@@ -16,7 +16,21 @@ import json
 from enum import Enum
 from typing import Any
 
-from ._utils import _endpoint_coeff_map, _is_directed_eid
+from ._utils import (
+    _endpoint_coeff_map,
+    _is_directed_eid,
+    _serialize_edge_layers,
+    _deserialize_edge_layers,
+    _serialize_VM,
+    _deserialize_VM,
+    _serialize_node_layer_attrs,
+    _deserialize_node_layer_attrs,
+    _df_to_rows,
+    _rows_to_df,
+    _serialize_layer_tuple_attrs,
+    _deserialize_layer_tuple_attrs,
+)
+import polars as pl
 
 
 def _serialize_value(v: Any) -> Any:
@@ -532,6 +546,23 @@ def to_nx(
                             membership_of=eid,
                         )
 
+    # ----------------- multilayer / Kivela metadata -----------------
+    aspects = list(getattr(graph, "aspects", []))
+    elem_layers = dict(getattr(graph, "elem_layers", {}))
+    VM_serialized = _serialize_VM(getattr(graph, "_VM", set()))
+    edge_kind = dict(getattr(graph, "edge_kind", {}))
+    edge_layers_ser = _serialize_edge_layers(getattr(graph, "edge_layers", {}))
+    node_layer_attrs_ser = _serialize_node_layer_attrs(
+        getattr(graph, "_vertex_layer_attrs", {})
+    )
+
+    # aspect and layer-tuple level attributes (dicts)
+    aspect_attrs = dict(getattr(graph, "_aspect_attrs", {}))
+    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(
+        getattr(graph, "_layer_attrs", {})
+    )
+    layer_attr_rows = _df_to_rows(getattr(graph, "layer_attributes", pl.DataFrame()))
+
     # ----------------- manifest (unchanged) -----------------
     manifest = {
         "edges": manifest_edges,
@@ -542,6 +573,17 @@ def to_nx(
         "slice_weights": slice_weights,  # always present (may be {})
         "edge_directed": {eid: bool(_is_directed_eid(graph, eid)) for eid in all_eids},
         "manifest_version": 1,
+        "multilayer": {
+            "aspects": aspects,
+            "aspect_attrs": aspect_attrs,
+            "elem_layers": elem_layers,
+            "VM": VM_serialized,
+            "edge_kind": edge_kind,
+            "edge_layers": edge_layers_ser,
+            "node_layer_attrs": node_layer_attrs_ser,
+            "layer_tuple_attrs": layer_tuple_attrs_ser,
+            "layer_attributes": layer_attr_rows,
+        },
     }
 
     return nxG, manifest
@@ -801,11 +843,7 @@ def from_nx(
                 H.add_slice(lid)
         except Exception:
             pass
-        for eid, w in (per_edge or {}).items():
-            try:
-                H.add_edge_to_slice(lid, eid)
-            except Exception:
-                pass
+        for eid, w in per_edge.items():
             try:
                 H.set_edge_slice_attrs(lid, eid, weight=float(w))
             except Exception:
@@ -813,6 +851,46 @@ def from_nx(
                     H.set_edge_slice_attr(lid, eid, "weight", float(w))
                 except Exception:
                     pass
+
+    # ----- multilayer / Kivela -----
+    mm = manifest.get("multilayer", {})
+    aspects = mm.get("aspects", [])
+    elem_layers = mm.get("elem_layers", {})
+
+    if aspects:
+        H.aspects = list(aspects)
+        H.elem_layers = dict(elem_layers or {})
+        H._rebuild_all_layers_cache()
+
+    aspect_attrs = mm.get("aspect_attrs", {})
+    if aspect_attrs:
+        H._aspect_attrs.update(aspect_attrs)
+
+    VM_data = mm.get("VM", [])
+    if VM_data:
+        H._VM = _deserialize_VM(VM_data)
+
+    # edge_kind / edge_layers
+    ek = mm.get("edge_kind", {})
+    el_ser = mm.get("edge_layers", {})
+    if ek:
+        H.edge_kind.update(ek)
+    if el_ser:
+        H.edge_layers.update(_deserialize_edge_layers(el_ser))
+
+    nl_attrs_ser = mm.get("node_layer_attrs", [])
+    if nl_attrs_ser:
+        H._vertex_layer_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+
+    layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
+    if layer_tuple_attrs_ser:
+        H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
+
+    layer_attr_rows = mm.get("layer_attributes", [])
+    if layer_attr_rows:
+        H.layer_attributes = _rows_to_df(layer_attr_rows)
+
+
 
     # --- restore vertex/edge attrs
     for vid, attrs in (manifest.get("vertex_attrs", {}) or {}).items():

@@ -21,166 +21,21 @@ except ImportError:
     gt = None
 from ..core.graph import Graph 
 
-# Serialization helpers 
+from ._utils import (
+    _serialize_edge_layers,
+    _deserialize_edge_layers,
+    _serialize_VM,
+    _deserialize_VM,
+    _serialize_node_layer_attrs,
+    _deserialize_node_layer_attrs,
+    _serialize_slices,
+    _deserialize_slices,
+    _df_to_rows,
+    _rows_to_df,
+    _serialize_layer_tuple_attrs,
+    _deserialize_layer_tuple_attrs,
+)
 
-def _serialize_edge_layers(edge_layers: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Convert edge_layers[eid] (aa or (aa, bb)) into JSON-safe form.
-
-    - intra:  aa -> {"kind": "single", "layers": [list(aa)]}
-    - inter/coupling: (aa, bb) -> {"kind": "pair", "layers": [list(aa), list(bb)]}
-    """
-    out = {}
-    for eid, L in edge_layers.items():
-        if L is None:
-            continue
-        # e.g. intra: L == aa (tuple[str,...])
-        if isinstance(L, tuple) and (len(L) == 0 or isinstance(L[0], str)):
-            out[eid] = {"kind": "single", "layers": [list(L)]}
-        # inter/coupling: L == (aa, bb)
-        elif (
-            isinstance(L, tuple)
-            and len(L) == 2
-            and isinstance(L[0], tuple)
-            and isinstance(L[1], tuple)
-        ):
-            out[eid] = {"kind": "pair", "layers": [list(L[0]), list(L[1])]}
-        else:
-            # fallback: just repr it
-            out[eid] = {"kind": "raw", "value": repr(L)}
-    return out
-
-
-def _deserialize_edge_layers(data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Inverse of _serialize_edge_layers.
-
-    Returns eid -> aa or (aa, bb) (tuples).
-    """
-    out = {}
-    for eid, rec in data.items():
-        kind = rec.get("kind")
-        if kind == "single":
-            aa = tuple(rec["layers"][0])
-            out[eid] = aa
-        elif kind == "pair":
-            La = tuple(rec["layers"][0])
-            Lb = tuple(rec["layers"][1])
-            out[eid] = (La, Lb)
-        else:
-            # unknown / raw -> ignore or store as is
-            # here we just skip, user can handle it manually if needed
-            continue
-    return out
-
-
-def _serialize_VM(VM: set[tuple[str, tuple[str, ...]]]) -> list[dict]:
-    """
-    Serialize V_M = {(u, aa)} to JSON-safe list of dicts.
-    """
-    return [{"node": u, "layer": list(aa)} for (u, aa) in VM]
-
-
-def _deserialize_VM(data: list[dict]) -> set[tuple[str, tuple[str, ...]]]:
-    """
-    Inverse of _serialize_VM.
-    """
-    return {(rec["node"], tuple(rec["layer"])) for rec in data}
-
-
-def _serialize_node_layer_attrs(nl_attrs: Dict[tuple[str, tuple[str, ...]], dict]) -> list[dict]:
-    """
-    (u, aa) -> {attrs}  ->  [{"node": u, "layer": list(aa), "attrs": {...}}, ...]
-    """
-    out = []
-    for (u, aa), attrs in nl_attrs.items():
-        out.append(
-            {
-                "node": u,
-                "layer": list(aa),
-                "attrs": dict(attrs),
-            }
-        )
-    return out
-
-
-def _deserialize_node_layer_attrs(data: list[dict]) -> Dict[tuple[str, tuple[str, ...]], dict]:
-    """
-    Inverse of _serialize_node_layer_attrs.
-    """
-    out: Dict[tuple[str, tuple[str, ...]], dict] = {}
-    for rec in data:
-        key = (rec["node"], tuple(rec["layer"]))
-        out[key] = dict(rec.get("attrs", {}))
-    return out
-
-
-def _serialize_slices(slices: Dict[str, dict]) -> Dict[str, dict]:
-    """
-    _slices is {slice_id: {"vertices": set, "edges": set, "attributes": dict}}
-    Convert sets to lists for JSON.
-    """
-    out = {}
-    for sid, rec in slices.items():
-        out[sid] = {
-            "vertices": list(rec.get("vertices", [])),
-            "edges": list(rec.get("edges", [])),
-            "attributes": dict(rec.get("attributes", {})),
-        }
-    return out
-
-
-def _deserialize_slices(data: Dict[str, dict]) -> Dict[str, dict]:
-    """
-    Inverse of _serialize_slices.
-    """
-    out = {}
-    for sid, rec in data.items():
-        out[sid] = {
-            "vertices": set(rec.get("vertices", [])),
-            "edges": set(rec.get("edges", [])),
-            "attributes": dict(rec.get("attributes", {})),
-        }
-    return out
-
-
-def _df_to_rows(df: pl.DataFrame) -> list[dict]:
-    """
-    Convert a Polars DataFrame to list-of-dicts in a stable way.
-    """
-    if df is None or df.height == 0:
-        return []
-    return df.to_dicts()
-
-
-def _rows_to_df(rows: list[dict]) -> pl.DataFrame:
-    """
-    Build a Polars DataFrame from list-of-dicts. Empty -> empty DF.
-    """
-    if not rows:
-        return pl.DataFrame()
-    return pl.DataFrame(rows)
-
-def _serialize_layer_tuple_attrs(layer_attrs: dict[tuple[str, ...], dict]) -> list[dict]:
-    """
-    _layer_attrs: {aa_tuple -> {attr_name: value}}
-    -> JSON-safe: [{"layer": list(aa), "attrs": {...}}, ...]
-    """
-    out = []
-    for aa, attrs in layer_attrs.items():
-        out.append({"layer": list(aa), "attrs": dict(attrs)})
-    return out
-
-
-def _deserialize_layer_tuple_attrs(data: list[dict]) -> dict[tuple[str, ...], dict]:
-    """
-    Inverse of _serialize_layer_tuple_attrs.
-    """
-    out: dict[tuple[str, ...], dict] = {}
-    for rec in data:
-        aa = tuple(rec["layer"])
-        out[aa] = dict(rec.get("attrs", {}))
-    return out
 
 # Core adapter: to_graphtool
 
@@ -270,7 +125,7 @@ def to_graphtool(
     edge_kind = dict(getattr(G, "edge_kind", {}))
     edge_layers_ser = _serialize_edge_layers(getattr(G, "edge_layers", {}))
     node_layer_attrs_ser = _serialize_node_layer_attrs(
-        getattr(G, "_node_layer_attrs", {})
+        getattr(G, "_vertex_layer_attrs", {})
     )
 
     # aspect and layer-tuple level attributes (dicts)
@@ -474,7 +329,7 @@ def from_graphtool(
 
     nl_attrs_ser = mm.get("node_layer_attrs", [])
     if nl_attrs_ser:
-        G._node_layer_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+        G._vertex_layer_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
 
     layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
     if layer_tuple_attrs_ser:

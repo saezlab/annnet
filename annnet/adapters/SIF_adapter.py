@@ -8,6 +8,20 @@ try:
 except Exception:
     from annnet.core.graph import Graph
 
+from ._utils import (
+    _serialize_edge_layers,
+    _deserialize_edge_layers,
+    _serialize_VM,
+    _deserialize_VM,
+    _serialize_node_layer_attrs,
+    _deserialize_node_layer_attrs,
+    _df_to_rows,
+    _rows_to_df,
+    _serialize_layer_tuple_attrs,
+    _deserialize_layer_tuple_attrs,
+)
+import polars as pl
+
 
 def _split_sif_line(line: str, delimiter: str | None) -> list[str]:
     if delimiter is not None:
@@ -99,7 +113,25 @@ def to_sif(
             "hyperedges": {},
             "vertex_attrs": {},
             "edge_metadata": {},
+            "edge_metadata": {},
             "slices": {},
+            "multilayer": {
+                "aspects": list(getattr(graph, "aspects", [])),
+                "aspect_attrs": dict(getattr(graph, "_aspect_attrs", {})),
+                "elem_layers": dict(getattr(graph, "elem_layers", {})),
+                "VM": _serialize_VM(getattr(graph, "_VM", set())),
+                "edge_kind": dict(getattr(graph, "edge_kind", {})),
+                "edge_layers": _serialize_edge_layers(getattr(graph, "edge_layers", {})),
+                "node_layer_attrs": _serialize_node_layer_attrs(
+                    getattr(graph, "_vertex_layer_attrs", {})
+                ),
+                "layer_tuple_attrs": _serialize_layer_tuple_attrs(
+                    getattr(graph, "_layer_attrs", {})
+                ),
+                "layer_attributes": _df_to_rows(
+                    getattr(graph, "layer_attributes", pl.DataFrame())
+                ),
+            },
         }
         if lossless
         else None
@@ -498,5 +530,47 @@ def from_sif(
                     H.set_edge_slice_attrs(lid, eid, weight=weight)
                 except Exception:
                     pass
+
+    if manifest and "multilayer" in manifest:
+        try:
+            mm = manifest.get("multilayer", {})
+            
+            aspects = mm.get("aspects", [])
+            elem_layers = mm.get("elem_layers", {})
+
+            if aspects:
+                H.aspects = list(aspects)
+                H.elem_layers = dict(elem_layers or {})
+                H._rebuild_all_layers_cache()
+
+            aspect_attrs = mm.get("aspect_attrs", {})
+            if aspect_attrs:
+                H._aspect_attrs.update(aspect_attrs)
+
+            VM_data = mm.get("VM", [])
+            if VM_data:
+                H._VM = _deserialize_VM(VM_data)
+
+            # edge_kind / edge_layers
+            ek = mm.get("edge_kind", {})
+            el_ser = mm.get("edge_layers", {})
+            if ek:
+                H.edge_kind.update(ek)
+            if el_ser:
+                H.edge_layers.update(_deserialize_edge_layers(el_ser))
+
+            nl_attrs_ser = mm.get("node_layer_attrs", [])
+            if nl_attrs_ser:
+                H._vertex_layer_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+
+            layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
+            if layer_tuple_attrs_ser:
+                H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
+
+            layer_attr_rows = mm.get("layer_attributes", [])
+            if layer_attr_rows:
+                H.layer_attributes = _rows_to_df(layer_attr_rows)
+        except Exception:
+            pass
 
     return H
