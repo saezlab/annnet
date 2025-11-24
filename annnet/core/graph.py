@@ -1971,8 +1971,6 @@ class Graph:
 
         This avoids all schema/dtype headaches (Polars infers them).
         """
-        import polars as pl
-
         df = self.layer_attributes
 
         # Convert existing DF to list of dict rows
@@ -5782,6 +5780,11 @@ class Graph:
         - If dtypes conflict (mixed over time), both sides upcast to ``Utf8`` to avoid schema errors.
 
         """
+        _NUMERIC_DTYPES = {
+        pl.Int8, pl.Int16, pl.Int32, pl.Int64,
+        pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
+        pl.Float32, pl.Float64,
+        }
         schema = df.schema
         for col, val in attrs.items():
             target = self._pl_dtype_for_value(val)
@@ -5791,10 +5794,17 @@ class Graph:
                 cur = schema[col]
                 if cur == pl.Null and target != pl.Null:
                     df = df.with_columns(pl.col(col).cast(target))
-                # if mixed types are expected over time, upcast to Utf8:
+                # if mixed types are expected over time:
                 elif cur != target and target != pl.Null:
-                    # upcast both sides to Utf8 to avoid schema conflicts
-                    df = df.with_columns(pl.col(col).cast(pl.Utf8))
+                    if cur in _NUMERIC_DTYPES and target in _NUMERIC_DTYPES:
+                        if pl.Float64 in (cur, target):
+                            supertype = pl.Float64
+                        else:
+                            supertype = pl.Int64
+                        df = df.with_columns(pl.col(col).cast(supertype))
+                    else:
+                        df = df.with_columns(pl.col(col).cast(pl.Utf8))
+
         return df
 
     def _upsert_row(self, df: pl.DataFrame, idx, attrs: dict) -> pl.DataFrame:
@@ -5942,8 +5952,14 @@ class Graph:
             elif right == pl.Null and left != pl.Null:
                 app_casts.append(pl.col(c).cast(left).alias(c))
             elif left != right:
-                df_casts.append(pl.col(c).cast(pl.Utf8))
-                app_casts.append(pl.col(c).cast(pl.Utf8).alias(c))
+                if pl.datatypes.is_numeric_dtype(left) and pl.datatypes.is_numeric_dtype(right):
+                    supertype = pl.datatypes.get_supertype(left, right)
+                    df_casts.append(pl.col(c).cast(supertype))
+                    app_casts.append(pl.col(c).cast(supertype).alias(c))
+                else:
+                    # fallback: Utf8 for incompatible non-numeric types
+                    df_casts.append(pl.col(c).cast(pl.Utf8))
+                    app_casts.append(pl.col(c).cast(pl.Utf8).alias(c))
 
         if df_casts:
             df = df.with_columns(df_casts)
