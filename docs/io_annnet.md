@@ -2,7 +2,7 @@
 
 ## Design Goals
 1. **Zero topology loss**: Preserve exact incidence matrix, all edge types, hyperedges, parallel edges
-2. **Complete metadata**: All attributes, layers, history, provenance
+2. **Complete metadata**: All attributes, slices, history, provenance
 3. **Cross-platform**: Works on Windows/Linux/Mac, Python/R/Julia
 4. **Incremental updates**: Can append without full rewrite
 5. **Cloud support**: S3/GCS/Azure compatible via Zarr
@@ -20,7 +20,7 @@ graph.annnet/
 │   │   ├── zarr.json             # Zarr v3 group metadata (includes group attributes)
 │   │   ├── row/                  # Zarr array (int32) of entity indices (COO row)
 │   │   ├── col/                  # Zarr array (int32) of edge indices   (COO col)
-│   │   └── data/                 # Zarr array (float32) of weights       (COO data)
+│   │   └── data/                 # Zarr array (float32) of weights      (COO data)
 │   │   # group attributes include: {"shape": [n_entities, n_edges]}
 │   ├── entity_to_idx.parquet     # entity_id → row index
 │   ├── idx_to_entity.parquet     # row index → entity_id
@@ -30,20 +30,29 @@ graph.annnet/
 │   ├── edge_definitions.parquet  # edge_id → (source, target, edge_type) for simple edges
 │   ├── edge_weights.parquet      # edge_id → weight
 │   ├── edge_directed.parquet     # edge_id → bool | null
-│   ├── edge_kind.parquet         # edge_id → "binary" | "hyper"
+│   ├── edge_kind.parquet         # edge_id → "binary" | "hyper" | "intra" | "inter"
 │   └── hyperedge_definitions.parquet
 │       # columns: edge_id, directed(bool), members(List[Utf8]) OR head(List[Utf8]), tail(List[Utf8])
 │
 ├── tables/
-│   ├── vertex_attributes.parquet     # vertex-level DF [dataframe]
-│   ├── edge_attributes.parquet       # edge-level DF
-│   ├── layer_attributes.parquet      # layer metadata
-│   └── edge_layer_attributes.parquet # (layer_id, edge_id, weight)
+│   ├── vertex_attributes.parquet      # vertex-level DF [dataframe]
+│   ├── edge_attributes.parquet        # edge-level DF
+│   ├── slice_attributes.parquet       # slice metadata
+│   └── edge_slice_attributes.parquet  # (slice_id, edge_id, weight)
 │
-├── layers/
-│   ├── registry.parquet              # layer_id, name, metadata…
-│   ├── vertex_memberships.parquet    # (layer_id, vertex_id)
-│   └── edge_memberships.parquet      # (layer_id, edge_id, weight)
+├── layers/                           # Kivela Multilayer Structures
+│   ├── metadata.json                 # {"aspects": [...], "elem_layers": {...}}
+│   ├── vertex_presence.parquet       # vertex_id, layer(List[str])
+│   ├── edge_layers.parquet           # edge_id, layer_1(List[str]), layer_2(List[str]|null)
+│   ├── elem_layer_attributes.parquet # attributes for elementary layers
+│   ├── aspect_attributes.json        # attributes for aspects
+│   ├── tuple_layer_attributes.parquet # layer(List[str]), attributes(JSON)
+│   └── vertex_layer_attributes.parquet # vertex_id, layer(List[str]), attributes(JSON)
+│
+├── slices/                           # Subgraph Views
+│   ├── registry.parquet              # slice_id, name, metadata…
+│   ├── vertex_memberships.parquet    # (slice_id, vertex_id)
+│   └── edge_memberships.parquet      # (slice_id, edge_id, weight)
 │
 ├── cache/                            # optional materialized views
 │   ├── csr.zarr/                     # CSR [compressed sparse row] cache
@@ -66,7 +75,7 @@ graph.annnet/
 ```json
 {
   "format": "annnet",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "created": "2025-10-23T10:30:00Z",
   "annnet_version": "0.1.0",
   "graph_version": 42,
@@ -75,12 +84,13 @@ graph.annnet/
     "vertices": 1000,
     "edges": 5000,
     "entities": 1050,
-    "layers": 3,
-    "hyperedges": 50
+    "slices": 3,
+    "hyperedges": 50,
+    "aspects": 2
   },
-  "layers": ["default", "temporal_2023", "temporal_2024"],
-  "active_layer": "default",
-  "default_layer": "default",
+  "slices": ["default", "temporal_2023", "temporal_2024"],
+  "active_slice": "default",
+  "default_slice": "default",
   "schema_version": "1.0",
   "checksum": "sha256:abcdef...",
   "compression": "zstd",
