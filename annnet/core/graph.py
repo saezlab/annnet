@@ -3426,7 +3426,7 @@ class Graph:
     def _gen_vertex_id_from_key(self, key_tuple: tuple) -> str:
         """Deterministic, human-readable vertex_id from a composite key."""
         parts = [f"{f}={repr(v)}" for f, v in zip(self._vertex_key_fields, key_tuple)]
-        return "kv:" + "|".join(parts)
+        return "cid:" + "|".join(parts)
 
     # Build graph
 
@@ -6772,7 +6772,7 @@ class Graph:
 
         # Create new vertex
         vid = self._gen_vertex_id_from_key(key)
-        # No need to pre-check entity_to_idx here; ids are namespaced by 'kv:' prefix
+        # No need to pre-check entity_to_idx here; ids are namespaced by 'cid:' prefix
         self.add_vertex(vid, slice=slice, **attrs)
 
         # Index ownership
