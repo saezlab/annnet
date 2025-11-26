@@ -84,6 +84,23 @@ def to_graphtool(
     ep_id = gtG.new_edge_property("string")
     ep_w = gtG.new_edge_property("double")
 
+    # Prepare edge attribute properties if edge_attributes exists
+    edge_props = {}
+    if hasattr(G, "edge_attributes") and G.edge_attributes is not None and G.edge_attributes.height > 0:
+        for col in G.edge_attributes.columns:
+            if col in ("edge_id", "id", edge_id_property, weight_property):
+                continue
+            # Infer type from first non-null value
+            sample = G.edge_attributes[col].drop_nulls()
+            if len(sample) > 0:
+                first_val = sample[0]
+                if isinstance(first_val, (int, bool)):
+                    edge_props[col] = gtG.new_edge_property("int")
+                elif isinstance(first_val, float):
+                    edge_props[col] = gtG.new_edge_property("double")
+                else:
+                    edge_props[col] = gtG.new_edge_property("string")
+
     for eid, defn in G.edge_definitions.items():
         try:
             u, v, etype = defn
@@ -98,9 +115,25 @@ def to_graphtool(
         e = gtG.add_edge(vmap[u], vmap[v])
         ep_id[e] = str(eid)
         ep_w[e] = float(G.edge_weights.get(eid, 1.0))
+        
+        # Set additional edge properties from edge_attributes
+        if edge_props and hasattr(G, "edge_attributes"):
+            id_col = "edge_id" if "edge_id" in G.edge_attributes.columns else "id"
+            if id_col in G.edge_attributes.columns:
+                row = G.edge_attributes.filter(G.edge_attributes[id_col] == eid)
+                if row.height > 0:
+                    for col, prop in edge_props.items():
+                        if col in row.columns:
+                            val = row[col][0]
+                            if val is not None:
+                                prop[e] = val
 
     gtG.ep[edge_id_property] = ep_id
     gtG.ep[weight_property] = ep_w
+    
+    # Register additional edge properties
+    for col, prop in edge_props.items():
+        gtG.ep[col] = prop
 
     # 4) attribute tables as rows (DF [DataFrame] -> list[dict])
 
