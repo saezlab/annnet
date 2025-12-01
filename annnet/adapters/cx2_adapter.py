@@ -36,46 +36,6 @@ from ._utils import (
 
 # --- Helpers ---
 
-def _rows_to_df(rows):
-    import polars as pl
-
-    if not rows:
-        return pl.DataFrame()
-
-    # --- 1) Normalize all rows to full schema ---
-    keys = set().union(*(r.keys() for r in rows))
-    norm = [{k: r.get(k, None) for k in keys} for r in rows]
-
-    # --- 2) Let Polars infer schema on the first few rows ---
-    # but allow nulls / mixed types
-    try:
-        return pl.DataFrame(norm, infer_schema_length=1000)
-    except Exception:
-        # --- 3) Fallback: cast everything to string but KEEP columns ---
-        # This preserves attributes instead of dropping them
-        return pl.DataFrame(
-            [{k: (str(v) if v is not None else None) for k,v in r.items()} for r in norm]
-        )
-
-def _map_pl_to_cx2_type(dtype: pl.DataType) -> str:
-    """Map Polars DataType to CX2 attribute data type string."""
-    if dtype in (pl.Int8, pl.Int16, pl.Int32, pl.UInt8, pl.UInt16, pl.UInt32):
-        return "integer"
-    elif dtype in (pl.Int64, pl.UInt64):
-        return "long"
-    elif dtype in (pl.Float32, pl.Float64):
-        return "double"
-    elif dtype == pl.Boolean:
-        return "boolean"
-    elif dtype in (pl.Utf8, pl.String, pl.Object):
-        return "string"
-    elif isinstance(dtype, pl.List):
-        inner = _map_pl_to_cx2_type(dtype.inner)
-        return f"list_of_{inner}"
-    else:
-        # Fallback for unknown types
-        return "string"
-
 def _cx2_collect_reified(aspects):
     """
     Detect reified hyperedges from CX2 nodes + edges.
@@ -141,6 +101,46 @@ def _cx2_collect_reified(aspects):
 
     return hyperdefs, membership_edges
 
+def _rows_to_df(rows):
+    import polars as pl
+
+    if not rows:
+        return pl.DataFrame()
+
+    # --- 1) Normalize all rows to full schema ---
+    keys = set().union(*(r.keys() for r in rows))
+    norm = [{k: r.get(k, None) for k in keys} for r in rows]
+
+    # --- 2) Let Polars infer schema on the first few rows ---
+    # allow nulls / mixed types
+    try:
+        return pl.DataFrame(norm, infer_schema_length=1000)
+    except Exception:
+        # --- 3) Fallback: cast everything to string but KEEP columns ---
+        # This preserves attributes
+        return pl.DataFrame(
+            [{k: (str(v) if v is not None else None) for k,v in r.items()} for r in norm]
+        )
+
+def _map_pl_to_cx2_type(dtype: pl.DataType) -> str:
+    """Map Polars DataType to CX2 attribute data type string."""
+    if dtype in (pl.Int8, pl.Int16, pl.Int32, pl.UInt8, pl.UInt16, pl.UInt32):
+        return "integer"
+    elif dtype in (pl.Int64, pl.UInt64):
+        return "long"
+    elif dtype in (pl.Float32, pl.Float64):
+        return "double"
+    elif dtype == pl.Boolean:
+        return "boolean"
+    elif dtype in (pl.Utf8, pl.String, pl.Object):
+        return "string"
+    elif isinstance(dtype, pl.List):
+        inner = _map_pl_to_cx2_type(dtype.inner)
+        return f"list_of_{inner}"
+    else:
+        # Fallback for unknown types
+        return "string"
+
 def _jsonify(obj):
     if isinstance(obj, dict):
         return {k: _jsonify(v) for k, v in obj.items()}
@@ -162,7 +162,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
     into a JSON string and stored in 'networkAttributes' under '__AnnNet_Manifest__'.
     """
     
-    # 1. Prepare Manifest (Lossless storage of complex features, same logci as from_graphtool)
+    # 1. Prepare Manifest (Lossless storage of complex features)
     vert_rows = _df_to_rows(getattr(G, "vertex_attributes", pl.DataFrame()))
     edge_rows = _df_to_rows(getattr(G, "edge_attributes", pl.DataFrame()))
     slice_rows = _df_to_rows(getattr(G, "slice_attributes", pl.DataFrame()))
@@ -220,7 +220,6 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
     # 2. Build Core CX2 Aspects
     
     # ID Mapping: AnnNet ID (str/int) -> CX2 ID (int)
-    # CX2 IDs must be integers.
     node_map: Dict[Any, int] = {}
     cx_nodes: List[Dict[str, Any]] = []
     cx_edges: List[Dict[str, Any]] = []
@@ -231,8 +230,24 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
     
     # Pre-fetch attribute data for fast lookup
     v_attrs_df = getattr(G, "vertex_attributes", pl.DataFrame())
+
+    # string columns in vertex_attributes (for None -> "")
+    v_string_cols = set()
+    if not v_attrs_df.is_empty():
+        for col, dtype in v_attrs_df.schema.items():
+            if dtype == pl.Utf8:
+                v_string_cols.add(col)
+
     v_attrs_map = {str(r.get("id")): r for r in vert_rows} if not v_attrs_df.is_empty() else {}
 
+    # helper: replace None by "" only for declared string cols (cytoscape web doesn't tolarate null values for string attributes)
+    def _clean_cx2_attrs(attrs, string_cols):
+        if not attrs:
+            return attrs
+        return {
+            k: ("" if (v is None and k in string_cols) else v)
+            for k, v in attrs.items()
+        }
     for uid, utype in G.entity_types.items():
         if utype != "vertex":
             continue
@@ -252,6 +267,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
             # Copy attributes, excluding 'id' to avoid redundancy
             attrs = v_attrs_map[str(uid)].copy()
             attrs.pop("id", None)
+            attrs = _clean_cx2_attrs(attrs, v_string_cols)
             n_obj["v"].update(attrs)
             
         cx_nodes.append(n_obj)
@@ -260,6 +276,13 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
     # Only binary edges between mapped vertices
     current_edge_id = 0
     e_attrs_df = getattr(G, "edge_attributes", pl.DataFrame())
+    
+    # string columns in edge_attributes (for None -> "")
+    e_string_cols = set()
+    if not e_attrs_df.is_empty():
+        for col, dtype in e_attrs_df.schema.items():
+            if dtype == pl.Utf8:
+                e_string_cols.add(col)
     
     # Create lookup for edge attributes (handle both 'edge_id' and 'id')
     e_attrs_map = {}
@@ -297,12 +320,14 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
                 }                
                 members = S | T
                 if directed:
-                    # tail → head cartesian
+                    # tail -> head cartesian
                     for u in T:
                         for v in S:
                             exp_entry["expanded_edges"].append([u, v])
                             cx_eid = current_edge_id
                             current_edge_id += 1
+                            raw_attrs = e_attrs_map.get(str(eid), {})
+                            clean_attrs = _clean_cx2_attrs(raw_attrs, e_string_cols)
                             cx_edges.append({
                                 "id": cx_eid,
                                 "s": node_map[u],
@@ -310,9 +335,10 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
                                 "v": {
                                     "interaction": str(eid),
                                     "weight": float(G.edge_weights.get(eid, 1.0)),
-                                    **(e_attrs_map.get(str(eid), {}))
+                                    **clean_attrs,
                                 }
                             })
+
                 else:
                     # undirected clique
                     mem = list(members)
@@ -322,6 +348,8 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
                             exp_entry["expanded_edges"].append([u, v])
                             cx_eid = current_edge_id
                             current_edge_id += 1
+                            raw_attrs = e_attrs_map.get(str(eid), {})
+                            clean_attrs = _clean_cx2_attrs(raw_attrs, e_string_cols)
                             cx_edges.append({
                                 "id": cx_eid,
                                 "s": node_map[u],
@@ -329,7 +357,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
                                 "v": {
                                     "interaction": str(eid),
                                     "weight": float(G.edge_weights.get(eid, 1.0)),
-                                    **(e_attrs_map.get(str(eid), {}))
+                                    **clean_attrs,
                                 }
                             })
                 manifest["edges"]["expanded"][str(eid)] = exp_entry
@@ -343,6 +371,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
                 he_attrs = e_attrs_map.get(str(eid), {}).copy()
                 he_attrs.pop("edge_id", None)
                 he_attrs.pop("id", None)
+                he_attrs = _clean_cx2_attrs(he_attrs, e_string_cols)
 
                 he_node = {
                     "id": he_cx_id,
@@ -358,7 +387,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
                 weight = float(G.edge_weights.get(eid,1.0))
 
                 if directed:
-                    # tail → HE
+                    # tail -> HE
                     for u in T:
                         cx_eid = current_edge_id
                         current_edge_id += 1
@@ -372,7 +401,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
                                 "weight": weight,
                             }
                         })
-                    # HE → head
+                    # HE -> head
                     for v in S:
                         cx_eid = current_edge_id
                         current_edge_id += 1
@@ -388,7 +417,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
                         })
 
                 else:
-                    # undirected: HE ↔ members
+                    # undirected: HE - members
                     members = S | T
                     for u in members:
                         cx_eid = current_edge_id
@@ -405,7 +434,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
                         })
                 continue
 
-            # unknown hyperedge mode → skip
+            # unknown hyperedge mode - skip
             continue
 
         try:
@@ -437,12 +466,12 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
             # Remove redundant keys
             attrs.pop("edge_id", None)
             attrs.pop("id", None)
+            attrs = _clean_cx2_attrs(attrs, e_string_cols)
             e_obj["v"].update(attrs)
 
         cx_edges.append(e_obj)
 
     # 3. Attribute Declarations
-    # CX2 requires explicit typing for attributes.
     attr_decls = {"nodes": {}, "edges": {}, "networkAttributes": {}}
 
     # Define Node Attributes
@@ -500,7 +529,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
 
 def from_cx2(cx2_data, *, hyperedges="manifest"):
     """
-    Fully robust CX2 → AnnNet importer.
+    Fully robust CX2 - AnnNet importer.
     Supports:
       - manifest reconstruction (full fidelity)
       - reified hyperedges
@@ -510,18 +539,17 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
       - arbitrary attribute modifications
     """
 
-    # -------------------------------------------------------------
     # Small helper: normalize rows so Polars won't crash
-    # -------------------------------------------------------------
+
     def _normalize_rows(rows):
         if not rows:
             return []
         keys = set().union(*(r.keys() for r in rows))
         return [{k: r.get(k, None) for k in keys} for r in rows]
 
-    # -------------------------------------------------------------
+
     # Load file or JSON string
-    # -------------------------------------------------------------
+
     import os, json
     if isinstance(cx2_data, str):
         if os.path.exists(cx2_data):
@@ -533,9 +561,9 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
             except Exception:
                 raise ValueError("Invalid CX2 string or file")
 
-    # -------------------------------------------------------------
+
     # Parse aspects into a dict
-    # -------------------------------------------------------------
+
     aspects = {}
     for item in cx2_data:
         if not item:
@@ -547,9 +575,9 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         else:
             aspects.setdefault(key, []).extend(item[key])
 
-    # -------------------------------------------------------------
+
     # Extract networkAttributes + manifest JSON
-    # -------------------------------------------------------------
+
     net_attrs = {}
     for na in aspects.get("networkAttributes", []):
         net_attrs.update(na)
@@ -562,15 +590,14 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         except:
             manifest = None
 
-    # -------------------------------------------------------------
+
     # Construct Graph
-    # -------------------------------------------------------------
+
     from annnet.core.graph import Graph
     G = Graph()
 
-    # =====================================================================
-    #                        PATH A: MANIFEST RECONSTRUCTION
-    # =====================================================================
+    # PATH A: MANIFEST RECONSTRUCTION
+
     if manifest and hyperedges in ("manifest", "reified"):
 
         # --- Base graph attrs ---
@@ -636,7 +663,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
                     edge_directed=False
                 )
 
-        # --- Kivela ---
+        # --- Layers (Kivela)---
         kiv = emeta.get("kivela", {})
         if kiv.get("edge_kind"): G.edge_kind.update(kiv["edge_kind"])
         if kiv.get("edge_layers"): 
@@ -675,20 +702,20 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
         # --- OPTIONAL: overlay reified hyperedges ---
         if hyperedges == "reified":
-            _cx2_overlay_reified(aspects, G)
+            _cx2_collect_reified(aspects, G)
 
-    # =====================================================================
-    #                        PATH B: NO MANIFEST
-    # =====================================================================
+
+    # PATH B: NO MANIFEST
+
     else:
         directed = net_attrs.get("directed", True)
         G = Graph(directed=directed)
 
-    # =====================================================================
-    #            Overlay Cytoscape edits: nodes + edges from CX2
-    # =====================================================================
 
-    # Map CX numeric ids → AnnNet string ids
+    #            Overlay Cytoscape edits: nodes + edges from CX2
+
+
+    # Map CX numeric ids - AnnNet string ids
     cx2node = {}
     node_aspects = aspects.get("nodes", [])
 
