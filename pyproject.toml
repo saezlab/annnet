@@ -96,9 +96,9 @@ classifiers = [
     "Programming Language :: Python :: 3"
 ]
 dependencies = [
-    "numpy>=2.2.6",
+    "numpy>=1.24",
     "polars>=0.20.0",
-    "scipy>=1.9.0",
+    "scipy>=1.10",
 ]
 description = "A Python tool to build, manipulate, and interoperate with flexible graph structures"
 license = "GPL-3.0-or-later"
@@ -114,25 +114,59 @@ version = "0.0.1"
 [project.optional-dependencies]
 networkx = ["networkx>=3.3"]
 igraph   = ["python-igraph>=0.11"]
-pandas = ["pandas>=2.0.3"]
+pandas = ["pandas>=1.5"]
 excel    = ["openpyxl>=3.1"]          # used by annnet/io/excel.py
-sbml     = ["lxml>=5"]                # used by sbml_adapter.py
-parquet  = ["pyarrow>=14"]            # used by GraphDir_Parquet_adapter.py
+sbml     = ["lxml>=4.9"]                # used by sbml_adapter.py
+parquet  = ["pyarrow>=10"]            # used by GraphDir_Parquet_adapter.py
 zarr_io  = ["zarr>=2.18", "numcodecs>=0.12"]  # used by io_annnet.py
-plot     = ["matplotlib>=3.8"]
+plot     = ["matplotlib>=3.5"]
+io = [
+  "pandas>=2.0",    # excel loader needs it
+  "pyarrow>=10",    # parquet adapter
+  "zarr>=2.18",
+  "numcodecs>=0.12",
+  "lxml>=4.9",        # SBML adapter
+  "toml>=0.10",     # metadata loading
+]
+backends = [
+  "networkx>=3.3",
+  "python-igraph>=0.11",
+  # graphtool cannot be installed via pip
+]
+plot = [
+  "matplotlib>=3.5",
+  "pydot",
+  "graphviz"
+]
+bio = [
+  "lxml>=4.9",
+  "cobra>=0.26"
+]
+storage = [
+  "pyarrow>=10",
+  "zarr>=2.18",
+  "numcodecs>=0.12",
+  "pandas>=2.0"
+]
 
 # "everything"
 all = [
   "networkx>=3.3",
   "python-igraph>=0.11",
   "openpyxl>=3.1",
-  "lxml>=5",
-  "pyarrow>=14",
+  "lxml>=4.9",
+  "pyarrow>=10",
   "zarr>=2.18",
   "numcodecs>=0.12",
-  "matplotlib>=3.8",
-  "pandas>=2.0.3"
+  "matplotlib>=3.5",
+  "pandas>=1.5",
+  "pydot",
+  "graphviz",
+  "cobra>=0.26",
+  "toml>=0.10",
+  # graphtool is not on PyPI
 ]
+
 
 
 # make CI tools installable via `.[dev]`
