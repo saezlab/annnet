@@ -35,6 +35,7 @@ from ._utils import (
 )
 
 # --- Helpers ---
+CX_STYLE_KEY = "__cx_style__"
 
 def _cx2_collect_reified(aspects):
     """
@@ -169,12 +170,17 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
     edge_slice_rows = _df_to_rows(getattr(G, "edge_slice_attributes", pl.DataFrame()))
     layer_attr_rows = _df_to_rows(getattr(G, "layer_attributes", pl.DataFrame()))
 
+    # strip CX-specific style from what we embed into the manifest
+    g_attrs = dict(getattr(G, "graph_attributes", {}))
+    g_attrs.pop(CX_STYLE_KEY, None)
+
     manifest = {
         "version": 1,
         "graph": {
             "directed": bool(G.directed) if G.directed is not None else True,
-            "attributes": dict(getattr(G, "graph_attributes", {})),
+            "attributes": g_attrs,
         },
+
         "vertices": {
             "types": dict(G.entity_types),
             "attributes": vert_rows,
@@ -223,24 +229,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
     node_map: Dict[Any, int] = {}
     cx_nodes: List[Dict[str, Any]] = []
     cx_edges: List[Dict[str, Any]] = []
-    
-    # -- Nodes --
-    # We only map entities of type 'vertex' to visual nodes.
-    current_node_id = 0
-    
-    # Pre-fetch attribute data for fast lookup
-    v_attrs_df = getattr(G, "vertex_attributes", pl.DataFrame())
 
-    # string columns in vertex_attributes (for None -> "")
-    v_string_cols = set()
-    if not v_attrs_df.is_empty():
-        for col, dtype in v_attrs_df.schema.items():
-            if dtype == pl.Utf8:
-                v_string_cols.add(col)
-
-    v_attrs_map = {str(r.get("id")): r for r in vert_rows} if not v_attrs_df.is_empty() else {}
-
-    # helper: replace None by "" only for declared string cols (cytoscape web doesn't tolarate null values for string attributes)
     def _clean_cx2_attrs(attrs, string_cols):
         if not attrs:
             return attrs
@@ -248,28 +237,100 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
             k: ("" if (v is None and k in string_cols) else v)
             for k, v in attrs.items()
         }
+
+    # -- Nodes --
+    # We only map entities of type 'vertex' to visual nodes.
+    current_node_id = 0
+
+    # Pre-fetch attribute data for fast lookup
+    v_attrs_df = getattr(G, "vertex_attributes", pl.DataFrame())
+
+    # Identify which vertex columns are string vs numeric (for cleaning None)
+    v_string_cols: set[str] = set()
+    v_numeric_cols: set[str] = set()
+    if v_attrs_df is not None and hasattr(v_attrs_df, "is_empty") and not v_attrs_df.is_empty():
+        for col, dtype in v_attrs_df.schema.items():
+            # strings
+            if dtype in (pl.Utf8, pl.String, pl.Object):
+                v_string_cols.add(col)
+            # numeric: all ints + floats
+            elif dtype in (
+                pl.Int8, pl.Int16, pl.Int32, pl.Int64,
+                pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
+                pl.Float32, pl.Float64,
+            ):
+                v_numeric_cols.add(col)
+
+    # Build map: vertex_id -> attribute row dict
+    v_attrs_map: Dict[str, Dict[str, Any]] = {}
+    if v_attrs_df is not None and hasattr(v_attrs_df, "is_empty") and not v_attrs_df.is_empty():
+        cols = set(v_attrs_df.columns)
+        id_col = "vertex_id" if "vertex_id" in cols else "id"
+        for r in vert_rows:  # vert_rows is _df_to_rows(vertex_attributes)
+            key = r.get(id_col)
+            if key is not None:
+                v_attrs_map[str(key)] = r
+
+    def _clean_vertex_attrs(attrs: Dict[str, Any]) -> Dict[str, Any]:
+        """Replace None in strings with '', drop None for numeric/others."""
+        out: Dict[str, Any] = {}
+        for k, v in attrs.items():
+            if v is None:
+                if k in v_string_cols:
+                    out[k] = ""          # string: None -> ""
+                elif k in v_numeric_cols:
+                    # numeric: drop the key entirely (no null numbers in CX2)
+                    continue
+                else:
+                    # unknown type: safest is to drop null
+                    continue
+            else:
+                out[k] = v
+        return out
+
     for uid, utype in G.entity_types.items():
         if utype != "vertex":
             continue
-            
+
         cx_id = current_node_id
         current_node_id += 1
         node_map[uid] = cx_id
-        
-        # Build node object
-        n_obj = {
+
+        # base node object
+        n_obj: Dict[str, Any] = {
             "id": cx_id,
-            "v": {"name": str(uid)} # 'name' is standard in Cytoscape
+            "v": {"name": str(uid)},  # 'name' is standard in Cytoscape
         }
-        
+
+        coords: Dict[str, float] = {}
+
         # Attach attributes if present
-        if str(uid) in v_attrs_map:
-            # Copy attributes, excluding 'id' to avoid redundancy
-            attrs = v_attrs_map[str(uid)].copy()
+        row = v_attrs_map.get(str(uid))
+        if row is not None:
+            attrs = dict(row)  # copy
+            # get rid of id column from attributes
             attrs.pop("id", None)
-            attrs = _clean_cx2_attrs(attrs, v_string_cols)
+            attrs.pop("vertex_id", None)
+
+            # pull layout_* into x/y/z for Cytoscape layout
+            for src, dst in (("layout_x", "x"), ("layout_y", "y"), ("layout_z", "z")):
+                val = attrs.get(src)
+                if val is not None:
+                    try:
+                        coords[dst] = float(val)
+                    except (TypeError, ValueError):
+                        pass
+                # never expose layout_* as regular attributes
+                attrs.pop(src, None)
+
+            # clean None values: "" for strings, drop for numeric/others
+            attrs = _clean_vertex_attrs(attrs)
             n_obj["v"].update(attrs)
-            
+
+        # put node coordinates at top-level (where Cytoscape expects them)
+        if coords:
+            n_obj.update(coords)
+
         cx_nodes.append(n_obj)
 
     # -- Edges --
@@ -504,24 +565,58 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
     attr_decls["networkAttributes"]["directed"] = {"d": "boolean"}
 
     # 4. Construct Final CX2 List
-    cx2 = [
-            {"CXVersion": "2.0", "hasFragments": False},
-            {"metaData": [
-                {"name": "attributeDeclarations", "elementCount": 1},
-                {"name": "networkAttributes", "elementCount": 1},
-                {"name": "nodes", "elementCount": len(cx_nodes)},
-                {"name": "edges", "elementCount": len(cx_edges)}
-            ]},
-            {"attributeDeclarations": [attr_decls]},
-            {"networkAttributes": [{
+
+    # Start with basic metadata
+    meta = [
+        {"name": "attributeDeclarations", "elementCount": 1},
+        {"name": "networkAttributes", "elementCount": 1},
+        {"name": "nodes", "elementCount": len(cx_nodes)},
+        {"name": "edges", "elementCount": len(cx_edges)},
+    ]
+
+    cx2: List[Dict[str, Any]] = [
+        {"CXVersion": "2.0", "hasFragments": False},
+        {"metaData": meta},
+        {"attributeDeclarations": [attr_decls]},
+        {
+            "networkAttributes": [{
                 "name": "AnnNet Export",
                 "directed": bool(G.directed) if G.directed is not None else True,
-                "__AnnNet_Manifest__": json.dumps(_jsonify(manifest))
-            }]},
-            {"nodes": cx_nodes},
-            {"edges": cx_edges}, 
-            {"status": [{"success": True}]} 
-        ]
+                "__AnnNet_Manifest__": json.dumps(_jsonify(manifest)),
+            }]
+        },
+        {"nodes": cx_nodes},
+        {"edges": cx_edges},
+    ]
+
+    # Re-emit Cytoscape visual style if we have it
+    style = dict(getattr(G, "graph_attributes", {})).get(CX_STYLE_KEY, {}) or {}
+
+    vp = style.get("visualProperties")
+    if vp:
+        meta.append({"name": "visualProperties", "elementCount": 1})
+        cx2.append({"visualProperties": [vp]})
+
+    nb = style.get("nodeBypasses")
+    if nb:
+        meta.append({"name": "nodeBypasses", "elementCount": len(nb)})
+        cx2.append({"nodeBypasses": nb})
+
+    eb = style.get("edgeBypasses")
+    if eb:
+        meta.append({"name": "edgeBypasses", "elementCount": len(eb)})
+        cx2.append({"edgeBypasses": eb})
+
+    vep = style.get("visualEditorProperties")
+    if vep:
+        meta.append({"name": "visualEditorProperties", "elementCount": 1})
+        cx2.append({"visualEditorProperties": [vep]})
+
+    # Status goes last
+    cx2.append({"status": [{"success": True}]})
+
+    return cx2
+
         
     return cx2
     
@@ -538,7 +633,6 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
       - sparse attribute tables
       - arbitrary attribute modifications
     """
-
     # Small helper: normalize rows so Polars won't crash
 
     def _normalize_rows(rows):
@@ -589,6 +683,28 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
             manifest = json.loads(manifest_str)
         except:
             manifest = None
+    visual_props = aspects.get("visualProperties", [])
+
+    # Extract Cytoscape visual style aspects (kept opaque but preserved)
+    style_aspects: Dict[str, Any] = {}
+
+    vp = aspects.get("visualProperties")
+    if vp:
+        style_aspects["visualProperties"] = vp[0] if isinstance(vp, list) else vp
+
+    nb = aspects.get("nodeBypasses")
+    if nb:
+        style_aspects["nodeBypasses"] = nb
+
+    eb = aspects.get("edgeBypasses")
+    if eb:
+        style_aspects["edgeBypasses"] = eb
+
+    vep = aspects.get("visualEditorProperties")
+    if vep:
+        style_aspects["visualEditorProperties"] = (
+            vep[0] if isinstance(vep, list) else vep
+        )
 
 
     # Construct Graph
@@ -604,6 +720,9 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         gmeta = manifest.get("graph", {})
         G.directed = gmeta.get("directed", True)
         G.graph_attributes = dict(gmeta.get("attributes", {}))
+
+        if visual_props:
+            G.graph_attributes["__cx_visualProperties__"] = visual_props
 
         # --- Vertices ---
         vmeta = manifest.get("vertices", {})
@@ -711,8 +830,13 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         directed = net_attrs.get("directed", True)
         G = Graph(directed=directed)
 
-
-    #            Overlay Cytoscape edits: nodes + edges from CX2
+        if visual_props:
+            # make sure we have a dict
+            if not hasattr(G, "graph_attributes") or G.graph_attributes is None:
+                G.graph_attributes = {}
+            G.graph_attributes["__cx_visualProperties__"] = visual_props
+    
+    # Overlay Cytoscape edits: nodes + edges from CX2
 
 
     # Map CX numeric ids - AnnNet string ids
@@ -738,9 +862,20 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
             G.add_vertex(ann_id)
 
         row = vmap.get(ann_id, {"vertex_id": ann_id})
+
+        # attributes from Cytoscape (except display name)
         for k, v in attrs.items():
             if k != "name":
                 row[k] = v
+
+        # layout coordinates live on the node, not in v
+        if "x" in n and n["x"] is not None:
+            row["layout_x"] = float(n["x"])
+        if "y" in n and n["y"] is not None:
+            row["layout_y"] = float(n["y"])
+        if "z" in n and n["z"] is not None:
+            row["layout_z"] = float(n["z"])
+
         vmap[ann_id] = row
 
     # rebuild vertex table
@@ -775,7 +910,14 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
     enorm = _normalize_rows(list(emap.values()))
     G.edge_attributes = _rows_to_df(enorm)
 
+    # Attach Cytoscape style blob if we captured any
+    if style_aspects:
+        # make sure graph_attributes exists and is a dict
+        G.graph_attributes = dict(getattr(G, "graph_attributes", {}))
+        G.graph_attributes[CX_STYLE_KEY] = style_aspects
+
     return G
+
 
 
 
