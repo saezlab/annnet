@@ -1,4 +1,4 @@
-name: graphglue
+name: annnet
 channels:
   - conda-forge
   - defaults
