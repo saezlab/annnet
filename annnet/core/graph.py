@@ -2746,27 +2746,27 @@ class Graph:
     # Bulk build graph
 
     def add_vertices_bulk(self, vertices, slice=None):
-        """Bulk add vertices (and edge-entities if prefixed externally).
-        Accepts: iterable of str  OR  iterable of (vertex_id, attrs_dict)  OR iterable of dicts with keys {'vertex_id', ...attrs}
-        Behavior: identical to calling add_vertex() for each, but resizes once and batches attribute inserts.
-        """
-        
+        """Bulk add vertices (and edge-entities if prefixed externally)."""
 
         slice = slice or self._current_slice
 
-        # Normalize items -> [(vid, attrs_dict), ...]
+        # -----------------------------------------------------------------------
+        # NORMALIZE INPUT
+        # -----------------------------------------------------------------------
         norm = []
         for it in vertices:
             if isinstance(it, dict):
                 vid = it.get("vertex_id") or it.get("id") or it.get("name")
                 if vid is None:
                     continue
-                a = {k: v for k, v in it.items() if k not in ("vertex_id", "id", "name")}
-                norm.append((vid, a))
+                attrs = {k: v for k, v in it.items() if k not in ("vertex_id", "id", "name")}
+                norm.append((vid, attrs))
+
             elif isinstance(it, (tuple, list)) and it:
                 vid = it[0]
-                a = it[1] if len(it) > 1 and isinstance(it[1], dict) else {}
-                norm.append((vid, a))
+                attrs = it[1] if len(it) > 1 and isinstance(it[1], dict) else {}
+                norm.append((vid, attrs))
+
             else:
                 norm.append((it, {}))
 
@@ -2776,16 +2776,18 @@ class Graph:
         # Intern hot strings
         try:
             import sys as _sys
-
             norm = [
-                (_sys.intern(vid) if isinstance(vid, str) else vid, attrs) for vid, attrs in norm
+                (_sys.intern(vid) if isinstance(vid, str) else vid, attrs)
+                for vid, attrs in norm
             ]
             if isinstance(slice, str):
                 slice = _sys.intern(slice)
         except Exception:
             pass
 
-        # Create missing vertices without per-item resize thrash
+        # -----------------------------------------------------------------------
+        # ENTITY REGISTRATION (fast, unchanged semantics)
+        # -----------------------------------------------------------------------
         new_rows = 0
         for vid, _ in norm:
             if vid not in self.entity_to_idx:
@@ -2796,57 +2798,67 @@ class Graph:
                 self._num_entities = idx + 1
                 new_rows += 1
 
-        # Grow rows once if needed
         if new_rows:
             self._grow_rows_to(self._num_entities)
 
-        # slice membership (same semantics as add_vertex)
+        # -----------------------------------------------------------------------
+        # SLICE MEMBERSHIP (unchanged behaviour)
+        # -----------------------------------------------------------------------
         if slice not in self._slices:
             self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
-        self._slices[slice]["vertices"].update(vid for vid, _ in norm)
+        self._slices[slice]["vertices"].update(v for v, _ in norm)
 
-        # Vertex attributes (batch insert for new ones, upsert for existing with attrs)
+        # -----------------------------------------------------------------------
+        # ATTRIBUTE TABLE PREP
+        # -----------------------------------------------------------------------
         self._ensure_vertex_table()
         df = self.vertex_attributes
 
-        # Collect existing ids (if any)
-        existing_ids = set()
+        # Build lookup of existing vertex_ids once
         try:
-            if isinstance(df, pl.DataFrame) and df.height and "vertex_id" in df.columns:
+            if df.height > 0:
                 existing_ids = set(df.get_column("vertex_id").to_list())
+            else:
+                existing_ids = set()
         except Exception:
-            pass
+            existing_ids = set()
 
-        # Rows to append for ids missing in DF
-        to_append = []
+        # -----------------------------------------------------------------------
+        # Build new rows (for vertex_ids missing in DF)
+        # -----------------------------------------------------------------------
+        new_rows_data = []
+        new_attr_keys = set()
+
         for vid, attrs in norm:
-            if df.is_empty() or vid not in existing_ids:
-                row = dict.fromkeys(df.columns) if not df.is_empty() else {"vertex_id": None}
+            if vid not in existing_ids:
+                row = {c: None for c in df.columns} if df.columns else {"vertex_id": None}
                 row["vertex_id"] = vid
                 for k, v in attrs.items():
                     row[k] = v
-                to_append.append(row)
+                    new_attr_keys.add(k)
+                new_rows_data.append(row)
+            else:
+                for k in attrs.keys():
+                    new_attr_keys.add(k)
 
-        if to_append:
-            # Ensure df has any new columns first
-            need_cols = {k for row in to_append for k in row.keys() if k != "vertex_id"}
-            if need_cols:
-                df = self._ensure_attr_columns(df, dict.fromkeys(need_cols))
+        # -----------------------------------------------------------------------
+        # Ensure DF has columns for all attributes used
+        # -----------------------------------------------------------------------
+        if new_attr_keys:
+            df = self._ensure_attr_columns(df, dict.fromkeys(new_attr_keys))
 
-            # Build add_df with full inference over the whole batch to avoid ComputeError
-            add_df = pl.DataFrame(
-                to_append,
-                infer_schema_length=len(to_append),
-                nan_to_null=True,
-                strict=False,
-            )
+        # -----------------------------------------------------------------------
+        # Vectorized insert of new rows
+        # -----------------------------------------------------------------------
+        if new_rows_data:
+            add_df = pl.DataFrame(new_rows_data, nan_to_null=True, strict=False)
 
-            # Make sure all df columns exist on add_df
+            # Ensure every column exists on add_df (exact order)
             for c in df.columns:
                 if c not in add_df.columns:
                     add_df = add_df.with_columns(pl.lit(None).cast(df.schema[c]).alias(c))
 
-            # Dtype reconciliation (mirror _upsert_row semantics)
+            # Resolve dtype mismatches using same rules
             for c in df.columns:
                 lc, rc = df.schema[c], add_df.schema[c]
                 if lc == pl.Null and rc != pl.Null:
@@ -2854,20 +2866,65 @@ class Graph:
                 elif rc == pl.Null and lc != pl.Null:
                     add_df = add_df.with_columns(pl.col(c).cast(lc).alias(c))
                 elif lc != rc:
-                    # resolve mismatches by upcasting both to Utf8 (UTF-8 string)
-                    df = df.with_columns(pl.col(c).cast(pl.Utf8))
-                    add_df = add_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
+                    if pl.datatypes.is_numeric_dtype(lc) and pl.datatypes.is_numeric_dtype(rc):
+                        supertype = pl.datatypes.get_supertype(lc, rc)
+                        df = df.with_columns(pl.col(c).cast(supertype))
+                        add_df = add_df.with_columns(pl.col(c).cast(supertype).alias(c))
+                    else:
+                        df = df.with_columns(pl.col(c).cast(pl.Utf8))
+                        add_df = add_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
 
-            # Reorder columns EXACTLY to match df before vstack
             add_df = add_df.select(df.columns)
-
             df = df.vstack(add_df)
 
-        # Upsert attrs for existing ids (vector of updates via helper)
-        for vid, attrs in norm:
-            if attrs and (df.is_empty() or (vid in existing_ids)):
-                df = self._upsert_row(df, vid, attrs)
+        # -----------------------------------------------------------------------
+        # VECTORIZED UPSERT OF EXISTING ATTRIBUTES
+        # -----------------------------------------------------------------------
+        update_pairs = [(vid, attrs) for vid, attrs in norm if vid in existing_ids and attrs]
 
+        if update_pairs:
+            # Build a DataFrame of updates
+            update_df = pl.DataFrame(
+                {
+                    "vertex_id": [vid for vid, _ in update_pairs],
+                    **{
+                        k: [attrs.get(k, None) for _, attrs in update_pairs]
+                        for k in new_attr_keys
+                    }
+                },
+                nan_to_null=True,
+                strict=False,
+            )
+
+            # Resolve dtype mismatches with df (vectorized)
+            for c in update_df.columns:
+                if c not in df.columns:
+                    continue
+                lc, rc = df.schema[c], update_df.schema[c]
+                if lc == pl.Null and rc != pl.Null:
+                    df = df.with_columns(pl.col(c).cast(rc))
+                elif rc == pl.Null and lc != pl.Null:
+                    update_df = update_df.with_columns(pl.col(c).cast(lc).alias(c))
+                elif lc != rc:
+                    if pl.datatypes.is_numeric_dtype(lc) and pl.datatypes.is_numeric_dtype(rc):
+                        supertype = pl.datatypes.get_supertype(lc, rc)
+                        df = df.with_columns(pl.col(c).cast(supertype))
+                        update_df = update_df.with_columns(pl.col(c).cast(supertype).alias(c))
+                    else:
+                        df = df.with_columns(pl.col(c).cast(pl.Utf8))
+                        update_df = update_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
+
+            # LEFT JOIN updates, COALESCE new values
+            df = df.join(update_df, on="vertex_id", how="left", suffix="_new")
+            for c in new_attr_keys:
+                if c in df.columns and c + "_new" in df.columns:
+                    df = df.with_columns(
+                        pl.coalesce([pl.col(c + "_new"), pl.col(c)]).alias(c)
+                    ).drop(c + "_new")
+
+        # -----------------------------------------------------------------------
+        # DONE
+        # -----------------------------------------------------------------------
         self.vertex_attributes = df
 
     def add_edges_bulk(
