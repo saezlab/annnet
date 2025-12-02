@@ -1,60 +1,33 @@
-## Description
-
-**annnet** is a lightweight, flexible, minimal-dependencies Python package for creating, manipulating, and interoperating with diverse graph data structures. It aims to be the connective tissue ("glue") between multiple graph ecosystems (NetworkX, igraph, graph-tool, etc.) while maintaining a clean and general-purpose internal representation.
-
----
-
-## 📌 Description
-
-annnet provides a unified interface for:
-
-- Building general-purpose graphs (simple, directed, hyper, signed, etc.)
-- Managing node/edge annotations
-- Indexing and fast lookups
-- Importing from or exporting to various tools and file formats
-
-Its design supports complex workflows in data science, bioinformatics, and network theory — without locking you into a specific graph backend.
+# AnnNet — Annotated Network Data Structures for Science
+**(BSD-3 License)** 
+AnnNet (**Annotated Network**) is a unified, high-expressivity graph platform designed to bring the convenience of **AnnData-style** annotated containers to **networks, multilayer structures, and hypergraphs**.   
+It targets systems biology, network biology, omics integration, computational social science, and any domain needing **fully flexible graph semantics** with modern stable storage and interoperability.
 
 ---
+### Why AnnNet?
+Straight answer: nothing else combines all of this at once:
+- **Maximum graph expressiveness**:   
+hyperedges, directed/undirected hybrid edges, parallel edges, self-loops, edge-edge edges, vertex-edge edges, custom directionality, graph-level and edge-level semantics.
+- **Multilayer networks**:   
+full support based on the Kivelä et al. multilayer network framework (layers, aspects, inter-layer edges).
+- **Slicing system**:   
+fast creation of subnetworks, clusters, and arbitrary “slices” of elements.
+- **Annotated tables everywhere**:   
+Polars-backed tables for vertices, edges, layers, vertex-layer couples, slices, and graph metadata/attributes.
+- **AnnData-style API**:   
+.obs, .var, .X, layers,.cache, .idx, etc..   Familiar for users of scanpy/anndata.
+- **Interoperability without friction**:   
+import/export with NetworkX, igraph, graph-tool, SBML, GraphML, CX2 (Cytoscape), SIF, Excel, CSV, JSON, graphdir, dataframes (Narwhals).
+- **Algorithm proxying**:   
+seamless lazy calls to algorithms from networkx, igraph, and graph-tool via proxy objects.
+- **Disk-backed, lossless storage as .annnet** :  
+	- Zarr for matrices.   
+	- Parquet for annotated tables.  
+	- JSON for metadata.   
+	Reopen without loss of structure or metadata.
 
-## ✅ Features
 
-### General Graph Modeling
-- Simple graphs, directed graphs, multigraphs
-- Hypergraphs (via edge sets or higher-order relationships)
-- Signed and weighted edges
-- Rich node/edge annotations
-- Efficient indexing and lookups
-
-### Import Support
-- CSV, JSON, and flat files
-- Native import from existing objects:
-  - `networkx.Graph`
-  - `igraph.Graph`
-  - `graph_tool.Graph`
-  - `corneto.Graph`
-
-### Export & Interoperability
-- NetworkX (`to_networkx()`)
-- igraph (`to_igraph()`)
-- graph-tool (`to_graphtool()`)
-- [CORNETO](https://corneto.org/)
-- CSV, JSON, and custom serializations
-
-### Backend-specific Integration (if installed)
-
-If `networkx` is installed, you can call any NetworkX algorithm directly using dot notation:
-
-```python
-centrality = G.nx.degree_centrality()
-```
-**How it works:**
-
-1. annnet converts `G` to a NetworkX object on demand, abstracting away all the non-needed attributes.
-2. Runs the algorithm _as-is_.
-3. Returns results directly, syncing any graph changes back to the internal representation of the `gg.Graph`.
-
-This allows you to access the full power of NetworkX algorithms with zero boilerplate.
+*AnnNet is a fresh development, available for public testing, we appreciate feedback in GitHub issues <https://github.com/saezlab/annnet>.
 
 ---
 
@@ -70,100 +43,58 @@ Optional dependencies for extended functionality:
 ```bash
 pip install annnet[networkx,igraph]
 pip install annnet[graph-tool]
-pip install annnet[corneto]
 ```
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ```python
-import annnet as gg
+G = an.Graph(directed=True)  # default direction; can be overridden per-edge
 
-# Create a new graph
-G = gg.Graph(directed=True, backend="corneto")
+# Add vertices with attributes
+G.add_vertices([
+    ('A', {'name': 'a'}),
+    ('B', {'name': 'b'}),
+    ('C', {'name': 'c'}),
+    ('D', {'name': 'd'}),
+])
 
-# Add nodes and edges
-G.add_node("A", type="gene")
-G.add_node("B", type="protein")
-G.add_edge("A", "B", sign="+", source="literature")
+# Create slices and set active
+G.add_slice("toy")
+G.add_slice("train")
+G.add_slice("eval")
+G.slices.active = "toy"   # same effect as set_active_slice("toy")
 
-# Run a NetworkX algorithm (if installed)
-path = G.nx.shortest_path(source="A", target="B")
+# Add vertices (with attributes) in 'toy'
+for v in ["A","B","C","D"]:
+    G.add_vertex(v, label=v, kind="gene")
 
-# Export to JSON
-G.to_json("graph.json")
+# 1) Binary directed
+e_dir = G.add_edge("A", "B", weight=2.0, edge_directed=True, relation="activates")
+
+# 2) Binary undirected
+e_undir = G.add_edge("B", "C", weight=1.0, edge_directed=False, relation="binds")
+
+# 3) Self-loop
+e_loop = G.add_edge("D", "D", weight=0.5, edge_directed=True, relation="self")
+
+# 4) Parallel edge
+e_parallel = G.add_parallel_edge("A", "B", weight=5.0, relation="alternative")
+
+# 5) Vertex–edge (hybrid) edges
+G.add_edge_entity("edge_e1", description="signal")
+e_vx = G.add_edge("edge_e1", "C", edge_type="vertex_edge", edge_directed=True, channel="edge->vertex")
+
+# 6) Hyperedge (undirected, 3-way membership)
+e_hyper_undir = G.add_hyperedge(members=["A","C","D"], weight=1.0, tag="complex")
+
+# 7) Hyperedge (directed head→tail)
+e_hyper_dir = G.add_hyperedge(head=["A","B"], tail=["C","D"], weight=1.0, reaction="A+B->C+D")
 ```
 
 ---
 
-## 📦 Refined Package Structure
-The package is organized to separate core functionality, I/O operations, adapters for external libraries, and algorithms. This modular design allows for easy extension and maintenance.
-
-```
-annnet/
-│
-├── __init__.py                # Public API surface, version, re-exports
-├── _version.py                # Single source of truth for __version__
-│
-├── core/                      # Core, always-installed logic
-│   ├── __init__.py
-│   ├── _base.py               # BaseGraph class and common interfaces 
-│   ├── _graph.py              # Graph class and internal state manager
-│   ├── structure.py           # Core data structures (nodes, edges, incidence)
-│   ├── metadata.py            # Node/edge attribute store and access helpers
-│   ├── views.py               # Subgraph views, shallow/deep copies
-│   └── state.py               # Graph history, change tracking, and lazy loading
-│
-├── io/                        # Loaders and writers for files
-│   ├── __init__.py
-│   ├── csv.py                 # CSV format (edge list, node table)
-│   ├── json.py                # JSON or JSONL parsing (streamable)
-│   ├── registry.py            # Entry point registration for loaders/dumpers
-│   └── utils.py               # Format detection, path helpers
-│
-├── adapters/                  # Lazy integration with external libraries
-│   ├── __init__.py
-│   ├── _base.py               # AbstractAdapter, adapter interface
-│   ├── _proxy.py              # Tiny forwarding proxy
-│   ├── manager.py             # Adapter registry and lazy bridge logic
-│   ├── networkx.py            # If available: convert, cache, sync with NetworkX
-│   ├── igraph.py              # If available
-│   ├── graphtool.py           # If available
-│   └── corneto.py             # If available
-│
-├── algorithms/                # Pure-python algorithms using core only
-│   ├── __init__.py
-│   └── traversal.py           # BFS/DFS etc.
-│
-└── utils/                     # Generic helpers not tied to graph structure
-    ├── validation.py
-    ├── typing.py
-    └── config.py              # Global options, logging, toggles
-```
-
----
-
-## ⚙️ Internal Design
-annnet intelligently adapts its internal representation for performance and compatibility:
-
-- Chooses between edge lists, incidence matrices, and adjacency dicts automatically
-- Keeps metadata (node/edge attributes) separate from core structure
-- Lazy construction of external library representations (e.g., NetworkX) only when needed
-- Copy-on-write design for subgraphs and structural mutations
-
----
-
-## 🧭  Philosophy
-annnet vis designed with these principles in mind:
-
-- **Simple**, consistent interface for all graph types
-- **Interoperability-first**: integrate, don’t replace
-- **Performance-aware**, not performance-obsessed
-- **Extendable** and modular, not monolithic
-
----
-
-## 📜 License
+## License
 annnet is licensed under the BSD-3 License. See the [LICENSE](LICENSE) file for details.
 
