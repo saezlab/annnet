@@ -5588,6 +5588,100 @@ class Graph:
             return pl.DataFrame(schema={"slice_id": pl.Utf8})
         return df.clone() if copy else df
 
+    def aspects_view(self, copy=True):
+        """
+        View of Kivela aspects and their metadata.
+
+        Columns:
+        aspect : str
+        elem_layers : list[str]
+        <aspect_attr_keys>...
+        """
+        if not getattr(self, "aspects", None):
+            return pl.DataFrame(schema={
+                "aspect": pl.Utf8,
+                "elem_layers": pl.List(pl.Utf8),
+            })
+
+        rows = []
+        for a in self.aspects:
+            base = {
+                "aspect": a,
+                "elem_layers": list(self.elem_layers.get(a, [])),
+            }
+            # aspect attrs stored in self._aspect_attrs[a]
+            for k, v in self._aspect_attrs.get(a, {}).items():
+                base[k] = v
+            rows.append(base)
+
+        df = pl.DataFrame(rows)
+        return df.clone() if copy else df
+    
+    def layers_view(self, copy=True):
+        """
+        Read-only table of multi-aspect layers (full Kivelä layers).
+
+        Columns:
+        layer_tuple : list[str]   # the aspect tuple
+        layer_id    : str         # canonical id
+        <aspect columns>          # one column per aspect
+        <layer attrs>...          # metadata set by set_layer_attrs()
+        <elem attrs>...           # merged elementary layer attrs (prefixed)
+
+        For a single-aspect model:
+        layer_tuple = [label]
+        layer_id    = label
+        aspect column = that label
+        """
+        # no aspects configured → no layers
+        if not getattr(self, "aspects", None):
+            return pl.DataFrame(schema={
+                "layer_tuple": pl.List(pl.Utf8),
+                "layer_id": pl.Utf8,
+            })
+
+        # empty product → no layers
+        if not getattr(self, "_all_layers", ()):
+            return pl.DataFrame(schema={
+                "layer_tuple": pl.List(pl.Utf8),
+                "layer_id": pl.Utf8,
+            })
+
+        rows = []
+        for aa in self._all_layers:
+            aa = tuple(aa)
+            lid = self.layer_tuple_to_id(aa)
+
+            base = {
+                "layer_tuple": list(aa),
+                "layer_id": lid,
+            }
+
+            # split per-aspect columns
+            for i, a in enumerate(self.aspects):
+                base[a] = aa[i]
+
+            # attach multi-aspect layer metadata
+            for k, v in self._layer_attrs.get(aa, {}).items():
+                base[k] = v
+
+            # attach elementary layer attrs for each aspect (prefixed)
+            # using the canonical elementary id "{aspect}_{label}"
+            for i, a in enumerate(self.aspects):
+                lid_elem = f"{a}_{aa[i]}"
+                row = self.layer_attributes.filter(pl.col("layer_id") == lid_elem)
+                if row.height > 0:
+                    rdict = row.to_dicts()[0]
+                    for k, v in rdict.items():
+                        if k == "layer_id":
+                            continue
+                        base[f"{a}__{k}"] = v
+
+            rows.append(base)
+
+        df = pl.DataFrame(rows)
+        return df.clone() if copy else df
+
     # slice set-ops & cross-slice analytics
 
     def get_slice_vertices(self, slice_id):
