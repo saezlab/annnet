@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from typing import Any
+
+import narwhals as nw
+from narwhals.typing import IntoDataFrame
 import polars as pl
 
 if __name__ == "__main__":
@@ -30,6 +34,9 @@ def to_dataframes(
     - 'hyperedges': Hyperedges with head/tail sets (if include_hyperedges=True)
     - 'slices': slice membership (if include_slices=True)
     - 'slice_weights': Per-slice edge weights (if include_slices=True)
+
+    Note: Output is always Polars because hyperedges use List types which
+    aren't universally supported across dataframe libraries.
 
     Args:
         graph: Graph instance to export
@@ -78,7 +85,6 @@ def to_dataframes(
             "edge_type": etype,
         }
 
-        # Edge attributes
         attrs = graph.edge_attributes.filter(pl.col("edge_id") == eid).to_dicts()
         if attrs:
             attr_dict = dict(attrs[0])
@@ -109,12 +115,10 @@ def to_dataframes(
         hyperedges_data = []
 
         if explode_hyperedges:
-            # Exploded format: one row per endpoint
             for eid, meta in graph.hyperedge_definitions.items():
                 directed = meta.get("directed", False)
                 weight = graph.edge_weights.get(eid, 1.0)
 
-                # Get edge attributes once
                 attrs = graph.edge_attributes.filter(pl.col("edge_id") == eid).to_dicts()
                 attr_dict = {}
                 if attrs:
@@ -126,7 +130,6 @@ def to_dataframes(
                         }
 
                 if directed:
-                    # Head vertices (sources)
                     for v in meta.get("head", []):
                         row = {
                             "edge_id": eid,
@@ -138,7 +141,6 @@ def to_dataframes(
                         row.update(attr_dict)
                         hyperedges_data.append(row)
 
-                    # Tail vertices (targets)
                     for v in meta.get("tail", []):
                         row = {
                             "edge_id": eid,
@@ -150,7 +152,6 @@ def to_dataframes(
                         row.update(attr_dict)
                         hyperedges_data.append(row)
                 else:
-                    # Undirected: all members
                     for v in meta.get("members", []):
                         row = {
                             "edge_id": eid,
@@ -162,7 +163,6 @@ def to_dataframes(
                         row.update(attr_dict)
                         hyperedges_data.append(row)
         else:
-            # Compact format: lists in cells
             for eid, meta in graph.hyperedge_definitions.items():
                 directed = meta.get("directed", False)
                 weight = graph.edge_weights.get(eid, 1.0)
@@ -182,7 +182,6 @@ def to_dataframes(
                     row["tail"] = None
                     row["members"] = list(meta.get("members", []))
 
-                # Edge attributes
                 attrs = graph.edge_attributes.filter(pl.col("edge_id") == eid).to_dicts()
                 if attrs:
                     attr_dict = dict(attrs[0])
@@ -220,19 +219,14 @@ def to_dataframes(
                     }
                 )
 
-    # 4. slice membership
+    # 4. Slice membership
     if include_slices:
         slices_data = []
         try:
             for lid in graph.list_slices(include_default=True):
                 slice_meta = graph._slices.get(lid, {})
                 for eid in slice_meta.get("edges", []):
-                    slices_data.append(
-                        {
-                            "slice_id": lid,
-                            "edge_id": eid,
-                        }
-                    )
+                    slices_data.append({"slice_id": lid, "edge_id": eid})
         except Exception:
             pass
 
@@ -263,17 +257,27 @@ def to_dataframes(
     return result
 
 
+def _to_dicts(df: nw.DataFrame[Any]) -> list[dict[str, Any]]:
+    """Convert narwhals DataFrame to list of dicts."""
+    return [dict(zip(df.columns, row)) for row in df.rows()]
+
+
+def _get_height(df: nw.DataFrame[Any]) -> int:
+    """Get row count from narwhals DataFrame."""
+    return df.shape[0]
+
+
 def from_dataframes(
-    nodes: pl.DataFrame | None = None,
-    edges: pl.DataFrame | None = None,
-    hyperedges: pl.DataFrame | None = None,
-    slices: pl.DataFrame | None = None,
-    slice_weights: pl.DataFrame | None = None,
+    nodes: IntoDataFrame | None = None,
+    edges: IntoDataFrame | None = None,
+    hyperedges: IntoDataFrame | None = None,
+    slices: IntoDataFrame | None = None,
+    slice_weights: IntoDataFrame | None = None,
     *,
     directed: bool | None = None,
     exploded_hyperedges: bool = False,
 ) -> Graph:
-    """Import graph from Polars DataFrames.
+    """Import graph from any DataFrame (Pandas, Polars, PyArrow, etc.).
 
     Accepts DataFrames in the format produced by to_dataframes():
 
@@ -296,7 +300,7 @@ def from_dataframes(
         - Required: slice_id, edge_id, weight
 
     Args:
-        nodes: DataFrame with vertex_id and attributes
+        nodes: DataFrame with vertex_id and attributes (Pandas/Polars/PyArrow/etc.)
         edges: DataFrame with binary edges
         hyperedges: DataFrame with hyperedges
         slices: DataFrame with slice membership
@@ -311,36 +315,35 @@ def from_dataframes(
     G = Graph(directed=directed)
 
     # 1. Add vertices
-    if nodes is not None and nodes.height > 0:
-        if "vertex_id" not in nodes.columns:
-            raise ValueError("nodes DataFrame must have 'vertex_id' column")
+    if nodes is not None:
+        nodes_nw = nw.from_native(nodes, eager_only=True)
+        if _get_height(nodes_nw) > 0:
+            if "vertex_id" not in nodes_nw.columns:
+                raise ValueError("nodes DataFrame must have 'vertex_id' column")
 
-        vertex_rows = []
-        for row in nodes.to_dicts():
-            vid = row.pop("vertex_id")
-            vertex_rows.append({"vertex_id": vid, "attributes": row})
-
-        for vrow in vertex_rows:
-            G.add_vertex(vrow["vertex_id"])
-            if vrow["attributes"]:
-                G.set_vertex_attrs(vrow["vertex_id"], **vrow["attributes"])
+            for row in _to_dicts(nodes_nw):
+                vid = row.pop("vertex_id")
+                G.add_vertex(vid)
+                if row:
+                    G.set_vertex_attrs(vid, **row)
 
     # 2. Add binary edges
-    if edges is not None and edges.height > 0:
-        if "source" not in edges.columns or "target" not in edges.columns:
-            raise ValueError("edges DataFrame must have 'source' and 'target' columns")
+    if edges is not None:
+        edges_nw = nw.from_native(edges, eager_only=True)
+        if _get_height(edges_nw) > 0:
+            if "source" not in edges_nw.columns or "target" not in edges_nw.columns:
+                raise ValueError("edges DataFrame must have 'source' and 'target' columns")
 
-        edge_rows = []
-        for row in edges.to_dicts():
-            src = row.pop("source")
-            tgt = row.pop("target")
-            eid = row.pop("edge_id", None)
-            weight = row.pop("weight", 1.0)
-            edge_directed = row.pop("directed", directed)
-            etype = row.pop("edge_type", "regular")
+            edge_rows = []
+            for row in _to_dicts(edges_nw):
+                src = row.pop("source")
+                tgt = row.pop("target")
+                eid = row.pop("edge_id", None)
+                weight = row.pop("weight", 1.0)
+                edge_directed = row.pop("directed", directed)
+                etype = row.pop("edge_type", "regular")
 
-            edge_rows.append(
-                {
+                edge_rows.append({
                     "source": src,
                     "target": tgt,
                     "edge_id": eid,
@@ -348,102 +351,106 @@ def from_dataframes(
                     "edge_directed": edge_directed,
                     "edge_type": etype,
                     "attributes": row,
-                }
-            )
+                })
 
-        G.add_edges_bulk(edge_rows)
+            G.add_edges_bulk(edge_rows)
 
     # 3. Add hyperedges
-    if hyperedges is not None and hyperedges.height > 0:
-        if exploded_hyperedges:
-            # Exploded format: group by edge_id
-            if "edge_id" not in hyperedges.columns or "vertex_id" not in hyperedges.columns:
-                raise ValueError("Exploded hyperedges must have 'edge_id' and 'vertex_id' columns")
+    if hyperedges is not None:
+        hyperedges_nw = nw.from_native(hyperedges, eager_only=True)
+        if _get_height(hyperedges_nw) > 0:
+            if exploded_hyperedges:
+                if "edge_id" not in hyperedges_nw.columns or "vertex_id" not in hyperedges_nw.columns:
+                    raise ValueError("Exploded hyperedges must have 'edge_id' and 'vertex_id' columns")
 
-            grouped = hyperedges.group_by("edge_id").agg(pl.all())
+                # Group by edge_id - need to collect all rows first
+                grouped: dict[str, dict[str, list[Any]]] = {}
+                for row in _to_dicts(hyperedges_nw):
+                    eid = row["edge_id"]
+                    if eid not in grouped:
+                        grouped[eid] = {"vertices": [], "roles": [], "directed": [], "weights": []}
+                    grouped[eid]["vertices"].append(row["vertex_id"])
+                    grouped[eid]["roles"].append(row.get("role", "member"))
+                    grouped[eid]["directed"].append(row.get("directed", False))
+                    grouped[eid]["weights"].append(row.get("weight", 1.0))
 
-            for row in grouped.to_dicts():
-                eid = row["edge_id"][0] if isinstance(row["edge_id"], list) else row["edge_id"]
-                vertices = row["vertex_id"]
-                roles = row.get("role", [])
-                directed_vals = row.get("directed", [])
-                weights = row.get("weight", [])
+                for eid, data in grouped.items():
+                    is_directed = data["directed"][0] if data["directed"] else False
+                    weight = data["weights"][0] if data["weights"] else 1.0
 
-                directed = directed_vals[0] if directed_vals else False
-                weight = weights[0] if weights else 1.0
+                    if is_directed:
+                        head = [v for v, r in zip(data["vertices"], data["roles"]) if r == "head"]
+                        tail = [v for v, r in zip(data["vertices"], data["roles"]) if r == "tail"]
+                        G.add_hyperedge(head=head, tail=tail, edge_id=eid, edge_directed=True, weight=weight)
+                    else:
+                        G.add_hyperedge(members=data["vertices"], edge_id=eid, edge_directed=False, weight=weight)
+            else:
+                if "edge_id" not in hyperedges_nw.columns:
+                    raise ValueError("hyperedges DataFrame must have 'edge_id' column")
 
-                if directed:
-                    head = [v for v, r in zip(vertices, roles) if r == "head"]
-                    tail = [v for v, r in zip(vertices, roles) if r == "tail"]
-                    G.add_hyperedge(
-                        head=head, tail=tail, edge_id=eid, edge_directed=True, weight=weight
-                    )
-                else:
-                    members = vertices
-                    G.add_hyperedge(
-                        members=members, edge_id=eid, edge_directed=False, weight=weight
-                    )
-        else:
-            # Compact format
-            if "edge_id" not in hyperedges.columns:
-                raise ValueError("hyperedges DataFrame must have 'edge_id' column")
+                for row in _to_dicts(hyperedges_nw):
+                    eid = row.pop("edge_id")
+                    directed_he = row.pop("directed", False)
+                    weight = row.pop("weight", 1.0)
+                    head = row.pop("head", None)
+                    tail = row.pop("tail", None)
+                    members = row.pop("members", None)
 
-            for row in hyperedges.to_dicts():
-                eid = row.pop("edge_id")
-                directed_he = row.pop("directed", False)
-                weight = row.pop("weight", 1.0)
-                head = row.pop("head", None)
-                tail = row.pop("tail", None)
-                members = row.pop("members", None)
+                    if directed_he:
+                        G.add_hyperedge(
+                            head=head or [],
+                            tail=tail or [],
+                            edge_id=eid,
+                            edge_directed=True,
+                            weight=weight,
+                        )
+                    else:
+                        G.add_hyperedge(
+                            members=members or [],
+                            edge_id=eid,
+                            edge_directed=False,
+                            weight=weight,
+                        )
 
-                if directed_he:
-                    G.add_hyperedge(
-                        head=head or [],
-                        tail=tail or [],
-                        edge_id=eid,
-                        edge_directed=True,
-                        weight=weight,
-                    )
-                else:
-                    G.add_hyperedge(
-                        members=members or [], edge_id=eid, edge_directed=False, weight=weight
-                    )
-
-                # Attributes
-                if row:
-                    G.set_edge_attrs(eid, **row)
+                    if row:
+                        G.set_edge_attrs(eid, **row)
 
     # 4. Add slice memberships
-    if slices is not None and slices.height > 0:
-        if "slice_id" not in slices.columns or "edge_id" not in slices.columns:
-            raise ValueError("slices DataFrame must have 'slice_id' and 'edge_id' columns")
+    if slices is not None:
+        slices_nw = nw.from_native(slices, eager_only=True)
+        if _get_height(slices_nw) > 0:
+            if "slice_id" not in slices_nw.columns or "edge_id" not in slices_nw.columns:
+                raise ValueError("slices DataFrame must have 'slice_id' and 'edge_id' columns")
 
-        for row in slices.to_dicts():
-            lid = row["slice_id"]
-            eid = row["edge_id"]
-
-            try:
-                if lid not in set(G.list_slices(include_default=True)):
-                    G.add_slice(lid)
-            except Exception:
-                G.add_slice(lid)
-
-            try:
-                G.add_edge_to_slice(lid, eid)
-            except Exception:
-                pass
-
-    # 5. Add per-slice weights
-    if slice_weights is not None and slice_weights.height > 0:
-        if {"slice_id", "edge_id", "weight"}.issubset(slice_weights.columns):
-            for row in slice_weights.to_dicts():
+            for row in _to_dicts(slices_nw):
                 lid = row["slice_id"]
                 eid = row["edge_id"]
-                weight = row["weight"]
 
                 try:
-                    G.set_edge_slice_attrs(lid, eid, weight=weight)
+                    if lid not in set(G.list_slices(include_default=True)):
+                        G.add_slice(lid)
+                except Exception:
+                    G.add_slice(lid)
+
+                try:
+                    G.add_edge_to_slice(lid, eid)
                 except Exception:
                     pass
+
+    # 5. Add per-slice weights
+    if slice_weights is not None:
+        slice_weights_nw = nw.from_native(slice_weights, eager_only=True)
+        if _get_height(slice_weights_nw) > 0:
+            cols = set(slice_weights_nw.columns)
+            if {"slice_id", "edge_id", "weight"}.issubset(cols):
+                for row in _to_dicts(slice_weights_nw):
+                    lid = row["slice_id"]
+                    eid = row["edge_id"]
+                    weight = row["weight"]
+
+                    try:
+                        G.set_edge_slice_attrs(lid, eid, weight=weight)
+                    except Exception:
+                        pass
 
     return G

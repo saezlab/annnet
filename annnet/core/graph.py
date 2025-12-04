@@ -7021,7 +7021,7 @@ class Graph:
         """
         result = {}
         csr = self._matrix.tocsr()
-        for i in range(csr.shape[0]):
+        for i in range(self._num_entities):
             vertex_id = self.idx_to_entity[i]
             row = csr.getrow(i)
             if values:
