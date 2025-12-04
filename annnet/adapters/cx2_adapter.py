@@ -230,13 +230,29 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
     cx_nodes: List[Dict[str, Any]] = []
     cx_edges: List[Dict[str, Any]] = []
 
-    def _clean_cx2_attrs(attrs, string_cols):
+    def _clean_cx2_attrs(attrs, string_cols, list_cols=None):
+        """Clean attributes: remove nulls, convert non-JSON types."""
         if not attrs:
-            return attrs
-        return {
-            k: ("" if (v is None and k in string_cols) else v)
-            for k, v in attrs.items()
-        }
+            return {}
+        if list_cols is None:
+            list_cols = set()
+        out = {}
+        for k, v in attrs.items():
+            if v is None:
+                if k in string_cols:
+                    out[k] = ""
+                elif k in list_cols:
+                    out[k] = []
+                # else: drop null entirely (CX2 doesn't accept null)
+            elif isinstance(v, (set, frozenset)):
+                out[k] = list(v)
+            elif isinstance(v, (str, int, float, bool)):
+                out[k] = v
+            elif isinstance(v, (list, tuple)):
+                out[k] = [str(x) if not isinstance(x, (str, int, float, bool, type(None))) else x for x in v]
+            else:
+                out[k] = str(v)  # fallback: stringify unknown types
+        return out
 
     # -- Nodes --
     # We only map entities of type 'vertex' to visual nodes.
