@@ -2743,6 +2743,93 @@ class Graph:
         except TypeError:
             return {vertices}
 
+    def make_undirected(self, *, drop_flexible: bool = True, update_default: bool = True):
+        """
+        Force the whole graph to be undirected in-place.
+
+        - Binary edges: rewrite incidence to (+w, +w) at (source, target).
+        - Hyperedges: rewrite incidence to undirected (+w on all members).
+        - Keeps weights, endpoints, slices, layer roles and attributes.
+        """
+
+        M = self._matrix
+        entity_to_idx = self.entity_to_idx
+
+        # 1) Binary edges (skip hyperedge sentinel rows)
+        for eid, (src, tgt, kind) in list(self.edge_definitions.items()):
+            if kind == "hyper":
+                # handled via hyperedge_definitions below
+                continue
+            if src is None or tgt is None:
+                continue  # just in case
+
+            col = self.edge_to_idx.get(eid)
+            if col is None:
+                continue
+
+            w = float(self.edge_weights.get(eid, 1.0))
+
+            # Write +w at both endpoints
+            si = entity_to_idx.get(src)
+            ti = entity_to_idx.get(tgt)
+
+            if si is not None:
+                M[si, col] = w
+            if ti is not None and ti != si:
+                M[ti, col] = w
+
+            # Mark metadata as undirected
+            self.edge_directed[eid] = False
+            try:
+                self.set_edge_attrs(eid, edge_type=EdgeType.UNDIRECTED)
+            except Exception:
+                pass  # attribute table might be missing in some minimal setups
+
+        # 2) Hyperedges
+        for eid, h in list(self.hyperedge_definitions.items()):
+            col = self.edge_to_idx.get(eid)
+            if col is None:
+                continue
+
+            w = float(self.edge_weights.get(eid, 1.0))
+
+            if h.get("directed", False):
+                head = set(h.get("head", ()))
+                tail = set(h.get("tail", ()))
+                members = head | tail
+
+                # Clear old (+w on head, -w on tail)
+                for u in members:
+                    idx = entity_to_idx.get(u)
+                    if idx is not None:
+                        try:
+                            M[idx, col] = 0
+                        except KeyError:
+                            pass
+            else:
+                members = set(h.get("members", ()))
+
+            # Rewrite as undirected: +w for all members
+            for u in members:
+                idx = entity_to_idx.get(u)
+                if idx is not None:
+                    M[idx, col] = w
+
+            # Update hyperedge metadata
+            self.hyperedge_definitions[eid] = {
+                "directed": False,
+                "members": set(members),
+            }
+            self.edge_directed[eid] = False
+
+        # 3) Optional: drop flexible-direction policies (they make no sense if everything is undirected)
+        if drop_flexible:
+            self.edge_direction_policy.clear()
+
+        # 4) Optional: set global default to undirected for future edges
+        if update_default:
+            self.directed = False
+
     # Bulk build graph
 
     def add_vertices_bulk(self, vertices, slice=None):
