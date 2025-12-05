@@ -78,7 +78,7 @@ def build_edge_labels(
         parts: list[str] = []
         if use_weight:
             try:
-                w = graph.get_effective_edge_weight(eid, layer=layer)
+                w = graph.get_effective_edge_weight(eid, slice=layer)
                 parts.append(f"w={w:.3g}")
             except Exception:
                 pass
@@ -138,7 +138,7 @@ def edge_style_from_weights(
     for j in eidxs:
         eid = graph.idx_to_edge[j]
         try:
-            raw_vals.append(abs(float(graph.get_effective_edge_weight(eid, layer=layer))))
+            raw_vals.append(abs(float(graph.get_effective_edge_weight(eid, slice=layer))))
         except Exception:
             raw_vals.append(1.0)
 
@@ -149,7 +149,7 @@ def edge_style_from_weights(
         if color_mode == "signed":
             eid = graph.idx_to_edge[j]
             try:
-                w = float(graph.get_effective_edge_weight(eid, layer=layer))
+                w = float(graph.get_effective_edge_weight(eid, slice=layer))
             except Exception:
                 w = 0.0
             color = "firebrick4" if w > 0 else ("dodgerblue4" if w < 0 else "black")
