@@ -12,20 +12,11 @@ dev = [
     "mypy>=1.0"
 ]
 docs = [
-    "sphinx>=7.2,<8.2.3",
-    "sphinx-last-updated-by-git>=0.3",
-    "sphinx-autodoc-typehints>=2.0.0,<3.2.0",
-    "sphinxcontrib-fulltoc>=1.2.0",
-    "sphinxcontrib-bibtex",
-    "sphinx-copybutton",
-    "myst-parser",
-    "myst-nb",
-    "jupyterlab",
-    "pydata-sphinx-theme",
-    "sphinx-remove-toctrees",
-    "jupyter-contrib-nbextensions",
-    "nbsphinx",
-    "sphinx-rtd-theme>=3.0.2"
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.25",
+    "mkdocs-jupyter>=0.25",
+    "mkdocs-autorefs>=1.0"
 ]
 tests = [
     "pytest>=7.0",
@@ -34,7 +25,8 @@ tests = [
     "coverage>=6.0",
     "codecov-cli>=10.2.0",
     "diff_cover",
-    "ruff"
+    "ruff",
+    "narwhals>=1.9"
 ]
 
 [lint.isort]
@@ -68,7 +60,6 @@ use-parentheses = true
 [lint.per-file-ignores]
 "*/__init__.py" = ["D104", "F401"]
 "docs/*" = ["I"]
-"docs/src/conf.py" = ["D100"]
 "tests/*" = ["D"]
 "tests/conftest.py" = ["D101", "D102", "D103", "E402"]
 
@@ -119,7 +110,7 @@ excel    = ["openpyxl>=3.1"]          # used by annnet/io/excel.py
 sbml     = ["lxml>=4.9"]                # used by sbml_adapter.py
 parquet  = ["pyarrow>=10"]            # used by GraphDir_Parquet_adapter.py
 zarr_io  = ["zarr>=2.18", "numcodecs>=0.12"]  # used by io_annnet.py
-plot     = ["matplotlib>=3.5"]
+matplotlib  = ["matplotlib>=3.5"]
 io = [
   "pandas>=2.0",    # excel loader needs it
   "pyarrow>=10",    # parquet adapter
@@ -127,6 +118,7 @@ io = [
   "numcodecs>=0.12",
   "lxml>=4.9",        # SBML adapter
   "toml>=0.10",     # metadata loading
+  "narwhals>=1.9",
 ]
 backends = [
   "networkx>=3.3",
@@ -164,6 +156,7 @@ all = [
   "graphviz",
   "cobra>=0.26",
   "toml>=0.10",
+  "narwhals>=1.9",
   # graphtool is not on PyPI
 ]
 
@@ -186,6 +179,7 @@ tests = [
   "tox-gh>=1.5.0",
   "diff_cover",
   "codecov-cli>=10.2.0",
+  "narwhals>=1.9",
 ]
 
 # switch docs extra to **MkDocs** (workflows call mkdocs)
@@ -349,11 +343,12 @@ platform = [
 usedevelop = true
 
 [tool.tox.env.clean-docs]
-changedir = "{toxinidir}/docs"
+changedir = "{toxinidir}"
 skip_install = true
-allowlist_externals = ["make"]
+allowlist_externals = []
 commands = [
-  ["make", "clean"]
+  ["uv", "sync", "--group", "docs"],
+  ["uv", "run", "mkdocs", "build", "--clean"]
 ]
 
 [tool.tox.env.covclean]
@@ -395,15 +390,14 @@ setenv = "_PYTEST_TOX_POSARGS=--log-cli-level=ERROR"
 
 
 [tool.tox.env.docs]
-description = "Build the documentation."
+description = "Build the documentation (MkDocs)."
 skip_install = true
 allowlist_externals = ["uv", "python"]
 commands = [
   ["uv", "sync", "--group", "docs"],
-  ["uv", "run", "sphinx-build", "--color", "-b", "html",
-   "{toxinidir}/docs/source", "{toxinidir}/docs/build/html"],
+  ["uv", "run", "mkdocs", "build", "--strict"],
   ["python", "-c",
-   "import pathlib; print('Documentation is available under:', pathlib.Path('{toxinidir}')/'docs'/'build'/'html'/'index.html')"]
+   "import pathlib; print('Documentation is available under:', pathlib.Path('{toxinidir}')/'site'/'index.html')"]
 ]
 
 [tool.tox-gh-actions]
