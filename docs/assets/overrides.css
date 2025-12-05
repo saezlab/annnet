@@ -1,0 +1,74 @@
+/* Prevent wrapping of code/output blocks; enable horizontal scrolling */
+:root {
+  /* Force a robust monospace stack for code + outputs */
+  --md-code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "DejaVu Sans Mono", "Liberation Mono", "Courier New", monospace;
+}
+
+.md-typeset {
+  --md-code-font-size: 0.74rem; /* smaller code font globally */
+}
+.md-typeset pre,
+.md-typeset code {
+  white-space: pre;           /* do not wrap */
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.md-typeset .highlight pre,
+.md-typeset .highlight code {
+  white-space: pre;           /* override theme pre-wrap */
+  overflow-x: auto;           /* scroll horizontally */
+}
+
+/* Jupyter/MkDocs-Jupyter output containers */
+.jp-OutputArea-output pre,
+.jp-OutputArea-output code,
+.output pre,
+.output code,
+.nb-output pre,
+.nb-output code {
+  white-space: pre !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  overflow-x: auto;
+}
+
+/* Ensure monospace font for ASCII tables */
+.md-typeset pre,
+.md-typeset code,
+.md-typeset kbd,
+.md-typeset samp,
+.md-typeset tt,
+.jp-OutputArea-output pre,
+.nb-output pre,
+.output pre,
+.cell_output pre {
+  font-family: var(--md-code-font) !important;
+  font-size: 0.74rem !important; /* smaller code/output font */
+  font-variant-ligatures: none !important; /* keep spacing exact */
+}
+
+/* Ensure plain text outputs also use monospace + smaller size */
+.jp-OutputArea-output,
+.output,
+.nb-output,
+.output_text,
+.cell_output,
+.jp-OutputArea,
+.jp-RenderedText,
+.rendered_html pre,
+.rendered_html code {
+  font-family: var(--md-code-font) !important;
+  font-size: 0.74rem !important;
+  font-variant-ligatures: none !important;
+}
+
+/* Extra: prevent wrapping everywhere in notebook outputs */
+.md-typeset .jp-OutputArea-output pre,
+.md-typeset .output pre,
+.md-typeset .nb-output pre,
+.md-typeset .cell_output pre,
+.md-typeset .output_text pre {
+  white-space: pre !important;
+  overflow-x: auto !important;
+}
