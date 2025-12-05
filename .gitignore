@@ -67,3 +67,6 @@ dist/
 test_venv/
 *venv*/
 test_venv/
+# pixi environments
+.pixi/*
+!.pixi/config.toml

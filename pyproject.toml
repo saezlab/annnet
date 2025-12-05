@@ -415,3 +415,21 @@ python = [
 [tool.uv.sources]
 jupyter-contrib-nbextensions = {git = "https://github.com/deeenes/jupyter_contrib_nbextensions.git", branch = "master"}
 nbsphinx = {git = "https://github.com/deeenes/nbsphinx", branch = "timings"}
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64"]
+
+[tool.pixi.dependencies]
+python = "3.12.*"
+graph-tool = "*"
+
+[tool.pixi.pypi-dependencies]
+annnet = { path = ".", editable = true, extras = ["tests", "dev", "networkx", "igraph", "pandas", "excel", "sbml", "parquet", "zarr_io"]}
+
+[tool.pixi.environments]
+dev = { solve-group = "default" }
+
+[tool.pixi.tasks]
+_pytest = { cmd = "pytest" }
+test-all = { depends-on = [{ task = "_pytest", environment = "dev" }] }

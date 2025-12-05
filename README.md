@@ -108,6 +108,19 @@ pip install "annnet[all]"
 
 Note: graph‑tool is supported by adapters/proxies if installed, but it is not available on PyPI; install it via your OS/package manager and annnet will detect it.
 
+### Dev/test setup with Pixi 
+
+Use Pixi to get a fully loaded dev environment (Python 3.12, all extras, graph‑tool from conda‑forge):
+
+```bash
+pixi install          # solves the dev env
+pixi run test-all     # runs pytest in the Pixi dev env (with graph-tool)
+```
+
+Notes:
+- `graph-tool` is only available on some platforms (e.g., macOS arm may need Rosetta, linux-64 is supported); the Pixi manifest includes multiple platforms.
+- The Pixi env installs annnet editable with extras `all`, `tests`, and `dev`, plus graph-tool from conda-forge.
+
 ---
 
 ## Quick Start
