@@ -1,6 +1,6 @@
 # test_graph.py
 import os
-import syss
+import sys
 import unittest
 
 import polars as pl

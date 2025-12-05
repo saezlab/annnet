@@ -1,6 +1,6 @@
-# AnnNet Zero-Loss Serialization: Zarr + Parquet
+# annnet zero-loss serialization: Zarr + Parquet
 
-## Design Goals
+## Design goals
 1. **Zero topology loss**: Preserve exact incidence matrix, all edge types, hyperedges, parallel edges
 2. **Complete metadata**: All attributes, slices, history, provenance
 3. **Cross-platform**: Works on Windows/Linux/Mac, Python/R/Julia
@@ -100,6 +100,32 @@ graph.annnet/
   }
 }
 ```
+
+### Field mapping to in‑memory graph
+
+- `format`, `version`: file format identifier and schema version.
+- `created`: ISO timestamp of export.
+- `annnet_version`: library version that wrote the data.
+- `graph_version`: internal monotonic version counter (used by caches/proxies).
+- `directed`: default directionality for edges when unspecified per‑edge.
+- `counts`: sanity counts for fast checks; not authoritative for reading.
+  - `vertices` ↔ number of entities with type `vertex` in `entity_types.parquet`.
+  - `edges` ↔ number of columns in incidence (and rows in `edge_*` maps).
+  - `entities` ↔ total rows in incidence and size of `entity_*` maps.
+  - `slices` ↔ number of slices in `slices/registry.parquet`.
+  - `hyperedges` ↔ entries in `structure/hyperedge_definitions.parquet`.
+  - `aspects` ↔ number of aspects in `layers/metadata.json`.
+- `slices`: ordered list of slice IDs; `active_slice` and `default_slice` indicate runtime state.
+- `compression`: preferred codec for Parquet writing (e.g., `zstd`).
+- `encoding`: explicit versions of Zarr and Parquet encodings used.
+
+### Validation and compatibility
+
+- Readers should not rely solely on `counts` for trust; derive truth from Parquet/Zarr sources.
+- Unknown keys MUST be ignored to allow forward‑compatible schema evolution.
+- If `schema_version` is older, treat missing sections as optional (e.g., no `layers/` folder → monolayer).
+- If `active_slice` is not present in `slices/registry.parquet`, fall back to `default_slice` or `"default"`.
+- Zarr root MUST carry `attrs.shape = [n_entities, n_edges]` for the incidence matrix.
 
 ## Advantages
 

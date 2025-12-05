@@ -1,15 +1,16 @@
 # Installation guide
 
-We strongly recommend installing a few prerequisites to ensure a smooth experience. These prerequisites are:
+## Prerequisites
 
-1. *Python 3* (version >= 3.10)
-      - [Install Python 3](https://docs.python.org/3/using/index.html)
-2. *Poetry* (Python packaging and dependency manager)
-      - [Install Poetry](https://python-poetry.org/docs/#installation)
-3. *git* (version control manager)
-      - [Install git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
-4. *Docker* (containerization technology) [optional]
-      - [Install Docker](https://docs.docker.com/engine/)
+Before installing `annnet`, please ensure you have the following tools installed:
+
+
+| Tool   | Minimum Version | Description                           | Installation Guide                                                           |
+| ------ | --------------- | ------------------------------------- | ---------------------------------------------------------------------------- |
+| Python | 3.10            | Programming language                  | [Install Python 3](https://docs.python.org/3/using/index.html)               |
+| uv     | —               | Python packaging & dependency manager | [Install uv](https://docs.astral.sh/uv/getting-started/installation/)        |
+| git    | —               | Version control system                | [Install git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) |
+
 
 !!! tip "Tip"
     If you are missing any of those pre-requisites, **please follow the installation guide in each resource before you continue**.
@@ -17,21 +18,46 @@ We strongly recommend installing a few prerequisites to ensure a smooth experien
 
 ## Checking prerequisites
 
-You can verify access to these components in your terminal:
+Verify that everything is installed by running:
 
-1. `Python` version 3.10 or higher.
+```bash
+python --version   # Should be 3.10 or higher
+uv --version
+git --version
+```
+
+## Installation
+
+### From PyPI
+
+```bash
+pip install annnet
+
+# Optional extras
+pip install "annnet[networkx,igraph]"   # backends
+pip install "annnet[io]"                # JSON/Parquet/Zarr, Excel, Narwhals
+pip install "annnet[all]"               # common extras (graph‑tool not on PyPI)
+```
+
+Graph‑tool is supported if installed via your OS/package manager.
+
+### From source (editable dev install)
+
+This package is under active development. To try the latest, clone and install in editable mode so changes reflect immediately without reinstalling.
+
+1. **Clone the repository:**
    ```bash
-   python --version
+   git clone https://github.com/saezlab/annnet.git
    ```
-2. `Poetry`
+
+2. **Navigate into the project directory:**
    ```bash
-   poetry --version
+   cd annnet
    ```
-3. `git`
+
+3. **Install the package in editable mode using `uv`:**
    ```bash
-   git --version
+   uv pip install -e .
    ```
-4. `Docker`
-   ```bash
-   docker --version
-   ```
+
+You can now start using `annnet` in your Python environment. Any changes you make to the source code will take effect immediately.

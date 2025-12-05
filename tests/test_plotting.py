@@ -67,12 +67,12 @@ class TestPlottingWithRealGraph(unittest.TestCase):
         self.assertEqual(labels_ids["A"], "A")
 
     def test_build_edge_labels(self):
-        lbls = plotting.build_edge_labels(self.g, use_weight=True, extra_keys=["type"], slice=None)
+        lbls = plotting.build_edge_labels(self.g, use_weight=True, extra_keys=["type"], layer=None)
         # keys are edge indices (0..m-1)
         self.assertIn(0, lbls)
         self.assertRegex(lbls[0], r"w=2(\.0+)?")
         # slice-aware override
-        lbls_Lw = plotting.build_edge_labels(self.g, use_weight=True, extra_keys=[], slice="Lw")
+        lbls_Lw = plotting.build_edge_labels(self.g, use_weight=True, extra_keys=[], layer="Lw")
         self.assertRegex(lbls_Lw[0], r"w=5(\.0+)?")
 
     def test_edge_style_signed(self):

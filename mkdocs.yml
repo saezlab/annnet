@@ -34,7 +34,9 @@ nav:
 -   About:
     -   Project: 'annnet-project/project.md'
     -   Design philosophy: 'annnet-project/design-philosophy.md'
-    -   Use Cases: 'annnet-project/use-cases.md'
+    -   Use Cases:
+        -   Overview: 'annnet-project/use-cases.md'
+        -   SBUC Notebook: notebooks/SBUC.ipynb
     -   About: about.md
 
 -   Get Started:
@@ -51,13 +53,19 @@ nav:
 
 -   Explanations:
     -   learn/explanation/index.md
-    -   IO AnnNet: io_annnet.md
+    -   Architecture Overview: learn/explanation/architecture-overview.md
+    -   Math (Incidence): learn/explanation/math-incidence.md
+    -   Math (Multilayer): learn/explanation/math-multilayer.md
+    -   Managers and Views: learn/explanation/managers-and-views.md
+    -   History and Diffs: learn/explanation/history-and-diffs.md
+    -   Interoperability: learn/explanation/interoperability.md
+    -   IO annnet: learn/explanation/io_annnet.md
 
 -   Reference:
     -   API Reference (mkdocstrings): reference/api.md
-    -   API Documentation:
-        -   'annnet':
-            -   _metadata: reference/source/annnet/_metadata-docs.md
+    #-   API Documentation:
+    #    -   'annnet':
+    #        -   _metadata: reference/source/annnet/_metadata-docs.md
 -   Community:
     -   Join Us: community/index.md
     -   Where to Start: community/contribute.md
@@ -110,5 +118,8 @@ plugins:
                     show_signature_annotations: false
                     signature_crossrefs: true
 -   mkdocs-jupyter
+
+extra_css:
+  - assets/overrides.css
 
 copyright: © Copyright 2021-2025, Saez-lab development team.

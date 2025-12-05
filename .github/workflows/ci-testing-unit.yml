@@ -39,3 +39,14 @@ jobs:
             with:
                 name: coverage-report-${{ matrix.python-version }}
                 path: .coverage*
+
+    pixi-test-all:
+        runs-on: ubuntu-latest
+        steps:
+        -   uses: actions/checkout@v4
+        -   uses: prefix-dev/setup-pixi@v0.9.3
+            with:
+                environments: dev
+                cache: true
+        -   name: Run tests including graph-tool
+            run: pixi run test-all
