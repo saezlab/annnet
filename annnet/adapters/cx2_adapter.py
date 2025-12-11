@@ -764,20 +764,31 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
         # hyperedge definitions
         if emeta.get("hyperedges"):
-            # these are raw dicts: convert lists back to sets
             fixed = {}
             for eid, info in emeta["hyperedges"].items():
-                if info.get("directed"):
+                # Older / simple manifests store hyperedges as a plain list of members
+                # e.g. "he1": ["n1", "n2", "n3"]
+                if isinstance(info, list):
+                    fixed[eid] = {
+                        "directed": False,
+                        "members": set(info),
+                    }
+                    continue
+
+                # Newer manifests: dict form with keys like "directed", "members" or "head"/"tail"
+                directed = bool(info.get("directed", False))
+                if directed:
                     fixed[eid] = {
                         "directed": True,
-                        "head": set(info["head"]),
-                        "tail": set(info["tail"]),
+                        "head": set(info.get("head", [])),
+                        "tail": set(info.get("tail", [])),
                     }
                 else:
                     fixed[eid] = {
                         "directed": False,
-                        "members": set(info["members"]),
+                        "members": set(info.get("members", [])),
                     }
+
             G.hyperedge_definitions = fixed
 
         # --- Expanded hyperedges (if present) ---
@@ -897,6 +908,11 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
     # rebuild vertex table
     vnorm = _normalize_rows(list(vmap.values()))
     G.vertex_attributes = _rows_to_df(vnorm)
+
+    # Normalise ID column name: prefer 'vertex_id' consistently
+    cols = set(G.vertex_attributes.columns)
+    if "vertex_id" not in cols and "id" in cols:
+        G.vertex_attributes = G.vertex_attributes.rename({"id": "vertex_id"})
 
     # --- edges ---
     emap = {}

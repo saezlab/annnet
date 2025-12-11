@@ -173,7 +173,10 @@ class TestCX2Adapter(unittest.TestCase):
         # Attributes should be loaded
         df = G_ext.vertex_attributes
         self.assertFalse(df.is_empty())
-        self.assertEqual(df.filter(pl.col("id") == "EXT_NODE")["importance"].item(), 5)
+        self.assertEqual(
+            df.filter(pl.col("vertex_id") == "EXT_NODE")["importance"].item(),
+            5,
+        )
 
 if __name__ == '__main__':
     unittest.main()
