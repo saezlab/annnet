@@ -455,3 +455,253 @@ class GraphView:
 
     def __len__(self):
         return self.vertex_count
+
+class ViewsClass():
+    # Materialized views
+
+    def edges_view(
+        self,
+        slice=None,
+        include_directed=True,
+        include_weight=True,
+        resolved_weight=True,
+        copy=True,
+    ):
+        """Build a Polars DF [DataFrame] view of edges with optional slice join.
+        Same columns/semantics as before, but vectorized (no per-edge DF scans).
+        """
+        # Fast path: no edges
+        if not self.edge_to_idx:
+            return pl.DataFrame(schema={"edge_id": pl.Utf8, "kind": pl.Utf8})
+
+        eids = list(self.edge_to_idx.keys())
+        kinds = [self.edge_kind.get(eid, "binary") for eid in eids]
+
+        # columns we might need
+        need_global = include_weight or resolved_weight
+        global_w = [self.edge_weights.get(eid, None) for eid in eids] if need_global else None
+        dirs = (
+            [
+                self.edge_directed.get(eid, True if self.directed is None else self.directed)
+                for eid in eids
+            ]
+            if include_directed
+            else None
+        )
+
+        # endpoints / hyper metadata (one pass; no weight lookups)
+        src, tgt, etype = [], [], []
+        head, tail, members = [], [], []
+        for eid, k in zip(eids, kinds):
+            if k == "hyper":
+                # hyperedge: store sets in canonical sorted tuples
+                h = self.hyperedge_definitions[eid]
+                if h.get("directed", False):
+                    head.append(tuple(sorted(h.get("head", ()))))
+                    tail.append(tuple(sorted(h.get("tail", ()))))
+                    members.append(None)
+                else:
+                    head.append(None)
+                    tail.append(None)
+                    members.append(tuple(sorted(h.get("members", ()))))
+                src.append(None)
+                tgt.append(None)
+                etype.append(None)
+            else:
+                s, t, et = self.edge_definitions[eid]
+                src.append(s)
+                tgt.append(t)
+                etype.append(et)
+                head.append(None)
+                tail.append(None)
+                members.append(None)
+
+        # base frame
+        cols = {"edge_id": eids, "kind": kinds}
+        if include_directed:
+            cols["directed"] = dirs
+        if include_weight:
+            cols["global_weight"] = global_w
+        # we still need global weight transiently to compute effective weight even if not displayed
+        if resolved_weight and not include_weight:
+            cols["_gw_tmp"] = global_w
+
+        base = pl.DataFrame(cols).with_columns(
+            pl.Series("source", src, dtype=pl.Utf8),
+            pl.Series("target", tgt, dtype=pl.Utf8),
+            pl.Series("edge_type", etype, dtype=pl.Utf8),
+            pl.Series("head", head, dtype=pl.List(pl.Utf8)),
+            pl.Series("tail", tail, dtype=pl.List(pl.Utf8)),
+            pl.Series("members", members, dtype=pl.List(pl.Utf8)),
+        )
+
+        # join pure edge attributes (left)
+        if isinstance(self.edge_attributes, pl.DataFrame) and self.edge_attributes.height > 0:
+            out = base.join(self.edge_attributes, on="edge_id", how="left")
+        else:
+            out = base
+
+        # join slice-specific attributes once, then compute resolved weight vectorized
+        if (
+            slice is not None
+            and isinstance(self.edge_slice_attributes, pl.DataFrame)
+            and self.edge_slice_attributes.height > 0
+        ):
+            slice_slice = self.edge_slice_attributes.filter(pl.col("slice_id") == slice).drop(
+                "slice_id"
+            )
+            if slice_slice.height > 0:
+                # prefix non-key columns -> slice_*
+                rename_map = {c: f"slice_{c}" for c in slice_slice.columns if c not in {"edge_id"}}
+                if rename_map:
+                    slice_slice = slice_slice.rename(rename_map)
+                out = out.join(slice_slice, on="edge_id", how="left")
+
+        # add effective_weight without per-edge function calls
+        if resolved_weight:
+            gw_col = "global_weight" if include_weight else "_gw_tmp"
+            lw_col = "slice_weight" if ("slice_weight" in out.columns) else None
+            if lw_col:
+                out = out.with_columns(
+                    pl.coalesce([pl.col(lw_col), pl.col(gw_col)]).alias("effective_weight")
+                )
+            else:
+                out = out.with_columns(pl.col(gw_col).alias("effective_weight"))
+
+            # drop temp global if it wasn't requested explicitly
+            if not include_weight and "_gw_tmp" in out.columns:
+                out = out.drop("_gw_tmp")
+
+        return out.clone() if copy else out
+
+    def vertices_view(self, copy=True):
+        """Read-only vertex attribute table.
+
+        Parameters
+        --
+        copy : bool, optional
+            Return a cloned DF.
+
+        Returns
+        ---
+        polars.DataFrame
+            Columns: ``vertex_id`` plus pure attributes (may be empty).
+
+        """
+        df = self.vertex_attributes
+        if df.height == 0:
+            return pl.DataFrame(schema={"vertex_id": pl.Utf8})
+        return df.clone() if copy else df
+
+    def slices_view(self, copy=True):
+        """Read-only slice attribute table.
+
+        Parameters
+        --
+        copy : bool, optional
+            Return a cloned DF.
+
+        Returns
+        ---
+        polars.DataFrame
+            Columns: ``slice_id`` plus pure attributes (may be empty).
+
+        """
+        df = self.slice_attributes
+        if df.height == 0:
+            return pl.DataFrame(schema={"slice_id": pl.Utf8})
+        return df.clone() if copy else df
+
+    def aspects_view(self, copy=True):
+        """
+        View of Kivela aspects and their metadata.
+
+        Columns:
+        aspect : str
+        elem_layers : list[str]
+        <aspect_attr_keys>...
+        """
+        if not getattr(self, "aspects", None):
+            return pl.DataFrame(schema={
+                "aspect": pl.Utf8,
+                "elem_layers": pl.List(pl.Utf8),
+            })
+
+        rows = []
+        for a in self.aspects:
+            base = {
+                "aspect": a,
+                "elem_layers": list(self.elem_layers.get(a, [])),
+            }
+            # aspect attrs stored in self._aspect_attrs[a]
+            for k, v in self._aspect_attrs.get(a, {}).items():
+                base[k] = v
+            rows.append(base)
+
+        df = pl.DataFrame(rows)
+        return df.clone() if copy else df
+    
+    def layers_view(self, copy=True):
+        """
+        Read-only table of multi-aspect layers (full Kivelä layers).
+
+        Columns:
+        layer_tuple : list[str]   # the aspect tuple
+        layer_id    : str         # canonical id
+        <aspect columns>          # one column per aspect
+        <layer attrs>...          # metadata set by set_layer_attrs()
+        <elem attrs>...           # merged elementary layer attrs (prefixed)
+
+        For a single-aspect model:
+        layer_tuple = [label]
+        layer_id    = label
+        aspect column = that label
+        """
+        # no aspects configured → no layers
+        if not getattr(self, "aspects", None):
+            return pl.DataFrame(schema={
+                "layer_tuple": pl.List(pl.Utf8),
+                "layer_id": pl.Utf8,
+            })
+
+        # empty product → no layers
+        if not getattr(self, "_all_layers", ()):
+            return pl.DataFrame(schema={
+                "layer_tuple": pl.List(pl.Utf8),
+                "layer_id": pl.Utf8,
+            })
+
+        rows = []
+        for aa in self._all_layers:
+            aa = tuple(aa)
+            lid = self.layer_tuple_to_id(aa)
+
+            base = {
+                "layer_tuple": list(aa),
+                "layer_id": lid,
+            }
+
+            # split per-aspect columns
+            for i, a in enumerate(self.aspects):
+                base[a] = aa[i]
+
+            # attach multi-aspect layer metadata
+            for k, v in self._layer_attrs.get(aa, {}).items():
+                base[k] = v
+
+            # attach elementary layer attrs for each aspect (prefixed)
+            # using the canonical elementary id "{aspect}_{label}"
+            for i, a in enumerate(self.aspects):
+                lid_elem = f"{a}_{aa[i]}"
+                row = self.layer_attributes.filter(pl.col("layer_id") == lid_elem)
+                if row.height > 0:
+                    rdict = row.to_dicts()[0]
+                    for k, v in rdict.items():
+                        if k == "layer_id":
+                            continue
+                        base[f"{a}__{k}"] = v
+
+            rows.append(base)
+
+        df = pl.DataFrame(rows)
+        return df.clone() if copy else df
