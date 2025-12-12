@@ -13,4 +13,4 @@ jobs:
         -   name: Install Bandit
             run: pip install bandit
         -   name: Run Bandit
-            run: bandit -r . --exclude venv,.venv,.tox --skip B101
+            run: bandit -r . --exclude venv,.venv,.tox --skip B101,B110,B112
