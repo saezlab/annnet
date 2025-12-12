@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from functools import wraps
 
 import numpy as np
+import polars as pl
 
 
 class GraphDiff:

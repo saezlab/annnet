@@ -2,6 +2,8 @@ import math
 
 import polars as pl
 
+from ._helpers import _get_numeric_supertype
+
 
 class AttributesClass:
     # Attributes & weights

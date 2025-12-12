@@ -14,7 +14,7 @@ CX2 'networkAttributes'.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, dict, list
 
 import polars as pl
 

@@ -1,4 +1,8 @@
 ## Lazy iGraph proxy
+import inspect
+
+import polars as pl
+
 
 class _LazyIGProxy:
     """Lazy, cached igraph adapter:

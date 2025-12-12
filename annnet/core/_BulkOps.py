@@ -1,6 +1,11 @@
 import polars as pl
 import scipy.sparse as sp
 
+from ._helpers import (
+    EdgeType,
+    _get_numeric_supertype,
+)
+
 
 class BulkOps:
     # Bulk build graph

@@ -1,4 +1,5 @@
 import polars as pl
+import scipy.sparse as sp
 
 
 class GraphView:

@@ -1,4 +1,7 @@
 ## Lazy NetworkX proxy
+import inspect
+
+import polars as pl
 
 
 class _LazyNXProxyAutogen:

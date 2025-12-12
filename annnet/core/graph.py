@@ -1,8 +1,7 @@
 import time
 from collections import defaultdict
 from datetime import UTC, datetime
-from enum import Enum
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union, list, tuple
 
 import numpy as np
 import polars as pl
