@@ -1,8 +1,13 @@
 ## Lazy NetworkX proxy
+from __future__ import annotations
+
 import inspect
+from typing import TYPE_CHECKING
 
 import polars as pl
 
+if TYPE_CHECKING:
+    from ..graph import Graph
 
 class _LazyNXProxyAutogen:
     def AmbiguousSolution(self, *args, **kwargs):
@@ -16,7 +21,7 @@ class _LazyNXProxyAutogen:
     def ExceededMaxIterations(self, *args, **kwargs):
         return self.__getattr__("ExceededMaxIterations")(*args, **kwargs)
     def Graph(self, *args, **kwargs):
-        return self.__getattr__("Graph")(*args, **kwargs)
+        return self.__getattr__(Graph)(*args, **kwargs)
     def GraphMLReader(self, *args, **kwargs):
         return self.__getattr__("GraphMLReader")(*args, **kwargs)
     def GraphMLWriter(self, *args, **kwargs):
@@ -1680,7 +1685,7 @@ class _LazyNXProxyDynamic:
     """
 
     # -- init ---
-    def __init__(self, owner: "Graph"):
+    def __init__(self, owner: Graph):
         self._G = owner
         self._cache = {}  # key -> {"nxG": nx.Graph, "version": int}
         self.cache_enabled = True

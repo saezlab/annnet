@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 import itertools
+from typing import TYPE_CHECKING
 
 import numpy as np
 import polars as pl
 import scipy.sparse as sp
 
+if TYPE_CHECKING:
+    from .graph import Graph
 
 class LayerManager:
     """Manager for Kivela multi-layer operations.
@@ -880,7 +885,7 @@ class LayerClass:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
-    ) -> "Graph":
+    ) -> Graph:
         """
         Concrete subgraph induced by a single Kivela layer.
 
@@ -904,7 +909,7 @@ class LayerClass:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
-    ) -> "Graph":
+    ) -> Graph:
         """
         Concrete subgraph induced by the union of several Kivela layers.
         """
@@ -921,7 +926,7 @@ class LayerClass:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
-    ) -> "Graph":
+    ) -> Graph:
         """
         Concrete subgraph induced by intersection of several Kivela layers.
         """
@@ -939,7 +944,7 @@ class LayerClass:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
-    ) -> "Graph":
+    ) -> Graph:
         """
         Concrete subgraph induced by layer_a layer_b.
         """

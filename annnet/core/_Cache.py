@@ -1,7 +1,12 @@
+from __future__ import annotations
+
 import time
+from typing import TYPE_CHECKING
 
 import polars as pl
 
+if TYPE_CHECKING:
+    from .graph import Graph
 
 class CacheManager:
     """Cache manager for materialized views (CSR/CSC)."""
@@ -161,7 +166,7 @@ class CacheManager:
 class Operations:
     # Slicing / copying / accounting
 
-    def edge_subgraph(self, edges) -> "Graph":
+    def edge_subgraph(self, edges) -> Graph:
         """Create a new graph containing only a specified subset of edges.
 
         Parameters
@@ -266,7 +271,7 @@ class Operations:
 
         return g
 
-    def subgraph(self, vertices) -> "Graph":
+    def subgraph(self, vertices) -> Graph:
         """Create a vertex-induced subgraph.
 
         Parameters
@@ -385,7 +390,7 @@ class Operations:
 
         return g
 
-    def extract_subgraph(self, vertices=None, edges=None) -> "Graph":
+    def extract_subgraph(self, vertices=None, edges=None) -> Graph:
         """Create a subgraph based on a combination of vertex and/or edge filters.
 
         Parameters
@@ -456,7 +461,7 @@ class Operations:
 
         return self.edge_subgraph(kept_edges).subgraph(kept_vertices)
 
-    def reverse(self) -> "Graph":
+    def reverse(self) -> Graph:
         """Return a new graph with all directed edges reversed.
 
         Returns

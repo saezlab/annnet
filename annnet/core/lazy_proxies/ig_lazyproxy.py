@@ -1,8 +1,13 @@
 ## Lazy iGraph proxy
+from __future__ import annotations
+
 import inspect
+from typing import TYPE_CHECKING
 
 import polars as pl
 
+if TYPE_CHECKING:
+    from ..graph import Graph
 
 class _LazyIGProxy:
     """Lazy, cached igraph adapter:
@@ -15,7 +20,7 @@ class _LazyIGProxy:
     - _ig_edge_aggs={"weight":"min","capacity":"sum"} for parallel-edge aggregation.
     """
 
-    def __init__(self, owner: "Graph"):
+    def __init__(self, owner: Graph):
         self._G = owner
         self._cache = {}  # key -> {"igG": ig.Graph, "version": int}
         self.cache_enabled = True
