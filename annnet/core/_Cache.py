@@ -1,5 +1,7 @@
-import polars as pl
 import time
+
+import polars as pl
+
 
 class CacheManager:
     """Cache manager for materialized views (CSR/CSC)."""
@@ -156,7 +158,7 @@ class CacheManager:
             "adjacency": _format_info(self._adjacency, self._adjacency_version),
         }
 
-class Operations():
+class Operations:
     # Slicing / copying / accounting
 
     def edge_subgraph(self, edges) -> "Graph":

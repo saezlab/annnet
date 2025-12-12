@@ -2,23 +2,30 @@ import time
 from collections import defaultdict
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Optional, List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import polars as pl
 import scipy.sparse as sp
 
-from ._helpers import _get_numeric_supertype, EdgeType, _vertex_RESERVED , _EDGE_RESERVED , _slice_RESERVED
-from ._BulkOps import BulkOps
-from ._Cache import CacheManager,  Operations
-from ._History import GraphDiff, History
-from ._Views import GraphView, ViewsClass
-from ._Index import IndexManager, IndexMapping
-from ._Layers import  LayerManager, LayerClass
-from ._Slices import SliceManager, SliceClass
-from .lazy_proxies import _LazyNXProxy, _LazyIGProxy, _LazyGTProxy
-from ._Annotation import AttributesClass
 from ..algorithms.traversal import Traversal
+from ._Annotation import AttributesClass
+from ._BulkOps import BulkOps
+from ._Cache import CacheManager, Operations
+from ._helpers import (
+    _EDGE_RESERVED,
+    EdgeType,
+    _get_numeric_supertype,
+    _slice_RESERVED,
+    _vertex_RESERVED,
+)
+from ._History import GraphDiff, History
+from ._Index import IndexManager, IndexMapping
+from ._Layers import LayerClass, LayerManager
+from ._Slices import SliceClass, SliceManager
+from ._Views import GraphView, ViewsClass
+from .lazy_proxies import _LazyGTProxy, _LazyIGProxy, _LazyNXProxy
+
 # ===================================
 
 class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, SliceClass, AttributesClass, Traversal):
@@ -1313,10 +1320,10 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
 
     def has_edge(
         self,
-        source: Optional[str] = None,
-        target: Optional[str] = None,
-        edge_id: Optional[str] = None,
-    ) -> Union[bool, Tuple[bool, List[str]]]:
+        source: str | None = None,
+        target: str | None = None,
+        edge_id: str | None = None,
+    ) -> bool | tuple[bool, list[str]]:
         """
         Edge existence check with three modes.
 
@@ -1344,7 +1351,7 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
 
         # ---- Mode 2: source + target only ----
         if edge_id is None and source is not None and target is not None:
-            eids: List[str] = []
+            eids: list[str] = []
             for eid, (src, tgt, _) in self.edge_definitions.items():
                 if src == source and tgt == target:
                     eids.append(eid)

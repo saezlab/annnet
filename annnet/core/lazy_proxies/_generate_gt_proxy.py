@@ -1,12 +1,13 @@
 import inspect
+
 import graph_tool as gt
-import graph_tool.topology
 import graph_tool.centrality
 import graph_tool.clustering
 import graph_tool.flow
-import graph_tool.inference
 import graph_tool.generation
+import graph_tool.inference
 import graph_tool.search
+import graph_tool.topology
 import graph_tool.util
 
 OUTPUT_FILE = "gt_proxy_autogen.py"

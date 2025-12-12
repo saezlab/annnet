@@ -1,14 +1,16 @@
-import unittest
 import os
 import shutil
 import tempfile
+import unittest
+
 import polars as pl
+
+from annnet.adapters.GraphDir_Parquet_adapter import read_parquet_graphdir, write_parquet_graphdir
+from annnet.adapters.igraph_adapter import from_igraph, to_igraph
+from annnet.adapters.json_adapter import from_json, to_json
+from annnet.adapters.networkx_adapter import from_nx, to_nx
+from annnet.adapters.SIF_adapter import from_sif, to_sif
 from annnet.core.graph import Graph
-from annnet.adapters.networkx_adapter import to_nx, from_nx
-from annnet.adapters.igraph_adapter import to_igraph, from_igraph
-from annnet.adapters.json_adapter import to_json, from_json
-from annnet.adapters.GraphDir_Parquet_adapter import write_parquet_graphdir, read_parquet_graphdir
-from annnet.adapters.SIF_adapter import to_sif, from_sif
 
 try:
     import networkx as nx

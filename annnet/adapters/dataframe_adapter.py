@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 import narwhals as nw
-from narwhals.typing import IntoDataFrame
 import polars as pl
+from narwhals.typing import IntoDataFrame
 
 if __name__ == "__main__":
     import pathlib

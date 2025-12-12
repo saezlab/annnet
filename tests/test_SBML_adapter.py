@@ -1,22 +1,19 @@
 # test_sbml_adapter_unittest.py
+import pathlib
+import sys
 import types
 import unittest
 from unittest.mock import patch
-import pathlib
-import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
 
 import annnet.adapters.SBML_adapter as sa
-
 from annnet.adapters.SBML_adapter import (
-    _graph_from_sbml_model,
-    BOUNDARY_SOURCE,
     BOUNDARY_SINK,
+    BOUNDARY_SOURCE,
+    _graph_from_sbml_model,
 )
-
-
 
 # -----------------------
 # Fake SBML/libSBML layer

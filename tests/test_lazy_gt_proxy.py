@@ -1,10 +1,12 @@
+import os
+import sys
 import unittest
 
-import os, sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from annnet.core.graph import Graph
 import polars as pl
-from graph_tool import topology, centrality, clustering, flow, generation, search, util
+from graph_tool import centrality, clustering, flow, generation, search, topology, util
+
+from annnet.core.graph import Graph
 
 
 def gt_backend(G):

@@ -6,6 +6,7 @@ import pyarrow as pa
 
 from annnet.adapters.dataframe_adapter import from_dataframes, to_dataframes
 
+
 class TestDataFrameAdapter(unittest.TestCase):
     """Test suite for Narwhals-based dataframe adapter."""
 

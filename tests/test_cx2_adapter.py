@@ -1,14 +1,14 @@
 # tests/test_networkx_adapter.py
+import json
 import os
 import sys
 import unittest
+
 import polars as pl
-import json
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from annnet.core.graph import Graph
-
 from annnet.adapters.cx2_adapter import from_cx2, to_cx2
+from annnet.core.graph import Graph
 
 
 class TestCX2Adapter(unittest.TestCase):

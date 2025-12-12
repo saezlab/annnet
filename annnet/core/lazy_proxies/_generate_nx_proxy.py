@@ -1,5 +1,6 @@
-import networkx as nx
 from pathlib import Path
+
+import networkx as nx
 
 # Always write into lazy_proxies folder next to this script
 OUTPUT = Path(__file__).parent / "lazy_proxies" / "nx_proxy_autogen.py"

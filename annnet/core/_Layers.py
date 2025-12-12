@@ -1,7 +1,8 @@
 import itertools
-import scipy.sparse as sp
+
 import numpy as np
 import polars as pl
+import scipy.sparse as sp
 
 
 class LayerManager:
@@ -253,7 +254,7 @@ class LayerManager:
             "coupling": self._G.build_coupling_block(layers),
         }
 
-class LayerClass():
+class LayerClass:
     # Multilayers
 
     ## Aspects & layers

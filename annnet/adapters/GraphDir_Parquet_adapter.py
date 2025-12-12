@@ -11,16 +11,16 @@ if TYPE_CHECKING:
     from ..core.graph import Graph
 
 from ._utils import (
-    _serialize_edge_layers,
     _deserialize_edge_layers,
-    _serialize_VM,
-    _deserialize_VM,
-    _serialize_node_layer_attrs,
+    _deserialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
+    _deserialize_VM,
     _df_to_rows,
     _rows_to_df,
+    _serialize_edge_layers,
     _serialize_layer_tuple_attrs,
-    _deserialize_layer_tuple_attrs,
+    _serialize_node_layer_attrs,
+    _serialize_VM,
 )
 
 

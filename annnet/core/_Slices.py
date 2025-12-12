@@ -424,7 +424,7 @@ class SliceManager:
     def __repr__(self):
         return f"SliceManager({self.count()} slices)"
 
-class SliceClass():
+class SliceClass:
 
     # slice basics
 

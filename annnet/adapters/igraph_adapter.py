@@ -4,21 +4,22 @@ import json
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+import polars as pl
+
 from ._utils import (
+    _deserialize_edge_layers,
+    _deserialize_layer_tuple_attrs,
+    _deserialize_node_layer_attrs,
+    _deserialize_VM,
+    _df_to_rows,
     _endpoint_coeff_map,
     _is_directed_eid,
-    _serialize_edge_layers,
-    _deserialize_edge_layers,
-    _serialize_VM,
-    _deserialize_VM,
-    _serialize_node_layer_attrs,
-    _deserialize_node_layer_attrs,
-    _df_to_rows,
     _rows_to_df,
+    _serialize_edge_layers,
     _serialize_layer_tuple_attrs,
-    _deserialize_layer_tuple_attrs,
+    _serialize_node_layer_attrs,
+    _serialize_VM,
 )
-import polars as pl
 
 if TYPE_CHECKING:
     from ..core.graph import Graph

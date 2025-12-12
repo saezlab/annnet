@@ -207,6 +207,7 @@ def _write_tables(graph, path: Path, compression: str):
 def _write_multilayers(graph, path: Path, compression: str):
     """Write Kivela multilayer structures to disk."""
     import json
+
     import polars as pl
 
     # If no aspects are defined, skip creating the folder
@@ -622,6 +623,7 @@ def _load_tables(graph, path: Path):
 def _load_multilayers(graph, path: Path):
     """Load Kivela multilayer structures."""
     import json
+
     import polars as pl
 
     # Graceful exit if this is a legacy graph without layers

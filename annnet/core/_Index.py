@@ -1,5 +1,6 @@
 import polars as pl
 
+
 class IndexManager:
     """Namespace for index operations.
     Provides clean API over existing dicts.
@@ -103,7 +104,7 @@ class IndexManager:
             "max_col": max(self._G.idx_to_edge.keys()) if self._G.idx_to_edge else -1,
         }
 
-class IndexMapping():
+class IndexMapping:
     # ID + entity ensure helpers
 
     def _get_next_edge_id(self) -> str:

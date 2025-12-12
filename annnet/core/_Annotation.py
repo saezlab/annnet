@@ -1,7 +1,9 @@
-import polars as pl
 import math
 
-class AttributesClass():
+import polars as pl
+
+
+class AttributesClass:
     # Attributes & weights
 
     def set_graph_attribute(self, key, value):

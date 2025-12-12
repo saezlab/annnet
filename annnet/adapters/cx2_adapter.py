@@ -12,26 +12,26 @@ CX2 'networkAttributes'.
 """
 
 from __future__ import annotations
-import json
-from typing import Dict, Any, List
-import polars as pl
 
-from typing import TYPE_CHECKING
+import json
+from typing import TYPE_CHECKING, Any, Dict, List
+
+import polars as pl
 
 if TYPE_CHECKING:
     from ..core.graph import Graph
 from ._utils import (
-    _serialize_edge_layers,
     _deserialize_edge_layers,
-    _serialize_VM,
-    _deserialize_VM,
-    _serialize_node_layer_attrs,
-    _deserialize_node_layer_attrs,
-    _serialize_slices,
-    _deserialize_slices,
-    _df_to_rows,
-    _serialize_layer_tuple_attrs,
     _deserialize_layer_tuple_attrs,
+    _deserialize_node_layer_attrs,
+    _deserialize_slices,
+    _deserialize_VM,
+    _df_to_rows,
+    _serialize_edge_layers,
+    _serialize_layer_tuple_attrs,
+    _serialize_node_layer_attrs,
+    _serialize_slices,
+    _serialize_VM,
 )
 
 # --- Helpers ---
@@ -154,7 +154,7 @@ def _jsonify(obj):
 
 # --- Core Adapter: to_cx2 ---
 
-def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
+def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
     """
     Convert an AnnNet Graph -> CX2 compliant JSON list.
 
@@ -226,9 +226,9 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
     # 2. Build Core CX2 Aspects
     
     # ID Mapping: AnnNet ID (str/int) -> CX2 ID (int)
-    node_map: Dict[Any, int] = {}
-    cx_nodes: List[Dict[str, Any]] = []
-    cx_edges: List[Dict[str, Any]] = []
+    node_map: dict[Any, int] = {}
+    cx_nodes: list[dict[str, Any]] = []
+    cx_edges: list[dict[str, Any]] = []
 
     def _clean_cx2_attrs(attrs, string_cols, list_cols=None):
         """Clean attributes: remove nulls, convert non-JSON types."""
@@ -278,7 +278,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
                 v_numeric_cols.add(col)
 
     # Build map: vertex_id -> attribute row dict
-    v_attrs_map: Dict[str, Dict[str, Any]] = {}
+    v_attrs_map: dict[str, dict[str, Any]] = {}
     if v_attrs_df is not None and hasattr(v_attrs_df, "is_empty") and not v_attrs_df.is_empty():
         cols = set(v_attrs_df.columns)
         id_col = "vertex_id" if "vertex_id" in cols else "id"
@@ -287,9 +287,9 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
             if key is not None:
                 v_attrs_map[str(key)] = r
 
-    def _clean_vertex_attrs(attrs: Dict[str, Any]) -> Dict[str, Any]:
+    def _clean_vertex_attrs(attrs: dict[str, Any]) -> dict[str, Any]:
         """Replace None in strings with '', drop None for numeric/others."""
-        out: Dict[str, Any] = {}
+        out: dict[str, Any] = {}
         for k, v in attrs.items():
             if v is None:
                 if k in v_string_cols:
@@ -313,12 +313,12 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
         node_map[uid] = cx_id
 
         # base node object
-        n_obj: Dict[str, Any] = {
+        n_obj: dict[str, Any] = {
             "id": cx_id,
             "v": {"name": str(uid)},  # 'name' is standard in Cytoscape
         }
 
-        coords: Dict[str, float] = {}
+        coords: dict[str, float] = {}
 
         # Attach attributes if present
         row = v_attrs_map.get(str(uid))
@@ -590,7 +590,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> List[Dict[str, Any]]:
         {"name": "edges", "elementCount": len(cx_edges)},
     ]
 
-    cx2: List[Dict[str, Any]] = [
+    cx2: list[dict[str, Any]] = [
         {"CXVersion": "2.0", "hasFragments": False},
         {"metaData": meta},
         {"attributeDeclarations": [attr_decls]},
@@ -660,10 +660,11 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
     # Load file or JSON string
 
-    import os, json
+    import json
+    import os
     if isinstance(cx2_data, str):
         if os.path.exists(cx2_data):
-            with open(cx2_data, "r") as f:
+            with open(cx2_data) as f:
                 cx2_data = json.load(f)
         else:
             try:
@@ -702,7 +703,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
     visual_props = aspects.get("visualProperties", [])
 
     # Extract Cytoscape visual style aspects (kept opaque but preserved)
-    style_aspects: Dict[str, Any] = {}
+    style_aspects: dict[str, Any] = {}
 
     vp = aspects.get("visualProperties")
     if vp:

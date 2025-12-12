@@ -1,8 +1,10 @@
 import inspect
-from functools import wraps
-import numpy as np
 import time
 from datetime import UTC, datetime
+from functools import wraps
+
+import numpy as np
+
 
 class GraphDiff:
     """Represents the difference between two graph states.
@@ -74,7 +76,7 @@ class GraphDiff:
             "slices_removed": list(self.slices_removed),
         }
 
-class History():
+class History:
     # History and Timeline
 
     def _utcnow_iso(self) -> str:

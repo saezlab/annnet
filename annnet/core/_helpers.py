@@ -1,5 +1,6 @@
-import polars as pl
 from enum import Enum
+
+import polars as pl
 
 
 def _get_numeric_supertype(left, right):

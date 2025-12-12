@@ -1,5 +1,6 @@
 import polars as pl
 
+
 class GraphView:
     """Lazy view into a graph with deferred operations.
 
@@ -456,7 +457,7 @@ class GraphView:
     def __len__(self):
         return self.vertex_count
 
-class ViewsClass():
+class ViewsClass:
     # Materialized views
 
     def edges_view(

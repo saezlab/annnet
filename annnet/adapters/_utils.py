@@ -66,10 +66,12 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
 
 # Serialization helpers moved from graphtool_adapter.py
 
-from typing import Dict, Any, Tuple, Optional
+from typing import Any, Dict, Optional, Tuple
+
 import polars as pl
 
-def _serialize_edge_layers(edge_layers: Dict[str, Any]) -> Dict[str, Any]:
+
+def _serialize_edge_layers(edge_layers: dict[str, Any]) -> dict[str, Any]:
     """
     Convert edge_layers[eid] (aa or (aa, bb)) into JSON-safe form.
 
@@ -97,7 +99,7 @@ def _serialize_edge_layers(edge_layers: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def _deserialize_edge_layers(data: Dict[str, Any]) -> Dict[str, Any]:
+def _deserialize_edge_layers(data: dict[str, Any]) -> dict[str, Any]:
     """
     Inverse of _serialize_edge_layers.
 
@@ -134,7 +136,7 @@ def _deserialize_VM(data: list[dict]) -> set[tuple[str, tuple[str, ...]]]:
     return {(rec["node"], tuple(rec["layer"])) for rec in data}
 
 
-def _serialize_node_layer_attrs(nl_attrs: Dict[tuple[str, tuple[str, ...]], dict]) -> list[dict]:
+def _serialize_node_layer_attrs(nl_attrs: dict[tuple[str, tuple[str, ...]], dict]) -> list[dict]:
     """
     (u, aa) -> {attrs}  ->  [{"node": u, "layer": list(aa), "attrs": {...}}, ...]
     """
@@ -150,18 +152,18 @@ def _serialize_node_layer_attrs(nl_attrs: Dict[tuple[str, tuple[str, ...]], dict
     return out
 
 
-def _deserialize_node_layer_attrs(data: list[dict]) -> Dict[tuple[str, tuple[str, ...]], dict]:
+def _deserialize_node_layer_attrs(data: list[dict]) -> dict[tuple[str, tuple[str, ...]], dict]:
     """
     Inverse of _serialize_node_layer_attrs.
     """
-    out: Dict[tuple[str, tuple[str, ...]], dict] = {}
+    out: dict[tuple[str, tuple[str, ...]], dict] = {}
     for rec in data:
         key = (rec["node"], tuple(rec["layer"]))
         out[key] = dict(rec.get("attrs", {}))
     return out
 
 
-def _serialize_slices(slices: Dict[str, dict]) -> Dict[str, dict]:
+def _serialize_slices(slices: dict[str, dict]) -> dict[str, dict]:
     """
     _slices is {slice_id: {"vertices": set, "edges": set, "attributes": dict}}
     Convert sets to lists for JSON.
@@ -176,7 +178,7 @@ def _serialize_slices(slices: Dict[str, dict]) -> Dict[str, dict]:
     return out
 
 
-def _deserialize_slices(data: Dict[str, dict]) -> Dict[str, dict]:
+def _deserialize_slices(data: dict[str, dict]) -> dict[str, dict]:
     """
     Inverse of _serialize_slices.
     """

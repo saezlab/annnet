@@ -1,5 +1,5 @@
 # Traversal (neighbors)
-class Traversal():
+class Traversal:
     def neighbors(self, entity_id):
         """Neighbors of an entity (vertex or edge-entity).
 

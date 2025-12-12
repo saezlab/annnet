@@ -13,29 +13,30 @@ all attribute tables, etc.) is preserved in `manifest`.
 """
 
 from __future__ import annotations
-from typing import Dict, Any, Tuple, Optional
+
+from typing import Any, Dict, Optional, Tuple
+
 import polars as pl
+
 try:
     import graph_tool.all as gt
 except ImportError:
     gt = None
-from ..core.graph import Graph 
-
+from ..core.graph import Graph
 from ._utils import (
-    _serialize_edge_layers,
     _deserialize_edge_layers,
-    _serialize_VM,
-    _deserialize_VM,
-    _serialize_node_layer_attrs,
+    _deserialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
-    _serialize_slices,
     _deserialize_slices,
+    _deserialize_VM,
     _df_to_rows,
     _rows_to_df,
+    _serialize_edge_layers,
     _serialize_layer_tuple_attrs,
-    _deserialize_layer_tuple_attrs,
+    _serialize_node_layer_attrs,
+    _serialize_slices,
+    _serialize_VM,
 )
-
 
 # Core adapter: to_graphtool
 
@@ -45,7 +46,7 @@ def to_graphtool(
     vertex_id_property: str = "id",
     edge_id_property: str = "id",
     weight_property: str = "weight",
-) -> Tuple["gt.Graph", dict]:
+) -> tuple[gt.Graph, dict]:
     """
     Convert an AnnNet Graph -> (graph_tool.Graph, manifest).
 
@@ -220,8 +221,8 @@ def to_graphtool(
 # Core adapter: from_graphtool
 
 def from_graphtool(
-    gtG: "gt.Graph",
-    manifest: Optional[dict] = None,
+    gtG: gt.Graph,
+    manifest: dict | None = None,
     *,
     vertex_id_property: str = "id",
     edge_id_property: str = "id",
@@ -251,7 +252,7 @@ def from_graphtool(
 
     # 1) vertices
     vp = gtG.vp.get(vertex_id_property, None)
-    v_to_id: Dict[Any, str] = {}
+    v_to_id: dict[Any, str] = {}
 
     for v in gtG.vertices():
         if vp is not None:

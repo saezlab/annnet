@@ -1,7 +1,8 @@
 import polars as pl
 import scipy.sparse as sp
 
-class BulkOps():
+
+class BulkOps:
     # Bulk build graph
 
     def add_vertices_bulk(self, vertices, slice=None):
