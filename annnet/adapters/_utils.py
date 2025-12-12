@@ -66,7 +66,7 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
 
 # Serialization helpers moved from graphtool_adapter.py
 
-from typing import Any, Optional, dict, tuple
+from typing import Any, Optional
 
 import polars as pl
 

@@ -14,7 +14,7 @@ all attribute tables, etc.) is preserved in `manifest`.
 
 from __future__ import annotations
 
-from typing import Any, Optional, dict, tuple
+from typing import Any, Optional
 
 import polars as pl
 

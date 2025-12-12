@@ -1,7 +1,7 @@
 import time
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Optional, Union, list, tuple
+from typing import Optional, Union
 
 import numpy as np
 import polars as pl
