@@ -162,7 +162,7 @@ def _jsonify(obj):
 # --- Core Adapter: to_cx2 ---
 
 
-def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
+def to_cx2(G: Graph, *, export_name = "annnet export", hyperedges="skip") -> list[dict[str, Any]]:
     """
     Convert an AnnNet Graph -> CX2 compliant JSON list.
 
@@ -623,7 +623,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
         {
             "networkAttributes": [
                 {
-                    "name": "AnnNet Export",
+                    "name": export_name,
                     "directed": bool(G.directed) if G.directed is not None else True,
                     "__AnnNet_Manifest__": json.dumps(_jsonify(manifest)),
                 }
