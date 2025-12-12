@@ -44,8 +44,10 @@ class AttributesClass:
         if self._vertex_key_enabled():
             old_key = self._current_key_of_vertex(vertex_id)
             # prospective values = old values overridden by incoming clean attrs
-            merged = {f: (clean[f] if f in clean else self.get_attr_vertex(vertex_id, f, None))
-                    for f in self._vertex_key_fields}
+            merged = {
+                f: (clean[f] if f in clean else self.get_attr_vertex(vertex_id, f, None))
+                for f in self._vertex_key_fields
+            }
             new_key = self._build_key_from_attrs(merged)
             if new_key is not None:
                 owner = self._vertex_key_index.get(new_key)
@@ -65,7 +67,7 @@ class AttributesClass:
         # Update index AFTER successful write
         if self._vertex_key_enabled():
             new_key = self._current_key_of_vertex(vertex_id)
-            old_key = old_key if 'old_key' in locals() else None
+            old_key = old_key if "old_key" in locals() else None
             if old_key != new_key:
                 if old_key is not None and self._vertex_key_index.get(old_key) == vertex_id:
                     self._vertex_key_index.pop(old_key, None)
@@ -110,7 +112,7 @@ class AttributesClass:
             Scalar value if present, else ``None``.
 
         See Also
-        
+
         get_attr_vertex
 
         """
@@ -186,7 +188,7 @@ class AttributesClass:
             Scalar value if present, else ``None``.
 
         See Also
-        
+
         get_attr_edge
 
         """
@@ -336,7 +338,7 @@ class AttributesClass:
             If the slice or edge does not exist.
 
         See Also
-        
+
         get_effective_edge_weight
 
         """
@@ -460,8 +462,6 @@ class AttributesClass:
         """
         import enum
 
-        
-
         if v is None:
             return pl.Null
         if isinstance(v, bool):
@@ -504,9 +504,16 @@ class AttributesClass:
 
         """
         _NUMERIC_DTYPES = {
-        pl.Int8, pl.Int16, pl.Int32, pl.Int64,
-        pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
-        pl.Float32, pl.Float64,
+            pl.Int8,
+            pl.Int16,
+            pl.Int32,
+            pl.Int64,
+            pl.UInt8,
+            pl.UInt16,
+            pl.UInt32,
+            pl.UInt64,
+            pl.Float32,
+            pl.Float64,
         }
         schema = df.schema
         for col, val in attrs.items():
@@ -534,7 +541,7 @@ class AttributesClass:
         """INTERNAL: Upsert a row in a Polars DF [DataFrame] using explicit key columns.
 
         Keys
-        
+
         - ``vertex_attributes``           - key: ``["vertex_id"]``
         - ``edge_attributes``             - key: ``["edge_id"]``
         - ``slice_attributes``            - key: ``["slice_id"]``
@@ -707,8 +714,11 @@ class AttributesClass:
 
     def _variables_watched_by_vertices(self):
         # set of vertex-attribute names used by vertex-scope policies
-        return {p["var"] for p in self.edge_direction_policy.values()
-                if p.get("scope", "edge") == "vertex"}
+        return {
+            p["var"]
+            for p in self.edge_direction_policy.values()
+            if p.get("scope", "edge") == "vertex"
+        }
 
     def _incident_flexible_edges(self, v):
         # naive scan; optimize later with an index if needed
@@ -720,33 +730,40 @@ class AttributesClass:
 
     def _apply_flexible_direction(self, edge_id):
         pol = self.edge_direction_policy.get(edge_id)
-        if not pol: return
+        if not pol:
+            return
 
         src, tgt, _ = self.edge_definitions[edge_id]
         col = self.edge_to_idx[edge_id]
-        w   = float(self.edge_weights.get(edge_id, 1.0))
+        w = float(self.edge_weights.get(edge_id, 1.0))
 
-        var  = pol["var"];  T = float(pol["threshold"])
-        scope = pol.get("scope", "edge")   # 'edge'|'vertex'
-        above = pol.get("above", "s->t")   # 's->t'|'t->s'
-        tie   = pol.get("tie", "keep")     # default behavior
+        var = pol["var"]
+        T = float(pol["threshold"])
+        scope = pol.get("scope", "edge")  # 'edge'|'vertex'
+        above = pol.get("above", "s->t")  # 's->t'|'t->s'
+        tie = pol.get("tie", "keep")  # default behavior
 
         # decide condition and detect tie
         tie_case = False
         if scope == "edge":
             x = self.get_attr_edge(edge_id, var, None)
-            if x is None: return
-            if x == T: tie_case = True
-            cond = (x > T)
+            if x is None:
+                return
+            if x == T:
+                tie_case = True
+            cond = x > T
         else:
             xs = self.get_attr_vertex(src, var, None)
             xt = self.get_attr_vertex(tgt, var, None)
-            if xs is None or xt is None: return
-            if xs == xt: tie_case = True
+            if xs is None or xt is None:
+                return
+            if xs == xt:
+                tie_case = True
             cond = (xs - xt) > 0
 
-        M  = self._matrix
-        si = self.entity_to_idx[src]; ti = self.entity_to_idx[tgt]
+        M = self._matrix
+        si = self.entity_to_idx[src]
+        ti = self.entity_to_idx[tgt]
 
         if tie_case:
             if tie == "keep":
@@ -755,20 +772,24 @@ class AttributesClass:
             if tie == "undirected":
                 # force (+w,+w) while equality holds
                 M[(si, col)] = +w
-                if src != tgt: M[(ti, col)] = +w
+                if src != tgt:
+                    M[(ti, col)] = +w
                 return
             # force a direction at equality
             cond = True if tie == "s->t" else False
 
         # rewrite as directed per 'above'
-        M[(si, col)] = 0; M[(ti, col)] = 0
+        M[(si, col)] = 0
+        M[(ti, col)] = 0
         src_to_tgt = cond if above == "s->t" else (not cond)
         if src_to_tgt:
             M[(si, col)] = +w
-            if src != tgt: M[(ti, col)] = -w
+            if src != tgt:
+                M[(ti, col)] = -w
         else:
             M[(si, col)] = -w
-            if src != tgt: M[(ti, col)] = +w
+            if src != tgt:
+                M[(ti, col)] = +w
 
     ## Full attribute dict for a single entity
 
@@ -795,8 +816,6 @@ class AttributesClass:
         df = self.edge_attributes
         # Polars-safe: iterate the (at most one) row as a dict
         try:
-            
-
             for row in df.filter(pl.col("edge_id") == eid).iter_rows(named=True):
                 return dict(row)
             return {}
@@ -824,8 +843,6 @@ class AttributesClass:
         """
         df = self.vertex_attributes
         try:
-            
-
             for row in df.filter(pl.col("vertex_id") == vertex).iter_rows(named=True):
                 return dict(row)
             return {}
@@ -977,7 +994,6 @@ class AttributesClass:
         """items: iterable of (edge_id, attrs_dict) or dict{edge_id: attrs_dict}
         Upserts rows in edge_slice_attributes for one slice in bulk.
         """
-        
 
         # normalize
         rows = []
@@ -1050,4 +1066,3 @@ class AttributesClass:
                 w = r.get("weight")
                 if w is not None:
                     self.slice_edge_weights[slice_id][r["edge_id"]] = float(w)
-

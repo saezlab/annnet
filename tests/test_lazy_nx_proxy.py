@@ -37,12 +37,10 @@ def build_directed():
     return G
 
 
-
 # TEST SUITE
 
 
 class TestLazyNXProxy(unittest.TestCase):
-
     # ---- backend basics ----
 
     def test_backend_basic(self):
@@ -159,8 +157,13 @@ class TestLazyNXProxy(unittest.TestCase):
         self.assertEqual(res[G.idx.entity_to_row("c")], 5.0)
 
         res2 = G.nx.shortest_path(G, source="a", target="c", weight="weight")
-        self.assertTrue(res2 in ([G.idx.entity_to_row("a"), G.idx.entity_to_row("b"), G.idx.entity_to_row("c")],
-                                 ["a", "b", "c"]))
+        self.assertTrue(
+            res2
+            in (
+                [G.idx.entity_to_row("a"), G.idx.entity_to_row("b"), G.idx.entity_to_row("c")],
+                ["a", "b", "c"],
+            )
+        )
 
     # ---- warnings on lossy conversions ----
 

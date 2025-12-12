@@ -23,7 +23,6 @@ def build_small():
 
 
 class TestLazyGTProxy(unittest.TestCase):
-
     # --- topology: shortest distance ---
 
     def test_shortest_distance_basic(self):
@@ -31,7 +30,7 @@ class TestLazyGTProxy(unittest.TestCase):
         d = G.gt.topology.shortest_distance(G, source="a", target="b", weights="weight")
         self.assertAlmostEqual(float(d), 3.0)
 
-    # --- topology: label_components ---
+        # --- topology: label_components ---
 
         def test_label_components(self):
             G = Graph()
@@ -41,7 +40,7 @@ class TestLazyGTProxy(unittest.TestCase):
 
             # directed=False ensures we look for Weakly Connected Components (1 component)
             comp, hist = G.gt.topology.label_components(G, directed=False)
-            
+
             # Check that the histogram has exactly 1 entry (meaning 1 component found)
             self.assertEqual(len(hist), 1)
 
@@ -81,7 +80,7 @@ class TestLazyGTProxy(unittest.TestCase):
             G.add_vertex(v)
         G.add_edge("a", "b")
         G.add_edge("b", "c")
-        G.add_edge("c", "a")         # triangle → clustering = 1.0
+        G.add_edge("c", "a")  # triangle → clustering = 1.0
 
         cc = G.gt.clustering.local_clustering(G)
         gtg = G.gt.backend()
@@ -96,12 +95,9 @@ class TestLazyGTProxy(unittest.TestCase):
         G.add_vertex("s")
         G.add_vertex("t")
         eid = G.add_edge("s", "t")
-        
+
         # Add capacity as edge attribute
-        G.edge_attributes = pl.DataFrame({
-            "edge_id": [eid],
-            "capacity": [5.0]
-        })
+        G.edge_attributes = pl.DataFrame({"edge_id": [eid], "capacity": [5.0]})
 
         g = G.gt.backend()
         cap = g.ep["capacity"]
@@ -109,7 +105,7 @@ class TestLazyGTProxy(unittest.TestCase):
         # push_relabel_max_flow returns residual capacity
         # flow = capacity - residual
         res = G.gt.flow.push_relabel_max_flow(G, "s", "t", cap)
-        
+
         # Calculate actual flow on each edge
         flow_sum = sum(cap[e] - res[e] for e in g.edges())
         self.assertAlmostEqual(flow_sum, 5.0)

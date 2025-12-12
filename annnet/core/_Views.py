@@ -51,8 +51,6 @@ class GraphView:
         if vertex_ids is None:
             return self._graph.vertex_attributes
 
-        
-
         return self._graph.vertex_attributes.filter(pl.col("vertex_id").is_in(list(vertex_ids)))
 
     @property
@@ -61,8 +59,6 @@ class GraphView:
         edge_ids = self.edge_ids
         if edge_ids is None:
             return self._graph.edge_attributes
-
-        
 
         return self._graph.edge_attributes.filter(pl.col("edge_id").is_in(list(edge_ids)))
 
@@ -93,8 +89,6 @@ class GraphView:
         if rows and cols:
             return self._graph._matrix[rows, :][:, cols]
         else:
-            
-
             return sp.dok_matrix((len(rows), len(cols)), dtype=self._graph._matrix.dtype)
 
     @property
@@ -242,8 +236,6 @@ class GraphView:
         # Filter by edge IDs in this view
         edge_ids = self.edge_ids
         if edge_ids is not None:
-            
-
             df = df.filter(pl.col("edge_id").is_in(list(edge_ids)))
 
         return df
@@ -258,8 +250,6 @@ class GraphView:
         # Filter by vertex IDs in this view
         vertex_ids = self.vertex_ids
         if vertex_ids is not None:
-            
-
             df = df.filter(pl.col("vertex_id").is_in(list(vertex_ids)))
 
         return df
@@ -272,6 +262,7 @@ class GraphView:
         """
         # Create new Graph instance
         from .graph import Graph
+
         subG = Graph(directed=self._graph.directed)
 
         vertex_ids = self.vertex_ids
@@ -415,7 +406,11 @@ class GraphView:
 
         # Return a fresh GraphView
         return GraphView(
-            self._graph, vertices=new_vertices, edges=new_edges, slices=new_slices, predicate=final_pred
+            self._graph,
+            vertices=new_vertices,
+            edges=new_edges,
+            slices=new_slices,
+            predicate=final_pred,
         )
 
     # ==================== Convenience ====================
@@ -457,6 +452,7 @@ class GraphView:
 
     def __len__(self):
         return self.vertex_count
+
 
 class ViewsClass:
     # Materialized views
@@ -624,10 +620,12 @@ class ViewsClass:
         <aspect_attr_keys>...
         """
         if not getattr(self, "aspects", None):
-            return pl.DataFrame(schema={
-                "aspect": pl.Utf8,
-                "elem_layers": pl.List(pl.Utf8),
-            })
+            return pl.DataFrame(
+                schema={
+                    "aspect": pl.Utf8,
+                    "elem_layers": pl.List(pl.Utf8),
+                }
+            )
 
         rows = []
         for a in self.aspects:
@@ -642,7 +640,7 @@ class ViewsClass:
 
         df = pl.DataFrame(rows)
         return df.clone() if copy else df
-    
+
     def layers_view(self, copy=True):
         """
         Read-only table of multi-aspect layers (full Kivelä layers).
@@ -661,17 +659,21 @@ class ViewsClass:
         """
         # no aspects configured → no layers
         if not getattr(self, "aspects", None):
-            return pl.DataFrame(schema={
-                "layer_tuple": pl.List(pl.Utf8),
-                "layer_id": pl.Utf8,
-            })
+            return pl.DataFrame(
+                schema={
+                    "layer_tuple": pl.List(pl.Utf8),
+                    "layer_id": pl.Utf8,
+                }
+            )
 
         # empty product → no layers
         if not getattr(self, "_all_layers", ()):
-            return pl.DataFrame(schema={
-                "layer_tuple": pl.List(pl.Utf8),
-                "layer_id": pl.Utf8,
-            })
+            return pl.DataFrame(
+                schema={
+                    "layer_tuple": pl.List(pl.Utf8),
+                    "layer_id": pl.Utf8,
+                }
+            )
 
         rows = []
         for aa in self._all_layers:

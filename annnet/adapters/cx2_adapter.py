@@ -37,6 +37,7 @@ from ._utils import (
 # --- Helpers ---
 CX_STYLE_KEY = "__cx_style__"
 
+
 def _cx2_collect_reified(aspects):
     """
     Detect reified hyperedges from CX2 nodes + edges.
@@ -94,13 +95,16 @@ def _cx2_collect_reified(aspects):
 
         # Determine directedness
         if any(k for k in (head_map or {})) or any(k for k in (tail_map or {})):
-            directed = True if any(ev.get("role") in ("head", "tail") for ev in attrs.values()) else False
+            directed = (
+                True if any(ev.get("role") in ("head", "tail") for ev in attrs.values()) else False
+            )
         else:
             directed = False
 
         hyperdefs.append((eid, directed, head_map, tail_map, attrs, he_id))
 
     return hyperdefs, membership_edges
+
 
 def _rows_to_df(rows):
     import polars as pl
@@ -120,8 +124,9 @@ def _rows_to_df(rows):
         # --- 3) Fallback: cast everything to string but KEEP columns ---
         # This preserves attributes
         return pl.DataFrame(
-            [{k: (str(v) if v is not None else None) for k,v in r.items()} for r in norm]
+            [{k: (str(v) if v is not None else None) for k, v in r.items()} for r in norm]
         )
+
 
 def _map_pl_to_cx2_type(dtype: pl.DataType) -> str:
     """Map Polars DataType to CX2 attribute data type string."""
@@ -142,6 +147,7 @@ def _map_pl_to_cx2_type(dtype: pl.DataType) -> str:
         # Fallback for unknown types
         return "string"
 
+
 def _jsonify(obj):
     if isinstance(obj, dict):
         return {k: _jsonify(v) for k, v in obj.items()}
@@ -152,7 +158,9 @@ def _jsonify(obj):
     else:
         return obj
 
+
 # --- Core Adapter: to_cx2 ---
+
 
 def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
     """
@@ -162,7 +170,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
     Complex AnnNet features (hyperedges, slices, etc.) are serialized
     into a JSON string and stored in 'networkAttributes' under '__AnnNet_Manifest__'.
     """
-    
+
     # 1. Prepare Manifest (Lossless storage of complex features)
     vert_rows = _df_to_rows(getattr(G, "vertex_attributes", pl.DataFrame()))
     edge_rows = _df_to_rows(getattr(G, "edge_attributes", pl.DataFrame()))
@@ -180,7 +188,6 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
             "directed": bool(G.directed) if G.directed is not None else True,
             "attributes": g_attrs,
         },
-
         "vertices": {
             "types": dict(G.entity_types),
             "attributes": vert_rows,
@@ -224,7 +231,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
     manifest["edges"]["expanded"] = {}
 
     # 2. Build Core CX2 Aspects
-    
+
     # ID Mapping: AnnNet ID (str/int) -> CX2 ID (int)
     node_map: dict[Any, int] = {}
     cx_nodes: list[dict[str, Any]] = []
@@ -249,7 +256,10 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
             elif isinstance(v, (str, int, float, bool)):
                 out[k] = v
             elif isinstance(v, (list, tuple)):
-                out[k] = [str(x) if not isinstance(x, (str, int, float, bool, type(None))) else x for x in v]
+                out[k] = [
+                    str(x) if not isinstance(x, (str, int, float, bool, type(None))) else x
+                    for x in v
+                ]
             else:
                 out[k] = str(v)  # fallback: stringify unknown types
         return out
@@ -271,9 +281,16 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
                 v_string_cols.add(col)
             # numeric: all ints + floats
             elif dtype in (
-                pl.Int8, pl.Int16, pl.Int32, pl.Int64,
-                pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
-                pl.Float32, pl.Float64,
+                pl.Int8,
+                pl.Int16,
+                pl.Int32,
+                pl.Int64,
+                pl.UInt8,
+                pl.UInt16,
+                pl.UInt32,
+                pl.UInt64,
+                pl.Float32,
+                pl.Float64,
             ):
                 v_numeric_cols.add(col)
 
@@ -293,7 +310,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
         for k, v in attrs.items():
             if v is None:
                 if k in v_string_cols:
-                    out[k] = ""          # string: None -> ""
+                    out[k] = ""  # string: None -> ""
                 elif k in v_numeric_cols:
                     # numeric: drop the key entirely (no null numbers in CX2)
                     continue
@@ -353,14 +370,14 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
     # Only binary edges between mapped vertices
     current_edge_id = 0
     e_attrs_df = getattr(G, "edge_attributes", pl.DataFrame())
-    
+
     # string columns in edge_attributes (for None -> "")
     e_string_cols = set()
     if not e_attrs_df.is_empty():
         for col, dtype in e_attrs_df.schema.items():
             if dtype == pl.Utf8:
                 e_string_cols.add(col)
-    
+
     # Create lookup for edge attributes (handle both 'edge_id' and 'id')
     e_attrs_map = {}
     if not e_attrs_df.is_empty():
@@ -393,8 +410,8 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
                     "tail": list(T) if directed else None,
                     "head": list(S) if directed else None,
                     "members": list(S | T) if not directed else None,
-                    "expanded_edges": []
-                }                
+                    "expanded_edges": [],
+                }
                 members = S | T
                 if directed:
                     # tail -> head cartesian
@@ -405,38 +422,42 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
                             current_edge_id += 1
                             raw_attrs = e_attrs_map.get(str(eid), {})
                             clean_attrs = _clean_cx2_attrs(raw_attrs, e_string_cols)
-                            cx_edges.append({
-                                "id": cx_eid,
-                                "s": node_map[u],
-                                "t": node_map[v],
-                                "v": {
-                                    "interaction": str(eid),
-                                    "weight": float(G.edge_weights.get(eid, 1.0)),
-                                    **clean_attrs,
+                            cx_edges.append(
+                                {
+                                    "id": cx_eid,
+                                    "s": node_map[u],
+                                    "t": node_map[v],
+                                    "v": {
+                                        "interaction": str(eid),
+                                        "weight": float(G.edge_weights.get(eid, 1.0)),
+                                        **clean_attrs,
+                                    },
                                 }
-                            })
+                            )
 
                 else:
                     # undirected clique
                     mem = list(members)
                     for i in range(len(mem)):
-                        for j in range(i+1, len(mem)):
+                        for j in range(i + 1, len(mem)):
                             u, v = mem[i], mem[j]
                             exp_entry["expanded_edges"].append([u, v])
                             cx_eid = current_edge_id
                             current_edge_id += 1
                             raw_attrs = e_attrs_map.get(str(eid), {})
                             clean_attrs = _clean_cx2_attrs(raw_attrs, e_string_cols)
-                            cx_edges.append({
-                                "id": cx_eid,
-                                "s": node_map[u],
-                                "t": node_map[v],
-                                "v": {
-                                    "interaction": str(eid),
-                                    "weight": float(G.edge_weights.get(eid, 1.0)),
-                                    **clean_attrs,
+                            cx_edges.append(
+                                {
+                                    "id": cx_eid,
+                                    "s": node_map[u],
+                                    "t": node_map[v],
+                                    "v": {
+                                        "interaction": str(eid),
+                                        "weight": float(G.edge_weights.get(eid, 1.0)),
+                                        **clean_attrs,
+                                    },
                                 }
-                            })
+                            )
                 manifest["edges"]["expanded"][str(eid)] = exp_entry
                 continue
 
@@ -461,37 +482,41 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
                 }
                 cx_nodes.append(he_node)
 
-                weight = float(G.edge_weights.get(eid,1.0))
+                weight = float(G.edge_weights.get(eid, 1.0))
 
                 if directed:
                     # tail -> HE
                     for u in T:
                         cx_eid = current_edge_id
                         current_edge_id += 1
-                        cx_edges.append({
-                            "id": cx_eid,
-                            "s": node_map[u],
-                            "t": he_cx_id,
-                            "v": {
-                                "interaction": f"{eid}::tail",
-                                "role": "tail",
-                                "weight": weight,
+                        cx_edges.append(
+                            {
+                                "id": cx_eid,
+                                "s": node_map[u],
+                                "t": he_cx_id,
+                                "v": {
+                                    "interaction": f"{eid}::tail",
+                                    "role": "tail",
+                                    "weight": weight,
+                                },
                             }
-                        })
+                        )
                     # HE -> head
                     for v in S:
                         cx_eid = current_edge_id
                         current_edge_id += 1
-                        cx_edges.append({
-                            "id": cx_eid,
-                            "s": he_cx_id,
-                            "t": node_map[v],
-                            "v": {
-                                "interaction": f"{eid}::head",
-                                "role": "head",
-                                "weight": weight,
+                        cx_edges.append(
+                            {
+                                "id": cx_eid,
+                                "s": he_cx_id,
+                                "t": node_map[v],
+                                "v": {
+                                    "interaction": f"{eid}::head",
+                                    "role": "head",
+                                    "weight": weight,
+                                },
                             }
-                        })
+                        )
 
                 else:
                     # undirected: HE - members
@@ -499,16 +524,18 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
                     for u in members:
                         cx_eid = current_edge_id
                         current_edge_id += 1
-                        cx_edges.append({
-                            "id": cx_eid,
-                            "s": node_map[u],
-                            "t": he_cx_id,
-                            "v": {
-                                "interaction": f"{eid}::member",
-                                "role": "member",
-                                "weight": weight,
+                        cx_edges.append(
+                            {
+                                "id": cx_eid,
+                                "s": node_map[u],
+                                "t": he_cx_id,
+                                "v": {
+                                    "interaction": f"{eid}::member",
+                                    "role": "member",
+                                    "weight": weight,
+                                },
                             }
-                        })
+                        )
                 continue
 
             # unknown hyperedge mode - skip
@@ -520,7 +547,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
             continue
 
         if u not in node_map or v not in node_map:
-            continue         
+            continue
 
         cx_u = node_map[u]
         cx_v = node_map[v]
@@ -531,10 +558,7 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
             "id": cx_eid,
             "s": cx_u,
             "t": cx_v,
-            "v": {
-                "interaction": str(eid),
-                "weight": float(G.edge_weights.get(eid, 1.0))
-            }
+            "v": {"interaction": str(eid), "weight": float(G.edge_weights.get(eid, 1.0))},
         }
 
         # Attach attributes
@@ -554,7 +578,8 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
     # Define Node Attributes
     if not v_attrs_df.is_empty():
         for col, dtype in v_attrs_df.schema.items():
-            if col == "id": continue
+            if col == "id":
+                continue
             attr_decls["nodes"][col] = {"d": _map_pl_to_cx2_type(dtype)}
 
     attr_decls["nodes"]["name"] = {"d": "string"}  # Always added
@@ -567,7 +592,8 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
     if not e_attrs_df.is_empty():
         id_col = "edge_id" if "edge_id" in e_attrs_df.columns else "id"
         for col, dtype in e_attrs_df.schema.items():
-            if col == id_col: continue
+            if col == id_col:
+                continue
             attr_decls["edges"][col] = {"d": _map_pl_to_cx2_type(dtype)}
     attr_decls["edges"]["interaction"] = {"d": "string"}
     attr_decls["edges"]["weight"] = {"d": "double"}
@@ -595,11 +621,13 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
         {"metaData": meta},
         {"attributeDeclarations": [attr_decls]},
         {
-            "networkAttributes": [{
-                "name": "AnnNet Export",
-                "directed": bool(G.directed) if G.directed is not None else True,
-                "__AnnNet_Manifest__": json.dumps(_jsonify(manifest)),
-            }]
+            "networkAttributes": [
+                {
+                    "name": "AnnNet Export",
+                    "directed": bool(G.directed) if G.directed is not None else True,
+                    "__AnnNet_Manifest__": json.dumps(_jsonify(manifest)),
+                }
+            ]
         },
         {"nodes": cx_nodes},
         {"edges": cx_edges},
@@ -633,10 +661,11 @@ def to_cx2(G: Graph, *, hyperedges="skip") -> list[dict[str, Any]]:
 
     return cx2
 
-        
     return cx2
-    
+
+
 # --- Core Adapter: from_cx2 ---
+
 
 def from_cx2(cx2_data, *, hyperedges="manifest"):
     """
@@ -657,11 +686,11 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         keys = set().union(*(r.keys() for r in rows))
         return [{k: r.get(k, None) for k in keys} for r in rows]
 
-
     # Load file or JSON string
 
     import json
     import os
+
     if isinstance(cx2_data, str):
         if os.path.exists(cx2_data):
             with open(cx2_data) as f:
@@ -671,7 +700,6 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
                 cx2_data = json.loads(cx2_data)
             except Exception:
                 raise ValueError("Invalid CX2 string or file")
-
 
     # Parse aspects into a dict
 
@@ -685,7 +713,6 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
             aspects[key] = item[key]
         else:
             aspects.setdefault(key, []).extend(item[key])
-
 
     # Extract networkAttributes + manifest JSON
 
@@ -719,20 +746,17 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
     vep = aspects.get("visualEditorProperties")
     if vep:
-        style_aspects["visualEditorProperties"] = (
-            vep[0] if isinstance(vep, list) else vep
-        )
-
+        style_aspects["visualEditorProperties"] = vep[0] if isinstance(vep, list) else vep
 
     # Construct Graph
 
     from annnet.core.graph import Graph
+
     G = Graph()
 
     # PATH A: MANIFEST RECONSTRUCTION
 
     if manifest and hyperedges in ("manifest", "reified"):
-
         # --- Base graph attrs ---
         gmeta = manifest.get("graph", {})
         G.directed = gmeta.get("directed", True)
@@ -758,10 +782,14 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
             G.edge_attributes = _rows_to_df(e_rows)
 
         # weights, directed flags, definitions
-        if emeta.get("weights"): G.edge_weights.update(emeta["weights"])
-        if emeta.get("directed"): G.edge_directed.update(emeta["directed"])
-        if emeta.get("definitions"): G.edge_definitions = dict(emeta["definitions"])
-        if emeta.get("direction_policy"): G.edge_direction_policy.update(emeta["direction_policy"])
+        if emeta.get("weights"):
+            G.edge_weights.update(emeta["weights"])
+        if emeta.get("directed"):
+            G.edge_directed.update(emeta["directed"])
+        if emeta.get("definitions"):
+            G.edge_definitions = dict(emeta["definitions"])
+        if emeta.get("direction_policy"):
+            G.edge_direction_policy.update(emeta["direction_policy"])
 
         # hyperedge definitions
         if emeta.get("hyperedges"):
@@ -801,19 +829,16 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
                     head=info.get("head", []),
                     tail=info.get("tail", []),
                     edge_id=eid,
-                    edge_directed=True
+                    edge_directed=True,
                 )
             else:
-                G.add_hyperedge(
-                    members=info.get("members", []),
-                    edge_id=eid,
-                    edge_directed=False
-                )
+                G.add_hyperedge(members=info.get("members", []), edge_id=eid, edge_directed=False)
 
         # --- Layers (Kivela)---
         kiv = emeta.get("kivela", {})
-        if kiv.get("edge_kind"): G.edge_kind.update(kiv["edge_kind"])
-        if kiv.get("edge_layers"): 
+        if kiv.get("edge_kind"):
+            G.edge_kind.update(kiv["edge_kind"])
+        if kiv.get("edge_layers"):
             G.edge_layers.update(kiv["edge_layers"])
 
         # --- Slices ---
@@ -836,8 +861,10 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
         # --- Multilayer ---
         mm = manifest.get("multilayer", {})
-        if mm.get("aspects"): G.aspects = mm["aspects"]
-        if mm.get("elem_layers"): G.elem_layers = dict(mm["elem_layers"])
+        if mm.get("aspects"):
+            G.aspects = mm["aspects"]
+        if mm.get("elem_layers"):
+            G.elem_layers = dict(mm["elem_layers"])
         if mm.get("aspect_attrs"):
             G._aspect_attrs = mm["aspect_attrs"]
         if mm.get("node_layer_attrs"):
@@ -851,7 +878,6 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         if hyperedges == "reified":
             _cx2_collect_reified(aspects, G)
 
-
     # PATH B: NO MANIFEST
 
     else:
@@ -863,9 +889,8 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
             if not hasattr(G, "graph_attributes") or G.graph_attributes is None:
                 G.graph_attributes = {}
             G.graph_attributes["__cx_visualProperties__"] = visual_props
-    
-    # Overlay Cytoscape edits: nodes + edges from CX2
 
+    # Overlay Cytoscape edits: nodes + edges from CX2
 
     # Map CX numeric ids - AnnNet string ids
     cx2node = {}
@@ -950,7 +975,3 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         G.graph_attributes[CX_STYLE_KEY] = style_aspects
 
     return G
-
-
-
-

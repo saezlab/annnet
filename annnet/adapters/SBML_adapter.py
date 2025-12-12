@@ -74,9 +74,7 @@ def _read_sbml_model(path: str):
             if err.getSeverity() >= libsbml.LIBSBML_SEV_ERROR:
                 msgs.append(f"[{err.getSeverity()}] {err.getMessage()}")
         if msgs:
-            raise ValueError(
-                "SBML document contains errors:\n" + "\n".join(msgs)
-            )
+            raise ValueError("SBML document contains errors:\n" + "\n".join(msgs))
 
     model = doc.getModel()
     if model is None:

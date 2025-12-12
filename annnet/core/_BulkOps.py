@@ -41,9 +41,9 @@ class BulkOps:
         # Intern hot strings
         try:
             import sys as _sys
+
             norm = [
-                (_sys.intern(vid) if isinstance(vid, str) else vid, attrs)
-                for vid, attrs in norm
+                (_sys.intern(vid) if isinstance(vid, str) else vid, attrs) for vid, attrs in norm
             ]
             if isinstance(slice, str):
                 slice = _sys.intern(slice)
@@ -152,10 +152,7 @@ class BulkOps:
             update_df = pl.DataFrame(
                 {
                     "vertex_id": [vid for vid, _ in update_pairs],
-                    **{
-                        k: [attrs.get(k, None) for _, attrs in update_pairs]
-                        for k in new_attr_keys
-                    }
+                    **{k: [attrs.get(k, None) for _, attrs in update_pairs] for k in new_attr_keys},
                 },
                 nan_to_null=True,
                 strict=False,
@@ -782,8 +779,6 @@ class BulkOps:
                 if owner is not None and owner != vid:
                     raise ValueError(f"Composite key conflict for {key}: {owner} vs {vid}")
                 self._vertex_key_index[key] = vid
-
-
 
     # Bulk remove / mutate down
 

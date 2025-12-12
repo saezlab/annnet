@@ -343,15 +343,17 @@ def from_dataframes(
                 edge_directed = row.pop("directed", directed)
                 etype = row.pop("edge_type", "regular")
 
-                edge_rows.append({
-                    "source": src,
-                    "target": tgt,
-                    "edge_id": eid,
-                    "weight": weight,
-                    "edge_directed": edge_directed,
-                    "edge_type": etype,
-                    "attributes": row,
-                })
+                edge_rows.append(
+                    {
+                        "source": src,
+                        "target": tgt,
+                        "edge_id": eid,
+                        "weight": weight,
+                        "edge_directed": edge_directed,
+                        "edge_type": etype,
+                        "attributes": row,
+                    }
+                )
 
             G.add_edges_bulk(edge_rows)
 
@@ -360,8 +362,13 @@ def from_dataframes(
         hyperedges_nw = nw.from_native(hyperedges, eager_only=True)
         if _get_height(hyperedges_nw) > 0:
             if exploded_hyperedges:
-                if "edge_id" not in hyperedges_nw.columns or "vertex_id" not in hyperedges_nw.columns:
-                    raise ValueError("Exploded hyperedges must have 'edge_id' and 'vertex_id' columns")
+                if (
+                    "edge_id" not in hyperedges_nw.columns
+                    or "vertex_id" not in hyperedges_nw.columns
+                ):
+                    raise ValueError(
+                        "Exploded hyperedges must have 'edge_id' and 'vertex_id' columns"
+                    )
 
                 # Group by edge_id - need to collect all rows first
                 grouped: dict[str, dict[str, list[Any]]] = {}
@@ -381,9 +388,16 @@ def from_dataframes(
                     if is_directed:
                         head = [v for v, r in zip(data["vertices"], data["roles"]) if r == "head"]
                         tail = [v for v, r in zip(data["vertices"], data["roles"]) if r == "tail"]
-                        G.add_hyperedge(head=head, tail=tail, edge_id=eid, edge_directed=True, weight=weight)
+                        G.add_hyperedge(
+                            head=head, tail=tail, edge_id=eid, edge_directed=True, weight=weight
+                        )
                     else:
-                        G.add_hyperedge(members=data["vertices"], edge_id=eid, edge_directed=False, weight=weight)
+                        G.add_hyperedge(
+                            members=data["vertices"],
+                            edge_id=eid,
+                            edge_directed=False,
+                            weight=weight,
+                        )
             else:
                 if "edge_id" not in hyperedges_nw.columns:
                     raise ValueError("hyperedges DataFrame must have 'edge_id' column")

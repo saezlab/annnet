@@ -189,6 +189,7 @@ def _write_structure(graph, path: Path, compression: str):
         )
         hyper_df.write_parquet(path / "hyperedge_definitions.parquet", compression=compression)
 
+
 def _write_tables(graph, path: Path, compression: str):
     """Write all Polars DataFrames directly to Parquet."""
 
@@ -203,6 +204,7 @@ def _write_tables(graph, path: Path, compression: str):
     graph.edge_slice_attributes.write_parquet(
         path / "edge_slice_attributes.parquet", compression=compression
     )
+
 
 def _write_multilayers(graph, path: Path, compression: str):
     """Write Kivela multilayer structures to disk."""
@@ -226,13 +228,17 @@ def _write_multilayers(graph, path: Path, compression: str):
     # 2. Vertex Presence (V_M)
     # Convert set of tuples -> List of dicts for Polars
     vm_data = [{"vertex_id": u, "layer": list(aa)} for u, aa in graph._VM]
-    
+
     # Handle empty case to preserve schema
     if not vm_data:
-         vm_schema = {"vertex_id": pl.Utf8, "layer": pl.List(pl.Utf8)}
-         pl.DataFrame(schema=vm_schema).write_parquet(path / "vertex_presence.parquet", compression=compression)
+        vm_schema = {"vertex_id": pl.Utf8, "layer": pl.List(pl.Utf8)}
+        pl.DataFrame(schema=vm_schema).write_parquet(
+            path / "vertex_presence.parquet", compression=compression
+        )
     else:
-        pl.DataFrame(vm_data).write_parquet(path / "vertex_presence.parquet", compression=compression)
+        pl.DataFrame(vm_data).write_parquet(
+            path / "vertex_presence.parquet", compression=compression
+        )
 
     # 3. Edge Layers
     # Logic: Intra edges have 1 layer tuple. Inter/Coupling have 2.
@@ -248,16 +254,18 @@ def _write_multilayers(graph, path: Path, compression: str):
             # Case: Intra -> (a,b)
             l1s.append(list(layers))
             l2s.append(None)
-    
-    pl.DataFrame({
-        "edge_id": eids, "layer_1": l1s, "layer_2": l2s
-    }).write_parquet(path / "edge_layers.parquet", compression=compression)
+
+    pl.DataFrame({"edge_id": eids, "layer_1": l1s, "layer_2": l2s}).write_parquet(
+        path / "edge_layers.parquet", compression=compression
+    )
 
     # 4. Attributes (Specific Layer Stores)
-    
+
     # 4a. Elementary Layer Attributes (Already a Polars DF in graph.py)
     if hasattr(graph, "layer_attributes") and not graph.layer_attributes.is_empty():
-        graph.layer_attributes.write_parquet(path / "elem_layer_attributes.parquet", compression=compression)
+        graph.layer_attributes.write_parquet(
+            path / "elem_layer_attributes.parquet", compression=compression
+        )
 
     # 4b. Aspect Attributes (Dict -> JSON)
     if hasattr(graph, "_aspect_attrs") and graph._aspect_attrs:
@@ -265,15 +273,24 @@ def _write_multilayers(graph, path: Path, compression: str):
 
     # 4c. Tuple Layer Attributes (Dict -> Parquet due to complex keys)
     if hasattr(graph, "_layer_attrs") and graph._layer_attrs:
-        la_data = [{"layer": list(aa), "attributes": json.dumps(attrs)} 
-                   for aa, attrs in graph._layer_attrs.items()]
-        pl.DataFrame(la_data).write_parquet(path / "tuple_layer_attributes.parquet", compression=compression)
+        la_data = [
+            {"layer": list(aa), "attributes": json.dumps(attrs)}
+            for aa, attrs in graph._layer_attrs.items()
+        ]
+        pl.DataFrame(la_data).write_parquet(
+            path / "tuple_layer_attributes.parquet", compression=compression
+        )
 
     # 4d. Vertex-Layer Attributes
     if hasattr(graph, "_vertex_layer_attrs") and graph._vertex_layer_attrs:
-        vla_data = [{"vertex_id": u, "layer": list(aa), "attributes": json.dumps(attrs)} 
-                    for (u, aa), attrs in graph._vertex_layer_attrs.items()]
-        pl.DataFrame(vla_data).write_parquet(path / "vertex_layer_attributes.parquet", compression=compression)
+        vla_data = [
+            {"vertex_id": u, "layer": list(aa), "attributes": json.dumps(attrs)}
+            for (u, aa), attrs in graph._vertex_layer_attrs.items()
+        ]
+        pl.DataFrame(vla_data).write_parquet(
+            path / "vertex_layer_attributes.parquet", compression=compression
+        )
+
 
 def _write_slices(graph, path: Path, compression: str):
     """Write slice registry and memberships."""
@@ -324,15 +341,18 @@ def _write_slices(graph, path: Path, compression: str):
         )
     em_df.write_parquet(path / "edge_memberships.parquet", compression=compression)
 
+
 def _write_audit(graph, path: Path, compression: str):
     """Write history, snapshots, provenance."""
     import json
     import sys
     from datetime import datetime
+
     try:
         from datetime import UTC  # Py3.11+
     except Exception:  # fallback for <3.11
         from datetime import timezone as _tz
+
         UTC = UTC
 
     import numpy as np
@@ -373,6 +393,7 @@ def _write_audit(graph, path: Path, compression: str):
             try:
                 from datetime import date as _dt_date
                 from datetime import datetime as _dt_datetime
+
                 if isinstance(v, (_dt_datetime, _dt_date)):
                     return v.isoformat()
             except Exception:
@@ -467,6 +488,7 @@ def _write_audit(graph, path: Path, compression: str):
 
     # Snapshots directory (if any)
     (path / "snapshots").mkdir(exist_ok=True)
+
 
 def _write_uns(graph, path: Path):
     """Write unstructured metadata and results."""
@@ -611,6 +633,7 @@ def _load_structure(graph, path: Path, lazy: bool):
     graph._num_entities = len(graph.entity_to_idx)
     graph._num_edges = len(graph.edge_to_idx)
 
+
 def _load_tables(graph, path: Path):
     """Load Polars DataFrames."""
     import polars as pl
@@ -619,6 +642,7 @@ def _load_tables(graph, path: Path):
     graph.edge_attributes = pl.read_parquet(path / "edge_attributes.parquet")
     graph.slice_attributes = pl.read_parquet(path / "slice_attributes.parquet")
     graph.edge_slice_attributes = pl.read_parquet(path / "edge_slice_attributes.parquet")
+
 
 def _load_multilayers(graph, path: Path):
     """Load Kivela multilayer structures."""
@@ -643,7 +667,7 @@ def _load_multilayers(graph, path: Path):
         vm_df = pl.read_parquet(path / "vertex_presence.parquet")
         # Bulk update is faster than iterating if we can, but let's be safe
         for row in vm_df.to_dicts():
-            aa = tuple(row["layer"]) # Convert list back to tuple
+            aa = tuple(row["layer"])  # Convert list back to tuple
             graph._VM.add((row["vertex_id"], aa))
 
     # 3. Edge Layers
@@ -661,7 +685,7 @@ def _load_multilayers(graph, path: Path):
                 graph.edge_layers[eid] = (tuple(l1), tuple(l2))
 
     # 4. Attributes
-    
+
     # 4a. Elementary Layer Attributes (Load directly into Polars)
     if (path / "elem_layer_attributes.parquet").exists():
         graph.layer_attributes = pl.read_parquet(path / "elem_layer_attributes.parquet")
@@ -683,6 +707,7 @@ def _load_multilayers(graph, path: Path):
         for row in vla_df.to_dicts():
             key = (row["vertex_id"], tuple(row["layer"]))
             graph._vertex_layer_attrs[key] = json.loads(row["attributes"])
+
 
 def _load_slices(graph, path: Path):
     """Reconstruct slice registry and memberships."""
@@ -713,6 +738,7 @@ def _load_slices(graph, path: Path):
         if w is not None:
             graph.slice_edge_weights.setdefault(lid, {})[eid] = w
 
+
 def _load_audit(graph, path: Path):
     """Load history and provenance."""
     import polars as pl
@@ -721,6 +747,7 @@ def _load_audit(graph, path: Path):
     if history_path.exists():
         history_df = pl.read_parquet(history_path)
         graph._history = history_df.to_dicts()
+
 
 def _load_uns(graph, path: Path):
     """Load unstructured metadata."""

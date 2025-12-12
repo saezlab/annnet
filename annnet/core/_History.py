@@ -77,6 +77,7 @@ class GraphDiff:
             "slices_removed": list(self.slices_removed),
         }
 
+
 class History:
     # History and Timeline
 
@@ -85,7 +86,6 @@ class History:
 
     def _jsonify(self, x):
         # Make args/return JSON-safe & compact.
-        
 
         if x is None or isinstance(x, (bool, int, float, str)):
             return x

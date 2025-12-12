@@ -8,6 +8,7 @@ import polars as pl
 if TYPE_CHECKING:
     from .graph import Graph
 
+
 class CacheManager:
     """Cache manager for materialized views (CSR/CSC)."""
 
@@ -163,6 +164,7 @@ class CacheManager:
             "adjacency": _format_info(self._adjacency, self._adjacency_version),
         }
 
+
 class Operations:
     # Slicing / copying / accounting
 
@@ -182,7 +184,7 @@ class Operations:
             vertices incident to them.
 
         Behavior
-        
+
         - Copies the current graph and deletes all edges **not** in the provided set.
         - Optionally, you can prune orphaned vertices (i.e., vertices not incident
         to any remaining edge) — this is generally recommended for consistency.
@@ -286,7 +288,7 @@ class Operations:
             for which **all** endpoints are within this set.
 
         Behavior
-        
+
         - Copies the current graph and removes edges with any endpoint outside
         the provided vertex set.
         - Removes all vertices not listed in `vertices`.
@@ -409,7 +411,7 @@ class Operations:
             sets.
 
         Behavior
-        
+
         - If both `vertices` and `edges` are provided, the resulting subgraph is
         the intersection of the two filters.
         - If only `vertices` is provided, equivalent to `subgraph(vertices)`.
@@ -470,7 +472,7 @@ class Operations:
             A new `Graph` instance with reversed directionality where applicable.
 
         Behavior
-        
+
         - **Binary edges:** direction is flipped by swapping source and target.
         - **Directed hyperedges:** `head` and `tail` sets are swapped.
         - **Undirected edges/hyperedges:** unaffected.
@@ -505,8 +507,6 @@ class Operations:
     def subgraph_from_slice(self, slice_id, *, resolve_slice_weights=True):
         if slice_id not in self._slices:
             raise KeyError(f"slice {slice_id} not found")
-
-        
 
         slice_meta = self._slices[slice_id]
         V = set(slice_meta["vertices"])
@@ -657,11 +657,7 @@ class Operations:
         # 1) Construct empty graph with same capacity (fast path)
         # ---------------------------------------------------------------
         G = self.__class__
-        new = G(
-            directed=self.directed,
-            n=self._num_entities,
-            e=self._num_edges
-        )
+        new = G(directed=self.directed, n=self._num_entities, e=self._num_edges)
 
         # ---------------------------------------------------------------
         # 2) Clone incidence matrix (DOK → DOK copy is fast)
@@ -691,17 +687,14 @@ class Operations:
         new.edge_to_idx = self.edge_to_idx.copy()
         new.idx_to_edge = self.idx_to_edge.copy()
         new.edge_definitions = {
-            eid: (s, t, etype)
-            for eid, (s, t, etype) in self.edge_definitions.items()
+            eid: (s, t, etype) for eid, (s, t, etype) in self.edge_definitions.items()
         }
         new.edge_weights = self.edge_weights.copy()
         new.edge_directed = self.edge_directed.copy()
         new.edge_kind = self.edge_kind.copy()
         new.edge_layers = self.edge_layers.copy()
         new._next_edge_id = self._next_edge_id
-        new.edge_direction_policy = {
-            k: v.copy() for k, v in self.edge_direction_policy.items()
-        }
+        new.edge_direction_policy = {k: v.copy() for k, v in self.edge_direction_policy.items()}
 
         # ---------------------------------------------------------------
         # 5) Clone slice structure (vertices, edges, attributes)
@@ -720,18 +713,13 @@ class Operations:
         # ---------------------------------------------------------------
         # 6) Clone slice_edge_weights
         # ---------------------------------------------------------------
-        new.slice_edge_weights = {
-            lid: m.copy() for lid, m in self.slice_edge_weights.items()
-        }
+        new.slice_edge_weights = {lid: m.copy() for lid, m in self.slice_edge_weights.items()}
 
         # ---------------------------------------------------------------
         # 7) Clone hyperedges
         # ---------------------------------------------------------------
         new.hyperedge_definitions = {
-            eid: {
-                k: (v.copy() if isinstance(v, (set, list, dict)) else v)
-                for k, v in hdef.items()
-            }
+            eid: {k: (v.copy() if isinstance(v, (set, list, dict)) else v) for k, v in hdef.items()}
             for eid, hdef in self.hyperedge_definitions.items()
         }
 
@@ -751,15 +739,9 @@ class Operations:
         new.elem_layers = {k: list(v) for k, v in self.elem_layers.items()}
         new._all_layers = tuple(tuple(x) for x in self._all_layers)
 
-        new._aspect_attrs = {
-            a: m.copy() for a, m in self._aspect_attrs.items()
-        }
-        new._layer_attrs = {
-            aa: m.copy() for aa, m in self._layer_attrs.items()
-        }
-        new._vertex_layer_attrs = {
-            k: m.copy() for k, m in self._vertex_layer_attrs.items()
-        }
+        new._aspect_attrs = {a: m.copy() for a, m in self._aspect_attrs.items()}
+        new._layer_attrs = {aa: m.copy() for aa, m in self._layer_attrs.items()}
+        new._vertex_layer_attrs = {k: m.copy() for k, m in self._vertex_layer_attrs.items()}
 
         # ---------------------------------------------------------------
         # 10) Copy global graph attributes
@@ -914,7 +896,7 @@ class Operations:
             based on its topology and attributes.
 
         Behavior
-        
+
         - Includes the set of verices, edges, and directedness in the hash.
         - Includes graph-level attributes (if any) to capture metadata changes.
         - Does **not** depend on memory addresses or internal object IDs, so the same
@@ -951,4 +933,3 @@ class Operations:
         )
 
         return hash((vertex_ids, edge_defs, graph_meta))
-

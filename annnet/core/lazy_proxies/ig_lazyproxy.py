@@ -9,6 +9,7 @@ import polars as pl
 if TYPE_CHECKING:
     from ..graph import Graph
 
+
 class _LazyIGProxy:
     """Lazy, cached igraph adapter:
     - On-demand backend conversion (no persistent igraph graph).
@@ -25,7 +26,7 @@ class _LazyIGProxy:
         self._cache = {}  # key -> {"igG": ig.Graph, "version": int}
         self.cache_enabled = True
 
-    #  public API 
+    #  public API
     def clear(self):
         self._cache.clear()
 
@@ -71,8 +72,6 @@ class _LazyIGProxy:
     # - dynamic dispatch -
     def __getattr__(self, name: str):
         def wrapper(*args, **kwargs):
-            
-
             import igraph as _ig
 
             # proxy-only knobs (consumed here)
@@ -295,7 +294,7 @@ class _LazyIGProxy:
                 stacklevel=3,
             )
 
-    # -- label/ID mapping helpers 
+    # -- label/ID mapping helpers
     def _infer_label_field(self) -> str | None:
         try:
             if hasattr(self._G, "default_label_field") and self._G.default_label_field:
@@ -327,7 +326,7 @@ class _LazyIGProxy:
                 return None
             id_col = self._vertex_id_col()
             try:
-                    # type: ignore
+                # type: ignore
 
                 matches = va.filter(pl.col(label_field) == val)
                 if matches.height == 0:
@@ -421,8 +420,8 @@ class _LazyIGProxy:
     def _map_output_vertices(self, obj):
         """Map igraph output structures (indices, set/list/tuple/dict) back to AnnNet row indices."""
         G = self._G
-        id2row = G.entity_to_idx    # entity_id → row index
-        idx2id = G.idx_to_entity    # row index → entity_id
+        id2row = G.entity_to_idx  # entity_id → row index
+        idx2id = G.idx_to_entity  # row index → entity_id
 
         def map_idx(i):
             # if igraph returned an index, convert: index -> internal entity_id -> row index
@@ -435,7 +434,7 @@ class _LazyIGProxy:
         if isinstance(obj, dict):
             out = {}
             for k, v in obj.items():
-                out[ map_idx(k) ] = self._map_output_vertices(v)
+                out[map_idx(k)] = self._map_output_vertices(v)
             return out
 
         # List
@@ -448,7 +447,7 @@ class _LazyIGProxy:
 
         # Set
         if isinstance(obj, set):
-            return { self._map_output_vertices(x) for x in obj }
+            return {self._map_output_vertices(x) for x in obj}
 
         # Leaf
         return map_idx(obj)

@@ -212,12 +212,8 @@ def write_parquet_graphdir(graph: Graph, path):
             "node_layer_attrs": _serialize_node_layer_attrs(
                 getattr(graph, "_vertex_layer_attrs", {})
             ),
-            "layer_tuple_attrs": _serialize_layer_tuple_attrs(
-                getattr(graph, "_layer_attrs", {})
-            ),
-            "layer_attributes": _df_to_rows(
-                getattr(graph, "layer_attributes", pl.DataFrame())
-            ),
+            "layer_tuple_attrs": _serialize_layer_tuple_attrs(getattr(graph, "_layer_attrs", {})),
+            "layer_attributes": _df_to_rows(getattr(graph, "layer_attributes", pl.DataFrame())),
         },
     }
     (path / "manifest.json").write_text(json.dumps(manifest, indent=2))
@@ -325,7 +321,7 @@ def read_parquet_graphdir(path) -> Graph:
         try:
             manifest = json.loads(manifest_path.read_text())
             mm = manifest.get("multilayer", {})
-            
+
             aspects = mm.get("aspects", [])
             elem_layers = mm.get("elem_layers", {})
 

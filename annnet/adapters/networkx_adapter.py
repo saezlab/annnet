@@ -553,15 +553,11 @@ def to_nx(
     VM_serialized = _serialize_VM(getattr(graph, "_VM", set()))
     edge_kind = dict(getattr(graph, "edge_kind", {}))
     edge_layers_ser = _serialize_edge_layers(getattr(graph, "edge_layers", {}))
-    node_layer_attrs_ser = _serialize_node_layer_attrs(
-        getattr(graph, "_vertex_layer_attrs", {})
-    )
+    node_layer_attrs_ser = _serialize_node_layer_attrs(getattr(graph, "_vertex_layer_attrs", {}))
 
     # aspect and layer-tuple level attributes (dicts)
     aspect_attrs = dict(getattr(graph, "_aspect_attrs", {}))
-    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(
-        getattr(graph, "_layer_attrs", {})
-    )
+    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(getattr(graph, "_layer_attrs", {}))
     layer_attr_rows = _df_to_rows(getattr(graph, "layer_attributes", pl.DataFrame()))
 
     # ----------------- manifest (unchanged) -----------------
@@ -890,8 +886,6 @@ def from_nx(
     layer_attr_rows = mm.get("layer_attributes", [])
     if layer_attr_rows:
         H.layer_attributes = _rows_to_df(layer_attr_rows)
-
-
 
     # --- restore vertex/edge attrs
     for vid, attrs in (manifest.get("vertex_attrs", {}) or {}).items():

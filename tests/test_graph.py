@@ -74,7 +74,9 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_edge_entity_and_vertex_edge_mode(self):
         # Create an edge that can itself be an endpoint
-        e = self.g.add_edge("x", "y", edge_id="edge_ghost", as_entity=True, weight=1.2, slice="Lx", label="meta")
+        e = self.g.add_edge(
+            "x", "y", edge_id="edge_ghost", as_entity=True, weight=1.2, slice="Lx", label="meta"
+        )
         # edge_ghost is registered as an entity (can be endpoint)
         self.assertIn("edge_ghost", self.g.entity_to_idx)
         self.assertEqual(self.g.entity_types["edge_ghost"], "edge")

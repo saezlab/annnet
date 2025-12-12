@@ -11,9 +11,18 @@ def _get_numeric_supertype(left, right):
     """
     # Type hierarchy (lower to higher precedence)
     type_order = {
-        pl.Int8: 1, pl.Int16: 2, pl.Int32: 3, pl.Int64: 4, pl.Int128: 5,
-        pl.UInt8: 1, pl.UInt16: 2, pl.UInt32: 3, pl.UInt64: 4, pl.UInt128: 5,
-        pl.Float32: 10, pl.Float64: 11
+        pl.Int8: 1,
+        pl.Int16: 2,
+        pl.Int32: 3,
+        pl.Int64: 4,
+        pl.Int128: 5,
+        pl.UInt8: 1,
+        pl.UInt16: 2,
+        pl.UInt32: 3,
+        pl.UInt64: 4,
+        pl.UInt128: 5,
+        pl.Float32: 10,
+        pl.Float64: 11,
     }
 
     # If either is float, result is float
@@ -42,6 +51,7 @@ def _get_numeric_supertype(left, right):
 class EdgeType(Enum):
     DIRECTED = "DIRECTED"
     UNDIRECTED = "UNDIRECTED"
+
 
 _vertex_RESERVED = {"vertex_id"}  # nothing structural for vertices
 _EDGE_RESERVED = {

@@ -424,8 +424,8 @@ class SliceManager:
     def __repr__(self):
         return f"SliceManager({self.count()} slices)"
 
-class SliceClass:
 
+class SliceClass:
     # slice basics
 
     def add_slice(self, slice_id, **attributes):
@@ -572,7 +572,7 @@ class SliceClass:
         if slice_id not in self._slices:
             raise KeyError(f"slice {slice_id} not found")
         return self._slices[slice_id].copy()
-    
+
     # slice set-ops & cross-slice analytics
 
     def get_slice_vertices(self, slice_id):
@@ -1049,4 +1049,3 @@ class SliceClass:
                 "attributes": slice_data["attributes"],
             }
         return stats
-

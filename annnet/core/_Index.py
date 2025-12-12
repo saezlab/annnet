@@ -104,6 +104,7 @@ class IndexManager:
             "max_col": max(self._G.idx_to_edge.keys()) if self._G.idx_to_edge else -1,
         }
 
+
 class IndexMapping:
     # ID + entity ensure helpers
 
@@ -240,4 +241,3 @@ class IndexMapping:
         """Deterministic, human-readable vertex_id from a composite key."""
         parts = [f"{f}={repr(v)}" for f, v in zip(self._vertex_key_fields, key_tuple)]
         return "cid:" + "|".join(parts)
-

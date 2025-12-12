@@ -1,5 +1,6 @@
 ## Lazy Graph-tool proxy
 
+
 class _LazyGTProxy:
     """
     graph-tool lazy proxy.
@@ -8,12 +9,14 @@ class _LazyGTProxy:
         G.gt.centrality.betweenness(...)
         G.gt.flow.push_relabel_max_flow(...)
     """
+
     # lazy module loader
     @staticmethod
     def _load_gt_module(name):
         from importlib import import_module
+
         return import_module(f"graph_tool.{name}")
-    
+
     VERTEX_KEYS = {"source", "target", "vertex", "root", "u", "v"}
 
     def __init__(self, owner):
@@ -37,10 +40,7 @@ class _LazyGTProxy:
         }
 
         # Initialize namespace objects (lazy modules)
-        self._namespaces = {
-            name: _GTNamespaceProxy(self, name)
-            for name in self._GT_MODULES.keys()
-        }
+        self._namespaces = {name: _GTNamespaceProxy(self, name) for name in self._GT_MODULES.keys()}
 
     def clear(self):
         self._cache.clear()
@@ -52,8 +52,7 @@ class _LazyGTProxy:
         if name in self._namespaces:
             return self._namespaces[name]
         raise AttributeError(
-            f"G.gt has no attribute '{name}'. "
-            f"Only namespaces: {list(self._namespaces.keys())}"
+            f"G.gt has no attribute '{name}'. Only namespaces: {list(self._namespaces.keys())}"
         )
 
     # Conversion
@@ -63,12 +62,9 @@ class _LazyGTProxy:
         version = getattr(self._G, "_version", None)
         entry = self._cache.get(key)
 
-        if (
-            not self.cache_enabled
-            or entry is None
-            or entry["version"] != version
-        ):
+        if not self.cache_enabled or entry is None or entry["version"] != version:
             from ...adapters.graphtool_adapter import to_graphtool
+
             gtG, manifest = to_graphtool(self._G)
             self._warn_on_loss(manifest)
             self._cache[key] = {"gtG": gtG, "version": version}
@@ -82,16 +78,14 @@ class _LazyGTProxy:
 
         def map_one(x):
             # AnnNet internal id?
-            if hasattr(x, '__class__') and x.__class__.__module__.startswith('graph_tool.'):
+            if hasattr(x, "__class__") and x.__class__.__module__.startswith("graph_tool."):
                 return x
             if x in self._G.entity_types:
                 vid = x
             else:
                 vid = self._lookup_vertex_id(label_field, x)
                 if vid is None:
-                    raise ValueError(
-                        f"Unknown vertex label '{x}' (label field '{label_field}')"
-                    )
+                    raise ValueError(f"Unknown vertex label '{x}' (label field '{label_field}')")
             idx = id_map[vid]
             return gtG.vertex(idx)
 
@@ -146,12 +140,7 @@ class _LazyGTProxy:
         matches = va.filter(va[field] == val)
         if matches.height == 0:
             return None
-        id_col = (
-            "vertex_id"
-            if "vertex_id" in va.columns else
-            "id" if "id" in va.columns else
-            "vid"
-        )
+        id_col = "vertex_id" if "vertex_id" in va.columns else "id" if "id" in va.columns else "vid"
         return matches.select(id_col).item(0, 0)
 
     # Lossy conversion warnings
@@ -165,9 +154,9 @@ class _LazyGTProxy:
                 msgs.append("multiple slices collapsed")
         if msgs:
             import warnings
-            warnings.warn(
-                "AnnNet → graph-tool conversion is lossy: " + "; ".join(msgs)
-            )
+
+            warnings.warn("AnnNet → graph-tool conversion is lossy: " + "; ".join(msgs))
+
 
 class _GTNamespaceProxy:
     def __init__(self, parent, module_name):
@@ -185,9 +174,7 @@ class _GTNamespaceProxy:
         mod = self._load()
         func = getattr(mod, name, None)
         if not callable(func):
-            raise AttributeError(
-                f"graph_tool.{self._module_name} has no function '{name}'"
-            )
+            raise AttributeError(f"graph_tool.{self._module_name} has no function '{name}'")
         return self._wrap(func)
 
     def _wrap(self, func):
@@ -212,6 +199,7 @@ class _GTNamespaceProxy:
             # bind signature
             try:
                 import inspect
+
                 sig = inspect.signature(func)
                 bound = sig.bind_partial(*args, **kwargs)
             except Exception:

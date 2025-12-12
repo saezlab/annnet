@@ -27,7 +27,18 @@ from .lazy_proxies import _LazyGTProxy, _LazyIGProxy, _LazyNXProxy
 
 # ===================================
 
-class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, SliceClass, AttributesClass, Traversal):
+
+class Graph(
+    BulkOps,
+    Operations,
+    History,
+    ViewsClass,
+    IndexMapping,
+    LayerClass,
+    SliceClass,
+    AttributesClass,
+    Traversal,
+):
     """Sparse incidence-matrix graph with slices, attributes, parallel edges, and hyperedges.
 
     The graph is backed by a DOK (Dictionary Of Keys) sparse matrix and exposes
@@ -49,7 +60,7 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
       contain only user data.
 
     See Also
-    
+
     add_vertex, add_edge, add_hyperedge, edges_view, vertices_view, slices_view
 
     """
@@ -75,7 +86,7 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
 
         """
         self.directed = directed
-        
+
         self._vertex_RESERVED = set(_vertex_RESERVED)
         self._EDGE_RESERVED = set(_EDGE_RESERVED)
         self._slice_RESERVED = set(_slice_RESERVED)
@@ -98,8 +109,8 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
         self._EDGE_RESERVED.update({"flexible"})
 
         # Composite vertex key (tuple-of-attrs) support
-        self._vertex_key_fields = None            # tuple[str,...] or None
-        self._vertex_key_index = {}               # dict[tuple, vertex_id]
+        self._vertex_key_fields = None  # tuple[str,...] or None
+        self._vertex_key_index = {}  # dict[tuple, vertex_id]
 
         # Sparse incidence matrix
         self._matrix = sp.dok_matrix((0, 0), dtype=np.float32)
@@ -167,14 +178,14 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
         self._snapshots = []
 
         # Multi-aspect definition
-        self.aspects: list[str] = []                         # e.g., ["time", "relation"]
-        self.elem_layers: dict[str, list[str]] = {}          # aspect -> elementary labels
-        self._all_layers: tuple[tuple[str, ...], ...] = ()   # cartesian product cache
+        self.aspects: list[str] = []  # e.g., ["time", "relation"]
+        self.elem_layers: dict[str, list[str]] = {}  # aspect -> elementary labels
+        self._all_layers: tuple[tuple[str, ...], ...] = ()  # cartesian product cache
 
         # vertex and vertex–layer presence
-        self._V: set[str] = set()                             # vertex ids (entities of type 'vertex')
-        self._VM: set[tuple[str, tuple[str, ...]]] = set()    # {(u, aa_tuple)}
-        self.vertex_aligned: bool = False                      # if True, VM == V × all_layers
+        self._V: set[str] = set()  # vertex ids (entities of type 'vertex')
+        self._VM: set[tuple[str, tuple[str, ...]]] = set()  # {(u, aa_tuple)}
+        self.vertex_aligned: bool = False  # if True, VM == V × all_layers
 
         # Stable indexing for supra rows
         self._nl_to_row: dict[tuple[str, tuple[str, ...]], int] = {}
@@ -182,16 +193,16 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
 
         # Legacy 1-aspect shim: when aspects==1 we map layer_id "L" -> ("L",)
         self._legacy_single_aspect_enabled: bool = True
-        
+
         # Multilayer edge bookkeeping (used by supra_adjacency)
-        self.edge_kind = {}     # eid -> {"intra","inter","coupling"}
-        self.edge_layers = {}   # eid -> aa   or -> (aa,bb) for inter/coupling
+        self.edge_kind = {}  # eid -> {"intra","inter","coupling"}
+        self.edge_layers = {}  # eid -> aa   or -> (aa,bb) for inter/coupling
 
         # Aspect / layer / vertex–layer attribute tables (Kivela metadata)
         # All of this is annotation on top of the structural incidence.
-        self._aspect_attrs = {}        # aspect_name -> {attr_name: value}
-        self._layer_attrs = {}         # aa (tuple[str,...]) -> {attr_name: value}
-        self._vertex_layer_attrs = {}    # (u, aa) -> {attr_name: value}
+        self._aspect_attrs = {}  # aspect_name -> {attr_name: value}
+        self._layer_attrs = {}  # aa (tuple[str,...]) -> {attr_name: value}
+        self._vertex_layer_attrs = {}  # (u, aa) -> {attr_name: value}
 
     # Build graph
 
@@ -265,7 +276,9 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
             if self.vertex_aligned and self._all_slices:
                 for aa in self._all_slices:
                     self._VM.add((vertex_id, aa))
-            elif slice is not None and len(self.aspects) == 1 and self._legacy_single_aspect_enabled:
+            elif (
+                slice is not None and len(self.aspects) == 1 and self._legacy_single_aspect_enabled
+            ):
                 self._VM.add((vertex_id, (slice,)))
 
         # Ensure vertex_attributes has a row for this vertex (even with no attrs)
@@ -297,31 +310,31 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
         return [d["vertex_id"] for d in it]
 
     def add_edge_entity(self, edge_entity_id, slice=None, **attributes):
-            """DEPRECATED: Use add_edge(..., as_entity=True) instead."""
-            self._register_edge_as_entity(edge_entity_id)
-            slice = slice or self._current_slice
-            if slice is not None:
-                if slice not in self._slices:
-                    self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
-                self._slices[slice]["edges"].add(edge_entity_id)
-            if attributes:
-                self.set_edge_attrs(edge_entity_id, **attributes)
-            return edge_entity_id
+        """DEPRECATED: Use add_edge(..., as_entity=True) instead."""
+        self._register_edge_as_entity(edge_entity_id)
+        slice = slice or self._current_slice
+        if slice is not None:
+            if slice not in self._slices:
+                self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
+            self._slices[slice]["edges"].add(edge_entity_id)
+        if attributes:
+            self.set_edge_attrs(edge_entity_id, **attributes)
+        return edge_entity_id
 
     def _register_edge_as_entity(self, edge_id):
-            """Make an existing edge connectable as an endpoint."""
-            if edge_id in self.entity_to_idx:
-                return
-            idx = self._num_entities
-            self.entity_to_idx[edge_id] = idx
-            self.idx_to_entity[idx] = edge_id
-            self.entity_types[edge_id] = "edge"
-            self._num_entities = idx + 1
-            M = self._matrix
-            rows, cols = M.shape
-            if idx >= rows:
-                new_rows = max(idx + 1, rows + max(8, rows >> 1))
-                M.resize((new_rows, cols))
+        """Make an existing edge connectable as an endpoint."""
+        if edge_id in self.entity_to_idx:
+            return
+        idx = self._num_entities
+        self.entity_to_idx[edge_id] = idx
+        self.idx_to_entity[idx] = edge_id
+        self.entity_types[edge_id] = "edge"
+        self._num_entities = idx + 1
+        M = self._matrix
+        rows, cols = M.shape
+        if idx >= rows:
+            new_rows = max(idx + 1, rows + max(8, rows >> 1))
+            M.resize((new_rows, cols))
 
     def add_edge(
         self,
@@ -392,14 +405,22 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
                 source = self.get_or_create_vertex_by_attrs(slice=slice, **source)
             if isinstance(target, dict):
                 target = self.get_or_create_vertex_by_attrs(slice=slice, **target)
-        
+
         flexible = attributes.pop("flexible", None)
         if flexible is not None:
-            if not isinstance(flexible, dict) or "var" not in flexible or "threshold" not in flexible:
-                raise ValueError("flexible must be a dict with keys {'var','threshold'[,'scope','above','tie']}")
+            if (
+                not isinstance(flexible, dict)
+                or "var" not in flexible
+                or "threshold" not in flexible
+            ):
+                raise ValueError(
+                    "flexible must be a dict with keys {'var','threshold'[,'scope','above','tie']}"
+                )
             tie = flexible.get("tie", "keep")
-            if tie not in {"keep","undirected","s->t","t->s"}:
-                raise ValueError("flexible['tie'] must be one of {'keep','undirected','s->t','t->s'}")
+            if tie not in {"keep", "undirected", "s->t", "t->s"}:
+                raise ValueError(
+                    "flexible['tie'] must be one of {'keep','undirected','s->t','t->s'}"
+                )
 
         # normalize endpoints: accept str OR iterable; route hyperedges
         def _to_tuple(x):
@@ -559,7 +580,7 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
             self._propagate_to_all_slices(edge_id, source, target)
 
         if flexible is not None:
-            self.edge_directed[edge_id] = True         # always directed; orientation is controlled
+            self.edge_directed[edge_id] = True  # always directed; orientation is controlled
             self.edge_direction_policy[edge_id] = flexible
 
         # attributes
@@ -617,8 +638,14 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
         """
         # Map dict endpoints to vertex_id when composite keys are enabled
         if self._vertex_key_enabled():
-            def _map(x): 
-                return self.get_or_create_vertex_by_attrs(slice=slice, **x) if isinstance(x, dict) else x
+
+            def _map(x):
+                return (
+                    self.get_or_create_vertex_by_attrs(slice=slice, **x)
+                    if isinstance(x, dict)
+                    else x
+                )
+
             if members is not None:
                 members = [_map(u) for u in members]
             else:
@@ -1545,7 +1572,7 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
             - `T` : frozenset[str] — set of target/tail verices.
 
         Behavior
-        
+
         - **Directed binary edges**: returned if any vertex is in the target (`T`).
         - **Directed hyperedges**: returned if any vertex is in the tail set.
         - **Undirected edges/hyperedges**: returned if any vertex is in
@@ -1590,7 +1617,7 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
             - `T` : frozenset[str] — set of target/tail verices.
 
         Behavior
-        
+
         - **Directed binary edges**: returned if any vertex is in the source (`S`).
         - **Directed hyperedges**: returned if any vertex is in the head set.
         - **Undirected edges/hyperedges**: returned if any vertex is in
@@ -1624,7 +1651,9 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
         - All key fields must be present and non-null in attrs.
         """
         if not self._vertex_key_fields:
-            raise RuntimeError("Call set_vertex_key(...) before using get_or_create_vertex_by_attrs")
+            raise RuntimeError(
+                "Call set_vertex_key(...) before using get_or_create_vertex_by_attrs"
+            )
 
         key = self._build_key_from_attrs(attrs)
         if key is None:

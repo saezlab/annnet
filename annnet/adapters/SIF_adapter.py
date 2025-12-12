@@ -129,9 +129,7 @@ def to_sif(
                 "layer_tuple_attrs": _serialize_layer_tuple_attrs(
                     getattr(graph, "_layer_attrs", {})
                 ),
-                "layer_attributes": _df_to_rows(
-                    getattr(graph, "layer_attributes", pl.DataFrame())
-                ),
+                "layer_attributes": _df_to_rows(getattr(graph, "layer_attributes", pl.DataFrame())),
             },
         }
         if lossless
@@ -535,7 +533,7 @@ def from_sif(
     if manifest and "multilayer" in manifest:
         try:
             mm = manifest.get("multilayer", {})
-            
+
             aspects = mm.get("aspects", [])
             elem_layers = mm.get("elem_layers", {})
 

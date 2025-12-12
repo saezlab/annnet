@@ -40,6 +40,7 @@ from ._utils import (
 
 # Core adapter: to_graphtool
 
+
 def to_graphtool(
     G: Graph,
     *,
@@ -87,7 +88,11 @@ def to_graphtool(
 
     # Prepare edge attribute properties if edge_attributes exists
     edge_props = {}
-    if hasattr(G, "edge_attributes") and G.edge_attributes is not None and G.edge_attributes.height > 0:
+    if (
+        hasattr(G, "edge_attributes")
+        and G.edge_attributes is not None
+        and G.edge_attributes.height > 0
+    ):
         for col in G.edge_attributes.columns:
             if col in ("edge_id", "id", edge_id_property, weight_property):
                 continue
@@ -116,7 +121,7 @@ def to_graphtool(
         e = gtG.add_edge(vmap[u], vmap[v])
         ep_id[e] = str(eid)
         ep_w[e] = float(G.edge_weights.get(eid, 1.0))
-        
+
         # Set additional edge properties from edge_attributes
         if edge_props and hasattr(G, "edge_attributes"):
             id_col = "edge_id" if "edge_id" in G.edge_attributes.columns else "id"
@@ -131,7 +136,7 @@ def to_graphtool(
 
     gtG.ep[edge_id_property] = ep_id
     gtG.ep[weight_property] = ep_w
-    
+
     # Register additional edge properties
     for col, prop in edge_props.items():
         gtG.ep[col] = prop
@@ -158,15 +163,11 @@ def to_graphtool(
     VM_serialized = _serialize_VM(getattr(G, "_VM", set()))
     edge_kind = dict(getattr(G, "edge_kind", {}))
     edge_layers_ser = _serialize_edge_layers(getattr(G, "edge_layers", {}))
-    node_layer_attrs_ser = _serialize_node_layer_attrs(
-        getattr(G, "_vertex_layer_attrs", {})
-    )
+    node_layer_attrs_ser = _serialize_node_layer_attrs(getattr(G, "_vertex_layer_attrs", {}))
 
     # aspect and layer-tuple level attributes (dicts)
     aspect_attrs = dict(getattr(G, "_aspect_attrs", {}))
-    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(
-        getattr(G, "_layer_attrs", {})
-    )
+    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(getattr(G, "_layer_attrs", {}))
 
     # 8) build manifest
     manifest = {
@@ -218,7 +219,9 @@ def to_graphtool(
 
     return gtG, manifest
 
+
 # Core adapter: from_graphtool
+
 
 def from_graphtool(
     gtG: gt.Graph,

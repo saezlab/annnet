@@ -165,6 +165,7 @@ class DummyGraph:
                 return
         raise KeyError(f"Edge {edge_id!r} not found")
 
+
 # -----------------------
 # Tests for _read_sbml_model
 # -----------------------
@@ -397,4 +398,3 @@ class TestFromSbmlIntegration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

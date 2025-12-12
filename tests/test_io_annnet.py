@@ -153,83 +153,87 @@ class TestAnnNetIO(unittest.TestCase):
         annnet_write(self.G, self.out, compression="zstd", overwrite=True)
 
     def test_write_read_kivela_layers(self):
-            """Test roundtrip of Kivela multilayer structures."""
-            # 1. Setup Kivela Multilayer Data on the existing graph
-            self.G.aspects = ["time", "transport"]
-            self.G.elem_layers = {
-                "time": ["t1", "t2"],
-                "transport": ["bus", "train"]
-            }
-            
-            # Initialize containers if they don't exist (depends on Graph init)
-            if not hasattr(self.G, "_VM"): self.G._VM = set()
-            if not hasattr(self.G, "edge_layers"): self.G.edge_layers = {}
-            if not hasattr(self.G, "_layer_attrs"): self.G._layer_attrs = {}
-            if not hasattr(self.G, "_vertex_layer_attrs"): self.G._vertex_layer_attrs = {}
-            if not hasattr(self.G, "_aspect_attrs"): self.G._aspect_attrs = {}
+        """Test roundtrip of Kivela multilayer structures."""
+        # 1. Setup Kivela Multilayer Data on the existing graph
+        self.G.aspects = ["time", "transport"]
+        self.G.elem_layers = {"time": ["t1", "t2"], "transport": ["bus", "train"]}
 
-            # Vertex Presence: (u, layer_tuple)
-            self.G._VM.add(("v1", ("t1", "bus")))
-            self.G._VM.add(("v2", ("t1", "bus")))
-            self.G._VM.add(("v2", ("t2", "train")))
+        # Initialize containers if they don't exist (depends on Graph init)
+        if not hasattr(self.G, "_VM"):
+            self.G._VM = set()
+        if not hasattr(self.G, "edge_layers"):
+            self.G.edge_layers = {}
+        if not hasattr(self.G, "_layer_attrs"):
+            self.G._layer_attrs = {}
+        if not hasattr(self.G, "_vertex_layer_attrs"):
+            self.G._vertex_layer_attrs = {}
+        if not hasattr(self.G, "_aspect_attrs"):
+            self.G._aspect_attrs = {}
 
-            # Edge Layers
-            # e1 (v1-v2): Intra-layer edge in (t1, bus)
-            self.G.edge_layers["e1"] = ("t1", "bus")
-            self.G.edge_kind["e1"] = "intra"
-            
-            # e2 (v2-v3): Inter-layer edge between (t1, bus) and (t2, train)
-            self.G.edge_layers["e2"] = (("t1", "bus"), ("t2", "train"))
-            self.G.edge_kind["e2"] = "inter"
+        # Vertex Presence: (u, layer_tuple)
+        self.G._VM.add(("v1", ("t1", "bus")))
+        self.G._VM.add(("v2", ("t1", "bus")))
+        self.G._VM.add(("v2", ("t2", "train")))
 
-            # Attributes
-            self.G._aspect_attrs = {"time": {"unit": "seconds"}}
-            self.G._layer_attrs = {("t1", "bus"): {"cost": 10}}
-            self.G._vertex_layer_attrs = {("v1", ("t1", "bus")): {"status": "active"}}
-            
-            # Elementary layer attributes (Polars DataFrame)
-            self.G.layer_attributes = pl.DataFrame([
+        # Edge Layers
+        # e1 (v1-v2): Intra-layer edge in (t1, bus)
+        self.G.edge_layers["e1"] = ("t1", "bus")
+        self.G.edge_kind["e1"] = "intra"
+
+        # e2 (v2-v3): Inter-layer edge between (t1, bus) and (t2, train)
+        self.G.edge_layers["e2"] = (("t1", "bus"), ("t2", "train"))
+        self.G.edge_kind["e2"] = "inter"
+
+        # Attributes
+        self.G._aspect_attrs = {"time": {"unit": "seconds"}}
+        self.G._layer_attrs = {("t1", "bus"): {"cost": 10}}
+        self.G._vertex_layer_attrs = {("v1", ("t1", "bus")): {"status": "active"}}
+
+        # Elementary layer attributes (Polars DataFrame)
+        self.G.layer_attributes = pl.DataFrame(
+            [
                 {"layer_id": "time_t1", "desc": "Morning"},
-                {"layer_id": "transport_bus", "desc": "Public Bus"}
-            ])
+                {"layer_id": "transport_bus", "desc": "Public Bus"},
+            ]
+        )
 
-            # Mock the cache rebuilder if strictly necessary for IO (avoids logic errors during load)
-            self.G._rebuild_all_layers_cache = lambda: None
+        # Mock the cache rebuilder if strictly necessary for IO (avoids logic errors during load)
+        self.G._rebuild_all_layers_cache = lambda: None
 
-            # 2. Roundtrip
-            G2 = self._roundtrip()
+        # 2. Roundtrip
+        G2 = self._roundtrip()
 
-            # 3. Verify Restoration
-            # Metadata
-            self.assertEqual(G2.aspects, ["time", "transport"])
-            self.assertEqual(G2.elem_layers, self.G.elem_layers)
-            
-            # Vertex Presence
-            self.assertEqual(len(G2._VM), 3)
-            self.assertIn(("v1", ("t1", "bus")), G2._VM)
-            self.assertIn(("v2", ("t2", "train")), G2._VM)
+        # 3. Verify Restoration
+        # Metadata
+        self.assertEqual(G2.aspects, ["time", "transport"])
+        self.assertEqual(G2.elem_layers, self.G.elem_layers)
 
-            # Edge Layers & Kinds
-            self.assertEqual(G2.edge_layers["e1"], ("t1", "bus"))
-            self.assertEqual(G2.edge_kind["e1"], "intra")
-            
-            # Verify Inter-layer tuple of tuples is restored correctly
-            self.assertEqual(G2.edge_layers["e2"], (("t1", "bus"), ("t2", "train")))
-            self.assertEqual(G2.edge_kind["e2"], "inter")
+        # Vertex Presence
+        self.assertEqual(len(G2._VM), 3)
+        self.assertIn(("v1", ("t1", "bus")), G2._VM)
+        self.assertIn(("v2", ("t2", "train")), G2._VM)
 
-            # Attributes
-            self.assertEqual(G2._aspect_attrs["time"]["unit"], "seconds")
-            self.assertEqual(G2._layer_attrs[("t1", "bus")]["cost"], 10)
-            self.assertEqual(G2._vertex_layer_attrs[("v1", ("t1", "bus"))]["status"], "active")
-            
-            # Verify DataFrame attributes
-            self.assertFalse(G2.layer_attributes.is_empty())
-            row = G2.layer_attributes.filter(pl.col("layer_id") == "time_t1").to_dicts()[0]
-            self.assertEqual(row["desc"], "Morning")
-            
-            # Verify Manifest Update
-            manifest = json.loads((self.out / "manifest.json").read_text())
-            self.assertEqual(manifest["counts"]["aspects"], 2)
+        # Edge Layers & Kinds
+        self.assertEqual(G2.edge_layers["e1"], ("t1", "bus"))
+        self.assertEqual(G2.edge_kind["e1"], "intra")
+
+        # Verify Inter-layer tuple of tuples is restored correctly
+        self.assertEqual(G2.edge_layers["e2"], (("t1", "bus"), ("t2", "train")))
+        self.assertEqual(G2.edge_kind["e2"], "inter")
+
+        # Attributes
+        self.assertEqual(G2._aspect_attrs["time"]["unit"], "seconds")
+        self.assertEqual(G2._layer_attrs[("t1", "bus")]["cost"], 10)
+        self.assertEqual(G2._vertex_layer_attrs[("v1", ("t1", "bus"))]["status"], "active")
+
+        # Verify DataFrame attributes
+        self.assertFalse(G2.layer_attributes.is_empty())
+        row = G2.layer_attributes.filter(pl.col("layer_id") == "time_t1").to_dicts()[0]
+        self.assertEqual(row["desc"], "Morning")
+
+        # Verify Manifest Update
+        manifest = json.loads((self.out / "manifest.json").read_text())
+        self.assertEqual(manifest["counts"]["aspects"], 2)
 
     def test_slices_registry_and_memberships(self):
         self._roundtrip()
@@ -291,29 +295,30 @@ class TestAnnNetIO(unittest.TestCase):
             annnet_read(Path(self.tmpdir) / "does_not_exist.annnet")
 
     def test_write_read_kivela_empty_state(self):
-            """Test multilayer graph with aspects but NO presence/edges (Edge case)."""
-            # 1. Setup minimal multilayer metadata
-            self.G.aspects = ["time"]
-            self.G.elem_layers = {"time": ["t1", "t2"]}
-            
-            # Ensure containers exist but are EMPTY
-            self.G._VM = set() 
-            self.G.edge_layers = {}
-            # We leave attributes empty as well to test optional attribute file writing
-            self.G._layer_attrs = {} 
+        """Test multilayer graph with aspects but NO presence/edges (Edge case)."""
+        # 1. Setup minimal multilayer metadata
+        self.G.aspects = ["time"]
+        self.G.elem_layers = {"time": ["t1", "t2"]}
 
-            # 2. Roundtrip
-            G2 = self._roundtrip()
+        # Ensure containers exist but are EMPTY
+        self.G._VM = set()
+        self.G.edge_layers = {}
+        # We leave attributes empty as well to test optional attribute file writing
+        self.G._layer_attrs = {}
 
-            # 3. Assertions
-            # Aspects preserved?
-            self.assertEqual(G2.aspects, ["time"])
-            # VM is empty?
-            self.assertEqual(len(G2._VM), 0)
-            # Verify the file was actually written (the empty schema parquet)
-            self.assertTrue((self.out / "layers" / "vertex_presence.parquet").exists())
-            # Verify attribute files were NOT written (optimization check)
-            self.assertFalse((self.out / "layers" / "tuple_layer_attributes.parquet").exists())
+        # 2. Roundtrip
+        G2 = self._roundtrip()
+
+        # 3. Assertions
+        # Aspects preserved?
+        self.assertEqual(G2.aspects, ["time"])
+        # VM is empty?
+        self.assertEqual(len(G2._VM), 0)
+        # Verify the file was actually written (the empty schema parquet)
+        self.assertTrue((self.out / "layers" / "vertex_presence.parquet").exists())
+        # Verify attribute files were NOT written (optimization check)
+        self.assertFalse((self.out / "layers" / "tuple_layer_attributes.parquet").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

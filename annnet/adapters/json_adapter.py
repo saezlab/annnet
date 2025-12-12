@@ -264,9 +264,7 @@ def to_json(graph: Graph, path, *, public_only: bool = False, indent: int = 0):
                 "layer_tuple_attrs": _serialize_layer_tuple_attrs(
                     getattr(graph, "_layer_attrs", {})
                 ),
-                "layer_attributes": _df_to_rows(
-                    getattr(graph, "layer_attributes", pl.DataFrame())
-                ),
+                "layer_attributes": _df_to_rows(getattr(graph, "layer_attributes", pl.DataFrame())),
             },
         },
     }
