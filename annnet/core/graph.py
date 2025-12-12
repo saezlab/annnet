@@ -291,87 +291,30 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
         return [d["vertex_id"] for d in it]
 
     def add_edge_entity(self, edge_entity_id, slice=None, **attributes):
-        """Add an **edge entity** (vertex-edge hybrid) that can connect to vertices/edges.
+            """DEPRECATED: Use add_edge(..., as_entity=True) instead."""
+            self._register_edge_as_entity(edge_entity_id)
+            slice = slice or self._current_slice
+            if slice is not None:
+                if slice not in self._slices:
+                    self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
+                self._slices[slice]["edges"].add(edge_entity_id)
+            if attributes:
+                self.set_edge_attrs(edge_entity_id, **attributes)
+            return edge_entity_id
 
-        Parameters
-        --
-        edge_entity_id : str
-            Entity ID to register as type ``'edge'`` in the entity set.
-        slice : str, optional
-            Target slice. Defaults to the active slice.
-        **attributes
-            Attributes stored in the vertex attribute DF (treated like vertices).
-
-        Returns
-        ---
-        str
-            The edge-entity ID.
-
-        """
-        # Resolve slice default and intern hot strings
-        slice = slice or self._current_slice
-        try:
-            import sys as _sys
-
-            if isinstance(edge_entity_id, str):
-                edge_entity_id = _sys.intern(edge_entity_id)
-            if isinstance(slice, str):
-                slice = _sys.intern(slice)
-        except Exception:
-            pass
-
-        entity_to_idx = self.entity_to_idx
-        slices = self._slices
-
-        # Add to global superset if new (delegate to existing helper)
-        if edge_entity_id not in entity_to_idx:
-            self._add_edge_entity(edge_entity_id)
-
-        # Add to specified slice
-        if slice not in slices:
-            slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
-        slices[slice]["edges"].add(edge_entity_id)
-
-        # Add attributes (treat edge entities like vertices for attributes)
-        if attributes:
-            self.set_edge_attrs(edge_entity_id, **attributes)
-
-        return edge_entity_id
-
-    def _add_edge_entity(self, edge_id):
-        """INTERNAL: Register an **edge-entity** so edges can attach to it (vertex-edge mode).
-
-        Parameters
-        --
-        edge_id : str
-            Identifier to insert into the entity index as type ``'edge'``.
-
-        Notes
-        -
-        - Adds a new entity row and resizes the DOK incidence matrix accordingly.
-
-        """
-        try:
-            import sys as _sys
-
-            if isinstance(edge_id, str):
-                edge_id = _sys.intern(edge_id)
-        except Exception:
-            pass
-
-        if edge_id not in self.entity_to_idx:
+    def _register_edge_as_entity(self, edge_id):
+            """Make an existing edge connectable as an endpoint."""
+            if edge_id in self.entity_to_idx:
+                return
             idx = self._num_entities
             self.entity_to_idx[edge_id] = idx
             self.idx_to_entity[idx] = edge_id
             self.entity_types[edge_id] = "edge"
             self._num_entities = idx + 1
-
-            # Grow-only resize (behavior: matrix >= (num_entities, num_edges))
-            M = self._matrix  # DOK
+            M = self._matrix
             rows, cols = M.shape
-            if self._num_entities > rows:
-                # geometric growth to reduce repeated resizes; minimum bump of 8 rows
-                new_rows = max(self._num_entities, rows + max(8, rows >> 1))
+            if idx >= rows:
+                new_rows = max(idx + 1, rows + max(8, rows >> 1))
                 M.resize((new_rows, cols))
 
     def add_edge(
@@ -381,7 +324,7 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
         slice=None,
         weight=1.0,
         edge_id=None,
-        edge_type="regular",
+        as_entity=False,
         propagate="none",
         slice_weight=None,
         directed=None,
@@ -393,17 +336,17 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
         Parameters
         --
         source : str
-            Source entity ID (vertex or edge-entity for vertex-edge mode).
+            Source entity ID (vertex or edge).
         target : str
-            Target entity ID.
+            Target entity ID (vertex or edge).
         slice : str, optional
             slice to place the edge into. Defaults to the active slice.
         weight : float, optional
             Global edge weight stored in the incidence column (default 1.0).
         edge_id : str, optional
             Explicit edge ID. If omitted, a fresh ID is generated.
-        edge_type : {'regular', 'vertex_edge'}, optional
-            Edge kind. ``'vertex_edge'`` allows connecting to an edge-entity.
+        as_entity : bool, optional
+            If True, this edge can itself be an endpoint of other edges.
         propagate : {'none', 'shared', 'all'}, optional
             slice propagation:
             - ``'none'`` : only the specified slice
@@ -424,7 +367,7 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
         Raises
         --
         ValueError
-            If ``propagate`` or ``edge_type`` is invalid.
+            If ``propagate`` is invalid.
         TypeError
             If ``weight`` is not numeric.
 
@@ -432,11 +375,10 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
         -
         - Directed edges write ``+weight`` at source row and ``-weight`` at target row.
         - Undirected edges write ``+weight`` at both endpoints.
-        - Updating an existing edge ID overwrites its matrix column and metadata.
+        - When ``as_entity=True``, the edge gets a row so other edges can connect to it.
 
         """
-        if edge_type is None:
-            edge_type = "regular"
+        edge_type = attributes.pop("edge_type", "regular")
 
         # Resolve dict endpoints via composite key (if enabled)
         if self._vertex_key_enabled():
@@ -497,27 +439,10 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
             raise ValueError(f"propagate must be one of 'none'|'shared'|'all', got {propagate!r}")
         if not isinstance(weight, (int, float)):
             raise TypeError(f"weight must be numeric, got {type(weight).__name__}")
-        if edge_type not in {"regular", "vertex_edge"}:
-            raise ValueError(f"edge_type must be 'regular' or 'vertex_edge', got {edge_type!r}")
 
         # resolve slice + whether to touch sliceing at all
         slice = self._current_slice if slice is None else slice
         touch_slice = slice is not None
-
-        # Intern common strings to speed up dict lookups
-        try:
-            import sys as _sys
-
-            if isinstance(source, str):
-                source = _sys.intern(source)
-            if isinstance(target, str):
-                target = _sys.intern(target)
-            if isinstance(slice, str):
-                slice = _sys.intern(slice)
-            if isinstance(edge_id, str):
-                edge_id = _sys.intern(edge_id)
-        except Exception:
-            pass
 
         entity_to_idx = self.entity_to_idx
         idx_to_edge = self.idx_to_edge
@@ -528,17 +453,10 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
         slices = self._slices
         M = self._matrix  # DOK
 
-        # ensure vertices exist (global)
-        def _ensure_vertex_or_edge_entity(x):
-            if x in entity_to_idx:
-                return
-            if edge_type == "vertex_edge" and isinstance(x, str) and x.startswith("edge_"):
-                self.add_edge_entity(x, slice=slice)
-            else:
-                self.add_vertex(x, slice=slice)
-
-        _ensure_vertex_or_edge_entity(source)
-        _ensure_vertex_or_edge_entity(target)
+        # ensure endpoints exist (creates vertex if not already registered)
+        for ep in (source, target):
+            if ep not in entity_to_idx:
+                self.add_vertex(ep, slice=slice)
 
         # indices (after potential vertex creation)
         source_idx = entity_to_idx[source]
@@ -645,6 +563,9 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
         if flexible is not None:
             self._apply_flexible_direction(edge_id)
 
+        if as_entity:
+            self._register_edge_as_entity(edge_id)
+
         return edge_id
 
     def add_parallel_edge(self, source, target, weight=1.0, **attributes):
@@ -664,15 +585,6 @@ class Graph(BulkOps, Operations, History, ViewsClass, IndexMapping, LayerClass, 
             The new edge ID.
 
         """
-        try:
-            import sys as _sys
-
-            if isinstance(source, str):
-                source = _sys.intern(source)
-            if isinstance(target, str):
-                target = _sys.intern(target)
-        except Exception:
-            pass
 
         _add_edge = self.add_edge
         return _add_edge(source, target, weight=weight, edge_id=None, **attributes)

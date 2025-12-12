@@ -73,14 +73,18 @@ class TestGraphBasics(unittest.TestCase):
         self.assertTrue(self.g.has_edge("p", "q", edge_id=e1))
 
     def test_edge_entity_and_vertex_edge_mode(self):
-        # Explicitly add an edge-entity, then connect vertex->edgeEntity
-        self.g.add_edge_entity("edge_ghost", slice="Lx", kind="meta")
-        e = self.g.add_edge("x", "edge_ghost", edge_type="vertex_edge", weight=1.2)
-        self.assertIn("edge_ghost", self.g.entity_types)
+        # Create an edge that can itself be an endpoint
+        e = self.g.add_edge("x", "y", edge_id="edge_ghost", as_entity=True, weight=1.2, slice="Lx", label="meta")
+        # edge_ghost is registered as an entity (can be endpoint)
+        self.assertIn("edge_ghost", self.g.entity_to_idx)
         self.assertEqual(self.g.entity_types["edge_ghost"], "edge")
+        # edge exists and has the right weight
         self.assertAlmostEqual(self.g.edge_weights[e], 1.2, places=7)
-        # also ensure attributes for edge entity were stored like vertex attrs
-        self.assertEqual(self.g.get_attr_vertex("edge_ghost", "kind"), "meta")
+        # attributes stored as edge attrs
+        self.assertEqual(self.g.get_attr_edge("edge_ghost", "label"), "meta")
+        # can connect another edge TO this edge
+        e2 = self.g.add_edge("z", "edge_ghost", edge_id="meta_link")
+        self.assertIn("meta_link", self.g.edge_to_idx)
 
     def test_hyperedge_undirected(self):
         hid = self.g.add_hyperedge(members=["h1", "h2", "h3"], weight=2.0, tag="tri")
