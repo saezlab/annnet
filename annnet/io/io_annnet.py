@@ -105,7 +105,11 @@ def write(graph, path: str | Path, *, compression="zstd", overwrite=False):
 
 def _write_structure(graph, path: Path, compression: str):
     """Write sparse incidence matrix + all index mappings."""
-    import polars as pl
+    try:
+        import polars as pl  # optional
+    except Exception:  # ModuleNotFoundError, etc.
+        pl = None
+
     import zarr
 
     path.mkdir(parents=True, exist_ok=True)
@@ -136,7 +140,10 @@ def _write_structure(graph, path: Path, compression: str):
 
     # Write all index mappings as Parquet
     def dict_to_parquet(d: dict, filepath: Path, id_name: str, val_name: str):
-        import polars as pl
+        try:
+            import polars as pl  # optional
+        except Exception:  # ModuleNotFoundError, etc.
+            pl = None
 
         df = pl.DataFrame({id_name: list(d.keys()), val_name: list(d.values())})
         df.write_parquet(filepath, compression=compression)
@@ -210,7 +217,10 @@ def _write_multilayers(graph, path: Path, compression: str):
     """Write Kivela multilayer structures to disk."""
     import json
 
-    import polars as pl
+    try:
+        import polars as pl  # optional
+    except Exception:  # ModuleNotFoundError, etc.
+        pl = None
 
     # If no aspects are defined, skip creating the folder
     if not getattr(graph, "aspects", []):
@@ -296,7 +306,11 @@ def _write_slices(graph, path: Path, compression: str):
     """Write slice registry and memberships."""
     import json
 
-    import polars as pl
+    try:
+        import polars as pl  # optional
+    except Exception:  # ModuleNotFoundError, etc.
+        pl = None
+
 
     path.mkdir(parents=True, exist_ok=True)
 
@@ -356,7 +370,10 @@ def _write_audit(graph, path: Path, compression: str):
         UTC = UTC
 
     import numpy as np
-    import polars as pl
+    try:
+        import polars as pl  # optional
+    except Exception:  # ModuleNotFoundError, etc.
+        pl = None
     import scipy
 
     path.mkdir(parents=True, exist_ok=True)
@@ -564,7 +581,10 @@ def read(path: str | Path, *, lazy: bool = False) -> Graph:
 
 def _load_structure(graph, path: Path, lazy: bool):
     """Load sparse matrix and index mappings."""
-    import polars as pl
+    try:
+        import polars as pl  # optional
+    except Exception:  # ModuleNotFoundError, etc.
+        pl = None
     import zarr
 
     # Load incidence matrix
@@ -636,7 +656,11 @@ def _load_structure(graph, path: Path, lazy: bool):
 
 def _load_tables(graph, path: Path):
     """Load Polars DataFrames."""
-    import polars as pl
+    try:
+        import polars as pl  # optional
+    except Exception:  # ModuleNotFoundError, etc.
+        pl = None
+
 
     graph.vertex_attributes = pl.read_parquet(path / "vertex_attributes.parquet")
     graph.edge_attributes = pl.read_parquet(path / "edge_attributes.parquet")
@@ -648,7 +672,11 @@ def _load_multilayers(graph, path: Path):
     """Load Kivela multilayer structures."""
     import json
 
-    import polars as pl
+    try:
+        import polars as pl  # optional
+    except Exception:  # ModuleNotFoundError, etc.
+        pl = None
+
 
     # Graceful exit if this is a legacy graph without layers
     if not path.exists() or not (path / "metadata.json").exists():
@@ -713,7 +741,11 @@ def _load_slices(graph, path: Path):
     """Reconstruct slice registry and memberships."""
     import json
 
-    import polars as pl
+    try:
+        import polars as pl  # optional
+    except Exception:  # ModuleNotFoundError, etc.
+        pl = None
+
 
     # Registry
     registry_df = pl.read_parquet(path / "registry.parquet")
@@ -741,7 +773,11 @@ def _load_slices(graph, path: Path):
 
 def _load_audit(graph, path: Path):
     """Load history and provenance."""
-    import polars as pl
+    try:
+        import polars as pl  # optional
+    except Exception:  # ModuleNotFoundError, etc.
+        pl = None
+
 
     history_path = path / "history.parquet"
     if history_path.exists():

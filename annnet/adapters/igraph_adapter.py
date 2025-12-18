@@ -4,7 +4,11 @@ import json
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-import polars as pl
+try:
+    import polars as pl  # optional
+except Exception:  # ModuleNotFoundError, etc.
+    pl = None
+
 
 from ._utils import (
     _deserialize_edge_layers,

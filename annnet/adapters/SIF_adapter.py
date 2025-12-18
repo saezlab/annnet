@@ -8,7 +8,10 @@ try:
 except Exception:
     from annnet.core.graph import Graph
 
-import polars as pl
+try:
+    import polars as pl  # optional
+except Exception:  # ModuleNotFoundError, etc.
+    pl = None
 
 from ._utils import (
     _deserialize_edge_layers,

@@ -3,7 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 import narwhals as nw
-import polars as pl
+try:
+    import polars as pl  # optional
+except Exception:  # ModuleNotFoundError, etc.
+    pl = None
 from narwhals.typing import IntoDataFrame
 
 if __name__ == "__main__":

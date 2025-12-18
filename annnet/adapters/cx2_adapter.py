@@ -16,7 +16,10 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-import polars as pl
+try:
+    import polars as pl  # optional
+except Exception:  # ModuleNotFoundError, etc.
+    pl = None
 
 if TYPE_CHECKING:
     from ..core.graph import Graph

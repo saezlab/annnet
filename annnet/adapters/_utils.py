@@ -68,8 +68,10 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
 
 from typing import Any, Optional
 
-import polars as pl
-
+try:
+    import polars as pl  # optional
+except Exception:  # ModuleNotFoundError, etc.
+    pl = None
 
 def _serialize_edge_layers(edge_layers: dict[str, Any]) -> dict[str, Any]:
     """

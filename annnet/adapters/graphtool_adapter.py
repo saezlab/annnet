@@ -16,7 +16,10 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-import polars as pl
+try:
+    import polars as pl  # optional
+except Exception:  # ModuleNotFoundError, etc.
+    pl = None
 
 try:
     import graph_tool.all as gt

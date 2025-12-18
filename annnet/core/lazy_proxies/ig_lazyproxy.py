@@ -4,7 +4,10 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING
 
-import polars as pl
+try:
+    import polars as pl  # optional
+except Exception:  # ModuleNotFoundError, etc.
+    pl = None
 
 if TYPE_CHECKING:
     from ..graph import Graph

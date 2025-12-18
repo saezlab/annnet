@@ -7,7 +7,7 @@ from . import load_adapter
 from ._proxy import BackendProxy
 
 if TYPE_CHECKING:
-    from ..core._graph import Graph
+    from ..core.graph import Graph
 
 
 def get_adapter(name: str):

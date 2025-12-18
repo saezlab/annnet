@@ -38,7 +38,10 @@ from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
-import polars as pl
+try:
+    import polars as pl  # optional
+except Exception:  # ModuleNotFoundError, etc.
+    pl = None
 
 from ..core.graph import Graph
 

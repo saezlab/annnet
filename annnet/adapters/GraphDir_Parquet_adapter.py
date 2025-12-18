@@ -5,7 +5,10 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import polars as pl
+try:
+    import polars as pl  # optional
+except Exception:  # ModuleNotFoundError, etc.
+    pl = None
 
 if TYPE_CHECKING:
     from ..core.graph import Graph
