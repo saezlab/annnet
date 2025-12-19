@@ -4,8 +4,11 @@ from datetime import UTC, datetime
 from functools import wraps
 
 import numpy as np
-import polars as pl
-
+import narwhals as nw
+try:
+    import polars as pl  # optional
+except Exception:  # ModuleNotFoundError, etc.
+    pl = None
 
 class GraphDiff:
     """Represents the difference between two graph states.
@@ -184,7 +187,19 @@ class History:
         Ordering is guaranteed by 'version' and 'mono_ns'. The log is in-memory until exported.
 
         """
-        return pl.DataFrame(self._history) if as_df else list(self._history)
+        if as_df:
+            try:
+                import polars as pl
+                return pl.DataFrame(self._history)
+            except Exception:
+                try:
+                    import pandas as pd
+                    return pd.DataFrame.from_records(self._history)
+                except Exception:
+                    raise RuntimeError(
+                        "Cannot return history as DataFrame: install polars (recommended) or pandas."
+                    )
+        return list(self._history)
 
     def export_history(self, path: str):
         """Write the mutation history to disk.
@@ -208,7 +223,17 @@ class History:
         """
         if not self._history:
             return 0
-        df = pl.DataFrame(self._history)
+        try:
+            import polars as pl
+            df = pl.DataFrame(self._history)
+        except Exception:
+            try:
+                import pandas as pd
+                df = pd.DataFrame.from_records(self._history)
+            except Exception:
+                raise RuntimeError(
+                    "Cannot construct DataFrame from history: install polars (recommended) or pandas."
+                )
         p = path.lower()
         if p.endswith(".parquet"):
             df.write_parquet(path)

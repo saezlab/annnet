@@ -1,8 +1,30 @@
 import math
+from typing import Any
 
-import polars as pl
-
+import narwhals as nw
+try:
+    import polars as pl  # optional
+    is_polars = True
+except Exception:  # ModuleNotFoundError, etc.
+    pl = None
+    is_polars = False
 from ._helpers import _get_numeric_supertype
+
+_NUMERIC_NW_DTYPES = {
+    nw.Int8, nw.Int16, nw.Int32, nw.Int64,
+    nw.UInt8, nw.UInt16, nw.UInt32, nw.UInt64,
+    nw.Float32, nw.Float64,
+}
+
+_NUMERIC_PL_DTYPES = set()
+if pl is not None:
+    _NUMERIC_PL_DTYPES = {
+        pl.Int8, pl.Int16, pl.Int32, pl.Int64,
+        pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
+        pl.Float32, pl.Float64,
+    }
+
+_NUMERIC_DTYPES = _NUMERIC_PL_DTYPES if is_polars else _NUMERIC_NW_DTYPES
 
 
 class AttributesClass:
@@ -89,12 +111,39 @@ class AttributesClass:
 
         """
         df = self.vertex_attributes
-        if key not in df.columns:
+        if df is None or not hasattr(df, "columns") or key not in df.columns:
             return default
-        rows = df.filter(pl.col("vertex_id") == vertex_id)
-        if rows.height == 0:
+
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        if pl is not None and isinstance(df, pl.DataFrame):
+            rows = df.filter(pl.col("vertex_id") == vertex_id)
+            if rows.height == 0:
+                return default
+            val = rows.select(pl.col(key)).to_series()[0]
+            return default if val is None else val
+
+        import narwhals as nw
+        rows = nw.to_native(
+            nw.from_native(df, pass_through=True).filter(nw.col("vertex_id") == vertex_id)
+        )
+
+        # empty?
+        if (hasattr(rows, "__len__") and len(rows) == 0) or (getattr(rows, "height", None) == 0):
             return default
-        val = rows.select(pl.col(key)).to_series()[0]
+
+        # pull first value of column `key`
+        try:
+            col = rows[key]
+            val = col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+        except Exception:
+            # fallback via first row dict
+            r0 = (rows.to_dicts()[0] if hasattr(rows, "to_dicts") else rows.to_dict(orient="records")[0])
+            val = r0.get(key, None)
+
         return default if val is None else val
 
     def get_vertex_attribute(self, vertex_id, attribute):  # legacy alias
@@ -120,17 +169,40 @@ class AttributesClass:
         attribute = getattr(attribute, "value", attribute)
 
         df = self.vertex_attributes
-        if not isinstance(df, pl.DataFrame):
+        df = self.vertex_attributes
+        if df is None or not hasattr(df, "columns"):
             return None
-        if df.height == 0 or "vertex_id" not in df.columns or attribute not in df.columns:
-            return None
-
-        rows = df.filter(pl.col("vertex_id") == vertex_id)
-        if rows.height == 0:
+        if "vertex_id" not in df.columns or attribute not in df.columns:
             return None
 
-        s = rows.get_column(attribute)
-        return s.item(0) if s.len() else None
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        if pl is not None and isinstance(df, pl.DataFrame):
+            if df.height == 0:
+                return None
+            rows = df.filter(pl.col("vertex_id") == vertex_id)
+            if rows.height == 0:
+                return None
+            s = rows.get_column(attribute)
+            return s.item(0) if s.len() else None
+
+        import narwhals as nw
+        rows = nw.to_native(
+            nw.from_native(df, pass_through=True).filter(nw.col("vertex_id") == vertex_id)
+        )
+        if (hasattr(rows, "__len__") and len(rows) == 0) or (getattr(rows, "height", None) == 0):
+            return None
+
+        # first scalar value of column
+        try:
+            col = rows[attribute]
+            return col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+        except Exception:
+            r0 = (rows.to_dict(orient="records")[0] if hasattr(rows, "to_dict") else rows.to_dicts()[0])
+            return r0.get(attribute, None)
 
     def set_edge_attrs(self, edge_id, **attrs):
         """Upsert pure edge attributes (non-structural) into the edge DF.
@@ -165,12 +237,35 @@ class AttributesClass:
 
         """
         df = self.edge_attributes
-        if key not in df.columns:
+        if df is None or not hasattr(df, "columns") or key not in df.columns:
             return default
-        rows = df.filter(pl.col("edge_id") == edge_id)
-        if rows.height == 0:
+
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        if pl is not None and isinstance(df, pl.DataFrame):
+            rows = df.filter(pl.col("edge_id") == edge_id)
+            if rows.height == 0:
+                return default
+            val = rows.select(pl.col(key)).to_series()[0]
+            return default if val is None else val
+
+        import narwhals as nw
+        rows = nw.to_native(
+            nw.from_native(df, pass_through=True).filter(nw.col("edge_id") == edge_id)
+        )
+        if (hasattr(rows, "__len__") and len(rows) == 0) or (getattr(rows, "height", None) == 0):
             return default
-        val = rows.select(pl.col(key)).to_series()[0]
+
+        try:
+            col = rows[key]
+            val = col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+        except Exception:
+            r0 = (rows.to_dict(orient="records")[0] if hasattr(rows, "to_dict") else rows.to_dicts()[0])
+            val = r0.get(key, None)
+
         return default if val is None else val
 
     def get_edge_attribute(self, edge_id, attribute):  # legacy alias
@@ -196,17 +291,38 @@ class AttributesClass:
         attribute = getattr(attribute, "value", attribute)
 
         df = self.edge_attributes
-        if not isinstance(df, pl.DataFrame):
+        if df is None or not hasattr(df, "columns"):
             return None
-        if df.height == 0 or "edge_id" not in df.columns or attribute not in df.columns:
-            return None
-
-        rows = df.filter(pl.col("edge_id") == edge_id)
-        if rows.height == 0:
+        if "edge_id" not in df.columns or attribute not in df.columns:
             return None
 
-        s = rows.get_column(attribute)
-        return s.item(0) if s.len() else None
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        if pl is not None and isinstance(df, pl.DataFrame):
+            if df.height == 0:
+                return None
+            rows = df.filter(pl.col("edge_id") == edge_id)
+            if rows.height == 0:
+                return None
+            s = rows.get_column(attribute)
+            return s.item(0) if s.len() else None
+
+        import narwhals as nw
+        rows = nw.to_native(
+            nw.from_native(df, pass_through=True).filter(nw.col("edge_id") == edge_id)
+        )
+        if (hasattr(rows, "__len__") and len(rows) == 0) or (getattr(rows, "height", None) == 0):
+            return None
+
+        try:
+            col = rows[attribute]
+            return col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+        except Exception:
+            r0 = (rows.to_dict(orient="records")[0] if hasattr(rows, "to_dict") else rows.to_dicts()[0])
+            return r0.get(attribute, None)
 
     def set_slice_attrs(self, slice_id, **attrs):
         """Upsert pure slice attributes.
@@ -237,12 +353,35 @@ class AttributesClass:
 
         """
         df = self.slice_attributes
-        if key not in df.columns:
+        if df is None or not hasattr(df, "columns") or key not in df.columns:
             return default
-        rows = df.filter(pl.col("slice_id") == slice_id)
-        if rows.height == 0:
+
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        if pl is not None and isinstance(df, pl.DataFrame):
+            rows = df.filter(pl.col("slice_id") == slice_id)
+            if rows.height == 0:
+                return default
+            val = rows.select(pl.col(key)).to_series()[0]
+            return default if val is None else val
+
+        import narwhals as nw
+        rows = nw.to_native(
+            nw.from_native(df, pass_through=True).filter(nw.col("slice_id") == slice_id)
+        )
+        if (hasattr(rows, "__len__") and len(rows) == 0) or (getattr(rows, "height", None) == 0):
             return default
-        val = rows.select(pl.col(key)).to_series()[0]
+
+        try:
+            col = rows[key]
+            val = col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+        except Exception:
+            r0 = (rows.to_dict(orient="records")[0] if hasattr(rows, "to_dict") else rows.to_dicts()[0])
+            val = r0.get(key, None)
+
         return default if val is None else val
 
     def set_edge_slice_attrs(self, slice_id, edge_id, **attrs):
@@ -284,7 +423,12 @@ class AttributesClass:
         # Ensure edge_slice_attributes compares strings to strings (defensive against prior bad writes),
         # but only cast when actually needed (skip no-op with_columns).
         df = self.edge_slice_attributes
-        if isinstance(df, pl.DataFrame) and df.height > 0:
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        if pl is not None and isinstance(df, pl.DataFrame) and df.height > 0:
             to_cast = []
             if "slice_id" in df.columns and df.schema["slice_id"] != pl.Utf8:
                 to_cast.append(pl.col("slice_id").cast(pl.Utf8))
@@ -292,7 +436,7 @@ class AttributesClass:
                 to_cast.append(pl.col("edge_id").cast(pl.Utf8))
             if to_cast:
                 df = df.with_columns(*to_cast)
-                self.edge_slice_attributes = df  # reassign only when changed
+                self.edge_slice_attributes = df
 
         # Upsert via central helper (keeps exact behavior, schema handling, and caching)
         self.edge_slice_attributes = self._upsert_row(
@@ -315,12 +459,37 @@ class AttributesClass:
 
         """
         df = self.edge_slice_attributes
-        if key not in df.columns:
+        if df is None or not hasattr(df, "columns") or key not in df.columns:
             return default
-        rows = df.filter((pl.col("slice_id") == slice_id) & (pl.col("edge_id") == edge_id))
-        if rows.height == 0:
+
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        if pl is not None and isinstance(df, pl.DataFrame):
+            rows = df.filter((pl.col("slice_id") == slice_id) & (pl.col("edge_id") == edge_id))
+            if rows.height == 0:
+                return default
+            val = rows.select(pl.col(key)).to_series()[0]
+            return default if val is None else val
+
+        import narwhals as nw
+        rows = nw.to_native(
+            nw.from_native(df, pass_through=True).filter(
+                (nw.col("slice_id") == slice_id) & (nw.col("edge_id") == edge_id)
+            )
+        )
+        if (hasattr(rows, "__len__") and len(rows) == 0) or (getattr(rows, "height", None) == 0):
             return default
-        val = rows.select(pl.col(key)).to_series()[0]
+
+        try:
+            col = rows[key]
+            val = col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+        except Exception:
+            r0 = (rows.to_dict(orient="records")[0] if hasattr(rows, "to_dict") else rows.to_dicts()[0])
+            val = r0.get(key, None)
+
         return default if val is None else val
 
     def set_slice_edge_weight(self, slice_id, edge_id, weight):  # legacy weight helper
@@ -365,18 +534,37 @@ class AttributesClass:
         """
         if slice is not None:
             df = self.edge_slice_attributes
-            if (
-                isinstance(df, pl.DataFrame)
-                and df.height > 0
-                and {"slice_id", "edge_id", "weight"} <= set(df.columns)
-            ):
-                rows = df.filter(
-                    (pl.col("slice_id") == slice) & (pl.col("edge_id") == edge_id)
-                ).select("weight")
-                if rows.height > 0:
-                    w = rows.to_series()[0]
-                    if w is not None and not (isinstance(w, float) and math.isnan(w)):
-                        return float(w)
+            if df is not None and hasattr(df, "columns") and {"slice_id", "edge_id", "weight"} <= set(df.columns):
+                try:
+                    import polars as pl
+                except Exception:
+                    pl = None
+
+                if pl is not None and isinstance(df, pl.DataFrame) and df.height > 0:
+                    rows = df.filter(
+                        (pl.col("slice_id") == slice) & (pl.col("edge_id") == edge_id)
+                    ).select("weight")
+                    if rows.height > 0:
+                        w = rows.to_series()[0]
+                        if w is not None and not (isinstance(w, float) and math.isnan(w)):
+                            return float(w)
+                else:
+                    import narwhals as nw
+                    rows = nw.to_native(
+                        nw.from_native(df, pass_through=True)
+                        .filter((nw.col("slice_id") == slice) & (nw.col("edge_id") == edge_id))
+                        .select("weight")
+                    )
+                    if (hasattr(rows, "__len__") and len(rows) > 0) or (getattr(rows, "height", 0) > 0):
+                        try:
+                            col = rows["weight"]
+                            w = col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+                        except Exception:
+                            r0 = (rows.to_dict(orient="records")[0] if hasattr(rows, "to_dict") else rows.to_dicts()[0])
+                            w = r0.get("weight", None)
+                        if w is not None and not (isinstance(w, float) and math.isnan(w)):
+                            return float(w)
+
 
             # fallback to legacy dict if present
             w2 = self.slice_edge_weights.get(slice, {}).get(edge_id, None)
@@ -407,16 +595,43 @@ class AttributesClass:
         ea = self.edge_attributes
         ela = self.edge_slice_attributes
 
-        vertex_attr_ids = (
-            set(na.select("vertex_id").to_series().to_list())
-            if isinstance(na, pl.DataFrame) and na.height > 0 and "vertex_id" in na.columns
-            else set()
-        )
-        edge_attr_ids = (
-            set(ea.select("edge_id").to_series().to_list())
-            if isinstance(ea, pl.DataFrame) and ea.height > 0 and "edge_id" in ea.columns
-            else set()
-        )
+        if na is not None and hasattr(na, "columns") and "vertex_id" in na.columns:
+            try:
+                import polars as pl
+            except Exception:
+                pl = None
+
+            if pl is not None and isinstance(na, pl.DataFrame) and na.height > 0:
+                vertex_attr_ids = set(na.select("vertex_id").to_series().to_list())
+            else:
+                import narwhals as nw
+                tmp = nw.to_native(nw.from_native(na, pass_through=True).select("vertex_id"))
+                try:
+                    s = tmp["vertex_id"]
+                    vertex_attr_ids = set(s.to_list() if hasattr(s, "to_list") else list(s))
+                except Exception:
+                    vertex_attr_ids = set()
+        else:
+            vertex_attr_ids = set()
+
+        if ea is not None and hasattr(ea, "columns") and "edge_id" in ea.columns:
+            try:
+                import polars as pl
+            except Exception:
+                pl = None
+
+            if pl is not None and isinstance(ea, pl.DataFrame) and ea.height > 0:
+                edge_attr_ids = set(ea.select("edge_id").to_series().to_list())
+            else:
+                import narwhals as nw
+                tmp = nw.to_native(nw.from_native(ea, pass_through=True).select("edge_id"))
+                try:
+                    s = tmp["edge_id"]
+                    edge_attr_ids = set(s.to_list() if hasattr(s, "to_list") else list(s))
+                except Exception:
+                    edge_attr_ids = set()
+        else:
+            edge_attr_ids = set()
 
         extra_vertex_rows = [i for i in vertex_attr_ids if i not in vertex_ids]
         extra_edge_rows = [i for i in edge_attr_ids if i not in edge_ids]
@@ -424,14 +639,25 @@ class AttributesClass:
         missing_edge_rows = [i for i in edge_ids if i not in edge_attr_ids]
 
         bad_edge_slice = []
-        if (
-            isinstance(ela, pl.DataFrame)
-            and ela.height > 0
-            and {"slice_id", "edge_id"} <= set(ela.columns)
-        ):
-            for lid, eid in ela.select(["slice_id", "edge_id"]).iter_rows():
-                if lid not in self._slices or eid not in edge_ids:
-                    bad_edge_slice.append((lid, eid))
+        if ela is not None and hasattr(ela, "columns") and {"slice_id", "edge_id"} <= set(ela.columns):
+            try:
+                import polars as pl
+            except Exception:
+                pl = None
+
+            if pl is not None and isinstance(ela, pl.DataFrame) and ela.height > 0:
+                for lid, eid in ela.select(["slice_id", "edge_id"]).iter_rows():
+                    if lid not in self._slices or eid not in edge_ids:
+                        bad_edge_slice.append((lid, eid))
+            else:
+                import narwhals as nw
+                tmp = nw.to_native(nw.from_native(ela, pass_through=True).select(["slice_id", "edge_id"]))
+                rows = tmp.to_dicts() if hasattr(tmp, "to_dicts") else tmp.to_dict(orient="records")
+                for r in rows:
+                    lid = r.get("slice_id")
+                    eid = r.get("edge_id")
+                    if lid not in self._slices or eid not in edge_ids:
+                        bad_edge_slice.append((lid, eid))
 
         return {
             "extra_vertex_rows": extra_vertex_rows,
@@ -441,184 +667,275 @@ class AttributesClass:
             "invalid_edge_slice_rows": bad_edge_slice,
         }
 
-    def _pl_dtype_for_value(self, v):
-        """INTERNAL: Infer an appropriate Polars dtype for a Python value.
+    def _dtype_for_value(self, v, *, prefer="polars"):
+        """INTERNAL: Infer an appropriate dtype class for value `v`.
 
-        Parameters
-        --
-        v : Any
-
-        Returns
-        ---
-        polars.datatypes.DataType
-            One of ``pl.Null``, ``pl.Boolean``, ``pl.Int64``, ``pl.Float64``,
-            ``pl.Utf8``, ``pl.Binary``, ``pl.Object``, or ``pl.List(inner)``.
-
-        Notes
-        -
-        - Enums are mapped to ``pl.Object`` (useful for categorical enums).
-        - Lists/tuples infer inner dtype from the first element (defaults to ``Utf8``).
-
+        - If Polars is available and prefer='polars', returns Polars dtype objects.
+        - Otherwise returns Narwhals dtype classes.
         """
         import enum
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+        import narwhals as nw
 
+        if prefer == "polars" and pl is not None:
+            if v is None:
+                return pl.Null
+            if isinstance(v, bool):
+                return pl.Boolean
+            if isinstance(v, int) and not isinstance(v, bool):
+                return pl.Int64
+            if isinstance(v, float):
+                return pl.Float64
+            if isinstance(v, enum.Enum):
+                return pl.Object
+            if isinstance(v, (bytes, bytearray)):
+                return pl.Binary
+            if isinstance(v, (list, tuple)):
+                inner = self._dtype_for_value(v[0], prefer="polars") if len(v) else pl.Utf8
+                return pl.List(pl.Utf8 if inner == pl.Null else inner)
+            if isinstance(v, dict):
+                return pl.Object
+            return pl.Utf8
+
+        # Narwhals dtype classes
         if v is None:
-            return pl.Null
+            return nw.Unknown
         if isinstance(v, bool):
-            return pl.Boolean
+            return nw.Boolean
         if isinstance(v, int) and not isinstance(v, bool):
-            return pl.Int64
+            return nw.Int64
         if isinstance(v, float):
-            return pl.Float64
+            return nw.Float64
         if isinstance(v, enum.Enum):
-            return pl.Object  # important for EdgeType
+            return nw.Object
         if isinstance(v, (bytes, bytearray)):
-            return pl.Binary
+            return nw.Binary
         if isinstance(v, (list, tuple)):
-            inner = self._pl_dtype_for_value(v[0]) if len(v) else pl.Utf8
-            return pl.List(pl.Utf8 if inner == pl.Null else inner)
+            inner = self._dtype_for_value(v[0], prefer="narwhals") if len(v) else nw.String
+            return nw.List(nw.String if inner == nw.Unknown else inner)
         if isinstance(v, dict):
-            return pl.Object
-        return pl.Utf8
+            return nw.Object
+        return nw.String
 
-    def _ensure_attr_columns(self, df: pl.DataFrame, attrs: dict) -> pl.DataFrame:
-        """INTERNAL: Create/align attribute columns and dtypes to accept ``attrs``.
+    def _is_null_dtype(self, dtype) -> bool:
+        """Check if a dtype represents a null/unknown type.
+
+        Narwhals doesn't have pl.Null, so we check for Unknown or handle
+        columns that are all-null differently.
+        """
+        # In narwhals, Unknown is the closest to Polars' Null dtype
+        return dtype == nw.Unknown
+
+    def _ensure_attr_columns(
+        self, df, attrs: dict
+    ) -> nw.DataFrame[Any]:
+        """Create/align attribute columns and dtypes to accept ``attrs``.
 
         Parameters
-        --
-        df : polars.DataFrame
-            Existing attribute table.
+        ----------
+        df : IntoDataFrame
+            Existing attribute table (any supported backend).
         attrs : dict
             Incoming key/value pairs to upsert.
 
         Returns
-        ---
-        polars.DataFrame
-            DataFrame with columns added/cast so inserts/updates won't hit ``Null`` dtypes.
+        -------
+        nw.DataFrame
+            Narwhals DataFrame with columns added/cast so inserts/updates work.
 
         Notes
-        -
+        -----
         - New columns are created with the inferred dtype.
-        - If a column is ``Null`` and the incoming value is not, it is cast to the inferred dtype.
-        - If dtypes conflict (mixed over time), both sides upcast to ``Utf8`` to avoid schema errors.
-
+        - If a column is Unknown (null-ish) and the incoming value is not,
+          it is cast to the inferred dtype.
+        - If dtypes conflict, both sides upcast to String to avoid schema errors.
         """
-        _NUMERIC_DTYPES = {
-            pl.Int8,
-            pl.Int16,
-            pl.Int32,
-            pl.Int64,
-            pl.UInt8,
-            pl.UInt16,
-            pl.UInt32,
-            pl.UInt64,
-            pl.Float32,
-            pl.Float64,
-        }
-        schema = df.schema
+        nw_df = nw.from_native(df, eager_only=True)
+        schema = nw_df.collect_schema()
+        
+        # Check if backend is polars (handles nulls natively) vs pandas-like
+        impl = nw_df.implementation
+        is_polars = impl.is_polars()
+
         for col, val in attrs.items():
-            target = self._pl_dtype_for_value(val)
+            target = self._dtype_for_value(val)
             if col not in schema:
-                df = df.with_columns(pl.lit(None).cast(target).alias(col))
+                # Add new column with None values
+                # For polars, cast to target dtype works fine
+                # For pandas-like, we leave as object initially
+                if is_polars:
+                    # do the cast using polars, not narwhals
+                    pdf = nw.to_native(nw_df)
+                    pl_target = self._dtype_for_value(val, prefer="polars")  # returns pl.* dtype
+                    pdf = pdf.with_columns(pl.lit(None).cast(pl_target).alias(col))
+                    nw_df = nw.from_native(pdf, eager_only=True)
+                else:
+                    # narwhals backend: cast using narwhals dtype
+                    nw_target = self._dtype_for_value(val, prefer="narwhals")  # returns nw.* dtype
+                    try:
+                        nw_df = nw_df.with_columns(nw.lit(None).cast(nw_target).alias(col))
+                    except Exception:
+                        # some backends don't like casting all-null columns; fall back to uncast
+                        nw_df = nw_df.with_columns(nw.lit(None).alias(col))
             else:
-                cur = schema[col]
-                if cur == pl.Null and target != pl.Null:
-                    df = df.with_columns(pl.col(col).cast(target))
-                # if mixed types are expected over time:
-                elif cur != target and target != pl.Null:
-                    if cur in _NUMERIC_DTYPES and target in _NUMERIC_DTYPES:
-                        if pl.Float64 in (cur, target):
-                            supertype = pl.Float64
-                        else:
-                            supertype = pl.Int64
-                        df = df.with_columns(pl.col(col).cast(supertype))
+                cur = type(schema[col]) if isinstance(schema[col], nw.dtypes.DType) else schema[col]
+                # Handle the case where current dtype is Unknown (null-like)
+                if self._is_null_dtype(cur) and not self._is_null_dtype(target):
+                    try:
+                        nw_df = nw_df.with_columns(nw.col(col).cast(target))
+                    except Exception:
+                        # If cast fails (common with pandas + null), leave as is
+                        pass
+                # Handle dtype conflicts
+                elif cur != target and not self._is_null_dtype(target):
+                    # Check if both are numeric
+                    cur_is_numeric = cur in _NUMERIC_DTYPES or (
+                        hasattr(cur, "is_numeric") and cur.is_numeric()
+                    )
+                    target_is_numeric = target in _NUMERIC_DTYPES
+
+                    if cur_is_numeric and target_is_numeric:
+                        supertype = _get_numeric_supertype(cur, target)
+                        try:
+                            nw_df = nw_df.with_columns(nw.col(col).cast(supertype))
+                        except Exception:
+                            pass  # Leave as is if cast fails
                     else:
-                        df = df.with_columns(pl.col(col).cast(pl.Utf8))
+                        # Fallback: cast to String for incompatible types
+                        try:
+                            nw_df = nw_df.with_columns(nw.col(col).cast(nw.String))
+                        except Exception:
+                            pass
 
-        return df
+        return nw_df
 
-    def _upsert_row(self, df: pl.DataFrame, idx, attrs: dict) -> pl.DataFrame:
-        """INTERNAL: Upsert a row in a Polars DF [DataFrame] using explicit key columns.
+    def _sanitize_value_for_nw(self, v):
+        # narwhals.lit can't handle nested python containers yet
+        if isinstance(v, (list, tuple, dict)):
+            import json
+            return json.dumps(v, ensure_ascii=False)
+        return v
+
+    def _upsert_row(
+        self, df: "object", idx: Any, attrs: dict
+    ) -> "object":
+        """Upsert a row in a DataFrame using explicit key columns.
 
         Keys
-
+        ----
         - ``vertex_attributes``           - key: ``["vertex_id"]``
         - ``edge_attributes``             - key: ``["edge_id"]``
         - ``slice_attributes``            - key: ``["slice_id"]``
         - ``edge_slice_attributes``       - key: ``["slice_id", "edge_id"]``
+
+        Parameters
+        ----------
+        df : "object"
+            The attribute DataFrame (polars, pandas, pyarrow, etc.)
+        idx : Any
+            The key value(s) for the row. Single value for single-key tables,
+            tuple for composite keys.
+        attrs : dict
+            Attribute key/value pairs to upsert.
+
+        Returns
+        -------
+        IntoDataFrame
+            Updated DataFrame in the same native format as input.
         """
         if not isinstance(attrs, dict) or not attrs:
             return df
 
-        cols = set(df.columns)
+        # Wrap in narwhals
+        nw_df = nw.from_native(df, eager_only=True)
+        cols = set(nw_df.columns)
 
-        # Determine key columns + values
+        # Determine key columns + values based on schema
         if {"slice_id", "edge_id"} <= cols:
             if not (isinstance(idx, tuple) and len(idx) == 2):
                 raise ValueError("idx must be a (slice_id, edge_id) tuple")
             key_cols = ("slice_id", "edge_id")
             key_vals = {"slice_id": idx[0], "edge_id": idx[1]}
-            cache_name = "_edge_slice_attr_keys"  # set of (slice_id, edge_id)
+            cache_name = "_edge_slice_attr_keys"
             df_id_name = "_edge_slice_attr_df_id"
         elif "vertex_id" in cols:
             key_cols = ("vertex_id",)
             key_vals = {"vertex_id": idx}
-            cache_name = "_vertex_attr_ids"  # set of vertex_id
+            cache_name = "_vertex_attr_ids"
             df_id_name = "_vertex_attr_df_id"
         elif "edge_id" in cols:
             key_cols = ("edge_id",)
             key_vals = {"edge_id": idx}
-            cache_name = "_edge_attr_ids"  # set of edge_id
+            cache_name = "_edge_attr_ids"
             df_id_name = "_edge_attr_df_id"
         elif "slice_id" in cols:
             key_cols = ("slice_id",)
             key_vals = {"slice_id": idx}
-            cache_name = "_slice_attr_ids"  # set of slice_id
+            cache_name = "_slice_attr_ids"
             df_id_name = "_slice_attr_df_id"
         else:
             raise ValueError("Cannot infer key columns from DataFrame schema")
 
         # Ensure attribute columns exist / are cast appropriately
-        df = self._ensure_attr_columns(df, attrs)
+        nw_df = self._ensure_attr_columns(nw_df, attrs)
 
-        # Build the match condition (used later for updates)
+        # Build the match condition
         cond = None
         for k in key_cols:
             v = key_vals[k]
-            c = pl.col(k) == pl.lit(v)
+            c = nw.col(k) == nw.lit(v)
             cond = c if cond is None else (cond & c)
 
-        # existence check via small per-table caches (no DF scan)
+        # Existence check via small per-table caches (avoids full DF scan)
         try:
             key_cache = getattr(self, cache_name, None)
             cached_df_id = getattr(self, df_id_name, None)
-            if key_cache is None or cached_df_id != id(df):
-                # Rebuild cache lazily for the current df object
+
+            # Get native df id for cache invalidation
+            native_df = nw.to_native(nw_df)
+            current_df_id = id(native_df)
+
+            if key_cache is None or cached_df_id != current_df_id:
+                # Rebuild cache for the current df
+                height = nw_df.shape[0]
                 if "vertex_id" in cols and key_cols == ("vertex_id",):
-                    series = df.get_column("vertex_id") if df.height else pl.Series([])
-                    key_cache = set(series.to_list()) if df.height else set()
+                    if height:
+                        key_cache = set(nw_df.get_column("vertex_id").to_list())
+                    else:
+                        key_cache = set()
                 elif (
-                    "edge_id" in cols and "slice_id" in cols and key_cols == ("slice_id", "edge_id")
+                    "edge_id" in cols
+                    and "slice_id" in cols
+                    and key_cols == ("slice_id", "edge_id")
                 ):
-                    if df.height:
+                    if height:
                         key_cache = set(
                             zip(
-                                df.get_column("slice_id").to_list(),
-                                df.get_column("edge_id").to_list(),
+                                nw_df.get_column("slice_id").to_list(),
+                                nw_df.get_column("edge_id").to_list(),
                             )
                         )
                     else:
                         key_cache = set()
                 elif "edge_id" in cols and key_cols == ("edge_id",):
-                    series = df.get_column("edge_id") if df.height else pl.Series([])
-                    key_cache = set(series.to_list()) if df.height else set()
+                    if height:
+                        key_cache = set(nw_df.get_column("edge_id").to_list())
+                    else:
+                        key_cache = set()
                 elif "slice_id" in cols and key_cols == ("slice_id",):
-                    series = df.get_column("slice_id") if df.height else pl.Series([])
-                    key_cache = set(series.to_list()) if df.height else set()
+                    if height:
+                        key_cache = set(nw_df.get_column("slice_id").to_list())
+                    else:
+                        key_cache = set()
                 else:
                     key_cache = set()
+
                 setattr(self, cache_name, key_cache)
-                setattr(self, df_id_name, id(df))
+                setattr(self, df_id_name, current_df_id)
+
             # Decide existence from cache
             cache_key = (
                 key_vals[key_cols[0]]
@@ -627,90 +944,117 @@ class AttributesClass:
             )
             exists = cache_key in key_cache
         except Exception:
-            # Fallback to original behavior if caching fails
-            exists = df.filter(cond).height > 0
+            # Fallback: filter and check height
+            exists = nw_df.filter(cond).shape[0] > 0
             key_cache = None
 
         if exists:
-            # cast literals to column dtypes; keep exact semantics
-            schema = df.schema
+            # cast literals to column dtypes (but handle Unknown specially)
+            schema = nw_df.collect_schema()
             upds = []
             for k, v in attrs.items():
+                v2 = self._sanitize_value_for_nw(v)
                 tgt_dtype = schema[k]
-                upds.append(
-                    pl.when(cond).then(pl.lit(v).cast(tgt_dtype)).otherwise(pl.col(k)).alias(k)
-                )
-            new_df = df.with_columns(upds)
+                tgt_dtype_class = tgt_dtype
 
-            # Keep cache pointers in sync with the new df object
+                if self._is_null_dtype(tgt_dtype_class):
+                    inferred = self._dtype_for_value(v2)
+                    upds.append(
+                        nw.when(cond)
+                        .then(nw.lit(v2).cast(inferred))
+                        .otherwise(nw.col(k).cast(inferred))
+                        .alias(k)
+                    )
+                else:
+                    upds.append(
+                        nw.when(cond)
+                        .then(nw.lit(v2).cast(tgt_dtype))
+                        .otherwise(nw.col(k))
+                        .alias(k)
+                    )
+            new_nw_df = nw_df.with_columns(upds)
+
+            # Keep cache in sync
             try:
-                setattr(self, df_id_name, id(new_df))
-                # cache contents unchanged for updates
+                new_native = nw.to_native(new_nw_df)
+                setattr(self, df_id_name, id(new_native))
             except Exception:
                 pass
 
-            return new_df
+            return nw.to_native(new_nw_df)
 
         # build a single row aligned to df schema
-        schema = df.schema
+        schema = nw_df.collect_schema()
 
         # Start with None for all columns, fill keys and attrs
-        new_row = dict.fromkeys(df.columns)
+        new_row = dict.fromkeys(nw_df.columns)
         new_row.update(key_vals)
         new_row.update(attrs)
 
-        to_append = pl.DataFrame([new_row])
+        # Create the row DataFrame using narwhals
+        # get_native_namespace returns the backend module (polars, pandas, etc.)
+        native_namespace = nw.get_native_namespace(nw_df)
+        to_append = nw.DataFrame.from_dict(
+            {col: [new_row[col]] for col in nw_df.columns},
+            backend=native_namespace,
+        )
 
-        # 1) Ensure to_append has all df columns
-        for c in df.columns:
-            if c not in to_append.columns:
-                to_append = to_append.with_columns(pl.lit(None).cast(schema[c]).alias(c))
-
-        # 2) Resolve dtype mismatches:
-        #    - df Null + to_append non-Null -> cast df to right
-        #    - to_append Null + df non-Null -> cast to_append to left
-        #    - left != right -> upcast both to Utf8
+        # Resolve dtype mismatches before concat
         left_schema = schema
-        right_schema = to_append.schema
+        right_schema = to_append.collect_schema()
+
         df_casts = []
         app_casts = []
-        for c in df.columns:
+
+        for c in nw_df.columns:
             left = left_schema[c]
             right = right_schema[c]
-            if left == pl.Null and right != pl.Null:
-                df_casts.append(pl.col(c).cast(right))
-            elif right == pl.Null and left != pl.Null:
-                app_casts.append(pl.col(c).cast(left).alias(c))
+
+            left_is_null = self._is_null_dtype(type(left) if isinstance(left, nw.dtypes.DType) else left)
+            right_is_null = self._is_null_dtype(type(right) if isinstance(right, nw.dtypes.DType) else right)
+
+            if left_is_null and not right_is_null:
+                df_casts.append(nw.col(c).cast(right))
+            elif right_is_null and not left_is_null:
+                app_casts.append(nw.col(c).cast(left).alias(c))
             elif left != right:
-                if left.is_numeric() and right.is_numeric():
-                    supertype = _get_numeric_supertype(left, right)
-                    df_casts.append(pl.col(c).cast(supertype))
-                    app_casts.append(pl.col(c).cast(supertype).alias(c))
+                left_type = type(left) if isinstance(left, nw.dtypes.DType) else left
+                right_type = type(right) if isinstance(right, nw.dtypes.DType) else right
+
+                left_is_numeric = left_type in _NUMERIC_DTYPES or (
+                    hasattr(left_type, "is_numeric") and left_type.is_numeric()
+                )
+                right_is_numeric = right_type in _NUMERIC_DTYPES or (
+                    hasattr(right_type, "is_numeric") and right_type.is_numeric()
+                )
+
+                if left_is_numeric and right_is_numeric:
+                    supertype = _get_numeric_supertype(left_type, right_type)
+                    df_casts.append(nw.col(c).cast(supertype))
+                    app_casts.append(nw.col(c).cast(supertype).alias(c))
                 else:
-                    # fallback: Utf8 for incompatible non-numeric types
-                    df_casts.append(pl.col(c).cast(pl.Utf8))
-                    app_casts.append(pl.col(c).cast(pl.Utf8).alias(c))
+                    # Fallback: String for incompatible non-numeric types
+                    df_casts.append(nw.col(c).cast(nw.String))
+                    app_casts.append(nw.col(c).cast(nw.String).alias(c))
 
         if df_casts:
-            df = df.with_columns(df_casts)
-            left_schema = df.schema  # refresh for correctness
+            nw_df = nw_df.with_columns(df_casts)
         if app_casts:
             to_append = to_append.with_columns(app_casts)
 
-        new_df = df.vstack(to_append)
+        # Concatenate vertically
+        new_nw_df = nw.concat([nw_df, to_append], how="vertical")
 
         # Update caches after insertion
         try:
             if key_cache is not None:
-                if len(key_cols) == 1:
-                    key_cache.add(cache_key)
-                else:
-                    key_cache.add(cache_key)
-            setattr(self, df_id_name, id(new_df))
+                key_cache.add(cache_key)
+            new_native = nw.to_native(new_nw_df)
+            setattr(self, df_id_name, id(new_native))
         except Exception:
             pass
 
-        return new_df
+        return nw.to_native(new_nw_df)
 
     def _variables_watched_by_vertices(self):
         # set of vertex-attribute names used by vertex-scope policies
@@ -816,9 +1160,22 @@ class AttributesClass:
         df = self.edge_attributes
         # Polars-safe: iterate the (at most one) row as a dict
         try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        # Polars fast-path
+        if pl is not None and isinstance(df, pl.DataFrame):
             for row in df.filter(pl.col("edge_id") == eid).iter_rows(named=True):
                 return dict(row)
             return {}
+
+        # Non-Polars path (Narwhals -> native rows)
+        try:
+            import narwhals as nw
+            native = nw.to_native(nw.from_native(df, pass_through=True).filter(nw.col("edge_id") == eid))
+            rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+            return rows[0] if rows else {}
         except Exception:
             # Fallback if df is pandas or dict-like
             try:
@@ -843,10 +1200,22 @@ class AttributesClass:
         """
         df = self.vertex_attributes
         try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        if pl is not None and isinstance(df, pl.DataFrame):
             for row in df.filter(pl.col("vertex_id") == vertex).iter_rows(named=True):
                 return dict(row)
             return {}
+
+        try:
+            import narwhals as nw
+            native = nw.to_native(nw.from_native(df, pass_through=True).filter(nw.col("vertex_id") == vertex))
+            rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+            return rows[0] if rows else {}
         except Exception:
+
             try:
                 row = df[df["vertex_id"] == vertex].to_dict(orient="records")
                 return row[0] if row else {}
@@ -880,9 +1249,31 @@ class AttributesClass:
 
         """
         df = self.edge_attributes
+
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
         if indexes is not None:
-            df = df.filter(pl.col("edge_id").is_in([self.idx_to_edge[i] for i in indexes]))
-        return {row["edge_id"]: row.as_dict() for row in df.iter_rows(named=True)}
+            wanted = [self.idx_to_edge[i] for i in indexes]
+            if pl is not None and isinstance(df, pl.DataFrame):
+                df = df.filter(pl.col("edge_id").is_in(wanted))
+            else:
+                import narwhals as nw
+                df = nw.to_native(nw.from_native(df, pass_through=True).filter(nw.col("edge_id").is_in(wanted)))
+
+        if pl is not None and isinstance(df, pl.DataFrame):
+            return {row["edge_id"]: dict(row) for row in df.iter_rows(named=True)}
+
+        # non-Polars
+        try:
+            import narwhals as nw
+            native = nw.to_native(nw.from_native(df, pass_through=True))
+            rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+            return {r.get("edge_id"): dict(r) for r in rows if r.get("edge_id") is not None}
+        except Exception:
+            return {}
 
     def get_attr_vertices(self, vertices=None) -> dict:
         """Retrieve vertex (vertex) attributes as a dictionary.
@@ -908,9 +1299,29 @@ class AttributesClass:
 
         """
         df = self.vertex_attributes
+
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
         if vertices is not None:
-            df = df.filter(pl.col("vertex_id").is_in(vertices))
-        return {row["vertex_id"]: row.as_dict() for row in df.iter_rows(named=True)}
+            if pl is not None and isinstance(df, pl.DataFrame):
+                df = df.filter(pl.col("vertex_id").is_in(list(vertices)))
+            else:
+                import narwhals as nw
+                df = nw.to_native(nw.from_native(df, pass_through=True).filter(nw.col("vertex_id").is_in(list(vertices))))
+
+        if pl is not None and isinstance(df, pl.DataFrame):
+            return {row["vertex_id"]: dict(row) for row in df.iter_rows(named=True)}
+
+        try:
+            import narwhals as nw
+            native = nw.to_native(nw.from_native(df, pass_through=True))
+            rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+            return {r.get("vertex_id"): dict(r) for r in rows if r.get("vertex_id") is not None}
+        except Exception:
+            return {}
 
     def get_attr_from_edges(self, key: str, default=None) -> dict:
         """Extract a specific attribute column for all edges.
@@ -935,11 +1346,32 @@ class AttributesClass:
 
         """
         df = self.edge_attributes
-        if key not in df.columns:
-            return {row["edge_id"]: default for row in df.iter_rows(named=True)}
+        if df is None or not hasattr(df, "columns"):
+            return {}
+
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        if pl is not None and isinstance(df, pl.DataFrame):
+            if key not in df.columns:
+                return {row["edge_id"]: default for row in df.iter_rows(named=True)}
+            return {
+                row["edge_id"]: (row[key] if row[key] is not None else default)
+                for row in df.iter_rows(named=True)
+            }
+
+        # non-Polars
+        import narwhals as nw
+        native = nw.to_native(nw.from_native(df, pass_through=True))
+        rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+        if key not in getattr(native, "columns", []):
+            return {r.get("edge_id"): default for r in rows if r.get("edge_id") is not None}
         return {
-            row["edge_id"]: row[key] if row[key] is not None else default
-            for row in df.iter_rows(named=True)
+            r.get("edge_id"): (r.get(key) if r.get(key) is not None else default)
+            for r in rows
+            if r.get("edge_id") is not None
         }
 
     def get_edges_by_attr(self, key: str, value) -> list:
@@ -964,9 +1396,21 @@ class AttributesClass:
 
         """
         df = self.edge_attributes
-        if key not in df.columns:
+        if df is None or not hasattr(df, "columns") or key not in df.columns:
             return []
-        return [row["edge_id"] for row in df.iter_rows(named=True) if row[key] == value]
+
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        if pl is not None and isinstance(df, pl.DataFrame):
+            return [row["edge_id"] for row in df.iter_rows(named=True) if row.get(key) == value]
+
+        import narwhals as nw
+        native = nw.to_native(nw.from_native(df, pass_through=True))
+        rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+        return [r.get("edge_id") for r in rows if r.get("edge_id") is not None and r.get(key) == value]
 
     def get_graph_attributes(self) -> dict:
         """Return a shallow copy of the graph-level attributes dictionary.
@@ -1017,52 +1461,113 @@ class AttributesClass:
 
         # start from current DF
         df = self.edge_slice_attributes
-        add_df = pl.DataFrame(rows)
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        if pl is not None:
+            add_df = pl.DataFrame(rows)
+        else:
+            import pandas as pd
+            add_df = pd.DataFrame.from_records(rows)
 
         # ensure required key cols exist/correct dtype on existing df
-        if not isinstance(df, pl.DataFrame) or df.is_empty():
-            # create from scratch with canonical dtypes
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
+        is_polars = pl is not None and isinstance(df, pl.DataFrame)
+
+        is_empty = False
+        try:
+            is_empty = df.is_empty() if is_polars else (len(df) == 0)
+        except Exception:
+            pass
+
+        if (not is_polars) or is_empty:
             self.edge_slice_attributes = add_df
             # legacy mirror
-            if "weight" in add_df.columns:
+            if "weight" in getattr(add_df, "columns", []):
                 self.slice_edge_weights.setdefault(slice_id, {})
-                for r in add_df.iter_rows(named=True):
+                if pl is not None and isinstance(add_df, pl.DataFrame):
+                    it = add_df.iter_rows(named=True)
+                else:
+                    it = (add_df.to_dict(orient="records") if hasattr(add_df, "to_dict") else [])
+                for r in it:
                     w = r.get("weight")
                     if w is not None:
                         self.slice_edge_weights[slice_id][r["edge_id"]] = float(w)
             return
 
         # schema alignment using _ensure_attr_columns + Utf8 upcast rule
-        need_cols = {c: None for c in add_df.columns if c not in df.columns}
-        if need_cols:
-            df = self._ensure_attr_columns(df, need_cols)  # adds missing columns to df
-        # add missing columns to add_df
-        for c in df.columns:
-            if c not in add_df.columns:
-                add_df = add_df.with_columns(pl.lit(None).cast(df.schema[c]).alias(c))
-        # reconcile dtype mismatches (Null/Null, mixed -> Utf8), same policy as _upsert_row
-        for c in df.columns:
-            lc, rc = df.schema[c], add_df.schema[c]
-            if lc == pl.Null and rc != pl.Null:
-                df = df.with_columns(pl.col(c).cast(rc))
-            elif rc == pl.Null and lc != pl.Null:
-                add_df = add_df.with_columns(pl.col(c).cast(lc).alias(c))
-            elif lc != rc:
-                df = df.with_columns(pl.col(c).cast(pl.Utf8))
-                add_df = add_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
 
-        # drop existing keys for (slice_id, edge_id) we are about to write; then vstack new rows
-        mask_keep = ~(
-            (pl.col("slice_id") == slice_id) & pl.col("edge_id").is_in(add_df.get_column("edge_id"))
-        )
-        df = df.filter(mask_keep)
-        df = df.vstack(add_df)
-        self.edge_slice_attributes = df
+        if pl is not None and isinstance(df, pl.DataFrame) and isinstance(add_df, pl.DataFrame):
+            # Polars fast-path
+            need_cols = {c: None for c in add_df.columns if c not in df.columns}
+            if need_cols:
+                df = self._ensure_attr_columns(df, need_cols)
+            for c in df.columns:
+                if c not in add_df.columns:
+                    add_df = add_df.with_columns(pl.lit(None).cast(df.schema[c]).alias(c))
+            for c in df.columns:
+                lc, rc = df.schema[c], add_df.schema[c]
+                if lc == pl.Null and rc != pl.Null:
+                    df = df.with_columns(pl.col(c).cast(rc))
+                elif rc == pl.Null and lc != pl.Null:
+                    add_df = add_df.with_columns(pl.col(c).cast(lc).alias(c))
+                elif lc != rc:
+                    df = df.with_columns(pl.col(c).cast(pl.Utf8))
+                    add_df = add_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
+
+            mask_keep = ~(
+                (pl.col("slice_id") == slice_id) & pl.col("edge_id").is_in(add_df.get_column("edge_id"))
+            )
+            df = df.filter(mask_keep)
+            df = df.vstack(add_df)
+            self.edge_slice_attributes = df
+
+        else:
+            # pandas fallback
+            import pandas as pd
+            pdf = df if isinstance(df, pd.DataFrame) else pd.DataFrame(df)
+            padd = add_df if isinstance(add_df, pd.DataFrame) else pd.DataFrame(add_df)
+
+            # ensure all columns exist on both sides
+            for c in padd.columns:
+                if c not in pdf.columns:
+                    pdf[c] = pd.NA
+            for c in pdf.columns:
+                if c not in padd.columns:
+                    padd[c] = pd.NA
+
+            # drop existing rows for the keys we’re writing: (slice_id, edge_id)
+            wanted_eids = set(padd["edge_id"].tolist()) if "edge_id" in padd.columns else set()
+            if "slice_id" in pdf.columns and "edge_id" in pdf.columns and wanted_eids:
+                keep_mask = ~((pdf["slice_id"] == slice_id) & (pdf["edge_id"].isin(list(wanted_eids))))
+                pdf = pdf.loc[keep_mask]
+
+            pdf = pd.concat([pdf, padd], ignore_index=True)
+            self.edge_slice_attributes = pdf
 
         # legacy mirror
-        if "weight" in add_df.columns:
+        if "weight" in getattr(add_df, "columns", []):
             self.slice_edge_weights.setdefault(slice_id, {})
-            for r in add_df.iter_rows(named=True):
+            try:
+                import polars as pl
+            except Exception:
+                pl = None
+
+            if pl is not None and isinstance(add_df, pl.DataFrame):
+                it = add_df.iter_rows(named=True)
+            else:
+                it = add_df.to_dict(orient="records") if hasattr(add_df, "to_dict") else []
+            for r in it:
                 w = r.get("weight")
                 if w is not None:
                     self.slice_edge_weights[slice_id][r["edge_id"]] = float(w)

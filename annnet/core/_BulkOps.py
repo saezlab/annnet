@@ -1,4 +1,9 @@
-import polars as pl
+import narwhals as nw
+import json 
+try:
+    import polars as pl
+except Exception:
+    pl = None
 import scipy.sparse as sp
 
 from ._helpers import (
@@ -6,18 +11,217 @@ from ._helpers import (
     _get_numeric_supertype,
 )
 
+def _sanitize(v):
+    if isinstance(v, (list, tuple, dict)):
+        return json.dumps(v, ensure_ascii=False)
+    return v
+
+def _to_polars_if_possible(df):
+    import narwhals as nw
+    try:
+        nwd = nw.from_native(df, eager_only=True)
+        if nwd.implementation.is_polars():
+            return nw.to_native(nwd), True
+    except Exception:
+        pass
+    return df, False
 
 class BulkOps:
     # Bulk build graph
 
     def add_vertices_bulk(self, vertices, slice=None):
+        """Bulk add vertices. Fast path: Polars-only vectorized upsert."""
+        slice = slice or self._current_slice
+
+
+        # Normalize input
+
+        norm_vids = []
+        norm_attrs = []
+        for it in vertices:
+            if isinstance(it, dict):
+                vid = it.get("vertex_id") or it.get("id") or it.get("name")
+                if vid is None:
+                    continue
+                attrs = {k: v for k, v in it.items() if k not in ("vertex_id", "id", "name")}
+            elif isinstance(it, (tuple, list)) and it:
+                vid = it[0]
+                attrs = it[1] if len(it) > 1 and isinstance(it[1], dict) else {}
+            else:
+                vid = it
+                attrs = {}
+            norm_vids.append(vid)
+            norm_attrs.append(attrs)
+
+        if not norm_vids:
+            return
+
+        # Intern hot strings
+        try:
+            import sys as _sys
+            norm_vids = [_sys.intern(v) if isinstance(v, str) else v for v in norm_vids]
+            if isinstance(slice, str):
+                slice = _sys.intern(slice)
+        except Exception:
+            pass
+
+
+        # Entity registration
+
+        new_rows = 0
+        for vid in norm_vids:
+            if vid not in self.entity_to_idx:
+                idx = self._num_entities
+                self.entity_to_idx[vid] = idx
+                self.idx_to_entity[idx] = vid
+                self.entity_types[vid] = "vertex"
+                self._num_entities = idx + 1
+                new_rows += 1
+        if new_rows:
+            self._grow_rows_to(self._num_entities)
+
+
+        # Slice membership
+
+        if slice not in self._slices:
+            self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
+        self._slices[slice]["vertices"].update(norm_vids)
+
+
+        # Ensure attribute table exists
+
+        self._ensure_vertex_table()
+        df = self.vertex_attributes
+        df, is_pl = _to_polars_if_possible(df)
+
+        # If not Polars, fall back to Narwhals
+
+        if pl is None or not isinstance(df, pl.DataFrame):
+            return self.add_vertices_bulk_nw(vertices, slice=slice)
+
+        # Build ONE incoming DF
+        # Collect all keys once to avoid repeated set growth in loops
+        keys = set()
+        for a in norm_attrs:
+            keys.update(a.keys())
+
+        cols = {"vertex_id": norm_vids}
+        # build columns with a single pass per key
+        for k in keys:
+            col = [a.get(k, None) for a in norm_attrs]
+            cols[k] = col
+
+        incoming = pl.DataFrame(cols, nan_to_null=True, strict=False)
+
+
+        # Ensure df has needed columns
+
+        if keys:
+            # _ensure_attr_columns returns a Narwhals DF; convert back to native Polars
+            df_tmp = self._ensure_attr_columns(df, {k: None for k in keys})
+            df, is_pl2 = _to_polars_if_possible(df_tmp)
+            if not is_pl2:
+                # backend drifted away from Polars -> fallback to Narwhals behavior
+                return self.add_vertices_bulk_nw(vertices, slice=slice)
+
+        # Split inserts vs updates
+        nrows = len(df)
+        id_df = df.select("vertex_id") if ("vertex_id" in df.columns and nrows > 0) else None
+
+        if id_df is None:
+            # df empty: everything is insert
+            to_insert = incoming
+            to_update = None
+        else:
+            # anti-join = new rows, semi-join = existing rows
+            to_insert = incoming.join(id_df, on="vertex_id", how="anti")
+            to_update = incoming.join(id_df, on="vertex_id", how="semi")
+
+
+        # Schema alignment helper
+
+        def _align_numeric_and_string(df_left: pl.DataFrame, df_right: pl.DataFrame):
+            # Cast both sides to a compatible dtype for each shared column
+            left = df_left
+            right = df_right
+            for c in left.columns:
+                if c not in right.columns:
+                    right = right.with_columns(pl.lit(None).alias(c))
+            for c in right.columns:
+                if c not in left.columns:
+                    left = left.with_columns(pl.lit(None).alias(c))
+
+            # Now cast column-by-column
+            for c in left.columns:
+                lc = left.schema[c]
+                rc = right.schema[c]
+                if lc == pl.Null and rc != pl.Null:
+                    left = left.with_columns(pl.col(c).cast(rc))
+                elif rc == pl.Null and lc != pl.Null:
+                    right = right.with_columns(pl.col(c).cast(lc).alias(c))
+                elif lc != rc:
+                    if lc.is_numeric() and rc.is_numeric():
+                        supertype = _get_numeric_supertype(lc, rc)
+                        left = left.with_columns(pl.col(c).cast(supertype))
+                        right = right.with_columns(pl.col(c).cast(supertype).alias(c))
+                    else:
+                        left = left.with_columns(pl.col(c).cast(pl.Utf8))
+                        right = right.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
+            # Keep identical column order
+            right = right.select(left.columns)
+            return left, right
+
+
+        # Inserts: one concat
+
+        if to_insert is not None and len(to_insert) > 0:
+            df, to_insert = _align_numeric_and_string(df, to_insert)
+            df = pl.concat([df, to_insert], how="vertical", rechunk=False)
+
+
+        # Updates: one join + one coalesce pass
+
+        if to_update is not None and len(to_update) > 0 and keys:
+            df, to_update = _align_numeric_and_string(df, to_update)
+
+            suffix = "__new"
+
+            left_dupes  = [c for c in df.columns if c.endswith(suffix)]
+            if left_dupes:
+                df = df.drop(left_dupes)
+
+            right_dupes = [c for c in to_update.columns if c.endswith(suffix)]
+            if right_dupes:
+                to_update = to_update.drop(right_dupes)
+
+            # Join once; suffix new columns
+            df2 = df.join(to_update, on="vertex_id", how="left", suffix=suffix)
+
+            # Build expressions once and update only the provided keys
+            exprs = []
+            drops = []
+            for k in keys:
+                nk = k + "__new"
+                if k in df2.columns and nk in df2.columns:
+                    exprs.append(pl.coalesce([pl.col(nk), pl.col(k)]).alias(k))
+                    drops.append(nk)
+
+            if exprs:
+                df2 = df2.with_columns(exprs)
+            if drops:
+                df2 = df2.drop(drops)
+
+            df = df2
+
+        self.vertex_attributes = df
+
+    def add_vertices_bulk_nw(self, vertices, slice=None):
         """Bulk add vertices (and edge-entities if prefixed externally)."""
 
         slice = slice or self._current_slice
 
-        # -----------------------------------------------------------------------
         # NORMALIZE INPUT
-        # -----------------------------------------------------------------------
+
         norm = []
         for it in vertices:
             if isinstance(it, dict):
@@ -50,9 +254,7 @@ class BulkOps:
         except Exception:
             pass
 
-        # -----------------------------------------------------------------------
-        # ENTITY REGISTRATION (fast, unchanged semantics)
-        # -----------------------------------------------------------------------
+        # ENTITY REGISTRATION
         new_rows = 0
         for vid, _ in norm:
             if vid not in self.entity_to_idx:
@@ -66,128 +268,151 @@ class BulkOps:
         if new_rows:
             self._grow_rows_to(self._num_entities)
 
-        # -----------------------------------------------------------------------
-        # SLICE MEMBERSHIP (unchanged behaviour)
-        # -----------------------------------------------------------------------
+        # SLICE MEMBERSHIP
         if slice not in self._slices:
             self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
         self._slices[slice]["vertices"].update(v for v, _ in norm)
 
-        # -----------------------------------------------------------------------
         # ATTRIBUTE TABLE PREP
-        # -----------------------------------------------------------------------
         self._ensure_vertex_table()
         df = self.vertex_attributes
 
         # Build lookup of existing vertex_ids once
         try:
-            if df.height > 0:
-                existing_ids = set(df.get_column("vertex_id").to_list())
+            import polars as pl
+        except Exception:
+            pl = None
+
+        existing_ids = set()
+        try:
+            if pl is not None and isinstance(df, pl.DataFrame):
+                if df.height > 0 and "vertex_id" in df.columns:
+                    existing_ids = set(df.get_column("vertex_id").to_list())
             else:
-                existing_ids = set()
+                import narwhals as nw
+                native = nw.to_native(nw.from_native(df, strict=False).select("vertex_id"))
+                col = native["vertex_id"]
+                existing_ids = set(col.to_list() if hasattr(col, "to_list") else list(col))
         except Exception:
             existing_ids = set()
 
-        # -----------------------------------------------------------------------
         # Build new rows (for vertex_ids missing in DF)
-        # -----------------------------------------------------------------------
+
         new_rows_data = []
         new_attr_keys = set()
 
         for vid, attrs in norm:
             if vid not in existing_ids:
-                row = {c: None for c in df.columns} if df.columns else {"vertex_id": None}
+                cols = list(df.columns) if hasattr(df, "columns") else []
+                row = {c: None for c in cols} if len(cols) > 0 else {"vertex_id": None}
                 row["vertex_id"] = vid
                 for k, v in attrs.items():
-                    row[k] = v
+                    row[k] = _sanitize(v)
                     new_attr_keys.add(k)
                 new_rows_data.append(row)
             else:
                 for k in attrs.keys():
                     new_attr_keys.add(k)
 
-        # -----------------------------------------------------------------------
         # Ensure DF has columns for all attributes used
-        # -----------------------------------------------------------------------
         if new_attr_keys:
             df = self._ensure_attr_columns(df, dict.fromkeys(new_attr_keys))
 
-        # -----------------------------------------------------------------------
         # Vectorized insert of new rows
-        # -----------------------------------------------------------------------
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
         if new_rows_data:
-            add_df = pl.DataFrame(new_rows_data, nan_to_null=True, strict=False)
+            # Polars fast-path (keep vectorized semantics)
+            if pl is not None and isinstance(df, pl.DataFrame):
+                add_df = pl.DataFrame(new_rows_data, nan_to_null=True, strict=False)
 
-            # Ensure every column exists on add_df (exact order)
-            for c in df.columns:
-                if c not in add_df.columns:
-                    add_df = add_df.with_columns(pl.lit(None).cast(df.schema[c]).alias(c))
+                for c in df.columns:
+                    if c not in add_df.columns:
+                        add_df = add_df.with_columns(pl.lit(None).cast(df.schema[c]).alias(c))
 
-            # Resolve dtype mismatches using same rules
-            for c in df.columns:
-                lc, rc = df.schema[c], add_df.schema[c]
-                if lc == pl.Null and rc != pl.Null:
-                    df = df.with_columns(pl.col(c).cast(rc))
-                elif rc == pl.Null and lc != pl.Null:
-                    add_df = add_df.with_columns(pl.col(c).cast(lc).alias(c))
-                elif lc != rc:
-                    if lc.is_numeric() and rc.is_numeric():
-                        supertype = _get_numeric_supertype(lc, rc)
-                        df = df.with_columns(pl.col(c).cast(supertype))
-                        add_df = add_df.with_columns(pl.col(c).cast(supertype).alias(c))
-                    else:
-                        df = df.with_columns(pl.col(c).cast(pl.Utf8))
-                        add_df = add_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
+                for c in df.columns:
+                    lc, rc = df.schema[c], add_df.schema[c]
+                    if lc == pl.Null and rc != pl.Null:
+                        df = df.with_columns(pl.col(c).cast(rc))
+                    elif rc == pl.Null and lc != pl.Null:
+                        add_df = add_df.with_columns(pl.col(c).cast(lc).alias(c))
+                    elif lc != rc:
+                        if lc.is_numeric() and rc.is_numeric():
+                            supertype = _get_numeric_supertype(lc, rc)
+                            df = df.with_columns(pl.col(c).cast(supertype))
+                            add_df = add_df.with_columns(pl.col(c).cast(supertype).alias(c))
+                        else:
+                            df = df.with_columns(pl.col(c).cast(pl.Utf8))
+                            add_df = add_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
 
-            add_df = add_df.select(df.columns)
-            df = df.vstack(add_df)
+                add_df = add_df.select(df.columns)
+                df = df.vstack(add_df)
 
-        # -----------------------------------------------------------------------
+            # Non-Polars fallback: do row-wise upserts (correct, slower)
+            else:
+                for row in new_rows_data:
+                    vid = row.get("vertex_id")
+                    attrs_only = {k: v for k, v in row.items() if k != "vertex_id" and v is not None}
+                    df = self._upsert_row(df, vid, attrs_only)
+
         # VECTORIZED UPSERT OF EXISTING ATTRIBUTES
-        # -----------------------------------------------------------------------
+        try:
+            import polars as pl
+        except Exception:
+            pl = None
+
         update_pairs = [(vid, attrs) for vid, attrs in norm if vid in existing_ids and attrs]
 
         if update_pairs:
-            # Build a DataFrame of updates
-            update_df = pl.DataFrame(
-                {
-                    "vertex_id": [vid for vid, _ in update_pairs],
-                    **{k: [attrs.get(k, None) for _, attrs in update_pairs] for k in new_attr_keys},
-                },
-                nan_to_null=True,
-                strict=False,
-            )
+            if pl is not None and isinstance(df, pl.DataFrame):
+                update_df = pl.DataFrame(
+                    {
+                        "vertex_id": [vid for vid, _ in update_pairs],
+                        **{k: [_sanitize(attrs.get(k, None)) for _, attrs in update_pairs] for k in new_attr_keys},
+                    },
+                    nan_to_null=True,
+                    strict=False,
+                )
 
-            # Resolve dtype mismatches with df (vectorized)
-            for c in update_df.columns:
-                if c not in df.columns:
-                    continue
-                lc, rc = df.schema[c], update_df.schema[c]
-                if lc == pl.Null and rc != pl.Null:
-                    df = df.with_columns(pl.col(c).cast(rc))
-                elif rc == pl.Null and lc != pl.Null:
-                    update_df = update_df.with_columns(pl.col(c).cast(lc).alias(c))
-                elif lc != rc:
-                    if lc.is_numeric() and rc.is_numeric():
-                        supertype = _get_numeric_supertype(lc, rc)
-                        df = df.with_columns(pl.col(c).cast(supertype))
-                        update_df = update_df.with_columns(pl.col(c).cast(supertype).alias(c))
-                    else:
-                        df = df.with_columns(pl.col(c).cast(pl.Utf8))
-                        update_df = update_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
+                for c in update_df.columns:
+                    if c not in df.columns:
+                        continue
+                    lc, rc = df.schema[c], update_df.schema[c]
+                    if lc == pl.Null and rc != pl.Null:
+                        df = df.with_columns(pl.col(c).cast(rc))
+                    elif rc == pl.Null and lc != pl.Null:
+                        update_df = update_df.with_columns(pl.col(c).cast(lc).alias(c))
+                    elif lc != rc:
+                        if lc.is_numeric() and rc.is_numeric():
+                            supertype = _get_numeric_supertype(lc, rc)
+                            df = df.with_columns(pl.col(c).cast(supertype))
+                            update_df = update_df.with_columns(pl.col(c).cast(supertype).alias(c))
+                        else:
+                            df = df.with_columns(pl.col(c).cast(pl.Utf8))
+                            update_df = update_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
+                suffix = "_new"
+                df_dupes = [c for c in df.columns if c.endswith(suffix)]
+                if df_dupes:
+                    df = df.drop(df_dupes)
 
-            # LEFT JOIN updates, COALESCE new values
-            df = df.join(update_df, on="vertex_id", how="left", suffix="_new")
-            for c in new_attr_keys:
-                if c in df.columns and c + "_new" in df.columns:
-                    df = df.with_columns(
-                        pl.coalesce([pl.col(c + "_new"), pl.col(c)]).alias(c)
-                    ).drop(c + "_new")
+                ud_dupes = [c for c in update_df.columns if c.endswith(suffix)]
+                if ud_dupes:
+                    update_df = update_df.drop(ud_dupes)
+                df = df.join(update_df, on="vertex_id", how="left", suffix="_new")
+                for c in new_attr_keys:
+                    if c in df.columns and c + "_new" in df.columns:
+                        df = df.with_columns(pl.coalesce([pl.col(c + "_new"), pl.col(c)]).alias(c)).drop(c + "_new")
 
-        # -----------------------------------------------------------------------
-        # DONE
-        # -----------------------------------------------------------------------
+            else:
+                # Non-Polars fallback: row-wise updates
+                for vid, attrs in update_pairs:
+                    df = self._upsert_row(df, vid, {k: _sanitize(v) for k, v in attrs.items()})
+
         self.vertex_attributes = df
+
 
     def add_edges_bulk(
         self,
@@ -673,14 +898,29 @@ class BulkOps:
         self._ensure_vertex_table()
         df = self.vertex_attributes
         to_append, existing_ids = [], set()
+
         try:
-            if df.height and "vertex_id" in df.columns:
-                existing_ids = set(df.get_column("vertex_id").to_list())
+            if pl is not None and isinstance(df, pl.DataFrame):
+                if df.height and "vertex_id" in df.columns:
+                    existing_ids = set(df.get_column("vertex_id").to_list())
+            else:
+                import narwhals as nw
+                native = nw.to_native(nw.from_native(df, strict=False).select("vertex_id"))
+                col = native["vertex_id"]
+                existing_ids = set(col.to_list() if hasattr(col, "to_list") else list(col))
         except Exception:
-            pass
+            existing_ids = set()
 
         for eid, attrs in norm:
-            if df.is_empty() or eid not in existing_ids:
+            is_empty = False
+            try:
+                is_empty = df.is_empty()
+            except Exception:
+                try:
+                    is_empty = len(df) == 0
+                except Exception:
+                    is_empty = False
+            if is_empty or eid not in existing_ids:
                 row = dict.fromkeys(df.columns) if not df.is_empty() else {"vertex_id": None}
                 row["vertex_id"] = eid
                 for k, v in attrs.items():
@@ -691,49 +931,46 @@ class BulkOps:
             need_cols = {k for r in to_append for k in r if k != "vertex_id"}
             if need_cols:
                 df = self._ensure_attr_columns(df, dict.fromkeys(need_cols))
-            add_df = pl.DataFrame(to_append)
-            for c in df.columns:
-                if c not in add_df.columns:
-                    add_df = add_df.with_columns(pl.lit(None).cast(df.schema[c]).alias(c))
-            for c in df.columns:
-                lc, rc = df.schema[c], add_df.schema[c]
-                if lc == pl.Null and rc != pl.Null:
-                    df = df.with_columns(pl.col(c).cast(rc))
-                elif rc == pl.Null and lc != pl.Null:
-                    add_df = add_df.with_columns(pl.col(c).cast(lc).alias(c))
-                elif lc != rc:
-                    df = df.with_columns(pl.col(c).cast(pl.Utf8))
-                    add_df = add_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
-                if to_append:
-                    need_cols = {k for r in to_append for k in r if k != "vertex_id"}
-                    if need_cols:
-                        df = self._ensure_attr_columns(df, dict.fromkeys(need_cols))
 
-                    add_df = pl.DataFrame(to_append)
+            # Polars fast-path
+            if pl is not None and isinstance(df, pl.DataFrame):
+                add_df = pl.DataFrame(to_append)
 
-                    # ensure all df columns exist on add_df
-                    for c in df.columns:
-                        if c not in add_df.columns:
-                            add_df = add_df.with_columns(pl.lit(None).cast(df.schema[c]).alias(c))
+                for c in df.columns:
+                    if c not in add_df.columns:
+                        add_df = add_df.with_columns(pl.lit(None).cast(df.schema[c]).alias(c))
 
-                    # dtype reconciliation (same as before)
-                    for c in df.columns:
-                        lc, rc = df.schema[c], add_df.schema[c]
-                        if lc == pl.Null and rc != pl.Null:
-                            df = df.with_columns(pl.col(c).cast(rc))
-                        elif rc == pl.Null and lc != pl.Null:
-                            add_df = add_df.with_columns(pl.col(c).cast(lc).alias(c))
-                        elif lc != rc:
-                            df = df.with_columns(pl.col(c).cast(pl.Utf8))
-                            add_df = add_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
+                for c in df.columns:
+                    lc, rc = df.schema[c], add_df.schema[c]
+                    if lc == pl.Null and rc != pl.Null:
+                        df = df.with_columns(pl.col(c).cast(rc))
+                    elif rc == pl.Null and lc != pl.Null:
+                        add_df = add_df.with_columns(pl.col(c).cast(lc).alias(c))
+                    elif lc != rc:
+                        df = df.with_columns(pl.col(c).cast(pl.Utf8))
+                        add_df = add_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
 
-                    # reorder add_df columns to match df exactly
-                    add_df = add_df.select(df.columns)
+                add_df = add_df.select(df.columns)
+                df = df.vstack(add_df)
 
-                    df = df.vstack(add_df)
+            # Non-Polars fallback: append via repeated _upsert_row
+            else:
+                for r in to_append:
+                    eid = r.get("vertex_id")
+                    attrs_only = {k: v for k, v in r.items() if k != "vertex_id" and v is not None}
+                    df = self._upsert_row(df, eid, attrs_only)
+
+        is_empty = False
+        try:
+            is_empty = df.is_empty()
+        except Exception:
+            try:
+                is_empty = len(df) == 0
+            except Exception:
+                is_empty = False
 
         for eid, attrs in norm:
-            if attrs and (df.is_empty() or (eid in existing_ids)):
+            if attrs and (is_empty or (eid in existing_ids)):
                 df = self._upsert_row(df, eid, attrs)
         self.vertex_attributes = df
 
@@ -749,8 +986,16 @@ class BulkOps:
         self._vertex_key_index.clear()
 
         df = self.vertex_attributes
-        if not isinstance(df, pl.DataFrame) or df.height == 0:
-            return  # nothing to index yet
+
+        if pl is not None and isinstance(df, pl.DataFrame):
+            if df.height == 0:
+                return
+        else:
+            try:
+                if df is None or len(df) == 0:
+                    return
+            except Exception:
+                return
 
         missing = [f for f in self._vertex_key_fields if f not in df.columns]
         if missing:
@@ -758,8 +1003,27 @@ class BulkOps:
             pass
 
         # Rebuild index, enforcing uniqueness only for fully-populated tuples
+
+        if pl is not None and isinstance(df, pl.DataFrame):
+            try:
+                for row in df.iter_rows(named=True):
+                    vid = row.get("vertex_id")
+                    key = tuple(row.get(f) for f in self._vertex_key_fields)
+                    if any(v is None for v in key):
+                        continue
+                    owner = self._vertex_key_index.get(key)
+                    if owner is not None and owner != vid:
+                        raise ValueError(f"Composite key conflict for {key}: {owner} vs {vid}")
+                    self._vertex_key_index[key] = vid
+                return
+            except Exception:
+                pass  # fall through to generic
+        # generic path
         try:
-            for row in df.iter_rows(named=True):
+            import narwhals as nw
+            native = nw.to_native(nw.from_native(df, strict=False))
+            rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+            for row in rows:
                 vid = row.get("vertex_id")
                 key = tuple(row.get(f) for f in self._vertex_key_fields)
                 if any(v is None for v in key):
@@ -769,8 +1033,15 @@ class BulkOps:
                     raise ValueError(f"Composite key conflict for {key}: {owner} vs {vid}")
                 self._vertex_key_index[key] = vid
         except Exception:
-            # Fallback if iter_rows misbehaves
-            for vid in df.get_column("vertex_id").to_list():
+            # last-resort fallback: per-vid lookups
+            try:
+                vids = df.get_column("vertex_id").to_list()  # polars
+            except Exception:
+                try:
+                    vids = list(df["vertex_id"])
+                except Exception:
+                    vids = []
+            for vid in vids:
                 cur = {f: self.get_attr_vertex(vid, f, None) for f in self._vertex_key_fields}
                 key = self._build_key_from_attrs(cur)
                 if key is None:
@@ -842,19 +1113,25 @@ class BulkOps:
                 d.pop(eid, None)
 
         # DataFrames
-        if isinstance(self.edge_attributes, pl.DataFrame) and self.edge_attributes.height:
-            if "edge_id" in self.edge_attributes.columns:
-                self.edge_attributes = self.edge_attributes.filter(
-                    ~pl.col("edge_id").is_in(list(drop))
+        ea = self.edge_attributes
+        if ea is not None and hasattr(ea, "columns") and "edge_id" in ea.columns:
+
+            if pl is not None and isinstance(ea, pl.DataFrame) and ea.height:
+                self.edge_attributes = ea.filter(~pl.col("edge_id").is_in(list(drop)))
+            else:
+                import narwhals as nw
+                self.edge_attributes = nw.to_native(
+                    nw.from_native(ea, strict=False).filter(~nw.col("edge_id").is_in(list(drop)))
                 )
-        if (
-            isinstance(self.edge_slice_attributes, pl.DataFrame)
-            and self.edge_slice_attributes.height
-        ):
-            cols = set(self.edge_slice_attributes.columns)
-            if {"edge_id"}.issubset(cols):
-                self.edge_slice_attributes = self.edge_slice_attributes.filter(
-                    ~pl.col("edge_id").is_in(list(drop))
+        ela = self.edge_slice_attributes
+        if ela is not None and hasattr(ela, "columns") and "edge_id" in ela.columns:
+
+            if pl is not None and isinstance(ela, pl.DataFrame) and ela.height:
+                self.edge_slice_attributes = ela.filter(~pl.col("edge_id").is_in(list(drop)))
+            else:
+                import narwhals as nw
+                self.edge_slice_attributes = nw.to_native(
+                    nw.from_native(ela, strict=False).filter(~nw.col("edge_id").is_in(list(drop)))
                 )
 
     def _remove_vertices_bulk(self, vertex_ids):
@@ -914,10 +1191,16 @@ class BulkOps:
         self._num_entities = new_rows
 
         # 6) Clean vertex attributes and slice memberships
-        if isinstance(self.vertex_attributes, pl.DataFrame) and self.vertex_attributes.height:
-            if "vertex_id" in self.vertex_attributes.columns:
-                self.vertex_attributes = self.vertex_attributes.filter(
-                    ~pl.col("vertex_id").is_in(list(drop_vs))
+        va = self.vertex_attributes
+        if va is not None and hasattr(va, "columns") and "vertex_id" in va.columns:
+
+            if pl is not None and isinstance(va, pl.DataFrame) and va.height:
+                self.vertex_attributes = va.filter(~pl.col("vertex_id").is_in(list(drop_vs)))
+            else:
+                import narwhals as nw
+                self.vertex_attributes = nw.to_native(
+                    nw.from_native(va, strict=False).filter(~nw.col("vertex_id").is_in(list(drop_vs)))
                 )
+
         for slice_data in self._slices.values():
             slice_data["vertices"].difference_update(drop_vs)

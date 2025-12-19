@@ -1,51 +1,73 @@
 from enum import Enum
 
-import polars as pl
+import narwhals as nw
+try:
+    import polars as pl
+except Exception:
+    pl = None
 
 
 def _get_numeric_supertype(left, right):
-    """Get the supertype for two numeric dtypes.
+    """Get the supertype for two numeric dtypes (Narwhals).
 
     Returns the wider type that can hold values from both input types.
     For mixed int/float, returns float. For different sizes, returns larger size.
+    For mixed signed/unsigned, promotes to Float64 for safety.
     """
-    # Type hierarchy (lower to higher precedence)
+    def _dtype_cls(dt):
+        return dt.base_type() if hasattr(dt, "base_type") else dt
+
+    left_cls = _dtype_cls(left)
+    right_cls = _dtype_cls(right)
+
+    # If either is float, result is float (wider float wins)
+    if left_cls.is_float() or right_cls.is_float():
+        if left_cls == nw.Float64 or right_cls == nw.Float64:
+            return nw.Float64
+        return nw.Float32
+
+    # Both are integers
     type_order = {
-        pl.Int8: 1,
-        pl.Int16: 2,
-        pl.Int32: 3,
-        pl.Int64: 4,
-        pl.Int128: 5,
-        pl.UInt8: 1,
-        pl.UInt16: 2,
-        pl.UInt32: 3,
-        pl.UInt64: 4,
-        pl.UInt128: 5,
-        pl.Float32: 10,
-        pl.Float64: 11,
+        nw.Int8: 1,
+        nw.Int16: 2,
+        nw.Int32: 3,
+        nw.Int64: 4,
+        nw.Int128: 5,
+        nw.UInt8: 1,
+        nw.UInt16: 2,
+        nw.UInt32: 3,
+        nw.UInt64: 4,
+        nw.UInt128: 5,
     }
 
-    # If either is float, result is float
-    if left in (pl.Float32, pl.Float64) or right in (pl.Float32, pl.Float64):
-        # Return the wider float type
-        if left == pl.Float64 or right == pl.Float64:
-            return pl.Float64
-        return pl.Float32
-
-    # Both are integers - return the wider one
-    left_order = type_order.get(left, 0)
-    right_order = type_order.get(right, 0)
-
-    # If mixing signed and unsigned, promote to next larger signed type
-    left_unsigned = left in (pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64, pl.UInt128)
-    right_unsigned = right in (pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64, pl.UInt128)
+    left_unsigned = left_cls.is_unsigned_integer()
+    right_unsigned = right_cls.is_unsigned_integer()
 
     if left_unsigned != right_unsigned:
-        # Mixed signed/unsigned - promote to Float64 for safety
-        return pl.Float64
+        return nw.Float64
 
-    # Same signedness - return the wider type
-    return left if left_order >= right_order else right
+    return left_cls if type_order.get(left_cls, 0) >= type_order.get(right_cls, 0) else right_cls
+
+def build_dataframe_from_rows(rows):
+    try:
+        import polars as pl
+        return pl.DataFrame(rows)
+    except Exception:
+        try:
+            import pandas as pd
+            return pd.DataFrame.from_records(rows)
+        except Exception:
+            raise RuntimeError(
+                "No dataframe backend available. Install polars (recommended) or pandas."
+            )
+
+def _df_filter_not_equal(df, col: str, value):
+    if pl is not None and isinstance(df, pl.DataFrame):
+        return df.filter(pl.col(col) != value)
+    import narwhals as nw
+    ndf = nw.from_native(df, strict=False)
+    return nw.to_native(ndf.filter(nw.col(col) != value))
+
 
 
 class EdgeType(Enum):

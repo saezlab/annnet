@@ -1,5 +1,8 @@
-import polars as pl
-
+import narwhals as nw
+try:
+    import polars as pl
+except Exception:
+    pl = None
 
 class IndexManager:
     """Namespace for index operations.
@@ -131,8 +134,29 @@ class IndexMapping:
 
         """
         df = getattr(self, "vertex_attributes", None)
-        if not isinstance(df, pl.DataFrame) or "vertex_id" not in df.columns:
-            self.vertex_attributes = pl.DataFrame({"vertex_id": pl.Series([], dtype=pl.Utf8)})
+
+        needs_init = (
+            df is None
+            or not hasattr(df, "columns")
+            or "vertex_id" not in df.columns
+        )
+
+        if needs_init:
+            try:
+                import polars as pl
+                self.vertex_attributes = pl.DataFrame(
+                    {"vertex_id": pl.Series([], dtype=pl.Utf8)}
+                )
+            except Exception:
+                try:
+                    import pandas as pd
+                    self.vertex_attributes = pd.DataFrame(
+                        {"vertex_id": pd.Series(dtype="string")}
+                    )
+                except Exception:
+                    raise RuntimeError(
+                        "Cannot initialize vertex_attributes: install polars (recommended) or pandas."
+                    )
 
     def _ensure_vertex_row(self, vertex_id: str) -> None:
         """INTERNAL: Ensure a row for ``vertex_id`` exists in the vertex attribute DF.
@@ -160,13 +184,29 @@ class IndexMapping:
             cached_df_id = getattr(self, "_vertex_attr_df_id", None)
             if cached_ids is None or cached_df_id != id(df):
                 ids = set()
-                if isinstance(df, pl.DataFrame) and df.height > 0 and "vertex_id" in df.columns:
+                try:
+                    import polars as pl  # optional
+                except Exception:
+                    pl = None
+
+                if df is not None and hasattr(df, "columns") and "vertex_id" in df.columns:
                     # One-time scan to seed cache
-                    try:
-                        ids = set(df.get_column("vertex_id").to_list())
-                    except Exception:
-                        # Fallback if column access path changes
-                        ids = set(df.select("vertex_id").to_series().to_list())
+                    if pl is not None and isinstance(df, pl.DataFrame):
+                        if df.height > 0:
+                            try:
+                                ids = set(df.get_column("vertex_id").to_list())
+                            except Exception:
+                                ids = set(df.select("vertex_id").to_series().to_list())
+                    else:
+                        import narwhals as nw
+                        ndf = nw.from_native(df, strict=False)
+                        try:
+                            ids = set(nw.to_native(ndf.select("vertex_id")).to_series().to_list())
+                        except Exception:
+                            # fallback: convert to native and pull column
+                            native = nw.to_native(ndf)
+                            col = native["vertex_id"]
+                            ids = set(col.to_list() if hasattr(col, "to_list") else list(col))
                 self._vertex_attr_ids = ids
                 self._vertex_attr_df_id = id(df)
         except Exception:
@@ -180,10 +220,29 @@ class IndexMapping:
             return
 
         # If DF is empty, create the first row with the canonical schema
-        if df.is_empty():
-            self.vertex_attributes = pl.DataFrame(
-                {"vertex_id": [vertex_id]}, schema={"vertex_id": pl.Utf8}
-            )
+        is_empty = False
+        try:
+            is_empty = df.is_empty()  # polars-like
+        except Exception:
+            try:
+                is_empty = len(df) == 0  # pandas-like
+            except Exception:
+                is_empty = False
+
+        if is_empty:
+            try:
+                import polars as pl
+                self.vertex_attributes = pl.DataFrame(
+                    {"vertex_id": [vertex_id]}, schema={"vertex_id": pl.Utf8}
+                )
+            except Exception:
+                try:
+                    import pandas as pd
+                    self.vertex_attributes = pd.DataFrame({"vertex_id": [vertex_id]})
+                except Exception:
+                    raise RuntimeError(
+                        "Cannot initialize vertex_attributes row: install polars (recommended) or pandas."
+                    )
             # keep cache in sync
             try:
                 if isinstance(self._vertex_attr_ids, set):
@@ -194,18 +253,34 @@ class IndexMapping:
             except Exception:
                 pass
             return
-
+        
         # Align columns: create a single dict with all columns present
         row = dict.fromkeys(df.columns)
         row["vertex_id"] = vertex_id
 
         # Append one row efficiently
         try:
-            new_df = df.vstack(pl.DataFrame([row]))
+            import polars as pl
         except Exception:
-            new_df = pl.concat([df, pl.DataFrame([row])], how="vertical")
-        self.vertex_attributes = new_df
+            pl = None
 
+        if pl is not None and isinstance(df, pl.DataFrame):
+            try:
+                new_df = df.vstack(pl.DataFrame([row]))
+            except Exception:
+                new_df = pl.concat([df, pl.DataFrame([row])], how="vertical")
+            self.vertex_attributes = new_df
+        else:
+            # generic fallback (narwhals -> native)
+            try:
+                import pandas as pd
+                self.vertex_attributes = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+            except Exception:
+                import narwhals as nw
+                ndf = nw.from_native(df, strict=False)
+                nrow = nw.from_native(pd.DataFrame([row]), strict=False)  # requires pandas
+                self.vertex_attributes = nw.to_native(nw.concat([ndf, nrow], how="vertical"))
+                
         # Update cache after mutation
         try:
             if isinstance(self._vertex_attr_ids, set):

@@ -4,7 +4,11 @@ from datetime import UTC, datetime
 from typing import Optional, Union
 
 import numpy as np
-import polars as pl
+import narwhals as nw
+try:
+    import polars as pl  # optional
+except Exception:  # ModuleNotFoundError, etc.
+    pl = None
 import scipy.sparse as sp
 
 from ..algorithms.traversal import Traversal
@@ -15,6 +19,7 @@ from ._helpers import (
     _EDGE_RESERVED,
     EdgeType,
     _get_numeric_supertype,
+    _df_filter_not_equal,
     _slice_RESERVED,
     _vertex_RESERVED,
 )
@@ -66,7 +71,7 @@ class Graph(
     """
 
     # Construction
-    def __init__(self, directed=None, n: int = 0, e: int = 0, **kwargs):
+    def __init__(self, directed=None, n: int = 0, e: int = 0, annotations=None, annotations_backend="polars",**kwargs):
         """Initialize an empty incidence-matrix graph.
 
         Parameters
@@ -117,17 +122,12 @@ class Graph(
         self._num_entities = 0
         self._num_edges = 0
 
-        # Attribute storage using polars DataFrames
-        self.vertex_attributes = pl.DataFrame(schema={"vertex_id": pl.Utf8})
-        self.edge_attributes = pl.DataFrame(schema={"edge_id": pl.Utf8})
-        self.slice_attributes = pl.DataFrame(schema={"slice_id": pl.Utf8})
-        self.edge_slice_attributes = pl.DataFrame(
-            schema={"slice_id": pl.Utf8, "edge_id": pl.Utf8, "weight": pl.Float64}
-        )
+        # Attribute storage using polars preferably
+        self._annotations_backend = annotations_backend
+        self._init_annotation_tables(annotations)
         self.edge_kind = {}
         self.hyperedge_definitions = {}
-        self.graph_attributes = {}
-        self.layer_attributes = pl.DataFrame(schema={"layer_id": pl.Utf8})
+        self.graph_attributes = {}        
 
         # Edge ID counter for parallel edges
         self._next_edge_id = 0
@@ -203,6 +203,45 @@ class Graph(
         self._aspect_attrs = {}  # aspect_name -> {attr_name: value}
         self._layer_attrs = {}  # aa (tuple[str,...]) -> {attr_name: value}
         self._vertex_layer_attrs = {}  # (u, aa) -> {attr_name: value}
+
+    def _init_annotation_tables(self, annotations):
+        # 1) If user provided tables, keep them (we’ll wrap with Narwhals in ops)
+        if annotations is not None:
+            self.vertex_attributes = annotations.get("vertex_attributes")
+            self.edge_attributes = annotations.get("edge_attributes")
+            self.slice_attributes = annotations.get("slice_attributes")
+            self.edge_slice_attributes = annotations.get("edge_slice_attributes")
+            self.layer_attributes = annotations.get("layer_attributes")
+            return
+
+        # 2) Otherwise, create empties.
+        if self._annotations_backend == "polars" and pl is not None:
+            self.vertex_attributes = pl.DataFrame(schema={"vertex_id": pl.Utf8})
+            self.edge_attributes = pl.DataFrame(schema={"edge_id": pl.Utf8})
+            self.slice_attributes = pl.DataFrame(schema={"slice_id": pl.Utf8})
+            self.edge_slice_attributes = pl.DataFrame(schema={"slice_id": pl.Utf8, "edge_id": pl.Utf8, "weight": pl.Float64})
+            self.layer_attributes = pl.DataFrame(schema={"layer_id": pl.Utf8})
+            return
+
+        # 3) No polars: need a fallback engine, or force user to pass tables.
+        # Picked pandas fallback since it is common.
+        try:
+            import pandas as pd
+        except Exception:
+            raise RuntimeError(
+                "Polars is not installed, and no annotation tables were provided. "
+                "Install polars OR pass annotation tables (pandas/pyarrow/etc.) to Graph(..., annotations=...)."
+            )
+
+        self.vertex_attributes = pd.DataFrame({"vertex_id": pd.Series(dtype="string")})
+        self.edge_attributes = pd.DataFrame({"edge_id": pd.Series(dtype="string")})
+        self.slice_attributes = pd.DataFrame({"slice_id": pd.Series(dtype="string")})
+        self.edge_slice_attributes = pd.DataFrame({
+            "slice_id": pd.Series(dtype="string"),
+            "edge_id": pd.Series(dtype="string"),
+            "weight": pd.Series(dtype="float64"),
+        })
+        self.layer_attributes = pd.DataFrame({"layer_id": pd.Series(dtype="string")})
 
     # Build graph
 
@@ -1059,26 +1098,26 @@ class Graph(
             self.edge_directed.pop(edge_id, None)
 
         # Remove from edge attributes
-        if (
-            isinstance(self.edge_attributes, pl.DataFrame)
-            and self.edge_attributes.height > 0
-            and "edge_id" in self.edge_attributes.columns
-        ):
-            self.edge_attributes = self.edge_attributes.filter(pl.col("edge_id") != edge_id)
+        ea = self.edge_attributes
+        if ea is not None and hasattr(ea, "columns"):
+            cols = list(ea.columns)
+            # generic emptiness check
+            is_empty = (getattr(ea, "height", None) == 0) or (hasattr(ea, "__len__") and len(ea) == 0)
+            if (not is_empty) and ("edge_id" in cols):
+                self.edge_attributes = _df_filter_not_equal(ea, "edge_id", edge_id)
 
         # Remove from per-slice membership
         for slice_data in self._slices.values():
             slice_data["edges"].discard(edge_id)
 
         # Remove from edge-slice attributes
-        if (
-            isinstance(self.edge_slice_attributes, pl.DataFrame)
-            and self.edge_slice_attributes.height > 0
-            and "edge_id" in self.edge_slice_attributes.columns
-        ):
-            self.edge_slice_attributes = self.edge_slice_attributes.filter(
-                pl.col("edge_id") != edge_id
-            )
+        esa = self.edge_slice_attributes
+        if esa is not None and hasattr(esa, "columns"):
+            cols = list(esa.columns)
+            is_empty = (getattr(esa, "height", None) == 0) or (hasattr(esa, "__len__") and len(esa) == 0)
+            if (not is_empty) and ("edge_id" in cols):
+                self.edge_slice_attributes = _df_filter_not_equal(esa, "edge_id", edge_id)
+
 
         # Legacy / auxiliary dicts
         for d in self.slice_edge_weights.values():
@@ -1172,11 +1211,12 @@ class Graph(
         self._num_entities -= 1
 
         # Remove from vertex attributes
-        if isinstance(self.vertex_attributes, pl.DataFrame):
-            if self.vertex_attributes.height > 0 and "vertex_id" in self.vertex_attributes.columns:
-                self.vertex_attributes = self.vertex_attributes.filter(
-                    pl.col("vertex_id") != vertex_id
-                )
+        va = self.vertex_attributes
+        if va is not None and hasattr(va, "columns"):
+            cols = list(va.columns)
+            is_empty = (getattr(va, "height", None) == 0) or (hasattr(va, "__len__") and len(va) == 0)
+            if (not is_empty) and ("vertex_id" in cols):
+                self.vertex_attributes = _df_filter_not_equal(va, "vertex_id", vertex_id)
 
         # Remove from per-slice membership
         for slice_data in self._slices.values():
@@ -1208,9 +1248,11 @@ class Graph(
 
         # Purge per-slice attributes
         ela = getattr(self, "edge_slice_attributes", None)
-        if isinstance(ela, pl.DataFrame) and ela.height > 0 and "slice_id" in ela.columns:
-            # Keep everything not matching the slice_id
-            self.edge_slice_attributes = ela.filter(pl.col("slice_id") != slice_id)
+        if ela is not None and hasattr(ela, "columns"):
+            cols = list(ela.columns)
+            is_empty = (getattr(ela, "height", None) == 0) or (hasattr(ela, "__len__") and len(ela) == 0)
+            if (not is_empty) and ("slice_id" in cols):
+                self.edge_slice_attributes = _df_filter_not_equal(ela, "slice_id", slice_id)
 
         # Drop legacy dict slice if present
         if isinstance(getattr(self, "slice_edge_weights", None), dict):

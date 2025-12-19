@@ -4,7 +4,11 @@ import itertools
 from typing import TYPE_CHECKING
 
 import numpy as np
-import polars as pl
+import narwhals as nw
+try:
+    import polars as pl
+except Exception:
+    pl = None
 import scipy.sparse as sp
 
 if TYPE_CHECKING:
@@ -464,7 +468,7 @@ class LayerClass:
         new_rows.append(base)
 
         # Rebuild DF; Polars will infer schema and fill missing values with nulls
-        self.layer_attributes = pl.DataFrame(new_rows)
+        self.layer_attributes = build_dataframe_from_rows(new_rows)
 
     def set_elementary_layer_attrs(self, aspect: str, label: str, **attrs):
         """
@@ -487,9 +491,16 @@ class LayerClass:
         if df.height == 0 or "layer_id" not in df.columns:
             return {}
 
-        rows = df.filter(pl.col("layer_id") == lid)
-        if rows.height == 0:
-            return {}
+        if pl is not None and isinstance(df, pl.DataFrame):
+            rows = df.filter(pl.col("layer_id") == lid)
+            if rows.height == 0:
+                return {}
+        else:
+            rows = nw.to_native(
+                nw.from_native(df, strict=False).filter(nw.col("layer_id") == lid)
+            )
+            if (hasattr(rows, "__len__") and len(rows) == 0) or (getattr(rows, "height", None) == 0):
+                return {}
 
         # single row: drop 'layer_id' and convert to dict
         row = rows.drop("layer_id").to_dicts()[0]
