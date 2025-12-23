@@ -1,5 +1,7 @@
+import json
+
 import narwhals as nw
-import json 
+
 try:
     import polars as pl
 except Exception:
@@ -10,6 +12,7 @@ from ._helpers import (
     EdgeType,
     _get_numeric_supertype,
 )
+
 
 def _sanitize(v):
     if isinstance(v, (list, tuple, dict)):

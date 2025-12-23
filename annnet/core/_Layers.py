@@ -3,8 +3,9 @@ from __future__ import annotations
 import itertools
 from typing import TYPE_CHECKING
 
-import numpy as np
 import narwhals as nw
+import numpy as np
+
 try:
     import polars as pl
 except Exception:
@@ -13,6 +14,8 @@ import scipy.sparse as sp
 
 if TYPE_CHECKING:
     from .graph import Graph
+
+from ._helpers import build_dataframe_from_rows
 
 
 class LayerManager:

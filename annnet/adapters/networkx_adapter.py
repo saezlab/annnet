@@ -30,11 +30,11 @@ from ._utils import (
     _endpoint_coeff_map,
     _is_directed_eid,
     _rows_to_df,
+    _safe_df_to_rows,
     _serialize_edge_layers,
     _serialize_layer_tuple_attrs,
     _serialize_node_layer_attrs,
     _serialize_VM,
-    _safe_df_to_rows
 )
 
 

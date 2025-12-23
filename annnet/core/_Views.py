@@ -1,4 +1,5 @@
 import narwhals as nw
+
 try:
     import polars as pl
 except Exception:

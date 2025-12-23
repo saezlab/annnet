@@ -3,8 +3,9 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Optional, Union
 
-import numpy as np
 import narwhals as nw
+import numpy as np
+
 try:
     import polars as pl  # optional
 except Exception:  # ModuleNotFoundError, etc.
@@ -18,8 +19,8 @@ from ._Cache import CacheManager, Operations
 from ._helpers import (
     _EDGE_RESERVED,
     EdgeType,
-    _get_numeric_supertype,
     _df_filter_not_equal,
+    _get_numeric_supertype,
     _slice_RESERVED,
     _vertex_RESERVED,
 )

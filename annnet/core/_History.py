@@ -3,8 +3,9 @@ import time
 from datetime import UTC, datetime
 from functools import wraps
 
-import numpy as np
 import narwhals as nw
+import numpy as np
+
 try:
     import polars as pl  # optional
 except Exception:  # ModuleNotFoundError, etc.

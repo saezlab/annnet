@@ -2,6 +2,7 @@ import math
 from typing import Any
 
 import narwhals as nw
+
 try:
     import polars as pl  # optional
     is_polars = True

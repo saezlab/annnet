@@ -38,6 +38,7 @@ from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
+
 try:
     import polars as pl  # optional
 except Exception:  # ModuleNotFoundError, etc.

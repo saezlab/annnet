@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import narwhals as nw
+
 try:
     import polars as pl  # optional
 except Exception:  # ModuleNotFoundError, etc.
