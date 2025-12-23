@@ -34,6 +34,7 @@ from ._utils import (
     _serialize_layer_tuple_attrs,
     _serialize_node_layer_attrs,
     _serialize_VM,
+    _safe_df_to_rows
 )
 
 
@@ -87,10 +88,45 @@ def _export_legacy(
     """
     G = nx.MultiDiGraph() if directed else nx.MultiGraph()
 
+    def _rows(t):
+        if t is None:
+            return []
+        if hasattr(t, "to_dicts"):
+            try:
+                return list(t.to_dicts())
+            except Exception:
+                pass
+        if hasattr(t, "to_dict"):
+            try:
+                recs = t.to_dict(orient="records")
+                if isinstance(recs, list):
+                    return recs
+            except Exception:
+                pass
+        if hasattr(t, "to_pylist"):
+            try:
+                return list(t.to_pylist())
+            except Exception:
+                pass
+        if hasattr(t, "fetchall") and hasattr(t, "columns"):
+            try:
+                cols = list(t.columns)
+                return [dict(zip(cols, row)) for row in t.fetchall()]
+            except Exception:
+                pass
+        if isinstance(t, dict):
+            keys = list(t.keys())
+            if keys and isinstance(t[keys[0]], list):
+                n = len(t[keys[0]])
+                return [{k: t[k][i] for k in keys} for i in range(n)]
+        if isinstance(t, list) and t and isinstance(t[0], dict):
+            return list(t)
+        return []
+
     for v in graph.vertices():
-        v_attrs = graph.vertex_attributes.filter(
-            graph.vertex_attributes["vertex_id"] == v
-        ).to_dicts()
+        v_attrs = _rows(
+            graph.vertex_attributes.filter(graph.vertex_attributes["vertex_id"] == v)
+        )
         v_attr = v_attrs[0] if v_attrs else {}
         v_attr.pop("vertex_id", None)
 
@@ -107,7 +143,9 @@ def _export_legacy(
         eid = graph.idx_to_edge[eidx]
         S, T = graph.get_edge(eidx)
 
-        e_attrs = graph.edge_attributes.filter(graph.edge_attributes["edge_id"] == eid).to_dicts()
+        e_attrs = _rows(
+            graph.edge_attributes.filter(graph.edge_attributes["edge_id"] == eid)
+        )        
         e_attr = e_attrs[0] if e_attrs else {}
         e_attr.pop("edge_id", None)
 
@@ -261,11 +299,47 @@ def to_nx(
     )
 
     # ----------------- vertex & edge attributes for manifest -----------------
+    def _rows_from_table(t):
+        # keep exactly the same logic you already have later (or call it from above)
+        if t is None:
+            return []
+        if hasattr(t, "to_dicts"):
+            try:
+                return list(t.to_dicts())
+            except Exception:
+                pass
+        if hasattr(t, "to_dict"):
+            try:
+                recs = t.to_dict(orient="records")
+                if isinstance(recs, list):
+                    return recs
+            except Exception:
+                pass
+        if hasattr(t, "to_pylist"):
+            try:
+                return list(t.to_pylist())
+            except Exception:
+                pass
+        if hasattr(t, "fetchall") and hasattr(t, "columns"):
+            try:
+                cols = list(t.columns)
+                return [dict(zip(cols, row)) for row in t.fetchall()]
+            except Exception:
+                pass
+        if isinstance(t, dict):
+            keys = list(t.keys())
+            if keys and isinstance(t[keys[0]], list):
+                n = len(t[keys[0]])
+                return [{k: t[k][i] for k in keys} for i in range(n)]
+        if isinstance(t, list) and t and isinstance(t[0], dict):
+            return list(t)
+        return []
+
     vertex_attrs = {}
     for v in graph.vertices():
-        v_rows = graph.vertex_attributes.filter(
-            graph.vertex_attributes["vertex_id"] == v
-        ).to_dicts()
+        v_rows = _rows_from_table(
+            graph.vertex_attributes.filter(graph.vertex_attributes["vertex_id"] == v)
+        )
         attrs = dict(v_rows[0]) if v_rows else {}
         attrs.pop("vertex_id", None)
         if public_only:
@@ -275,7 +349,9 @@ def to_nx(
     edge_attrs = {}
     for eidx in range(graph.number_of_edges()):
         eid = graph.idx_to_edge[eidx]
-        e_rows = graph.edge_attributes.filter(graph.edge_attributes["edge_id"] == eid).to_dicts()
+        e_rows = _rows_from_table(
+            graph.edge_attributes.filter(graph.edge_attributes["edge_id"] == eid)
+        )
         attrs = dict(e_rows[0]) if e_rows else {}
         attrs.pop("edge_id", None)
         if public_only:
@@ -561,7 +637,7 @@ def to_nx(
     # aspect and layer-tuple level attributes (dicts)
     aspect_attrs = dict(getattr(graph, "_aspect_attrs", {}))
     layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(getattr(graph, "_layer_attrs", {}))
-    layer_attr_rows = _df_to_rows(getattr(graph, "layer_attributes", pl.DataFrame()))
+    layer_attr_rows = _safe_df_to_rows(getattr(graph, "layer_attributes", None))
 
     # ----------------- manifest (unchanged) -----------------
     manifest = {

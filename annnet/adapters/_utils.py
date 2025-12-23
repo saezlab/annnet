@@ -232,3 +232,28 @@ def _deserialize_layer_tuple_attrs(data: list[dict]) -> dict[tuple[str, ...], di
         aa = tuple(rec["layer"])
         out[aa] = dict(rec.get("attrs", {}))
     return out
+
+def _safe_df_to_rows(df):
+    """Return list[dict] rows from polars/pandas/narwhals; return [] on None/empty/unknown."""
+    if df is None:
+        return []
+    # Prefer the project-wide helper if it works
+    try:
+        return _df_to_rows(df)
+    except Exception:
+        pass
+
+    # Fallbacks
+    if hasattr(df, "to_dicts"):  # polars
+        try:
+            return df.to_dicts()
+        except Exception:
+            return []
+    if hasattr(df, "to_dict"):  # pandas
+        try:
+            return df.to_dict(orient="records")
+        except Exception:
+            return []
+
+    return []
+

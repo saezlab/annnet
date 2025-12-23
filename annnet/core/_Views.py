@@ -66,7 +66,7 @@ class GraphView:
 
         import narwhals as nw
         return nw.to_native(
-            nw.from_native(df, strict=False).filter(nw.col("vertex_id").is_in(list(vertex_ids)))
+            nw.from_native(df).filter(nw.col("vertex_id").is_in(list(vertex_ids)))
         )
 
     @property
@@ -87,7 +87,7 @@ class GraphView:
 
         import narwhals as nw
         return nw.to_native(
-            nw.from_native(df, strict=False).filter(nw.col("edge_id").is_in(list(edge_ids)))
+            nw.from_native(df).filter(nw.col("edge_id").is_in(list(edge_ids)))
         )
 
     @property
@@ -274,7 +274,7 @@ class GraphView:
             else:
                 import narwhals as nw
                 df = nw.to_native(
-                    nw.from_native(df, strict=False).filter(nw.col("edge_id").is_in(list(edge_ids)))
+                    nw.from_native(df).filter(nw.col("edge_id").is_in(list(edge_ids)))
                 )
 
         return df
@@ -299,7 +299,7 @@ class GraphView:
             else:
                 import narwhals as nw
                 df = nw.to_native(
-                    nw.from_native(df, strict=False).filter(nw.col("vertex_id").is_in(list(vertex_ids)))
+                    nw.from_native(df).filter(nw.col("vertex_id").is_in(list(vertex_ids)))
                 )
         return df
 

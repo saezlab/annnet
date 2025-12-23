@@ -497,7 +497,7 @@ class LayerClass:
                 return {}
         else:
             rows = nw.to_native(
-                nw.from_native(df, strict=False).filter(nw.col("layer_id") == lid)
+                nw.from_native(df).filter(nw.col("layer_id") == lid)
             )
             if (hasattr(rows, "__len__") and len(rows) == 0) or (getattr(rows, "height", None) == 0):
                 return {}

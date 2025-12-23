@@ -199,7 +199,7 @@ class IndexMapping:
                                 ids = set(df.select("vertex_id").to_series().to_list())
                     else:
                         import narwhals as nw
-                        ndf = nw.from_native(df, strict=False)
+                        ndf = nw.from_native(df)
                         try:
                             ids = set(nw.to_native(ndf.select("vertex_id")).to_series().to_list())
                         except Exception:
@@ -277,8 +277,8 @@ class IndexMapping:
                 self.vertex_attributes = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
             except Exception:
                 import narwhals as nw
-                ndf = nw.from_native(df, strict=False)
-                nrow = nw.from_native(pd.DataFrame([row]), strict=False)  # requires pandas
+                ndf = nw.from_native(df)
+                nrow = nw.from_native(pd.DataFrame([row]))  # requires pandas
                 self.vertex_attributes = nw.to_native(nw.concat([ndf, nrow], how="vertical"))
                 
         # Update cache after mutation

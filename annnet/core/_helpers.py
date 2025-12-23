@@ -65,7 +65,7 @@ def _df_filter_not_equal(df, col: str, value):
     if pl is not None and isinstance(df, pl.DataFrame):
         return df.filter(pl.col(col) != value)
     import narwhals as nw
-    ndf = nw.from_native(df, strict=False)
+    ndf = nw.from_native(df)
     return nw.to_native(ndf.filter(nw.col(col) != value))
 
 

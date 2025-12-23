@@ -290,7 +290,7 @@ class BulkOps:
                     existing_ids = set(df.get_column("vertex_id").to_list())
             else:
                 import narwhals as nw
-                native = nw.to_native(nw.from_native(df, strict=False).select("vertex_id"))
+                native = nw.to_native(nw.from_native(df).select("vertex_id"))
                 col = native["vertex_id"]
                 existing_ids = set(col.to_list() if hasattr(col, "to_list") else list(col))
         except Exception:
@@ -905,7 +905,7 @@ class BulkOps:
                     existing_ids = set(df.get_column("vertex_id").to_list())
             else:
                 import narwhals as nw
-                native = nw.to_native(nw.from_native(df, strict=False).select("vertex_id"))
+                native = nw.to_native(nw.from_native(df).select("vertex_id"))
                 col = native["vertex_id"]
                 existing_ids = set(col.to_list() if hasattr(col, "to_list") else list(col))
         except Exception:
@@ -1021,7 +1021,7 @@ class BulkOps:
         # generic path
         try:
             import narwhals as nw
-            native = nw.to_native(nw.from_native(df, strict=False))
+            native = nw.to_native(nw.from_native(df))
             rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
             for row in rows:
                 vid = row.get("vertex_id")
@@ -1121,7 +1121,7 @@ class BulkOps:
             else:
                 import narwhals as nw
                 self.edge_attributes = nw.to_native(
-                    nw.from_native(ea, strict=False).filter(~nw.col("edge_id").is_in(list(drop)))
+                    nw.from_native(ea).filter(~nw.col("edge_id").is_in(list(drop)))
                 )
         ela = self.edge_slice_attributes
         if ela is not None and hasattr(ela, "columns") and "edge_id" in ela.columns:
@@ -1131,7 +1131,7 @@ class BulkOps:
             else:
                 import narwhals as nw
                 self.edge_slice_attributes = nw.to_native(
-                    nw.from_native(ela, strict=False).filter(~nw.col("edge_id").is_in(list(drop)))
+                    nw.from_native(ela).filter(~nw.col("edge_id").is_in(list(drop)))
                 )
 
     def _remove_vertices_bulk(self, vertex_ids):
@@ -1199,7 +1199,7 @@ class BulkOps:
             else:
                 import narwhals as nw
                 self.vertex_attributes = nw.to_native(
-                    nw.from_native(va, strict=False).filter(~nw.col("vertex_id").is_in(list(drop_vs)))
+                    nw.from_native(va).filter(~nw.col("vertex_id").is_in(list(drop_vs)))
                 )
 
         for slice_data in self._slices.values():
