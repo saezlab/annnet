@@ -20,6 +20,10 @@ try:
     import polars as pl  # optional
 except Exception:  # ModuleNotFoundError, etc.
     pl = None
+try:
+    import pandas as pd  # optional fallback
+except Exception:
+    pd = None
 
 if TYPE_CHECKING:
     from ..core.graph import Graph
@@ -30,6 +34,7 @@ from ._utils import (
     _deserialize_slices,
     _deserialize_VM,
     _df_to_rows,
+    _safe_df_to_rows,
     _serialize_edge_layers,
     _serialize_layer_tuple_attrs,
     _serialize_node_layer_attrs,
@@ -110,10 +115,12 @@ def _cx2_collect_reified(aspects):
 
 
 def _rows_to_df(rows):
-    import polars as pl
-
     if not rows:
-        return pl.DataFrame()
+        if pl is not None:
+            return pl.DataFrame()
+        if pd is not None:
+            return pd.DataFrame()
+        return []  # keep as rows
 
     # --- 1) Normalize all rows to full schema ---
     keys = set().union(*(r.keys() for r in rows))
@@ -121,14 +128,22 @@ def _rows_to_df(rows):
 
     # --- 2) Let Polars infer schema on the first few rows ---
     # allow nulls / mixed types
-    try:
-        return pl.DataFrame(norm, infer_schema_length=1000)
-    except Exception:
-        # --- 3) Fallback: cast everything to string but KEEP columns ---
-        # This preserves attributes
-        return pl.DataFrame(
-            [{k: (str(v) if v is not None else None) for k, v in r.items()} for r in norm]
-        )
+    if pl is not None:
+        try:
+            return pl.DataFrame(norm, infer_schema_length=1000)
+        except Exception:
+            return pl.DataFrame(
+                [{k: (str(v) if v is not None else None) for k, v in r.items()} for r in norm]
+            )
+    # pandas fallback
+    if pd is not None:
+        try:
+            return pd.DataFrame(norm)
+        except Exception:
+            return pd.DataFrame(
+                [{k: (str(v) if v is not None else None) for k, v in r.items()} for r in norm]
+            )
+    return norm
 
 
 def _map_pl_to_cx2_type(dtype: pl.DataType) -> str:
@@ -175,11 +190,11 @@ def to_cx2(G: Graph, *, export_name = "annnet export", hyperedges="skip") -> lis
     """
 
     # 1. Prepare Manifest (Lossless storage of complex features)
-    vert_rows = _df_to_rows(getattr(G, "vertex_attributes", pl.DataFrame()))
-    edge_rows = _df_to_rows(getattr(G, "edge_attributes", pl.DataFrame()))
-    slice_rows = _df_to_rows(getattr(G, "slice_attributes", pl.DataFrame()))
-    edge_slice_rows = _df_to_rows(getattr(G, "edge_slice_attributes", pl.DataFrame()))
-    layer_attr_rows = _df_to_rows(getattr(G, "layer_attributes", pl.DataFrame()))
+    vert_rows = _safe_df_to_rows(getattr(G, "vertex_attributes", None))
+    edge_rows = _safe_df_to_rows(getattr(G, "edge_attributes", None))
+    slice_rows = _safe_df_to_rows(getattr(G, "slice_attributes", None))
+    edge_slice_rows = _safe_df_to_rows(getattr(G, "edge_slice_attributes", None))
+    layer_attr_rows = _safe_df_to_rows(getattr(G, "layer_attributes", None))
 
     # strip CX-specific style from what we embed into the manifest
     g_attrs = dict(getattr(G, "graph_attributes", {}))
@@ -272,12 +287,13 @@ def to_cx2(G: Graph, *, export_name = "annnet export", hyperedges="skip") -> lis
     current_node_id = 0
 
     # Pre-fetch attribute data for fast lookup
-    v_attrs_df = getattr(G, "vertex_attributes", pl.DataFrame())
+    v_attrs_df = getattr(G, "vertex_attributes", None)
 
     # Identify which vertex columns are string vs numeric (for cleaning None)
     v_string_cols: set[str] = set()
     v_numeric_cols: set[str] = set()
-    if v_attrs_df is not None and hasattr(v_attrs_df, "is_empty") and not v_attrs_df.is_empty():
+    # Only do dtype-based classification if this is actually a Polars DF
+    if pl is not None and isinstance(v_attrs_df, pl.DataFrame) and v_attrs_df.height:
         for col, dtype in v_attrs_df.schema.items():
             # strings
             if dtype in (pl.Utf8, pl.String, pl.Object):
@@ -299,7 +315,7 @@ def to_cx2(G: Graph, *, export_name = "annnet export", hyperedges="skip") -> lis
 
     # Build map: vertex_id -> attribute row dict
     v_attrs_map: dict[str, dict[str, Any]] = {}
-    if v_attrs_df is not None and hasattr(v_attrs_df, "is_empty") and not v_attrs_df.is_empty():
+    if v_attrs_df is not None and vert_rows:
         cols = set(v_attrs_df.columns)
         id_col = "vertex_id" if "vertex_id" in cols else "id"
         for r in vert_rows:  # vert_rows is _df_to_rows(vertex_attributes)
@@ -372,18 +388,18 @@ def to_cx2(G: Graph, *, export_name = "annnet export", hyperedges="skip") -> lis
     # -- Edges --
     # Only binary edges between mapped vertices
     current_edge_id = 0
-    e_attrs_df = getattr(G, "edge_attributes", pl.DataFrame())
+    e_attrs_df = getattr(G, "edge_attributes", None)
 
     # string columns in edge_attributes (for None -> "")
     e_string_cols = set()
-    if not e_attrs_df.is_empty():
+    if pl is not None and isinstance(e_attrs_df, pl.DataFrame) and e_attrs_df.height:
         for col, dtype in e_attrs_df.schema.items():
-            if dtype == pl.Utf8:
+            if dtype in (pl.Utf8, pl.String, pl.Object):
                 e_string_cols.add(col)
 
     # Create lookup for edge attributes (handle both 'edge_id' and 'id')
     e_attrs_map = {}
-    if not e_attrs_df.is_empty():
+    if e_attrs_df is not None and edge_rows:
         id_col = "edge_id" if "edge_id" in e_attrs_df.columns else "id"
         for r in edge_rows:
             if id_col in r:
@@ -579,11 +595,16 @@ def to_cx2(G: Graph, *, export_name = "annnet export", hyperedges="skip") -> lis
     attr_decls = {"nodes": {}, "edges": {}, "networkAttributes": {}}
 
     # Define Node Attributes
-    if not v_attrs_df.is_empty():
+    if pl is not None and isinstance(v_attrs_df, pl.DataFrame) and v_attrs_df.height:
         for col, dtype in v_attrs_df.schema.items():
             if col == "id":
                 continue
             attr_decls["nodes"][col] = {"d": _map_pl_to_cx2_type(dtype)}
+    elif v_attrs_df is not None and hasattr(v_attrs_df, "columns"):
+        for col in list(v_attrs_df.columns):
+            if col == "id":
+                continue
+            attr_decls["nodes"][col] = {"d": "string"}
 
     attr_decls["nodes"]["name"] = {"d": "string"}  # Always added
     attr_decls["nodes"]["is_hyperedge"] = {"d": "boolean"}
@@ -592,12 +613,18 @@ def to_cx2(G: Graph, *, export_name = "annnet export", hyperedges="skip") -> lis
     attr_decls["nodes"]["reaction"] = {"d": "string"}
 
     # Define Edge Attributes
-    if not e_attrs_df.is_empty():
+    if pl is not None and isinstance(e_attrs_df, pl.DataFrame) and e_attrs_df.height:
         id_col = "edge_id" if "edge_id" in e_attrs_df.columns else "id"
         for col, dtype in e_attrs_df.schema.items():
             if col == id_col:
                 continue
             attr_decls["edges"][col] = {"d": _map_pl_to_cx2_type(dtype)}
+    elif e_attrs_df is not None and hasattr(e_attrs_df, "columns"):
+        id_col = "edge_id" if "edge_id" in e_attrs_df.columns else "id"
+        for col in list(e_attrs_df.columns):
+            if col == id_col:
+                continue
+            attr_decls["edges"][col] = {"d": "string"}
     attr_decls["edges"]["interaction"] = {"d": "string"}
     attr_decls["edges"]["weight"] = {"d": "double"}
     attr_decls["edges"]["edge_id"] = {"d": "string"}
