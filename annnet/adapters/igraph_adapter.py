@@ -170,6 +170,59 @@ def _attrs_to_dict(attrs_dict: dict) -> dict:
             out[k] = v
     return out
 
+def _rows(t):
+    """Backend-agnostic: convert a table-ish object to list[dict]."""
+    if t is None:
+        return []
+    # polars
+    if hasattr(t, "to_dicts"):
+        try:
+            return list(t.to_dicts())
+        except Exception:
+            pass
+    # pandas
+    if hasattr(t, "to_dict"):
+        try:
+            recs = t.to_dict(orient="records")
+            if isinstance(recs, list):
+                return recs
+        except Exception:
+            pass
+    # narwhals / other df-likes
+    if hasattr(t, "to_pylist"):
+        try:
+            return list(t.to_pylist())
+        except Exception:
+            pass
+    # sqlite cursor-like
+    if hasattr(t, "fetchall") and hasattr(t, "columns"):
+        try:
+            cols = list(t.columns)
+            return [dict(zip(cols, row)) for row in t.fetchall()]
+        except Exception:
+            pass
+    # dict-of-columns
+    if isinstance(t, dict):
+        keys = list(t.keys())
+        if keys and isinstance(t[keys[0]], list):
+            n = len(t[keys[0]])
+            return [{k: t[k][i] for k in keys} for i in range(n)]
+    # already list-of-dicts
+    if isinstance(t, list) and t and isinstance(t[0], dict):
+        return list(t)
+    return []
+
+
+def _safe_df_to_rows(df):
+    """Never crash if df is None or backend is missing."""
+    if df is None:
+        return []
+    try:
+        return _df_to_rows(df)
+    except Exception:
+        # fallback to generic rows() conversion
+        return _rows(df)
+
 
 def _export_legacy(
     graph: Graph,
@@ -459,9 +512,13 @@ def to_igraph(
     # -------------- collect vertex/edge attrs for manifest --------------
     vertex_attrs = {}
     for v in graph.vertices():
-        v_rows = graph.vertex_attributes.filter(
-            graph.vertex_attributes["vertex_id"] == v
-        ).to_dicts()
+        vtab = getattr(graph, "vertex_attributes", None)
+        v_rows = []
+        try:
+            if vtab is not None and hasattr(vtab, "filter"):
+                v_rows = _rows(vtab.filter(vtab["vertex_id"] == v))
+        except Exception:
+            v_rows = []
         attrs = dict(v_rows[0]) if v_rows else {}
         attrs.pop("vertex_id", None)
         if public_only:
@@ -471,7 +528,13 @@ def to_igraph(
     edge_attrs = {}
     for eidx in range(graph.number_of_edges()):
         eid = graph.idx_to_edge[eidx]
-        e_rows = graph.edge_attributes.filter(graph.edge_attributes["edge_id"] == eid).to_dicts()
+        etab = getattr(graph, "edge_attributes", None)
+        e_rows = []
+        try:
+            if etab is not None and hasattr(etab, "filter"):
+                e_rows = _rows(etab.filter(etab["edge_id"] == eid))
+        except Exception:
+            e_rows = []
         attrs = dict(e_rows[0]) if e_rows else {}
         attrs.pop("edge_id", None)
         if public_only:
@@ -505,14 +568,7 @@ def to_igraph(
 
     # ---------- slices + per-slice weights for manifest ----------
     def _rows_from_table(t):
-        if t is None:
-            return []
-        if hasattr(t, "to_dicts"):
-            try:
-                return list(t.to_dicts())
-            except Exception:
-                pass
-        return []
+        return _rows(t)
 
     all_eids = list(manifest_edges.keys())
 
@@ -717,7 +773,10 @@ def to_igraph(
     # aspect and layer-tuple level attributes (dicts)
     aspect_attrs = dict(getattr(graph, "_aspect_attrs", {}))
     layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(getattr(graph, "_layer_attrs", {}))
-    layer_attr_rows = _df_to_rows(getattr(graph, "layer_attributes", pl.DataFrame()))
+    layer_df = getattr(graph, "layer_attributes", None)
+    if layer_df is None and pl is not None:
+        layer_df = pl.DataFrame()
+    layer_attr_rows = _safe_df_to_rows(layer_df)
 
     # -------------- manifest (unchanged semantics) --------------
     manifest = {

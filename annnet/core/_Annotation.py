@@ -1003,6 +1003,41 @@ class AttributesClass:
         left_schema = schema
         right_schema = to_append.collect_schema()
 
+        def _dtype_str(dt) -> str:
+            try:
+                return str(dt).lower()
+            except Exception:
+                return ""
+
+        def _is_list_dtype(dt) -> bool:
+            s = _dtype_str(dt)
+            # narwhals / polars / pyarrow style spellings
+            return ("list" in s) or ("large_list" in s) or ("array" in s)
+
+        def _is_struct_dtype(dt) -> bool:
+            s = _dtype_str(dt)
+            return ("struct" in s) or ("map" in s)
+
+        def _coerce_value_for_left_dtype(left_dt, value):
+            # If existing column is list-like and new value is scalar, wrap it.
+            if value is None:
+                return None
+            if _is_list_dtype(left_dt) and not isinstance(value, (list, tuple)):
+                return [value]
+            return value
+
+        # pre-coerce the appended row to match LEFT schema (critical for list columns)
+        coerced_cols = {}
+        for c in nw_df.columns:
+            left = left_schema[c]
+            v = new_row.get(c, None)
+            v2 = _coerce_value_for_left_dtype(left, v)
+            coerced_cols[c] = [v2]
+        to_append = nw.DataFrame.from_dict(coerced_cols, backend=native_namespace)
+
+        # Recompute right schema after coercion
+        right_schema = to_append.collect_schema()
+
         df_casts = []
         app_casts = []
 
@@ -1033,9 +1068,19 @@ class AttributesClass:
                     df_casts.append(nw.col(c).cast(supertype))
                     app_casts.append(nw.col(c).cast(supertype).alias(c))
                 else:
-                    # Fallback: String for incompatible non-numeric types
-                    df_casts.append(nw.col(c).cast(nw.String))
-                    app_casts.append(nw.col(c).cast(nw.String).alias(c))
+                    if _is_list_dtype(left) or _is_list_dtype(right) or _is_struct_dtype(left) or _is_struct_dtype(right):
+                        # Use Object to preserve nested values across pandas backends
+                        obj = getattr(nw, "Object", None)
+                        if obj is not None:
+                            df_casts.append(nw.col(c).cast(obj))
+                            app_casts.append(nw.col(c).cast(obj).alias(c))
+                        else:
+                            # do nothing
+                            pass
+                    else:
+                        # Original fallback
+                        df_casts.append(nw.col(c).cast(nw.String))
+                        app_casts.append(nw.col(c).cast(nw.String).alias(c))
 
         if df_casts:
             nw_df = nw_df.with_columns(df_casts)
