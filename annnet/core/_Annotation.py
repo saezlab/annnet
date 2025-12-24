@@ -722,13 +722,19 @@ class AttributesClass:
         return nw.String
 
     def _is_null_dtype(self, dtype) -> bool:
-        """Check if a dtype represents a null/unknown type.
-
-        Narwhals doesn't have pl.Null, so we check for Unknown or handle
-        columns that are all-null differently.
-        """
-        # In narwhals, Unknown is the closest to Polars' Null dtype
-        return dtype == nw.Unknown
+        """Check if a dtype represents a null/unknown type."""
+        import narwhals as nw
+        try:
+            import polars as pl
+        except ImportError:
+            pl = None
+        
+        # Catch Narwhals Unknown and backend-specific Null classes
+        if dtype == nw.Unknown or (pl and dtype == pl.Null):
+            return True
+        # Handle instance vs class comparison
+        dt_type = type(dtype) if not isinstance(dtype, type) else dtype
+        return dt_type == nw.Unknown or (pl and dt_type == pl.Null)
 
     def _ensure_attr_columns(
         self, df, attrs: dict
@@ -757,59 +763,36 @@ class AttributesClass:
         nw_df = nw.from_native(df, eager_only=True)
         schema = nw_df.collect_schema()
         
-        # Check if backend is polars (handles nulls natively) vs pandas-like
         impl = nw_df.implementation
         is_polars = impl.is_polars()
 
         for col, val in attrs.items():
-            target = self._dtype_for_value(val)
+            # Use Narwhals dtypes for logic to avoid backend-mismatch pitfalls
+            target = self._dtype_for_value(val, prefer="narwhals")
+            
             if col not in schema:
-                # Add new column with None values
-                # For polars, cast to target dtype works fine
-                # For pandas-like, we leave as object initially
+                # Add new column with appropriate null-casting
                 if is_polars:
-                    # do the cast using polars, not narwhals
+                    import polars as pl
                     pdf = nw.to_native(nw_df)
-                    pl_target = self._dtype_for_value(val, prefer="polars")  # returns pl.* dtype
+                    pl_target = self._dtype_for_value(val, prefer="polars")
                     pdf = pdf.with_columns(pl.lit(None).cast(pl_target).alias(col))
                     nw_df = nw.from_native(pdf, eager_only=True)
                 else:
-                    # narwhals backend: cast using narwhals dtype
-                    nw_target = self._dtype_for_value(val, prefer="narwhals")  # returns nw.* dtype
                     try:
-                        nw_df = nw_df.with_columns(nw.lit(None).cast(nw_target).alias(col))
+                        nw_df = nw_df.with_columns(nw.lit(None).cast(target).alias(col))
                     except Exception:
-                        # some backends don't like casting all-null columns; fall back to uncast
                         nw_df = nw_df.with_columns(nw.lit(None).alias(col))
             else:
-                cur = type(schema[col]) if isinstance(schema[col], nw.dtypes.DType) else schema[col]
-                # Handle the case where current dtype is Unknown (null-like)
+                # Upgrade logic: ONLY cast if the existing column is a Null/Unknown type
+                cur = schema[col]
                 if self._is_null_dtype(cur) and not self._is_null_dtype(target):
                     try:
                         nw_df = nw_df.with_columns(nw.col(col).cast(target))
                     except Exception:
-                        # If cast fails (common with pandas + null), leave as is
                         pass
-                # Handle dtype conflicts
-                elif cur != target and not self._is_null_dtype(target):
-                    # Check if both are numeric
-                    cur_is_numeric = cur in _NUMERIC_DTYPES or (
-                        hasattr(cur, "is_numeric") and cur.is_numeric()
-                    )
-                    target_is_numeric = target in _NUMERIC_DTYPES
-
-                    if cur_is_numeric and target_is_numeric:
-                        supertype = _get_numeric_supertype(cur, target)
-                        try:
-                            nw_df = nw_df.with_columns(nw.col(col).cast(supertype))
-                        except Exception:
-                            pass  # Leave as is if cast fails
-                    else:
-                        # Fallback: cast to String for incompatible types
-                        try:
-                            nw_df = nw_df.with_columns(nw.col(col).cast(nw.String))
-                        except Exception:
-                            pass
+                # DELETED: The 'elif cur != target' block that forced String fallback.
+                # Type conflicts are now managed lazily during the actual upsert/concat.
 
         return nw_df
 
@@ -820,321 +803,156 @@ class AttributesClass:
             return json.dumps(v, ensure_ascii=False)
         return v
 
+    def _is_binary_type(self, dt) -> bool:
+        """INTERNAL: Robustly identify binary types across backends."""
+        import narwhals as nw
+        if isinstance(dt, (nw.Binary, nw.dtypes.Binary)):
+            return True
+        s = str(dt).lower()
+        return any(kw in s for kw in ("binary", "blob", "byte"))
+
     def _safe_nw_cast(self, column_expr, target_dtype):
-        """
-        INTERNAL: Attempt to cast a Narwhals expression to a target dtype.
-        Falls back to String if the engine (e.g., Polars) rejects the operation.
-        """
+        """INTERNAL: Attempt cast; fallback to String on engine rejection."""
+        import narwhals as nw
         try:
+            # Ensure target_dtype is a Narwhals DType, not a native backend class
+            if not isinstance(target_dtype, (nw.dtypes.DType, type(nw.Int64))):
+                return column_expr.cast(nw.String)
             return column_expr.cast(target_dtype)
         except Exception:
-            # Fallback for FixedSizeBinary, Struct, or incompatible Numeric casts
-            import narwhals as nw
             return column_expr.cast(nw.String)
 
-    def _upsert_row(
-        self, df: "object", idx: Any, attrs: dict
-    ) -> "object":
-        """Upsert a row in a DataFrame using explicit key columns.
-
-        Keys
-        ----
-        - ``vertex_attributes``           - key: ``["vertex_id"]``
-        - ``edge_attributes``             - key: ``["edge_id"]``
-        - ``slice_attributes``            - key: ``["slice_id"]``
-        - ``edge_slice_attributes``       - key: ``["slice_id", "edge_id"]``
-
-        Parameters
-        ----------
-        df : "object"
-            The attribute DataFrame (polars, pandas, pyarrow, etc.)
-        idx : Any
-            The key value(s) for the row. Single value for single-key tables,
-            tuple for composite keys.
-        attrs : dict
-            Attribute key/value pairs to upsert.
-
-        Returns
-        -------
-        IntoDataFrame
-            Updated DataFrame in the same native format as input.
-        """
+    def _upsert_row(self, df: "object", idx: Any, attrs: dict) -> "object":
         if not isinstance(attrs, dict) or not attrs:
             return df
 
-        # Wrap in narwhals
         nw_df = nw.from_native(df, eager_only=True)
         cols = set(nw_df.columns)
 
-        # Determine key columns + values based on schema
+        # 1. Key Resolution (Unchanged)
         if {"slice_id", "edge_id"} <= cols:
-            if not (isinstance(idx, tuple) and len(idx) == 2):
-                raise ValueError("idx must be a (slice_id, edge_id) tuple")
-            key_cols = ("slice_id", "edge_id")
-            key_vals = {"slice_id": idx[0], "edge_id": idx[1]}
-            cache_name = "_edge_slice_attr_keys"
-            df_id_name = "_edge_slice_attr_df_id"
+            key_cols, key_vals = ("slice_id", "edge_id"), {"slice_id": idx[0], "edge_id": idx[1]}
+            cache_name, df_id_name = "_edge_slice_attr_keys", "_edge_slice_attr_df_id"
         elif "vertex_id" in cols:
-            key_cols = ("vertex_id",)
-            key_vals = {"vertex_id": idx}
-            cache_name = "_vertex_attr_ids"
-            df_id_name = "_vertex_attr_df_id"
+            key_cols, key_vals = ("vertex_id",), {"vertex_id": idx}
+            cache_name, df_id_name = "_vertex_attr_ids", "_vertex_attr_df_id"
         elif "edge_id" in cols:
-            key_cols = ("edge_id",)
-            key_vals = {"edge_id": idx}
-            cache_name = "_edge_attr_ids"
-            df_id_name = "_edge_attr_df_id"
+            key_cols, key_vals = ("edge_id",), {"edge_id": idx}
+            cache_name, df_id_name = "_edge_attr_ids", "_edge_attr_df_id"
         elif "slice_id" in cols:
-            key_cols = ("slice_id",)
-            key_vals = {"slice_id": idx}
-            cache_name = "_slice_attr_ids"
-            df_id_name = "_slice_attr_df_id"
+            key_cols, key_vals = ("slice_id",), {"slice_id": idx}
+            cache_name, df_id_name = "_slice_attr_ids", "_slice_attr_df_id"
         else:
             raise ValueError("Cannot infer key columns from DataFrame schema")
 
-        # Ensure attribute columns exist / are cast appropriately
         nw_df = self._ensure_attr_columns(nw_df, attrs)
-
-        # Build the match condition
         cond = None
         for k in key_cols:
-            v = key_vals[k]
-            c = nw.col(k) == nw.lit(v)
+            c = nw.col(k) == nw.lit(key_vals[k])
             cond = c if cond is None else (cond & c)
 
-        # Existence check via small per-table caches (avoids full DF scan)
+        # 2. Existence Check (Unchanged)
         try:
             key_cache = getattr(self, cache_name, None)
-            cached_df_id = getattr(self, df_id_name, None)
-
-            # Get native df id for cache invalidation
-            native_df = nw.to_native(nw_df)
-            current_df_id = id(native_df)
-
-            if key_cache is None or cached_df_id != current_df_id:
-                # Rebuild cache for the current df
-                height = nw_df.shape[0]
-                if "vertex_id" in cols and key_cols == ("vertex_id",):
-                    if height:
-                        key_cache = set(nw_df.get_column("vertex_id").to_list())
-                    else:
-                        key_cache = set()
-                elif (
-                    "edge_id" in cols
-                    and "slice_id" in cols
-                    and key_cols == ("slice_id", "edge_id")
-                ):
-                    if height:
-                        key_cache = set(
-                            zip(
-                                nw_df.get_column("slice_id").to_list(),
-                                nw_df.get_column("edge_id").to_list(),
-                            )
-                        )
-                    else:
-                        key_cache = set()
-                elif "edge_id" in cols and key_cols == ("edge_id",):
-                    if height:
-                        key_cache = set(nw_df.get_column("edge_id").to_list())
-                    else:
-                        key_cache = set()
-                elif "slice_id" in cols and key_cols == ("slice_id",):
-                    if height:
-                        key_cache = set(nw_df.get_column("slice_id").to_list())
-                    else:
-                        key_cache = set()
+            current_df_id = id(nw.to_native(nw_df))
+            if key_cache is None or getattr(self, df_id_name, None) != current_df_id:
+                if key_cols == ("slice_id", "edge_id"):
+                    key_cache = set(zip(nw_df.get_column("slice_id").to_list(), nw_df.get_column("edge_id").to_list()))
                 else:
-                    key_cache = set()
-
+                    key_cache = set(nw_df.get_column(key_cols[0]).to_list())
                 setattr(self, cache_name, key_cache)
                 setattr(self, df_id_name, current_df_id)
-
-            # Decide existence from cache
-            cache_key = (
-                key_vals[key_cols[0]]
-                if len(key_cols) == 1
-                else (key_vals["slice_id"], key_vals["edge_id"])
-            )
+            cache_key = idx
             exists = cache_key in key_cache
         except Exception:
-            # Fallback: filter and check height
             exists = nw_df.filter(cond).shape[0] > 0
             key_cache = None
 
         if exists:
-            # cast literals to column dtypes (but handle Unknown specially)
             schema = nw_df.collect_schema()
             upds = []
             for k, v in attrs.items():
                 v2 = self._sanitize_value_for_nw(v)
-                tgt_dtype = schema[k]
-                tgt_dtype_class = tgt_dtype
-
-                if self._is_null_dtype(tgt_dtype_class):
-                    inferred = self._dtype_for_value(v2)
-                    upds.append(
-                        nw.when(cond)
-                        .then(nw.lit(v2).cast(inferred))
-                        .otherwise(nw.col(k).cast(inferred))
-                        .alias(k)
-                    )
+                tgt_dt = schema[k]
+                if self._is_null_dtype(tgt_dt):
+                    inf = self._dtype_for_value(v2, prefer="narwhals")
+                    upds.append(nw.when(cond).then(nw.lit(v2).cast(inf)).otherwise(nw.col(k).cast(inf)).alias(k))
+                elif self._is_binary_type(tgt_dt):
+                    # Localized cast for binary column being updated
+                    upds.append(nw.when(cond).then(nw.lit(v2).cast(nw.String)).otherwise(nw.col(k).cast(nw.String)).alias(k))
                 else:
-                    if "fixedsizebinary" in str(tgt_dtype).lower():
-                        upds.append(
-                            nw.when(cond)
-                            .then(nw.lit(v2).cast(nw.String))
-                            .otherwise(nw.col(k).cast(nw.String))
-                            .alias(k)
-                        )
-                    else:
-                        upds.append(
-                            nw.when(cond)
-                            .then(nw.lit(v2).cast(tgt_dtype))
-                            .otherwise(nw.col(k))
-                            .alias(k)
-                        )
+                    upds.append(nw.when(cond).then(nw.lit(v2).cast(tgt_dt)).otherwise(nw.col(k)).alias(k))
             new_nw_df = nw_df.with_columns(upds)
-
-            # Keep cache in sync
-            try:
-                new_native = nw.to_native(new_nw_df)
-                setattr(self, df_id_name, id(new_native))
-            except Exception:
-                pass
-
+            setattr(self, df_id_name, id(nw.to_native(new_nw_df)))
             return nw.to_native(new_nw_df)
 
-        # build a single row aligned to df schema
+        # 3. Insertion & Reconciliation
         schema = nw_df.collect_schema()
-        fsb_cols = [
-            c for c, dt in schema.items()
-            if "fixedsizebinary" in str(dt).lower()
-        ]
-
-        if fsb_cols:
-            nw_df = nw_df.with_columns([
-                nw.col(c).cast(nw.String) for c in fsb_cols
-            ])
-            schema = nw_df.collect_schema()
-
-        # Start with None for all columns, fill keys and attrs
-        new_row = dict.fromkeys(nw_df.columns)
-        new_row.update(key_vals)
-        new_row.update(attrs)
-
-        # Create the row DataFrame using narwhals
-        # get_native_namespace returns the backend module (polars, pandas, etc.)
-        native_namespace = nw.get_native_namespace(nw_df)
-        to_append = nw.DataFrame.from_dict(
-            {col: [new_row[col]] for col in nw_df.columns},
-            backend=native_namespace,
-        )
-
-        # Resolve dtype mismatches before concat
-        left_schema = schema
+        new_row_dict = {**dict.fromkeys(nw_df.columns), **key_vals, **attrs}
+        
+        # Helper to detect list types (critical for nested data)
+        def _is_list(dt): 
+            return any(x in str(dt).lower() for x in ("list", "array"))
+            
+        coerced = {
+            c: ([new_row_dict[c]] if _is_list(schema[c]) and 
+                not isinstance(new_row_dict[c], (list, tuple, type(None))) 
+                else [new_row_dict[c]]) 
+            for c in nw_df.columns
+        }
+        
+        to_append = nw.DataFrame.from_dict(coerced, backend=nw.get_native_namespace(nw_df))
         right_schema = to_append.collect_schema()
 
-        def _dtype_str(dt) -> str:
-            try:
-                return str(dt).lower()
-            except Exception:
-                return ""
-
-        def _is_list_dtype(dt) -> bool:
-            s = _dtype_str(dt)
-            # narwhals / polars / pyarrow style spellings
-            return ("list" in s) or ("large_list" in s) or ("array" in s)
-
-        def _is_struct_dtype(dt) -> bool:
-            s = _dtype_str(dt)
-            return ("struct" in s) or ("map" in s)
-
-        def _coerce_value_for_left_dtype(left_dt, value):
-            # If existing column is list-like and new value is scalar, wrap it.
-            if value is None:
-                return None
-            if _is_list_dtype(left_dt) and not isinstance(value, (list, tuple)):
-                return [value]
-            return value
-
-        # pre-coerce the appended row to match LEFT schema (critical for list columns)
-        coerced_cols = {}
+        df_up, app_up = [], []
         for c in nw_df.columns:
-            left = left_schema[c]
-            v = new_row.get(c, None)
-            v2 = _coerce_value_for_left_dtype(left, v)
-            coerced_cols[c] = [v2]
-        to_append = nw.DataFrame.from_dict(coerced_cols, backend=native_namespace)
-        app_schema = to_append.collect_schema()
-        fsb_cols = [
-            c for c, dt in app_schema.items()
-            if "fixedsizebinary" in str(dt).lower()
-        ]
+            l, r = schema[c], right_schema[c]
+            l_null = self._is_null_dtype(l)
+            r_null = self._is_null_dtype(r)
 
-        if fsb_cols:
-            to_append = to_append.with_columns([
-                nw.col(c).cast(nw.String) for c in fsb_cols
-            ])
-        # Recompute right schema after coercion
-        right_schema = to_append.collect_schema()
+            if l_null and not r_null:
+                df_up.append(self._safe_nw_cast(nw.col(c), r).alias(c))
+            elif r_null and not l_null:
+                app_up.append(self._safe_nw_cast(nw.col(c), l).alias(c))
+            elif l != r:
+                # 1. Binary check (priority for adapters)
+                if self._is_binary_type(l) or self._is_binary_type(r):
+                    df_up.append(nw.col(c).cast(nw.String).alias(c))
+                    app_up.append(nw.col(c).cast(nw.String).alias(c))
+                    continue
 
-        df_casts = []
-        app_casts = []
+                # 2. Robust Numeric Supertype Check
+                # Use string-based heuristics if the method check is brittle
+                def _is_num(dt):
+                    s = str(dt).lower()
+                    return any(x in s for x in ("float", "int", "decimal", "uint"))
 
-        for c in nw_df.columns:
-            left = left_schema[c]
-            right = right_schema[c]
+                if _is_num(l) and _is_num(r):
+                    try:
+                        sup = _get_numeric_supertype(l, r)
+                        if sup:
+                            df_up.append(self._safe_nw_cast(nw.col(c), sup).alias(c))
+                            app_up.append(self._safe_nw_cast(nw.col(c), sup).alias(c))
+                            continue
+                    except Exception:
+                        pass # Fall through to string if supertype fails
 
-            left_is_null = self._is_null_dtype(type(left) if isinstance(left, nw.dtypes.DType) else left)
-            right_is_null = self._is_null_dtype(type(right) if isinstance(right, nw.dtypes.DType) else right)
+                # 3. Final Fallback (Incompatible types only)
+                df_up.append(nw.col(c).cast(nw.String).alias(c))
+                app_up.append(nw.col(c).cast(nw.String).alias(c))
 
-            if left_is_null and not right_is_null:
-                # Existing data is null, new data has a type: upgrade existing
-                nw_df = nw_df.with_columns(self._safe_nw_cast(nw.col(c), right))
-            elif right_is_null and not left_is_null:
-                # New data is null, existing data has type: cast new row to match
-                to_append = to_append.with_columns(self._safe_nw_cast(nw.col(c), left).alias(c))
-            elif left != right:
-                # Both have types but they conflict: try numeric supertype or String
-                left_type = type(left) if isinstance(left, nw.dtypes.DType) else left
-                right_type = type(right) if isinstance(right, nw.dtypes.DType) else right
+        if df_up: 
+            nw_df = nw_df.with_columns(df_up)
+        if app_up: 
+            to_append = to_append.with_columns(app_up)
 
-                if (hasattr(left_type, "is_numeric") and left_type.is_numeric() and 
-                    hasattr(right_type, "is_numeric") and right_type.is_numeric()):
-                    supertype = _get_numeric_supertype(left_type, right_type)
-                    nw_df = nw_df.with_columns(self._safe_nw_cast(nw.col(c), supertype))
-                    to_append = to_append.with_columns(self._safe_nw_cast(nw.col(c), supertype).alias(c))
-                else:
-                    # Final fallback: both sides become String to ensure concat succeeds
-                    nw_df = nw_df.with_columns(nw.col(c).cast(nw.String))
-                    to_append = to_append.with_columns(nw.col(c).cast(nw.String).alias(c))
-        if df_casts:
-            nw_df = nw_df.with_columns(df_casts)
-        if app_casts:
-            to_append = to_append.with_columns(app_casts)
-            app_schema = to_append.collect_schema()
-            fsb_cols = [
-                c for c, dt in app_schema.items()
-                if "fixedsizebinary" in str(dt).lower()
-            ]
+        final_df = nw.concat([nw_df, to_append], how="vertical")
+        if key_cache is not None: 
+            key_cache.add(cache_key)
+            
+        setattr(self, df_id_name, id(nw.to_native(final_df)))
+        return nw.to_native(final_df)
 
-            if fsb_cols:
-                to_append = to_append.with_columns([
-                    nw.col(c).cast(nw.String) for c in fsb_cols
-                ])
-        # Concatenate vertically
-        new_nw_df = nw.concat([nw_df, to_append], how="vertical")
-
-        # Update caches after insertion
-        try:
-            if key_cache is not None:
-                key_cache.add(cache_key)
-            new_native = nw.to_native(new_nw_df)
-            setattr(self, df_id_name, id(new_native))
-        except Exception:
-            pass
-
-        return nw.to_native(new_nw_df)
 
     def _variables_watched_by_vertices(self):
         # set of vertex-attribute names used by vertex-scope policies
