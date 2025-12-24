@@ -2599,34 +2599,26 @@ class _LazyNXProxyDynamic:
         def wrapper(*args, **kwargs):
             import networkx as _nx
 
-            # 1. Partition and Consume ALL conversion keys (bare and prefixed)
-            directed = bool(kwargs.pop("_nx_directed", 
-                            kwargs.pop("directed", getattr(self, "default_directed", True))))
-            
-            hyperedge_mode = kwargs.pop("_nx_hyperedge", 
-                                       kwargs.pop("hyperedge_mode", 
-                                                  getattr(self, "default_hyperedge_mode", "expand")))
-            
-            slice = kwargs.pop("_nx_slice", kwargs.pop("slice", None))
-            slices = kwargs.pop("_nx_slices", kwargs.pop("slices", None))
-            
-            simple = bool(kwargs.pop("_nx_simple", 
-                                    kwargs.pop("simple", getattr(self, "default_simple", False))))
-            
-            edge_aggs = kwargs.pop("_nx_edge_aggs", kwargs.pop("edge_aggs", None))            
+            # Proxy-only knobs (consumed here; not forwarded to NX)
+            directed = bool(kwargs.pop("_nx_directed", getattr(self, "default_directed", True)))
+            hyperedge_mode = kwargs.pop(
+                "_nx_hyperedge", getattr(self, "default_hyperedge_mode", "expand")
+            )  # "skip" | "expand"
+            slice = kwargs.pop("_nx_slice", None)
+            slices = kwargs.pop("_nx_slices", None)
             label_field = kwargs.pop("_nx_label_field", None)  # explicit label column
             guess_labels = kwargs.pop("_nx_guess_labels", True)  # try auto-infer when not provided
 
             # force simple Graph/DiGraph and aggregation policy for parallel edges
-            simple = bool(kwargs.pop("_nx_simple", 
-                                    kwargs.pop("simple", getattr(self, "default_simple", False))))
-            
-            edge_aggs = kwargs.pop("_nx_edge_aggs", kwargs.pop("edge_aggs", None))
+            simple = bool(kwargs.pop("_nx_simple", getattr(self, "default_simple", False)))
+            edge_aggs = kwargs.pop(
+                "_nx_edge_aggs", None
+            )  # e.g. {"weight":"min","capacity":"sum"} or callables
 
             # Determine required edge attributes (keep graph skinny)
             needed_edge_attrs = self._needed_edge_attrs(nx_callable, kwargs)
 
-            # 2. Structural Pivot: Do NOT auto-inject G. Only convert if the user passed our Graph.
+            # Do NOT auto-inject G. Only convert/replace if the user passed our Graph.
             args = list(args)
             has_owner_graph = any(a is self._G for a in args) or any(
                 v is self._G for v in kwargs.values()
@@ -2645,7 +2637,7 @@ class _LazyNXProxyDynamic:
                     edge_aggs=edge_aggs,
                 )
 
-            # 3. Graph Replacement Logic
+            # Replace any occurrence of our Graph with the NX backend
             if nxG is not None:
                 for i, v in enumerate(args):
                     if v is self._G:
@@ -2654,7 +2646,7 @@ class _LazyNXProxyDynamic:
                     if v is self._G:
                         kwargs[k] = nxG
 
-            # 4. Signature Binding: coerce vertex args (labels/indices -> vertex IDs)
+            # Bind to NX signature so we can coerce vertex args (no defaults!)
             bound = None
             try:
                 sig = inspect.signature(nx_callable)
@@ -2662,22 +2654,26 @@ class _LazyNXProxyDynamic:
             except Exception:
                 pass
 
+            # Coerce vertex args (labels/indices -> vertex IDs)
             try:
+                # Determine default label field if not given
                 if label_field is None and guess_labels:
                     label_field = self._infer_label_field()
 
                 if bound is not None and nxG is not None:
                     self._coerce_vertices_in_bound(bound, nxG, label_field)
+                    # Reconstruct WITHOUT applying defaults (avoid flow_func=None, etc.)
                     pargs = bound.args
                     pkwargs = bound.kwargs
                 else:
+                    # Fallback: best-effort coercion on kwargs only
                     if nxG is not None:
                         self._coerce_vertices_in_kwargs(kwargs, nxG, label_field)
                     pargs, pkwargs = tuple(args), kwargs
             except Exception:
-                pargs, pkwargs = tuple(args), kwargs
+                pargs, pkwargs = tuple(args), kwargs  # best effort; let NX raise if needed
 
-            # Final Cleanup: ensure no private knobs remain
+            # Never leak private knobs to NX
             for k in list(pkwargs.keys()):
                 if isinstance(k, str) and k.startswith("_nx_"):
                     pkwargs.pop(k, None)
@@ -2685,10 +2681,10 @@ class _LazyNXProxyDynamic:
             from networkx.exception import NodeNotFound
 
             try:
-                # 5. Dispatch Cleaned Kwargs to Native Algorithm
                 raw = nx_callable(*pargs, **pkwargs)
                 return self._map_output_vertices(raw)
             except NodeNotFound as e:
+                # Add actionable tip that actually tells how to fix it now.
                 sample = self.peek_vertices(5)
                 tip = (
                     f"{e}. vertices must be graph's vertex IDs.\n"
@@ -2698,6 +2694,7 @@ class _LazyNXProxyDynamic:
                     f"- A few vertex IDs NX sees: {sample}"
                 )
                 raise _nx.NodeNotFound(tip) from e
+
         return wrapper
 
     # -- internals ---
