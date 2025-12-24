@@ -287,7 +287,7 @@ def _export_legacy(
     vidx = {v: i for i, v in enumerate(vertices)}
 
     # Create igraph graph and set vertex 'name'
-    G = ig.AnnNet(directed=bool(directed))
+    G = ig.Graph(directed=bool(directed))
     G.add_vertices(len(vertices))
     G.vs["name"] = vertices
 
