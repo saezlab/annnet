@@ -820,6 +820,18 @@ class AttributesClass:
             return json.dumps(v, ensure_ascii=False)
         return v
 
+    def _safe_nw_cast(self, column_expr, target_dtype):
+        """
+        INTERNAL: Attempt to cast a Narwhals expression to a target dtype.
+        Falls back to String if the engine (e.g., Polars) rejects the operation.
+        """
+        try:
+            return column_expr.cast(target_dtype)
+        except Exception:
+            # Fallback for FixedSizeBinary, Struct, or incompatible Numeric casts
+            import narwhals as nw
+            return column_expr.cast(nw.String)
+
     def _upsert_row(
         self, df: "object", idx: Any, attrs: dict
     ) -> "object":
@@ -967,12 +979,20 @@ class AttributesClass:
                         .alias(k)
                     )
                 else:
-                    upds.append(
-                        nw.when(cond)
-                        .then(nw.lit(v2).cast(tgt_dtype))
-                        .otherwise(nw.col(k))
-                        .alias(k)
-                    )
+                    if "fixedsizebinary" in str(tgt_dtype).lower():
+                        upds.append(
+                            nw.when(cond)
+                            .then(nw.lit(v2).cast(nw.String))
+                            .otherwise(nw.col(k).cast(nw.String))
+                            .alias(k)
+                        )
+                    else:
+                        upds.append(
+                            nw.when(cond)
+                            .then(nw.lit(v2).cast(tgt_dtype))
+                            .otherwise(nw.col(k))
+                            .alias(k)
+                        )
             new_nw_df = nw_df.with_columns(upds)
 
             # Keep cache in sync
@@ -986,6 +1006,16 @@ class AttributesClass:
 
         # build a single row aligned to df schema
         schema = nw_df.collect_schema()
+        fsb_cols = [
+            c for c, dt in schema.items()
+            if "fixedsizebinary" in str(dt).lower()
+        ]
+
+        if fsb_cols:
+            nw_df = nw_df.with_columns([
+                nw.col(c).cast(nw.String) for c in fsb_cols
+            ])
+            schema = nw_df.collect_schema()
 
         # Start with None for all columns, fill keys and attrs
         new_row = dict.fromkeys(nw_df.columns)
@@ -1035,7 +1065,16 @@ class AttributesClass:
             v2 = _coerce_value_for_left_dtype(left, v)
             coerced_cols[c] = [v2]
         to_append = nw.DataFrame.from_dict(coerced_cols, backend=native_namespace)
+        app_schema = to_append.collect_schema()
+        fsb_cols = [
+            c for c, dt in app_schema.items()
+            if "fixedsizebinary" in str(dt).lower()
+        ]
 
+        if fsb_cols:
+            to_append = to_append.with_columns([
+                nw.col(c).cast(nw.String) for c in fsb_cols
+            ])
         # Recompute right schema after coercion
         right_schema = to_append.collect_schema()
 
@@ -1050,44 +1089,39 @@ class AttributesClass:
             right_is_null = self._is_null_dtype(type(right) if isinstance(right, nw.dtypes.DType) else right)
 
             if left_is_null and not right_is_null:
-                df_casts.append(nw.col(c).cast(right))
+                # Existing data is null, new data has a type: upgrade existing
+                nw_df = nw_df.with_columns(self._safe_nw_cast(nw.col(c), right))
             elif right_is_null and not left_is_null:
-                app_casts.append(nw.col(c).cast(left).alias(c))
+                # New data is null, existing data has type: cast new row to match
+                to_append = to_append.with_columns(self._safe_nw_cast(nw.col(c), left).alias(c))
             elif left != right:
+                # Both have types but they conflict: try numeric supertype or String
                 left_type = type(left) if isinstance(left, nw.dtypes.DType) else left
                 right_type = type(right) if isinstance(right, nw.dtypes.DType) else right
 
-                left_is_numeric = left_type in _NUMERIC_DTYPES or (
-                    hasattr(left_type, "is_numeric") and left_type.is_numeric()
-                )
-                right_is_numeric = right_type in _NUMERIC_DTYPES or (
-                    hasattr(right_type, "is_numeric") and right_type.is_numeric()
-                )
-
-                if left_is_numeric and right_is_numeric:
+                if (hasattr(left_type, "is_numeric") and left_type.is_numeric() and 
+                    hasattr(right_type, "is_numeric") and right_type.is_numeric()):
                     supertype = _get_numeric_supertype(left_type, right_type)
-                    df_casts.append(nw.col(c).cast(supertype))
-                    app_casts.append(nw.col(c).cast(supertype).alias(c))
+                    nw_df = nw_df.with_columns(self._safe_nw_cast(nw.col(c), supertype))
+                    to_append = to_append.with_columns(self._safe_nw_cast(nw.col(c), supertype).alias(c))
                 else:
-                    if _is_list_dtype(left) or _is_list_dtype(right) or _is_struct_dtype(left) or _is_struct_dtype(right):
-                        # Use Object to preserve nested values across pandas backends
-                        obj = getattr(nw, "Object", None)
-                        if obj is not None:
-                            df_casts.append(nw.col(c).cast(obj))
-                            app_casts.append(nw.col(c).cast(obj).alias(c))
-                        else:
-                            # do nothing
-                            pass
-                    else:
-                        # Original fallback
-                        df_casts.append(nw.col(c).cast(nw.String))
-                        app_casts.append(nw.col(c).cast(nw.String).alias(c))
-
+                    # Final fallback: both sides become String to ensure concat succeeds
+                    nw_df = nw_df.with_columns(nw.col(c).cast(nw.String))
+                    to_append = to_append.with_columns(nw.col(c).cast(nw.String).alias(c))
         if df_casts:
             nw_df = nw_df.with_columns(df_casts)
         if app_casts:
             to_append = to_append.with_columns(app_casts)
+            app_schema = to_append.collect_schema()
+            fsb_cols = [
+                c for c, dt in app_schema.items()
+                if "fixedsizebinary" in str(dt).lower()
+            ]
 
+            if fsb_cols:
+                to_append = to_append.with_columns([
+                    nw.col(c).cast(nw.String) for c in fsb_cols
+                ])
         # Concatenate vertically
         new_nw_df = nw.concat([nw_df, to_append], how="vertical")
 
