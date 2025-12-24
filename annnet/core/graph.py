@@ -33,17 +33,15 @@ from .lazy_proxies import _LazyGTProxy, _LazyIGProxy, _LazyNXProxy
 
 # ===================================
 
-class LighAnnNet(
-    AttributesClass,
-    IndexMapping
-):
+
+class LighAnnNet(AttributesClass, IndexMapping):
     """
     Core structural container for an Annotated Network (AnnNet) utilizing a sparse incidence-matrix.
 
-    LAN (Light Annotated Network) serves as the performance-optimized base class, 
-    stripping analytical and versioning overhead to focus on raw data ingestion 
-    and storage. It manages the mapping between unique identifiers and sparse 
-    matrix indices without the computational burden of history-tracking or 
+    LAN (Light Annotated Network) serves as the performance-optimized base class,
+    stripping analytical and versioning overhead to focus on raw data ingestion
+    and storage. It manages the mapping between unique identifiers and sparse
+    matrix indices without the computational burden of history-tracking or
     algorithm mixins.
 
     Attributes
@@ -53,7 +51,7 @@ class LighAnnNet(
     edge_to_idx : dict
         Mapping of edge ID to column index in the incidence matrix.
     _matrix : scipy.sparse.dok_matrix
-        The underlying DOK (Dictionary Of Keys) [a sparse matrix format] storage 
+        The underlying DOK (Dictionary Of Keys) [a sparse matrix format] storage
         representing the network topology.
     vertex_attributes : DataFrame
         Table storing metadata for vertices, typically using Polars or Pandas.
@@ -62,31 +60,34 @@ class LighAnnNet(
 
     Technical Constraints & Reality
     -------------------------------
-    - Subtractive logic: Unlike the full AnnNet, LAN lacks Slices, Layers, 
+    - Subtractive logic: Unlike the full AnnNet, LAN lacks Slices, Layers,
     and Traversal capabilities. It is a "dumb" container.
-    - Performance: Designed to bypass Python-level overhead (such as History hooks) 
+    - Performance: Designed to bypass Python-level overhead (such as History hooks)
     during high-volume write operations.
-    - Sparse Growth: Uses geometric resizing for the DOK matrix to mitigate the 
+    - Sparse Growth: Uses geometric resizing for the DOK matrix to mitigate the
     cost of frequent memory reallocations during ingestion.
-    - Annotation Backend: Supports multiple engines via NW (Narwhals) [a 
+    - Annotation Backend: Supports multiple engines via NW (Narwhals) [a
     lightweight compatibility layer for dataframes].
 
     Skeptical Consideration
     -----------------------
-    While LAN is lighter than AnnNet, its performance is still bounded by 
-    the DOK format’s inherent O(1) [constant time] insertion cost and the 
-    limitations of the Python interpreter. It is not a substitute for a 
-    compiled C++/Rust graph engine but provides a flexible, high-level 
+    While LAN is lighter than AnnNet, its performance is still bounded by
+    the DOK format’s inherent O(1) [constant time] insertion cost and the
+    limitations of the Python interpreter. It is not a substitute for a
+    compiled C++/Rust graph engine but provides a flexible, high-level
     abstraction for annotated structures.
     """
-    def __init__(self, directed=None, n=0, e=0, annotations=None, annotations_backend="polars", **kwargs):
+
+    def __init__(
+        self, directed=None, n=0, e=0, annotations=None, annotations_backend="polars", **kwargs
+    ):
         self.directed = directed
-        
+
         # Structural state
         self.entity_to_idx = {}  # ID -> row
         self.idx_to_entity = {}
         self.entity_types = {}
-        self.edge_to_idx = {}    # ID -> col
+        self.edge_to_idx = {}  # ID -> col
         self.idx_to_edge = {}
         self.edge_definitions = {}
         self.edge_weights = {}
@@ -919,7 +920,9 @@ class LighAnnNet(
         if ea is not None and hasattr(ea, "columns"):
             cols = list(ea.columns)
             # generic emptiness check
-            is_empty = (getattr(ea, "height", None) == 0) or (hasattr(ea, "__len__") and len(ea) == 0)
+            is_empty = (getattr(ea, "height", None) == 0) or (
+                hasattr(ea, "__len__") and len(ea) == 0
+            )
             if (not is_empty) and ("edge_id" in cols):
                 self.edge_attributes = _df_filter_not_equal(ea, "edge_id", edge_id)
 
@@ -931,10 +934,11 @@ class LighAnnNet(
         esa = self.edge_slice_attributes
         if esa is not None and hasattr(esa, "columns"):
             cols = list(esa.columns)
-            is_empty = (getattr(esa, "height", None) == 0) or (hasattr(esa, "__len__") and len(esa) == 0)
+            is_empty = (getattr(esa, "height", None) == 0) or (
+                hasattr(esa, "__len__") and len(esa) == 0
+            )
             if (not is_empty) and ("edge_id" in cols):
                 self.edge_slice_attributes = _df_filter_not_equal(esa, "edge_id", edge_id)
-
 
         # Legacy / auxiliary dicts
         for d in self.slice_edge_weights.values():
@@ -1031,7 +1035,9 @@ class LighAnnNet(
         va = self.vertex_attributes
         if va is not None and hasattr(va, "columns"):
             cols = list(va.columns)
-            is_empty = (getattr(va, "height", None) == 0) or (hasattr(va, "__len__") and len(va) == 0)
+            is_empty = (getattr(va, "height", None) == 0) or (
+                hasattr(va, "__len__") and len(va) == 0
+            )
             if (not is_empty) and ("vertex_id" in cols):
                 self.vertex_attributes = _df_filter_not_equal(va, "vertex_id", vertex_id)
 
@@ -1547,7 +1553,6 @@ class LighAnnNet(
         """
         return (self.num_vertices, self.num_edges)
 
-
     # AnnNet API
 
     def X(self):
@@ -1568,7 +1573,6 @@ class LighAnnNet(
     def uns(self):
         """Unstructured metadata."""
         return self.graph_attributes
-
 
 
 class AnnNet(
@@ -1609,7 +1613,15 @@ class AnnNet(
     """
 
     # Construction
-    def __init__(self, directed=None, n: int = 0, e: int = 0, annotations=None, annotations_backend="polars",**kwargs):
+    def __init__(
+        self,
+        directed=None,
+        n: int = 0,
+        e: int = 0,
+        annotations=None,
+        annotations_backend="polars",
+        **kwargs,
+    ):
         """Initialize an empty incidence-matrix graph.
 
         Parameters
@@ -1665,7 +1677,7 @@ class AnnNet(
         self._init_annotation_tables(annotations)
         self.edge_kind = {}
         self.hyperedge_definitions = {}
-        self.graph_attributes = {}        
+        self.graph_attributes = {}
 
         # Edge ID counter for parallel edges
         self._next_edge_id = 0
@@ -1757,7 +1769,9 @@ class AnnNet(
             self.vertex_attributes = pl.DataFrame(schema={"vertex_id": pl.Utf8})
             self.edge_attributes = pl.DataFrame(schema={"edge_id": pl.Utf8})
             self.slice_attributes = pl.DataFrame(schema={"slice_id": pl.Utf8})
-            self.edge_slice_attributes = pl.DataFrame(schema={"slice_id": pl.Utf8, "edge_id": pl.Utf8, "weight": pl.Float64})
+            self.edge_slice_attributes = pl.DataFrame(
+                schema={"slice_id": pl.Utf8, "edge_id": pl.Utf8, "weight": pl.Float64}
+            )
             self.layer_attributes = pl.DataFrame(schema={"layer_id": pl.Utf8})
             return
 
@@ -1774,11 +1788,13 @@ class AnnNet(
         self.vertex_attributes = pd.DataFrame({"vertex_id": pd.Series(dtype="string")})
         self.edge_attributes = pd.DataFrame({"edge_id": pd.Series(dtype="string")})
         self.slice_attributes = pd.DataFrame({"slice_id": pd.Series(dtype="string")})
-        self.edge_slice_attributes = pd.DataFrame({
-            "slice_id": pd.Series(dtype="string"),
-            "edge_id": pd.Series(dtype="string"),
-            "weight": pd.Series(dtype="float64"),
-        })
+        self.edge_slice_attributes = pd.DataFrame(
+            {
+                "slice_id": pd.Series(dtype="string"),
+                "edge_id": pd.Series(dtype="string"),
+                "weight": pd.Series(dtype="float64"),
+            }
+        )
         self.layer_attributes = pd.DataFrame({"layer_id": pd.Series(dtype="string")})
 
     # Build graph
@@ -2640,7 +2656,9 @@ class AnnNet(
         if ea is not None and hasattr(ea, "columns"):
             cols = list(ea.columns)
             # generic emptiness check
-            is_empty = (getattr(ea, "height", None) == 0) or (hasattr(ea, "__len__") and len(ea) == 0)
+            is_empty = (getattr(ea, "height", None) == 0) or (
+                hasattr(ea, "__len__") and len(ea) == 0
+            )
             if (not is_empty) and ("edge_id" in cols):
                 self.edge_attributes = _df_filter_not_equal(ea, "edge_id", edge_id)
 
@@ -2652,10 +2670,11 @@ class AnnNet(
         esa = self.edge_slice_attributes
         if esa is not None and hasattr(esa, "columns"):
             cols = list(esa.columns)
-            is_empty = (getattr(esa, "height", None) == 0) or (hasattr(esa, "__len__") and len(esa) == 0)
+            is_empty = (getattr(esa, "height", None) == 0) or (
+                hasattr(esa, "__len__") and len(esa) == 0
+            )
             if (not is_empty) and ("edge_id" in cols):
                 self.edge_slice_attributes = _df_filter_not_equal(esa, "edge_id", edge_id)
-
 
         # Legacy / auxiliary dicts
         for d in self.slice_edge_weights.values():
@@ -2752,7 +2771,9 @@ class AnnNet(
         va = self.vertex_attributes
         if va is not None and hasattr(va, "columns"):
             cols = list(va.columns)
-            is_empty = (getattr(va, "height", None) == 0) or (hasattr(va, "__len__") and len(va) == 0)
+            is_empty = (getattr(va, "height", None) == 0) or (
+                hasattr(va, "__len__") and len(va) == 0
+            )
             if (not is_empty) and ("vertex_id" in cols):
                 self.vertex_attributes = _df_filter_not_equal(va, "vertex_id", vertex_id)
 
@@ -2788,7 +2809,9 @@ class AnnNet(
         ela = getattr(self, "edge_slice_attributes", None)
         if ela is not None and hasattr(ela, "columns"):
             cols = list(ela.columns)
-            is_empty = (getattr(ela, "height", None) == 0) or (hasattr(ela, "__len__") and len(ela) == 0)
+            is_empty = (getattr(ela, "height", None) == 0) or (
+                hasattr(ela, "__len__") and len(ela) == 0
+            )
             if (not is_empty) and ("slice_id" in cols):
                 self.edge_slice_attributes = _df_filter_not_equal(ela, "slice_id", slice_id)
 

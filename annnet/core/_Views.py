@@ -66,9 +66,8 @@ class GraphView:
             return df.filter(pl.col("vertex_id").is_in(list(vertex_ids)))
 
         import narwhals as nw
-        return nw.to_native(
-            nw.from_native(df).filter(nw.col("vertex_id").is_in(list(vertex_ids)))
-        )
+
+        return nw.to_native(nw.from_native(df).filter(nw.col("vertex_id").is_in(list(vertex_ids))))
 
     @property
     def var(self):
@@ -87,9 +86,8 @@ class GraphView:
             return df.filter(pl.col("edge_id").is_in(list(edge_ids)))
 
         import narwhals as nw
-        return nw.to_native(
-            nw.from_native(df).filter(nw.col("edge_id").is_in(list(edge_ids)))
-        )
+
+        return nw.to_native(nw.from_native(df).filter(nw.col("edge_id").is_in(list(edge_ids))))
 
     @property
     def X(self):
@@ -274,6 +272,7 @@ class GraphView:
                 df = df.filter(pl.col("edge_id").is_in(list(edge_ids)))
             else:
                 import narwhals as nw
+
                 df = nw.to_native(
                     nw.from_native(df).filter(nw.col("edge_id").is_in(list(edge_ids)))
                 )
@@ -299,6 +298,7 @@ class GraphView:
                 df = df.filter(pl.col("vertex_id").is_in(list(vertex_ids)))
             else:
                 import narwhals as nw
+
                 df = nw.to_native(
                     nw.from_native(df).filter(nw.col("vertex_id").is_in(list(vertex_ids)))
                 )
@@ -522,10 +522,14 @@ class ViewsClass:
         if not self.edge_to_idx:
             try:
                 import polars as pl
+
                 return pl.DataFrame(schema={"edge_id": pl.Utf8, "kind": pl.Utf8})
             except Exception:
                 import pandas as pd
-                return pd.DataFrame({"edge_id": pd.Series(dtype="string"), "kind": pd.Series(dtype="string")})
+
+                return pd.DataFrame(
+                    {"edge_id": pd.Series(dtype="string"), "kind": pd.Series(dtype="string")}
+                )
 
         eids = list(self.edge_to_idx.keys())
         kinds = [self.edge_kind.get(eid, "binary") for eid in eids]
@@ -584,7 +588,7 @@ class ViewsClass:
         except Exception:
             pl = None
 
-        # Polars fast-path 
+        # Polars fast-path
         if pl is not None:
             base = pl.DataFrame(cols).with_columns(
                 pl.Series("source", src, dtype=pl.Utf8),
@@ -607,9 +611,13 @@ class ViewsClass:
                 and isinstance(self.edge_slice_attributes, pl.DataFrame)
                 and self.edge_slice_attributes.height > 0
             ):
-                slice_slice = self.edge_slice_attributes.filter(pl.col("slice_id") == slice).drop("slice_id")
+                slice_slice = self.edge_slice_attributes.filter(pl.col("slice_id") == slice).drop(
+                    "slice_id"
+                )
                 if slice_slice.height > 0:
-                    rename_map = {c: f"slice_{c}" for c in slice_slice.columns if c not in {"edge_id"}}
+                    rename_map = {
+                        c: f"slice_{c}" for c in slice_slice.columns if c not in {"edge_id"}
+                    }
                     if rename_map:
                         slice_slice = slice_slice.rename(rename_map)
                     out = out.join(slice_slice, on="edge_id", how="left")
@@ -651,16 +659,22 @@ class ViewsClass:
             if esa is not None and hasattr(esa, "columns") and len(esa) > 0:
                 esa_df = pd.DataFrame(esa)
                 if {"slice_id", "edge_id"}.issubset(esa_df.columns):
-                    slice_slice = esa_df[esa_df["slice_id"] == slice].drop(columns=["slice_id"], errors="ignore")
+                    slice_slice = esa_df[esa_df["slice_id"] == slice].drop(
+                        columns=["slice_id"], errors="ignore"
+                    )
                     if not slice_slice.empty:
-                        rename_map = {c: f"slice_{c}" for c in slice_slice.columns if c != "edge_id"}
+                        rename_map = {
+                            c: f"slice_{c}" for c in slice_slice.columns if c != "edge_id"
+                        }
                         slice_slice = slice_slice.rename(columns=rename_map)
                         out = out.merge(slice_slice, on="edge_id", how="left")
 
         if resolved_weight:
             gw_col = "global_weight" if include_weight else "_gw_tmp"
             if "slice_weight" in out.columns:
-                out["effective_weight"] = out["slice_weight"].where(out["slice_weight"].notna(), out[gw_col])
+                out["effective_weight"] = out["slice_weight"].where(
+                    out["slice_weight"].notna(), out[gw_col]
+                )
             else:
                 out["effective_weight"] = out[gw_col]
             if not include_weight and "_gw_tmp" in out.columns:
@@ -695,12 +709,12 @@ class ViewsClass:
 
         # fallback
         import pandas as pd
+
         if df is None or (hasattr(df, "__len__") and len(df) == 0):
             out = pd.DataFrame({"vertex_id": pd.Series(dtype="string")})
         else:
             out = pd.DataFrame(df)
         return out.copy(deep=True) if copy else out
-
 
     def slices_view(self, copy=True):
         """Read-only slice attribute table.
@@ -728,6 +742,7 @@ class ViewsClass:
             return df.clone() if copy else df
 
         import pandas as pd
+
         if df is None or (hasattr(df, "__len__") and len(df) == 0):
             out = pd.DataFrame({"slice_id": pd.Series(dtype="string")})
         else:
@@ -746,11 +761,14 @@ class ViewsClass:
         if not getattr(self, "aspects", None):
             try:
                 import polars as pl
+
                 return pl.DataFrame(schema={"aspect": pl.Utf8, "elem_layers": pl.List(pl.Utf8)})
             except Exception:
                 import pandas as pd
-                return pd.DataFrame({"aspect": pd.Series(dtype="string"), "elem_layers": pd.Series(dtype="object")})
 
+                return pd.DataFrame(
+                    {"aspect": pd.Series(dtype="string"), "elem_layers": pd.Series(dtype="object")}
+                )
 
         rows = []
         for a in self.aspects:
@@ -765,10 +783,12 @@ class ViewsClass:
 
         try:
             import polars as pl
+
             df = pl.DataFrame(rows)
             return df.clone() if copy else df
         except Exception:
             import pandas as pd
+
             df = pd.DataFrame.from_records(rows)
             return df.copy(deep=True) if copy else df
 
@@ -792,15 +812,23 @@ class ViewsClass:
         if not getattr(self, "aspects", None):
             try:
                 import polars as pl
+
                 return pl.DataFrame(schema={"layer_tuple": pl.List(pl.Utf8), "layer_id": pl.Utf8})
             except Exception:
                 import pandas as pd
-                return pd.DataFrame({"layer_tuple": pd.Series(dtype="object"), "layer_id": pd.Series(dtype="string")})
+
+                return pd.DataFrame(
+                    {
+                        "layer_tuple": pd.Series(dtype="object"),
+                        "layer_id": pd.Series(dtype="string"),
+                    }
+                )
 
         # empty product → no layers
         if not getattr(self, "_all_layers", ()):
             try:
                 import polars as pl
+
                 return pl.DataFrame(
                     schema={
                         "layer_tuple": pl.List(pl.Utf8),
@@ -809,13 +837,14 @@ class ViewsClass:
                 )
             except Exception:
                 import pandas as pd
+
                 return pd.DataFrame(
                     {
                         "layer_tuple": pd.Series(dtype="object"),
                         "layer_id": pd.Series(dtype="string"),
                     }
                 )
-            
+
         rows = []
         for aa in self._all_layers:
             aa = tuple(aa)
@@ -846,9 +875,11 @@ class ViewsClass:
 
         try:
             import polars as pl
+
             df = pl.DataFrame(rows)
             return df.clone() if copy else df
         except Exception:
             import pandas as pd
+
             df = pd.DataFrame.from_records(rows)
             return df.copy(deep=True) if copy else df

@@ -11,6 +11,7 @@ try:
 except Exception:  # ModuleNotFoundError, etc.
     pl = None
 
+
 class GraphDiff:
     """Represents the difference between two graph states.
 
@@ -191,10 +192,12 @@ class History:
         if as_df:
             try:
                 import polars as pl
+
                 return pl.DataFrame(self._history)
             except Exception:
                 try:
                     import pandas as pd
+
                     return pd.DataFrame.from_records(self._history)
                 except Exception:
                     raise RuntimeError(
@@ -226,10 +229,12 @@ class History:
             return 0
         try:
             import polars as pl
+
             df = pl.DataFrame(self._history)
         except Exception:
             try:
                 import pandas as pd
+
                 df = pd.DataFrame.from_records(self._history)
             except Exception:
                 raise RuntimeError(

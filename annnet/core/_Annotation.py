@@ -5,6 +5,7 @@ import narwhals as nw
 
 try:
     import polars as pl  # optional
+
     is_polars = True
 except Exception:  # ModuleNotFoundError, etc.
     pl = None
@@ -12,17 +13,31 @@ except Exception:  # ModuleNotFoundError, etc.
 from ._helpers import _get_numeric_supertype
 
 _NUMERIC_NW_DTYPES = {
-    nw.Int8, nw.Int16, nw.Int32, nw.Int64,
-    nw.UInt8, nw.UInt16, nw.UInt32, nw.UInt64,
-    nw.Float32, nw.Float64,
+    nw.Int8,
+    nw.Int16,
+    nw.Int32,
+    nw.Int64,
+    nw.UInt8,
+    nw.UInt16,
+    nw.UInt32,
+    nw.UInt64,
+    nw.Float32,
+    nw.Float64,
 }
 
 _NUMERIC_PL_DTYPES = set()
 if pl is not None:
     _NUMERIC_PL_DTYPES = {
-        pl.Int8, pl.Int16, pl.Int32, pl.Int64,
-        pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
-        pl.Float32, pl.Float64,
+        pl.Int8,
+        pl.Int16,
+        pl.Int32,
+        pl.Int64,
+        pl.UInt8,
+        pl.UInt16,
+        pl.UInt32,
+        pl.UInt64,
+        pl.Float32,
+        pl.Float64,
     }
 
 _NUMERIC_DTYPES = _NUMERIC_PL_DTYPES if is_polars else _NUMERIC_NW_DTYPES
@@ -128,6 +143,7 @@ class AttributesClass:
             return default if val is None else val
 
         import narwhals as nw
+
         rows = nw.to_native(
             nw.from_native(df, pass_through=True).filter(nw.col("vertex_id") == vertex_id)
         )
@@ -139,10 +155,18 @@ class AttributesClass:
         # pull first value of column `key`
         try:
             col = rows[key]
-            val = col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+            val = (
+                col.iloc[0]
+                if hasattr(col, "iloc")
+                else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+            )
         except Exception:
             # fallback via first row dict
-            r0 = (rows.to_dicts()[0] if hasattr(rows, "to_dicts") else rows.to_dict(orient="records")[0])
+            r0 = (
+                rows.to_dicts()[0]
+                if hasattr(rows, "to_dicts")
+                else rows.to_dict(orient="records")[0]
+            )
             val = r0.get(key, None)
 
         return default if val is None else val
@@ -191,6 +215,7 @@ class AttributesClass:
             return s.item(0) if s.len() else None
 
         import narwhals as nw
+
         rows = nw.to_native(
             nw.from_native(df, pass_through=True).filter(nw.col("vertex_id") == vertex_id)
         )
@@ -200,9 +225,17 @@ class AttributesClass:
         # first scalar value of column
         try:
             col = rows[attribute]
-            return col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+            return (
+                col.iloc[0]
+                if hasattr(col, "iloc")
+                else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+            )
         except Exception:
-            r0 = (rows.to_dict(orient="records")[0] if hasattr(rows, "to_dict") else rows.to_dicts()[0])
+            r0 = (
+                rows.to_dict(orient="records")[0]
+                if hasattr(rows, "to_dict")
+                else rows.to_dicts()[0]
+            )
             return r0.get(attribute, None)
 
     def set_edge_attrs(self, edge_id, **attrs):
@@ -254,6 +287,7 @@ class AttributesClass:
             return default if val is None else val
 
         import narwhals as nw
+
         rows = nw.to_native(
             nw.from_native(df, pass_through=True).filter(nw.col("edge_id") == edge_id)
         )
@@ -262,9 +296,17 @@ class AttributesClass:
 
         try:
             col = rows[key]
-            val = col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+            val = (
+                col.iloc[0]
+                if hasattr(col, "iloc")
+                else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+            )
         except Exception:
-            r0 = (rows.to_dict(orient="records")[0] if hasattr(rows, "to_dict") else rows.to_dicts()[0])
+            r0 = (
+                rows.to_dict(orient="records")[0]
+                if hasattr(rows, "to_dict")
+                else rows.to_dicts()[0]
+            )
             val = r0.get(key, None)
 
         return default if val is None else val
@@ -312,6 +354,7 @@ class AttributesClass:
             return s.item(0) if s.len() else None
 
         import narwhals as nw
+
         rows = nw.to_native(
             nw.from_native(df, pass_through=True).filter(nw.col("edge_id") == edge_id)
         )
@@ -320,9 +363,17 @@ class AttributesClass:
 
         try:
             col = rows[attribute]
-            return col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+            return (
+                col.iloc[0]
+                if hasattr(col, "iloc")
+                else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+            )
         except Exception:
-            r0 = (rows.to_dict(orient="records")[0] if hasattr(rows, "to_dict") else rows.to_dicts()[0])
+            r0 = (
+                rows.to_dict(orient="records")[0]
+                if hasattr(rows, "to_dict")
+                else rows.to_dicts()[0]
+            )
             return r0.get(attribute, None)
 
     def set_slice_attrs(self, slice_id, **attrs):
@@ -370,6 +421,7 @@ class AttributesClass:
             return default if val is None else val
 
         import narwhals as nw
+
         rows = nw.to_native(
             nw.from_native(df, pass_through=True).filter(nw.col("slice_id") == slice_id)
         )
@@ -378,9 +430,17 @@ class AttributesClass:
 
         try:
             col = rows[key]
-            val = col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+            val = (
+                col.iloc[0]
+                if hasattr(col, "iloc")
+                else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+            )
         except Exception:
-            r0 = (rows.to_dict(orient="records")[0] if hasattr(rows, "to_dict") else rows.to_dicts()[0])
+            r0 = (
+                rows.to_dict(orient="records")[0]
+                if hasattr(rows, "to_dict")
+                else rows.to_dicts()[0]
+            )
             val = r0.get(key, None)
 
         return default if val is None else val
@@ -476,6 +536,7 @@ class AttributesClass:
             return default if val is None else val
 
         import narwhals as nw
+
         rows = nw.to_native(
             nw.from_native(df, pass_through=True).filter(
                 (nw.col("slice_id") == slice_id) & (nw.col("edge_id") == edge_id)
@@ -486,9 +547,17 @@ class AttributesClass:
 
         try:
             col = rows[key]
-            val = col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+            val = (
+                col.iloc[0]
+                if hasattr(col, "iloc")
+                else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+            )
         except Exception:
-            r0 = (rows.to_dict(orient="records")[0] if hasattr(rows, "to_dict") else rows.to_dicts()[0])
+            r0 = (
+                rows.to_dict(orient="records")[0]
+                if hasattr(rows, "to_dict")
+                else rows.to_dicts()[0]
+            )
             val = r0.get(key, None)
 
         return default if val is None else val
@@ -535,7 +604,11 @@ class AttributesClass:
         """
         if slice is not None:
             df = self.edge_slice_attributes
-            if df is not None and hasattr(df, "columns") and {"slice_id", "edge_id", "weight"} <= set(df.columns):
+            if (
+                df is not None
+                and hasattr(df, "columns")
+                and {"slice_id", "edge_id", "weight"} <= set(df.columns)
+            ):
                 try:
                     import polars as pl
                 except Exception:
@@ -551,21 +624,31 @@ class AttributesClass:
                             return float(w)
                 else:
                     import narwhals as nw
+
                     rows = nw.to_native(
                         nw.from_native(df, pass_through=True)
                         .filter((nw.col("slice_id") == slice) & (nw.col("edge_id") == edge_id))
                         .select("weight")
                     )
-                    if (hasattr(rows, "__len__") and len(rows) > 0) or (getattr(rows, "height", 0) > 0):
+                    if (hasattr(rows, "__len__") and len(rows) > 0) or (
+                        getattr(rows, "height", 0) > 0
+                    ):
                         try:
                             col = rows["weight"]
-                            w = col.iloc[0] if hasattr(col, "iloc") else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+                            w = (
+                                col.iloc[0]
+                                if hasattr(col, "iloc")
+                                else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
+                            )
                         except Exception:
-                            r0 = (rows.to_dict(orient="records")[0] if hasattr(rows, "to_dict") else rows.to_dicts()[0])
+                            r0 = (
+                                rows.to_dict(orient="records")[0]
+                                if hasattr(rows, "to_dict")
+                                else rows.to_dicts()[0]
+                            )
                             w = r0.get("weight", None)
                         if w is not None and not (isinstance(w, float) and math.isnan(w)):
                             return float(w)
-
 
             # fallback to legacy dict if present
             w2 = self.slice_edge_weights.get(slice, {}).get(edge_id, None)
@@ -606,6 +689,7 @@ class AttributesClass:
                 vertex_attr_ids = set(na.select("vertex_id").to_series().to_list())
             else:
                 import narwhals as nw
+
                 tmp = nw.to_native(nw.from_native(na, pass_through=True).select("vertex_id"))
                 try:
                     s = tmp["vertex_id"]
@@ -625,6 +709,7 @@ class AttributesClass:
                 edge_attr_ids = set(ea.select("edge_id").to_series().to_list())
             else:
                 import narwhals as nw
+
                 tmp = nw.to_native(nw.from_native(ea, pass_through=True).select("edge_id"))
                 try:
                     s = tmp["edge_id"]
@@ -640,7 +725,11 @@ class AttributesClass:
         missing_edge_rows = [i for i in edge_ids if i not in edge_attr_ids]
 
         bad_edge_slice = []
-        if ela is not None and hasattr(ela, "columns") and {"slice_id", "edge_id"} <= set(ela.columns):
+        if (
+            ela is not None
+            and hasattr(ela, "columns")
+            and {"slice_id", "edge_id"} <= set(ela.columns)
+        ):
             try:
                 import polars as pl
             except Exception:
@@ -652,7 +741,10 @@ class AttributesClass:
                         bad_edge_slice.append((lid, eid))
             else:
                 import narwhals as nw
-                tmp = nw.to_native(nw.from_native(ela, pass_through=True).select(["slice_id", "edge_id"]))
+
+                tmp = nw.to_native(
+                    nw.from_native(ela, pass_through=True).select(["slice_id", "edge_id"])
+                )
                 rows = tmp.to_dicts() if hasattr(tmp, "to_dicts") else tmp.to_dict(orient="records")
                 for r in rows:
                     lid = r.get("slice_id")
@@ -675,6 +767,7 @@ class AttributesClass:
         - Otherwise returns Narwhals dtype classes.
         """
         import enum
+
         try:
             import polars as pl
         except Exception:
@@ -724,11 +817,12 @@ class AttributesClass:
     def _is_null_dtype(self, dtype) -> bool:
         """Check if a dtype represents a null/unknown type."""
         import narwhals as nw
+
         try:
             import polars as pl
         except ImportError:
             pl = None
-        
+
         # Catch Narwhals Unknown and backend-specific Null classes
         if dtype == nw.Unknown or (pl and dtype == pl.Null):
             return True
@@ -736,9 +830,7 @@ class AttributesClass:
         dt_type = type(dtype) if not isinstance(dtype, type) else dtype
         return dt_type == nw.Unknown or (pl and dt_type == pl.Null)
 
-    def _ensure_attr_columns(
-        self, df, attrs: dict
-    ) -> nw.DataFrame[Any]:
+    def _ensure_attr_columns(self, df, attrs: dict) -> nw.DataFrame[Any]:
         """Create/align attribute columns and dtypes to accept ``attrs``.
 
         Parameters
@@ -762,18 +854,19 @@ class AttributesClass:
         """
         nw_df = nw.from_native(df, eager_only=True)
         schema = nw_df.collect_schema()
-        
+
         impl = nw_df.implementation
         is_polars = impl.is_polars()
 
         for col, val in attrs.items():
             # Use Narwhals dtypes for logic to avoid backend-mismatch pitfalls
             target = self._dtype_for_value(val, prefer="narwhals")
-            
+
             if col not in schema:
                 # Add new column with appropriate null-casting
                 if is_polars:
                     import polars as pl
+
                     pdf = nw.to_native(nw_df)
                     pl_target = self._dtype_for_value(val, prefer="polars")
                     pdf = pdf.with_columns(pl.lit(None).cast(pl_target).alias(col))
@@ -800,12 +893,14 @@ class AttributesClass:
         # narwhals.lit can't handle nested python containers yet
         if isinstance(v, (list, tuple, dict)):
             import json
+
             return json.dumps(v, ensure_ascii=False)
         return v
 
     def _is_binary_type(self, dt) -> bool:
         """INTERNAL: Robustly identify binary types across backends."""
         import narwhals as nw
+
         if isinstance(dt, (nw.Binary, nw.dtypes.Binary)):
             return True
         s = str(dt).lower()
@@ -814,6 +909,7 @@ class AttributesClass:
     def _safe_nw_cast(self, column_expr, target_dtype):
         """INTERNAL: Attempt cast; fallback to String on engine rejection."""
         import narwhals as nw
+
         try:
             # Ensure target_dtype is a Narwhals DType, not a native backend class
             if not isinstance(target_dtype, (nw.dtypes.DType, type(nw.Int64))):
@@ -857,7 +953,12 @@ class AttributesClass:
             current_df_id = id(nw.to_native(nw_df))
             if key_cache is None or getattr(self, df_id_name, None) != current_df_id:
                 if key_cols == ("slice_id", "edge_id"):
-                    key_cache = set(zip(nw_df.get_column("slice_id").to_list(), nw_df.get_column("edge_id").to_list()))
+                    key_cache = set(
+                        zip(
+                            nw_df.get_column("slice_id").to_list(),
+                            nw_df.get_column("edge_id").to_list(),
+                        )
+                    )
                 else:
                     key_cache = set(nw_df.get_column(key_cols[0]).to_list())
                 setattr(self, cache_name, key_cache)
@@ -876,12 +977,24 @@ class AttributesClass:
                 tgt_dt = schema[k]
                 if self._is_null_dtype(tgt_dt):
                     inf = self._dtype_for_value(v2, prefer="narwhals")
-                    upds.append(nw.when(cond).then(nw.lit(v2).cast(inf)).otherwise(nw.col(k).cast(inf)).alias(k))
+                    upds.append(
+                        nw.when(cond)
+                        .then(nw.lit(v2).cast(inf))
+                        .otherwise(nw.col(k).cast(inf))
+                        .alias(k)
+                    )
                 elif self._is_binary_type(tgt_dt):
                     # Localized cast for binary column being updated
-                    upds.append(nw.when(cond).then(nw.lit(v2).cast(nw.String)).otherwise(nw.col(k).cast(nw.String)).alias(k))
+                    upds.append(
+                        nw.when(cond)
+                        .then(nw.lit(v2).cast(nw.String))
+                        .otherwise(nw.col(k).cast(nw.String))
+                        .alias(k)
+                    )
                 else:
-                    upds.append(nw.when(cond).then(nw.lit(v2).cast(tgt_dt)).otherwise(nw.col(k)).alias(k))
+                    upds.append(
+                        nw.when(cond).then(nw.lit(v2).cast(tgt_dt)).otherwise(nw.col(k)).alias(k)
+                    )
             new_nw_df = nw_df.with_columns(upds)
             setattr(self, df_id_name, id(nw.to_native(new_nw_df)))
             return nw.to_native(new_nw_df)
@@ -889,18 +1002,21 @@ class AttributesClass:
         # 3. Insertion & Reconciliation
         schema = nw_df.collect_schema()
         new_row_dict = {**dict.fromkeys(nw_df.columns), **key_vals, **attrs}
-        
+
         # Helper to detect list types (critical for nested data)
-        def _is_list(dt): 
+        def _is_list(dt):
             return any(x in str(dt).lower() for x in ("list", "array"))
-            
+
         coerced = {
-            c: ([new_row_dict[c]] if _is_list(schema[c]) and 
-                not isinstance(new_row_dict[c], (list, tuple, type(None))) 
-                else [new_row_dict[c]]) 
+            c: (
+                [new_row_dict[c]]
+                if _is_list(schema[c])
+                and not isinstance(new_row_dict[c], (list, tuple, type(None)))
+                else [new_row_dict[c]]
+            )
             for c in nw_df.columns
         }
-        
+
         to_append = nw.DataFrame.from_dict(coerced, backend=nw.get_native_namespace(nw_df))
         right_schema = to_append.collect_schema()
 
@@ -935,21 +1051,21 @@ class AttributesClass:
                             app_up.append(self._safe_nw_cast(nw.col(c), sup).alias(c))
                             continue
                     except Exception:
-                        pass # Fall through to string if supertype fails
+                        pass  # Fall through to string if supertype fails
 
                 # 3. Final Fallback (Incompatible types only)
                 df_up.append(nw.col(c).cast(nw.String).alias(c))
                 app_up.append(nw.col(c).cast(nw.String).alias(c))
 
-        if df_up: 
+        if df_up:
             nw_df = nw_df.with_columns(df_up)
-        if app_up: 
+        if app_up:
             to_append = to_append.with_columns(app_up)
 
         final_df = nw.concat([nw_df, to_append], how="vertical")
-        if key_cache is not None: 
+        if key_cache is not None:
             key_cache.add(cache_key)
-            
+
         setattr(self, df_id_name, id(nw.to_native(final_df)))
         return nw.to_native(final_df)
 
@@ -1070,8 +1186,15 @@ class AttributesClass:
         # Non-Polars path (Narwhals -> native rows)
         try:
             import narwhals as nw
-            native = nw.to_native(nw.from_native(df, pass_through=True).filter(nw.col("edge_id") == eid))
-            rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+
+            native = nw.to_native(
+                nw.from_native(df, pass_through=True).filter(nw.col("edge_id") == eid)
+            )
+            rows = (
+                native.to_dicts()
+                if hasattr(native, "to_dicts")
+                else native.to_dict(orient="records")
+            )
             return rows[0] if rows else {}
         except Exception:
             # Fallback if df is pandas or dict-like
@@ -1108,11 +1231,17 @@ class AttributesClass:
 
         try:
             import narwhals as nw
-            native = nw.to_native(nw.from_native(df, pass_through=True).filter(nw.col("vertex_id") == vertex))
-            rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+
+            native = nw.to_native(
+                nw.from_native(df, pass_through=True).filter(nw.col("vertex_id") == vertex)
+            )
+            rows = (
+                native.to_dicts()
+                if hasattr(native, "to_dicts")
+                else native.to_dict(orient="records")
+            )
             return rows[0] if rows else {}
         except Exception:
-
             try:
                 row = df[df["vertex_id"] == vertex].to_dict(orient="records")
                 return row[0] if row else {}
@@ -1158,7 +1287,10 @@ class AttributesClass:
                 df = df.filter(pl.col("edge_id").is_in(wanted))
             else:
                 import narwhals as nw
-                df = nw.to_native(nw.from_native(df, pass_through=True).filter(nw.col("edge_id").is_in(wanted)))
+
+                df = nw.to_native(
+                    nw.from_native(df, pass_through=True).filter(nw.col("edge_id").is_in(wanted))
+                )
 
         if pl is not None and isinstance(df, pl.DataFrame):
             return {row["edge_id"]: dict(row) for row in df.iter_rows(named=True)}
@@ -1166,8 +1298,13 @@ class AttributesClass:
         # non-Polars
         try:
             import narwhals as nw
+
             native = nw.to_native(nw.from_native(df, pass_through=True))
-            rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+            rows = (
+                native.to_dicts()
+                if hasattr(native, "to_dicts")
+                else native.to_dict(orient="records")
+            )
             return {r.get("edge_id"): dict(r) for r in rows if r.get("edge_id") is not None}
         except Exception:
             return {}
@@ -1207,15 +1344,25 @@ class AttributesClass:
                 df = df.filter(pl.col("vertex_id").is_in(list(vertices)))
             else:
                 import narwhals as nw
-                df = nw.to_native(nw.from_native(df, pass_through=True).filter(nw.col("vertex_id").is_in(list(vertices))))
+
+                df = nw.to_native(
+                    nw.from_native(df, pass_through=True).filter(
+                        nw.col("vertex_id").is_in(list(vertices))
+                    )
+                )
 
         if pl is not None and isinstance(df, pl.DataFrame):
             return {row["vertex_id"]: dict(row) for row in df.iter_rows(named=True)}
 
         try:
             import narwhals as nw
+
             native = nw.to_native(nw.from_native(df, pass_through=True))
-            rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+            rows = (
+                native.to_dicts()
+                if hasattr(native, "to_dicts")
+                else native.to_dict(orient="records")
+            )
             return {r.get("vertex_id"): dict(r) for r in rows if r.get("vertex_id") is not None}
         except Exception:
             return {}
@@ -1261,8 +1408,11 @@ class AttributesClass:
 
         # non-Polars
         import narwhals as nw
+
         native = nw.to_native(nw.from_native(df, pass_through=True))
-        rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+        rows = (
+            native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+        )
         if key not in getattr(native, "columns", []):
             return {r.get("edge_id"): default for r in rows if r.get("edge_id") is not None}
         return {
@@ -1305,9 +1455,14 @@ class AttributesClass:
             return [row["edge_id"] for row in df.iter_rows(named=True) if row.get(key) == value]
 
         import narwhals as nw
+
         native = nw.to_native(nw.from_native(df, pass_through=True))
-        rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
-        return [r.get("edge_id") for r in rows if r.get("edge_id") is not None and r.get(key) == value]
+        rows = (
+            native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+        )
+        return [
+            r.get("edge_id") for r in rows if r.get("edge_id") is not None and r.get(key) == value
+        ]
 
     def get_graph_attributes(self) -> dict:
         """Return a shallow copy of the graph-level attributes dictionary.
@@ -1367,6 +1522,7 @@ class AttributesClass:
             add_df = pl.DataFrame(rows)
         else:
             import pandas as pd
+
             add_df = pd.DataFrame.from_records(rows)
 
         # ensure required key cols exist/correct dtype on existing df
@@ -1391,7 +1547,7 @@ class AttributesClass:
                 if pl is not None and isinstance(add_df, pl.DataFrame):
                     it = add_df.iter_rows(named=True)
                 else:
-                    it = (add_df.to_dict(orient="records") if hasattr(add_df, "to_dict") else [])
+                    it = add_df.to_dict(orient="records") if hasattr(add_df, "to_dict") else []
                 for r in it:
                     w = r.get("weight")
                     if w is not None:
@@ -1423,7 +1579,8 @@ class AttributesClass:
                     add_df = add_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
 
             mask_keep = ~(
-                (pl.col("slice_id") == slice_id) & pl.col("edge_id").is_in(add_df.get_column("edge_id"))
+                (pl.col("slice_id") == slice_id)
+                & pl.col("edge_id").is_in(add_df.get_column("edge_id"))
             )
             df = df.filter(mask_keep)
             df = df.vstack(add_df)
@@ -1432,6 +1589,7 @@ class AttributesClass:
         else:
             # pandas fallback
             import pandas as pd
+
             pdf = df if isinstance(df, pd.DataFrame) else pd.DataFrame(df)
             padd = add_df if isinstance(add_df, pd.DataFrame) else pd.DataFrame(add_df)
 
@@ -1446,7 +1604,9 @@ class AttributesClass:
             # drop existing rows for the keys we’re writing: (slice_id, edge_id)
             wanted_eids = set(padd["edge_id"].tolist()) if "edge_id" in padd.columns else set()
             if "slice_id" in pdf.columns and "edge_id" in pdf.columns and wanted_eids:
-                keep_mask = ~((pdf["slice_id"] == slice_id) & (pdf["edge_id"].isin(list(wanted_eids))))
+                keep_mask = ~(
+                    (pdf["slice_id"] == slice_id) & (pdf["edge_id"].isin(list(wanted_eids)))
+                )
                 pdf = pdf.loc[keep_mask]
 
             pdf = pd.concat([pdf, padd], ignore_index=True)

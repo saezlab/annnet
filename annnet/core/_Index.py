@@ -5,6 +5,7 @@ try:
 except Exception:
     pl = None
 
+
 class IndexManager:
     """Namespace for index operations.
     Provides clean API over existing dicts.
@@ -136,24 +137,18 @@ class IndexMapping:
         """
         df = getattr(self, "vertex_attributes", None)
 
-        needs_init = (
-            df is None
-            or not hasattr(df, "columns")
-            or "vertex_id" not in df.columns
-        )
+        needs_init = df is None or not hasattr(df, "columns") or "vertex_id" not in df.columns
 
         if needs_init:
             try:
                 import polars as pl
-                self.vertex_attributes = pl.DataFrame(
-                    {"vertex_id": pl.Series([], dtype=pl.Utf8)}
-                )
+
+                self.vertex_attributes = pl.DataFrame({"vertex_id": pl.Series([], dtype=pl.Utf8)})
             except Exception:
                 try:
                     import pandas as pd
-                    self.vertex_attributes = pd.DataFrame(
-                        {"vertex_id": pd.Series(dtype="string")}
-                    )
+
+                    self.vertex_attributes = pd.DataFrame({"vertex_id": pd.Series(dtype="string")})
                 except Exception:
                     raise RuntimeError(
                         "Cannot initialize vertex_attributes: install polars (recommended) or pandas."
@@ -200,6 +195,7 @@ class IndexMapping:
                                 ids = set(df.select("vertex_id").to_series().to_list())
                     else:
                         import narwhals as nw
+
                         ndf = nw.from_native(df)
                         try:
                             ids = set(nw.to_native(ndf.select("vertex_id")).to_series().to_list())
@@ -233,12 +229,14 @@ class IndexMapping:
         if is_empty:
             try:
                 import polars as pl
+
                 self.vertex_attributes = pl.DataFrame(
                     {"vertex_id": [vertex_id]}, schema={"vertex_id": pl.Utf8}
                 )
             except Exception:
                 try:
                     import pandas as pd
+
                     self.vertex_attributes = pd.DataFrame({"vertex_id": [vertex_id]})
                 except Exception:
                     raise RuntimeError(
@@ -254,7 +252,7 @@ class IndexMapping:
             except Exception:
                 pass
             return
-        
+
         # Align columns: create a single dict with all columns present
         row = dict.fromkeys(df.columns)
         row["vertex_id"] = vertex_id
@@ -275,13 +273,15 @@ class IndexMapping:
             # generic fallback (narwhals -> native)
             try:
                 import pandas as pd
+
                 self.vertex_attributes = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
             except Exception:
                 import narwhals as nw
+
                 ndf = nw.from_native(df)
                 nrow = nw.from_native(pd.DataFrame([row]))  # requires pandas
                 self.vertex_attributes = nw.to_native(nw.concat([ndf, nrow], how="vertical"))
-                
+
         # Update cache after mutation
         try:
             if isinstance(self._vertex_attr_ids, set):

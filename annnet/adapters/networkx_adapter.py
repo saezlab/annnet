@@ -124,9 +124,7 @@ def _export_legacy(
         return []
 
     for v in graph.vertices():
-        v_attrs = _rows(
-            graph.vertex_attributes.filter(graph.vertex_attributes["vertex_id"] == v)
-        )
+        v_attrs = _rows(graph.vertex_attributes.filter(graph.vertex_attributes["vertex_id"] == v))
         v_attr = v_attrs[0] if v_attrs else {}
         v_attr.pop("vertex_id", None)
 
@@ -143,9 +141,7 @@ def _export_legacy(
         eid = graph.idx_to_edge[eidx]
         S, T = graph.get_edge(eidx)
 
-        e_attrs = _rows(
-            graph.edge_attributes.filter(graph.edge_attributes["edge_id"] == eid)
-        )        
+        e_attrs = _rows(graph.edge_attributes.filter(graph.edge_attributes["edge_id"] == eid))
         e_attr = e_attrs[0] if e_attrs else {}
         e_attr.pop("edge_id", None)
 

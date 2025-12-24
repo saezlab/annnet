@@ -170,6 +170,7 @@ def _attrs_to_dict(attrs_dict: dict) -> dict:
             out[k] = v
     return out
 
+
 def _rows(t):
     """Backend-agnostic: convert a table-ish object to list[dict]."""
     if t is None:

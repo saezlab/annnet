@@ -4,8 +4,8 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import polars as pl
-
 import pytest
+
 graph_tool = pytest.importorskip("graph_tool")
 from graph_tool import centrality, clustering, flow, generation, search, topology, util
 

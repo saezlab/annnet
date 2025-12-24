@@ -499,10 +499,10 @@ class LayerClass:
             if rows.height == 0:
                 return {}
         else:
-            rows = nw.to_native(
-                nw.from_native(df).filter(nw.col("layer_id") == lid)
-            )
-            if (hasattr(rows, "__len__") and len(rows) == 0) or (getattr(rows, "height", None) == 0):
+            rows = nw.to_native(nw.from_native(df).filter(nw.col("layer_id") == lid))
+            if (hasattr(rows, "__len__") and len(rows) == 0) or (
+                getattr(rows, "height", None) == 0
+            ):
                 return {}
 
         # single row: drop 'layer_id' and convert to dict

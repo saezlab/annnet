@@ -73,6 +73,7 @@ try:
 except Exception:  # ModuleNotFoundError, etc.
     pl = None
 
+
 def _serialize_edge_layers(edge_layers: dict[str, Any]) -> dict[str, Any]:
     """
     Convert edge_layers[eid] (aa or (aa, bb)) into JSON-safe form.
@@ -233,6 +234,7 @@ def _deserialize_layer_tuple_attrs(data: list[dict]) -> dict[tuple[str, ...], di
         out[aa] = dict(rec.get("attrs", {}))
     return out
 
+
 def _safe_df_to_rows(df):
     """Return list[dict] rows from polars/pandas/narwhals; return [] on None/empty/unknown."""
     if df is None:
@@ -256,4 +258,3 @@ def _safe_df_to_rows(df):
             return []
 
     return []
-

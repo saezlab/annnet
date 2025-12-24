@@ -22,9 +22,11 @@ except NameError:
             "Replace this call with the actual writer function for AnnNet IO."
         )
 
+
 def _have_polars():
     try:
         import polars as pl  # noqa
+
         return True
     except Exception:
         return False
@@ -38,8 +40,10 @@ def _df_from_dict(data: dict):
     """
     if _have_polars():
         import polars as pl
+
         return pl.DataFrame(data)
     import pandas as pd
+
     return pd.DataFrame(data)
 
 
@@ -64,6 +68,7 @@ def _write_parquet_df(df, path, *, compression="zstd"):
 
     # Last resort: narwhals -> pandas
     import narwhals as nw
+
     native = nw.to_native(nw.from_native(df, pass_through=True))
     if hasattr(native, "to_parquet"):
         try:
@@ -82,9 +87,12 @@ def _read_parquet(path):
     """
     if _have_polars():
         import polars as pl
+
         return pl.read_parquet(path)
     import pandas as pd
+
     return pd.read_parquet(path, engine="pyarrow")
+
 
 def _iter_rows(df):
     """
@@ -107,6 +115,7 @@ def _iter_rows(df):
     # Last resort: try narwhals -> pandas/polars native
     try:
         import narwhals as nw
+
         native = nw.to_native(nw.from_native(df, pass_through=True))
         if hasattr(native, "to_dicts") and callable(getattr(native, "to_dicts")):
             return native.to_dicts()
@@ -115,7 +124,6 @@ def _iter_rows(df):
     except Exception:
         pass
     raise TypeError(f"Unsupported dataframe type for row iteration: {type(df)!r}")
-
 
 
 ANNNET_EXT = "graph.annnet"
@@ -237,7 +245,6 @@ def _write_structure(graph, path: Path, compression: str):
         df = _df_from_dict({id_name: list(d.keys()), val_name: list(d.values())})
         _write_parquet_df(df, filepath, compression=compression)
 
-
     dict_to_parquet(graph.entity_to_idx, path / "entity_to_idx.parquet", "entity_id", "idx")
     dict_to_parquet(graph.idx_to_entity, path / "idx_to_entity.parquet", "idx", "entity_id")
     dict_to_parquet(graph.entity_types, path / "entity_types.parquet", "entity_id", "type")
@@ -249,12 +256,14 @@ def _write_structure(graph, path: Path, compression: str):
 
     # Edge definitions (tuples > struct column)
 
-    edge_def_df = _df_from_dict({
-        "edge_id": list(graph.edge_definitions.keys()),
-        "source": [v[0] for v in graph.edge_definitions.values()],
-        "target": [v[1] for v in graph.edge_definitions.values()],
-        "edge_type": [v[2] for v in graph.edge_definitions.values()],
-    })
+    edge_def_df = _df_from_dict(
+        {
+            "edge_id": list(graph.edge_definitions.keys()),
+            "source": [v[0] for v in graph.edge_definitions.values()],
+            "target": [v[1] for v in graph.edge_definitions.values()],
+            "edge_type": [v[2] for v in graph.edge_definitions.values()],
+        }
+    )
     _write_parquet_df(edge_def_df, path / "edge_definitions.parquet", compression=compression)
 
     # Hyperedge definitions (lists > list column)
@@ -280,6 +289,7 @@ def _write_structure(graph, path: Path, compression: str):
         # Polars: keep explicit List(Utf8) dtypes; Non-polars: let pandas/pyarrow infer list columns.
         if _have_polars():
             import polars as pl
+
             hyper_df = pl.DataFrame({"edge_id": eids, "directed": dirs}).with_columns(
                 pl.Series("members", mems, dtype=pl.List(pl.Utf8)),
                 pl.Series("head", heads, dtype=pl.List(pl.Utf8)),
@@ -287,24 +297,35 @@ def _write_structure(graph, path: Path, compression: str):
             )
             hyper_df.write_parquet(path / "hyperedge_definitions.parquet", compression=compression)
         else:
-            hyper_df = _df_from_dict({
-                "edge_id": eids,
-                "directed": dirs,
-                "members": mems,
-                "head": heads,
-                "tail": tails,
-            })
-            _write_parquet_df(hyper_df, path / "hyperedge_definitions.parquet", compression=compression)
+            hyper_df = _df_from_dict(
+                {
+                    "edge_id": eids,
+                    "directed": dirs,
+                    "members": mems,
+                    "head": heads,
+                    "tail": tails,
+                }
+            )
+            _write_parquet_df(
+                hyper_df, path / "hyperedge_definitions.parquet", compression=compression
+            )
 
 
 def _write_tables(graph, path: Path, compression: str):
     path.mkdir(parents=True, exist_ok=True)
 
-    _write_parquet_df(graph.vertex_attributes, path / "vertex_attributes.parquet", compression=compression)
-    _write_parquet_df(graph.edge_attributes, path / "edge_attributes.parquet", compression=compression)
-    _write_parquet_df(graph.slice_attributes, path / "slice_attributes.parquet", compression=compression)
-    _write_parquet_df(graph.edge_slice_attributes, path / "edge_slice_attributes.parquet", compression=compression)
-
+    _write_parquet_df(
+        graph.vertex_attributes, path / "vertex_attributes.parquet", compression=compression
+    )
+    _write_parquet_df(
+        graph.edge_attributes, path / "edge_attributes.parquet", compression=compression
+    )
+    _write_parquet_df(
+        graph.slice_attributes, path / "slice_attributes.parquet", compression=compression
+    )
+    _write_parquet_df(
+        graph.edge_slice_attributes, path / "edge_slice_attributes.parquet", compression=compression
+    )
 
 
 def _write_multilayers(graph, path: Path, compression: str):
@@ -330,6 +351,7 @@ def _write_multilayers(graph, path: Path, compression: str):
 
     if _have_polars():
         import polars as pl
+
         if not vm_data:
             vm_df = pl.DataFrame(
                 {
@@ -455,6 +477,7 @@ def _write_slices(graph, path: Path, compression: str):
         em_df = _df_from_dict({"slice_id": [], "edge_id": [], "weight": []})
     _write_parquet_df(em_df, path / "edge_memberships.parquet", compression=compression)
 
+
 def _write_audit(graph, path: Path, compression: str):
     """Write history, snapshots, provenance."""
     import json
@@ -469,6 +492,7 @@ def _write_audit(graph, path: Path, compression: str):
         UTC = UTC
 
     import numpy as np
+
     try:
         import polars as pl  # optional
     except Exception:  # ModuleNotFoundError, etc.
@@ -504,6 +528,7 @@ def _write_audit(graph, path: Path, compression: str):
             try:
                 from datetime import date as _dt_date
                 from datetime import datetime as _dt_datetime
+
                 if isinstance(v, (_dt_datetime, _dt_date)):
                     return v.isoformat()
             except Exception:
@@ -787,7 +812,6 @@ def _load_tables(graph, path: Path):
     except Exception:  # ModuleNotFoundError, etc.
         pl = None
 
-
     graph.vertex_attributes = _read_parquet(path / "vertex_attributes.parquet")
     graph.edge_attributes = _read_parquet(path / "edge_attributes.parquet")
     graph.slice_attributes = _read_parquet(path / "slice_attributes.parquet")
@@ -802,7 +826,6 @@ def _load_multilayers(graph, path: Path):
         import polars as pl  # optional
     except Exception:  # ModuleNotFoundError, etc.
         pl = None
-
 
     # Graceful exit if this is a legacy graph without layers
     if not path.exists() or not (path / "metadata.json").exists():
@@ -872,7 +895,6 @@ def _load_slices(graph, path: Path):
     except Exception:  # ModuleNotFoundError, etc.
         pl = None
 
-
     # Registry
     registry_df = _read_parquet(path / "registry.parquet")
     for row in _iter_rows(registry_df):
@@ -903,7 +925,6 @@ def _load_audit(graph, path: Path):
         import polars as pl  # optional
     except Exception:  # ModuleNotFoundError, etc.
         pl = None
-
 
     history_path = path / "history.parquet"
     if history_path.exists():

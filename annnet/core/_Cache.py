@@ -545,6 +545,7 @@ class Operations:
                         e_attrs[eid] = d
             else:
                 import narwhals as nw
+
                 ndf = nw.from_native(ea, pass_through=True)
                 native = nw.to_native(ndf.filter(nw.col("edge_id").is_in(list(E))))
 
@@ -569,7 +570,11 @@ class Operations:
         eff_w = {}
         if resolve_slice_weights:
             df = self.edge_slice_attributes
-            if df is not None and hasattr(df, "columns") and {"slice_id", "edge_id", "weight"}.issubset(df.columns):
+            if (
+                df is not None
+                and hasattr(df, "columns")
+                and {"slice_id", "edge_id", "weight"}.issubset(df.columns)
+            ):
                 try:
                     import polars as pl
                 except Exception:
@@ -583,6 +588,7 @@ class Operations:
                             eff_w[r["edge_id"]] = float(r["weight"])
                 else:
                     import narwhals as nw
+
                     ndf = nw.from_native(df, pass_through=True).filter(
                         (nw.col("slice_id") == slice_id) & (nw.col("edge_id").is_in(list(E)))
                     )
@@ -710,6 +716,7 @@ class Operations:
                     mapping[kval] = d
             else:
                 import narwhals as nw
+
                 native = nw.to_native(nw.from_native(df, pass_through=True))
                 # rows as dicts across backends
                 to_dicts_fn = getattr(type(native), "to_dicts", None)

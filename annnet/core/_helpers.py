@@ -15,6 +15,7 @@ def _get_numeric_supertype(left, right):
     For mixed int/float, returns float. For different sizes, returns larger size.
     For mixed signed/unsigned, promotes to Float64 for safety.
     """
+
     def _dtype_cls(dt):
         return dt.base_type() if hasattr(dt, "base_type") else dt
 
@@ -49,26 +50,30 @@ def _get_numeric_supertype(left, right):
 
     return left_cls if type_order.get(left_cls, 0) >= type_order.get(right_cls, 0) else right_cls
 
+
 def build_dataframe_from_rows(rows):
     try:
         import polars as pl
+
         return pl.DataFrame(rows)
     except Exception:
         try:
             import pandas as pd
+
             return pd.DataFrame.from_records(rows)
         except Exception:
             raise RuntimeError(
                 "No dataframe backend available. Install polars (recommended) or pandas."
             )
 
+
 def _df_filter_not_equal(df, col: str, value):
     if pl is not None and isinstance(df, pl.DataFrame):
         return df.filter(pl.col(col) != value)
     import narwhals as nw
+
     ndf = nw.from_native(df)
     return nw.to_native(ndf.filter(nw.col(col) != value))
-
 
 
 class EdgeType(Enum):

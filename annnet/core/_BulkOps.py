@@ -19,8 +19,10 @@ def _sanitize(v):
         return json.dumps(v, ensure_ascii=False)
     return v
 
+
 def _to_polars_if_possible(df):
     import narwhals as nw
+
     try:
         nwd = nw.from_native(df, eager_only=True)
         if nwd.implementation.is_polars():
@@ -29,13 +31,13 @@ def _to_polars_if_possible(df):
         pass
     return df, False
 
+
 class BulkOps:
     # Bulk build graph
 
     def add_vertices_bulk(self, vertices, slice=None):
         """Bulk add vertices. Fast path: Polars-only vectorized upsert."""
         slice = slice or self._current_slice
-
 
         # Normalize input
 
@@ -62,12 +64,12 @@ class BulkOps:
         # Intern hot strings
         try:
             import sys as _sys
+
             norm_vids = [_sys.intern(v) if isinstance(v, str) else v for v in norm_vids]
             if isinstance(slice, str):
                 slice = _sys.intern(slice)
         except Exception:
             pass
-
 
         # Entity registration
 
@@ -83,13 +85,11 @@ class BulkOps:
         if new_rows:
             self._grow_rows_to(self._num_entities)
 
-
         # Slice membership
 
         if slice not in self._slices:
             self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
         self._slices[slice]["vertices"].update(norm_vids)
-
 
         # Ensure attribute table exists
 
@@ -116,7 +116,6 @@ class BulkOps:
 
         incoming = pl.DataFrame(cols, nan_to_null=True, strict=False)
 
-
         # Ensure df has needed columns
 
         if keys:
@@ -139,7 +138,6 @@ class BulkOps:
             # anti-join = new rows, semi-join = existing rows
             to_insert = incoming.join(id_df, on="vertex_id", how="anti")
             to_update = incoming.join(id_df, on="vertex_id", how="semi")
-
 
         # Schema alignment helper
 
@@ -174,13 +172,11 @@ class BulkOps:
             right = right.select(left.columns)
             return left, right
 
-
         # Inserts: one concat
 
         if to_insert is not None and len(to_insert) > 0:
             df, to_insert = _align_numeric_and_string(df, to_insert)
             df = pl.concat([df, to_insert], how="vertical", rechunk=False)
-
 
         # Updates: one join + one coalesce pass
 
@@ -189,7 +185,7 @@ class BulkOps:
 
             suffix = "__new"
 
-            left_dupes  = [c for c in df.columns if c.endswith(suffix)]
+            left_dupes = [c for c in df.columns if c.endswith(suffix)]
             if left_dupes:
                 df = df.drop(left_dupes)
 
@@ -293,6 +289,7 @@ class BulkOps:
                     existing_ids = set(df.get_column("vertex_id").to_list())
             else:
                 import narwhals as nw
+
                 native = nw.to_native(nw.from_native(df).select("vertex_id"))
                 col = native["vertex_id"]
                 existing_ids = set(col.to_list() if hasattr(col, "to_list") else list(col))
@@ -358,7 +355,9 @@ class BulkOps:
             else:
                 for row in new_rows_data:
                     vid = row.get("vertex_id")
-                    attrs_only = {k: v for k, v in row.items() if k != "vertex_id" and v is not None}
+                    attrs_only = {
+                        k: v for k, v in row.items() if k != "vertex_id" and v is not None
+                    }
                     df = self._upsert_row(df, vid, attrs_only)
 
         # VECTORIZED UPSERT OF EXISTING ATTRIBUTES
@@ -374,7 +373,10 @@ class BulkOps:
                 update_df = pl.DataFrame(
                     {
                         "vertex_id": [vid for vid, _ in update_pairs],
-                        **{k: [_sanitize(attrs.get(k, None)) for _, attrs in update_pairs] for k in new_attr_keys},
+                        **{
+                            k: [_sanitize(attrs.get(k, None)) for _, attrs in update_pairs]
+                            for k in new_attr_keys
+                        },
                     },
                     nan_to_null=True,
                     strict=False,
@@ -407,7 +409,9 @@ class BulkOps:
                 df = df.join(update_df, on="vertex_id", how="left", suffix="_new")
                 for c in new_attr_keys:
                     if c in df.columns and c + "_new" in df.columns:
-                        df = df.with_columns(pl.coalesce([pl.col(c + "_new"), pl.col(c)]).alias(c)).drop(c + "_new")
+                        df = df.with_columns(
+                            pl.coalesce([pl.col(c + "_new"), pl.col(c)]).alias(c)
+                        ).drop(c + "_new")
 
             else:
                 # Non-Polars fallback: row-wise updates
@@ -415,7 +419,6 @@ class BulkOps:
                     df = self._upsert_row(df, vid, {k: _sanitize(v) for k, v in attrs.items()})
 
         self.vertex_attributes = df
-
 
     def add_edges_bulk(
         self,
@@ -908,6 +911,7 @@ class BulkOps:
                     existing_ids = set(df.get_column("vertex_id").to_list())
             else:
                 import narwhals as nw
+
                 native = nw.to_native(nw.from_native(df).select("vertex_id"))
                 col = native["vertex_id"]
                 existing_ids = set(col.to_list() if hasattr(col, "to_list") else list(col))
@@ -1024,8 +1028,13 @@ class BulkOps:
         # generic path
         try:
             import narwhals as nw
+
             native = nw.to_native(nw.from_native(df))
-            rows = native.to_dicts() if hasattr(native, "to_dicts") else native.to_dict(orient="records")
+            rows = (
+                native.to_dicts()
+                if hasattr(native, "to_dicts")
+                else native.to_dict(orient="records")
+            )
             for row in rows:
                 vid = row.get("vertex_id")
                 key = tuple(row.get(f) for f in self._vertex_key_fields)
@@ -1118,21 +1127,21 @@ class BulkOps:
         # DataFrames
         ea = self.edge_attributes
         if ea is not None and hasattr(ea, "columns") and "edge_id" in ea.columns:
-
             if pl is not None and isinstance(ea, pl.DataFrame) and ea.height:
                 self.edge_attributes = ea.filter(~pl.col("edge_id").is_in(list(drop)))
             else:
                 import narwhals as nw
+
                 self.edge_attributes = nw.to_native(
                     nw.from_native(ea).filter(~nw.col("edge_id").is_in(list(drop)))
                 )
         ela = self.edge_slice_attributes
         if ela is not None and hasattr(ela, "columns") and "edge_id" in ela.columns:
-
             if pl is not None and isinstance(ela, pl.DataFrame) and ela.height:
                 self.edge_slice_attributes = ela.filter(~pl.col("edge_id").is_in(list(drop)))
             else:
                 import narwhals as nw
+
                 self.edge_slice_attributes = nw.to_native(
                     nw.from_native(ela).filter(~nw.col("edge_id").is_in(list(drop)))
                 )
@@ -1196,11 +1205,11 @@ class BulkOps:
         # 6) Clean vertex attributes and slice memberships
         va = self.vertex_attributes
         if va is not None and hasattr(va, "columns") and "vertex_id" in va.columns:
-
             if pl is not None and isinstance(va, pl.DataFrame) and va.height:
                 self.vertex_attributes = va.filter(~pl.col("vertex_id").is_in(list(drop_vs)))
             else:
                 import narwhals as nw
+
                 self.vertex_attributes = nw.to_native(
                     nw.from_native(va).filter(~nw.col("vertex_id").is_in(list(drop_vs)))
                 )

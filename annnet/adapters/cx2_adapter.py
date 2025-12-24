@@ -180,7 +180,7 @@ def _jsonify(obj):
 # --- Core Adapter: to_cx2 ---
 
 
-def to_cx2(G: AnnNet, *, export_name = "annnet export", hyperedges="skip") -> list[dict[str, Any]]:
+def to_cx2(G: AnnNet, *, export_name="annnet export", hyperedges="skip") -> list[dict[str, Any]]:
     """
     Convert an AnnNet AnnNet -> CX2 compliant JSON list.
 

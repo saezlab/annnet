@@ -211,5 +211,6 @@ class TestLazyNXProxy(unittest.TestCase):
         )
         self.assertAlmostEqual(d, 5.0)  # still correct
 
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
