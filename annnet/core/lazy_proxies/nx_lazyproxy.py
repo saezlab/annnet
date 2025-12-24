@@ -29,8 +29,8 @@ class _LazyNXProxyAutogen:
     def ExceededMaxIterations(self, *args, **kwargs):
         return self.__getattr__("ExceededMaxIterations")(*args, **kwargs)
 
-    def AnnNet(self, *args, **kwargs):
-        return self.__getattr__(AnnNet)(*args, **kwargs)
+    def Graph(self, *args, **kwargs):
+        return self.__getattr__("Graph")(*args, **kwargs)
 
     def GraphMLReader(self, *args, **kwargs):
         return self.__getattr__("GraphMLReader")(*args, **kwargs)
@@ -2515,14 +2515,14 @@ class _LazyNXProxyDynamic:
     - Selective edge attr exposure (weight/capacity only when needed).
     - Clear warnings when conversion is lossy.
     - Auto label-ID mapping for vertex arguments (kwargs + positionals).
-    - _nx_simple to collapse Multi* - simple AnnNet/DiGraph for algos that need it.
+    - _nx_simple to collapse Multi* - simple Graph/DiGraph for algos that need it.
     - _nx_edge_aggs to control parallel-edge aggregation (e.g., {"capacity":"sum"}).
     """
 
     # -- init ---
     def __init__(self, owner: AnnNet):
         self._G = owner
-        self._cache = {}  # key -> {"nxG": nx.AnnNet, "version": int}
+        self._cache = {}  # key -> {"nxG": nx.Graph, "version": int}
         self.cache_enabled = True
 
     def __getattr__(self, name):
@@ -2572,11 +2572,11 @@ class _LazyNXProxyDynamic:
         machinery as normal calls.
 
         Args:
-            directed: build DiGraph (True) or AnnNet (False) view
+            directed: build DiGraph (True) or Graph (False) view
             hyperedge_mode: "skip" | "expand"
-            slice/slices: slice selection if AnnNet is multisliceed
+            slice/slices: slice selection if Graph is multisliceed
             needed_attrs: set of edge attribute names to keep (default empty)
-            simple: if True, collapse Multi* -> simple (Di)AnnNet
+            simple: if True, collapse Multi* -> simple (Di)Graph
             edge_aggs: how to aggregate parallel edge attrs when simple=True,
                         e.g. {"capacity": "sum", "weight": "min"} or callables
 
@@ -2617,7 +2617,7 @@ class _LazyNXProxyDynamic:
             label_field = kwargs.pop("_nx_label_field", None)  # explicit label column
             guess_labels = kwargs.pop("_nx_guess_labels", True)  # try auto-infer when not provided
 
-            # force simple AnnNet/DiGraph and aggregation policy for parallel edges
+            # force simple Graph/DiGraph and aggregation policy for parallel edges
             simple = bool(kwargs.pop("_nx_simple", 
                                     kwargs.pop("simple", getattr(self, "default_simple", False))))
             
@@ -2626,7 +2626,7 @@ class _LazyNXProxyDynamic:
             # Determine required edge attributes (keep graph skinny)
             needed_edge_attrs = self._needed_edge_attrs(nx_callable, kwargs)
 
-            # 2. Structural Pivot: Do NOT auto-inject G. Only convert if the user passed our AnnNet.
+            # 2. Structural Pivot: Do NOT auto-inject G. Only convert if the user passed our Graph.
             args = list(args)
             has_owner_graph = any(a is self._G for a in args) or any(
                 v is self._G for v in kwargs.values()
@@ -2645,7 +2645,7 @@ class _LazyNXProxyDynamic:
                     edge_aggs=edge_aggs,
                 )
 
-            # 3. AnnNet Replacement Logic
+            # 3. Graph Replacement Logic
             if nxG is not None:
                 for i, v in enumerate(args):
                     if v is self._G:
@@ -2787,7 +2787,7 @@ class _LazyNXProxyDynamic:
                 for _, _, _, d in nxG.edges(keys=True, data=True):
                     d.clear()
 
-        # Collapse Multi* - simple AnnNet/DiGraph if requested
+        # Collapse Multi* - simple Graph/DiGraph if requested
         if simple and nxG.is_multigraph():
             nxG = self._collapse_multiedges(
                 nxG, directed=directed, aggregations=edge_aggs, needed_attrs=needed_attrs
@@ -3042,7 +3042,7 @@ class _LazyNXProxyDynamic:
         """
         import networkx as _nx
 
-        H = _nx.DiGraph() if directed else _nx.AnnNet()
+        H = _nx.DiGraph() if directed else _nx.Graph()
         H.add_nodes_from(nxG.nodes(data=True))
 
         aggregations = aggregations or {}
