@@ -10,7 +10,7 @@ import scipy as scipy
 import scipy.sparse as sp
 
 if TYPE_CHECKING:
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 
 try:
     _write_cache  # type: ignore[name-defined]
@@ -633,7 +633,7 @@ def _write_uns(graph, path: Path):
 
     path.mkdir(parents=True, exist_ok=True)
 
-    # Graph attributes
+    # AnnNet attributes
     (path / "graph_attributes.json").write_text(
         json.dumps(graph.graph_attributes, indent=2, default=str)
     )
@@ -642,7 +642,7 @@ def _write_uns(graph, path: Path):
     (path / "results").mkdir(exist_ok=True)
 
 
-def read(path: str | Path, *, lazy: bool = False) -> Graph:
+def read(path: str | Path, *, lazy: bool = False) -> AnnNet:
     """Load graph from disk with zero loss.
 
     Parameters
@@ -654,7 +654,7 @@ def read(path: str | Path, *, lazy: bool = False) -> Graph:
 
     Returns
     -------
-    Graph
+    AnnNet
         Reconstructed graph with all topology and metadata
 
     """
@@ -669,9 +669,9 @@ def read(path: str | Path, *, lazy: bool = False) -> Graph:
     manifest = json.loads((root / "manifest.json").read_text())
 
     # 2. Create empty graph
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 
-    G = Graph(directed=manifest["directed"])
+    G = AnnNet(directed=manifest["directed"])
     G._version = manifest["graph_version"]
 
     # 3. Load structure

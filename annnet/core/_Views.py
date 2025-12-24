@@ -15,7 +15,7 @@ class GraphView:
 
     Parameters
     --
-    graph : Graph
+    graph : AnnNet
         Parent graph instance
     vertices : list[str] | set[str] | callable | None
         vertex IDs to include, or predicate function
@@ -51,7 +51,7 @@ class GraphView:
 
     @property
     def obs(self):
-        """Filtered vertex attribute table (uses Graph.vertex_attributes)."""
+        """Filtered vertex attribute table (uses AnnNet.vertex_attributes)."""
         vertex_ids = self.vertex_ids
         if vertex_ids is None:
             return self._graph.vertex_attributes
@@ -72,7 +72,7 @@ class GraphView:
 
     @property
     def var(self):
-        """Filtered edge attribute table (uses Graph.edge_attributes)."""
+        """Filtered edge attribute table (uses AnnNet.edge_attributes)."""
         edge_ids = self.edge_ids
         if edge_ids is None:
             return self._graph.edge_attributes
@@ -157,7 +157,7 @@ class GraphView:
         vertex_ids = None
         edge_ids = None
 
-        # Step 1: Apply slice filter (uses Graph._slices)
+        # Step 1: Apply slice filter (uses AnnNet._slices)
         if self._slices is not None:
             vertex_ids = set()
             edge_ids = set()
@@ -225,7 +225,7 @@ class GraphView:
                     pass
             vertex_ids = filtered_vertices
 
-        # Step 5: Filter edges by vertex connectivity (uses Graph.edge_definitions, hyperedge_definitions)
+        # Step 5: Filter edges by vertex connectivity (uses AnnNet.edge_definitions, hyperedge_definitions)
         if vertex_ids is not None and edge_ids is not None:
             filtered_edges = set()
             for eid in edge_ids:
@@ -253,13 +253,13 @@ class GraphView:
         self._edge_ids_cache = edge_ids
         self._computed = True
 
-    # ==================== View Methods (use Graph's existing methods) ====================
+    # ==================== View Methods (use AnnNet's existing methods) ====================
 
     def edges_df(self, **kwargs):
         """Get edge DataFrame view with optional filtering.
-        Uses Graph.edges_view() and filters by edge IDs.
+        Uses AnnNet.edges_view() and filters by edge IDs.
         """
-        # Use Graph's existing edges_view() method
+        # Use AnnNet's existing edges_view() method
         df = self._graph.edges_view(**kwargs)
 
         # Filter by edge IDs in this view
@@ -282,9 +282,9 @@ class GraphView:
 
     def vertices_df(self, **kwargs):
         """Get vertex DataFrame view.
-        Uses Graph.vertices_view() and filters by vertex IDs.
+        Uses AnnNet.vertices_view() and filters by vertex IDs.
         """
-        # Use Graph's existing vertices_view() method
+        # Use AnnNet's existing vertices_view() method
         df = self._graph.vertices_view(**kwargs)
 
         # Filter by vertex IDs in this view
@@ -304,16 +304,16 @@ class GraphView:
                 )
         return df
 
-    # ==================== Materialization (uses Graph methods) ====================
+    # ==================== Materialization (uses AnnNet methods) ====================
 
     def materialize(self, copy_attributes=True):
         """Create a concrete subgraph from this view.
-        Uses Graph.add_vertex(), add_edge(), add_hyperedge(), get_*_attrs()
+        Uses AnnNet.add_vertex(), add_edge(), add_hyperedge(), get_*_attrs()
         """
-        # Create new Graph instance
-        from .graph import Graph
+        # Create new AnnNet instance
+        from .graph import AnnNet
 
-        subG = Graph(directed=self._graph.directed)
+        subG = AnnNet(directed=self._graph.directed)
 
         vertex_ids = self.vertex_ids
         edge_ids = self.edge_ids
@@ -326,7 +326,7 @@ class GraphView:
                 vid for vid, vtype in self._graph.entity_types.items() if vtype == "vertex"
             ]
 
-        # Copy vertices (uses Graph.add_vertex, get_vertex_attrs)
+        # Copy vertices (uses AnnNet.add_vertex, get_vertex_attrs)
         for vid in vertices_to_copy:
             if copy_attributes:
                 attrs = self._graph.get_vertex_attrs(vid)
@@ -342,7 +342,7 @@ class GraphView:
         else:
             edges_to_copy = self._graph.edge_to_idx.keys()
 
-        # Copy edges (uses Graph methods)
+        # Copy edges (uses AnnNet methods)
         for eid in edges_to_copy:
             # Binary edges
             if eid in self._graph.edge_definitions:

@@ -10,7 +10,7 @@ try:
 except Exception:
     pl = None
 if TYPE_CHECKING:
-    from .graph import Graph
+    from .graph import AnnNet
 
 
 class CacheManager:
@@ -172,7 +172,7 @@ class CacheManager:
 class Operations:
     # Slicing / copying / accounting
 
-    def edge_subgraph(self, edges) -> Graph:
+    def edge_subgraph(self, edges) -> AnnNet:
         """Create a new graph containing only a specified subset of edges.
 
         Parameters
@@ -183,8 +183,8 @@ class Operations:
 
         Returns
         ---
-        Graph
-            A new `Graph` instance containing only the selected edges and the
+        AnnNet
+            A new `AnnNet` instance containing only the selected edges and the
             vertices incident to them.
 
         Behavior
@@ -277,7 +277,7 @@ class Operations:
 
         return g
 
-    def subgraph(self, vertices) -> Graph:
+    def subgraph(self, vertices) -> AnnNet:
         """Create a vertex-induced subgraph.
 
         Parameters
@@ -287,8 +287,8 @@ class Operations:
 
         Returns
         ---
-        Graph
-            A new `Graph` containing only the specified vertices and any edges
+        AnnNet
+            A new `AnnNet` containing only the specified vertices and any edges
             for which **all** endpoints are within this set.
 
         Behavior
@@ -396,7 +396,7 @@ class Operations:
 
         return g
 
-    def extract_subgraph(self, vertices=None, edges=None) -> Graph:
+    def extract_subgraph(self, vertices=None, edges=None) -> AnnNet:
         """Create a subgraph based on a combination of vertex and/or edge filters.
 
         Parameters
@@ -410,8 +410,8 @@ class Operations:
 
         Returns
         ---
-        Graph
-            A new `Graph` filtered according to the provided vertex and/or edge
+        AnnNet
+            A new `AnnNet` filtered according to the provided vertex and/or edge
             sets.
 
         Behavior
@@ -467,13 +467,13 @@ class Operations:
 
         return self.edge_subgraph(kept_edges).subgraph(kept_vertices)
 
-    def reverse(self) -> Graph:
+    def reverse(self) -> AnnNet:
         """Return a new graph with all directed edges reversed.
 
         Returns
         ---
-        Graph
-            A new `Graph` instance with reversed directionality where applicable.
+        AnnNet
+            A new `AnnNet` instance with reversed directionality where applicable.
 
         Behavior
 
@@ -734,7 +734,7 @@ class Operations:
 
     def copy(self, history: bool = False):
         """
-        Deep copy of the entire Graph.
+        Deep copy of the entire AnnNet.
         Fully structural + attribute fidelity.
         O(N) Python, O(nnz) matrix. ~100× faster than old version.
 
@@ -1020,7 +1020,7 @@ class Operations:
 
         Notes
         -
-        - This method enables `Graph` objects to be used in hash-based containers
+        - This method enables `AnnNet` objects to be used in hash-based containers
         (like `set` or `dict` keys).
         - If the graph is **mutated** after hashing (e.g., verices or edges are added
         or removed), the hash will no longer reflect the new state.

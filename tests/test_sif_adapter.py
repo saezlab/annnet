@@ -56,9 +56,9 @@ class TestSIFAdapter:
         assert any(a.get("interaction_type") == "phosphorylation" for a in attrs)
 
     def test_mixed_directedness(self, tmpdir_fixture):
-        from annnet.core.graph import Graph
+        from annnet.core.graph import AnnNet
 
-        G = Graph(directed=None)
+        G = AnnNet(directed=None)
         G.add_vertex("A")
         G.add_vertex("B")
         G.add_edge("A", "B", edge_id="e_dir", edge_directed=True)

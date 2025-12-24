@@ -8,7 +8,7 @@ import numpy as np
 
 warnings.filterwarnings("ignore", message="Signature .*numpy.longdouble.*")
 
-from ..core.graph import Graph
+from ..core.graph import AnnNet
 
 try:
     import libsbml  # python-libsbml
@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover
 
 
 def _monkeypatch_set_hyperedge_coeffs(G) -> bool:
-    """Add set_hyperedge_coeffs(edge_id, coeffs) to Graph instance if missing.
+    """Add set_hyperedge_coeffs(edge_id, coeffs) to AnnNet instance if missing.
     Writes per-vertex coefficients into the incidence column.
     Returns True if patch was applied, False if already available.
     """
@@ -46,7 +46,7 @@ BOUNDARY_SINK = "__BOUNDARY_SINK__"
 
 
 def _ensure_boundary_vertices(G, slice: str) -> None:
-    # idempotent – Graph.add_vertices_bulk ignores existing ids
+    # idempotent – AnnNet.add_vertices_bulk ignores existing ids
     G.add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
 
 
@@ -85,21 +85,21 @@ def _read_sbml_model(path: str):
 
 def _graph_from_sbml_model(
     model,
-    graph: Graph | None = None,
+    graph: AnnNet | None = None,
     *,
     slice: str = "default",
     preserve_stoichiometry: bool = True,
-) -> Graph:
-    """Build a Graph from an SBML model using only libSBML.
+) -> AnnNet:
+    """Build a AnnNet from an SBML model using only libSBML.
 
     - Vertices: SBML species ids (plus global boundary source/sink nodes).
     - Hyperedges: reactions, tail = reactants, head = products.
     - Stoichiometry: signed coefficients (reactants negative, products positive).
     """
     if graph is None:
-        if Graph is None:
-            raise RuntimeError("Graph class not importable; pass `graph=` explicitly.")
-        G = Graph(directed=True)
+        if AnnNet is None:
+            raise RuntimeError("AnnNet class not importable; pass `graph=` explicitly.")
+        G = AnnNet(directed=True)
     else:
         G = graph
     # Ensure all species + boundary placeholders exist
@@ -208,11 +208,11 @@ def _graph_from_sbml_model(
 
 def from_sbml(
     path: str,
-    graph: Graph | None = None,
+    graph: AnnNet | None = None,
     *,
     slice: str = "default",
     preserve_stoichiometry: bool = True,
-) -> Graph:
+) -> AnnNet:
     """Read SBML using python-libsbml.
 
     Parameters
@@ -220,9 +220,9 @@ def from_sbml(
     path:
         Path to the SBML file.
     graph:
-        Optional existing Graph to add entities/edges to.
+        Optional existing AnnNet to add entities/edges to.
     slice:
-        Graph slice name.
+        AnnNet slice name.
     preserve_stoichiometry:
         If True, store per-vertex stoichiometric coefficients
         (either via `set_hyperedge_coeffs` if available, or as

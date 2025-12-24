@@ -1,8 +1,8 @@
 class SliceManager:
     """Manager for graph slice operations.
 
-    Provides organized namespace for slice operations by delegating to Graph methods.
-    All heavy lifting is done by the Graph class; this is just a clean API surface.
+    Provides organized namespace for slice operations by delegating to AnnNet methods.
+    All heavy lifting is done by the AnnNet class; this is just a clean API surface.
 
     """
 
@@ -14,56 +14,56 @@ class SliceManager:
     def add(self, slice_id, **attributes):
         """Create new slice.
 
-        Delegates to Graph.add_slice()
+        Delegates to AnnNet.add_slice()
         """
         return self._G.add_slice(slice_id, **attributes)
 
     def remove(self, slice_id):
         """Remove slice.
 
-        Delegates to Graph.remove_slice()
+        Delegates to AnnNet.remove_slice()
         """
         return self._G.remove_slice(slice_id)
 
     def list(self, include_default=False):
         """List slice IDs.
 
-        Delegates to Graph.list_slices()
+        Delegates to AnnNet.list_slices()
         """
         return self._G.list_slices(include_default=include_default)
 
     def exists(self, slice_id):
         """Check if slice exists.
 
-        Delegates to Graph.has_slice()
+        Delegates to AnnNet.has_slice()
         """
         return self._G.has_slice(slice_id)
 
     def info(self, slice_id):
         """Get slice metadata.
 
-        Delegates to Graph.get_slice_info()
+        Delegates to AnnNet.get_slice_info()
         """
         return self._G.get_slice_info(slice_id)
 
     def count(self):
         """Get number of slices.
 
-        Delegates to Graph.slice_count()
+        Delegates to AnnNet.slice_count()
         """
         return self._G.slice_count()
 
     def vertices(self, slice_id):
         """Get vertices in slice.
 
-        Delegates to Graph.get_slice_vertices()
+        Delegates to AnnNet.get_slice_vertices()
         """
         return self._G.get_slice_vertices(slice_id)
 
     def edges(self, slice_id):
         """Get edges in slice.
 
-        Delegates to Graph.get_slice_edges()
+        Delegates to AnnNet.get_slice_edges()
         """
         return self._G.get_slice_edges(slice_id)
 
@@ -73,7 +73,7 @@ class SliceManager:
     def active(self):
         """Get active slice ID.
 
-        Delegates to Graph.get_active_slice()
+        Delegates to AnnNet.get_active_slice()
         """
         return self._G.get_active_slice()
 
@@ -81,7 +81,7 @@ class SliceManager:
     def active(self, slice_id):
         """Set active slice ID.
 
-        Delegates to Graph.set_active_slice()
+        Delegates to AnnNet.set_active_slice()
         """
         self._G.set_active_slice(slice_id)
 
@@ -90,7 +90,7 @@ class SliceManager:
     def union(self, slice_ids):
         """Compute union of slices (returns dict, doesn't create slice).
 
-        Delegates to Graph.slice_union()
+        Delegates to AnnNet.slice_union()
 
         Parameters
         --
@@ -108,7 +108,7 @@ class SliceManager:
     def intersect(self, slice_ids):
         """Compute intersection of slices (returns dict, doesn't create slice).
 
-        Delegates to Graph.slice_intersection()
+        Delegates to AnnNet.slice_intersection()
 
         Parameters
         --
@@ -126,7 +126,7 @@ class SliceManager:
     def difference(self, slice_a, slice_b):
         """Compute set difference (returns dict, doesn't create slice).
 
-        Delegates to Graph.slice_difference()
+        Delegates to AnnNet.slice_difference()
 
         Parameters
         --
@@ -149,7 +149,7 @@ class SliceManager:
     def union_create(self, slice_ids, name, **attributes):
         """Create new slice as union of existing slices.
 
-        Combines Graph.slice_union() + Graph.create_slice_from_operation()
+        Combines AnnNet.slice_union() + AnnNet.create_slice_from_operation()
 
         Parameters
         --
@@ -172,7 +172,7 @@ class SliceManager:
     def intersect_create(self, slice_ids, name, **attributes):
         """Create new slice as intersection of existing slices.
 
-        Combines Graph.slice_intersection() + Graph.create_slice_from_operation()
+        Combines AnnNet.slice_intersection() + AnnNet.create_slice_from_operation()
 
         Parameters
         --
@@ -195,7 +195,7 @@ class SliceManager:
     def difference_create(self, slice_a, slice_b, name, **attributes):
         """Create new slice as difference of two slices.
 
-        Combines Graph.slice_difference() + Graph.create_slice_from_operation()
+        Combines AnnNet.slice_difference() + AnnNet.create_slice_from_operation()
 
         Parameters
         --
@@ -222,7 +222,7 @@ class SliceManager:
     ):
         """Create aggregated slice from multiple sources.
 
-        Delegates to Graph.create_aggregated_slice()
+        Delegates to AnnNet.create_aggregated_slice()
 
         Parameters
         --
@@ -252,7 +252,7 @@ class SliceManager:
     def stats(self, include_default=False):
         """Get statistics for all slices.
 
-        Delegates to Graph.slice_statistics()
+        Delegates to AnnNet.slice_statistics()
 
         Returns
         ---
@@ -265,7 +265,7 @@ class SliceManager:
     def vertex_presence(self, vertex_id, include_default=False):
         """Find slices containing a vertex.
 
-        Delegates to Graph.vertex_presence_across_slices()
+        Delegates to AnnNet.vertex_presence_across_slices()
 
         Parameters
         --
@@ -287,7 +287,7 @@ class SliceManager:
     ):
         """Find slices containing an edge.
 
-        Delegates to Graph.edge_presence_across_slices()
+        Delegates to AnnNet.edge_presence_across_slices()
 
         Parameters
         --
@@ -320,7 +320,7 @@ class SliceManager:
     def hyperedge_presence(self, members=None, head=None, tail=None, include_default=False):
         """Find slices containing a hyperedge.
 
-        Delegates to Graph.hyperedge_presence_across_slices()
+        Delegates to AnnNet.hyperedge_presence_across_slices()
 
         Parameters
         --
@@ -346,7 +346,7 @@ class SliceManager:
     def conserved_edges(self, min_slices=2, include_default=False):
         """Find edges present in multiple slices.
 
-        Delegates to Graph.conserved_edges()
+        Delegates to AnnNet.conserved_edges()
 
         Parameters
         --
@@ -366,7 +366,7 @@ class SliceManager:
     def specific_edges(self, slice_id):
         """Find edges unique to a slice.
 
-        Delegates to Graph.slice_specific_edges()
+        Delegates to AnnNet.slice_specific_edges()
 
         Parameters
         --
@@ -384,7 +384,7 @@ class SliceManager:
     def temporal_dynamics(self, ordered_slices, metric="edge_change"):
         """Analyze temporal changes across slices.
 
-        Delegates to Graph.temporal_dynamics()
+        Delegates to AnnNet.temporal_dynamics()
 
         Parameters
         --

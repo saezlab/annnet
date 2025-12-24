@@ -1,4 +1,4 @@
-## Lazy Graph-tool proxy
+## Lazy AnnNet-tool proxy
 
 
 class _LazyGTProxy:
@@ -181,7 +181,7 @@ class _GTNamespaceProxy:
         def call(*args, **kwargs):
             parent = self._parent
 
-            # detect if AnnNet Graph passed
+            # detect if AnnNet AnnNet passed
             has_owner = any(a is parent._G for a in args) or any(
                 v is parent._G for v in kwargs.values()
             )

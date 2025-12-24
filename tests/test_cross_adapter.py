@@ -14,7 +14,7 @@ from annnet.adapters.GraphDir_Parquet_adapter import (
 from annnet.adapters.GraphML_adapter import (
     from_graphml,
     to_graphml,
-)  # GraphML (Graph Markup Language)
+)  # GraphML (AnnNet Markup Language)
 from annnet.adapters.json_adapter import from_json, to_json
 from annnet.adapters.SIF_adapter import from_sif, to_sif  # SIF (Simple Interaction Format)
 

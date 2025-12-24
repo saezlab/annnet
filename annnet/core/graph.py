@@ -34,7 +34,7 @@ from .lazy_proxies import _LazyGTProxy, _LazyIGProxy, _LazyNXProxy
 # ===================================
 
 
-class Graph(
+class AnnNet(
     BulkOps,
     Operations,
     History,
@@ -231,7 +231,7 @@ class Graph(
         except Exception:
             raise RuntimeError(
                 "Polars is not installed, and no annotation tables were provided. "
-                "Install polars OR pass annotation tables (pandas/pyarrow/etc.) to Graph(..., annotations=...)."
+                "Install polars OR pass annotation tables (pandas/pyarrow/etc.) to AnnNet(..., annotations=...)."
             )
 
         self.vertex_attributes = pd.DataFrame({"vertex_id": pd.Series(dtype="string")})
@@ -1767,7 +1767,7 @@ class Graph(
 
     @property
     def shape(self):
-        """Graph shape as a tuple: (num_vertices, num_edges).
+        """AnnNet shape as a tuple: (num_vertices, num_edges).
         Useful for quick inspection.
         """
         return (self.num_vertices, self.num_edges)
@@ -1790,13 +1790,13 @@ class Graph(
     def ig(self):
         """Accessor for the lazy igraph proxy.
         Usage: G.ig.community_multilevel(G, weights="weight"), G.ig.shortest_paths_dijkstra(G, source="a", target="z", weights="weight")
-        (same idea as NX: pass G; proxy swaps it with the backend igraph.Graph lazily)
+        (same idea as NX: pass G; proxy swaps it with the backend igraph.AnnNet lazily)
         """
         if not hasattr(self, "_ig_proxy"):
             self._ig_proxy = _LazyIGProxy(self)
         return self._ig_proxy
 
-    ## Lazy Graph-tool proxy
+    ## Lazy AnnNet-tool proxy
 
     @property
     def gt(self):
@@ -1881,7 +1881,7 @@ class Graph(
     def snapshot(self, label=None):
         """Create a named snapshot of current graph state.
 
-        Uses existing Graph attributes: entity_types, edge_to_idx, _slices, _version
+        Uses existing AnnNet attributes: entity_types, edge_to_idx, _slices, _version
 
         Parameters
         --
@@ -1906,7 +1906,7 @@ class Graph(
                 "edges": self.number_of_edges(),
                 "slices": len(self._slices),
             },
-            # Store minimal state for comparison (uses existing Graph attributes)
+            # Store minimal state for comparison (uses existing AnnNet attributes)
             "vertex_ids": set(v for v, t in self.entity_types.items() if t == "vertex"),
             "edge_ids": set(self.edge_to_idx.keys()),
             "slice_ids": set(self._slices.keys()),
@@ -1920,9 +1920,9 @@ class Graph(
 
         Parameters
         --
-        a : str | dict | Graph
-            First snapshot (label, snapshot dict, or Graph instance)
-        b : str | dict | Graph | None
+        a : str | dict | AnnNet
+            First snapshot (label, snapshot dict, or AnnNet instance)
+        b : str | dict | AnnNet | None
             Second snapshot. If None, compare with current state.
 
         Returns
@@ -1937,7 +1937,7 @@ class Graph(
         return GraphDiff(snap_a, snap_b)
 
     def _resolve_snapshot(self, ref):
-        """Resolve snapshot reference (label, dict, or Graph)."""
+        """Resolve snapshot reference (label, dict, or AnnNet)."""
         if isinstance(ref, dict):
             return ref
         elif isinstance(ref, str):
@@ -1946,8 +1946,8 @@ class Graph(
                 if snap["label"] == ref:
                     return snap
             raise ValueError(f"Snapshot '{ref}' not found")
-        elif isinstance(ref, Graph):
-            # Create snapshot from another graph (uses Graph attributes)
+        elif isinstance(ref, AnnNet):
+            # Create snapshot from another graph (uses AnnNet attributes)
             return {
                 "label": "external",
                 "version": ref._version,
@@ -1959,7 +1959,7 @@ class Graph(
             raise TypeError(f"Invalid snapshot reference: {type(ref)}")
 
     def _current_snapshot(self):
-        """Create snapshot of current state (uses Graph attributes)."""
+        """Create snapshot of current state (uses AnnNet attributes)."""
         return {
             "label": "current",
             "version": self._version,

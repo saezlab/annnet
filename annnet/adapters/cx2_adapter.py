@@ -1,9 +1,9 @@
 """
-CX2 Adapter for AnnNet Graph.
+CX2 Adapter for AnnNet AnnNet.
 
 Provides:
     to_cx2(G)        -> List[Dict[str, Any]] (CX2 JSON object)
-    from_cx2(cx2_data) -> Graph
+    from_cx2(cx2_data) -> AnnNet
 
 This adapter maps AnnNet Graphs to the Cytoscape Exchange (CX2) format.
 It creates a lossless representation by serializing complex features
@@ -26,7 +26,7 @@ except Exception:
     pd = None
 
 if TYPE_CHECKING:
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 from ._utils import (
     _deserialize_edge_layers,
     _deserialize_layer_tuple_attrs,
@@ -180,9 +180,9 @@ def _jsonify(obj):
 # --- Core Adapter: to_cx2 ---
 
 
-def to_cx2(G: Graph, *, export_name = "annnet export", hyperedges="skip") -> list[dict[str, Any]]:
+def to_cx2(G: AnnNet, *, export_name = "annnet export", hyperedges="skip") -> list[dict[str, Any]]:
     """
-    Convert an AnnNet Graph -> CX2 compliant JSON list.
+    Convert an AnnNet AnnNet -> CX2 compliant JSON list.
 
     The output is a list of aspect dictionaries (CX2 format).
     Complex AnnNet features (hyperedges, slices, etc.) are serialized
@@ -778,11 +778,11 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
     if vep:
         style_aspects["visualEditorProperties"] = vep[0] if isinstance(vep, list) else vep
 
-    # Construct Graph
+    # Construct AnnNet
 
-    from annnet.core.graph import Graph
+    from annnet.core.graph import AnnNet
 
-    G = Graph()
+    G = AnnNet()
 
     # PATH A: MANIFEST RECONSTRUCTION
 
@@ -912,7 +912,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
     else:
         directed = net_attrs.get("directed", True)
-        G = Graph(directed=directed)
+        G = AnnNet(directed=directed)
 
         if visual_props:
             # make sure we have a dict

@@ -11,7 +11,7 @@ except Exception:  # ModuleNotFoundError, etc.
     pl = None
 
 if TYPE_CHECKING:
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 
 from ._utils import (
     _deserialize_edge_layers,
@@ -101,7 +101,7 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
     return out
 
 
-def write_parquet_graphdir(graph: Graph, path):
+def write_parquet_graphdir(graph: AnnNet, path):
     """Write lossless GraphDir:
       vertices.parquet, edges.parquet, slices.parquet, edge_slices.parquet, manifest.json
     Wide tables (attrs as columns). Hyperedges stored with 'kind' and head/tail/members lists.
@@ -222,9 +222,9 @@ def write_parquet_graphdir(graph: Graph, path):
     (path / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
 
-def read_parquet_graphdir(path) -> Graph:
+def read_parquet_graphdir(path) -> AnnNet:
     """Read GraphDir (lossless vs write_parquet_graphdir())."""
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 
     path = Path(path)
     V = pl.read_parquet(path / "vertices.parquet")
@@ -240,7 +240,7 @@ def read_parquet_graphdir(path) -> Graph:
         else pl.DataFrame([])
     )
 
-    H = Graph()
+    H = AnnNet()
     # vertices
     for rec in V.to_dicts():
         vid = rec.pop("vertex_id")

@@ -17,13 +17,13 @@ if __name__ == "__main__":
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 try:
-    from annnet.core.graph import Graph
+    from annnet.core.graph import AnnNet
 except ImportError:
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 
 
 def to_dataframes(
-    graph: Graph,
+    graph: AnnNet,
     *,
     include_slices: bool = True,
     include_hyperedges: bool = True,
@@ -43,7 +43,7 @@ def to_dataframes(
     aren't universally supported across dataframe libraries.
 
     Args:
-        graph: Graph instance to export
+        graph: AnnNet instance to export
         include_slices: Include slice membership tables
         include_hyperedges: Include hyperedge table
         explode_hyperedges: If True, explode hyperedges to one row per endpoint
@@ -280,7 +280,7 @@ def from_dataframes(
     *,
     directed: bool | None = None,
     exploded_hyperedges: bool = False,
-) -> Graph:
+) -> AnnNet:
     """Import graph from any DataFrame (Pandas, Polars, PyArrow, etc.).
 
     Accepts DataFrames in the format produced by to_dataframes():
@@ -313,10 +313,10 @@ def from_dataframes(
         exploded_hyperedges: If True, hyperedges DataFrame is in exploded format
 
     Returns:
-        Graph instance
+        AnnNet instance
 
     """
-    G = Graph(directed=directed)
+    G = AnnNet(directed=directed)
 
     # 1. Add vertices
     if nodes is not None:

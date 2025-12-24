@@ -10,7 +10,7 @@ except Exception:  # ModuleNotFoundError, etc.
     pl = None
 
 if TYPE_CHECKING:
-    from ..graph import Graph
+    from ..graph import AnnNet
 
 
 class _LazyNXProxyAutogen:
@@ -29,8 +29,8 @@ class _LazyNXProxyAutogen:
     def ExceededMaxIterations(self, *args, **kwargs):
         return self.__getattr__("ExceededMaxIterations")(*args, **kwargs)
 
-    def Graph(self, *args, **kwargs):
-        return self.__getattr__(Graph)(*args, **kwargs)
+    def AnnNet(self, *args, **kwargs):
+        return self.__getattr__(AnnNet)(*args, **kwargs)
 
     def GraphMLReader(self, *args, **kwargs):
         return self.__getattr__("GraphMLReader")(*args, **kwargs)
@@ -2511,18 +2511,18 @@ class _LazyNXProxyAutogen:
 class _LazyNXProxyDynamic:
     """Lazy, cached NX (NetworkX) adapter:
     - On-demand backend conversion (no persistent NX graph).
-    - Cache keyed by options until Graph._version changes.
+    - Cache keyed by options until AnnNet._version changes.
     - Selective edge attr exposure (weight/capacity only when needed).
     - Clear warnings when conversion is lossy.
     - Auto label-ID mapping for vertex arguments (kwargs + positionals).
-    - _nx_simple to collapse Multi* - simple Graph/DiGraph for algos that need it.
+    - _nx_simple to collapse Multi* - simple AnnNet/DiGraph for algos that need it.
     - _nx_edge_aggs to control parallel-edge aggregation (e.g., {"capacity":"sum"}).
     """
 
     # -- init ---
-    def __init__(self, owner: Graph):
+    def __init__(self, owner: AnnNet):
         self._G = owner
-        self._cache = {}  # key -> {"nxG": nx.Graph, "version": int}
+        self._cache = {}  # key -> {"nxG": nx.AnnNet, "version": int}
         self.cache_enabled = True
 
     def __getattr__(self, name):
@@ -2572,11 +2572,11 @@ class _LazyNXProxyDynamic:
         machinery as normal calls.
 
         Args:
-            directed: build DiGraph (True) or Graph (False) view
+            directed: build DiGraph (True) or AnnNet (False) view
             hyperedge_mode: "skip" | "expand"
-            slice/slices: slice selection if Graph is multisliceed
+            slice/slices: slice selection if AnnNet is multisliceed
             needed_attrs: set of edge attribute names to keep (default empty)
-            simple: if True, collapse Multi* -> simple (Di)Graph
+            simple: if True, collapse Multi* -> simple (Di)AnnNet
             edge_aggs: how to aggregate parallel edge attrs when simple=True,
                         e.g. {"capacity": "sum", "weight": "min"} or callables
 
@@ -2599,26 +2599,34 @@ class _LazyNXProxyDynamic:
         def wrapper(*args, **kwargs):
             import networkx as _nx
 
-            # Proxy-only knobs (consumed here; not forwarded to NX)
-            directed = bool(kwargs.pop("_nx_directed", getattr(self, "default_directed", True)))
-            hyperedge_mode = kwargs.pop(
-                "_nx_hyperedge", getattr(self, "default_hyperedge_mode", "expand")
-            )  # "skip" | "expand"
-            slice = kwargs.pop("_nx_slice", None)
-            slices = kwargs.pop("_nx_slices", None)
+            # 1. Partition and Consume ALL conversion keys (bare and prefixed)
+            directed = bool(kwargs.pop("_nx_directed", 
+                            kwargs.pop("directed", getattr(self, "default_directed", True))))
+            
+            hyperedge_mode = kwargs.pop("_nx_hyperedge", 
+                                       kwargs.pop("hyperedge_mode", 
+                                                  getattr(self, "default_hyperedge_mode", "expand")))
+            
+            slice = kwargs.pop("_nx_slice", kwargs.pop("slice", None))
+            slices = kwargs.pop("_nx_slices", kwargs.pop("slices", None))
+            
+            simple = bool(kwargs.pop("_nx_simple", 
+                                    kwargs.pop("simple", getattr(self, "default_simple", False))))
+            
+            edge_aggs = kwargs.pop("_nx_edge_aggs", kwargs.pop("edge_aggs", None))            
             label_field = kwargs.pop("_nx_label_field", None)  # explicit label column
             guess_labels = kwargs.pop("_nx_guess_labels", True)  # try auto-infer when not provided
 
-            # force simple Graph/DiGraph and aggregation policy for parallel edges
-            simple = bool(kwargs.pop("_nx_simple", getattr(self, "default_simple", False)))
-            edge_aggs = kwargs.pop(
-                "_nx_edge_aggs", None
-            )  # e.g. {"weight":"min","capacity":"sum"} or callables
+            # force simple AnnNet/DiGraph and aggregation policy for parallel edges
+            simple = bool(kwargs.pop("_nx_simple", 
+                                    kwargs.pop("simple", getattr(self, "default_simple", False))))
+            
+            edge_aggs = kwargs.pop("_nx_edge_aggs", kwargs.pop("edge_aggs", None))
 
             # Determine required edge attributes (keep graph skinny)
             needed_edge_attrs = self._needed_edge_attrs(nx_callable, kwargs)
 
-            # Do NOT auto-inject G. Only convert/replace if the user passed our Graph.
+            # 2. Structural Pivot: Do NOT auto-inject G. Only convert if the user passed our AnnNet.
             args = list(args)
             has_owner_graph = any(a is self._G for a in args) or any(
                 v is self._G for v in kwargs.values()
@@ -2637,7 +2645,7 @@ class _LazyNXProxyDynamic:
                     edge_aggs=edge_aggs,
                 )
 
-            # Replace any occurrence of our Graph with the NX backend
+            # 3. AnnNet Replacement Logic
             if nxG is not None:
                 for i, v in enumerate(args):
                     if v is self._G:
@@ -2646,7 +2654,7 @@ class _LazyNXProxyDynamic:
                     if v is self._G:
                         kwargs[k] = nxG
 
-            # Bind to NX signature so we can coerce vertex args (no defaults!)
+            # 4. Signature Binding: coerce vertex args (labels/indices -> vertex IDs)
             bound = None
             try:
                 sig = inspect.signature(nx_callable)
@@ -2654,26 +2662,22 @@ class _LazyNXProxyDynamic:
             except Exception:
                 pass
 
-            # Coerce vertex args (labels/indices -> vertex IDs)
             try:
-                # Determine default label field if not given
                 if label_field is None and guess_labels:
                     label_field = self._infer_label_field()
 
                 if bound is not None and nxG is not None:
                     self._coerce_vertices_in_bound(bound, nxG, label_field)
-                    # Reconstruct WITHOUT applying defaults (avoid flow_func=None, etc.)
                     pargs = bound.args
                     pkwargs = bound.kwargs
                 else:
-                    # Fallback: best-effort coercion on kwargs only
                     if nxG is not None:
                         self._coerce_vertices_in_kwargs(kwargs, nxG, label_field)
                     pargs, pkwargs = tuple(args), kwargs
             except Exception:
-                pargs, pkwargs = tuple(args), kwargs  # best effort; let NX raise if needed
+                pargs, pkwargs = tuple(args), kwargs
 
-            # Never leak private knobs to NX
+            # Final Cleanup: ensure no private knobs remain
             for k in list(pkwargs.keys()):
                 if isinstance(k, str) and k.startswith("_nx_"):
                     pkwargs.pop(k, None)
@@ -2681,10 +2685,10 @@ class _LazyNXProxyDynamic:
             from networkx.exception import NodeNotFound
 
             try:
+                # 5. Dispatch Cleaned Kwargs to Native Algorithm
                 raw = nx_callable(*pargs, **pkwargs)
                 return self._map_output_vertices(raw)
             except NodeNotFound as e:
-                # Add actionable tip that actually tells how to fix it now.
                 sample = self.peek_vertices(5)
                 tip = (
                     f"{e}. vertices must be graph's vertex IDs.\n"
@@ -2694,7 +2698,6 @@ class _LazyNXProxyDynamic:
                     f"- A few vertex IDs NX sees: {sample}"
                 )
                 raise _nx.NodeNotFound(tip) from e
-
         return wrapper
 
     # -- internals ---
@@ -2784,7 +2787,7 @@ class _LazyNXProxyDynamic:
                 for _, _, _, d in nxG.edges(keys=True, data=True):
                     d.clear()
 
-        # Collapse Multi* - simple Graph/DiGraph if requested
+        # Collapse Multi* - simple AnnNet/DiGraph if requested
         if simple and nxG.is_multigraph():
             nxG = self._collapse_multiedges(
                 nxG, directed=directed, aggregations=edge_aggs, needed_attrs=needed_attrs
@@ -2863,7 +2866,7 @@ class _LazyNXProxyDynamic:
             msgs.append("no manifest provided; round-trip fidelity not guaranteed")
         if msgs:
             warnings.warn(
-                "Graph-NX conversion is lossy: " + "; ".join(msgs) + ".",
+                "AnnNet-NX conversion is lossy: " + "; ".join(msgs) + ".",
                 category=RuntimeWarning,
                 stacklevel=3,
             )
@@ -2871,7 +2874,7 @@ class _LazyNXProxyDynamic:
     # -- label/ID mapping helpers
     def _infer_label_field(self) -> str | None:
         """Heuristic label column if user didn't specify:
-        1) Graph.default_label_field if present
+        1) AnnNet.default_label_field if present
         2) first present in ["name","label","title","slug","external_id","string_id"]
         """
         try:
@@ -3039,7 +3042,7 @@ class _LazyNXProxyDynamic:
         """
         import networkx as _nx
 
-        H = _nx.DiGraph() if directed else _nx.Graph()
+        H = _nx.DiGraph() if directed else _nx.AnnNet()
         H.add_nodes_from(nxG.nodes(data=True))
 
         aggregations = aggregations or {}

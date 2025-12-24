@@ -10,23 +10,23 @@ except Exception:  # ModuleNotFoundError, etc.
     pl = None
 
 if TYPE_CHECKING:
-    from ..graph import Graph
+    from ..graph import AnnNet
 
 
 class _LazyIGProxy:
     """Lazy, cached igraph adapter:
     - On-demand backend conversion (no persistent igraph graph).
-    - Cache keyed by options until Graph._version changes.
+    - Cache keyed by options until AnnNet._version changes.
     - Selective edge-attr exposure (keep only needed weights/capacity).
     - Clear warnings when conversion is lossy.
     - Auto label-ID mapping for vertex args (kwargs + positionals).
-    - _ig_simple=True collapses parallel edges to simple (Di)Graph.
+    - _ig_simple=True collapses parallel edges to simple (Di)AnnNet.
     - _ig_edge_aggs={"weight":"min","capacity":"sum"} for parallel-edge aggregation.
     """
 
-    def __init__(self, owner: Graph):
+    def __init__(self, owner: AnnNet):
         self._G = owner
-        self._cache = {}  # key -> {"igG": ig.Graph, "version": int}
+        self._cache = {}  # key -> {"igG": ig.AnnNet, "version": int}
         self.cache_enabled = True
 
     #  public API
@@ -103,7 +103,7 @@ class _LazyIGProxy:
                 edge_aggs=edge_aggs,
             )
 
-            # replace any Graph instance with igG
+            # replace any AnnNet instance with igG
             args = list(args)
             for i, v in enumerate(args):
                 if v is self._G:
@@ -112,7 +112,7 @@ class _LazyIGProxy:
                 if v is self._G:
                     kwargs[k] = igG
 
-            # resolve target callable: prefer bound Graph method, else module-level
+            # resolve target callable: prefer bound AnnNet method, else module-level
             target = getattr(igG, name, None)
             if not callable(target):
                 target = getattr(_ig, name, None)
@@ -292,7 +292,7 @@ class _LazyIGProxy:
             msgs.append("no manifest provided; round-trip fidelity not guaranteed")
         if msgs:
             warnings.warn(
-                "Graph-igraph conversion is lossy: " + "; ".join(msgs) + ".",
+                "AnnNet-igraph conversion is lossy: " + "; ".join(msgs) + ".",
                 category=RuntimeWarning,
                 stacklevel=3,
             )
@@ -461,14 +461,14 @@ class _LazyIGProxy:
 
         if not needed_attrs:
             # keep only 'name' on vertices, drop all edge attrs quickly by rebuild
-            H = _ig.Graph(directed=igG.is_directed())
+            H = _ig.AnnNet(directed=igG.is_directed())
             H.add_vertices(igG.vcount())
             if "name" in igG.vs.attributes():
                 H.vs["name"] = igG.vs["name"]
             H.add_edges([e.tuple for e in igG.es])
             return H
         # keep only specific attrs
-        H = _ig.Graph(directed=igG.is_directed())
+        H = _ig.AnnNet(directed=igG.is_directed())
         H.add_vertices(igG.vcount())
         if "name" in igG.vs.attributes():
             H.vs["name"] = igG.vs["name"]
@@ -485,7 +485,7 @@ class _LazyIGProxy:
     ):
         import igraph as _ig
 
-        H = _ig.Graph(directed=directed)
+        H = _ig.AnnNet(directed=directed)
         H.add_vertices(igG.vcount())
         if "name" in igG.vs.attributes():
             H.vs["name"] = igG.vs["name"]

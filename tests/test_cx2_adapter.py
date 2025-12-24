@@ -8,13 +8,13 @@ import polars as pl
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from annnet.adapters.cx2_adapter import from_cx2, to_cx2
-from annnet.core.graph import Graph
+from annnet.core.graph import AnnNet
 
 
 class TestCX2Adapter(unittest.TestCase):
     def setUp(self):
-        """Set up a complex Graph object for testing."""
-        self.G = Graph(directed=True)
+        """Set up a complex AnnNet object for testing."""
+        self.G = AnnNet(directed=True)
 
         # 1. Setup Vertices
         # We use a mix of types to test type inference

@@ -14,7 +14,7 @@ warnings.filterwarnings(
 
 # Make project importable when tests run from /tests
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from annnet.core.graph import Graph
+from annnet.core.graph import AnnNet
 
 # --- Optional deps gates ------------------------------------------------------
 try:
@@ -31,9 +31,9 @@ from annnet.adapters.networkx_adapter import from_nx, to_nx  # type: ignore
 # Reuse the same graph builder as igraph tests
 
 
-def _build_graph() -> Graph:
-    """Build a realistic test graph using the real Graph class."""
-    g = Graph(directed=True)
+def _build_graph() -> AnnNet:
+    """Build a realistic test graph using the real AnnNet class."""
+    g = AnnNet(directed=True)
 
     # vertices with some attributes
     g.add_vertex("A", label="alpha", kind="src")
@@ -80,7 +80,7 @@ class TestNetworkXAdapter(unittest.TestCase):
         nxG, manifest = to_nx(g, directed=True, hyperedge_mode="skip", public_only=True)
 
         # --- Export checks
-        # Graph object created
+        # AnnNet object created
         self.assertIsNotNone(nxG)
         # Manifest basics
         self.assertIn("edges", manifest)
@@ -96,7 +96,7 @@ class TestNetworkXAdapter(unittest.TestCase):
         self.assertIn("Lw", manifest["slices"])
         self.assertGreater(len(manifest["slices"]["Lw"]), 0)
 
-        # --- Roundtrip back to Graph
+        # --- Roundtrip back to AnnNet
         g2 = from_nx(nxG, manifest)
 
         # Ensure we can pull an edge id from Lw and read its effective weight

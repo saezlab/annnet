@@ -112,12 +112,12 @@ class DummyDoc:
 
 
 # ---------------
-# Dummy Graph API
+# Dummy AnnNet API
 # ---------------
 
 
 class DummyGraph:
-    """Minimal Graph stand-in to test adapter logic."""
+    """Minimal AnnNet stand-in to test adapter logic."""
 
     def __init__(self, directed: bool = True):
         self.directed = directed

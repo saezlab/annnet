@@ -26,7 +26,7 @@ from ._utils import (
 )
 
 if TYPE_CHECKING:
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 
 
 def _collect_slices_and_weights(graph) -> tuple[dict, dict]:
@@ -225,23 +225,23 @@ def _safe_df_to_rows(df):
 
 
 def _export_legacy(
-    graph: Graph,
+    graph: AnnNet,
     *,
     directed: bool = True,
     skip_hyperedges: bool = True,
     public_only: bool = False,
 ):
-    """Export Graph to igraph.Graph without manifest.
+    """Export AnnNet to igraph.AnnNet without manifest.
 
     igraph requires integer vertex indices; external vertex IDs are preserved
     in vertex attribute 'name'. Edge IDs stored in edge attribute 'eid'.
 
     Parameters
     ----------
-    graph : Graph
+    graph : AnnNet
         Source graph instance.
     directed : bool
-        If True, export as directed igraph.Graph; else undirected.
+        If True, export as directed igraph.AnnNet; else undirected.
         Undirected edges in directed export are emitted bidirectionally.
     skip_hyperedges : bool
         If True, drop hyperedges. If False:
@@ -252,7 +252,7 @@ def _export_legacy(
 
     Returns
     -------
-    igraph.Graph
+    igraph.AnnNet
 
     """
     import igraph as ig
@@ -287,7 +287,7 @@ def _export_legacy(
     vidx = {v: i for i, v in enumerate(vertices)}
 
     # Create igraph graph and set vertex 'name'
-    G = ig.Graph(directed=bool(directed))
+    G = ig.AnnNet(directed=bool(directed))
     G.add_vertices(len(vertices))
     G.vs["name"] = vertices
 
@@ -485,7 +485,7 @@ def _coeff_from_obj(obj) -> float:
 
 
 def to_igraph(
-    graph: Graph,
+    graph: AnnNet,
     directed=True,
     hyperedge_mode="skip",
     slice=None,
@@ -493,7 +493,7 @@ def to_igraph(
     public_only=False,
     reify_prefix="he::",
 ):
-    """Export Graph → (igraph.Graph, manifest).
+    """Export AnnNet → (igraph.AnnNet, manifest).
 
     hyperedge_mode: {"skip","expand","reify"}
       - "skip": drop HE edges from igG (manifest keeps them)
@@ -929,16 +929,16 @@ def from_igraph(
     he_node_flag: str = "is_hyperedge",
     he_id_attr: str = "eid",
     reify_prefix: str = "he::",
-) -> Graph:
-    """Reconstruct a Graph from igraph.Graph + manifest.
+) -> AnnNet:
+    """Reconstruct a AnnNet from igraph.AnnNet + manifest.
 
     hyperedge: "none" (default) | "reified"
       When "reified", also detect hyperedge nodes in igG and rebuild true hyperedges
       that are NOT present in the manifest.
     """
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 
-    H = Graph()
+    H = AnnNet()
 
     # -------- helper: scan reified HE nodes in igG (used only if hyperedge == "reified") --------
     def _ig_collect_reified(ig):
@@ -1281,16 +1281,16 @@ def from_igraph(
 
 
 def to_backend(graph, **kwargs):
-    """Export Graph to igraph without manifest (legacy compatibility).
+    """Export AnnNet to igraph without manifest (legacy compatibility).
 
     Parameters
     ----------
-    graph : Graph
-        Source Graph instance to export.
+    graph : AnnNet
+        Source AnnNet instance to export.
     **kwargs
         Forwarded to _export_legacy(). Supported:
         - directed : bool, default True
-            Export as directed igraph.Graph (True) or undirected (False).
+            Export as directed igraph.AnnNet (True) or undirected (False).
         - skip_hyperedges : bool, default True
             If True, drop hyperedges. If False, expand them
             (cartesian product for directed, clique for undirected).
@@ -1299,8 +1299,8 @@ def to_backend(graph, **kwargs):
 
     Returns
     -------
-    igraph.Graph
-        igraph.Graph with integer vertex indices. External vertex IDs
+    igraph.AnnNet
+        igraph.AnnNet with integer vertex indices. External vertex IDs
         are stored in vertex attribute 'name'. Edge IDs stored in edge
         attribute 'eid'. Hyperedges are either dropped or expanded into
         multiple binary edges. No manifest is returned, so round-tripping
@@ -1326,14 +1326,14 @@ def from_ig_only(
     coeff_attr="coeff",
     membership_attr="membership_of",
 ):
-    """Best-effort import from a *plain* igraph.Graph (no manifest).
+    """Best-effort import from a *plain* igraph.AnnNet (no manifest).
     Preserves all vertex/edge attributes.
     hyperedge: "none" | "reified"
       When "reified", rebuild true hyperedges and skip membership edges from binary import.
     """
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 
-    H = Graph()
+    H = AnnNet()
 
     # vertices
     names = igG.vs["name"] if "name" in igG.vs.attributes() else list(range(igG.vcount()))
@@ -1452,22 +1452,22 @@ class IGraphAdapter:
     Methods
     -------
     export(graph, **kwargs)
-        Export Graph to igraph.Graph without manifest (lossy).
+        Export AnnNet to igraph.AnnNet without manifest (lossy).
 
     """
 
     def export(self, graph, **kwargs):
-        """Export Graph to igraph.Graph without manifest.
+        """Export AnnNet to igraph.AnnNet without manifest.
 
         Parameters
         ----------
-        graph : Graph
+        graph : AnnNet
         **kwargs
             See to_backend() for supported parameters.
 
         Returns
         -------
-        igraph.Graph
+        igraph.AnnNet
 
         """
         return _export_legacy(graph, **kwargs)

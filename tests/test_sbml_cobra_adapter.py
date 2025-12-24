@@ -8,7 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
 
 from annnet.adapters.sbml_cobra_adapter import _graph_from_stoich, from_cobra_model
-from annnet.core import Graph
+from annnet.core import AnnNet
 
 
 class TestSBMLAdapter(unittest.TestCase):
@@ -27,7 +27,7 @@ class TestSBMLAdapter(unittest.TestCase):
             dtype=float,
         )
 
-        G = Graph(directed=True)
+        G = AnnNet(directed=True)
         G = _graph_from_stoich(S, mets, rxns, graph=G, preserve_stoichiometry=True)
 
         # Vertices
@@ -78,7 +78,7 @@ class TestSBMLAdapter(unittest.TestCase):
 
         model.add_reactions([R1, R2])
 
-        G = from_cobra_model(model, graph=Graph(directed=True))
+        G = from_cobra_model(model, graph=AnnNet(directed=True))
         self.assertEqual(G.num_edges, 2)
         self.assertIn("R1", G.edge_to_idx)
 
@@ -95,7 +95,7 @@ class TestSBMLAdapter(unittest.TestCase):
         rxns = ["deg", "syn"]
         S = np.array([[-1.0, +1.0]])  # A degrades (col0) and is synthesized (col1)
         G = _graph_from_stoich(
-            S, mets, rxns, graph=Graph(directed=True), preserve_stoichiometry=True
+            S, mets, rxns, graph=AnnNet(directed=True), preserve_stoichiometry=True
         )
         h_deg = G.hyperedge_definitions["deg"]
         h_syn = G.hyperedge_definitions["syn"]

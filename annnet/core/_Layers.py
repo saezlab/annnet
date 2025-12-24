@@ -13,7 +13,7 @@ except Exception:
 import scipy.sparse as sp
 
 if TYPE_CHECKING:
-    from .graph import Graph
+    from .graph import AnnNet
 
 from ._helpers import build_dataframe_from_rows
 
@@ -21,8 +21,8 @@ from ._helpers import build_dataframe_from_rows
 class LayerManager:
     """Manager for Kivela multi-layer operations.
 
-    Provides organized namespace for layer operations by delegating to Graph methods.
-    All heavy lifting is done by the Graph class; this is just a clean API surface.
+    Provides organized namespace for layer operations by delegating to AnnNet methods.
+    All heavy lifting is done by the AnnNet class; this is just a clean API surface.
 
     """
 
@@ -44,7 +44,7 @@ class LayerManager:
         return list(self._G.iter_layers())
 
     def tuple_id(self, aa):
-        """Canonical string id for a layer tuple (matches Graph’s synthetic id)."""
+        """Canonical string id for a layer tuple (matches AnnNet’s synthetic id)."""
         aa = tuple(aa)
         if len(self._G.aspects) == 1:
             return aa[0]
@@ -63,7 +63,7 @@ class LayerManager:
     # ==================== Aspect / layer / vertex-layer attributes ===========
 
     def set_aspect_attrs(self, aspect: str, **attrs):
-        """Attach metadata to an aspect (delegates to Graph.set_aspect_attrs)."""
+        """Attach metadata to an aspect (delegates to AnnNet.set_aspect_attrs)."""
         return self._G.set_aspect_attrs(aspect, **attrs)
 
     def aspect_attrs(self, aspect: str) -> dict:
@@ -89,14 +89,14 @@ class LayerManager:
     # ==================== Elementary layer attributes ===========
 
     def elem_layer_id(self, aspect: str, label: str) -> str:
-        """Canonical '{aspect}_{label}' id used in Graph.layer_attributes."""
+        """Canonical '{aspect}_{label}' id used in AnnNet.layer_attributes."""
         return self._G._elem_layer_id(aspect, label)
 
     def set_elem_layer_attrs(self, aspect: str, label: str, **attrs):
         """
         Upsert attributes for elementary Kivela layer (aspect, label).
 
-        Writes into Graph.layer_attributes with layer_id = "{aspect}_{label}".
+        Writes into AnnNet.layer_attributes with layer_id = "{aspect}_{label}".
         """
         return self._G.set_elementary_layer_attrs(aspect, label, **attrs)
 
@@ -104,7 +104,7 @@ class LayerManager:
         """
         Read attributes for elementary Kivela layer (aspect, label) as dict.
 
-        Reads from Graph.layer_attributes.
+        Reads from AnnNet.layer_attributes.
         """
         return self._G.get_elementary_layer_attrs(aspect, label)
 
@@ -246,7 +246,7 @@ class LayerManager:
     def intra_edges_tuple(self, aa):
         """Edge IDs of intra edges inside tuple-layer aa."""
         aa = tuple(aa)
-        # intra appear in Graph.edge_kind with edge_layers[eid] == aa
+        # intra appear in AnnNet.edge_kind with edge_layers[eid] == aa
         return {
             eid
             for eid, k in self._G.edge_kind.items()
@@ -962,7 +962,7 @@ class LayerClass:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
-    ) -> Graph:
+    ) -> AnnNet:
         """
         Concrete subgraph induced by a single Kivela layer.
 
@@ -986,7 +986,7 @@ class LayerClass:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
-    ) -> Graph:
+    ) -> AnnNet:
         """
         Concrete subgraph induced by the union of several Kivela layers.
         """
@@ -1003,7 +1003,7 @@ class LayerClass:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
-    ) -> Graph:
+    ) -> AnnNet:
         """
         Concrete subgraph induced by intersection of several Kivela layers.
         """
@@ -1021,7 +1021,7 @@ class LayerClass:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
-    ) -> Graph:
+    ) -> AnnNet:
         """
         Concrete subgraph induced by layer_a layer_b.
         """

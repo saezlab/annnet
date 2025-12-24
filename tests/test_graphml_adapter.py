@@ -6,7 +6,7 @@ sys.path.insert(0, str(ROOT))
 from annnet.adapters.GraphML_adapter import (
     from_graphml,
     to_graphml,
-)  # GraphML (Graph Markup Language)
+)  # GraphML (AnnNet Markup Language)
 
 from .helpers import assert_graphs_equal
 
@@ -35,9 +35,9 @@ class TestGraphMLAdapter:
         assert_graphs_equal(G, G2, check_slices=True, check_hyperedges=True)
 
     def test_attribute_type_preservation(self, tmpdir_fixture):
-        from annnet.core.graph import Graph
+        from annnet.core.graph import AnnNet
 
-        G = Graph()
+        G = AnnNet()
         G.add_vertex("A")
         G.set_vertex_attrs("A", string_val="text", int_val=42, float_val=3.14, bool_val=True)
         to_graphml(G, tmpdir_fixture / "graph.graphml")

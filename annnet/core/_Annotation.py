@@ -953,7 +953,6 @@ class AttributesClass:
         setattr(self, df_id_name, id(nw.to_native(final_df)))
         return nw.to_native(final_df)
 
-
     def _variables_watched_by_vertices(self):
         # set of vertex-attribute names used by vertex-scope policies
         return {
@@ -1318,7 +1317,7 @@ class AttributesClass:
         dict
             A dictionary of global metadata describing the graph as a whole.
             Typical keys might include:
-            - `"name"` : Graph name or label.
+            - `"name"` : AnnNet name or label.
             - `"directed"` : Boolean indicating directedness.
             - `"slices"` : List of slices present in the graph.
             - `"created_at"` : Timestamp of graph creation.
@@ -1326,7 +1325,7 @@ class AttributesClass:
         Notes
         -
         - Returns a **shallow copy** to prevent external mutation of internal state.
-        - Graph-level attributes are meant to store metadata not tied to individual
+        - AnnNet-level attributes are meant to store metadata not tied to individual
         verices or edges (e.g., versioning info, provenance, global labels).
 
         """

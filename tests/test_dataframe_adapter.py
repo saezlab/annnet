@@ -321,7 +321,7 @@ class TestDataFrameAdapter(unittest.TestCase):
         self.assertEqual(len(list(G.vertices())), 0)
 
     def test_nodes_only(self):
-        """Graph with only nodes, no edges."""
+        """AnnNet with only nodes, no edges."""
         nodes = pd.DataFrame(self.nodes_data)
 
         G = from_dataframes(nodes=nodes)
@@ -329,7 +329,7 @@ class TestDataFrameAdapter(unittest.TestCase):
         self._assert_graph_structure(G, expected_vertices=5, expected_edges=0)
 
     def test_edges_only(self):
-        """Graph with edges but no explicit nodes (vertices created implicitly)."""
+        """AnnNet with edges but no explicit nodes (vertices created implicitly)."""
         edges = pd.DataFrame(
             {
                 "source": ["a", "b"],

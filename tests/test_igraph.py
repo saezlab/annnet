@@ -14,7 +14,7 @@ import os
 import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from annnet.core.graph import Graph
+from annnet.core.graph import AnnNet
 
 # Optional deps presence
 HAS_IG = True
@@ -24,9 +24,9 @@ except Exception:
     HAS_IG = False
 
 
-def _build_graph() -> Graph:
-    """Build a realistic test graph using the real Graph class."""
-    g = Graph(directed=True)
+def _build_graph() -> AnnNet:
+    """Build a realistic test graph using the real AnnNet class."""
+    g = AnnNet(directed=True)
 
     # vertices with some attributes
     g.add_vertex("A", label="alpha", kind="src")
@@ -71,7 +71,7 @@ class TestIgraphAdapter(unittest.TestCase):
         self.assertIn("slices", manifest)
         self.assertIn("Lw", manifest["slices"])
 
-        # --- Round-trip back to Graph
+        # --- Round-trip back to AnnNet
         g2 = from_igraph(igG, manifest)
         self.assertEqual(set(g2.vertices()), set(g.vertices()))
         for eid in g.edge_weights:

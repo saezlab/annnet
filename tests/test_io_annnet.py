@@ -13,7 +13,7 @@ import numpy as np
 import polars as pl
 import zarr
 
-from annnet.core.graph import Graph
+from annnet.core.graph import AnnNet
 from annnet.io.io_annnet import read as annnet_read
 from annnet.io.io_annnet import write as annnet_write
 
@@ -21,7 +21,7 @@ from annnet.io.io_annnet import write as annnet_write
 class TestAnnNetIO(unittest.TestCase):
     def setUp(self):
         # Build a tiny directed graph with a slice + hyperedge
-        G = Graph(directed=True)
+        G = AnnNet(directed=True)
 
         # Vertices (two in slice1)
         G.add_vertex("v1", slice="slice1")
@@ -158,7 +158,7 @@ class TestAnnNetIO(unittest.TestCase):
         self.G.aspects = ["time", "transport"]
         self.G.elem_layers = {"time": ["t1", "t2"], "transport": ["bus", "train"]}
 
-        # Initialize containers if they don't exist (depends on Graph init)
+        # Initialize containers if they don't exist (depends on AnnNet init)
         if not hasattr(self.G, "_VM"):
             self.G._VM = set()
         if not hasattr(self.G, "edge_layers"):

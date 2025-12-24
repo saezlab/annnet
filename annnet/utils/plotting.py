@@ -107,7 +107,7 @@ def edge_style_from_weights(
     Parameters
     ----------
     graph : object
-        Graph-like object exposing `number_of_edges()`, `idx_to_edge`, and
+        AnnNet-like object exposing `number_of_edges()`, `idx_to_edge`, and
         `get_effective_edge_weight(eid, layer)` methods.
     layer : str, optional
         Layer name for retrieving edge weights. Defaults to `None`, which uses global weights.
@@ -379,7 +379,7 @@ def plot(
     Parameters
     ----------
     graph : object
-        Graph-like object with `vertices()`, `get_edge()`, `get_attr_edge()`, etc.
+        AnnNet-like object with `vertices()`, `get_edge()`, `get_attr_edge()`, etc.
     backend : {'graphviz', 'pydot'}, optional
         Visualization backend to use. Default is ``'graphviz'``.
     layout : str, optional

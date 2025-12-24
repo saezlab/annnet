@@ -1,12 +1,12 @@
-"""SBML (Systems Biology Markup Language) → Graph adapter
+"""SBML (Systems Biology Markup Language) → AnnNet adapter
 ------------------------------------------------------
-Targets the provided `Graph` API.
+Targets the provided `AnnNet` API.
 
 Two entry points:
   - from_sbml(path, graph=None, slice="default", preserve_stoichiometry=True)
   - from_cobra_model(model, graph=None, slice="default", preserve_stoichiometry=True)
 
-If `Graph.set_hyperedge_coeffs(edge_id, coeffs: dict[str, float])` is not available,
+If `AnnNet.set_hyperedge_coeffs(edge_id, coeffs: dict[str, float])` is not available,
 stoichiometric coefficients are stored under an edge attribute `stoich` (lossy but usable).
 """
 
@@ -20,13 +20,13 @@ import numpy as np
 
 warnings.filterwarnings("ignore", message="Signature .*numpy.longdouble.*")
 
-from ..core.graph import Graph
+from ..core.graph import AnnNet
 
 # ----------------------- utilities -----------------------
 
 
 def _monkeypatch_set_hyperedge_coeffs(G) -> bool:
-    """Add `set_hyperedge_coeffs(edge_id, coeffs)` to Graph instance if missing.
+    """Add `set_hyperedge_coeffs(edge_id, coeffs)` to AnnNet instance if missing.
     Writes per-vertex coefficients into the incidence column (DOK [Dictionary Of Keys]).
     Returns True if patch was applied, False if already available.
     """
@@ -53,7 +53,7 @@ BOUNDARY_SINK = "__BOUNDARY_SINK__"
 
 
 def _ensure_boundary_vertices(G, slice: str):
-    # idempotent – Graph.add_vertices_bulk ignores existing ids
+    # idempotent – AnnNet.add_vertices_bulk ignores existing ids
     G.add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
 
 
@@ -61,15 +61,15 @@ def _graph_from_stoich(
     S: np.ndarray,
     metabolite_ids: Sequence[str],
     reaction_ids: Sequence[str],
-    graph: Graph | None = None,
+    graph: AnnNet | None = None,
     *,
     slice: str = "default",
     preserve_stoichiometry: bool = True,
-) -> Graph:
+) -> AnnNet:
     if graph is None:
-        if Graph is None:
-            raise RuntimeError("Graph class not importable; pass `graph=` explicitly.")
-        G = Graph(directed=True)
+        if AnnNet is None:
+            raise RuntimeError("AnnNet class not importable; pass `graph=` explicitly.")
+        G = AnnNet(directed=True)
     else:
         G = graph
 
@@ -141,12 +141,12 @@ def _graph_from_stoich(
 
 def from_cobra_model(
     model,
-    graph: Graph | None = None,
+    graph: AnnNet | None = None,
     *,
     slice: str = "default",
     preserve_stoichiometry: bool = True,
-) -> Graph:
-    """Convert a COBRApy model to Graph. Requires cobra.util.array.create_stoichiometric_matrix.
+) -> AnnNet:
+    """Convert a COBRApy model to AnnNet. Requires cobra.util.array.create_stoichiometric_matrix.
     Edge attributes added: name, default_lb, default_ub, gpr (Gene-Protein-Reaction rule [GPR]).
     """
     try:
@@ -162,7 +162,7 @@ def from_cobra_model(
         S, met_ids, rxn_ids, graph=graph, slice=slice, preserve_stoichiometry=preserve_stoichiometry
     )
 
-    # Attach per-reaction metadata via set_edge_attrs (Graph API)
+    # Attach per-reaction metadata via set_edge_attrs (AnnNet API)
     for rxn in model.reactions:
         eid = rxn.id
         attrs = {
@@ -181,12 +181,12 @@ def from_cobra_model(
 
 def from_sbml(
     path: str,
-    graph: Graph | None = None,
+    graph: AnnNet | None = None,
     *,
     slice: str = "default",
     preserve_stoichiometry: bool = True,
     quiet: bool = True,
-) -> Graph:
+) -> AnnNet:
     """Read SBML using COBRApy if available; falls back to python-libsbml (if you extend this file)."""
     try:
         from cobra.io import read_sbml_model  # type: ignore

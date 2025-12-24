@@ -10,7 +10,7 @@ import unittest
 
 import polars as pl
 
-from annnet.core.graph import Graph
+from annnet.core.graph import AnnNet
 from annnet.io import csv as csv_io
 
 
@@ -43,7 +43,7 @@ def _explode_cell(x):
 class TestCSVIO(unittest.TestCase):
     def setUp(self):
         # Build a small test graph entirely in memory
-        self.G = Graph(directed=True)
+        self.G = AnnNet(directed=True)
         self.G.add_vertices(["A", "B", "C"])
         # Binary edges: A->B (directed), B--C (undirected)
         self.e_ab = self.G.add_edge("A", "B", directed=True, weight=1.0, slice="L1", color="red")
@@ -59,7 +59,7 @@ class TestCSVIO(unittest.TestCase):
 
         # Read back with Polars and import into a fresh graph
         df_edges = pl.read_csv(e_buf)
-        G2 = Graph(directed=True)
+        G2 = AnnNet(directed=True)
         csv_io.from_dataframe(df_edges, graph=G2, schema="edge_list")
 
         # Validate: only binary edges came through (2); ignore directedness (importer may default True)
@@ -92,7 +92,7 @@ class TestCSVIO(unittest.TestCase):
 
         # Read back and import into a fresh graph as hyperedge schema
         df_h = pl.read_csv(h_buf)
-        G3 = Graph(directed=True)
+        G3 = AnnNet(directed=True)
         csv_io.from_dataframe(df_h, graph=G3, schema="hyperedge")
 
         # Validate: hyperedge exists, members survived
@@ -134,7 +134,7 @@ class TestCSVIO(unittest.TestCase):
         csv_io.export_edge_list_csv(self.G, e_buf)
         e_buf.seek(0)
 
-        G4 = Graph(directed=True)
+        G4 = AnnNet(directed=True)
         csv_io.load_csv_to_graph(e_buf, graph=G4, schema="auto")  # auto-detects edge_list
 
         ev = G4.edges_view()
@@ -147,9 +147,9 @@ class TestCSVIO(unittest.TestCase):
         bad_buf.seek(0)
         df_bad = pl.read_csv(bad_buf)
         with self.assertRaises(Exception):
-            csv_io.from_dataframe(df_bad, graph=Graph(directed=True), schema="edge_list")
+            csv_io.from_dataframe(df_bad, graph=AnnNet(directed=True), schema="edge_list")
         with self.assertRaises(Exception):
-            csv_io.from_dataframe(df_bad, graph=Graph(directed=True), schema="hyperedge")
+            csv_io.from_dataframe(df_bad, graph=AnnNet(directed=True), schema="hyperedge")
 
 
 if __name__ == "__main__":

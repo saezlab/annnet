@@ -11,7 +11,7 @@ except ModuleNotFoundError as e:
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 import json
 from enum import Enum
 from typing import Any
@@ -59,17 +59,17 @@ def _attrs_to_dict(attrs_dict: dict) -> dict:
 
 
 def _export_legacy(
-    graph: Graph,
+    graph: AnnNet,
     *,
     directed: bool = True,
     skip_hyperedges: bool = True,
     public_only: bool = False,
 ):
-    """Export Graph to NetworkX Multi(Di)Graph without manifest.
+    """Export AnnNet to NetworkX Multi(Di)AnnNet without manifest.
 
     Parameters
     ----------
-    graph : Graph
+    graph : AnnNet
         Source graph instance.
     directed : bool
         If True, export as MultiDiGraph; else MultiGraph.
@@ -226,7 +226,7 @@ def _coeff_from_obj(obj) -> float:
 
 
 def to_nx(
-    graph: Graph,
+    graph: AnnNet,
     directed=True,
     hyperedge_mode="skip",
     slice=None,
@@ -234,13 +234,13 @@ def to_nx(
     public_only=False,
     reify_prefix="he::",
 ):
-    """Export Graph → (networkx.Graph, manifest).
+    """Export AnnNet → (networkx.AnnNet, manifest).
     Manifest preserves hyperedges with per-endpoint coefficients, slices,
     vertex/edge attrs, and stable edge IDs.
 
     Parameters
     ----------
-    graph : Graph
+    graph : AnnNet
     directed : bool
     hyperedge_mode : {"skip", "expand", "reify"}
     slice : str, optional
@@ -251,7 +251,7 @@ def to_nx(
 
     Returns
     -------
-    tuple[networkx.Graph, dict]
+    tuple[networkx.AnnNet, dict]
         (nxG, manifest)
 
     """
@@ -802,16 +802,16 @@ def from_nx(
     coeff_attr="coeff",
     membership_attr="membership_of",
     reify_prefix="he::",
-) -> Graph:
-    """Reconstruct a Graph from NetworkX graph + manifest.
+) -> AnnNet:
+    """Reconstruct a AnnNet from NetworkX graph + manifest.
 
     hyperedge: "none" (default) | "reified"
       When "reified", also detect hyperedge nodes in nxG and rebuild true hyperedges
       (in addition to those specified in the manifest).
     """
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 
-    H = Graph()
+    H = AnnNet()
 
     # --- vertices from nxG (best-effort; edges will ensure presence too)
     try:
@@ -1039,12 +1039,12 @@ def from_nx(
 
 
 def to_backend(graph, **kwargs):
-    """Export Graph to NetworkX without manifest (legacy compatibility).
+    """Export AnnNet to NetworkX without manifest (legacy compatibility).
 
     Parameters
     ----------
-    graph : Graph
-        Source Graph instance to export.
+    graph : AnnNet
+        Source AnnNet instance to export.
     **kwargs
         Forwarded to _export_legacy(). Supported:
         - directed : bool, default True
@@ -1087,9 +1087,9 @@ def from_nx_only(
       When "reified", detect hyperedge nodes + membership edges and rebuild true hyperedges.
     """
 
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 
-    H = Graph()
+    H = AnnNet()
 
     # 1) Nodes + node attributes (verbatim, but skip HE nodes if reified)
     for v, d in nxG.nodes(data=True):

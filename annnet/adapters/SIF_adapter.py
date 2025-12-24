@@ -4,9 +4,9 @@ import json
 from collections.abc import Iterable
 
 try:
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 except Exception:
-    from annnet.core.graph import Graph
+    from annnet.core.graph import AnnNet
 
 try:
     import polars as pl  # optional
@@ -35,14 +35,14 @@ def _split_sif_line(line: str, delimiter: str | None) -> list[str]:
     return line.strip().split()
 
 
-def _safe_vertex_attr_table(graph: Graph):
+def _safe_vertex_attr_table(graph: AnnNet):
     va = getattr(graph, "vertex_attributes", None)
     if va is None:
         return None
     return va if hasattr(va, "columns") and hasattr(va, "to_dicts") else None
 
 
-def _get_all_edge_attrs(graph: Graph, edge_id: str):
+def _get_all_edge_attrs(graph: AnnNet, edge_id: str):
     ea = getattr(graph, "edge_attributes", None)
     if (
         ea is not None
@@ -62,7 +62,7 @@ def _get_all_edge_attrs(graph: Graph, edge_id: str):
     return {}
 
 
-def _get_edge_weight(graph: Graph, edge_id: str, default=1.0):
+def _get_edge_weight(graph: AnnNet, edge_id: str, default=1.0):
     ew = getattr(graph, "edge_weights", None)
     if ew is not None and hasattr(ew, "get"):
         try:
@@ -74,7 +74,7 @@ def _get_edge_weight(graph: Graph, edge_id: str, default=1.0):
 
 
 def to_sif(
-    graph: Graph,
+    graph: AnnNet,
     path: str | None = None,
     *,
     relation_attr: str = "relation",
@@ -305,7 +305,7 @@ def from_sif(
     encoding: str = "utf-8",
     delimiter: str | None = None,
     comment_prefixes: Iterable[str] = ("#", "!"),
-) -> Graph:
+) -> AnnNet:
     """Import graph from SIF (Simple Interaction Format).
 
     Standard mode (manifest=None):
@@ -347,7 +347,7 @@ def from_sif(
         comment_prefixes: Line prefixes to skip (default: # and !)
 
     Returns:
-        Graph: Reconstructed graph object
+        AnnNet: Reconstructed graph object
 
     Notes:
         - SIF format only supports binary edges natively
@@ -363,9 +363,9 @@ def from_sif(
             manifest = json.load(mf)
 
     if manifest and "binary_edges" in manifest:
-        H = Graph(directed=None)
+        H = AnnNet(directed=None)
     else:
-        H = Graph(directed=directed)
+        H = AnnNet(directed=directed)
 
     def _parse_node_kv(tok: str):
         if "=" not in tok:

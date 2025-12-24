@@ -9,7 +9,7 @@ import pytest
 graph_tool = pytest.importorskip("graph_tool")
 from graph_tool import centrality, clustering, flow, generation, search, topology, util
 
-from annnet.core.graph import Graph
+from annnet.core.graph import AnnNet
 
 
 def gt_backend(G):
@@ -18,7 +18,7 @@ def gt_backend(G):
 
 # ---- Simple graph builder ----
 def build_small():
-    G = Graph()
+    G = AnnNet()
     G.add_vertex("a")
     G.add_vertex("b")
     G.add_edge("a", "b", weight=3.0)
@@ -36,7 +36,7 @@ class TestLazyGTProxy(unittest.TestCase):
         # --- topology: label_components ---
 
         def test_label_components(self):
-            G = Graph()
+            G = AnnNet()
             G.add_vertex("x")
             G.add_vertex("y")
             G.add_edge("x", "y")
@@ -58,7 +58,7 @@ class TestLazyGTProxy(unittest.TestCase):
     # --- centrality: betweenness ---
 
     def test_betweenness(self):
-        G = Graph()
+        G = AnnNet()
         for v in ["a", "b", "c"]:
             G.add_vertex(v)
         G.add_edge("a", "b")
@@ -78,7 +78,7 @@ class TestLazyGTProxy(unittest.TestCase):
     # --- clustering: local clustering coefficients ---
 
     def test_clustering(self):
-        G = Graph()
+        G = AnnNet()
         for v in ["a", "b", "c"]:
             G.add_vertex(v)
         G.add_edge("a", "b")
@@ -94,7 +94,7 @@ class TestLazyGTProxy(unittest.TestCase):
     # --- flow: max flow ---
 
     def test_max_flow(self):
-        G = Graph()
+        G = AnnNet()
         G.add_vertex("s")
         G.add_vertex("t")
         eid = G.add_edge("s", "t")
@@ -116,7 +116,7 @@ class TestLazyGTProxy(unittest.TestCase):
     # --- generation: line graph ----
 
     def test_generation_line_graph(self):
-        g = Graph()
+        g = AnnNet()
         g.add_vertex("a")
         g.add_vertex("b")
         g.add_edge("a", "b")

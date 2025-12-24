@@ -8,7 +8,7 @@ import polars as pl
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import warnings
 
-from annnet.core.graph import Graph
+from annnet.core.graph import AnnNet
 
 warnings.filterwarnings(
     "ignore",
@@ -20,7 +20,7 @@ warnings.filterwarnings(
 
 class TestGraphBasics(unittest.TestCase):
     def setUp(self):
-        self.g = Graph(directed=True)  # default directed
+        self.g = AnnNet(directed=True)  # default directed
 
     def test_add_vertex_and_attributes(self):
         self.g.add_vertex("v1", color="red", value=3)

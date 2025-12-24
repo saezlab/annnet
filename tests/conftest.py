@@ -11,7 +11,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
 
-from annnet.core.graph import Graph  # noqa: E402
+from annnet.core.graph import AnnNet  # noqa: E402
 
 # ======================================================================
 # FIXTURES
@@ -21,7 +21,7 @@ from annnet.core.graph import Graph  # noqa: E402
 @pytest.fixture
 def simple_graph():
     """Minimal graph with vertices and binary edges only."""
-    G = Graph(directed=True)
+    G = AnnNet(directed=True)
     G.add_vertex("A")
     G.add_vertex("B")
     G.add_vertex("C")
@@ -35,7 +35,7 @@ def simple_graph():
 @pytest.fixture
 def complex_graph():
     """Full-featured graph with all capabilities (mixed directedness)."""
-    G = Graph(directed=None)
+    G = AnnNet(directed=None)
 
     # Vertices with attributes
     G.add_vertex("A")

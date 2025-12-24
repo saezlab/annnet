@@ -10,7 +10,7 @@ from annnet.adapters.igraph_adapter import from_igraph, to_igraph
 from annnet.adapters.json_adapter import from_json, to_json
 from annnet.adapters.networkx_adapter import from_nx, to_nx
 from annnet.adapters.SIF_adapter import from_sif, to_sif
-from annnet.core.graph import Graph
+from annnet.core.graph import AnnNet
 
 try:
     import networkx as nx
@@ -35,7 +35,7 @@ class TestMultilayerAdapters(unittest.TestCase):
         shutil.rmtree(self.test_dir)
 
     def _build_multilayer_graph(self):
-        G = Graph()
+        G = AnnNet()
         # 1. Aspects & Elementary Layers
         G.aspects = ["time", "transport"]
         G.elem_layers = {"time": ["t1", "t2"], "transport": ["bus", "train"]}

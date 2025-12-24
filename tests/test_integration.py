@@ -15,9 +15,9 @@ class TestIntegration:
     """End-to-end integration tests."""
 
     def test_biological_network_workflow(self, tmpdir_fixture):
-        from annnet.core.graph import Graph
+        from annnet.core.graph import AnnNet
 
-        G = Graph(directed=False)
+        G = AnnNet(directed=False)
         proteins = ["TP53", "MDM2", "ATM", "CHEK2", "p21"]
         for p in proteins:
             G.add_vertex(p)
@@ -43,9 +43,9 @@ class TestIntegration:
         assert len(list(G_sif.vertices())) == len(proteins)
 
     def test_multi_slice_network(self, tmpdir_fixture):
-        from annnet.core.graph import Graph
+        from annnet.core.graph import AnnNet
 
-        G = Graph(directed=True)
+        G = AnnNet(directed=True)
         users = ["Alice", "Bob", "Charlie", "David"]
         for u in users:
             G.add_vertex(u)

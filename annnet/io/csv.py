@@ -1,6 +1,6 @@
 """This module purposefully avoids importing stdlib `csv` and uses Polars for IO.
 
-It ingests a CSV into Graph by auto-detecting common schemas:
+It ingests a CSV into AnnNet by auto-detecting common schemas:
 - Edge list (including DOK/COO triples and variations)
 - Hyperedge table (members column or head/tail sets)
 - Incidence matrix (rows=entities, cols=edges, ±w orientation)
@@ -9,7 +9,7 @@ It ingests a CSV into Graph by auto-detecting common schemas:
 
 If auto-detection fails or you want control, pass schema=... explicitly.
 
-Dependencies: polars, numpy, scipy (only if you use sparse helpers), Graph
+Dependencies: polars, numpy, scipy (only if you use sparse helpers), AnnNet
 
 Design notes:
 - We treat unknown columns as attributes ("pure" non-structural) and write them via
@@ -23,10 +23,10 @@ Design notes:
   schema="edge_list" / "hyperedge" / "incidence" / "adjacency" / "lil".
 
 Public entry points:
-- load_csv_to_graph(path, graph=None, schema="auto", **options) -> Graph
-- from_dataframe(df, graph=None, schema="auto", **options) -> Graph
+- load_csv_to_graph(path, graph=None, schema="auto", **options) -> AnnNet
+- from_dataframe(df, graph=None, schema="auto", **options) -> AnnNet
 
-Both will create and return an Graph (or mutate the provided one).
+Both will create and return an AnnNet (or mutate the provided one).
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ try:
 except Exception:  # ModuleNotFoundError, etc.
     pl = None
 
-from ..core.graph import Graph
+from ..core.graph import AnnNet
 
 # ---------------------------
 # Helpers / parsing utilities
@@ -240,7 +240,7 @@ def _detect_schema(df: pl.DataFrame) -> str:
 def load_csv_to_graph(
     path: str,
     *,
-    graph: Graph | None = None,
+    graph: AnnNet | None = None,
     schema: str = "auto",
     default_slice: str | None = None,
     default_directed: bool | None = None,
@@ -251,15 +251,15 @@ def load_csv_to_graph(
     low_memory: bool = True,
     **kwargs: Any,
 ):
-    """Load a CSV and construct/augment an Graph.
+    """Load a CSV and construct/augment an AnnNet.
 
     Parameters
     ----------
     path : str
         Path to the CSV file.
-    graph : Graph or None, optional
-        If provided, mutate this graph; otherwise create a new Graph using
-        `Graph(**kwargs)`.
+    graph : AnnNet or None, optional
+        If provided, mutate this graph; otherwise create a new AnnNet using
+        `AnnNet(**kwargs)`.
     schema : {'auto','edge_list','hyperedge','incidence','adjacency','lil'}, default 'auto'
         Parsing mode. 'auto' tries to infer the schema from columns and types.
     default_slice : str or None, optional
@@ -277,17 +277,17 @@ def load_csv_to_graph(
     low_memory : bool, default True
         Pass to Polars read_csv for balanced memory usage.
     **kwargs : Any
-        Passed to Graph constructor if `graph` is None.
+        Passed to AnnNet constructor if `graph` is None.
 
     Returns
     -------
-    Graph
+    AnnNet
         The populated graph instance.
 
     Raises
     ------
     RuntimeError
-        If no Graph can be constructed or imported.
+        If no AnnNet can be constructed or imported.
     ValueError
         If schema is unknown or parsing fails.
 
@@ -313,22 +313,22 @@ def load_csv_to_graph(
 def from_dataframe(
     df: pl.DataFrame,
     *,
-    graph: Graph | None = None,
+    graph: AnnNet | None = None,
     schema: str = "auto",
     default_slice: str | None = None,
     default_directed: bool | None = None,
     default_weight: float = 1.0,
     **kwargs: Any,
 ):
-    """Build/augment an Graph from a Polars DataFrame.
+    """Build/augment an AnnNet from a Polars DataFrame.
 
     Parameters
     ----------
     df : polars.DataFrame
         Input table parsed from CSV.
-    graph : Graph or None, optional
-        If provided, mutate this graph; otherwise create a new Graph using
-        `Graph(**kwargs)`.
+    graph : AnnNet or None, optional
+        If provided, mutate this graph; otherwise create a new AnnNet using
+        `AnnNet(**kwargs)`.
     schema : {'auto','edge_list','hyperedge','incidence','adjacency','lil'}, default 'auto'
         Parsing mode. 'auto' tries to infer the schema.
     default_slice : str or None, optional
@@ -340,15 +340,15 @@ def from_dataframe(
 
     Returns
     -------
-    Graph
+    AnnNet
         The populated graph instance.
 
     """
     G = graph
     if G is None:
-        if Graph is None:
-            raise RuntimeError("Graph class not importable; pass an instance via `graph=`.")
-        G = Graph(**kwargs)  # type: ignore
+        if AnnNet is None:
+            raise RuntimeError("AnnNet class not importable; pass an instance via `graph=`.")
+        G = AnnNet(**kwargs)  # type: ignore
 
     mode = schema.lower().strip()
     if mode == "auto":
@@ -375,8 +375,8 @@ def export_edge_list_csv(G, path, slice=None):
 
     Parameters
     ----------
-    G : Graph
-        Graph instance to export. Must support ``edges_view`` with columns
+    G : AnnNet
+        AnnNet instance to export. Must support ``edges_view`` with columns
         compatible with binary endpoints (e.g., 'source', 'target').
     path : str or pathlib.Path
         Output path for the CSV file.
@@ -455,8 +455,8 @@ def export_hyperedge_csv(G, path, slice=None, directed=None):
 
     Parameters
     ----------
-    G : Graph
-        Graph instance to export. Must support ``edges_view`` exposing either
+    G : AnnNet
+        AnnNet instance to export. Must support ``edges_view`` exposing either
         'members' (for undirected hyperedges) or 'head'/'tail' (for directed hyperedges).
     path : str or pathlib.Path
         Output path for the CSV file.

@@ -1,9 +1,9 @@
 """
-Graph-tool adapter for AnnNet Graph.
+AnnNet-tool adapter for AnnNet AnnNet.
 
 Provides:
-    to_graphtool(G)      -> (gt.Graph, manifest_dict)
-    from_graphtool(gtG, manifest=None) -> Graph
+    to_graphtool(G)      -> (gt.AnnNet, manifest_dict)
+    from_graphtool(gtG, manifest=None) -> AnnNet
 
 graph-tool only gets what it can natively represent:
     - vertices (type 'vertex')
@@ -25,7 +25,7 @@ try:
     import graph_tool.all as gt
 except ImportError:
     gt = None
-from ..core.graph import Graph
+from ..core.graph import AnnNet
 from ._utils import (
     _deserialize_edge_layers,
     _deserialize_layer_tuple_attrs,
@@ -45,14 +45,14 @@ from ._utils import (
 
 
 def to_graphtool(
-    G: Graph,
+    G: AnnNet,
     *,
     vertex_id_property: str = "id",
     edge_id_property: str = "id",
     weight_property: str = "weight",
-) -> tuple[gt.Graph, dict]:
+) -> tuple[gt.AnnNet, dict]:
     """
-    Convert an AnnNet Graph -> (graph_tool.Graph, manifest).
+    Convert an AnnNet AnnNet -> (graph_tool.AnnNet, manifest).
 
     graph-tool graph:
       - vertices: only entities with entity_types[u] == "vertex"
@@ -68,9 +68,9 @@ def to_graphtool(
     if gt is None:
         raise RuntimeError("graph-tool is not installed; cannot call to_graphtool")
 
-    # 1) graph-tool Graph (directed flag from AnnNet)
+    # 1) graph-tool AnnNet (directed flag from AnnNet)
     directed = bool(G.directed) if G.directed is not None else True
-    gtG = gt.Graph(directed=directed)
+    gtG = gt.AnnNet(directed=directed)
 
     # 2) vertices (only type 'vertex')
     vmap = {}  # annnet_id -> gt.Vertex
@@ -227,15 +227,15 @@ def to_graphtool(
 
 
 def from_graphtool(
-    gtG: gt.Graph,
+    gtG: gt.AnnNet,
     manifest: dict | None = None,
     *,
     vertex_id_property: str = "id",
     edge_id_property: str = "id",
     weight_property: str = "weight",
-) -> Graph:
+) -> AnnNet:
     """
-    Convert graph_tool.Graph (+ optional manifest) back into AnnNet Graph.
+    Convert graph_tool.AnnNet (+ optional manifest) back into AnnNet AnnNet.
 
     - Vertices: from vertex property `vertex_id_property` if present, else numeric index.
     - Edges:    from edges in gtG; edge_id from edge property `edge_id_property` if present,
@@ -254,7 +254,7 @@ def from_graphtool(
         raise RuntimeError("graph-tool is not installed; cannot call from_graphtool")
 
     directed = bool(gtG.is_directed())
-    G = Graph(directed=directed)
+    G = AnnNet(directed=directed)
 
     # 1) vertices
     vp = gtG.vp.get(vertex_id_property, None)

@@ -4,7 +4,7 @@ import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..core.graph import Graph
+    from ..core.graph import AnnNet
 
 try:
     import polars as pl  # optional
@@ -100,7 +100,7 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
     return out
 
 
-def to_json(graph: Graph, path, *, public_only: bool = False, indent: int = 0):
+def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     """Node-link JSON with x-extensions (slices, edge_slices, hyperedges).
     Lossless vs your core (IDs, attrs, parallel, hyperedges, slices).
     """
@@ -275,13 +275,13 @@ def to_json(graph: Graph, path, *, public_only: bool = False, indent: int = 0):
         json.dump(doc, f, ensure_ascii=False, indent=indent)
 
 
-def from_json(path) -> Graph:
-    """Load Graph from node-link JSON + x-extensions (lossless wrt schema above)."""
-    from ..core.graph import Graph
+def from_json(path) -> AnnNet:
+    """Load AnnNet from node-link JSON + x-extensions (lossless wrt schema above)."""
+    from ..core.graph import AnnNet
 
     with open(path, encoding="utf-8") as f:
         doc = json.load(f)
-    H = Graph()
+    H = AnnNet()
 
     # vertices
     for nd in doc.get("nodes", []):
@@ -415,7 +415,7 @@ def from_json(path) -> Graph:
     return H
 
 
-def write_ndjson(graph: Graph, dir_path):
+def write_ndjson(graph: AnnNet, dir_path):
     """Write nodes.ndjson, edges.ndjson, hyperedges.ndjson, slices.ndjson, edge_slices.ndjson.
     Each line is one JSON object. Lossless wrt to_json schema.
     """

@@ -20,10 +20,10 @@ def load_excel_to_graph(
     ----------
     path : str or Path
         Path to the Excel file.
-    graph : Graph, optional
+    graph : AnnNet, optional
         Existing graph instance. If None, a new one is created.
     schema : {'auto', 'edge_list', 'hyperedge', 'incidence', 'adjacency', 'lil'}, default 'auto'
-        Graph schema to assume or infer.
+        AnnNet schema to assume or infer.
     sheet : str, optional
         Sheet name to load. Defaults to the first sheet.
     default_slice : str, optional
@@ -37,7 +37,7 @@ def load_excel_to_graph(
 
     Returns
     -------
-    Graph
+    AnnNet
         The created or augmented graph.
 
     Notes

@@ -16,7 +16,7 @@ import os
 import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from annnet.core.graph import Graph
+from annnet.core.graph import AnnNet
 from annnet.utils import plotting
 
 
@@ -38,7 +38,7 @@ class TestHelpers(unittest.TestCase):
 
 class TestPlottingWithRealGraph(unittest.TestCase):
     def setUp(self):
-        g = Graph()
+        g = AnnNet()
         # vertices with labels
         g.add_vertex("A", label="alpha")
         g.add_vertex("B", label="beta")
@@ -103,7 +103,7 @@ class TestBackends(unittest.TestCase):
             cls.HAS_PYDOT = False
 
     def setUp(self):
-        g = Graph()
+        g = AnnNet()
         g.add_vertex("A", label="alpha")
         g.add_vertex("B", label="beta")
         g.add_vertex("C", label="gamma")
