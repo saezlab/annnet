@@ -496,7 +496,7 @@ class BulkOps:
             if s not in entity_to_idx:
                 # vertex or edge-entity depending on mode?
                 if et == "vertex_edge" and isinstance(s, str) and s.startswith("edge_"):
-                    self._add_edge_entity(s)
+                    self.add_edge_entity(s)
                 else:
                     # bare global insert (no slice side-effects; membership handled later)
                     idx = self._num_entities
@@ -506,7 +506,7 @@ class BulkOps:
                     self._num_entities = idx + 1
             if t not in entity_to_idx:
                 if et == "vertex_edge" and isinstance(t, str) and t.startswith("edge_"):
-                    self._add_edge_entity(t)
+                    self.add_edge_entity(t)
                 else:
                     idx = self._num_entities
                     self.entity_to_idx[t] = idx

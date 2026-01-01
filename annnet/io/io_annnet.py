@@ -9,6 +9,11 @@ import numpy as np
 import scipy as scipy
 import scipy.sparse as sp
 
+import tempfile
+from pathlib import Path
+
+from ._utils import _write_archive, _read_archive
+
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
@@ -129,7 +134,7 @@ def _iter_rows(df):
 ANNNET_EXT = "graph.annnet"
 
 
-def write(graph, path: str | Path, *, compression="zstd", overwrite=False):
+def _write_dir(graph, path: str | Path, *, compression="zstd", overwrite=False):
     """Write graph to disk with zero topology loss.
 
     Parameters
@@ -153,10 +158,11 @@ def write(graph, path: str | Path, *, compression="zstd", overwrite=False):
     from pathlib import Path
 
     root = Path(path)
-    if root.exists() and not overwrite:
-        raise FileExistsError(f"{path} already exists. Set overwrite=True.")
-
-    root.mkdir(parents=True, exist_ok=overwrite)
+    if root.exists():
+        if not overwrite:
+            raise FileExistsError(f"{root} already exists. Set overwrite=True.")
+    else:
+        root.mkdir(parents=True, exist_ok=True)
 
     # 1. Write manifest
     manifest = {
@@ -205,6 +211,23 @@ def write(graph, path: str | Path, *, compression="zstd", overwrite=False):
     if hasattr(graph, "_cached_csr") or hasattr(graph, "_cached_csc"):
         _write_cache(graph, root / "cache", compression)
 
+def write(graph, path: str | Path, *, compression="zstd", overwrite=False):
+    path = Path(path)
+
+    # FILE MODE (.annnet archive)
+    if path.suffix == ".annnet" and not path.is_dir():
+        if path.exists() and not overwrite:
+            raise FileExistsError(f"{path} already exists. Set overwrite=True.")
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = Path(tmp) / "graph.annnet"
+            _write_dir(graph, tmp_root, compression=compression, overwrite=True)
+            _write_archive(tmp_root, path)
+        return
+
+    # DIRECTORY MODE (canonical format)
+    return _write_dir(graph, path, compression=compression, overwrite=overwrite)
 
 def _write_structure(graph, path: Path, compression: str):
     """Write sparse incidence matrix + all index mappings."""
@@ -689,6 +712,12 @@ def read(path: str | Path, *, lazy: bool = False) -> AnnNet:
     root = Path(path)
     if not root.exists():
         raise FileNotFoundError(f"{path} not found")
+
+    # FILE MODE (.annnet)
+    if root.is_file() and root.suffix == ".annnet":
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_root = _read_archive(root, Path(tmp))
+            return read(tmp_root, lazy=lazy)
 
     # 1. Read manifest
     manifest = json.loads((root / "manifest.json").read_text())
