@@ -26,7 +26,6 @@ from ._utils import (
     _deserialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
     _deserialize_VM,
-    _df_to_rows,
     _endpoint_coeff_map,
     _is_directed_eid,
     _rows_to_df,

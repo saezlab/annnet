@@ -730,6 +730,26 @@ class SliceClass:
 
         return result_slice_id
 
+    def add_vertex_to_slice(self, lid, vid):
+        """Attach an existing vertex to a slice.
+
+        Parameters
+        --
+        lid : str
+            slice ID.
+        vid : str
+            vertex ID.
+
+        Raises
+        --
+        KeyError
+            If the slice does not exist.
+
+        """
+        if lid not in self._slices:
+            raise KeyError(f"slice {lid} does not exist")
+        self._slices[lid]["vertices"].add(vid)
+
     def edge_presence_across_slices(
         self,
         edge_id: str | None = None,

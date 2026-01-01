@@ -258,3 +258,12 @@ def _safe_df_to_rows(df):
             return []
 
     return []
+
+def _validate_numeric(df: pl.DataFrame, cols: list[str], ctx: str):
+    for c in cols:
+        if c not in df.columns:
+            raise KeyError(f"{ctx}: column '{c}' not found")
+        if not pl.datatypes.is_numeric(df[c].dtype):
+            raise ValueError(
+                f"{ctx}: column '{c}' is non-numeric ({df[c].dtype})"
+            )

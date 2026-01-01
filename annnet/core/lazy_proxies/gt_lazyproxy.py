@@ -1,4 +1,4 @@
-## Lazy AnnNet-tool proxy
+## Lazy graph-tool proxy
 
 
 class _LazyGTProxy:
