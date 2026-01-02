@@ -2,7 +2,7 @@
 AnnNet-tool adapter for AnnNet AnnNet.
 
 Provides:
-    to_graphtool(G)      -> (gt.AnnNet, manifest_dict)
+    to_graphtool(G)      -> (gt.Graph, manifest_dict)
     from_graphtool(gtG, manifest=None) -> AnnNet
 
 graph-tool only gets what it can natively represent:
@@ -50,7 +50,7 @@ def to_graphtool(
     vertex_id_property: str = "id",
     edge_id_property: str = "id",
     weight_property: str = "weight",
-) -> tuple[gt.AnnNet, dict]:
+) -> tuple[gt.Graph, dict]:
     """
     Convert an AnnNet AnnNet -> (graph_tool.AnnNet, manifest).
 
@@ -70,7 +70,7 @@ def to_graphtool(
 
     # 1) graph-tool AnnNet (directed flag from AnnNet)
     directed = bool(G.directed) if G.directed is not None else True
-    gtG = gt.AnnNet(directed=directed)
+    gtG = gt.Graph(directed=directed)
 
     # 2) vertices (only type 'vertex')
     vmap = {}  # annnet_id -> gt.Vertex
@@ -227,7 +227,7 @@ def to_graphtool(
 
 
 def from_graphtool(
-    gtG: gt.AnnNet,
+    gtG: gt.Graph,
     manifest: dict | None = None,
     *,
     vertex_id_property: str = "id",
