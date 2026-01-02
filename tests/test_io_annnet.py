@@ -14,9 +14,9 @@ import polars as pl
 import zarr
 
 from annnet.core.graph import AnnNet
+from annnet.io._utils import _read_archive
 from annnet.io.io_annnet import read as annnet_read
 from annnet.io.io_annnet import write as annnet_write
-from annnet.io._utils import _read_archive
 
 
 class TestAnnNetIO(unittest.TestCase):
@@ -69,7 +69,7 @@ class TestAnnNetIO(unittest.TestCase):
             out_path = Path(self.tmpdir) / "test_graph.annnet"
         else:
             out_path = Path(self.tmpdir) / "test_graph_dir"
-        
+
         annnet_write(self.G, out_path, compression="zstd", overwrite=True)
         G2 = annnet_read(out_path)
         return G2, out_path
@@ -122,14 +122,14 @@ class TestAnnNetIO(unittest.TestCase):
                 self.assertEqual(
                     self.G.slice_edge_weights.get(lid, {}), G2.slice_edge_weights.get(lid, {})
                 )
-        
+
         self._test_both_modes(_test)
 
     def test_manifest_and_layout(self):
         def _test(use_archive):
             G2, out_path = self._roundtrip(use_archive=use_archive)
             root = self._get_root(out_path, use_archive)
-            
+
             self.assertTrue((root / "manifest.json").exists())
 
             manifest = json.loads((root / "manifest.json").read_text())
@@ -145,14 +145,14 @@ class TestAnnNetIO(unittest.TestCase):
             self.assertTrue((root / "slices").exists())
             self.assertTrue((root / "audit").exists())
             self.assertTrue((root / "uns").exists())
-        
+
         self._test_both_modes(_test)
 
     def test_zarr_incidence_group(self):
         def _test(use_archive):
             G2, out_path = self._roundtrip(use_archive=use_archive)
             root = self._get_root(out_path, use_archive)
-            
+
             inc = root / "structure" / "incidence.zarr"
             self.assertTrue(inc.exists())
 
@@ -177,7 +177,7 @@ class TestAnnNetIO(unittest.TestCase):
             # COO consistency: same length across row/col/data
             self.assertEqual(len(row), len(col))
             self.assertEqual(len(row), len(dat))
-        
+
         self._test_both_modes(_test)
 
     def test_overwrite_semantics(self):
@@ -274,14 +274,14 @@ class TestAnnNetIO(unittest.TestCase):
             # Verify Manifest Update
             manifest = json.loads((root / "manifest.json").read_text())
             self.assertEqual(manifest["counts"]["aspects"], 2)
-        
+
         self._test_both_modes(_test)
 
     def test_slices_registry_and_memberships(self):
         def _test(use_archive):
             G2, out_path = self._roundtrip(use_archive=use_archive)
             root = self._get_root(out_path, use_archive)
-            
+
             slices_dir = root / "slices"
             self.assertTrue((slices_dir / "registry.parquet").exists())
             self.assertTrue((slices_dir / "vertex_memberships.parquet").exists())
@@ -301,14 +301,14 @@ class TestAnnNetIO(unittest.TestCase):
             # edges exist in memberships as well
             self.assertIn("edge_id", emem.columns)
             self.assertIn("weight", emem.columns)
-        
+
         self._test_both_modes(_test)
 
     def test_hyperedge_definitions_parquet(self):
         def _test(use_archive):
             G2, out_path = self._roundtrip(use_archive=use_archive)
             root = self._get_root(out_path, use_archive)
-            
+
             p = root / "structure" / "hyperedge_definitions.parquet"
             self.assertTrue(p.exists())
             df = pl.read_parquet(p)
@@ -316,7 +316,7 @@ class TestAnnNetIO(unittest.TestCase):
             self.assertIn("directed", df.columns)
             # at least one of members/head/tail exists (depending on directed flag)
             self.assertTrue(any(c in df.columns for c in ("members", "head", "tail")))
-        
+
         self._test_both_modes(_test)
 
     def test_audit_and_uns_written(self):
@@ -343,7 +343,7 @@ class TestAnnNetIO(unittest.TestCase):
             attrs = json.loads(gattr.read_text())
             self.assertEqual(attrs.get("project"), "unittest")
             self.assertEqual(attrs.get("tags"), ["io", "annnet"])
-        
+
         self._test_both_modes(_test)
 
     def test_read_missing_path_raises(self):
@@ -376,7 +376,7 @@ class TestAnnNetIO(unittest.TestCase):
             self.assertTrue((root / "layers" / "vertex_presence.parquet").exists())
             # Verify attribute files were NOT written (optimization check)
             self.assertFalse((root / "layers" / "tuple_layer_attributes.parquet").exists())
-        
+
         self._test_both_modes(_test)
 
     def test_write_read_large_sparse_graph(self):
@@ -386,9 +386,7 @@ class TestAnnNetIO(unittest.TestCase):
 
             G = AnnNet(directed=True)
 
-            G.add_vertices_bulk(
-                ({"vertex_id": f"v{i}"} for i in range(n_vertices))
-            )
+            G.add_vertices_bulk({"vertex_id": f"v{i}"} for i in range(n_vertices))
 
             bulk = []
             for i in range(n_edges):
@@ -415,7 +413,7 @@ class TestAnnNetIO(unittest.TestCase):
             self.assertEqual(G._num_edges, G2._num_edges)
             self.assertEqual(G._matrix.shape, G2._matrix.shape)
 
-            for eid in (eids[0], eids[len(eids)//2], eids[-1]):
+            for eid in (eids[0], eids[len(eids) // 2], eids[-1]):
                 self.assertEqual(G.edge_weights[eid], G2.edge_weights[eid])
 
             self.assertLessEqual(len(G2._matrix), int(n_edges * 2))

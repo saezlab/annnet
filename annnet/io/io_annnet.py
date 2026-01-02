@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -9,10 +10,7 @@ import numpy as np
 import scipy as scipy
 import scipy.sparse as sp
 
-import tempfile
-from pathlib import Path
-
-from ._utils import _write_archive, _read_archive
+from ._utils import _read_archive, _write_archive
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
@@ -211,6 +209,7 @@ def _write_dir(graph, path: str | Path, *, compression="zstd", overwrite=False):
     if hasattr(graph, "_cached_csr") or hasattr(graph, "_cached_csc"):
         _write_cache(graph, root / "cache", compression)
 
+
 def write(graph, path: str | Path, *, compression="zstd", overwrite=False):
     path = Path(path)
 
@@ -220,6 +219,7 @@ def write(graph, path: str | Path, *, compression="zstd", overwrite=False):
             raise FileExistsError(f"{path} already exists. Set overwrite=True.")
 
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmp:
             tmp_root = Path(tmp) / "graph.annnet"
             _write_dir(graph, tmp_root, compression=compression, overwrite=True)
@@ -228,6 +228,7 @@ def write(graph, path: str | Path, *, compression="zstd", overwrite=False):
 
     # DIRECTORY MODE (canonical format)
     return _write_dir(graph, path, compression=compression, overwrite=overwrite)
+
 
 def _write_structure(graph, path: Path, compression: str):
     """Write sparse incidence matrix + all index mappings."""

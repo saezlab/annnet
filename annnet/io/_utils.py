@@ -1,5 +1,6 @@
-from pathlib import Path
 import tarfile
+from pathlib import Path
+
 
 def _write_archive(src_dir: Path, outfile: Path):
     with tarfile.open(outfile, "w:gz") as tar:

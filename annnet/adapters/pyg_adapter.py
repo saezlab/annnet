@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import torch
@@ -31,7 +31,7 @@ def _rows_to_tensor(
     """Convert list of dicts to tensor, extracting specified columns."""
     if not rows:
         return torch.empty((0, len(cols)), dtype=torch.float32, device=device)
-    
+
     # Explicitly handle None values - convert to 0.0
     data = []
     for row in rows:
@@ -46,12 +46,13 @@ def _rows_to_tensor(
                 except (TypeError, ValueError):
                     row_data.append(0.0)
         data.append(row_data)
-    
+
     arr = np.array(data, dtype=np.float32)
     # Extra safety: replace any remaining NaN with 0.0
     arr = np.nan_to_num(arr, nan=0.0)
-    
+
     return torch.from_numpy(arr).to(device=device)
+
 
 def _validate_numeric(rows: list[dict], cols: list[str], context: str):
     """Validate that specified columns contain numeric data."""
@@ -103,7 +104,7 @@ def to_pyg(
                 id_col = "vertex_id"
             elif "id" in vert_rows[0]:
                 id_col = "id"
-        
+
         if id_col:
             for r in vert_rows:
                 vid = str(r.get(id_col))
@@ -117,7 +118,7 @@ def to_pyg(
                 id_col = "edge_id"
             elif "id" in edge_rows[0]:
                 id_col = "id"
-        
+
         if id_col:
             for r in edge_rows:
                 eid = str(r.get(id_col))
@@ -128,10 +129,10 @@ def to_pyg(
     for uid, utype in graph.entity_types.items():
         if utype != "vertex":
             continue
-        
+
         row = v_attrs_map.get(str(uid), {})
         kind = row.get("kind", "default")
-        
+
         if kind not in kind_to_vertices:
             kind_to_vertices[kind] = []
         kind_to_vertices[kind].append(str(uid))
@@ -139,7 +140,7 @@ def to_pyg(
     # Process nodes by kind
     for kind, vids in kind_to_vertices.items():
         n = len(vids)
-        
+
         idx_map = dict(zip(vids, range(n)))
         manifest["node_index"][kind] = idx_map
 
@@ -168,11 +169,9 @@ def to_pyg(
         if is_hyper:
             if hyperedge_mode == "skip":
                 continue
-            
+
             if hyperedge_mode == "reify":
-                _process_hyperedge_reify(
-                    graph, eid, data, manifest, device, v_attrs_map
-                )
+                _process_hyperedge_reify(graph, eid, data, manifest, device, v_attrs_map)
             elif hyperedge_mode == "expand":
                 _process_hyperedge_expand(
                     graph, eid, data, manifest, device, v_attrs_map, e_attrs_map
@@ -190,7 +189,7 @@ def to_pyg(
 
         u_row = v_attrs_map.get(u_str, {})
         v_row = v_attrs_map.get(v_str, {})
-        
+
         uk = u_row.get("kind", "default")
         vk = v_row.get("kind", "default")
 
@@ -213,10 +212,10 @@ def to_pyg(
         data[etype].edge_index = torch.cat([data[etype].edge_index, edge_idx], dim=1)
 
         w = float(graph.edge_weights.get(eid, 1.0))
-        
+
         src_map = graph.get_edge_attribute(eid, "__source_attr") or {}
         tgt_map = graph.get_edge_attribute(eid, "__target_attr") or {}
-        
+
         w *= src_map.get(u, {}).get("__value", 1.0)
         w *= tgt_map.get(v, {}).get("__value", 1.0)
 
@@ -230,7 +229,7 @@ def to_pyg(
                 continue
 
             _validate_numeric(list(e_attrs_map.values()), cols, f"edge{etype}")
-            
+
             feat_rows = list(e_attrs_map.values())
             if feat_rows:
                 feats = _rows_to_tensor(feat_rows, cols, device=device)
@@ -302,20 +301,26 @@ def _process_hyperedge_expand(
     if directed:
         S = set(hdef.get("head", []))
         T = set(hdef.get("tail", []))
-        
+
         for t in T:
             for s in S:
                 _add_expanded_edge(
-                    graph, eid, str(t), str(s), data, manifest, device, 
-                    v_attrs_map, e_attrs_map
+                    graph, eid, str(t), str(s), data, manifest, device, v_attrs_map, e_attrs_map
                 )
     else:
         members = list(hdef.get("members", []))
         for i in range(len(members)):
             for j in range(i + 1, len(members)):
                 _add_expanded_edge(
-                    graph, eid, str(members[i]), str(members[j]), data, manifest, 
-                    device, v_attrs_map, e_attrs_map
+                    graph,
+                    eid,
+                    str(members[i]),
+                    str(members[j]),
+                    data,
+                    manifest,
+                    device,
+                    v_attrs_map,
+                    e_attrs_map,
                 )
 
 
@@ -333,7 +338,7 @@ def _add_expanded_edge(
     """Add single expanded edge from hyperedge."""
     u_row = v_attrs_map.get(u_str, {})
     v_row = v_attrs_map.get(v_str, {})
-    
+
     uk = u_row.get("kind", "default")
     vk = v_row.get("kind", "default")
 
