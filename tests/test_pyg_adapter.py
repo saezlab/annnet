@@ -439,9 +439,9 @@ class TestPyGAdapter(unittest.TestCase):
 
         random.seed(42)
         for i in range(n_edges):
-            p = f"p{random.randint(0, n_proteins - 1)}"
-            gn = f"g{random.randint(0, n_genes - 1)}"
-            g.add_edge(p, gn, edge_id=f"e{i}", weight=random.random())
+            p = f"p{random.randint(0, n_proteins - 1)}" # nosec B311
+            gn = f"g{random.randint(0, n_genes - 1)}" # nosec B311
+            g.add_edge(p, gn, edge_id=f"e{i}", weight=random.random()) # nosec B311
 
         import time
 

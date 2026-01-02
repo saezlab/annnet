@@ -52,7 +52,7 @@ class TestJSONAdapter:
 
     def test_public_only_filter(self, complex_graph, tmpdir_fixture):
         G = complex_graph
-        G.set_vertex_attrs("A", __secret="hidden")
+        G.set_vertex_attrs("A", __internal_flag="hidden")
         G.set_edge_attrs("e1", __internal="private")
         to_json(G, tmpdir_fixture / "graph.json", public_only=True)
         G2 = from_json(tmpdir_fixture / "graph.json")

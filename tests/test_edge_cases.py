@@ -137,9 +137,9 @@ class TestEdgeCases:
             G.add_vertex(f"v{i}")
         random.seed(42)
         for i in range(n_edges):
-            u = f"v{random.randint(0, n_vertices - 1)}"
-            v = f"v{random.randint(0, n_vertices - 1)}"
-            G.add_edge(u, v, edge_id=f"e{i}", weight=random.random())
+            u = f"v{random.randint(0, n_vertices - 1)}" # nosec B311
+            v = f"v{random.randint(0, n_vertices - 1)}" # nosec B311
+            G.add_edge(u, v, edge_id=f"e{i}", weight=random.random()) # nosec B311
         write_parquet_graphdir(G, tmpdir_fixture / "large_dir")
         G_parquet = read_parquet_graphdir(tmpdir_fixture / "large_dir")
         assert len(list(G_parquet.vertices())) == n_vertices
