@@ -112,6 +112,72 @@ class AttributesClass:
                 if new_key is not None:
                     self._vertex_key_index[new_key] = vertex_id
 
+    def set_vertex_attrs_bulk(self, updates):
+        """
+        updates: dict[vertex_id, dict[attr, value]]
+                 or iterable[(vertex_id, dict)]
+        """
+        if not updates:
+            return
+        if not isinstance(updates, dict):
+            updates = dict(updates)
+
+        for vid, attrs in updates.items():
+            if not isinstance(attrs, dict):
+                raise TypeError(
+                    f"vertex bulk attrs must be dict, got {type(attrs)} for {vid}"
+                )
+
+        clean_updates = {
+            vid: {k: v for k, v in attrs.items() if k not in self._vertex_RESERVED}
+            for vid, attrs in updates.items()
+        }
+        clean_updates = {vid: attrs for vid, attrs in clean_updates.items() if attrs}
+        
+        if not clean_updates:
+            return
+        
+        if self._vertex_key_enabled():
+            old_keys = {vid: self._current_key_of_vertex(vid) for vid in clean_updates}
+            
+            new_keys = {}
+            for vid, attrs in clean_updates.items():
+                merged = {
+                    f: (attrs[f] if f in attrs else self.get_attr_vertex(vid, f, None))
+                    for f in self._vertex_key_fields
+                }
+                new_keys[vid] = self._build_key_from_attrs(merged)
+            
+            for vid, new_key in new_keys.items():
+                if new_key is not None:
+                    owner = self._vertex_key_index.get(new_key)
+                    if owner is not None and owner != vid:
+                        raise ValueError(
+                            f"Composite key collision on {self._vertex_key_fields}: {new_key} owned by {owner}"
+                        )
+        
+        self.vertex_attributes = self._upsert_rows_bulk(self.vertex_attributes, clean_updates)
+        
+        watched = self._variables_watched_by_vertices()
+        if watched:
+            affected_vertices = {vid for vid, attrs in clean_updates.items() if any(k in watched for k in attrs)}
+            if affected_vertices:
+                affected_edges = set()
+                for vid in affected_vertices:
+                    affected_edges.update(self._incident_flexible_edges(vid))
+                for eid in affected_edges:
+                    self._apply_flexible_direction(eid)
+        
+        if self._vertex_key_enabled():
+            for vid in clean_updates:
+                new_key = new_keys[vid]
+                old_key = old_keys[vid]
+                if old_key != new_key:
+                    if old_key is not None and self._vertex_key_index.get(old_key) == vid:
+                        self._vertex_key_index.pop(old_key, None)
+                    if new_key is not None:
+                        self._vertex_key_index[new_key] = vid
+
     def get_attr_vertex(self, vertex_id, key, default=None):
         """Get a single vertex attribute (scalar) or default if missing.
 
@@ -255,6 +321,40 @@ class AttributesClass:
         pol = self.edge_direction_policy.get(edge_id)
         if pol and pol.get("scope", "edge") == "edge" and pol["var"] in clean:
             self._apply_flexible_direction(edge_id)
+
+    def set_edge_attrs_bulk(self, updates):
+        """
+        updates: dict[edge_id, dict[attr, value]]
+        """
+        if not updates:
+            return
+        if not isinstance(updates, dict):
+            updates = dict(updates)
+        for eid, attrs in updates.items():
+            if not isinstance(attrs, dict):
+                raise TypeError(
+                    f"edge bulk attrs must be dict, got {type(attrs)} for {eid}"
+                )
+        
+        clean_updates = {
+            eid: {k: v for k, v in attrs.items() if k not in self._EDGE_RESERVED}
+            for eid, attrs in updates.items()
+        }
+        clean_updates = {eid: attrs for eid, attrs in clean_updates.items() if attrs}
+        
+        if not clean_updates:
+            return
+        
+        self.edge_attributes = self._upsert_rows_bulk(self.edge_attributes, clean_updates)
+        
+        affected_edges = set()
+        for eid, attrs in clean_updates.items():
+            pol = self.edge_direction_policy.get(eid)
+            if pol and pol.get("scope") == "edge" and pol["var"] in attrs:
+                affected_edges.add(eid)
+        
+        for eid in affected_edges:
+            self._apply_flexible_direction(eid)
 
     def get_attr_edge(self, edge_id, key, default=None):
         """Get a single edge attribute (scalar) or default if missing.
@@ -1068,6 +1168,48 @@ class AttributesClass:
 
         setattr(self, df_id_name, id(nw.to_native(final_df)))
         return nw.to_native(final_df)
+
+    def _upsert_rows_bulk(self, df: "object", updates: dict) -> "object":
+        if not updates:
+            return df
+        
+        nw_df = nw.from_native(df, eager_only=True)
+        
+        # Build complete update DataFrame
+        update_records = []
+        for idx, attrs in updates.items():
+            if isinstance(idx, tuple):
+                record = {"slice_id": idx[0], "edge_id": idx[1], **attrs}
+            else:
+                cols = set(nw_df.columns)
+                if "vertex_id" in cols:
+                    record = {"vertex_id": idx, **attrs}
+                elif "edge_id" in cols:
+                    record = {"edge_id": idx, **attrs}
+                else:
+                    record = {"slice_id": idx, **attrs}
+            update_records.append(record)
+        
+        update_df = nw.DataFrame.from_dicts(update_records, backend=nw.get_native_namespace(nw_df))
+        
+        # Determine join keys
+        cols = set(nw_df.columns)
+        if {"slice_id", "edge_id"} <= cols:
+            join_keys = ["slice_id", "edge_id"]
+        elif "vertex_id" in cols:
+            join_keys = ["vertex_id"]
+        elif "edge_id" in cols:
+            join_keys = ["edge_id"]
+        else:
+            join_keys = ["slice_id"]
+        
+        # Anti-join to get rows NOT being updated
+        unchanged = nw_df.join(update_df.select(join_keys), on=join_keys, how="anti")
+        
+        # Combine: unchanged rows + all update rows
+        result = nw.concat([unchanged, update_df], how="diagonal")
+        
+        return nw.to_native(result)
 
     def _variables_watched_by_vertices(self):
         # set of vertex-attribute names used by vertex-scope policies

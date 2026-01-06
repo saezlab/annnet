@@ -403,6 +403,13 @@ class LayerClass:
             raise ValueError("layer_id_to_tuple is only valid when exactly 1 aspect is configured")
         return (layer_id,)
 
+    def _layer_id_to_tuple_cached(self, layer: str):
+        if not hasattr(self, "_layer_tuple_cache"):
+            self._layer_tuple_cache = {}
+        if layer not in self._layer_tuple_cache:
+            self._layer_tuple_cache[layer] = self.layer_id_to_tuple(layer)
+        return self._layer_tuple_cache[layer]
+
     def layer_tuple_to_id(self, aa: tuple[str, ...]) -> str:
         """
         Canonical string id for a layer tuple.
@@ -567,6 +574,13 @@ class LayerClass:
 
     ## explicit vertex–layer edge APIs
 
+    def _layer_tuple_to_lid(self, aa: tuple[str, ...]) -> str:
+        if not hasattr(self, "_lid_cache"):
+            self._lid_cache = {}
+        if aa not in self._lid_cache:
+            self._lid_cache[aa] = aa[0] if len(self.aspects) == 1 else "×".join(aa)
+        return self._lid_cache[aa]
+
     def set_edge_kivela_role(self, eid: str, role: str, layers):
         """
         Annotate an existing structural edge with Kivela semantics.
@@ -614,14 +628,14 @@ class LayerClass:
         if len(getattr(self, "aspects", [])) == 1 and getattr(
             self, "_legacy_single_aspect_enabled", True
         ):
-            aa = self.layer_id_to_tuple(layer)
+            aa = self._layer_id_to_tuple_cached(layer)
             return self.add_intra_edge_nl(u, v, aa, weight=weight, eid=eid)
         # Fallback when multi-aspect is not configured: let add_edge handle bookkeeping.
         eid = eid or f"{u}--{v}@{layer}"
         self.add_edge(u, v, layer=layer, weight=weight, edge_id=eid)
         # In legacy single-layer mode we don't have a full aspect tuple; store as ("layer",)
         if self.aspects:
-            aa = self.layer_id_to_tuple(layer) if len(self.aspects) == 1 else (layer,)
+            aa = self._layer_id_to_tuple_cached(layer) if len(self.aspects) == 1 else (layer,)
             self.set_edge_kivela_role(eid, "intra", aa)
         else:
             # no aspects configured -> treat as plain edge; leave edge_kind/edge_layers unset
@@ -640,13 +654,14 @@ class LayerClass:
         """
         Add (u,v) inside a multi-aspect layer aa (tuple). Requires presence (u,aa),(v,aa) in V_M.
         """
-        self._validate_layer_tuple(layer_tuple)
-        aa = tuple(layer_tuple)
-        self._assert_presence(u, aa)
-        self._assert_presence(v, aa)
-        eid = eid or f"{u}--{v}@{'.'.join(aa)}"
+        aa = layer_tuple if isinstance(layer_tuple, tuple) else tuple(layer_tuple)
+        if not getattr(self, "_fast_mode", False):
+            self._validate_layer_tuple(aa)
+            self._assert_presence(u, aa)
+            self._assert_presence(v, aa)
+        Lid = self._layer_tuple_to_lid(aa)        
+        eid = eid or f"{u}>{v}@{Lid}"
         # Use a synthetic layer id for intra edges so existing slice bookkeeping runs.
-        Lid = aa[0] if len(self.aspects) == 1 else "×".join(aa)
         self.add_edge(u, v, layer=Lid, weight=weight, edge_id=eid)
         # Pure Kivela annotation:
         self.set_edge_kivela_role(eid, "intra", aa)
@@ -665,12 +680,14 @@ class LayerClass:
         """
         Add an inter-layer edge between (u, aa) and (v, bb). Requires presence (u,aa),(v,bb) in V_M.
         """
-        self._validate_layer_tuple(layer_a)
-        self._validate_layer_tuple(layer_b)
-        aa, bb = tuple(layer_a), tuple(layer_b)
-        self._assert_presence(u, aa)
-        self._assert_presence(v, bb)
-        eid = eid or f"{u}--{v}=={'.'.join(aa)}~{'.'.join(bb)}"
+        aa = layer_a if isinstance(layer_a, tuple) else tuple(layer_a)
+        bb = layer_b if isinstance(layer_b, tuple) else tuple(layer_b)
+        if not getattr(self, "_fast_mode", False):
+            self._validate_layer_tuple(aa)
+            self._validate_layer_tuple(bb)
+            self._assert_presence(u, aa)
+            self._assert_presence(v, bb)
+        eid = eid or f"{u}>{v}@{self._layer_tuple_to_lid(aa)}~{self._layer_tuple_to_lid(bb)}"
         # No single slice applies; just register the edge structurally.
         self.add_edge(u, v, weight=weight, edge_id=eid)
         self.set_edge_kivela_role(eid, "inter", (aa, bb))
