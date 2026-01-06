@@ -872,7 +872,6 @@ class BulkOps:
         # intern hot strings
         try:
             import sys as _sys
-
             norm = [
                 (_sys.intern(eid) if isinstance(eid, str) else eid, attrs) for eid, attrs in norm
             ]
@@ -898,88 +897,12 @@ class BulkOps:
         # slice membership
         if slice not in self._slices:
             self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
-        self._slices[slice]["vertices"].update(eid for eid, _ in norm)
+        self._slices[slice]["edges"].update(eid for eid, _ in norm)
 
-        # attributes (edge-entities share vertex_attributes table)
-        self._ensure_vertex_table()
-        df = self.vertex_attributes
-        to_append, existing_ids = [], set()
-
-        try:
-            if pl is not None and isinstance(df, pl.DataFrame):
-                if df.height and "vertex_id" in df.columns:
-                    existing_ids = set(df.get_column("vertex_id").to_list())
-            else:
-                import narwhals as nw
-
-                native = nw.to_native(nw.from_native(df).select("vertex_id"))
-                col = native["vertex_id"]
-                existing_ids = set(col.to_list() if hasattr(col, "to_list") else list(col))
-        except Exception:
-            existing_ids = set()
-
-        for eid, attrs in norm:
-            is_empty = False
-            try:
-                is_empty = df.is_empty()
-            except Exception:
-                try:
-                    is_empty = len(df) == 0
-                except Exception:
-                    is_empty = False
-            if is_empty or eid not in existing_ids:
-                row = dict.fromkeys(df.columns) if not df.is_empty() else {"vertex_id": None}
-                row["vertex_id"] = eid
-                for k, v in attrs.items():
-                    row[k] = v
-                to_append.append(row)
-
-        if to_append:
-            need_cols = {k for r in to_append for k in r if k != "vertex_id"}
-            if need_cols:
-                df = self._ensure_attr_columns(df, dict.fromkeys(need_cols))
-
-            # Polars fast-path
-            if pl is not None and isinstance(df, pl.DataFrame):
-                add_df = pl.DataFrame(to_append)
-
-                for c in df.columns:
-                    if c not in add_df.columns:
-                        add_df = add_df.with_columns(pl.lit(None).cast(df.schema[c]).alias(c))
-
-                for c in df.columns:
-                    lc, rc = df.schema[c], add_df.schema[c]
-                    if lc == pl.Null and rc != pl.Null:
-                        df = df.with_columns(pl.col(c).cast(rc))
-                    elif rc == pl.Null and lc != pl.Null:
-                        add_df = add_df.with_columns(pl.col(c).cast(lc).alias(c))
-                    elif lc != rc:
-                        df = df.with_columns(pl.col(c).cast(pl.Utf8))
-                        add_df = add_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
-
-                add_df = add_df.select(df.columns)
-                df = df.vstack(add_df)
-
-            # Non-Polars fallback: append via repeated _upsert_row
-            else:
-                for r in to_append:
-                    eid = r.get("vertex_id")
-                    attrs_only = {k: v for k, v in r.items() if k != "vertex_id" and v is not None}
-                    df = self._upsert_row(df, eid, attrs_only)
-
-        is_empty = False
-        try:
-            is_empty = df.is_empty()
-        except Exception:
-            try:
-                is_empty = len(df) == 0
-            except Exception:
-                is_empty = False
-
-        for eid, attrs in norm:
-            if attrs and (is_empty or (eid in existing_ids)):
-                df = self._upsert_row(df, eid, attrs)
-        self.vertex_attributes = df
+        # attributes go to edge table
+        attrs_to_write = {eid: attrs for eid, attrs in norm if attrs}
+        if attrs_to_write:
+            self.set_edge_attrs_bulk(attrs_to_write)
 
     def set_vertex_key(self, *fields: str):
         """Declare composite key fields (order matters). Rebuilds the uniqueness index.
