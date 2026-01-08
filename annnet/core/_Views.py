@@ -518,68 +518,62 @@ class ViewsClass:
         """Build a Polars DF [DataFrame] view of edges with optional slice join.
         Same columns/semantics as before, but vectorized (no per-edge DF scans).
         """
-        # Fast path: no edges
         if not self.edge_to_idx:
             try:
                 import polars as pl
-
                 return pl.DataFrame(schema={"edge_id": pl.Utf8, "kind": pl.Utf8})
             except Exception:
                 import pandas as pd
-
                 return pd.DataFrame(
                     {"edge_id": pd.Series(dtype="string"), "kind": pd.Series(dtype="string")}
                 )
 
-        eids = list(self.edge_to_idx.keys())
-        kinds = [self.edge_kind.get(eid, "binary") for eid in eids]
+        # Keep original keys for dict lookups
+        eids_raw = list(self.edge_to_idx.keys())
+        eids_str = [str(eid) for eid in eids_raw]  # Stringified for DataFrame
+        
+        kinds = [self.edge_kind.get(eid, "binary") for eid in eids_raw]
 
-        # columns we might need
         need_global = include_weight or resolved_weight
-        global_w = [self.edge_weights.get(eid, None) for eid in eids] if need_global else None
+        global_w = [self.edge_weights.get(eid, None) for eid in eids_raw] if need_global else None
         dirs = (
-            [
-                self.edge_directed.get(eid, True if self.directed is None else self.directed)
-                for eid in eids
-            ]
-            if include_directed
-            else None
+            [self.edge_directed.get(eid, True if self.directed is None else self.directed)
+            for eid in eids_raw]
+            if include_directed else None
         )
 
-        # endpoints / hyper metadata (one pass; no weight lookups)
         src, tgt, etype = [], [], []
         head, tail, members = [], [], []
-        for eid, k in zip(eids, kinds):
+        
+        for eid_raw, k in zip(eids_raw, kinds):
             if k == "hyper":
-                # hyperedge: store sets in canonical sorted tuples
-                h = self.hyperedge_definitions[eid]
+                h = self.hyperedge_definitions[eid_raw]
                 if h.get("directed", False):
-                    head.append(tuple(sorted(h.get("head", ()))))
-                    tail.append(tuple(sorted(h.get("tail", ()))))
+                    head.append(tuple(str(x) for x in sorted(h.get("head", ()))))
+                    tail.append(tuple(str(x) for x in sorted(h.get("tail", ()))))
                     members.append(None)
                 else:
                     head.append(None)
                     tail.append(None)
-                    members.append(tuple(sorted(h.get("members", ()))))
+                    members.append(tuple(str(x) for x in sorted(h.get("members", ()))))
                 src.append(None)
                 tgt.append(None)
                 etype.append(None)
             else:
-                s, t, et = self.edge_definitions[eid]
-                src.append(s)
-                tgt.append(t)
-                etype.append(et)
+                s, t, et = self.edge_definitions[eid_raw]
+                src.append(str(s) if s is not None else None)
+                tgt.append(str(t) if t is not None else None)
+                etype.append(str(et) if et is not None else None)
                 head.append(None)
                 tail.append(None)
                 members.append(None)
 
-        # base frame
-        cols = {"edge_id": eids, "kind": kinds}
+        # Use stringified IDs in DataFrame
+        cols = {"edge_id": eids_str, "kind": kinds}
         if include_directed:
             cols["directed"] = dirs
         if include_weight:
             cols["global_weight"] = global_w
-        # we still need global weight transiently to compute effective weight even if not displayed
         if resolved_weight and not include_weight:
             cols["_gw_tmp"] = global_w
 
@@ -588,7 +582,6 @@ class ViewsClass:
         except Exception:
             pl = None
 
-        # Polars fast-path
         if pl is not None:
             base = pl.DataFrame(cols).with_columns(
                 pl.Series("source", src, dtype=pl.Utf8),
@@ -599,25 +592,23 @@ class ViewsClass:
                 pl.Series("members", members, dtype=pl.List(pl.Utf8)),
             )
 
-            # join pure edge attributes (left)
+            # Normalize edge_attributes before join
             if isinstance(self.edge_attributes, pl.DataFrame) and self.edge_attributes.height > 0:
-                out = base.join(self.edge_attributes, on="edge_id", how="left")
+                edge_attrs = self.edge_attributes
+                if "edge_id" in edge_attrs.columns:
+                    edge_attrs = edge_attrs.with_columns(pl.col("edge_id").cast(pl.Utf8))
+                out = base.join(edge_attrs, on="edge_id", how="left")
             else:
                 out = base
 
-            # join slice-specific attributes once, then compute resolved weight vectorized
-            if (
-                slice is not None
-                and isinstance(self.edge_slice_attributes, pl.DataFrame)
-                and self.edge_slice_attributes.height > 0
-            ):
-                slice_slice = self.edge_slice_attributes.filter(pl.col("slice_id") == slice).drop(
-                    "slice_id"
-                )
+            if (slice is not None and isinstance(self.edge_slice_attributes, pl.DataFrame) 
+                and self.edge_slice_attributes.height > 0):
+                slice_df = self.edge_slice_attributes
+                if "edge_id" in slice_df.columns:
+                    slice_df = slice_df.with_columns(pl.col("edge_id").cast(pl.Utf8))
+                slice_slice = slice_df.filter(pl.col("slice_id") == slice).drop("slice_id")
                 if slice_slice.height > 0:
-                    rename_map = {
-                        c: f"slice_{c}" for c in slice_slice.columns if c not in {"edge_id"}
-                    }
+                    rename_map = {c: f"slice_{c}" for c in slice_slice.columns if c != "edge_id"}
                     if rename_map:
                         slice_slice = slice_slice.rename(rename_map)
                     out = out.join(slice_slice, on="edge_id", how="left")
@@ -637,9 +628,8 @@ class ViewsClass:
 
             return out.clone() if copy else out
 
-        # Non-Polars fallback (pandas)
+        # pandas fallback
         import pandas as pd
-
         base = pd.DataFrame(cols)
         base["source"] = src
         base["target"] = tgt
@@ -647,25 +637,25 @@ class ViewsClass:
         base["head"] = head
         base["tail"] = tail
         base["members"] = members
-
         out = base
 
         ea = self.edge_attributes
         if ea is not None and hasattr(ea, "columns") and len(ea) > 0 and "edge_id" in ea.columns:
-            out = out.merge(pd.DataFrame(ea), on="edge_id", how="left")
+            ea_df = pd.DataFrame(ea)
+            ea_df["edge_id"] = ea_df["edge_id"].astype(str)
+            out = out.merge(ea_df, on="edge_id", how="left")
 
         if slice is not None:
             esa = self.edge_slice_attributes
             if esa is not None and hasattr(esa, "columns") and len(esa) > 0:
                 esa_df = pd.DataFrame(esa)
                 if {"slice_id", "edge_id"}.issubset(esa_df.columns):
+                    esa_df["edge_id"] = esa_df["edge_id"].astype(str)
                     slice_slice = esa_df[esa_df["slice_id"] == slice].drop(
                         columns=["slice_id"], errors="ignore"
                     )
                     if not slice_slice.empty:
-                        rename_map = {
-                            c: f"slice_{c}" for c in slice_slice.columns if c != "edge_id"
-                        }
+                        rename_map = {c: f"slice_{c}" for c in slice_slice.columns if c != "edge_id"}
                         slice_slice = slice_slice.rename(columns=rename_map)
                         out = out.merge(slice_slice, on="edge_id", how="left")
 
