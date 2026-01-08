@@ -852,17 +852,26 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
         # --- Expanded hyperedges (if present) ---
         exp = emeta.get("expanded", {})
-        for eid, info in exp.items():
-            directed = info.get("mode") == "directed"
-            if directed:
-                G.add_hyperedge(
-                    head=info.get("head", []),
-                    tail=info.get("tail", []),
-                    edge_id=eid,
-                    edge_directed=True,
-                )
-            else:
-                G.add_hyperedge(members=info.get("members", []), edge_id=eid, edge_directed=False)
+        if exp:
+            hyperedge_bulk_data = []
+            for eid, info in exp.items():
+                directed = info.get("mode") == "directed"
+                if directed:
+                    hyperedge_bulk_data.append({
+                        "head": info.get("head", []),
+                        "tail": info.get("tail", []),
+                        "edge_id": eid,
+                        "edge_directed": True,
+                    })
+                else:
+                    hyperedge_bulk_data.append({
+                        "members": info.get("members", []),
+                        "edge_id": eid,
+                        "edge_directed": False,
+                    })
+            
+            if hyperedge_bulk_data:
+                G.add_hyperedges_bulk(hyperedge_bulk_data)
 
         # --- Layers (Kivela)---
         kiv = emeta.get("kivela", {})
@@ -934,32 +943,33 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         vmap[vid] = dict(r)
 
     # --- update vertex attrs ---
+    vertex_bulk_data = []
     for n in node_aspects:
         cx_id = n["id"]
         attrs = dict(n.get("v", {}))
-
         ann_id = str(attrs.get("name", cx_id))
         cx2node[cx_id] = ann_id
-
-        if ann_id not in G.entity_types:
-            G.add_vertex(ann_id)
-
+        
         row = vmap.get(ann_id, {"vertex_id": ann_id})
-
-        # attributes from Cytoscape (except display name)
+        
+        # Merge attributes from Cytoscape (except display name)
         for k, v in attrs.items():
             if k != "name":
                 row[k] = v
-
-        # layout coordinates live on the node, not in v
+        
+        # Layout coordinates live on the node, not in v
         if "x" in n and n["x"] is not None:
             row["layout_x"] = float(n["x"])
         if "y" in n and n["y"] is not None:
             row["layout_y"] = float(n["y"])
         if "z" in n and n["z"] is not None:
             row["layout_z"] = float(n["z"])
+        
+        vertex_bulk_data.append(row)
 
-        vmap[ann_id] = row
+    # Single bulk vertex insert
+    if vertex_bulk_data:
+        G.add_vertices_bulk(vertex_bulk_data)
 
     # rebuild vertex table
     vnorm = _normalize_rows(list(vmap.values()))
@@ -977,23 +987,35 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         eid = str(r.get("edge_id", r.get("id")))
         emap[eid] = dict(r)
 
+    edge_bulk_data = []
     for e in aspects.get("edges", []):
         s = cx2node.get(e["s"])
         t = cx2node.get(e["t"])
         if not s or not t:
             continue
-
+        
         attrs = e.get("v", {})
         eid = str(attrs.get("edge_id", attrs.get("interaction", e["id"])))
         w = float(attrs.get("weight", 1.0))
+        
+        # Collect edge data for bulk insert
+        edge_dict = {
+            "source": s,
+            "target": t,
+            "edge_id": eid,
+            "weight": w,
+        }
+        
+        # Collect additional attributes (excluding interaction and weight)
+        extra_attrs = {k: v for k, v in attrs.items() if k not in ("interaction", "weight")}
+        if extra_attrs:
+            edge_dict["attributes"] = extra_attrs
+        
+        edge_bulk_data.append(edge_dict)
 
-        G.add_edge(s, t, edge_id=eid, weight=w)
-
-        row = emap.get(eid, {"edge_id": eid})
-        for k, v in attrs.items():
-            if k not in ("interaction", "weight"):
-                row[k] = v
-        emap[eid] = row
+    # Single bulk edge insert
+    if edge_bulk_data:
+        G.add_edges_bulk(edge_bulk_data)
 
     enorm = _normalize_rows(list(emap.values()))
     G.edge_attributes = _rows_to_df(enorm)
