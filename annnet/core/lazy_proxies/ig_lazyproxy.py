@@ -461,14 +461,14 @@ class _LazyIGProxy:
 
         if not needed_attrs:
             # keep only 'name' on vertices, drop all edge attrs quickly by rebuild
-            H = _ig.AnnNet(directed=igG.is_directed())
+            H = _ig.Graph(directed=igG.is_directed())
             H.add_vertices(igG.vcount())
             if "name" in igG.vs.attributes():
                 H.vs["name"] = igG.vs["name"]
             H.add_edges([e.tuple for e in igG.es])
             return H
         # keep only specific attrs
-        H = _ig.AnnNet(directed=igG.is_directed())
+        H = _ig.Graph(directed=igG.is_directed())
         H.add_vertices(igG.vcount())
         if "name" in igG.vs.attributes():
             H.vs["name"] = igG.vs["name"]
@@ -485,7 +485,7 @@ class _LazyIGProxy:
     ):
         import igraph as _ig
 
-        H = _ig.AnnNet(directed=directed)
+        H = _ig.Graph(directed=directed)
         H.add_vertices(igG.vcount())
         if "name" in igG.vs.attributes():
             H.vs["name"] = igG.vs["name"]
