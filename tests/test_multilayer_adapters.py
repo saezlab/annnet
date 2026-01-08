@@ -5,7 +5,7 @@ import unittest
 
 import polars as pl
 
-from annnet.adapters.GraphDir_Parquet_adapter import read_parquet_graphdir, write_parquet_graphdir
+from annnet.adapters.GraphDir_Parquet_adapter import from_parquet_graphdir, to_parquet_graphdir
 from annnet.adapters.igraph_adapter import from_igraph, to_igraph
 from annnet.adapters.json_adapter import from_json, to_json
 from annnet.adapters.networkx_adapter import from_nx, to_nx
@@ -138,8 +138,8 @@ class TestMultilayerAdapters(unittest.TestCase):
     def test_graphdir_roundtrip(self):
         G = self._build_multilayer_graph()
         path = os.path.join(self.test_dir, "graph_dir")
-        write_parquet_graphdir(G, path)
-        G2 = read_parquet_graphdir(path)
+        to_parquet_graphdir(G, path)
+        G2 = from_parquet_graphdir(path)
         self._assert_multilayer_equal(G, G2)
 
     def test_sif_roundtrip(self):
