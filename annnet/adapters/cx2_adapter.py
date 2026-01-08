@@ -923,6 +923,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         directed = net_attrs.get("directed", True)
         G = AnnNet(directed=directed)
 
+        G.entity_types = {}
         if visual_props:
             # make sure we have a dict
             if not hasattr(G, "graph_attributes") or G.graph_attributes is None:
@@ -972,8 +973,10 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         G.add_vertices_bulk(vertex_bulk_data)
 
     # rebuild vertex table
-    vnorm = _normalize_rows(list(vmap.values()))
-    G.vertex_attributes = _rows_to_df(vnorm)
+    if vertex_bulk_data:
+        G.vertex_attributes = _rows_to_df(_normalize_rows(vertex_bulk_data))
+    else:
+        G.vertex_attributes = _rows_to_df([])
 
     # Normalise ID column name: prefer 'vertex_id' consistently
     cols = set(G.vertex_attributes.columns)
