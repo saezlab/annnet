@@ -667,6 +667,103 @@ class LayerClass:
         self.set_edge_kivela_role(eid, "intra", aa)
         return eid
 
+    def add_intra_edges_bulk(self, edges, layer_tuple, weight=1.0, fast_mode=True):
+        """
+        Direct matrix manipulation - bypasses add_edge overhead.
+        edges: [(u, v), ...] or [(u, v, w), ...]
+        """
+        aa = tuple(layer_tuple)
+        
+        if not fast_mode:
+            self._validate_layer_tuple(aa)
+            self._assert_presence(u, aa)
+            self._assert_presence(v, aa)
+        
+        Lid = self._layer_tuple_to_lid(aa)
+        entity_to_idx = self.entity_to_idx
+        edge_to_idx = self.edge_to_idx
+        idx_to_edge = self.idx_to_edge
+        edge_defs = self.edge_definitions
+        edge_w = self.edge_weights
+        edge_dir = self.edge_directed
+        slices = self._slices
+        M = self._matrix
+        
+        # Ensure all vertices exist
+        all_vertices = set()
+        edge_data = []
+        for e in edges:
+            if isinstance(e, tuple):
+                u, v = e[0], e[1]
+                w = e[2] if len(e) > 2 else weight
+            else:
+                u, v = e['u'], e['v']
+                w = e.get('weight', weight)
+            all_vertices.update([u, v])
+            edge_data.append((u, v, w))
+        
+        missing = [v for v in all_vertices if v not in entity_to_idx]
+        if missing:
+            self.add_vertices_bulk(missing, slice=self._current_slice)
+        
+        # Grow matrix once
+        self._grow_rows_to(self._num_entities)
+        num_new_edges = len(edge_data)
+        start_col = self._num_edges
+        self._num_edges += num_new_edges
+        self._grow_cols_to(self._num_edges)
+        col_idx = start_col
+        
+        # Batch insert edges
+        edge_ids = []
+        
+        self.edge_kind = getattr(self, "edge_kind", {})
+        self.edge_layers = getattr(self, "edge_layers", {})
+        for u, v, w in edge_data:
+            base_eid = f"{u}>{v}@{Lid}"
+            eid = base_eid
+            k = 1
+            while eid in edge_to_idx:
+                eid = f"{base_eid}#{k}"
+                k += 1
+            
+            if eid in edge_to_idx:
+                # Update existing - rare in bulk creation
+                c = edge_to_idx[eid]
+            else:
+                # Create new
+                edge_to_idx[eid] = col_idx
+                idx_to_edge[col_idx] = eid
+                c = col_idx
+                col_idx += 1
+            
+            edge_defs[eid] = (u, v, 'regular')
+            edge_w[eid] = w
+            edge_dir[eid] = bool(self.directed) if self.directed is not None else False  # eventhough intra edges typically undirected
+            
+            source_idx = entity_to_idx[u]
+            target_idx = entity_to_idx[v]
+            
+            M[source_idx, c] = w
+            if u != v:
+                M[target_idx, c] = w
+            
+            # Kivela metadata
+            self.edge_kind[eid] = 'intra'
+            self.edge_layers[eid] = aa
+            
+            edge_ids.append(eid)
+        
+        self._num_edges = col_idx
+        
+        # Batch slice registration
+        if Lid not in slices:
+            slices[Lid] = {"vertices": set(), "edges": set(), "attributes": {}}
+        slices[Lid]["edges"].update(edge_ids)
+        slices[Lid]["vertices"].update(all_vertices)
+        
+        return edge_ids
+
     def add_inter_edge_nl(
         self,
         u: str,
