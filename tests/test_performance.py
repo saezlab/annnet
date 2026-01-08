@@ -10,8 +10,8 @@ import pytest
 
 from annnet.adapters.dataframe_adapter import from_dataframes, to_dataframes  # DF (DataFrame)
 from annnet.adapters.GraphDir_Parquet_adapter import (
-    read_parquet_graphdir,
-    write_parquet_graphdir,
+    from_parquet_graphdir,
+    to_parquet_graphdir,
 )  # Parquet (columnar storage)
 from annnet.adapters.json_adapter import from_json, to_json  # JSON (JavaScript Object Notation)
 
@@ -29,8 +29,8 @@ class TestPerformance:
         results["JSON"] = time.time() - start
 
         start = time.time()
-        write_parquet_graphdir(G, tmpdir_fixture / "perf_dir")
-        H = read_parquet_graphdir(tmpdir_fixture / "perf_dir")
+        to_parquet_graphdir(G, tmpdir_fixture / "perf_dir")
+        H = from_parquet_graphdir(tmpdir_fixture / "perf_dir")
         # optional sanity:
         assert H.number_of_edges() == G.number_of_edges()
         results["Parquet"] = time.time() - start

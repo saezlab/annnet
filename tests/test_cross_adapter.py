@@ -8,8 +8,8 @@ sys.path.insert(0, str(ROOT))
 import polars as pl  # PL (Polars)
 
 from annnet.adapters.GraphDir_Parquet_adapter import (
-    read_parquet_graphdir,
-    write_parquet_graphdir,
+    from_parquet_graphdir,
+    to_parquet_graphdir,
 )
 from annnet.adapters.GraphML_adapter import (
     from_graphml,
@@ -25,7 +25,7 @@ class TestCrossAdapter:
     def test_all_adapters_lossless(self, complex_graph, tmpdir_fixture):
         G = complex_graph
         to_json(G, tmpdir_fixture / "graph.json", public_only=False)
-        write_parquet_graphdir(G, tmpdir_fixture / "graphdir")
+        to_parquet_graphdir(G, tmpdir_fixture / "graphdir")
         to_sif(
             G,
             tmpdir_fixture / "graph.sif",
@@ -35,7 +35,7 @@ class TestCrossAdapter:
         to_graphml(G, tmpdir_fixture / "graph.graphml", hyperedge_mode="reify")
 
         G_json = from_json(tmpdir_fixture / "graph.json")
-        G_parquet = read_parquet_graphdir(tmpdir_fixture / "graphdir")
+        G_parquet = from_parquet_graphdir(tmpdir_fixture / "graphdir")
         G_sif = from_sif(
             tmpdir_fixture / "graph.sif", manifest=tmpdir_fixture / "graph.sif.manifest.json"
         )
