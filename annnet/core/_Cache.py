@@ -300,8 +300,8 @@ class Operations:
         Notes
         -
         - For binary edges, both endpoints must be in `vertices` to be retained.
-        - For hyperedges, **all** member verices must be included to retain the edge.
-        - Attributes for retained verices and edges are preserved.
+        - For hyperedges, **all** member vertices must be included to retain the edge.
+        - Attributes for retained vertices and edges are preserved.
 
         """
         V = set(vertices)
@@ -1019,7 +1019,7 @@ class Operations:
 
         Behavior
 
-        - Includes the set of verices, edges, and directedness in the hash.
+        - Includes the set of vertices, edges, and directedness in the hash.
         - Includes graph-level attributes (if any) to capture metadata changes.
         - Does **not** depend on memory addresses or internal object IDs, so the same
         graph serialized/deserialized or reconstructed with identical structure
@@ -1029,14 +1029,14 @@ class Operations:
         -
         - This method enables `AnnNet` objects to be used in hash-based containers
         (like `set` or `dict` keys).
-        - If the graph is **mutated** after hashing (e.g., verices or edges are added
+        - If the graph is **mutated** after hashing (e.g., vertices or edges are added
         or removed), the hash will no longer reflect the new state.
         - The method uses a deterministic representation: sorted vertex/edge sets
         ensure that ordering does not affect the hash.
 
         """
         # Core structural components
-        vertex_ids = tuple(sorted(self.verices()))
+        vertex_ids = tuple(sorted(self.vertices()))
         edge_defs = []
 
         for j in range(self.number_of_edges()):
