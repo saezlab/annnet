@@ -8,8 +8,8 @@ from unittest.mock import patch
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
 
-import annnet.adapters.SBML_adapter as sa
-from annnet.adapters.SBML_adapter import (
+import annnet.adapters.SBML_io as sa
+from annnet.adapters.SBML_io import (
     BOUNDARY_SINK,
     BOUNDARY_SOURCE,
     _graph_from_sbml_model,

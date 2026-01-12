@@ -8,12 +8,12 @@ import time
 
 import pytest
 
-from annnet.adapters.dataframe_adapter import from_dataframes, to_dataframes  # DF (DataFrame)
-from annnet.adapters.GraphDir_Parquet_adapter import (
+from annnet.adapters.dataframe_io import from_dataframes, to_dataframes  # DF (DataFrame)
+from annnet.adapters.GraphDir_Parquet_io import (
     from_parquet_graphdir,
     to_parquet_graphdir,
 )  # Parquet (columnar storage)
-from annnet.adapters.json_adapter import from_json, to_json  # JSON (JavaScript Object Notation)
+from annnet.adapters.json_io import from_json, to_json  # JSON (JavaScript Object Notation)
 
 
 class TestPerformance:

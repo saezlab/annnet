@@ -4,12 +4,12 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
 
-from annnet.adapters.GraphDir_Parquet_adapter import (
+from annnet.adapters.GraphDir_Parquet_io import (
     from_parquet_graphdir,
     to_parquet_graphdir,
 )  # Parquet (columnar storage)
-from annnet.adapters.json_adapter import from_json, to_json  # JSON (JavaScript Object Notation)
-from annnet.adapters.SIF_adapter import from_sif, to_sif  # SIF (Simple Interaction Format)
+from annnet.adapters.json_io import from_json, to_json  # JSON (JavaScript Object Notation)
+from annnet.adapters.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
 
 
 class TestEdgeCases:
@@ -27,7 +27,7 @@ class TestEdgeCases:
         G_parquet = from_parquet_graphdir(tmpdir_fixture / "empty_dir")
         assert len(list(G_parquet.vertices())) == 0
 
-        from annnet.adapters.dataframe_adapter import from_dataframes, to_dataframes
+        from annnet.adapters.dataframe_io import from_dataframes, to_dataframes
 
         dfs = to_dataframes(G)
         G_df = from_dataframes(**dfs)

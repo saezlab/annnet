@@ -4,11 +4,11 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
 
-from annnet.adapters.dataframe_adapter import to_dataframes  # DF (DataFrame)
-from annnet.adapters.GraphDir_Parquet_adapter import (
+from annnet.adapters.dataframe_io import to_dataframes  # DF (DataFrame)
+from annnet.adapters.GraphDir_Parquet_io import (
     to_parquet_graphdir,
 )  # Parquet (columnar storage)
-from annnet.adapters.SIF_adapter import from_sif, to_sif  # SIF (Simple Interaction Format)
+from annnet.adapters.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
 
 
 class TestIntegration:
@@ -60,7 +60,7 @@ class TestIntegration:
         G.add_edge_to_slice("collaboration", "c1")
         G.add_edge("Alice", "David", edge_id="m1")
         G.add_edge_to_slice("mentorship", "m1")
-        from annnet.adapters.json_adapter import from_json, to_json
+        from annnet.adapters.json_io import from_json, to_json
 
         to_json(G, tmpdir_fixture / "multislice.json")
         G2 = from_json(tmpdir_fixture / "multislice.json")

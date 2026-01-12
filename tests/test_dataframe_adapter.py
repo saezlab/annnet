@@ -4,7 +4,7 @@ import pandas as pd
 import polars as pl
 import pyarrow as pa
 
-from annnet.adapters.dataframe_adapter import from_dataframes, to_dataframes
+from annnet.adapters.dataframe_io import from_dataframes, to_dataframes
 
 
 class TestDataFrameAdapter(unittest.TestCase):

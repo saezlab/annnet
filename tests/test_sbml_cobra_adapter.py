@@ -7,7 +7,7 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
 
-from annnet.adapters.sbml_cobra_adapter import _graph_from_stoich, from_cobra_model
+from annnet.adapters.sbml_cobra_io import _graph_from_stoich, from_cobra_model
 from annnet.core import AnnNet
 
 
@@ -85,7 +85,7 @@ class TestSBMLAdapter(unittest.TestCase):
     def test_boundary_reactions(self):
         import numpy as np
 
-        from annnet.adapters.sbml_cobra_adapter import (
+        from annnet.adapters.sbml_cobra_io import (
             BOUNDARY_SINK,
             BOUNDARY_SOURCE,
             _graph_from_stoich,

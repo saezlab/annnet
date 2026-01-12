@@ -367,6 +367,18 @@ def from_sif(
     else:
         H = AnnNet(directed=directed)
 
+    binary_edge_index = None
+    if manifest and "binary_edges" in manifest:
+        em = manifest.get("edge_metadata", {})
+        binary_edge_index = {
+            (
+                info["source"],
+                info["target"],
+                em.get(eid, {}).get("attrs", {}).get(relation_attr, default_relation),
+            ): (eid, info)
+            for eid, info in manifest["binary_edges"].items()
+        }
+
     def _parse_node_kv(tok: str):
         if "=" not in tok:
             return None, None
@@ -453,18 +465,13 @@ def from_sif(
             edge_key = (src, tgt, rel)
 
             if manifest and "binary_edges" in manifest:
-                orig_eid = None
-                edge_directed_val = directed
-
-                for eid, info in manifest["binary_edges"].items():
-                    if info["source"] == src and info["target"] == tgt:
-                        meta = manifest.get("edge_metadata", {}).get(eid, {})
-                        edge_rel = meta.get("attrs", {}).get(relation_attr, default_relation)
-
-                        if edge_rel == rel:
-                            orig_eid = eid
-                            edge_directed_val = info.get("directed", directed)
-                            break
+                hit = binary_edge_index.get((src, tgt, rel))
+                if hit:
+                    orig_eid, info = hit
+                    edge_directed_val = info.get("directed", directed)
+                else:
+                    orig_eid = None
+                    edge_directed_val = directed
 
                 if orig_eid:
                     eid = H.add_edge(src, tgt, edge_id=orig_eid, edge_directed=edge_directed_val)
