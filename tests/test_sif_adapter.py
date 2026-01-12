@@ -3,7 +3,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
-from annnet.adapters.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
+from annnet.io.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
 
 from .helpers import assert_edge_attrs_equal, assert_graphs_equal, assert_vertex_attrs_equal
 

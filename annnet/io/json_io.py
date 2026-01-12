@@ -11,7 +11,7 @@ try:
 except Exception:  # ModuleNotFoundError, etc.
     pl = None
 
-from ._utils import (
+from ..adapters._utils import (
     _deserialize_edge_layers,
     _deserialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,

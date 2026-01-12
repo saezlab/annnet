@@ -10,7 +10,7 @@ import networkx as nx
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
-from .networkx_adapter import from_nx, from_nx_only, to_nx
+from ..adapters.networkx_adapter import from_nx, from_nx_only, to_nx
 
 _BOOL = {"true": True, "false": False}
 _NUM_RE = re.compile(r"^[+-]?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$")

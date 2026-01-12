@@ -3,7 +3,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
-from annnet.adapters.GraphML_io import (
+from annnet.io.GraphML_io import (
     from_graphml,
     to_graphml,
 )  # GraphML (AnnNet Markup Language)
