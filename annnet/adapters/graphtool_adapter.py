@@ -340,6 +340,15 @@ def from_graphtool(
     edge_slice_rows = smeta.get("edge_slice_attributes", [])
     if edge_slice_rows:
         G.edge_slice_attributes = _rows_to_df(edge_slice_rows)
+        
+        # reconstruct slice edge membership from edge_slice_attributes
+        for row in edge_slice_rows:
+            lid = row.get("slice") or row.get("slice_id") or row.get("lid")
+            eid = row.get("edge_id") or row.get("edge")
+            if lid and eid:
+                if lid not in G._slices:
+                    G._slices[lid] = {"edges": set(), "vertices": set(), "attrs": {}}
+                G._slices[lid]["edges"].add(eid)
 
     # ----- multilayer / Kivela -----
     mm = manifest.get("multilayer", {})
