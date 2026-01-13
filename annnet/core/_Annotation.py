@@ -1042,6 +1042,27 @@ class AttributesClass:
             raise ValueError("Cannot infer key columns from DataFrame schema")
 
         nw_df = self._ensure_attr_columns(nw_df, attrs)
+        
+        schema = nw_df.collect_schema()
+        upcasts = []
+        for c, v in attrs.items():
+            if c in schema and v is not None:
+                existing_dt = schema[c]
+                if not self._is_null_dtype(existing_dt):
+                    v_dt = self._dtype_for_value(v, prefer="narwhals")
+                    def _is_num(dt):
+                        s = str(dt).lower()
+                        return any(x in s for x in ("float", "int", "decimal", "uint"))
+                    if _is_num(existing_dt) and _is_num(v_dt) and existing_dt != v_dt:
+                        try:
+                            sup = _get_numeric_supertype(existing_dt, v_dt)
+                            if sup and sup != existing_dt:
+                                upcasts.append(nw.col(c).cast(sup).alias(c))
+                        except Exception:
+                            pass
+        if upcasts:
+            nw_df = nw_df.with_columns(upcasts)        
+
         cond = None
         for k in key_cols:
             c = nw.col(k) == nw.lit(key_vals[k])
