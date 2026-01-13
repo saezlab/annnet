@@ -16,6 +16,7 @@ from annnet.core.graph import AnnNet
 
 try:
     import graph_tool.all as gt
+
     HAS_GT = True
 except Exception:
     HAS_GT = False
@@ -59,7 +60,7 @@ class TestGraphToolAdapter(unittest.TestCase):
 
         self.assertIsNotNone(gtG)
         self.assertIsInstance(manifest, dict)
-        
+
         self.assertIn("version", manifest)
         self.assertIn("graph", manifest)
         self.assertIn("vertices", manifest)
@@ -73,11 +74,11 @@ class TestGraphToolAdapter(unittest.TestCase):
     def test_roundtrip_preserves_structure(self):
         g = _BUILD_GRAPH()
         gtG, manifest = to_graphtool(g)
-        
+
         g2 = from_graphtool(gtG, manifest)
 
         self.assertEqual(g2.number_of_vertices(), g.number_of_vertices())
-        
+
         self.assertIn("A", g2.vertices())
         self.assertIn("B", g2.vertices())
         self.assertIn("C", g2.vertices())
@@ -88,7 +89,7 @@ class TestGraphToolAdapter(unittest.TestCase):
 
         slices_data = manifest.get("slices", {})
         self.assertIn("data", slices_data)
-        
+
         slice_names = list(slices_data.get("data", {}).keys())
         self.assertIn("Lw", slice_names)
         self.assertIn("L0", slice_names)
@@ -99,18 +100,18 @@ class TestGraphToolAdapter(unittest.TestCase):
 
         edges_meta = manifest.get("edges", {})
         hyperedges = edges_meta.get("hyperedges", {})
-        
+
         self.assertGreater(len(hyperedges), 0)
 
     def test_roundtrip_preserves_weights(self):
         g = _BUILD_GRAPH()
-        
+
         e1_eid = None
         for eid in g.edge_weights.keys():
             if g.edge_weights[eid] == 2.0:
                 e1_eid = eid
                 break
-        
+
         self.assertIsNotNone(e1_eid)
 
         gtG, manifest = to_graphtool(g)
@@ -139,7 +140,7 @@ class TestGraphToolAdapter(unittest.TestCase):
         gtG, manifest = to_graphtool(g)
 
         self.assertIn("id", gtG.vp)
-        
+
         vertex_ids = [gtG.vp["id"][v] for v in gtG.vertices()]
         self.assertIn("A", vertex_ids)
         self.assertIn("B", vertex_ids)
@@ -200,7 +201,7 @@ class TestGraphToolAdapter(unittest.TestCase):
     def test_without_manifest_loses_hyperedges(self):
         g = _BUILD_GRAPH()
         gtG, manifest = to_graphtool(g)
-        
+
         g2 = from_graphtool(gtG, manifest=None)
 
         self.assertEqual(g2.number_of_vertices(), 3)

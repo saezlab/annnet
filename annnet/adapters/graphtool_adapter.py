@@ -340,7 +340,7 @@ def from_graphtool(
     edge_slice_rows = smeta.get("edge_slice_attributes", [])
     if edge_slice_rows:
         G.edge_slice_attributes = _rows_to_df(edge_slice_rows)
-        
+
         # reconstruct slice edge membership from edge_slice_attributes
         for row in edge_slice_rows:
             lid = row.get("slice") or row.get("slice_id") or row.get("lid")
