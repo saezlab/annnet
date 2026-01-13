@@ -56,10 +56,7 @@ def run(scale):
     # ------------------------------------------------------------------
     # Bulk vertex attributes (FASTER)
     # ------------------------------------------------------------------
-    items = [
-        (f"v{i}", {"kind": "gene", "score": i % 7})
-        for i in range(scale.vertices)
-    ]
+    items = [(f"v{i}", {"kind": "gene", "score": i % 7}) for i in range(scale.vertices)]
 
     with measure() as m_vertex_bulk:
         G.set_vertex_attrs_bulk(items)
@@ -74,8 +71,7 @@ def run(scale):
     # Bulk edge attributes
     # ------------------------------------------------------------------
     edge_items = [
-        (eid, {"weight": float(i % 5), "etype": "regular"})
-        for i, eid in enumerate(G.edges())
+        (eid, {"weight": float(i % 5), "etype": "regular"}) for i, eid in enumerate(G.edges())
     ]
 
     with measure() as m_edge_bulk:
@@ -92,10 +88,7 @@ def run(scale):
     # ------------------------------------------------------------------
     slice_id = "base"
 
-    slice_items = [
-        (eid, {"confidence": float(i % 3)})
-        for i, eid in enumerate(G.edges())
-    ]
+    slice_items = [(eid, {"confidence": float(i % 3)}) for i, eid in enumerate(G.edges())]
 
     with measure() as m_edge_slice_bulk:
         G.set_edge_slice_attrs_bulk(slice_id, slice_items)

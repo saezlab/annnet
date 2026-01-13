@@ -48,7 +48,9 @@ def _time(label, timings):
     t1 = time.perf_counter()
     timings[label] = timings.get(label, 0.0) + (t1 - t0)
 
+
 # ---------------
+
 
 def _serialize_value(v: Any) -> Any:
     if isinstance(v, Enum):
@@ -144,7 +146,9 @@ def _export_legacy(
             attrs = dict(row)
             attrs.pop("vertex_id", None)
             if public_only:
-                attrs = {k: _serialize_value(v) for k, v in attrs.items() if not str(k).startswith("__")}
+                attrs = {
+                    k: _serialize_value(v) for k, v in attrs.items() if not str(k).startswith("__")
+                }
             else:
                 attrs = {k: _serialize_value(v) for k, v in attrs.items()}
             v_attrs_map[vid] = attrs
@@ -158,7 +162,9 @@ def _export_legacy(
             attrs = dict(row)
             attrs.pop("edge_id", None)
             if public_only:
-                attrs = {k: _serialize_value(v) for k, v in attrs.items() if not str(k).startswith("__")}
+                attrs = {
+                    k: _serialize_value(v) for k, v in attrs.items() if not str(k).startswith("__")
+                }
             else:
                 attrs = {k: _serialize_value(v) for k, v in attrs.items()}
             e_attrs_map[eid] = attrs
@@ -459,7 +465,7 @@ def to_nx(
                     if eid not in seen:
                         arr.append(eid)
                         seen.add(eid)
-    
+
     for r in _rows_from_table(t):
         lid = r.get("slice") or r.get("slice_id") or r.get("lid")
         if lid is None:
@@ -478,7 +484,7 @@ def to_nx(
                 if eid not in seen:
                     arr.append(eid)
                     seen.add(eid)
-    
+
     if isinstance(etl, dict):
         for eid, arr_lids in etl.items():
             for lid in arr_lids or []:
@@ -489,11 +495,11 @@ def to_nx(
     # Per-edge slice weights - BATCH READ
     slice_weights = {}
     candidate_lids = set(slices_section.keys()) or lids
-    
+
     # Read entire slice attributes table once
     slice_attr_table = getattr(graph, "edge_slice_attributes", None)
     slice_attr_rows = _rows_from_table(slice_attr_table)
-    
+
     # Build lookup: {(slice, edge_id): weight}
     slice_weight_lookup = {}
     for row in slice_attr_rows:
@@ -502,7 +508,7 @@ def to_nx(
         w = row.get("weight")
         if lid is not None and eid is not None and w is not None:
             slice_weight_lookup[(lid, eid)] = float(w)
-    
+
     # Populate slice_weights from lookup
     for lid in candidate_lids:
         arr = slices_section.setdefault(lid, [])
@@ -549,30 +555,38 @@ def to_nx(
 
             head_map, tail_map = spec[0], spec[1]
             he_id = f"{reify_prefix}{eid}"
-            
+
             he_attrs = _public(edge_attrs.get(eid, {}))
-            he_attrs.update({
-                "is_hyperedge": True,
-                "eid": eid,
-                "directed": bool(_is_directed_eid(graph, eid)),
-                "hyper_weight": float(weights_map.get(eid, 1.0)),
-            })
-            
+            he_attrs.update(
+                {
+                    "is_hyperedge": True,
+                    "eid": eid,
+                    "directed": bool(_is_directed_eid(graph, eid)),
+                    "hyper_weight": float(weights_map.get(eid, 1.0)),
+                }
+            )
+
             he_nodes_to_add.append((he_id, he_attrs))
 
             if _is_directed_eid(graph, eid):
                 for u, coeff in (tail_map or {}).items():
-                    membership_edges_to_add.append((
-                        u, he_id,
-                        f"m::{eid}::{u}::tail",
-                        {"role": "tail", "coeff": float(coeff), "membership_of": eid}
-                    ))
+                    membership_edges_to_add.append(
+                        (
+                            u,
+                            he_id,
+                            f"m::{eid}::{u}::tail",
+                            {"role": "tail", "coeff": float(coeff), "membership_of": eid},
+                        )
+                    )
                 for v, coeff in (head_map or {}).items():
-                    membership_edges_to_add.append((
-                        he_id, v,
-                        f"m::{eid}::{v}::head",
-                        {"role": "head", "coeff": float(coeff), "membership_of": eid}
-                    ))
+                    membership_edges_to_add.append(
+                        (
+                            he_id,
+                            v,
+                            f"m::{eid}::{v}::head",
+                            {"role": "head", "coeff": float(coeff), "membership_of": eid},
+                        )
+                    )
             else:
                 members = {}
                 members.update(tail_map or {})
@@ -580,29 +594,38 @@ def to_nx(
                 if is_multi_di:
                     for u, coeff in members.items():
                         base = f"m::{eid}::{u}::m"
-                        membership_edges_to_add.append((
-                            u, he_id,
-                            base + "::fwd",
-                            {"role": "member", "coeff": float(coeff), "membership_of": eid}
-                        ))
-                        membership_edges_to_add.append((
-                            he_id, u,
-                            base + "::rev",
-                            {"role": "member", "coeff": float(coeff), "membership_of": eid}
-                        ))
+                        membership_edges_to_add.append(
+                            (
+                                u,
+                                he_id,
+                                base + "::fwd",
+                                {"role": "member", "coeff": float(coeff), "membership_of": eid},
+                            )
+                        )
+                        membership_edges_to_add.append(
+                            (
+                                he_id,
+                                u,
+                                base + "::rev",
+                                {"role": "member", "coeff": float(coeff), "membership_of": eid},
+                            )
+                        )
                 else:
                     for u, coeff in members.items():
-                        membership_edges_to_add.append((
-                            u, he_id,
-                            f"m::{eid}::{u}::m",
-                            {"role": "member", "coeff": float(coeff), "membership_of": eid}
-                        ))
+                        membership_edges_to_add.append(
+                            (
+                                u,
+                                he_id,
+                                f"m::{eid}::{u}::m",
+                                {"role": "member", "coeff": float(coeff), "membership_of": eid},
+                            )
+                        )
 
         # BULK ADD TO NETWORKX
         for he_id, attrs in he_nodes_to_add:
             if he_id not in nxG:
                 nxG.add_node(he_id, **attrs)
-        
+
         for u, v, key, attrs in membership_edges_to_add:
             nxG.add_edge(u, v, key=key, **attrs)
 
@@ -643,6 +666,7 @@ def to_nx(
     }
 
     return nxG, manifest
+
 
 def save_manifest(manifest: dict, path: str):
     """Write manifest to JSON file.
@@ -796,7 +820,7 @@ def from_nx(
     known_vertices = set()
     existing_eids = set()
     existing_slices = set(H.list_slices(include_default=True))
-    
+
     edge_directed_cache = manifest.get("edge_directed", {}) or {}
     weights_cache = manifest.get("weights", {}) or {}
     vertex_attrs_cache = manifest.get("vertex_attrs", {}) or {}
@@ -841,7 +865,7 @@ def from_nx(
                     head = list(head_map)
                     tail = list(tail_map)
                     all_vertices = set(head) | set(tail)
-                    
+
                     for x in all_vertices:
                         add_vertex_once(x)
 
@@ -852,29 +876,35 @@ def from_nx(
                     }
 
                     if is_dir:
-                        hyperedges_bulk.append({
-                            "head": head,
-                            "tail": tail,
-                            "edge_id": eid,
-                            "edge_directed": True,
-                            "attributes": attrs,
-                        })
+                        hyperedges_bulk.append(
+                            {
+                                "head": head,
+                                "tail": tail,
+                                "edge_id": eid,
+                                "edge_directed": True,
+                                "attributes": attrs,
+                            }
+                        )
                     else:
-                        hyperedges_bulk.append({
-                            "members": list(all_vertices),
-                            "edge_id": eid,
-                            "edge_directed": False,
-                            "attributes": attrs,
-                        })
+                        hyperedges_bulk.append(
+                            {
+                                "members": list(all_vertices),
+                                "edge_id": eid,
+                                "edge_directed": False,
+                                "attributes": attrs,
+                            }
+                        )
                     existing_eids.add(eid)
             else:
                 u, v = defn[0], defn[1]
-                regular_edges_bulk.append({
-                    "source": u,
-                    "target": v,
-                    "edge_id": eid,
-                    "edge_directed": is_dir,
-                })
+                regular_edges_bulk.append(
+                    {
+                        "source": u,
+                        "target": v,
+                        "edge_id": eid,
+                        "edge_directed": is_dir,
+                    }
+                )
                 existing_eids.add(eid)
 
         # SINGLE BULK CALL FOR REGULAR EDGES
@@ -919,7 +949,7 @@ def from_nx(
                 except Exception:
                     pass
 
-    with _time("multilayer", timings):                    
+    with _time("multilayer", timings):
         aspects = mm.get("aspects", [])
         elem_layers = mm.get("elem_layers", {})
 
@@ -964,7 +994,7 @@ def from_nx(
                         H.set_vertex_attrs(vid, **attrs)
                     except Exception:
                         pass
-        
+
         if edge_attrs_cache:
             for eid, attrs in edge_attrs_cache.items():
                 if attrs:
@@ -983,45 +1013,55 @@ def from_nx(
                 coeff_attr=coeff_attr,
                 membership_attr=membership_attr,
             )
-            
+
             reified_hyperedges_bulk = []
-            
+
             for eid, directed, head_map, tail_map, he_attrs, he_node in hyperdefs:
                 if eid in existing_eids:
                     continue
-                
+
                 all_vertices = set(head_map) | set(tail_map)
                 for x in all_vertices:
                     add_vertex_once(x)
-                
+
                 # BUILD ATTRIBUTES INLINE
                 attrs = {}
                 if directed:
                     attrs["__source_attr"] = {u: {"__value": c} for u, c in head_map.items()}
                     attrs["__target_attr"] = {v: {"__value": c} for v, c in tail_map.items()}
                 else:
-                    attrs["__source_attr"] = {u: {"__value": head_map[u]} for u in all_vertices if u in head_map}
-                    attrs["__target_attr"] = {v: {"__value": tail_map[v]} for v in all_vertices if v in tail_map}
+                    attrs["__source_attr"] = {
+                        u: {"__value": head_map[u]} for u in all_vertices if u in head_map
+                    }
+                    attrs["__target_attr"] = {
+                        v: {"__value": tail_map[v]} for v in all_vertices if v in tail_map
+                    }
 
-                clean_attrs = {k: v for k, v in (he_attrs or {}).items() if k not in {he_node_flag, he_id_attr}}
+                clean_attrs = {
+                    k: v for k, v in (he_attrs or {}).items() if k not in {he_node_flag, he_id_attr}
+                }
                 if clean_attrs:
                     attrs.update(clean_attrs)
 
                 if directed:
-                    reified_hyperedges_bulk.append({
-                        "head": list(head_map),
-                        "tail": list(tail_map),
-                        "edge_id": eid,
-                        "edge_directed": True,
-                        "attributes": attrs,
-                    })
+                    reified_hyperedges_bulk.append(
+                        {
+                            "head": list(head_map),
+                            "tail": list(tail_map),
+                            "edge_id": eid,
+                            "edge_directed": True,
+                            "attributes": attrs,
+                        }
+                    )
                 else:
-                    reified_hyperedges_bulk.append({
-                        "members": list(all_vertices),
-                        "edge_id": eid,
-                        "edge_directed": False,
-                        "attributes": attrs,
-                    })
+                    reified_hyperedges_bulk.append(
+                        {
+                            "members": list(all_vertices),
+                            "edge_id": eid,
+                            "edge_directed": False,
+                            "attributes": attrs,
+                        }
+                    )
                 existing_eids.add(eid)
 
             # SINGLE BULK CALL FOR REIFIED HYPEREDGES
@@ -1030,11 +1070,12 @@ def from_nx(
 
     return H
 
+
 def _nx_collect_reified_optimized(
     nxG, *, he_node_flag, he_id_attr, role_attr, coeff_attr, membership_attr
 ):
     """Optimized: pre-index edges by incident node to avoid O(H×E) full scans."""
-    
+
     node_to_edges = {}
     for u, v, d in nxG.edges(data=True):
         if u not in node_to_edges:
@@ -1043,32 +1084,32 @@ def _nx_collect_reified_optimized(
             node_to_edges[v] = []
         node_to_edges[u].append((u, v, d))
         node_to_edges[v].append((u, v, d))
-    
+
     hyperdefs = []
     membership_edges = []
-    
+
     for he_node, he_attrs in nxG.nodes(data=True):
         he_attrs = he_attrs or {}
         if not bool(he_attrs.get(he_node_flag, False)):
             continue
-        
+
         eid = he_attrs.get(he_id_attr, he_node)
-        
+
         head_map = {}
         tail_map = {}
         directed = False
-        
+
         incident_edges = node_to_edges.get(he_node, [])
-        
+
         for u, v, d in incident_edges:
             d = d or {}
             if membership_attr in d:
                 membership_edges.append((u, v, d))
-                
+
                 other = v if u == he_node else u
                 role = d.get(role_attr, "member")
                 coeff = d.get(coeff_attr, 1.0)
-                
+
                 if role == "head":
                     head_map[other] = coeff
                     directed = True
@@ -1078,11 +1119,12 @@ def _nx_collect_reified_optimized(
                 else:
                     head_map[other] = coeff
                     tail_map[other] = coeff
-        
+
         if head_map or tail_map:
             hyperdefs.append((eid, directed, head_map, tail_map, he_attrs, he_node))
-    
+
     return hyperdefs, membership_edges
+
 
 def to_backend(graph, **kwargs):
     """Export AnnNet to NetworkX without manifest (legacy compatibility).

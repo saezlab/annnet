@@ -33,6 +33,7 @@ from .lazy_proxies import _LazyGTProxy, _LazyIGProxy, _LazyNXProxy
 
 # ===================================
 
+
 class AnnNet(
     BulkOps,
     Operations,

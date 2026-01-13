@@ -71,10 +71,10 @@ _lazy_symbols: dict[str, tuple[str, str]] = {
         "read_parquet_graphdir",
     ),
     # CX2
-    "to_cx2" : ("annnet.io.cx2_io", "to_cx2"),
+    "to_cx2": ("annnet.io.cx2_io", "to_cx2"),
     "from_cx2": ("annnet.io.cx2_io", "from_cx2"),
     # JSON
-    "to_json" : ("annnet.io.json_io", "to_json"),
+    "to_json": ("annnet.io.json_io", "to_json"),
     "from_json": ("annnet.io.json_io", "from_json"),
 }
 

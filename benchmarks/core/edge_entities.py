@@ -67,9 +67,7 @@ def run(scale):
     def _node_edge_create():
         for i, eid in enumerate(base_edges):
             u = f"v{i % scale.vertices}"
-            node_edge_ids.append(
-                G.add_edge(u, eid, weight=1.0, as_entity=False)
-            )
+            node_edge_ids.append(G.add_edge(u, eid, weight=1.0, as_entity=False))
 
     with measure() as m_node_edge_create:
         mem_node_edge_create = _measure_mem(_node_edge_create)
@@ -100,8 +98,7 @@ def run(scale):
     # 3) Edge -> Edge creation + reification
     # ------------------------------------------------------------
     edge_entities = [
-        e for e in node_edge_ids
-        if e in G.entity_types and G.entity_types[e] == "edge"
+        e for e in node_edge_ids if e in G.entity_types and G.entity_types[e] == "edge"
     ]
 
     ee_ids = []
@@ -171,9 +168,7 @@ def run(scale):
     results["final_counts"] = {
         "vertices": G.number_of_vertices(),
         "edges_total": G.number_of_edges(),
-        "edge_entities": sum(
-            1 for t in G.entity_types.values() if t == "edge"
-        ),
+        "edge_entities": sum(1 for t in G.entity_types.values() if t == "edge"),
     }
 
     return results

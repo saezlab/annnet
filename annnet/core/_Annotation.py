@@ -124,22 +124,20 @@ class AttributesClass:
 
         for vid, attrs in updates.items():
             if not isinstance(attrs, dict):
-                raise TypeError(
-                    f"vertex bulk attrs must be dict, got {type(attrs)} for {vid}"
-                )
+                raise TypeError(f"vertex bulk attrs must be dict, got {type(attrs)} for {vid}")
 
         clean_updates = {
             vid: {k: v for k, v in attrs.items() if k not in self._vertex_RESERVED}
             for vid, attrs in updates.items()
         }
         clean_updates = {vid: attrs for vid, attrs in clean_updates.items() if attrs}
-        
+
         if not clean_updates:
             return
-        
+
         if self._vertex_key_enabled():
             old_keys = {vid: self._current_key_of_vertex(vid) for vid in clean_updates}
-            
+
             new_keys = {}
             for vid, attrs in clean_updates.items():
                 merged = {
@@ -147,7 +145,7 @@ class AttributesClass:
                     for f in self._vertex_key_fields
                 }
                 new_keys[vid] = self._build_key_from_attrs(merged)
-            
+
             for vid, new_key in new_keys.items():
                 if new_key is not None:
                     owner = self._vertex_key_index.get(new_key)
@@ -155,19 +153,21 @@ class AttributesClass:
                         raise ValueError(
                             f"Composite key collision on {self._vertex_key_fields}: {new_key} owned by {owner}"
                         )
-        
+
         self.vertex_attributes = self._upsert_rows_bulk(self.vertex_attributes, clean_updates)
-        
+
         watched = self._variables_watched_by_vertices()
         if watched:
-            affected_vertices = {vid for vid, attrs in clean_updates.items() if any(k in watched for k in attrs)}
+            affected_vertices = {
+                vid for vid, attrs in clean_updates.items() if any(k in watched for k in attrs)
+            }
             if affected_vertices:
                 affected_edges = set()
                 for vid in affected_vertices:
                     affected_edges.update(self._incident_flexible_edges(vid))
                 for eid in affected_edges:
                     self._apply_flexible_direction(eid)
-        
+
         if self._vertex_key_enabled():
             for vid in clean_updates:
                 new_key = new_keys[vid]
@@ -332,27 +332,25 @@ class AttributesClass:
             updates = dict(updates)
         for eid, attrs in updates.items():
             if not isinstance(attrs, dict):
-                raise TypeError(
-                    f"edge bulk attrs must be dict, got {type(attrs)} for {eid}"
-                )
-        
+                raise TypeError(f"edge bulk attrs must be dict, got {type(attrs)} for {eid}")
+
         clean_updates = {
             eid: {k: v for k, v in attrs.items() if k not in self._EDGE_RESERVED}
             for eid, attrs in updates.items()
         }
         clean_updates = {eid: attrs for eid, attrs in clean_updates.items() if attrs}
-        
+
         if not clean_updates:
             return
-        
+
         self.edge_attributes = self._upsert_rows_bulk(self.edge_attributes, clean_updates)
-        
+
         affected_edges = set()
         for eid, attrs in clean_updates.items():
             pol = self.edge_direction_policy.get(eid)
             if pol and pol.get("scope") == "edge" and pol["var"] in attrs:
                 affected_edges.add(eid)
-        
+
         for eid in affected_edges:
             self._apply_flexible_direction(eid)
 
@@ -1042,7 +1040,7 @@ class AttributesClass:
             raise ValueError("Cannot infer key columns from DataFrame schema")
 
         nw_df = self._ensure_attr_columns(nw_df, attrs)
-        
+
         schema = nw_df.collect_schema()
         upcasts = []
         for c, v in attrs.items():
@@ -1050,9 +1048,11 @@ class AttributesClass:
                 existing_dt = schema[c]
                 if not self._is_null_dtype(existing_dt):
                     v_dt = self._dtype_for_value(v, prefer="narwhals")
+
                     def _is_num(dt):
                         s = str(dt).lower()
                         return any(x in s for x in ("float", "int", "decimal", "uint"))
+
                     if _is_num(existing_dt) and _is_num(v_dt) and existing_dt != v_dt:
                         try:
                             sup = _get_numeric_supertype(existing_dt, v_dt)
@@ -1061,7 +1061,7 @@ class AttributesClass:
                         except Exception:
                             pass
         if upcasts:
-            nw_df = nw_df.with_columns(upcasts)        
+            nw_df = nw_df.with_columns(upcasts)
 
         cond = None
         for k in key_cols:
@@ -1193,9 +1193,9 @@ class AttributesClass:
     def _upsert_rows_bulk(self, df: "object", updates: dict) -> "object":
         if not updates:
             return df
-        
+
         nw_df = nw.from_native(df, eager_only=True)
-        
+
         # Build complete update DataFrame
         update_records = []
         for idx, attrs in updates.items():
@@ -1210,9 +1210,9 @@ class AttributesClass:
                 else:
                     record = {"slice_id": idx, **attrs}
             update_records.append(record)
-        
+
         update_df = nw.DataFrame.from_dicts(update_records, backend=nw.get_native_namespace(nw_df))
-        
+
         # Determine join keys
         cols = set(nw_df.columns)
         if {"slice_id", "edge_id"} <= cols:
@@ -1223,13 +1223,13 @@ class AttributesClass:
             join_keys = ["edge_id"]
         else:
             join_keys = ["slice_id"]
-        
+
         # Anti-join to get rows NOT being updated
         unchanged = nw_df.join(update_df.select(join_keys), on=join_keys, how="anti")
-        
+
         # Combine: unchanged rows + all update rows
         result = nw.concat([unchanged, update_df], how="diagonal")
-        
+
         return nw.to_native(result)
 
     def _variables_watched_by_vertices(self):

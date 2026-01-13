@@ -26,18 +26,16 @@ from benchmarks.harness.metrics import measure
 MAX_SPECTRAL_N = 2000
 MAX_DENSE_COMPARE_N = 1500
 
+
 def run(scale):
     results = {}
     G = AnnNet(directed=True)
 
     n_aspects = min(3, max(2, scale.slices // 10))
     n_elem_per_aspect = max(2, scale.slices // n_aspects)
-    
+
     aspects = [f"aspect_{i}" for i in range(n_aspects)]
-    elem_layers = {
-        a: [f"{a}_e{j}" for j in range(n_elem_per_aspect)]
-        for a in aspects
-    }
+    elem_layers = {a: [f"{a}_e{j}" for j in range(n_elem_per_aspect)] for a in aspects}
 
     with measure() as m_aspect_setup:
         G.set_aspects(aspects, elem_layers)
@@ -51,10 +49,10 @@ def run(scale):
     }
 
     vertices_per_layer = min(10, scale.vertices)
-    
+
     with measure() as m_presence:
         vid_counter = 0
-        for aa in layer_tuples[:min(len(layer_tuples), scale.slices)]:
+        for aa in layer_tuples[: min(len(layer_tuples), scale.slices)]:
             for i in range(vertices_per_layer):
                 vid = f"v{vid_counter}"
                 if vid not in G.vertices():
@@ -63,8 +61,7 @@ def run(scale):
                 vid_counter += 1
 
     presence_counts = {
-        str(aa): len(G.layer_vertex_set(aa))
-        for aa in layer_tuples[:min(10, len(layer_tuples))]
+        str(aa): len(G.layer_vertex_set(aa)) for aa in layer_tuples[: min(10, len(layer_tuples))]
     }
 
     results["vertex_presence"] = {
@@ -75,11 +72,11 @@ def run(scale):
 
     with measure() as m_intra_edges:
         intra_count = 0
-        for aa in layer_tuples[:min(len(layer_tuples), scale.slices)]:
+        for aa in layer_tuples[: min(len(layer_tuples), scale.slices)]:
             verts = list(G.layer_vertex_set(aa))
             if len(verts) < 2:
                 continue
-            
+
             n_edges = min(len(verts), scale.edges // len(layer_tuples))
             for i in range(n_edges):
                 u = verts[i % len(verts)]
@@ -89,7 +86,7 @@ def run(scale):
 
     intra_edge_counts = {
         str(aa): len(G.layer_edge_set(aa, include_inter=False, include_coupling=False))
-        for aa in layer_tuples[:min(10, len(layer_tuples))]
+        for aa in layer_tuples[: min(10, len(layer_tuples))]
     }
 
     results["intra_edges"] = {
@@ -103,7 +100,7 @@ def run(scale):
     # ------------------------------------------------------------------
 
     bulk_by_layer = {}
-    for aa in layer_tuples[:min(len(layer_tuples), scale.slices)]:
+    for aa in layer_tuples[: min(len(layer_tuples), scale.slices)]:
         verts = list(G.layer_vertex_set(aa))
         if len(verts) < 2:
             continue
@@ -132,8 +129,7 @@ def run(scale):
         "metrics": m_intra_edges_bulk,
         "total_intra": bulk_count,
         "speedup_vs_single": (
-            results["intra_edges"]["metrics"]["wall_time_s"]
-            / m_intra_edges_bulk["wall_time_s"]
+            results["intra_edges"]["metrics"]["wall_time_s"] / m_intra_edges_bulk["wall_time_s"]
             if m_intra_edges_bulk["wall_time_s"] > 0
             else None
         ),
@@ -145,17 +141,17 @@ def run(scale):
             for i in range(min(len(layer_tuples) - 1, 50)):
                 aa = layer_tuples[i]
                 bb = layer_tuples[i + 1]
-                
+
                 verts_a = list(G.layer_vertex_set(aa))
                 verts_b = list(G.layer_vertex_set(bb))
-                
+
                 if not verts_a or not verts_b:
                     continue
-                
+
                 for j in range(min(5, len(verts_a), len(verts_b))):
                     u = verts_a[j % len(verts_a)]
                     v = verts_b[j % len(verts_b)]
-                    
+
                     if G.has_presence(u, aa) and G.has_presence(v, bb):
                         G.add_inter_edge_nl(u, aa, v, bb, weight=1.0)
                         inter_count += 1
@@ -170,12 +166,12 @@ def run(scale):
         vertices_in_multiple = {}
         for u, aa in G._VM:
             vertices_in_multiple.setdefault(u, []).append(aa)
-        
+
         for u, layers in list(vertices_in_multiple.items())[:50]:
             if len(layers) < 2:
                 continue
             for i in range(len(layers) - 1):
-                G.add_coupling_edge_nl(u, layers[i], layers[i+1], weight=1.0)
+                G.add_coupling_edge_nl(u, layers[i], layers[i + 1], weight=1.0)
                 coupling_count += 1
 
     results["coupling_edges"] = {
@@ -186,25 +182,16 @@ def run(scale):
     if len(layer_tuples) >= 3:
         with measure() as m_union:
             union_layers = layer_tuples[:3]
-            union_result = G.layer_union(
-                union_layers,
-                include_inter=False,
-                include_coupling=False
-            )
+            union_result = G.layer_union(union_layers, include_inter=False, include_coupling=False)
 
         with measure() as m_intersection:
             inter_result = G.layer_intersection(
-                union_layers,
-                include_inter=False,
-                include_coupling=False
+                union_layers, include_inter=False, include_coupling=False
             )
 
         with measure() as m_difference:
             diff_result = G.layer_difference(
-                layer_tuples[0],
-                layer_tuples[1],
-                include_inter=False,
-                include_coupling=False
+                layer_tuples[0], layer_tuples[1], include_inter=False, include_coupling=False
             )
 
         results["layer_algebra"] = {
@@ -220,18 +207,15 @@ def run(scale):
     if len(layer_tuples) >= 2:
         with measure() as m_layer_to_slice:
             slice_id = G.create_slice_from_layer(
-                "layer_slice_0",
-                layer_tuples[0],
-                include_inter=False,
-                include_coupling=False
+                "layer_slice_0", layer_tuples[0], include_inter=False, include_coupling=False
             )
 
         with measure() as m_layer_union_to_slice:
             union_slice = G.create_slice_from_layer_union(
                 "union_slice",
-                layer_tuples[:min(3, len(layer_tuples))],
+                layer_tuples[: min(3, len(layer_tuples))],
                 include_inter=True,
-                include_coupling=False
+                include_coupling=False,
             )
 
         results["layer_to_slice"] = {
@@ -244,16 +228,12 @@ def run(scale):
     if len(layer_tuples) >= 1:
         with measure() as m_subgraph:
             sub = G.subgraph_from_layer_tuple(
-                layer_tuples[0],
-                include_inter=False,
-                include_coupling=False
+                layer_tuples[0], include_inter=False, include_coupling=False
             )
 
         with measure() as m_subgraph_union:
             sub_union = G.subgraph_from_layer_union(
-                layer_tuples[:min(3, len(layer_tuples))],
-                include_inter=True,
-                include_coupling=True
+                layer_tuples[: min(3, len(layer_tuples))], include_inter=True, include_coupling=True
             )
 
         results["subgraphs"] = {
@@ -301,20 +281,17 @@ def run(scale):
         "n_vertices": len(tensor_view["vertices"]),
         "n_layers": len(tensor_view["layers"]),
         "n_edges": int(len(tensor_view["w"])),
-        "reconstruction_matches": bool(np.allclose(
-            A_reconstructed.toarray(),
-            supra_A.toarray()
-        )),
+        "reconstruction_matches": bool(np.allclose(A_reconstructed.toarray(), supra_A.toarray())),
     }
 
     if len(G._VM) >= 2:
         with measure() as m_queries:
             sample_vertex = next(iter(G.vertices()))
             vertex_layers = list(G.iter_vertex_layers(sample_vertex))
-            
+
             layer_deg_raw = G.layer_degree_vectors(None)
             layer_deg_count = len(layer_deg_raw)
-            
+
             if intra_count > 0:
                 participation = G.participation_coefficient(None)
                 versatility = G.versatility(None)
@@ -329,8 +306,7 @@ def run(scale):
             "n_vertices_participation": len(participation),
             "n_vertices_versatility": len(versatility),
             "avg_participation": (
-                sum(participation.values()) / len(participation)
-                if participation else 0.0
+                sum(participation.values()) / len(participation) if participation else 0.0
             ),
         }
 
@@ -338,7 +314,7 @@ def run(scale):
         if len(layer_tuples) >= 1:
             sample_layer = layer_tuples[0]
             vertices_in_layer = G.layer_vertex_set(sample_layer)
-            
+
             if vertices_in_layer:
                 sample_v = next(iter(vertices_in_layer))
                 layers_of_v = list(G.iter_vertex_layers(sample_v))
@@ -387,27 +363,20 @@ def run(scale):
         if len(aspects) >= 1:
             G.set_aspect_attrs(aspects[0], description="test", order="temporal")
             aspect_attrs = G.get_aspect_attrs(aspects[0])
-            
+
         if len(layer_tuples) >= 1:
             G.set_layer_attrs(layer_tuples[0], label="test_layer")
             layer_attrs = G.get_layer_attrs(layer_tuples[0])
-            
+
         if len(elem_layers[aspects[0]]) >= 1:
-            G.set_elementary_layer_attrs(
-                aspects[0],
-                elem_layers[aspects[0]][0],
-                timestamp=0
-            )
-            elem_attrs = G.get_elementary_layer_attrs(
-                aspects[0],
-                elem_layers[aspects[0]][0]
-            )
+            G.set_elementary_layer_attrs(aspects[0], elem_layers[aspects[0]][0], timestamp=0)
+            elem_attrs = G.get_elementary_layer_attrs(aspects[0], elem_layers[aspects[0]][0])
 
     results["layer_attributes"] = {
         "metrics": m_attributes,
-        "aspect_attrs_set": len(aspect_attrs) > 0 if 'aspect_attrs' in locals() else False,
-        "layer_attrs_set": len(layer_attrs) > 0 if 'layer_attrs' in locals() else False,
-        "elem_attrs_set": len(elem_attrs) > 0 if 'elem_attrs' in locals() else False,
+        "aspect_attrs_set": len(aspect_attrs) > 0 if "aspect_attrs" in locals() else False,
+        "layer_attrs_set": len(layer_attrs) > 0 if "layer_attrs" in locals() else False,
+        "elem_attrs_set": len(elem_attrs) > 0 if "elem_attrs" in locals() else False,
     }
 
     if len(layer_tuples) >= 4 and len(aspects) >= 2:
@@ -419,8 +388,8 @@ def run(scale):
             added = G.add_layer_coupling_pairs(layer_pairs, weight=1.0)
 
     results["coupling_operations"] = {
-        "metrics": m_coupling_ops if 'm_coupling_ops' in locals() else None,
-        "edges_added": added if 'added' in locals() else 0,
+        "metrics": m_coupling_ops if "m_coupling_ops" in locals() else None,
+        "edges_added": added if "added" in locals() else 0,
     }
 
     n = len(G._VM)
@@ -437,8 +406,8 @@ def run(scale):
                 spectral_gap = 0.0
 
     results["spectral"] = {
-        "metrics": m_spectral if 'm_spectral' in locals() else None,
-        "spectral_gap": spectral_gap if 'spectral_gap' in locals() else 0.0,
+        "metrics": m_spectral if "m_spectral" in locals() else None,
+        "spectral_gap": spectral_gap if "spectral_gap" in locals() else 0.0,
     }
 
     if len(layer_tuples) >= 1:
@@ -447,17 +416,15 @@ def run(scale):
             if len(sample_vertices) >= 2:
                 flattened_edges = set()
                 for eid in G.layer_edge_set(
-                    layer_tuples[0],
-                    include_inter=False,
-                    include_coupling=False
+                    layer_tuples[0], include_inter=False, include_coupling=False
                 ):
                     if eid in G.edge_definitions:
                         u, v, _ = G.edge_definitions[eid]
                         flattened_edges.add((u, v))
 
     results["layer_projection"] = {
-        "metrics": m_projection if 'm_projection' in locals() else None,
-        "projected_edges": len(flattened_edges) if 'flattened_edges' in locals() else 0,
+        "metrics": m_projection if "m_projection" in locals() else None,
+        "projected_edges": len(flattened_edges) if "flattened_edges" in locals() else 0,
     }
 
     return results

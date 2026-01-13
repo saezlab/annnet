@@ -716,7 +716,7 @@ class BulkOps:
         num_edges = self._num_edges
 
         out_ids = []
-        
+
         # Batch attribute writes
         attrs_batch = {}
 
@@ -887,6 +887,7 @@ class BulkOps:
         # intern hot strings
         try:
             import sys as _sys
+
             norm = [
                 (_sys.intern(eid) if isinstance(eid, str) else eid, attrs) for eid, attrs in norm
             ]

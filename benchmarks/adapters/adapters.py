@@ -23,13 +23,13 @@ from benchmarks.harness.metrics import measure
 def run(scale):
     out = {}
     graph = AnnNet(directed=True)
-    
+
     with measure() as m_vertices:
         graph.add_vertices_bulk(
             ({"vertex_id": f"v{i}"} for i in range(scale.vertices)),
             slice="base",
         )
-    
+
     with measure() as m_edges:
         graph.add_edges_bulk(
             {
@@ -40,12 +40,12 @@ def run(scale):
             }
             for i in range(scale.edges)
         )
-    
+
     out["total_vertices"] = graph.number_of_vertices()
-    out["total_edges"] = graph.number_of_edges()    
+    out["total_edges"] = graph.number_of_edges()
     out["vertices"] = m_vertices
     out["edges"] = m_edges
-    
+
     # NetworkX adapter
     with measure() as m_nx_export:
         nxG, manifest = to_nx(graph)
@@ -55,7 +55,7 @@ def run(scale):
     out["nx_import"] = m_nx_import
     out["nx_vertices"] = G2.number_of_vertices()
     out["nx_edges"] = G2.number_of_edges()
-    
+
     # JSON adapter
     with tempfile.TemporaryDirectory() as td:
         path = os.path.join(td, "graph.json")
@@ -69,18 +69,16 @@ def run(scale):
     out["json_size_bytes"] = size_bytes
     out["json_vertices"] = G3.number_of_vertices()
     out["json_edges"] = G3.number_of_edges()
-    
+
     # PyG (PyTorch Geometric) adapter
     with measure() as m_pyg_export:
         data = to_pyg(graph)
     tensor_bytes = sum(
-        t.element_size() * t.nelement()
-        for t in data.to_dict().values()
-        if hasattr(t, "nelement")
+        t.element_size() * t.nelement() for t in data.to_dict().values() if hasattr(t, "nelement")
     )
     out["pyg_export"] = m_pyg_export
     out["pyg_tensor_bytes"] = tensor_bytes
-    
+
     # CX2 adapter
     with tempfile.TemporaryDirectory() as td:
         sk = to_cx2(graph)
@@ -96,7 +94,7 @@ def run(scale):
     out["cx2_size_bytes"] = cx2_size
     out["cx2_vertices"] = G4.number_of_vertices()
     out["cx2_edges"] = G4.number_of_edges()
-    
+
     # SIF adapter
     with tempfile.TemporaryDirectory() as td:
         sif_path = os.path.join(td, "graph.sif")
@@ -110,30 +108,30 @@ def run(scale):
     out["sif_size_bytes"] = sif_size
     out["sif_vertices"] = G5.number_of_vertices()
     out["sif_edges"] = G5.number_of_edges()
-    
+
     # DataFrame adapter
     with measure() as m_df_export:
         dfs = to_dataframes(graph)
     df_size = 0
     for df in dfs.values():
-        if hasattr(df, 'memory_usage'):
+        if hasattr(df, "memory_usage"):
             df_size += df.memory_usage(deep=True).sum()
-        elif hasattr(df, 'estimated_size'):
+        elif hasattr(df, "estimated_size"):
             df_size += df.estimated_size()
     with measure() as m_df_import:
         G6 = from_dataframes(
-            nodes=dfs.get('nodes'),
-            edges=dfs.get('edges'),
-            hyperedges=dfs.get('hyperedges'),
-            slices=dfs.get('slices'),
-            slice_weights=dfs.get('slice_weights')
+            nodes=dfs.get("nodes"),
+            edges=dfs.get("edges"),
+            hyperedges=dfs.get("hyperedges"),
+            slices=dfs.get("slices"),
+            slice_weights=dfs.get("slice_weights"),
         )
     out["df_export"] = m_df_export
     out["df_import"] = m_df_import
     out["df_memory_bytes"] = df_size
     out["df_vertices"] = G6.number_of_vertices()
     out["df_edges"] = G6.number_of_edges()
-    
+
     # GraphML adapter
     with tempfile.TemporaryDirectory() as td:
         graphml_path = os.path.join(td, "graph.graphml")
@@ -147,7 +145,7 @@ def run(scale):
     out["graphml_size_bytes"] = graphml_size
     out["graphml_vertices"] = G7.number_of_vertices()
     out["graphml_edges"] = G7.number_of_edges()
-    
+
     # GEXF adapter
     with tempfile.TemporaryDirectory() as td:
         gexf_path = os.path.join(td, "graph.gexf")
@@ -161,7 +159,7 @@ def run(scale):
     out["gexf_size_bytes"] = gexf_size
     out["gexf_vertices"] = G8.number_of_vertices()
     out["gexf_edges"] = G8.number_of_edges()
-    
+
     # Parquet GraphDir adapter
     with tempfile.TemporaryDirectory() as td:
         parquet_dir = os.path.join(td, "graph_parquet")
@@ -179,7 +177,7 @@ def run(scale):
     out["parquet_size_bytes"] = parquet_size
     out["parquet_vertices"] = G9.number_of_vertices()
     out["parquet_edges"] = G9.number_of_edges()
-    
+
     # graph-tool adapter
     try:
         with measure() as m_gt_export:
@@ -192,7 +190,7 @@ def run(scale):
         out["graphtool_edges"] = G10.number_of_edges()
     except Exception as e:
         out["graphtool_error"] = str(e)
-    
+
     # igraph adapter
     try:
         with measure() as m_ig_export:
@@ -205,5 +203,5 @@ def run(scale):
         out["igraph_edges"] = G11.number_of_edges()
     except Exception as e:
         out["igraph_error"] = str(e)
-    
+
     return out

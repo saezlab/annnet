@@ -857,19 +857,23 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
             for eid, info in exp.items():
                 directed = info.get("mode") == "directed"
                 if directed:
-                    hyperedge_bulk_data.append({
-                        "head": info.get("head", []),
-                        "tail": info.get("tail", []),
-                        "edge_id": eid,
-                        "edge_directed": True,
-                    })
+                    hyperedge_bulk_data.append(
+                        {
+                            "head": info.get("head", []),
+                            "tail": info.get("tail", []),
+                            "edge_id": eid,
+                            "edge_directed": True,
+                        }
+                    )
                 else:
-                    hyperedge_bulk_data.append({
-                        "members": info.get("members", []),
-                        "edge_id": eid,
-                        "edge_directed": False,
-                    })
-            
+                    hyperedge_bulk_data.append(
+                        {
+                            "members": info.get("members", []),
+                            "edge_id": eid,
+                            "edge_directed": False,
+                        }
+                    )
+
             if hyperedge_bulk_data:
                 G.add_hyperedges_bulk(hyperedge_bulk_data)
 
@@ -950,14 +954,14 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         attrs = dict(n.get("v", {}))
         ann_id = str(attrs.get("name", cx_id))
         cx2node[cx_id] = ann_id
-        
+
         row = vmap.get(ann_id, {"vertex_id": ann_id})
-        
+
         # Merge attributes from Cytoscape (except display name)
         for k, v in attrs.items():
             if k != "name":
                 row[k] = v
-        
+
         # Layout coordinates live on the node, not in v
         if "x" in n and n["x"] is not None:
             row["layout_x"] = float(n["x"])
@@ -965,7 +969,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
             row["layout_y"] = float(n["y"])
         if "z" in n and n["z"] is not None:
             row["layout_z"] = float(n["z"])
-        
+
         vertex_bulk_data.append(row)
 
     # Single bulk vertex insert
@@ -996,11 +1000,11 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         t = cx2node.get(e["t"])
         if not s or not t:
             continue
-        
+
         attrs = e.get("v", {})
         eid = str(attrs.get("edge_id", attrs.get("interaction", e["id"])))
         w = float(attrs.get("weight", 1.0))
-        
+
         # Collect edge data for bulk insert
         edge_dict = {
             "source": s,
@@ -1008,12 +1012,12 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
             "edge_id": eid,
             "weight": w,
         }
-        
+
         # Collect additional attributes (excluding interaction and weight)
         extra_attrs = {k: v for k, v in attrs.items() if k not in ("interaction", "weight")}
         if extra_attrs:
             edge_dict["attributes"] = extra_attrs
-        
+
         edge_bulk_data.append(edge_dict)
 
     # Single bulk edge insert

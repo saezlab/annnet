@@ -369,8 +369,11 @@ def from_sif(
     if manifest and "binary_edges" in manifest:
         em = manifest.get("edge_metadata", {})
         binary_edge_index = {
-            info["source"] + SEP + info["target"] + SEP + 
-            em.get(eid, {}).get("attrs", {}).get(relation_attr, default_relation): (eid, info)
+            info["source"]
+            + SEP
+            + info["target"]
+            + SEP
+            + em.get(eid, {}).get("attrs", {}).get(relation_attr, default_relation): (eid, info)
             for eid, info in manifest["binary_edges"].items()
         }
 
@@ -395,30 +398,31 @@ def from_sif(
 
     # ===== NODES SIDECAR WITH PRE-DETECT DELIMITER =====
     vertex_data = {}
-    
+
     if read_nodes_sidecar:
         sidecar = nodes_path if nodes_path is not None else (str(path) + ".nodes")
         import os
+
         if os.path.exists(sidecar):
             # Detect delimiter once
             use_tab = None
             vd = vertex_data  # OPT 7: Localize
-            
+
             with open(sidecar, encoding=encoding) as nf:
                 for raw in nf:
                     s = raw.rstrip("\n\r")
                     if not s or any(s.lstrip().startswith(pfx) for pfx in comment_prefixes):
                         continue
-                    
+
                     # Auto-detect on first data line
                     if use_tab is None:
                         use_tab = "\t" in s
-                    
+
                     toks = s.split("\t") if use_tab else [s]
                     vid = toks[0].strip()
                     if not vid or vid.lower() == "none":
                         continue
-                    
+
                     attrs = {}
                     if len(toks) > 1:
                         for t in toks[1:]:
@@ -434,26 +438,26 @@ def from_sif(
 
     # ===== EDGES FILE WITH: INLINE + LOCALS + FAST COLLECTIONS =====
     edges_raw = []
-    
+
     # Resolve delimiter once
     use_tab = delimiter is None
     actual_delim = delimiter if delimiter is not None else "\t"
-    
+
     # Localize lookups
     vd = vertex_data
     append_edge = edges_raw.append
     comment_tuple = tuple(comment_prefixes)
-    
+
     with open(path, encoding=encoding) as f:
         for raw in f:
             # Inline fast path for comments
             if raw.startswith(comment_tuple):
                 continue
-            
+
             line = raw.rstrip("\n\r")
             if not line:
                 continue
-            
+
             # Inline split (no function call)
             if use_tab:
                 if "\t" not in line:
@@ -461,20 +465,20 @@ def from_sif(
                 toks = line.split("\t")
             else:
                 toks = line.split(actual_delim)
-            
+
             if len(toks) < 3:
                 continue
-            
+
             src, rel, tgt = toks[0].strip(), toks[1].strip(), toks[2].strip()
             if not src or src.lower() == "none" or not tgt or tgt.lower() == "none":
                 continue
-            
+
             # Avoid setdefault allocation on hit
             if src not in vd:
                 vd[src] = {}
             if tgt not in vd:
                 vd[tgt] = {}
-            
+
             append_edge((src, tgt, rel))
 
     # ===== BULK ADD VERTICES =====
@@ -488,48 +492,52 @@ def from_sif(
         edges_bulk = []
         get_edge = binary_edge_index.get  # Localize
         append = edges_bulk.append  # Localize
-        
+
         for src, tgt, rel in edges_raw:
             # Single string key (no tuple allocation)
             key = src + SEP + tgt + SEP + rel
             hit = get_edge(key)
-            
+
             if hit:
                 orig_eid, info = hit
                 edge_directed_val = info.get("directed", directed)
                 meta = manifest.get("edge_metadata", {}).get(orig_eid, {})
                 weight = meta.get("weight", 1.0)
                 attrs = meta.get("attrs", {})
-                
-                append({
-                    'source': src,
-                    'target': tgt,
-                    'weight': weight,
-                    'edge_id': orig_eid,
-                    'edge_directed': edge_directed_val,
-                    'attributes': attrs if attrs else {}
-                })
+
+                append(
+                    {
+                        "source": src,
+                        "target": tgt,
+                        "weight": weight,
+                        "edge_id": orig_eid,
+                        "edge_directed": edge_directed_val,
+                        "attributes": attrs if attrs else {},
+                    }
+                )
             else:
-                append({
-                    'source': src,
-                    'target': tgt,
-                    'weight': 1.0,
-                    'edge_directed': directed,
-                    'attributes': {relation_attr: rel}
-                })
+                append(
+                    {
+                        "source": src,
+                        "target": tgt,
+                        "weight": 1.0,
+                        "edge_directed": directed,
+                        "attributes": {relation_attr: rel},
+                    }
+                )
     else:
         # Standard mode - delayed dict expansion via generator
         edges_bulk = (
             {
-                'source': src,
-                'target': tgt,
-                'weight': 1.0,
-                'edge_directed': directed,
-                'attributes': {relation_attr: rel}
+                "source": src,
+                "target": tgt,
+                "weight": 1.0,
+                "edge_directed": directed,
+                "attributes": {relation_attr: rel},
             }
             for src, tgt, rel in edges_raw
         )
-    
+
     if edges_raw:  # Check original list, not generator
         H.add_edges_bulk(edges_bulk, default_weight=1.0, default_edge_directed=directed)
 
@@ -539,20 +547,20 @@ def from_sif(
         for eid, info in manifest["hyperedges"].items():
             directed_he = info.get("directed", False)
             he_dict = {
-                'edge_id': eid,
-                'weight': info.get("weight", 1.0),
-                'edge_directed': directed_he,
-                'attributes': info.get("attrs", {})
+                "edge_id": eid,
+                "weight": info.get("weight", 1.0),
+                "edge_directed": directed_he,
+                "attributes": info.get("attrs", {}),
             }
-            
+
             if directed_he:
-                he_dict['head'] = info.get("head", [])
-                he_dict['tail'] = info.get("tail", [])
+                he_dict["head"] = info.get("head", [])
+                he_dict["tail"] = info.get("tail", [])
             else:
-                he_dict['members'] = info.get("members", [])
-            
+                he_dict["members"] = info.get("members", [])
+
             hyperedges_bulk.append(he_dict)
-        
+
         if hyperedges_bulk:
             H.add_hyperedges_bulk(hyperedges_bulk, default_weight=1.0, default_edge_directed=False)
 
@@ -560,22 +568,22 @@ def from_sif(
     if manifest and "slices" in manifest:
         # Build set once
         existing_slices = set(H.list_slices(include_default=True))
-        
+
         for lid, slice_info in manifest["slices"].items():
             # Guard instead of exception
             if lid not in existing_slices:
                 H.add_slice(lid)
                 existing_slices.add(lid)  # Keep cached set in sync
-            
+
             edge_ids = slice_info.get("edges", [])
             if edge_ids:
                 H.add_edges_to_slice_bulk(lid, edge_ids)
-            
+
             weights = slice_info.get("weights", {})
             if weights:
-                H.set_edge_slice_attrs_bulk(lid, [
-                    {'edge_id': eid, 'weight': w} for eid, w in weights.items()
-                ])
+                H.set_edge_slice_attrs_bulk(
+                    lid, [{"edge_id": eid, "weight": w} for eid, w in weights.items()]
+                )
 
     # ===== MULTILAYER =====
     if manifest and "multilayer" in manifest:

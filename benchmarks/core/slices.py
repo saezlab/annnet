@@ -13,17 +13,11 @@ def run(scale):
     with measure() as m_vertex_presence:
         for sid in slice_ids:
             G.add_vertices_bulk(
-                (
-                    {"vertex_id": f"{sid}_v{i}"}
-                    for i in range(scale.vertices // scale.slices)
-                ),
+                ({"vertex_id": f"{sid}_v{i}"} for i in range(scale.vertices // scale.slices)),
                 slice=sid,
             )
 
-    vertex_counts = {
-        sid: len(list(G.get_slice_vertices(sid)))
-        for sid in slice_ids
-    }
+    vertex_counts = {sid: len(list(G.get_slice_vertices(sid))) for sid in slice_ids}
 
     results["vertex_presence"] = {
         "metrics": m_vertex_presence,
@@ -45,10 +39,7 @@ def run(scale):
                 for i in range(scale.edges // scale.slices)
             )
 
-    edge_counts = {
-        sid: len(G.get_slice_edges(sid))
-        for sid in slice_ids
-    }
+    edge_counts = {sid: len(G.get_slice_edges(sid)) for sid in slice_ids}
 
     results["edge_presence"] = {
         "metrics": m_edge_presence,
@@ -72,19 +63,12 @@ def run(scale):
             )
 
     shared_presence = {
-        sid: sum(
-            v.startswith("shared_")
-            for v in list(G.get_slice_vertices(sid))
-        )
+        sid: sum(v.startswith("shared_") for v in list(G.get_slice_vertices(sid)))
         for sid in slice_ids
     }
 
     all_presence = {
-        sid: sum(
-            v.startswith("all_")
-            for v in list(G.get_slice_vertices(sid))
-        )
-        for sid in slice_ids
+        sid: sum(v.startswith("all_") for v in list(G.get_slice_vertices(sid))) for sid in slice_ids
     }
 
     results["propagation"] = {
@@ -98,10 +82,7 @@ def run(scale):
         for sid in slice_ids:
             G.set_slice_attrs(sid, label=sid)
 
-    slice_attrs = {
-        sid: G.get_slice_attr(sid, "label")
-        for sid in slice_ids
-    }
+    slice_attrs = {sid: G.get_slice_attr(sid, "label") for sid in slice_ids}
 
     results["slice_attributes"] = {
         "metrics": m_slice_attrs,
@@ -162,10 +143,7 @@ def run(scale):
     with measure() as m_conserved:
         conserved = G.conserved_edges(min_slices=2)
 
-    slice_local = {
-        sid: len(G.slice_specific_edges(sid))
-        for sid in slice_ids
-    }
+    slice_local = {sid: len(G.slice_specific_edges(sid)) for sid in slice_ids}
 
     results["edge_scope"] = {
         "conserved": {

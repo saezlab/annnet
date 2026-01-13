@@ -521,9 +521,11 @@ class ViewsClass:
         if not self.edge_to_idx:
             try:
                 import polars as pl
+
                 return pl.DataFrame(schema={"edge_id": pl.Utf8, "kind": pl.Utf8})
             except Exception:
                 import pandas as pd
+
                 return pd.DataFrame(
                     {"edge_id": pd.Series(dtype="string"), "kind": pd.Series(dtype="string")}
                 )
@@ -531,20 +533,23 @@ class ViewsClass:
         # Keep original keys for dict lookups
         eids_raw = list(self.edge_to_idx.keys())
         eids_str = [str(eid) for eid in eids_raw]  # Stringified for DataFrame
-        
+
         kinds = [self.edge_kind.get(eid, "binary") for eid in eids_raw]
 
         need_global = include_weight or resolved_weight
         global_w = [self.edge_weights.get(eid, None) for eid in eids_raw] if need_global else None
         dirs = (
-            [self.edge_directed.get(eid, True if self.directed is None else self.directed)
-            for eid in eids_raw]
-            if include_directed else None
+            [
+                self.edge_directed.get(eid, True if self.directed is None else self.directed)
+                for eid in eids_raw
+            ]
+            if include_directed
+            else None
         )
 
         src, tgt, etype = [], [], []
         head, tail, members = [], [], []
-        
+
         for eid_raw, k in zip(eids_raw, kinds):
             if k == "hyper":
                 h = self.hyperedge_definitions[eid_raw]
@@ -601,8 +606,11 @@ class ViewsClass:
             else:
                 out = base
 
-            if (slice is not None and isinstance(self.edge_slice_attributes, pl.DataFrame) 
-                and self.edge_slice_attributes.height > 0):
+            if (
+                slice is not None
+                and isinstance(self.edge_slice_attributes, pl.DataFrame)
+                and self.edge_slice_attributes.height > 0
+            ):
                 slice_df = self.edge_slice_attributes
                 if "edge_id" in slice_df.columns:
                     slice_df = slice_df.with_columns(pl.col("edge_id").cast(pl.Utf8))
@@ -630,6 +638,7 @@ class ViewsClass:
 
         # pandas fallback
         import pandas as pd
+
         base = pd.DataFrame(cols)
         base["source"] = src
         base["target"] = tgt
@@ -655,7 +664,9 @@ class ViewsClass:
                         columns=["slice_id"], errors="ignore"
                     )
                     if not slice_slice.empty:
-                        rename_map = {c: f"slice_{c}" for c in slice_slice.columns if c != "edge_id"}
+                        rename_map = {
+                            c: f"slice_{c}" for c in slice_slice.columns if c != "edge_id"
+                        }
                         slice_slice = slice_slice.rename(columns=rename_map)
                         out = out.merge(slice_slice, on="edge_id", how="left")
 
