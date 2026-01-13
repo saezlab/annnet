@@ -5,12 +5,12 @@ import unittest
 
 import polars as pl
 
-from annnet.io.GraphDir_Parquet_io import from_parquet_graphdir, to_parquet_graphdir
 from annnet.adapters.igraph_adapter import from_igraph, to_igraph
-from annnet.io.json_io import from_json, to_json
 from annnet.adapters.networkx_adapter import from_nx, to_nx
-from annnet.io.SIF_io import from_sif, to_sif
 from annnet.core.graph import AnnNet
+from annnet.io.GraphDir_Parquet_io import from_parquet_graphdir, to_parquet_graphdir
+from annnet.io.json_io import from_json, to_json
+from annnet.io.SIF_io import from_sif, to_sif
 
 try:
     import networkx as nx

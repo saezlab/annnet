@@ -357,37 +357,30 @@ def from_sif(
         - Vertex attributes require .nodes sidecar file or manifest
 
     """
-
     if manifest is not None and not isinstance(manifest, dict):
         with open(str(manifest), encoding="utf-8") as mf:
             manifest = json.load(mf)
 
-    if manifest and "binary_edges" in manifest:
-        H = AnnNet(directed=None)
-    else:
-        H = AnnNet(directed=directed)
+    H = AnnNet(directed=None if manifest and "binary_edges" in manifest else directed)
 
+    # Single-key hashing with separator
+    SEP = "\x00"  # NULL byte - impossible in text files
     binary_edge_index = None
     if manifest and "binary_edges" in manifest:
         em = manifest.get("edge_metadata", {})
         binary_edge_index = {
-            (
-                info["source"],
-                info["target"],
-                em.get(eid, {}).get("attrs", {}).get(relation_attr, default_relation),
-            ): (eid, info)
+            info["source"] + SEP + info["target"] + SEP + 
+            em.get(eid, {}).get("attrs", {}).get(relation_attr, default_relation): (eid, info)
             for eid, info in manifest["binary_edges"].items()
         }
 
     def _parse_node_kv(tok: str):
         if "=" not in tok:
             return None, None
-        k, v = tok.split("=", 1)
-        k = k.strip()
-        v = v.strip()
-        if k == "":
+        k, _, v = tok.partition("=")
+        k, v = k.strip(), v.strip()
+        if not k:
             return None, None
-
         lv = v.lower()
         if lv == "true":
             return k, True
@@ -395,191 +388,227 @@ def from_sif(
             return k, False
         if lv in ("nan", "inf", "-inf"):
             return k, v
-
         try:
             return k, float(v)
-        except Exception:
+        except:
             return k, v
 
+    # ===== NODES SIDECAR WITH PRE-DETECT DELIMITER =====
+    vertex_data = {}
+    
     if read_nodes_sidecar:
         sidecar = nodes_path if nodes_path is not None else (str(path) + ".nodes")
         import os
-
         if os.path.exists(sidecar):
+            # Detect delimiter once
+            use_tab = None
+            vd = vertex_data  # OPT 7: Localize
+            
             with open(sidecar, encoding=encoding) as nf:
                 for raw in nf:
                     s = raw.rstrip("\n\r")
                     if not s or any(s.lstrip().startswith(pfx) for pfx in comment_prefixes):
                         continue
-
-                    toks = s.split("\t") if "\t" in s else [s]
-                    vid_raw = toks[0]
-                    if vid_raw is None:
+                    
+                    # Auto-detect on first data line
+                    if use_tab is None:
+                        use_tab = "\t" in s
+                    
+                    toks = s.split("\t") if use_tab else [s]
+                    vid = toks[0].strip()
+                    if not vid or vid.lower() == "none":
                         continue
-                    vid = str(vid_raw).strip()
-                    if vid == "" or vid.lower() == "none":
-                        continue
-
-                    H.add_vertex(vid)
-
+                    
+                    attrs = {}
                     if len(toks) > 1:
-                        kvs: dict[str, object] = {}
                         for t in toks[1:]:
                             k, v = _parse_node_kv(t)
                             if k is not None:
-                                kvs[k] = v
-                        if kvs:
-                            H.set_vertex_attrs(vid, **kvs)
+                                attrs[k] = v
+                    vd[vid] = attrs
 
+    # Merge manifest vertex attrs
     if manifest and "vertex_attrs" in manifest:
         for vid, attrs in manifest["vertex_attrs"].items():
-            H.add_vertex(vid)
-            H.set_vertex_attrs(vid, **attrs)
+            vertex_data.setdefault(vid, {}).update(attrs)
 
-    edge_mapping = {}
-
+    # ===== EDGES FILE WITH: INLINE + LOCALS + FAST COLLECTIONS =====
+    edges_raw = []
+    
+    # Resolve delimiter once
+    use_tab = delimiter is None
+    actual_delim = delimiter if delimiter is not None else "\t"
+    
+    # Localize lookups
+    vd = vertex_data
+    append_edge = edges_raw.append
+    comment_tuple = tuple(comment_prefixes)
+    
     with open(path, encoding=encoding) as f:
         for raw in f:
-            if not raw:
+            # Inline fast path for comments
+            if raw.startswith(comment_tuple):
                 continue
-            if any(raw.lstrip().startswith(pfx) for pfx in comment_prefixes):
+            
+            line = raw.rstrip("\n\r")
+            if not line:
                 continue
-
-            toks = _split_sif_line(raw, delimiter)
-            if not toks:
-                continue
-
+            
+            # Inline split (no function call)
+            if use_tab:
+                if "\t" not in line:
+                    continue
+                toks = line.split("\t")
+            else:
+                toks = line.split(actual_delim)
+            
             if len(toks) < 3:
                 continue
-
-            src = toks[0].strip()
-            rel = toks[1].strip()
-            tgt = toks[2].strip()
-
-            if src == "" or src.lower() == "none" or tgt == "" or tgt.lower() == "none":
+            
+            src, rel, tgt = toks[0].strip(), toks[1].strip(), toks[2].strip()
+            if not src or src.lower() == "none" or not tgt or tgt.lower() == "none":
                 continue
+            
+            # Avoid setdefault allocation on hit
+            if src not in vd:
+                vd[src] = {}
+            if tgt not in vd:
+                vd[tgt] = {}
+            
+            append_edge((src, tgt, rel))
 
-            H.add_vertex(src)
-            H.add_vertex(tgt)
+    # ===== BULK ADD VERTICES =====
+    if vertex_data:
+        vertices_bulk = [(vid, attrs) for vid, attrs in vertex_data.items()]
+        H.add_vertices_bulk(vertices_bulk)
 
-            edge_key = (src, tgt, rel)
-
-            if manifest and "binary_edges" in manifest:
-                hit = binary_edge_index.get((src, tgt, rel))
-                if hit:
-                    orig_eid, info = hit
-                    edge_directed_val = info.get("directed", directed)
-                else:
-                    orig_eid = None
-                    edge_directed_val = directed
-
-                if orig_eid:
-                    eid = H.add_edge(src, tgt, edge_id=orig_eid, edge_directed=edge_directed_val)
-                    edge_mapping[edge_key] = eid
-
-                    if orig_eid in manifest.get("edge_metadata", {}):
-                        meta = manifest["edge_metadata"][orig_eid]
-                        weight = meta.get("weight", 1.0)
-                        attrs = meta.get("attrs", {})
-
-                        if weight != 1.0:
-                            H.edge_weights[eid] = weight
-
-                        if attrs:
-                            H.set_edge_attrs(eid, **attrs)
-                        # REMOVED the else clause - don't add relation if no attrs in manifest
-                else:
-                    eid = H.add_edge(src, tgt, edge_directed=edge_directed_val)
-                    H.set_edge_attrs(eid, **{relation_attr: rel})
-                    edge_mapping[edge_key] = eid
+    # ===== BULK ADD EDGES WITH FAST HASHING + DELAYED EXPANSION =====
+    if manifest and "binary_edges" in manifest:
+        # Lossless mode with single-key lookup
+        edges_bulk = []
+        get_edge = binary_edge_index.get  # Localize
+        append = edges_bulk.append  # Localize
+        
+        for src, tgt, rel in edges_raw:
+            # Single string key (no tuple allocation)
+            key = src + SEP + tgt + SEP + rel
+            hit = get_edge(key)
+            
+            if hit:
+                orig_eid, info = hit
+                edge_directed_val = info.get("directed", directed)
+                meta = manifest.get("edge_metadata", {}).get(orig_eid, {})
+                weight = meta.get("weight", 1.0)
+                attrs = meta.get("attrs", {})
+                
+                append({
+                    'source': src,
+                    'target': tgt,
+                    'weight': weight,
+                    'edge_id': orig_eid,
+                    'edge_directed': edge_directed_val,
+                    'attributes': attrs if attrs else {}
+                })
             else:
-                eid = H.add_edge(src, tgt, edge_directed=directed)
-                H.set_edge_attrs(eid, **{relation_attr: rel})
-                edge_mapping[edge_key] = eid
+                append({
+                    'source': src,
+                    'target': tgt,
+                    'weight': 1.0,
+                    'edge_directed': directed,
+                    'attributes': {relation_attr: rel}
+                })
+    else:
+        # Standard mode - delayed dict expansion via generator
+        edges_bulk = (
+            {
+                'source': src,
+                'target': tgt,
+                'weight': 1.0,
+                'edge_directed': directed,
+                'attributes': {relation_attr: rel}
+            }
+            for src, tgt, rel in edges_raw
+        )
+    
+    if edges_raw:  # Check original list, not generator
+        H.add_edges_bulk(edges_bulk, default_weight=1.0, default_edge_directed=directed)
 
+    # ===== HYPEREDGES =====
     if manifest and "hyperedges" in manifest:
+        hyperedges_bulk = []
         for eid, info in manifest["hyperedges"].items():
             directed_he = info.get("directed", False)
-            head = info.get("head", [])
-            tail = info.get("tail", [])
-            members = info.get("members", [])
-            weight = info.get("weight", 1.0)
-            attrs = info.get("attrs", {})
-
-            for v in head + tail + members:
-                H.add_vertex(v)
-
+            he_dict = {
+                'edge_id': eid,
+                'weight': info.get("weight", 1.0),
+                'edge_directed': directed_he,
+                'attributes': info.get("attrs", {})
+            }
+            
             if directed_he:
-                he_id = H.add_hyperedge(head=head, tail=tail, edge_id=eid, edge_directed=True)
+                he_dict['head'] = info.get("head", [])
+                he_dict['tail'] = info.get("tail", [])
             else:
-                he_id = H.add_hyperedge(members=members, edge_id=eid, edge_directed=False)
+                he_dict['members'] = info.get("members", [])
+            
+            hyperedges_bulk.append(he_dict)
+        
+        if hyperedges_bulk:
+            H.add_hyperedges_bulk(hyperedges_bulk, default_weight=1.0, default_edge_directed=False)
 
-            if weight != 1.0:
-                H.edge_weights[he_id] = weight
-
-            if attrs:
-                H.set_edge_attrs(he_id, **attrs)
-
+    # ===== SLICES WITH NO EXCEPTIONS + CACHED SET =====
     if manifest and "slices" in manifest:
+        # Build set once
+        existing_slices = set(H.list_slices(include_default=True))
+        
         for lid, slice_info in manifest["slices"].items():
-            try:
-                if lid not in set(H.list_slices(include_default=True)):
-                    H.add_slice(lid)
-            except Exception:
+            # Guard instead of exception
+            if lid not in existing_slices:
                 H.add_slice(lid)
+                existing_slices.add(lid)  # Keep cached set in sync
+            
+            edge_ids = slice_info.get("edges", [])
+            if edge_ids:
+                H.add_edges_to_slice_bulk(lid, edge_ids)
+            
+            weights = slice_info.get("weights", {})
+            if weights:
+                H.set_edge_slice_attrs_bulk(lid, [
+                    {'edge_id': eid, 'weight': w} for eid, w in weights.items()
+                ])
 
-            for eid in slice_info.get("edges", []):
-                try:
-                    H.add_edge_to_slice(lid, eid)
-                except Exception:
-                    pass
-
-            for eid, weight in slice_info.get("weights", {}).items():
-                try:
-                    H.set_edge_slice_attrs(lid, eid, weight=weight)
-                except Exception:
-                    pass
-
+    # ===== MULTILAYER =====
     if manifest and "multilayer" in manifest:
         try:
-            mm = manifest.get("multilayer", {})
-
+            mm = manifest["multilayer"]
             aspects = mm.get("aspects", [])
             elem_layers = mm.get("elem_layers", {})
-
             if aspects:
                 H.aspects = list(aspects)
                 H.elem_layers = dict(elem_layers or {})
                 H._rebuild_all_layers_cache()
-
             aspect_attrs = mm.get("aspect_attrs", {})
             if aspect_attrs:
                 H._aspect_attrs.update(aspect_attrs)
-
             VM_data = mm.get("VM", [])
             if VM_data:
                 H._VM = _deserialize_VM(VM_data)
-
-            # edge_kind / edge_layers
             ek = mm.get("edge_kind", {})
             el_ser = mm.get("edge_layers", {})
             if ek:
                 H.edge_kind.update(ek)
             if el_ser:
                 H.edge_layers.update(_deserialize_edge_layers(el_ser))
-
             nl_attrs_ser = mm.get("node_layer_attrs", [])
             if nl_attrs_ser:
                 H._vertex_layer_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
-
             layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
             if layer_tuple_attrs_ser:
                 H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
-
             layer_attr_rows = mm.get("layer_attributes", [])
             if layer_attr_rows:
                 H.layer_attributes = _rows_to_df(layer_attr_rows)
-        except Exception:
+        except:
             pass
 
     return H

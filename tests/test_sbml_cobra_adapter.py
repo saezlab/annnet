@@ -7,8 +7,8 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
 
-from annnet.io.sbml_cobra_io import _graph_from_stoich, from_cobra_model
 from annnet.core import AnnNet
+from annnet.io.sbml_cobra_io import _graph_from_stoich, from_cobra_model
 
 
 class TestSBMLAdapter(unittest.TestCase):

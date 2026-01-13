@@ -7,8 +7,8 @@ import unittest
 import polars as pl
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from annnet.io.cx2_io import from_cx2, to_cx2
 from annnet.core.graph import AnnNet
+from annnet.io.cx2_io import from_cx2, to_cx2
 
 
 class TestCX2Adapter(unittest.TestCase):
