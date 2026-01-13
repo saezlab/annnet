@@ -1,0 +1,19 @@
+[workspace]
+name = "annnet"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.11,<3.14"
+
+[feature.dev.dependencies]
+pytest = "*"
+graph-tool = "*"
+pip = "*"
+
+[feature.dev.tasks]
+install-pkg = 'pip install -e ".[dev,tests]"' -q
+test-gt = { depends-on = ["install-pkg"], cmd = "pytest tests/test_graphtool.py -v" }
+
+[environments]
+dev = ["dev"]

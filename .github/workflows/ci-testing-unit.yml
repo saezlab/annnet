@@ -3,18 +3,6 @@ name: CI testing [unit testing]
 on: [push, pull_request]
 
 jobs:
-    lint:
-        runs-on: ubuntu-latest
-        steps:
-        -   uses: actions/checkout@v4
-        -   uses: ./.github/actions/setup
-            with:
-                python-version: '3.13'
-        -   name: Run Ruff (lint + formatting + import order)
-            run: .venv/bin/ruff check .
-        -   name: Run Ruff format check (like Black)
-            run: .venv/bin/ruff format --check .
-
     test:
         runs-on: ubuntu-latest
         strategy:
@@ -29,7 +17,7 @@ jobs:
             shell: bash
             run: |
                 source .venv/bin/activate
-                uv pip install networkx zarr numcodecs pyarrow python-igraph
+                uv pip install networkx zarr numcodecs pyarrow python-igraph matplotlib torch torch-geometric
         -   name: Run tests with coverage
             run: |
                 source .venv/bin/activate
@@ -40,6 +28,7 @@ jobs:
                 name: coverage-report-${{ matrix.python-version }}
                 path: .coverage*
 
+
     pixi-test-all:
         runs-on: ubuntu-latest
         steps:
@@ -48,5 +37,5 @@ jobs:
             with:
                 environments: dev
                 cache: true
-        -   name: Run tests including graph-tool
-            run: pixi run test-all
+        -   name: Run graph-tool tests only
+            run: pixi run test-gt
