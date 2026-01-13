@@ -674,42 +674,51 @@ class BulkOps:
         except Exception:
             pass
 
-        # Ensure participants exist (global)
+        entity_to_idx = self.entity_to_idx
+        entity_types = self.entity_types
+        idx_to_entity = self.idx_to_entity
+        num_entities = self._num_entities
+
+        # Collect ALL unique vertices first
+        all_verts = set()
         for d in items:
             if "members" in d and d["members"] is not None:
-                for u in d["members"]:
-                    if u not in self.entity_to_idx:
-                        idx = self._num_entities
-                        self.entity_to_idx[u] = idx
-                        self.idx_to_entity[idx] = u
-                        self.entity_types[u] = "vertex"
-                        self._num_entities = idx + 1
+                all_verts.update(d["members"])
             else:
-                for u in d.get("head", []):
-                    if u not in self.entity_to_idx:
-                        idx = self._num_entities
-                        self.entity_to_idx[u] = idx
-                        self.idx_to_entity[idx] = u
-                        self.entity_types[u] = "vertex"
-                        self._num_entities = idx + 1
-                for v in d.get("tail", []):
-                    if v not in self.entity_to_idx:
-                        idx = self._num_entities
-                        self.entity_to_idx[v] = idx
-                        self.entity_types[v] = "vertex"
-                        self.idx_to_entity[idx] = v
-                        self._num_entities = idx + 1
+                all_verts.update(d.get("head", []))
+                all_verts.update(d.get("tail", []))
 
-        # Grow rows once
-        self._grow_rows_to(self._num_entities)
+        # Single pass vertex creation
+        for u in all_verts:
+            if u not in entity_to_idx:
+                entity_to_idx[u] = num_entities
+                idx_to_entity[num_entities] = u
+                entity_types[u] = "vertex"
+                num_entities += 1
+
+        self._num_entities = num_entities
+        self._grow_rows_to(num_entities)
 
         # Pre-size columns
-        new_count = sum(1 for d in items if d.get("edge_id") not in self.edge_to_idx)
+        edge_to_idx = self.edge_to_idx
+        new_count = sum(1 for d in items if d.get("edge_id") not in edge_to_idx)
         if new_count:
             self._grow_cols_to(self._num_edges + new_count)
 
         M = self._matrix
+        edge_definitions = self.edge_definitions
+        hyperedge_definitions = self.hyperedge_definitions
+        edge_weights = self.edge_weights
+        edge_directed = self.edge_directed
+        edge_kind = self.edge_kind
+        idx_to_edge = self.idx_to_edge
+        slices = self._slices
+        num_edges = self._num_edges
+
         out_ids = []
+        
+        # Batch attribute writes
+        attrs_batch = {}
 
         for d in items:
             members = d.get("members")
@@ -728,84 +737,90 @@ class BulkOps:
             if e_id is None:
                 e_id = self._get_next_edge_id()
 
-            if e_id in self.edge_to_idx:
-                col = self.edge_to_idx[e_id]
+            if e_id in edge_to_idx:
+                col = edge_to_idx[e_id]
                 # clear old cells (binary or hyper)
-                if e_id in self.hyperedge_definitions:
-                    h = self.hyperedge_definitions[e_id]
+                if e_id in hyperedge_definitions:
+                    h = hyperedge_definitions[e_id]
                     if h.get("members"):
                         rows = h["members"]
                     else:
                         rows = set(h.get("head", ())) | set(h.get("tail", ()))
                     for vid in rows:
                         try:
-                            M[self.entity_to_idx[vid], col] = 0
+                            M[entity_to_idx[vid], col] = 0
                         except Exception:
                             pass
                 else:
-                    old = self.edge_definitions.get(e_id)
+                    old = edge_definitions.get(e_id)
                     if old is not None:
                         os, ot, _ = old
                         try:
-                            M[self.entity_to_idx[os], col] = 0
+                            M[entity_to_idx[os], col] = 0
                         except Exception:
                             pass
                         if ot is not None and ot != os:
                             try:
-                                M[self.entity_to_idx[ot], col] = 0
+                                M[entity_to_idx[ot], col] = 0
                             except Exception:
                                 pass
             else:
-                col = self._num_edges
-                self.edge_to_idx[e_id] = col
-                self.idx_to_edge[col] = e_id
-                self._num_edges = col + 1
+                col = num_edges
+                edge_to_idx[e_id] = col
+                idx_to_edge[col] = e_id
+                num_edges = col + 1
 
             # write new column values + metadata
             if members is not None:
                 for u in members:
-                    M[self.entity_to_idx[u], col] = w
-                self.hyperedge_definitions[e_id] = {"directed": False, "members": set(members)}
-                self.edge_directed[e_id] = False
-                self.edge_kind[e_id] = "hyper"
-                self.edge_definitions[e_id] = (None, None, "hyper")
+                    M[entity_to_idx[u], col] = w
+                hyperedge_definitions[e_id] = {"directed": False, "members": set(members)}
+                edge_directed[e_id] = False
+                edge_kind[e_id] = "hyper"
+                edge_definitions[e_id] = (None, None, "hyper")
             else:
                 for u in head:
-                    M[self.entity_to_idx[u], col] = w
+                    M[entity_to_idx[u], col] = w
                 for v in tail:
-                    M[self.entity_to_idx[v], col] = -w
-                self.hyperedge_definitions[e_id] = {
+                    M[entity_to_idx[v], col] = -w
+                hyperedge_definitions[e_id] = {
                     "directed": True,
                     "head": set(head),
                     "tail": set(tail),
                 }
-                self.edge_directed[e_id] = True
-                self.edge_kind[e_id] = "hyper"
-                self.edge_definitions[e_id] = (None, None, "hyper")
+                edge_directed[e_id] = True
+                edge_kind[e_id] = "hyper"
+                edge_definitions[e_id] = (None, None, "hyper")
 
-            self.edge_weights[e_id] = w
+            edge_weights[e_id] = w
 
             # slice membership
             if slice_local is not None:
-                if slice_local not in self._slices:
-                    self._slices[slice_local] = {
+                if slice_local not in slices:
+                    slices[slice_local] = {
                         "vertices": set(),
                         "edges": set(),
                         "attributes": {},
                     }
-                self._slices[slice_local]["edges"].add(e_id)
+                slices[slice_local]["edges"].add(e_id)
                 if members is not None:
-                    self._slices[slice_local]["vertices"].update(members)
+                    slices[slice_local]["vertices"].update(members)
                 else:
-                    self._slices[slice_local]["vertices"].update(head)
-                    self._slices[slice_local]["vertices"].update(tail)
+                    slices[slice_local]["vertices"].update(head)
+                    slices[slice_local]["vertices"].update(tail)
 
-            # per-edge attributes (optional)
+            # Collect attributes for batch write
             attrs = d.get("attributes") or d.get("attrs") or {}
             if attrs:
-                self.set_edge_attrs(e_id, **attrs)
+                attrs_batch[e_id] = attrs
 
             out_ids.append(e_id)
+
+        self._num_edges = num_edges
+
+        # SINGLE BULK WRITE FOR ALL ATTRIBUTES
+        if attrs_batch:
+            self.set_edge_attrs_bulk(attrs_batch)
 
         return out_ids
 
