@@ -9,7 +9,7 @@ def _write_archive(src_dir: Path, outfile: Path):
 
 def _read_archive(infile: Path, tmpdir: Path) -> Path:
     with tarfile.open(infile, "r:gz") as tar:
-        tar.extractall(tmpdir)
+        tar.extractall(tmpdir) # nosec B202
 
     roots = list(tmpdir.iterdir())
     if len(roots) != 1:

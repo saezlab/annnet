@@ -12,7 +12,7 @@ graph-tool = "*"
 pip = "*"
 
 [feature.dev.tasks]
-install-pkg = 'pip install -e ".[dev,tests]"' -q
+install-pkg = 'pip install -e ".[dev,tests]"'
 test-gt = { depends-on = ["install-pkg"], cmd = "pytest tests/test_graphtool.py -v" }
 
 [environments]
