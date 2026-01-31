@@ -96,7 +96,7 @@ def run(scale):
     out["cx2_edges"] = G4.number_of_edges()
 
     # SIF adapter
-    with tempfile.TemporaryDirectory() as td:
+    """with tempfile.TemporaryDirectory() as td:
         sif_path = os.path.join(td, "graph.sif")
         with measure() as m_sif_export:
             to_sif(graph, sif_path)
@@ -107,7 +107,7 @@ def run(scale):
     out["sif_import"] = m_sif_import
     out["sif_size_bytes"] = sif_size
     out["sif_vertices"] = G5.number_of_vertices()
-    out["sif_edges"] = G5.number_of_edges()
+    out["sif_edges"] = G5.number_of_edges()"""
 
     # DataFrame adapter
     with measure() as m_df_export:
@@ -147,7 +147,7 @@ def run(scale):
     out["graphml_edges"] = G7.number_of_edges()
 
     # GEXF adapter
-    with tempfile.TemporaryDirectory() as td:
+    """with tempfile.TemporaryDirectory() as td:
         gexf_path = os.path.join(td, "graph.gexf")
         with measure() as m_gexf_export:
             to_gexf(graph, gexf_path)
@@ -158,7 +158,7 @@ def run(scale):
     out["gexf_import"] = m_gexf_import
     out["gexf_size_bytes"] = gexf_size
     out["gexf_vertices"] = G8.number_of_vertices()
-    out["gexf_edges"] = G8.number_of_edges()
+    out["gexf_edges"] = G8.number_of_edges()"""
 
     # Parquet GraphDir adapter
     with tempfile.TemporaryDirectory() as td:

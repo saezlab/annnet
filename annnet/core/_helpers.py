@@ -95,5 +95,6 @@ _EDGE_RESERVED = {
     "members",
     "head",
     "tail",
+    "flexible"
 }
 _slice_RESERVED = {"slice_id"}

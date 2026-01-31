@@ -20,7 +20,6 @@ from ._helpers import (
     _EDGE_RESERVED,
     EdgeType,
     _df_filter_not_equal,
-    _get_numeric_supertype,
     _slice_RESERVED,
     _vertex_RESERVED,
 )
@@ -119,8 +118,6 @@ class AnnNet(
 
         # flexible-direction behavior
         self.edge_direction_policy = {}  # eid -> policy dict
-        # ensure 'flexible' isn’t stored as an attribute column
-        self._EDGE_RESERVED.update({"flexible"})
 
         # Composite vertex key (tuple-of-attrs) support
         self._vertex_key_fields = None  # tuple[str,...] or None
@@ -151,10 +148,6 @@ class AnnNet(
         self._slices[self._default_slice] = {"vertices": set(), "edges": set(), "attributes": {}}
         self._current_slice = self._default_slice
 
-        # counts stay logical (start empty)
-        self._num_entities = 0
-        self._num_edges = 0
-
         # pre-size the incidence matrix to capacity (no zeros allocated in DOK)
         n = int(n) if n and n > 0 else 0
         e = int(e) if e and e > 0 else 0
@@ -164,7 +157,7 @@ class AnnNet(
         def _grow_rows_to(target: int):
             rows, cols = self._matrix.shape
             if target > rows:
-                # geometric bump; keeps behavior, reduces churn
+                # geometric bump
                 new_rows = max(target, rows + max(8, rows >> 1))
                 self._matrix.resize((new_rows, cols))
 
@@ -258,7 +251,7 @@ class AnnNet(
 
     # Build graph
 
-    def add_vertex(self, vertex_id, slice=None, **attributes):
+    def add_vertex(self, vertex_id, slice=None, layer=None, **attributes):
         """Add (or upsert) a vertex and optionally attach it to a slice.
 
         Parameters
@@ -319,19 +312,19 @@ class AnnNet(
             slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
         slices[slice]["vertices"].add(vertex_id)
 
-        # Multislice presence sync:
+        # Multilayer presence sync:
         # - Track V (true vertices only)
         # - If vertex_aligned: ensure presence across all slices
-        # - Else, if we are in 1-aspect shim mode and a slice was given, add (u, (slice,))
+        # - Else, if we are in 1-aspect shim mode and a layer was given, add (u, (layer,))
         if self.entity_types.get(vertex_id) == "vertex":
             self._V.add(vertex_id)
-            if self.vertex_aligned and self._all_slices:
-                for aa in self._all_slices:
+            if self.vertex_aligned and self._all_layers:
+                for aa in self._all_layers:
                     self._VM.add((vertex_id, aa))
             elif (
-                slice is not None and len(self.aspects) == 1 and self._legacy_single_aspect_enabled
+                layer is not None and len(self.aspects) == 1 and self._legacy_single_aspect_enabled
             ):
-                self._VM.add((vertex_id, (slice,)))
+                self._VM.add((vertex_id, (layer,)))
 
         # Ensure vertex_attributes has a row for this vertex (even with no attrs)
         self._ensure_vertex_table()

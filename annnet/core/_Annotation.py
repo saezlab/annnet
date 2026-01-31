@@ -1023,7 +1023,7 @@ class AttributesClass:
         nw_df = nw.from_native(df, eager_only=True)
         cols = set(nw_df.columns)
 
-        # 1. Key Resolution (Unchanged)
+        # 1. Key Resolution
         if {"slice_id", "edge_id"} <= cols:
             key_cols, key_vals = ("slice_id", "edge_id"), {"slice_id": idx[0], "edge_id": idx[1]}
             cache_name, df_id_name = "_edge_slice_attr_keys", "_edge_slice_attr_df_id"
@@ -1068,7 +1068,7 @@ class AttributesClass:
             c = nw.col(k) == nw.lit(key_vals[k])
             cond = c if cond is None else (cond & c)
 
-        # 2. Existence Check (Unchanged)
+        # 2. Existence Check
         try:
             key_cache = getattr(self, cache_name, None)
             current_df_id = id(nw.to_native(nw_df))
