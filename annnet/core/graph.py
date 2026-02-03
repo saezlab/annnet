@@ -134,7 +134,8 @@ class AnnNet(
         self.edge_kind = {}
         self.hyperedge_definitions = {}
         self.graph_attributes = {}
-
+        self.graph_attributes.update(kwargs)
+        
         # Edge ID counter for parallel edges
         self._next_edge_id = 0
 

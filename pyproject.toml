@@ -88,7 +88,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.24",
-    "polars>=0.20.0",
+    "narwhals",
     "scipy>=1.10",
 ]
 description = "A Python tool to build, manipulate, and interoperate with flexible graph structures"
@@ -103,6 +103,7 @@ requires-python = ">=3.10"
 version = "0.1.0"
 
 [project.optional-dependencies]
+polars = ["polars>=0.20.0"]   # recommended dataframe annotations
 networkx = ["networkx>=3.3"]
 igraph   = ["python-igraph>=0.11"]
 pandas = ["pandas>=1.5"]
@@ -143,6 +144,7 @@ storage = [
 
 # "everything"
 all = [
+  "polars"
   "networkx>=3.3",
   "python-igraph>=0.11",
   "openpyxl>=3.1",
