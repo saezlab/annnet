@@ -38,4 +38,6 @@ jobs:
                 environments: dev
                 cache: true
         -   name: Run graph-tool tests only
-            run: pixi run test-gt
+            run:  |
+                pip install polars
+                pixi run test-gt
