@@ -11,7 +11,7 @@ import unittest
 import polars as pl
 
 from annnet.core.graph import AnnNet
-from annnet.io import csv as csv_io
+from annnet.io import csv_io as csv_io
 
 
 def _colmap(df: pl.DataFrame):

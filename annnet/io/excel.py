@@ -78,7 +78,7 @@ def load_excel_to_graph(
         df.to_csv(tmp_path, index=False)
 
     # Pass the temporary CSV into the existing loader
-    from .csv import load_csv_to_graph
+    from .csv_io import load_csv_to_graph
 
     G = load_csv_to_graph(
         tmp_path,
