@@ -17,7 +17,7 @@ jobs:
             shell: bash
             run: |
                 source .venv/bin/activate
-                uv pip install pandas networkx zarr numcodecs pyarrow python-igraph matplotlib torch torch-geometric
+                uv pip install polars pandas networkx zarr numcodecs pyarrow python-igraph matplotlib torch torch-geometric
         -   name: Run tests with coverage
             run: |
                 source .venv/bin/activate
