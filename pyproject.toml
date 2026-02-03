@@ -26,7 +26,7 @@ tests = [
     "codecov-cli>=10.2.0",
     "diff_cover",
     "ruff",
-    ""polars>=0.20.0""
+    "polars>=0.20.0",
     "narwhals>=1.9"
 ]
 
