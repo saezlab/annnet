@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 # ------------------------------------------------------------------------------
@@ -8,7 +8,7 @@ from typing import Any
 Edge = tuple[frozenset[Any], frozenset[Any]]
 
 
-class Attr(str, Enum):
+class Attr(StrEnum):
     """Enum class representing predefined attribute names used in the `Attributes` class.
 
     Attributes:

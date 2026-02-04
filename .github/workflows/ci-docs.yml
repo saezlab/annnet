@@ -26,5 +26,9 @@ jobs:
                 path: .cache
                 restore-keys: |
                     mkdocs-material-
+        -   name: Pin mkdocstrings versions
+            run: |
+                .venv/bin/pip install "mkdocstrings>=0.24" "mkdocstrings-python>=1.6"
+
         -   name: Build documentation with mkdocs
             run: .venv/bin/mkdocs gh-deploy --force
