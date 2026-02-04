@@ -17,89 +17,279 @@ class IndexManager:
     # ==================== Entity (vertex) Indexes ====================
 
     def entity_to_row(self, entity_id):
-        """Map entity ID to matrix row index."""
+        """Map an entity ID to its matrix row index.
+
+        Parameters
+        ----------
+        entity_id : str
+            Entity identifier.
+
+        Returns
+        -------
+        int
+            Row index for the entity.
+
+        Raises
+        ------
+        KeyError
+            If the entity is not found.
+        """
         if entity_id not in self._G.entity_to_idx:
             raise KeyError(f"Entity '{entity_id}' not found")
         return self._G.entity_to_idx[entity_id]
 
     def row_to_entity(self, row):
-        """Map matrix row index to entity ID."""
+        """Map a matrix row index to its entity ID.
+
+        Parameters
+        ----------
+        row : int
+            Row index.
+
+        Returns
+        -------
+        str
+            Entity identifier.
+
+        Raises
+        ------
+        KeyError
+            If the row index is not found.
+        """
         if row not in self._G.idx_to_entity:
             raise KeyError(f"Row {row} not found")
         return self._G.idx_to_entity[row]
 
     def entities_to_rows(self, entity_ids):
-        """Batch convert entity IDs to row indices."""
+        """Batch convert entity IDs to row indices.
+
+        Parameters
+        ----------
+        entity_ids : Iterable[str]
+            Entity identifiers.
+
+        Returns
+        -------
+        list[int]
+        """
         return [self._G.entity_to_idx[eid] for eid in entity_ids]
 
     def rows_to_entities(self, rows):
-        """Batch convert row indices to entity IDs."""
+        """Batch convert row indices to entity IDs.
+
+        Parameters
+        ----------
+        rows : Iterable[int]
+            Row indices.
+
+        Returns
+        -------
+        list[str]
+        """
         return [self._G.idx_to_entity[r] for r in rows]
 
     # ==================== Edge Indexes ====================
 
     def edge_to_col(self, edge_id):
-        """Map edge ID to matrix column index."""
+        """Map an edge ID to its matrix column index.
+
+        Parameters
+        ----------
+        edge_id : str
+            Edge identifier.
+
+        Returns
+        -------
+        int
+            Column index for the edge.
+
+        Raises
+        ------
+        KeyError
+            If the edge is not found.
+        """
         if edge_id not in self._G.edge_to_idx:
             raise KeyError(f"Edge '{edge_id}' not found")
         return self._G.edge_to_idx[edge_id]
 
     def col_to_edge(self, col):
-        """Map matrix column index to edge ID."""
+        """Map a matrix column index to its edge ID.
+
+        Parameters
+        ----------
+        col : int
+            Column index.
+
+        Returns
+        -------
+        str
+            Edge identifier.
+
+        Raises
+        ------
+        KeyError
+            If the column index is not found.
+        """
         if col not in self._G.idx_to_edge:
             raise KeyError(f"Column {col} not found")
         return self._G.idx_to_edge[col]
 
     def edges_to_cols(self, edge_ids):
-        """Batch convert edge IDs to column indices."""
+        """Batch convert edge IDs to column indices.
+
+        Parameters
+        ----------
+        edge_ids : Iterable[str]
+            Edge identifiers.
+
+        Returns
+        -------
+        list[int]
+        """
         return [self._G.edge_to_idx[eid] for eid in edge_ids]
 
     def cols_to_edges(self, cols):
-        """Batch convert column indices to edge IDs."""
+        """Batch convert column indices to edge IDs.
+
+        Parameters
+        ----------
+        cols : Iterable[int]
+            Column indices.
+
+        Returns
+        -------
+        list[str]
+        """
         return [self._G.idx_to_edge[c] for c in cols]
 
     # ==================== Utilities ====================
 
     def entity_type(self, entity_id):
-        """Get entity type ('vertex' or 'edge')."""
+        """Get the entity type for an ID.
+
+        Parameters
+        ----------
+        entity_id : str
+            Entity identifier.
+
+        Returns
+        -------
+        str
+            `'vertex'` or `'edge'`.
+
+        Raises
+        ------
+        KeyError
+            If the entity is not found.
+        """
         if entity_id not in self._G.entity_types:
             raise KeyError(f"Entity '{entity_id}' not found")
         return self._G.entity_types[entity_id]
 
     def is_vertex(self, entity_id):
-        """Check if entity is a vertex."""
+        """Check whether an entity ID refers to a vertex.
+
+        Parameters
+        ----------
+        entity_id : str
+            Entity identifier.
+
+        Returns
+        -------
+        bool
+        """
         return self.entity_type(entity_id) == "vertex"
 
     def is_edge_entity(self, entity_id):
-        """Check if entity is an edge-entity (vertex-edge hybrid)."""
+        """Check whether an entity ID refers to an edge-entity.
+
+        Parameters
+        ----------
+        entity_id : str
+            Entity identifier.
+
+        Returns
+        -------
+        bool
+        """
         return self.entity_type(entity_id) == "edge"
 
     def has_entity(self, entity_id: str) -> bool:
-        """True if the ID exists as any entity (vertex or edge-entity)."""
+        """Check if an ID exists as any entity.
+
+        Parameters
+        ----------
+        entity_id : str
+            Entity identifier.
+
+        Returns
+        -------
+        bool
+        """
         return entity_id in self._G.entity_to_idx
 
     def has_vertex(self, vertex_id: str) -> bool:
-        """True if the ID exists and is a vertex (not an edge-entity)."""
+        """Check if an ID exists and is a vertex.
+
+        Parameters
+        ----------
+        vertex_id : str
+            Vertex identifier.
+
+        Returns
+        -------
+        bool
+        """
         return self._G.entity_types.get(vertex_id) == "vertex"
 
     def has_edge_id(self, edge_id: str) -> bool:
-        """True if an edge with this ID exists."""
+        """Check if an edge ID exists.
+
+        Parameters
+        ----------
+        edge_id : str
+            Edge identifier.
+
+        Returns
+        -------
+        bool
+        """
         return edge_id in self._G.edge_to_idx
 
     def edge_count(self) -> int:
-        """Number of edges (columns in incidence)."""
+        """Return the number of edges in the graph.
+
+        Returns
+        -------
+        int
+        """
         return len(self._G.edge_to_idx)
 
     def entity_count(self) -> int:
-        """Number of entities (vertices + edge-entities)."""
+        """Return the number of entities (vertices + edge-entities).
+
+        Returns
+        -------
+        int
+        """
         return len(self._G.entity_to_idx)
 
     def vertex_count(self) -> int:
-        """Number of true vertices (excludes edge-entities)."""
+        """Return the number of true vertices (excludes edge-entities).
+
+        Returns
+        -------
+        int
+        """
         return sum(1 for t in self._G.entity_types.values() if t == "vertex")
 
     def stats(self):
-        """Get index statistics."""
+        """Return index statistics for entities and edges.
+
+        Returns
+        -------
+        dict
+        """
         return {
             "n_entities": len(self._G.entity_to_idx),
             "n_vertices": sum(1 for t in self._G.entity_types.values() if t == "vertex"),

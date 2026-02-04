@@ -14,56 +14,138 @@ class SliceManager:
     def add(self, slice_id, **attributes):
         """Create new slice.
 
-        Delegates to AnnNet.add_slice()
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+        **attributes
+            Slice attributes to store.
+
+        Returns
+        -------
+        str
+            Created slice ID.
+
+        Notes
+        -----
+        Delegates to `AnnNet.add_slice()`.
         """
         return self._G.add_slice(slice_id, **attributes)
 
     def remove(self, slice_id):
         """Remove slice.
 
-        Delegates to AnnNet.remove_slice()
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+
+        Notes
+        -----
+        Delegates to `AnnNet.remove_slice()`.
         """
         return self._G.remove_slice(slice_id)
 
     def list(self, include_default=False):
         """List slice IDs.
 
-        Delegates to AnnNet.list_slices()
+        Parameters
+        ----------
+        include_default : bool, optional
+            Include the internal default slice if True.
+
+        Returns
+        -------
+        list[str]
+
+        Notes
+        -----
+        Delegates to `AnnNet.list_slices()`.
         """
         return self._G.list_slices(include_default=include_default)
 
     def exists(self, slice_id):
         """Check if slice exists.
 
-        Delegates to AnnNet.has_slice()
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+
+        Returns
+        -------
+        bool
+
+        Notes
+        -----
+        Delegates to `AnnNet.has_slice()`.
         """
         return self._G.has_slice(slice_id)
 
     def info(self, slice_id):
         """Get slice metadata.
 
-        Delegates to AnnNet.get_slice_info()
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+
+        Returns
+        -------
+        dict
+
+        Notes
+        -----
+        Delegates to `AnnNet.get_slice_info()`.
         """
         return self._G.get_slice_info(slice_id)
 
     def count(self):
         """Get number of slices.
 
-        Delegates to AnnNet.slice_count()
+        Returns
+        -------
+        int
+
+        Notes
+        -----
+        Delegates to `AnnNet.slice_count()`.
         """
         return self._G.slice_count()
 
     def vertices(self, slice_id):
         """Get vertices in slice.
 
-        Delegates to AnnNet.get_slice_vertices()
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+
+        Returns
+        -------
+        set[str]
+
+        Notes
+        -----
+        Delegates to `AnnNet.get_slice_vertices()`.
         """
         return self._G.get_slice_vertices(slice_id)
 
     def edges(self, slice_id):
         """Get edges in slice.
 
-        Delegates to AnnNet.get_slice_edges()
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+
+        Returns
+        -------
+        set[str]
+
+        Notes
+        -----
+        Delegates to `AnnNet.get_slice_edges()`.
         """
         return self._G.get_slice_edges(slice_id)
 
@@ -73,7 +155,13 @@ class SliceManager:
     def active(self):
         """Get active slice ID.
 
-        Delegates to AnnNet.get_active_slice()
+        Returns
+        -------
+        str
+
+        Notes
+        -----
+        Delegates to `AnnNet.get_active_slice()`.
         """
         return self._G.get_active_slice()
 
@@ -81,7 +169,14 @@ class SliceManager:
     def active(self, slice_id):
         """Set active slice ID.
 
-        Delegates to AnnNet.set_active_slice()
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+
+        Notes
+        -----
+        Delegates to `AnnNet.set_active_slice()`.
         """
         self._G.set_active_slice(slice_id)
 
@@ -90,57 +185,59 @@ class SliceManager:
     def union(self, slice_ids):
         """Compute union of slices (returns dict, doesn't create slice).
 
-        Delegates to AnnNet.slice_union()
-
         Parameters
-        --
+        ----------
         slice_ids : list[str]
-            slices to union
+            Slices to union.
 
         Returns
-        ---
+        -------
         dict
-            {"vertices": set[str], "edges": set[str]}
+            `{"vertices": set[str], "edges": set[str]}`.
 
+        Notes
+        -----
+        Delegates to `AnnNet.slice_union()`.
         """
         return self._G.slice_union(slice_ids)
 
     def intersect(self, slice_ids):
         """Compute intersection of slices (returns dict, doesn't create slice).
 
-        Delegates to AnnNet.slice_intersection()
-
         Parameters
-        --
+        ----------
         slice_ids : list[str]
-            slices to intersect
+            Slices to intersect.
 
         Returns
-        ---
+        -------
         dict
-            {"vertices": set[str], "edges": set[str]}
+            `{"vertices": set[str], "edges": set[str]}`.
 
+        Notes
+        -----
+        Delegates to `AnnNet.slice_intersection()`.
         """
         return self._G.slice_intersection(slice_ids)
 
     def difference(self, slice_a, slice_b):
         """Compute set difference (returns dict, doesn't create slice).
 
-        Delegates to AnnNet.slice_difference()
-
         Parameters
-        --
+        ----------
         slice_a : str
-            First slice
+            First slice.
         slice_b : str
-            Second slice
+            Second slice.
 
         Returns
-        ---
+        -------
         dict
-            {"vertices": set[str], "edges": set[str]}
-            Elements in slice_a but not in slice_b
+            Elements in `slice_a` but not in `slice_b`.
 
+        Notes
+        -----
+        Delegates to `AnnNet.slice_difference()`.
         """
         return self._G.slice_difference(slice_a, slice_b)
 
@@ -149,22 +246,23 @@ class SliceManager:
     def union_create(self, slice_ids, name, **attributes):
         """Create new slice as union of existing slices.
 
-        Combines AnnNet.slice_union() + AnnNet.create_slice_from_operation()
-
         Parameters
-        --
+        ----------
         slice_ids : list[str]
-            slices to union
+            Slices to union.
         name : str
-            New slice name
+            New slice name.
         **attributes
-            slice attributes
+            Slice attributes.
 
         Returns
-        ---
+        -------
         str
-            Created slice ID
+            Created slice ID.
 
+        Notes
+        -----
+        Combines `AnnNet.slice_union()` with `AnnNet.create_slice_from_operation()`.
         """
         result = self._G.slice_union(slice_ids)
         return self._G.create_slice_from_operation(name, result, **attributes)
@@ -172,22 +270,23 @@ class SliceManager:
     def intersect_create(self, slice_ids, name, **attributes):
         """Create new slice as intersection of existing slices.
 
-        Combines AnnNet.slice_intersection() + AnnNet.create_slice_from_operation()
-
         Parameters
-        --
+        ----------
         slice_ids : list[str]
-            slices to intersect
+            Slices to intersect.
         name : str
-            New slice name
+            New slice name.
         **attributes
-            slice attributes
+            Slice attributes.
 
         Returns
-        ---
+        -------
         str
-            Created slice ID
+            Created slice ID.
 
+        Notes
+        -----
+        Combines `AnnNet.slice_intersection()` with `AnnNet.create_slice_from_operation()`.
         """
         result = self._G.slice_intersection(slice_ids)
         return self._G.create_slice_from_operation(name, result, **attributes)
@@ -195,24 +294,25 @@ class SliceManager:
     def difference_create(self, slice_a, slice_b, name, **attributes):
         """Create new slice as difference of two slices.
 
-        Combines AnnNet.slice_difference() + AnnNet.create_slice_from_operation()
-
         Parameters
-        --
+        ----------
         slice_a : str
-            First slice
+            First slice.
         slice_b : str
-            Second slice
+            Second slice.
         name : str
-            New slice name
+            New slice name.
         **attributes
-            slice attributes
+            Slice attributes.
 
         Returns
-        ---
+        -------
         str
-            Created slice ID
+            Created slice ID.
 
+        Notes
+        -----
+        Combines `AnnNet.slice_difference()` with `AnnNet.create_slice_from_operation()`.
         """
         result = self._G.slice_difference(slice_a, slice_b)
         return self._G.create_slice_from_operation(name, result, **attributes)
@@ -222,26 +322,27 @@ class SliceManager:
     ):
         """Create aggregated slice from multiple sources.
 
-        Delegates to AnnNet.create_aggregated_slice()
-
         Parameters
-        --
+        ----------
         source_slice_ids : list[str]
-            Source slices
+            Source slices.
         target_slice_id : str
-            Target slice name
+            Target slice name.
         method : {'union', 'intersection'}
-            Aggregation method
+            Aggregation method.
         weight_func : callable, optional
-            Weight merging function (reserved)
+            Weight merging function (reserved).
         **attributes
-            slice attributes
+            Slice attributes.
 
         Returns
-        ---
+        -------
         str
-            Created slice ID
+            Created slice ID.
 
+        Notes
+        -----
+        Delegates to `AnnNet.create_aggregated_slice()`.
         """
         return self._G.create_aggregated_slice(
             source_slice_ids, target_slice_id, method, weight_func, **attributes
@@ -252,33 +353,39 @@ class SliceManager:
     def stats(self, include_default=False):
         """Get statistics for all slices.
 
-        Delegates to AnnNet.slice_statistics()
+        Parameters
+        ----------
+        include_default : bool, optional
+            Include the internal default slice.
 
         Returns
-        ---
+        -------
         dict[str, dict]
-            {slice_id: {'vertices': int, 'edges': int, 'attributes': dict}}
+            Mapping of slice ID to stats.
 
+        Notes
+        -----
+        Delegates to `AnnNet.slice_statistics()`.
         """
         return self._G.slice_statistics(include_default=include_default)
 
     def vertex_presence(self, vertex_id, include_default=False):
         """Find slices containing a vertex.
 
-        Delegates to AnnNet.vertex_presence_across_slices()
-
         Parameters
-        --
+        ----------
         vertex_id : str
-            Vertex to search for
-        include_default : bool
-            Include default slice
+            Vertex to search for.
+        include_default : bool, optional
+            Include the internal default slice.
 
         Returns
-        ---
+        -------
         list[str]
-            slice IDs containing the vertex
 
+        Notes
+        -----
+        Delegates to `AnnNet.vertex_presence_across_slices()`.
         """
         return self._G.vertex_presence_across_slices(vertex_id, include_default)
 
@@ -287,27 +394,28 @@ class SliceManager:
     ):
         """Find slices containing an edge.
 
-        Delegates to AnnNet.edge_presence_across_slices()
-
         Parameters
-        --
+        ----------
         edge_id : str, optional
-            Edge ID to search for
+            Edge ID to search for.
         source : str, optional
-            Source vertex (with target)
+            Source vertex (with target).
         target : str, optional
-            Target vertex (with source)
-        include_default : bool
-            Include default slice
+            Target vertex (with source).
+        include_default : bool, optional
+            Include the internal default slice.
         undirected_match : bool, optional
-            Allow symmetric matches
+            Allow symmetric matches.
 
         Returns
-        ---
-        list[str] or dict[str, list[str]]
-            If edge_id: list of slice IDs
-            If source/target: {slice_id: [edge_ids]}
+        -------
+        list[str] | dict[str, list[str]]
+            If `edge_id`: list of slice IDs. If `source`/`target`: mapping of
+            slice IDs to matching edge IDs.
 
+        Notes
+        -----
+        Delegates to `AnnNet.edge_presence_across_slices()`.
         """
         return self._G.edge_presence_across_slices(
             edge_id,
@@ -320,24 +428,25 @@ class SliceManager:
     def hyperedge_presence(self, members=None, head=None, tail=None, include_default=False):
         """Find slices containing a hyperedge.
 
-        Delegates to AnnNet.hyperedge_presence_across_slices()
-
         Parameters
-        --
+        ----------
         members : Iterable[str], optional
-            Undirected hyperedge members
+            Undirected hyperedge members.
         head : Iterable[str], optional
-            Directed hyperedge head
+            Directed hyperedge head.
         tail : Iterable[str], optional
-            Directed hyperedge tail
-        include_default : bool
-            Include default slice
+            Directed hyperedge tail.
+        include_default : bool, optional
+            Include the internal default slice.
 
         Returns
-        ---
+        -------
         dict[str, list[str]]
-            {slice_id: [edge_ids]}
+            Mapping of slice ID to edge IDs.
 
+        Notes
+        -----
+        Delegates to `AnnNet.hyperedge_presence_across_slices()`.
         """
         return self._G.hyperedge_presence_across_slices(
             members=members, head=head, tail=tail, include_default=include_default
@@ -346,58 +455,61 @@ class SliceManager:
     def conserved_edges(self, min_slices=2, include_default=False):
         """Find edges present in multiple slices.
 
-        Delegates to AnnNet.conserved_edges()
-
         Parameters
-        --
-        min_slices : int
-            Minimum number of slices
-        include_default : bool
-            Include default slice
+        ----------
+        min_slices : int, optional
+            Minimum number of slices.
+        include_default : bool, optional
+            Include the internal default slice.
 
         Returns
-        ---
+        -------
         dict[str, int]
-            {edge_id: slice_count}
+            Mapping of edge ID to slice count.
 
+        Notes
+        -----
+        Delegates to `AnnNet.conserved_edges()`.
         """
         return self._G.conserved_edges(min_slices, include_default)
 
     def specific_edges(self, slice_id):
         """Find edges unique to a slice.
 
-        Delegates to AnnNet.slice_specific_edges()
-
         Parameters
-        --
+        ----------
         slice_id : str
-            slice to check
+            Slice identifier.
 
         Returns
-        ---
+        -------
         set[str]
-            Edge IDs unique to this slice
+            Edge IDs unique to this slice.
 
+        Notes
+        -----
+        Delegates to `AnnNet.slice_specific_edges()`.
         """
         return self._G.slice_specific_edges(slice_id)
 
     def temporal_dynamics(self, ordered_slices, metric="edge_change"):
         """Analyze temporal changes across slices.
 
-        Delegates to AnnNet.temporal_dynamics()
-
         Parameters
-        --
+        ----------
         ordered_slices : list[str]
-            slices in chronological order
+            Slice IDs in chronological order.
         metric : {'edge_change', 'vertex_change'}
-            What to track
+            What to track.
 
         Returns
-        ---
+        -------
         list[dict]
-            Per-step changes: [{'added': int, 'removed': int, 'net_change': int}]
+            Per-step changes with keys `added`, `removed`, `net_change`.
 
+        Notes
+        -----
+        Delegates to `AnnNet.temporal_dynamics()`.
         """
         return self._G.temporal_dynamics(ordered_slices, metric)
 
@@ -407,10 +519,9 @@ class SliceManager:
         """Get human-readable summary of all slices.
 
         Returns
-        ---
+        -------
         str
-            Formatted summary
-
+            Formatted summary.
         """
         stats = self.stats(include_default=True)
         lines = [f"slices: {len(stats)}"]
@@ -432,22 +543,21 @@ class SliceClass:
         """Create a new empty slice.
 
         Parameters
-        --
+        ----------
         slice_id : str
-            New slice identifier (ID).
+            New slice identifier.
         **attributes
-            Pure slice attributes to store (non-structural).
+            Slice attributes to store.
 
         Returns
-        ---
+        -------
         str
             The created slice ID.
 
         Raises
-        --
+        ------
         ValueError
             If the slice already exists.
-
         """
         if slice_id in self._slices and slice_id != "default":
             raise ValueError(f"slice {slice_id} already exists")
@@ -468,15 +578,14 @@ class SliceClass:
         """Set the active slice for subsequent operations.
 
         Parameters
-        --
+        ----------
         slice_id : str
             Existing slice ID.
 
         Raises
-        --
+        ------
         KeyError
             If the slice does not exist.
-
         """
         if slice_id not in self._slices:
             raise KeyError(f"slice {slice_id} not found")
@@ -486,10 +595,9 @@ class SliceClass:
         """Get the currently active slice ID.
 
         Returns
-        ---
+        -------
         str
             Active slice ID.
-
         """
         return self._current_slice
 
@@ -497,15 +605,14 @@ class SliceClass:
         """Get a mapping of slice IDs to their metadata.
 
         Parameters
-        --
+        ----------
         include_default : bool, optional
-            Include the internal ``'default'`` slice if True.
+            Include the internal `default` slice if True.
 
         Returns
-        ---
+        -------
         dict[str, dict]
-            ``{slice_id: {"vertices": set, "edges": set, "attributes": dict}}``.
-
+            Mapping of slice IDs to metadata dicts.
         """
         if include_default:
             return self._slices
@@ -515,15 +622,14 @@ class SliceClass:
         """List slice IDs.
 
         Parameters
-        --
+        ----------
         include_default : bool, optional
-            Include the internal ``'default'`` slice if True.
+            Include the internal `default` slice if True.
 
         Returns
-        ---
+        -------
         list[str]
-            slice IDs.
-
+            Slice IDs.
         """
         return list(self.get_slices_dict(include_default=include_default).keys())
 
@@ -531,13 +637,13 @@ class SliceClass:
         """Check whether a slice exists.
 
         Parameters
-        --
+        ----------
         slice_id : str
+            Slice identifier.
 
         Returns
-        ---
+        -------
         bool
-
         """
         return slice_id in self._slices
 
@@ -545,9 +651,8 @@ class SliceClass:
         """Get the number of slices (including the internal default).
 
         Returns
-        ---
+        -------
         int
-
         """
         return len(self._slices)
 
@@ -555,19 +660,19 @@ class SliceClass:
         """Get a slice's metadata snapshot.
 
         Parameters
-        --
+        ----------
         slice_id : str
+            Slice identifier.
 
         Returns
-        ---
+        -------
         dict
-            Copy of ``{"vertices": set, "edges": set, "attributes": dict}``.
+            Copy of `{"vertices": set, "edges": set, "attributes": dict}`.
 
         Raises
-        --
+        ------
         KeyError
             If the slice does not exist.
-
         """
         if slice_id not in self._slices:
             raise KeyError(f"slice {slice_id} not found")
@@ -579,13 +684,13 @@ class SliceClass:
         """Vertices in a slice.
 
         Parameters
-        --
+        ----------
         slice_id : str
+            Slice identifier.
 
         Returns
-        ---
+        -------
         set[str]
-
         """
         return self._slices[slice_id]["vertices"].copy()
 
@@ -593,13 +698,13 @@ class SliceClass:
         """Edges in a slice.
 
         Parameters
-        --
+        ----------
         slice_id : str
+            Slice identifier.
 
         Returns
-        ---
+        -------
         set[str]
-
         """
         return self._slices[slice_id]["edges"].copy()
 
@@ -607,14 +712,13 @@ class SliceClass:
         """Union of multiple slices.
 
         Parameters
-        --
+        ----------
         slice_ids : Iterable[str]
 
         Returns
-        ---
+        -------
         dict
-            ``{"vertices": set[str], "edges": set[str]}``
-
+            `{"vertices": set[str], "edges": set[str]}`.
         """
         if not slice_ids:
             return {"vertices": set(), "edges": set()}
@@ -633,14 +737,13 @@ class SliceClass:
         """Intersection of multiple slices.
 
         Parameters
-        --
+        ----------
         slice_ids : Iterable[str]
 
         Returns
-        ---
+        -------
         dict
-            ``{"vertices": set[str], "edges": set[str]}``
-
+            `{"vertices": set[str], "edges": set[str]}`.
         """
         if not slice_ids:
             return {"vertices": set(), "edges": set()}
@@ -671,20 +774,19 @@ class SliceClass:
         """Set difference: elements in ``slice1_id`` not in ``slice2_id``.
 
         Parameters
-        --
+        ----------
         slice1_id : str
         slice2_id : str
 
         Returns
-        ---
+        -------
         dict
-            ``{"vertices": set[str], "edges": set[str]}``
+            `{"vertices": set[str], "edges": set[str]}`.
 
         Raises
-        --
+        ------
         KeyError
             If either slice is missing.
-
         """
         if slice1_id not in self._slices or slice2_id not in self._slices:
             raise KeyError("One or both slices not found")
@@ -701,23 +803,23 @@ class SliceClass:
         """Create a new slice from the result of a set operation.
 
         Parameters
-        --
+        ----------
         result_slice_id : str
+            New slice identifier.
         operation_result : dict
-            Output of ``slice_union``/``slice_intersection``/``slice_difference``.
+            Output of `slice_union`/`slice_intersection`/`slice_difference`.
         **attributes
-            Pure slice attributes.
+            Slice attributes.
 
         Returns
-        ---
+        -------
         str
             The created slice ID.
 
         Raises
-        --
+        ------
         ValueError
             If the target slice already exists.
-
         """
         if result_slice_id in self._slices:
             raise ValueError(f"slice {result_slice_id} already exists")
@@ -734,17 +836,16 @@ class SliceClass:
         """Attach an existing vertex to a slice.
 
         Parameters
-        --
+        ----------
         lid : str
-            slice ID.
+            Slice identifier.
         vid : str
-            vertex ID.
+            Vertex identifier.
 
         Raises
-        --
+        ------
         KeyError
             If the slice does not exist.
-
         """
         if lid not in self._slices:
             raise KeyError(f"slice {lid} does not exist")
@@ -762,11 +863,11 @@ class SliceClass:
         """Locate where an edge exists across slices.
 
         Parameters
-        --
+        ----------
         edge_id : str, optional
             If provided, match by ID (any kind: binary/vertex-edge/hyper).
         source : str, optional
-            When used with ``target``, match only binary/vertex-edge edges by endpoints.
+            When used with `target`, match binary/vertex-edge edges by endpoints.
         target : str, optional
         include_default : bool, optional
             Include the internal default slice in the search.
@@ -774,16 +875,15 @@ class SliceClass:
             When endpoint matching, allow undirected symmetric matches.
 
         Returns
-        ---
-        list[str] or dict[str, list[str]]
-            If ``edge_id`` given: list of slice IDs.
-            Else: ``{slice_id: [edge_id, ...]}``.
+        -------
+        list[str] | dict[str, list[str]]
+            If `edge_id` is given: list of slice IDs. Otherwise mapping of slice
+            IDs to matching edge IDs.
 
         Raises
-        --
+        ------
         ValueError
             If both modes (ID and endpoints) are provided or neither is valid.
-
         """
         has_id = edge_id is not None
         has_pair = (source is not None) and (target is not None)
@@ -828,7 +928,7 @@ class SliceClass:
         """Locate slices containing a hyperedge with exactly these sets.
 
         Parameters
-        --
+        ----------
         members : Iterable[str], optional
             Undirected member set (exact match).
         head : Iterable[str], optional
@@ -838,15 +938,14 @@ class SliceClass:
         include_default : bool, optional
 
         Returns
-        ---
+        -------
         dict[str, list[str]]
-            ``{slice_id: [edge_id, ...]}``.
+            Mapping of slice IDs to matching edge IDs.
 
         Raises
-        --
+        ------
         ValueError
             For invalid combinations or empty sets.
-
         """
         undirected = members is not None
         if undirected and (head is not None or tail is not None):
@@ -889,14 +988,13 @@ class SliceClass:
         """List slices containing a specific vertex.
 
         Parameters
-        --
+        ----------
         vertex_id : str
         include_default : bool, optional
 
         Returns
-        ---
+        -------
         list[str]
-
         """
         slices_with_vertex = []
         for slice_id, slice_data in self.get_slices_dict(include_default=include_default).items():
@@ -908,15 +1006,14 @@ class SliceClass:
         """Edges present in at least ``min_slices`` slices.
 
         Parameters
-        --
+        ----------
         min_slices : int, optional
         include_default : bool, optional
 
         Returns
-        ---
+        -------
         dict[str, int]
-            ``{edge_id: count}``.
-
+            Mapping of edge ID to slice count.
         """
         slices_to_check = self.get_slices_dict(
             include_default=include_default
@@ -931,18 +1028,17 @@ class SliceClass:
         """Edges that appear **only** in the specified slice.
 
         Parameters
-        --
+        ----------
         slice_id : str
 
         Returns
-        ---
+        -------
         set[str]
 
         Raises
-        --
+        ------
         KeyError
             If the slice does not exist.
-
         """
         if slice_id not in self._slices:
             raise KeyError(f"slice {slice_id} not found")
@@ -962,23 +1058,22 @@ class SliceClass:
         """Compute changes between consecutive slices in a temporal sequence.
 
         Parameters
-        --
+        ----------
         ordered_slices : list[str]
-            slice IDs in chronological order.
+            Slice IDs in chronological order.
         metric : {'edge_change', 'vertex_change'}, optional
 
         Returns
-        ---
+        -------
         list[dict[str, int]]
-            Per-step dictionaries with keys: ``'added'``, ``'removed'``, ``'net_change'``.
+            Per-step dictionaries with keys `added`, `removed`, `net_change`.
 
         Raises
-        --
+        ------
         ValueError
             If fewer than two slices are provided.
         KeyError
             If a referenced slice does not exist.
-
         """
         if len(ordered_slices) < 2:
             raise ValueError("Need at least 2 slices for temporal analysis")
@@ -1013,25 +1108,24 @@ class SliceClass:
         """Create a new slice by aggregating multiple source slices.
 
         Parameters
-        --
+        ----------
         source_slice_ids : list[str]
         target_slice_id : str
         method : {'union', 'intersection'}, optional
         weight_func : callable, optional
             Reserved for future weight merging logic (currently unused).
         **attributes
-            Pure slice attributes.
+            Slice attributes.
 
         Returns
-        ---
+        -------
         str
             The created slice ID.
 
         Raises
-        --
+        ------
         ValueError
             For unknown methods or missing source slices, or if target exists.
-
         """
         if not source_slice_ids:
             raise ValueError("Must specify at least one source slice")
@@ -1052,14 +1146,13 @@ class SliceClass:
         """Basic per-slice statistics.
 
         Parameters
-        --
+        ----------
         include_default : bool, optional
 
         Returns
-        ---
+        -------
         dict[str, dict]
-            ``{slice_id: {'vertices': int, 'edges': int, 'attributes': dict}}``.
-
+            Mapping of slice ID to stats.
         """
         stats = {}
         for slice_id, slice_data in self.get_slices_dict(include_default=include_default).items():

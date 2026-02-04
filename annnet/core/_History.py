@@ -45,7 +45,13 @@ class GraphDiff:
         self.slices_removed = snapshot_a["slice_ids"] - snapshot_b["slice_ids"]
 
     def summary(self):
-        """Human-readable summary of differences."""
+        """Return a human-readable summary of differences.
+
+        Returns
+        -------
+        str
+            Summary text describing added/removed vertices, edges, and slices.
+        """
         lines = [
             f"Diff: {self.snapshot_a['label']} - {self.snapshot_b['label']}",
             "",
@@ -56,7 +62,12 @@ class GraphDiff:
         return "\n".join(lines)
 
     def is_empty(self):
-        """Check if there are no differences."""
+        """Check whether the diff contains no changes.
+
+        Returns
+        -------
+        bool
+        """
         return (
             not self.vertices_added
             and not self.vertices_removed
@@ -70,7 +81,12 @@ class GraphDiff:
         return self.summary()
 
     def to_dict(self):
-        """Convert to dictionary for serialization."""
+        """Convert the diff to a serializable dictionary.
+
+        Returns
+        -------
+        dict
+        """
         return {
             "snapshot_a": self.snapshot_a["label"],
             "snapshot_b": self.snapshot_b["label"],
@@ -172,22 +188,20 @@ class History:
         """Return the append-only mutation history.
 
         Parameters
-        --
+        ----------
         as_df : bool, default False
-            If True, return a Polars DF [DataFrame]; otherwise return a list of dicts.
+            If True, return a DataFrame; otherwise return a list of dicts.
 
         Returns
-        ---
-        list[dict] or polars.DataFrame
-            Each event includes: 'version', 'ts_utc' (UTC [Coordinated Universal Time]
-            ISO-8601 [International Organization for Standardization]), 'mono_ns'
-            (monotonic nanoseconds since logger start), 'op', call snapshot fields,
-            and 'result' when captured.
+        -------
+        list[dict] | DataFrame
+            Event records including `version`, `ts_utc`, `mono_ns`, `op`, and
+            captured arguments/results.
 
         Notes
-        -
-        Ordering is guaranteed by 'version' and 'mono_ns'. The log is in-memory until exported.
-
+        -----
+        Ordering is guaranteed by `version` and `mono_ns`. The log is in-memory
+        until exported.
         """
         if as_df:
             try:
@@ -209,21 +223,24 @@ class History:
         """Write the mutation history to disk.
 
         Parameters
-        --
+        ----------
         path : str
-            Output path. Supported extensions: '.parquet', '.ndjson' (a.k.a. '.jsonl'),
-            '.json', '.csv'. Unknown extensions default to Parquet by appending '.parquet'.
+            Output path. Supported extensions: `.parquet`, `.ndjson`/`.jsonl`,
+            `.json`, `.csv`. Unknown extensions default to Parquet.
 
         Returns
-        ---
+        -------
         int
             Number of events written. Returns 0 if the history is empty.
 
         Raises
-        --
+        ------
         OSError
             If the file cannot be written.
 
+        Notes
+        -----
+        Unknown extensions default to Parquet by appending `.parquet`.
         """
         if not self._history:
             return 0
@@ -268,14 +285,13 @@ class History:
         """Enable or disable in-memory mutation logging.
 
         Parameters
-        --
+        ----------
         flag : bool, default True
             When True, start/continue logging; when False, pause logging.
 
         Returns
-        ---
+        -------
         None
-
         """
         self._history_enabled = bool(flag)
 
@@ -283,13 +299,12 @@ class History:
         """Clear the in-memory mutation log.
 
         Returns
-        ---
+        -------
         None
 
         Notes
-        -
+        -----
         This does not delete any files previously exported.
-
         """
         self._history.clear()
 
@@ -297,19 +312,18 @@ class History:
         """Insert a manual marker into the mutation history.
 
         Parameters
-        --
+        ----------
         label : str
             Human-readable tag for the marker event.
 
         Returns
-        ---
+        -------
         None
 
         Notes
-        -
-        The event is recorded with 'op'='mark' alongside standard fields
-        ('version', 'ts_utc', 'mono_ns'). Logging must be enabled for the
+        -----
+        The event is recorded with `op='mark'` alongside standard fields
+        (`version`, `ts_utc`, `mono_ns`). Logging must be enabled for the
         marker to be recorded.
-
         """
         self._log_event("mark", label=label)

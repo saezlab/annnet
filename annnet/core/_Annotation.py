@@ -50,10 +50,11 @@ class AttributesClass:
         """Set a graph-level attribute.
 
         Parameters
-        --
+        ----------
         key : str
+            Attribute name.
         value : Any
-
+            Attribute value.
         """
         self.graph_attributes[key] = value
 
@@ -61,19 +62,28 @@ class AttributesClass:
         """Get a graph-level attribute.
 
         Parameters
-        --
+        ----------
         key : str
+            Attribute name.
         default : Any, optional
+            Value to return if the attribute is missing.
 
         Returns
-        ---
+        -------
         Any
-
         """
         return self.graph_attributes.get(key, default)
 
     def set_vertex_attrs(self, vertex_id, **attrs):
-        """Upsert pure vertex attributes (non-structural) into the vertex DF [DataFrame]."""
+        """Upsert pure vertex attributes (non-structural) into the vertex table.
+
+        Parameters
+        ----------
+        vertex_id : str
+            Vertex identifier.
+        **attrs
+            Attribute key/value pairs. Structural keys are ignored.
+        """
         clean = {k: v for k, v in attrs.items() if k not in self._vertex_RESERVED}
         if not clean:
             return
@@ -113,9 +123,12 @@ class AttributesClass:
                     self._vertex_key_index[new_key] = vertex_id
 
     def set_vertex_attrs_bulk(self, updates):
-        """
-        updates: dict[vertex_id, dict[attr, value]]
-                 or iterable[(vertex_id, dict)]
+        """Upsert vertex attributes in bulk.
+
+        Parameters
+        ----------
+        updates : dict[str, dict] | Iterable[tuple[str, dict]]
+            Mapping or iterable of `(vertex_id, attrs)` pairs.
         """
         if not updates:
             return
@@ -182,15 +195,17 @@ class AttributesClass:
         """Get a single vertex attribute (scalar) or default if missing.
 
         Parameters
-        --
+        ----------
         vertex_id : str
+            Vertex identifier.
         key : str
+            Attribute name.
         default : Any, optional
+            Value to return if missing.
 
         Returns
-        ---
+        -------
         Any
-
         """
         df = self.vertex_attributes
         if df is None or not hasattr(df, "columns") or key not in df.columns:
@@ -241,20 +256,20 @@ class AttributesClass:
         """(Legacy alias) Get a single vertex attribute from the Polars DF [DataFrame].
 
         Parameters
-        --
+        ----------
         vertex_id : str
+            Vertex identifier.
         attribute : str or enum.Enum
-            Column name or Enum with ``.value``.
+            Column name or enum with `.value`.
 
         Returns
-        ---
-        Any or None
-            Scalar value if present, else ``None``.
+        -------
+        Any | None
+            Scalar value if present, else None.
 
         See Also
-
+        --------
         get_attr_vertex
-
         """
         # allow Attr enums
         attribute = getattr(attribute, "value", attribute)
@@ -308,11 +323,11 @@ class AttributesClass:
         """Upsert pure edge attributes (non-structural) into the edge DF.
 
         Parameters
-        --
+        ----------
         edge_id : str
+            Edge identifier.
         **attrs
-            Key/value attributes. Structural keys are ignored.
-
+            Attribute key/value pairs. Structural keys are ignored.
         """
         # keep attributes table pure: strip structural keys
         clean = {k: v for k, v in attrs.items() if k not in self._EDGE_RESERVED}
@@ -323,8 +338,12 @@ class AttributesClass:
             self._apply_flexible_direction(edge_id)
 
     def set_edge_attrs_bulk(self, updates):
-        """
-        updates: dict[edge_id, dict[attr, value]]
+        """Upsert edge attributes in bulk.
+
+        Parameters
+        ----------
+        updates : dict[str, dict] | Iterable[tuple[str, dict]]
+            Mapping or iterable of `(edge_id, attrs)` pairs.
         """
         if not updates:
             return
@@ -358,15 +377,17 @@ class AttributesClass:
         """Get a single edge attribute (scalar) or default if missing.
 
         Parameters
-        --
+        ----------
         edge_id : str
+            Edge identifier.
         key : str
+            Attribute name.
         default : Any, optional
+            Value to return if missing.
 
         Returns
-        ---
+        -------
         Any
-
         """
         df = self.edge_attributes
         if df is None or not hasattr(df, "columns") or key not in df.columns:
@@ -413,20 +434,20 @@ class AttributesClass:
         """(Legacy alias) Get a single edge attribute from the Polars DF [DataFrame].
 
         Parameters
-        --
+        ----------
         edge_id : str
+            Edge identifier.
         attribute : str or enum.Enum
-            Column name or Enum with ``.value``.
+            Column name or enum with `.value`.
 
         Returns
-        ---
-        Any or None
-            Scalar value if present, else ``None``.
+        -------
+        Any | None
+            Scalar value if present, else None.
 
         See Also
-
+        --------
         get_attr_edge
-
         """
         # allow Attr enums
         attribute = getattr(attribute, "value", attribute)
@@ -478,11 +499,11 @@ class AttributesClass:
         """Upsert pure slice attributes.
 
         Parameters
-        --
+        ----------
         slice_id : str
+            Slice identifier.
         **attrs
-            Key/value attributes. Structural keys are ignored.
-
+            Attribute key/value pairs. Structural keys are ignored.
         """
         clean = {k: v for k, v in attrs.items() if k not in self._slice_RESERVED}
         if clean:
@@ -492,15 +513,17 @@ class AttributesClass:
         """Get a single slice attribute (scalar) or default if missing.
 
         Parameters
-        --
+        ----------
         slice_id : str
+            Slice identifier.
         key : str
+            Attribute name.
         default : Any, optional
+            Value to return if missing.
 
         Returns
-        ---
+        -------
         Any
-
         """
         df = self.slice_attributes
         if df is None or not hasattr(df, "columns") or key not in df.columns:
@@ -547,12 +570,13 @@ class AttributesClass:
         """Upsert per-slice attributes for a specific edge.
 
         Parameters
-        --
+        ----------
         slice_id : str
+            Slice identifier.
         edge_id : str
+            Edge identifier.
         **attrs
-            Pure attributes. Structural keys are ignored (except 'weight', which is allowed here).
-
+            Attribute key/value pairs. Structural keys are ignored except `weight`.
         """
         # allow 'weight' through; keep ignoring true structural keys
         clean = {
@@ -606,16 +630,19 @@ class AttributesClass:
         """Get a per-slice attribute for an edge.
 
         Parameters
-        --
+        ----------
         slice_id : str
+            Slice identifier.
         edge_id : str
+            Edge identifier.
         key : str
+            Attribute name.
         default : Any, optional
+            Value to return if missing.
 
         Returns
-        ---
+        -------
         Any
-
         """
         df = self.edge_slice_attributes
         if df is None or not hasattr(df, "columns") or key not in df.columns:
@@ -664,20 +691,22 @@ class AttributesClass:
         """Set a legacy per-slice weight override for an edge.
 
         Parameters
-        --
+        ----------
         slice_id : str
+            Slice identifier.
         edge_id : str
+            Edge identifier.
         weight : float
+            Weight override.
 
         Raises
-        --
+        ------
         KeyError
             If the slice or edge does not exist.
 
         See Also
-
+        --------
         get_effective_edge_weight
-
         """
         if slice_id not in self._slices:
             raise KeyError(f"slice {slice_id} not found")
@@ -689,16 +718,16 @@ class AttributesClass:
         """Resolve the effective weight for an edge, optionally within a slice.
 
         Parameters
-        --
+        ----------
         edge_id : str
+            Edge identifier.
         slice : str, optional
             If provided, return the slice override if present; otherwise global weight.
 
         Returns
-        ---
+        -------
         float
             Effective weight.
-
         """
         if slice is not None:
             df = self.edge_slice_attributes
@@ -759,16 +788,14 @@ class AttributesClass:
         """Audit attribute tables for extra/missing rows and invalid edge-slice pairs.
 
         Returns
-        ---
+        -------
         dict
-            {
-            'extra_vertex_rows': list[str],
-            'extra_edge_rows': list[str],
-            'missing_vertex_rows': list[str],
-            'missing_edge_rows': list[str],
-            'invalid_edge_slice_rows': list[tuple[str, str]],
-            }
-
+            Summary with keys:
+            - `extra_vertex_rows`
+            - `extra_edge_rows`
+            - `missing_vertex_rows`
+            - `missing_edge_rows`
+            - `invalid_edge_slice_rows`
         """
         vertex_ids = {eid for eid, t in self.entity_types.items() if t == "vertex"}
         edge_ids = set(self.edge_to_idx.keys())
@@ -1317,15 +1344,14 @@ class AttributesClass:
         """Return the full attribute dict for a single edge.
 
         Parameters
-        --
+        ----------
         edge : int | str
-            Edge index (int) or edge id (str).
+            Edge index or edge ID.
 
         Returns
-        ---
+        -------
         dict
-            Attribute dictionary for that edge. {} if not found.
-
+            Attribute dictionary for that edge. Empty if not found.
         """
         # normalize to edge id
         if isinstance(edge, int):
@@ -1371,15 +1397,14 @@ class AttributesClass:
         """Return the full attribute dict for a single vertex.
 
         Parameters
-        --
+        ----------
         vertex : str
-            Vertex id.
+            Vertex ID.
 
         Returns
-        ---
+        -------
         dict
-            Attribute dictionary for that vertex. {} if not found.
-
+            Attribute dictionary for that vertex. Empty if not found.
         """
         df = self.vertex_attributes
         try:
@@ -1417,25 +1442,14 @@ class AttributesClass:
         """Retrieve edge attributes as a dictionary.
 
         Parameters
-        --
+        ----------
         indexes : Iterable[int] | None, optional
-            A list or iterable of edge indices to retrieve attributes for.
-            - If `None` (default), attributes for **all** edges are returned.
-            - If provided, only those edges will be included in the output.
+            Edge indices to retrieve. If None, returns all edges.
 
         Returns
-        ---
+        -------
         dict[str, dict]
-            A dictionary mapping `edge_id` - `attribute_dict`, where:
-            - `edge_id` is the unique string identifier of the edge.
-            - `attribute_dict` is a dictionary of attribute names and values.
-
-        Notes
-        -
-        - This function reads directly from `self.edge_attributes`, which should be
-        a Polars DataFrame where each row corresponds to an edge.
-        - Useful for bulk inspection, serialization, or analytics without looping manually.
-
+            Mapping of `edge_id` to attribute dictionaries.
         """
         df = self.edge_attributes
 
@@ -1476,24 +1490,14 @@ class AttributesClass:
         """Retrieve vertex (vertex) attributes as a dictionary.
 
         Parameters
-        --
+        ----------
         vertices : Iterable[str] | None, optional
-            A list or iterable of vertex IDs to retrieve attributes for.
-            - If `None` (default), attributes for **all** verices are returned.
-            - If provided, only those verices will be included in the output.
+            Vertex IDs to retrieve. If None, returns all vertices.
 
         Returns
-        ---
+        -------
         dict[str, dict]
-            A dictionary mapping `vertex_id` - `attribute_dict`, where:
-            - `vertex_id` is the unique string identifier of the vertex.
-            - `attribute_dict` is a dictionary of attribute names and values.
-
-        Notes
-        -
-        - This reads from `self.vertex_attributes`, which stores per-vertex metadata.
-        - Use this for bulk data extraction instead of repeated single-vertex calls.
-
+            Mapping of `vertex_id` to attribute dictionaries.
         """
         df = self.vertex_attributes
 
@@ -1534,23 +1538,16 @@ class AttributesClass:
         """Extract a specific attribute column for all edges.
 
         Parameters
-        --
+        ----------
         key : str
-            Attribute column name to extract from `self.edge_attributes`.
+            Attribute column name to extract.
         default : Any, optional
-            Default value to use if the column does not exist or if an edge
-            does not have a value. Defaults to `None`.
+            Value to use if the column or value is missing.
 
         Returns
-        ---
+        -------
         dict[str, Any]
-            A dictionary mapping `edge_id` - attribute value.
-
-        Notes
-        -
-        - If the requested column is missing, all edges return `default`.
-        - This is useful for quick property lookups (e.g., weight, label, type).
-
+            Mapping of `edge_id` to attribute values.
         """
         df = self.edge_attributes
         if df is None or not hasattr(df, "columns"):
@@ -1588,22 +1585,16 @@ class AttributesClass:
         """Retrieve all edges where a given attribute equals a specific value.
 
         Parameters
-        --
+        ----------
         key : str
             Attribute column name to filter on.
         value : Any
             Value to match.
 
         Returns
-        ---
+        -------
         list[str]
-            A list of edge IDs where the attribute `key` equals `value`.
-
-        Notes
-        -
-        - If the attribute column does not exist, an empty list is returned.
-        - Comparison is exact; consider normalizing types before calling.
-
+            Edge IDs where the attribute equals `value`.
         """
         df = self.edge_attributes
         if df is None or not hasattr(df, "columns") or key not in df.columns:
@@ -1631,27 +1622,25 @@ class AttributesClass:
         """Return a shallow copy of the graph-level attributes dictionary.
 
         Returns
-        ---
+        -------
         dict
-            A dictionary of global metadata describing the graph as a whole.
-            Typical keys might include:
-            - `"name"` : AnnNet name or label.
-            - `"directed"` : Boolean indicating directedness.
-            - `"slices"` : List of slices present in the graph.
-            - `"created_at"` : Timestamp of graph creation.
+            Shallow copy of global graph metadata.
 
         Notes
-        -
-        - Returns a **shallow copy** to prevent external mutation of internal state.
-        - AnnNet-level attributes are meant to store metadata not tied to individual
-        verices or edges (e.g., versioning info, provenance, global labels).
-
+        -----
+        Returned value is a shallow copy to prevent external mutation.
         """
         return dict(self.graph_attributes)
 
     def set_edge_slice_attrs_bulk(self, slice_id, items):
-        """items: iterable of (edge_id, attrs_dict) or dict{edge_id: attrs_dict}
-        Upserts rows in edge_slice_attributes for one slice in bulk.
+        """Upsert edge-slice attributes for a single slice in bulk.
+
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+        items : Iterable[tuple[str, dict]] | dict[str, dict]
+            Iterable or mapping of `(edge_id, attrs)` pairs.
         """
 
         # normalize

@@ -29,8 +29,15 @@ class CacheManager:
 
     @property
     def csr(self):
-        """Get CSR (Compressed Sparse Row) format.
-        Builds and caches on first access.
+        """Return the CSR (Compressed Sparse Row) matrix.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+
+        Notes
+        -----
+        Built and cached on first access.
         """
         if self._csr is None or self._csr_version != self._G._version:
             self._csr = self._G._matrix.tocsr()
@@ -39,8 +46,15 @@ class CacheManager:
 
     @property
     def csc(self):
-        """Get CSC (Compressed Sparse Column) format.
-        Builds and caches on first access.
+        """Return the CSC (Compressed Sparse Column) matrix.
+
+        Returns
+        -------
+        scipy.sparse.csc_matrix
+
+        Notes
+        -----
+        Built and cached on first access.
         """
         if self._csc is None or self._csc_version != self._G._version:
             self._csc = self._G._matrix.tocsc()
@@ -49,8 +63,15 @@ class CacheManager:
 
     @property
     def adjacency(self):
-        """Get adjacency matrix (computed from incidence).
-        For incidence B: adjacency A = B @ B.T
+        """Return the adjacency matrix computed from incidence.
+
+        Returns
+        -------
+        scipy.sparse.spmatrix
+
+        Notes
+        -----
+        For incidence matrix `B`, adjacency is computed as `A = B @ B.T`.
         """
         if self._adjacency is None or self._adjacency_version != self._G._version:
             csr = self.csr
@@ -60,24 +81,57 @@ class CacheManager:
         return self._adjacency
 
     def has_csr(self) -> bool:
-        """True if CSR cache exists and matches current graph version."""
+        """Check whether a valid CSR cache exists.
+
+        Returns
+        -------
+        bool
+        """
         return self._csr is not None and self._csr_version == self._G._version
 
     def has_csc(self) -> bool:
-        """True if CSC cache exists and matches current graph version."""
+        """Check whether a valid CSC cache exists.
+
+        Returns
+        -------
+        bool
+        """
         return self._csc is not None and self._csc_version == self._G._version
 
     def has_adjacency(self) -> bool:
-        """True if adjacency cache exists and matches current graph version."""
+        """Check whether a valid adjacency cache exists.
+
+        Returns
+        -------
+        bool
+        """
         return self._adjacency is not None and self._adjacency_version == self._G._version
 
     def get_csr(self):
+        """Return the cached CSR matrix.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+        """
         return self.csr
 
     def get_csc(self):
+        """Return the cached CSC matrix.
+
+        Returns
+        -------
+        scipy.sparse.csc_matrix
+        """
         return self.csc
 
     def get_adjacency(self):
+        """Return the cached adjacency matrix.
+
+        Returns
+        -------
+        scipy.sparse.spmatrix
+        """
         return self.adjacency
 
     # ==================== Cache Management ====================
@@ -86,11 +140,14 @@ class CacheManager:
         """Invalidate cached formats.
 
         Parameters
-        --
+        ----------
         formats : list[str], optional
-            Formats to invalidate ('csr', 'csc', 'adjacency').
+            Formats to invalidate (`'csr'`, `'csc'`, `'adjacency'`).
             If None, invalidate all.
 
+        Returns
+        -------
+        None
         """
         if formats is None:
             formats = ["csr", "csc", "adjacency"]
@@ -110,11 +167,14 @@ class CacheManager:
         """Pre-build specified formats (eager caching).
 
         Parameters
-        --
+        ----------
         formats : list[str], optional
-            Formats to build ('csr', 'csc', 'adjacency').
+            Formats to build (`'csr'`, `'csc'`, `'adjacency'`).
             If None, build all.
 
+        Returns
+        -------
+        None
         """
         if formats is None:
             formats = ["csr", "csc", "adjacency"]
@@ -128,17 +188,21 @@ class CacheManager:
                 _ = self.adjacency
 
     def clear(self):
-        """Clear all caches."""
+        """Clear all caches.
+
+        Returns
+        -------
+        None
+        """
         self.invalidate()
 
     def info(self):
         """Get cache status and memory usage.
 
         Returns
-        ---
+        -------
         dict
-            Status of each cached format
-
+            Status and size information for each cached format.
         """
 
         def _format_info(matrix, version):
@@ -173,34 +237,21 @@ class Operations:
     # Slicing / copying / accounting
 
     def edge_subgraph(self, edges) -> AnnNet:
-        """Create a new graph containing only a specified subset of edges.
+        """Create a subgraph containing only a specified subset of edges.
 
         Parameters
-        --
+        ----------
         edges : Iterable[str] | Iterable[int]
-            Edge identifiers (strings) or edge indices (integers) to retain
-            in the subgraph.
+            Edge identifiers or edge indices to retain.
 
         Returns
-        ---
+        -------
         AnnNet
-            A new `AnnNet` instance containing only the selected edges and the
-            vertices incident to them.
-
-        Behavior
-
-        - Copies the current graph and deletes all edges **not** in the provided set.
-        - Optionally, you can prune orphaned vertices (i.e., vertices not incident
-        to any remaining edge) — this is generally recommended for consistency.
+            Subgraph containing selected edges and their incident vertices.
 
         Notes
-        -
-        - Attributes associated with remaining edges and vertices are preserved.
-        - Hyperedges are supported: if a hyperedge is in the provided set, all
-        its members are retained.
-        - If `edges` is empty, the resulting graph will be empty except for
-        any isolated vertices that remain.
-
+        -----
+        Hyperedges are supported and retain all member vertices.
         """
         # normalize to edge_id set
         if all(isinstance(e, int) for e in edges):
@@ -281,28 +332,18 @@ class Operations:
         """Create a vertex-induced subgraph.
 
         Parameters
-        --
+        ----------
         vertices : Iterable[str]
-            A set or list of vertex identifiers to keep in the subgraph.
+            Vertex identifiers to retain.
 
         Returns
-        ---
+        -------
         AnnNet
-            A new `AnnNet` containing only the specified vertices and any edges
-            for which **all** endpoints are within this set.
-
-        Behavior
-
-        - Copies the current graph and removes edges with any endpoint outside
-        the provided vertex set.
-        - Removes all vertices not listed in `vertices`.
+            Subgraph containing only the specified vertices and their internal edges.
 
         Notes
-        -
-        - For binary edges, both endpoints must be in `vertices` to be retained.
-        - For hyperedges, **all** member vertices must be included to retain the edge.
-        - Attributes for retained vertices and edges are preserved.
-
+        -----
+        For hyperedges, all member vertices must be included to retain the edge.
         """
         V = set(vertices)
 
@@ -397,36 +438,24 @@ class Operations:
         return g
 
     def extract_subgraph(self, vertices=None, edges=None) -> AnnNet:
-        """Create a subgraph based on a combination of vertex and/or edge filters.
+        """Create a subgraph based on vertex and/or edge filters.
 
         Parameters
-        --
+        ----------
         vertices : Iterable[str] | None, optional
-            A set of vertex IDs to include. If provided, behaves like `subgraph()`.
-            If `None`, no vertex filtering is applied.
+            Vertex IDs to include. If None, no vertex filtering is applied.
         edges : Iterable[str] | Iterable[int] | None, optional
-            A set of edge IDs or indices to include. If provided, behaves like
-            `edge_subgraph()`. If `None`, no edge filtering is applied.
+            Edge IDs or indices to include. If None, no edge filtering is applied.
 
         Returns
-        ---
+        -------
         AnnNet
-            A new `AnnNet` filtered according to the provided vertex and/or edge
-            sets.
-
-        Behavior
-
-        - If both `vertices` and `edges` are provided, the resulting subgraph is
-        the intersection of the two filters.
-        - If only `vertices` is provided, equivalent to `subgraph(vertices)`.
-        - If only `edges` is provided, equivalent to `edge_subgraph(edges)`.
-        - If neither is provided, a full copy of the graph is returned.
+            Filtered subgraph.
 
         Notes
-        -
-        - This is a convenience method; it delegates to `subgraph()` and
+        -----
+        This is a convenience method that delegates to `subgraph()` and
         `edge_subgraph()` internally.
-
         """
         if vertices is None and edges is None:
             return self.copy()
@@ -471,24 +500,24 @@ class Operations:
         """Return a new graph with all directed edges reversed.
 
         Returns
-        ---
+        -------
         AnnNet
             A new `AnnNet` instance with reversed directionality where applicable.
 
         Behavior
-
+        --------
         - **Binary edges:** direction is flipped by swapping source and target.
         - **Directed hyperedges:** `head` and `tail` sets are swapped.
         - **Undirected edges/hyperedges:** unaffected.
         - Edge attributes and metadata are preserved.
 
         Notes
-        -
+        -----
         - This operation does not modify the original graph.
         - If the graph is undirected (`self.directed == False`), the result is
-        identical to the original.
+          identical to the original.
         - For mixed graphs (directed + undirected edges), only the directed
-        ones are reversed.
+          ones are reversed.
 
         """
         g = self.copy()
@@ -509,6 +538,25 @@ class Operations:
         return g
 
     def subgraph_from_slice(self, slice_id, *, resolve_slice_weights=True):
+        """Create a subgraph induced by a single slice.
+
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+        resolve_slice_weights : bool, optional
+            If True, use per-slice edge weights when available.
+
+        Returns
+        -------
+        AnnNet
+            Subgraph containing the slice vertices and edges.
+
+        Raises
+        ------
+        KeyError
+            If the slice does not exist.
+        """
         if slice_id not in self._slices:
             raise KeyError(f"slice {slice_id} not found")
 
@@ -740,16 +788,22 @@ class Operations:
         return mapping.get(key, {})
 
     def copy(self, history: bool = False):
-        """
-        Deep copy of the entire AnnNet.
-        Fully structural + attribute fidelity.
-        O(N) Python, O(nnz) matrix. ~100× faster than old version.
+        """Deep copy of the entire AnnNet.
 
         Parameters
         ----------
-        history : bool
+        history : bool, optional
             If True, copy the mutation history and snapshot timeline.
             If False, the new graph starts with a clean history.
+
+        Returns
+        -------
+        AnnNet
+            A new graph with full structural and attribute fidelity.
+
+        Notes
+        -----
+        O(N) Python, O(nnz) matrix; this path is optimized for speed.
         """
 
         # ---------------------------------------------------------------
@@ -877,7 +931,7 @@ class Operations:
         """Approximate total memory usage in bytes.
 
         Returns
-        ---
+        -------
         int
             Estimated bytes for the incidence matrix, dictionaries, and attribute DFs.
 
@@ -929,14 +983,14 @@ class Operations:
         """Materialize the vertex–edge incidence structure as Python lists.
 
         Parameters
-        --
+        ----------
         values : bool, optional (default=False)
             - If `False`, returns edge indices incident to each vertex.
             - If `True`, returns the **matrix values** (usually weights or 1/0) for
             each incident edge instead of the indices.
 
         Returns
-        ---
+        -------
         dict[str, list]
             A mapping from `vertex_id` - list of incident edges (indices or values),
             where:
@@ -945,7 +999,7 @@ class Operations:
             from the incidence matrix (if `values=True`).
 
         Notes
-        -
+        -----
         - Internally uses the sparse incidence matrix `self._matrix`, which is stored
         as a SciPy CSR (compressed sparse row) matrix or similar.
         - The incidence matrix `M` is defined as:
@@ -971,7 +1025,7 @@ class Operations:
         """Return the vertex–edge incidence matrix in sparse or dense form.
 
         Parameters
-        --
+        ----------
         values : bool, optional (default=False)
             If `True`, include the numeric values stored in the matrix
             (e.g., weights or signed incidence values). If `False`, convert the
@@ -981,7 +1035,7 @@ class Operations:
             - If `False`, return a dense NumPy ndarray.
 
         Returns
-        ---
+        -------
         scipy.sparse.csr_matrix | numpy.ndarray
             The vertex–edge incidence matrix `M`:
             - Rows correspond to vertices.
@@ -989,7 +1043,7 @@ class Operations:
             - `M[i, j]` ≠ 0 indicates that vertex `i` is incident to edge `j`.
 
         Notes
-        -
+        -----
         - If `values=False`, the returned matrix is binarized before returning.
         - Use `sparse=True` for large graphs to avoid memory blowups.
         - This is the canonical low-level structure that most algorithms (e.g.,
@@ -1012,12 +1066,13 @@ class Operations:
         """Return a stable hash representing the current graph structure and metadata.
 
         Returns
-        ---
+        -------
         int
             A hash value that uniquely (within high probability) identifies the graph
             based on its topology and attributes.
 
         Behavior
+        --------
 
         - Includes the set of vertices, edges, and directedness in the hash.
         - Includes graph-level attributes (if any) to capture metadata changes.
@@ -1026,7 +1081,7 @@ class Operations:
         will produce the same hash.
 
         Notes
-        -
+        -----
         - This method enables `AnnNet` objects to be used in hash-based containers
         (like `set` or `dict` keys).
         - If the graph is **mutated** after hashing (e.g., vertices or edges are added

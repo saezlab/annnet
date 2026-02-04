@@ -52,6 +52,27 @@ def _get_numeric_supertype(left, right):
 
 
 def build_dataframe_from_rows(rows):
+    """Build a DataFrame from a list of row records using available backends.
+
+    Parameters
+    ----------
+    rows : list[dict] | list[list] | list[tuple]
+        Row records to load into a DataFrame.
+
+    Returns
+    -------
+    DataFrame-like
+        Polars DataFrame if available, otherwise pandas DataFrame.
+
+    Raises
+    ------
+    RuntimeError
+        If neither polars nor pandas is available.
+
+    Notes
+    -----
+    Uses Polars when installed for performance; otherwise falls back to pandas.
+    """
     try:
         import polars as pl
 

@@ -36,7 +36,26 @@ class BulkOps:
     # Bulk build graph
 
     def add_vertices_bulk(self, vertices, slice=None):
-        """Bulk add vertices. Fast path: Polars-only vectorized upsert."""
+        """Bulk add vertices with a Polars fast path when available.
+
+        Parameters
+        ----------
+        vertices : Iterable[str] | Iterable[tuple[str, dict]] | Iterable[dict]
+            Vertices to add. Each item can be:
+            - `vertex_id` (str)
+            - `(vertex_id, attrs)` tuple
+            - dict containing `vertex_id` plus attributes
+        slice : str, optional
+            Target slice. Defaults to the active slice.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        Falls back to Narwhals-based logic when Polars is unavailable.
+        """
         slice = slice or self._current_slice
 
         # Normalize input
@@ -215,7 +234,23 @@ class BulkOps:
         self.vertex_attributes = df
 
     def add_vertices_bulk_nw(self, vertices, slice=None):
-        """Bulk add vertices (and edge-entities if prefixed externally)."""
+        """Bulk add vertices using Narwhals-compatible operations.
+
+        Parameters
+        ----------
+        vertices : Iterable[str] | Iterable[tuple[str, dict]] | Iterable[dict]
+            Vertices to add.
+        slice : str, optional
+            Target slice. Defaults to the active slice.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This path is slower than the Polars fast path but preserves behavior.
+        """
 
         slice = slice or self._current_slice
 
@@ -431,12 +466,36 @@ class BulkOps:
         default_slice_weight=None,
         default_edge_directed=None,
     ):
-        """Bulk add/update *binary* (and vertex-edge) edges.
-        Accepts each item as:
-        - (src, tgt)
-        - (src, tgt, weight)
-        - dict with keys: source, target, [weight, edge_id, edge_type, propagate, slice_weight, edge_directed, attributes]
-        Behavior: identical to calling add_edge() per item (same propagation/slice/attrs), but grows columns once and avoids full-column wipes.
+        """Bulk add or update binary edges (and vertex-edge edges).
+
+        Parameters
+        ----------
+        edges : Iterable
+            Each item can be:
+            - `(source, target)`
+            - `(source, target, weight)`
+            - dict with keys `source`, `target`, and optional edge fields.
+        slice : str, optional
+            Default slice to place edges into.
+        default_weight : float, optional
+            Default weight for edges missing an explicit weight.
+        default_edge_type : str, optional
+            Default edge type when not provided.
+        default_propagate : {'none', 'shared', 'all'}, optional
+            Default slice propagation mode.
+        default_slice_weight : float, optional
+            Default per-slice weight override.
+        default_edge_directed : bool, optional
+            Default per-edge directedness override.
+
+        Returns
+        -------
+        list[str]
+            Edge IDs for created/updated edges.
+
+        Notes
+        -----
+        Behavior mirrors `add_edge()` but grows the matrix once to reduce overhead.
         """
         slice = self._current_slice if slice is None else slice
 
@@ -622,11 +681,29 @@ class BulkOps:
         default_weight=1.0,
         default_edge_directed=None,
     ):
-        """Bulk add/update hyperedges.
-        Each item can be:
-        - {'members': [...], 'edge_id': ..., 'weight': ..., 'slice': ..., 'attributes': {...}}
-        - {'head': [...], 'tail': [...], ...}
-        Behavior: identical to calling add_hyperedge() per item, but grows columns once and avoids full-column wipes.
+        """Bulk add or update hyperedges.
+
+        Parameters
+        ----------
+        hyperedges : Iterable[dict]
+            Each item can be:
+            - `{'members': [...], 'edge_id': ..., 'weight': ..., 'slice': ..., 'attributes': {...}}`
+            - `{'head': [...], 'tail': [...], ...}`
+        slice : str, optional
+            Default slice for hyperedges missing an explicit slice.
+        default_weight : float, optional
+            Default weight for hyperedges missing an explicit weight.
+        default_edge_directed : bool, optional
+            Default directedness override.
+
+        Returns
+        -------
+        list[str]
+            Hyperedge IDs for created/updated hyperedges.
+
+        Notes
+        -----
+        Behavior mirrors `add_hyperedge()` but grows the matrix once to reduce overhead.
         """
         slice = self._current_slice if slice is None else slice
 
@@ -825,8 +902,22 @@ class BulkOps:
         return out_ids
 
     def add_edges_to_slice_bulk(self, slice_id, edge_ids):
-        """Bulk version of add_edge_to_slice: add many edges to a slice and attach
-        all incident vertices. No weights are changed here.
+        """Add many edges to a slice and attach all incident vertices.
+
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+        edge_ids : Iterable[str]
+            Edge identifiers to add.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        No weights are changed in this operation.
         """
         slice = slice_id if slice_id is not None else self._current_slice
         if slice not in self._slices:
@@ -857,12 +948,25 @@ class BulkOps:
         L["vertices"].update(verts)
 
     def add_edge_entities_bulk(self, items, slice=None):
-        """Bulk add edge-entities (vertex-edge hybrids). Accepts:
-        - iterable of str IDs
-        - iterable of (edge_entity_id, attrs_dict)
-        - iterable of dicts with key 'edge_entity_id' (or 'id')
-        Behavior: identical to calling add_edge_entity() for each, but grows rows once
-        and batches attribute inserts.
+        """Bulk add edge-entities (vertex-edge hybrids).
+
+        Parameters
+        ----------
+        items : Iterable
+            Accepts:
+            - iterable of string IDs
+            - iterable of `(edge_entity_id, attrs)` tuples
+            - iterable of dicts with key `edge_entity_id` (or `id`)
+        slice : str, optional
+            Target slice. Defaults to the active slice.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        Attribute inserts are batched for efficiency.
         """
         slice = slice or self._current_slice
 
@@ -921,10 +1025,21 @@ class BulkOps:
             self.set_edge_attrs_bulk(attrs_to_write)
 
     def set_vertex_key(self, *fields: str):
-        """Declare composite key fields (order matters). Rebuilds the uniqueness index.
+        """Declare composite key fields and rebuild the uniqueness index.
 
-        - Raises ValueError if duplicates exist among already-populated vertices.
-        - Vertices missing some key fields are skipped during indexing.
+        Parameters
+        ----------
+        *fields : str
+            Ordered field names used to build a composite key.
+
+        Raises
+        ------
+        ValueError
+            If duplicates exist among already-populated vertices.
+
+        Notes
+        -----
+        Vertices missing some key fields are skipped during indexing.
         """
         if not fields:
             raise ValueError("set_vertex_key requires at least one field")
@@ -1005,14 +1120,42 @@ class BulkOps:
     # Bulk remove / mutate down
 
     def remove_edges(self, edge_ids):
-        """Remove many edges in one pass (much faster than looping)."""
+        """Remove many edges in one pass.
+
+        Parameters
+        ----------
+        edge_ids : Iterable[str]
+            Edge identifiers to remove.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This is faster than calling `remove_edge` in a loop.
+        """
         to_drop = [eid for eid in edge_ids if eid in self.edge_to_idx]
         if not to_drop:
             return
         self._remove_edges_bulk(to_drop)
 
     def remove_vertices(self, vertex_ids):
-        """Remove many vertices (and all their incident edges) in one pass."""
+        """Remove many vertices (and their incident edges) in one pass.
+
+        Parameters
+        ----------
+        vertex_ids : Iterable[str]
+            Vertex identifiers to remove.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This is faster than calling `remove_vertex` in a loop.
+        """
         to_drop = [vid for vid in vertex_ids if vid in self.entity_to_idx]
         if not to_drop:
             return

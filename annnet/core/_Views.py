@@ -51,7 +51,16 @@ class GraphView:
 
     @property
     def obs(self):
-        """Filtered vertex attribute table (uses AnnNet.vertex_attributes)."""
+        """Return the filtered vertex attribute table for this view.
+
+        Returns
+        -------
+        DataFrame-like
+
+        Notes
+        -----
+        Uses `AnnNet.vertex_attributes` and filters by the view's vertex IDs.
+        """
         vertex_ids = self.vertex_ids
         if vertex_ids is None:
             return self._graph.vertex_attributes
@@ -71,7 +80,16 @@ class GraphView:
 
     @property
     def var(self):
-        """Filtered edge attribute table (uses AnnNet.edge_attributes)."""
+        """Return the filtered edge attribute table for this view.
+
+        Returns
+        -------
+        DataFrame-like
+
+        Notes
+        -----
+        Uses `AnnNet.edge_attributes` and filters by the view's edge IDs.
+        """
         edge_ids = self.edge_ids
         if edge_ids is None:
             return self._graph.edge_attributes
@@ -91,7 +109,12 @@ class GraphView:
 
     @property
     def X(self):
-        """Filtered incidence matrix subview."""
+        """Return the filtered incidence matrix subview.
+
+        Returns
+        -------
+        scipy.sparse.dok_matrix
+        """
         vertex_ids = self.vertex_ids
         edge_ids = self.edge_ids
 
@@ -120,21 +143,38 @@ class GraphView:
 
     @property
     def vertex_ids(self):
-        """Get filtered vertex IDs (cached)."""
+        """Get filtered vertex IDs (cached).
+
+        Returns
+        -------
+        set[str] | None
+            None means no vertex filter (full graph).
+        """
         if not self._computed:
             self._compute_ids()
         return self._vertex_ids_cache
 
     @property
     def edge_ids(self):
-        """Get filtered edge IDs (cached)."""
+        """Get filtered edge IDs (cached).
+
+        Returns
+        -------
+        set[str] | None
+            None means no edge filter (full graph).
+        """
         if not self._computed:
             self._compute_ids()
         return self._edge_ids_cache
 
     @property
     def vertex_count(self):
-        """Number of vertices in this view."""
+        """Return the number of vertices in this view.
+
+        Returns
+        -------
+        int
+        """
         vertex_ids = self.vertex_ids
         if vertex_ids is None:
             return sum(1 for t in self._graph.entity_types.values() if t == "vertex")
@@ -142,7 +182,12 @@ class GraphView:
 
     @property
     def edge_count(self):
-        """Number of edges in this view."""
+        """Return the number of edges in this view.
+
+        Returns
+        -------
+        int
+        """
         edge_ids = self.edge_ids
         if edge_ids is None:
             return len(self._graph.edge_to_idx)
@@ -254,8 +299,20 @@ class GraphView:
     # ==================== View Methods (use AnnNet's existing methods) ====================
 
     def edges_df(self, **kwargs):
-        """Get edge DataFrame view with optional filtering.
-        Uses AnnNet.edges_view() and filters by edge IDs.
+        """Return an edge DataFrame view filtered to this view's edges.
+
+        Parameters
+        ----------
+        **kwargs
+            Passed through to `AnnNet.edges_view()`.
+
+        Returns
+        -------
+        DataFrame-like
+
+        Notes
+        -----
+        Uses `AnnNet.edges_view()` and then filters by the view's edge IDs.
         """
         # Use AnnNet's existing edges_view() method
         df = self._graph.edges_view(**kwargs)
@@ -280,8 +337,20 @@ class GraphView:
         return df
 
     def vertices_df(self, **kwargs):
-        """Get vertex DataFrame view.
-        Uses AnnNet.vertices_view() and filters by vertex IDs.
+        """Return a vertex DataFrame view filtered to this view's vertices.
+
+        Parameters
+        ----------
+        **kwargs
+            Passed through to `AnnNet.vertices_view()`.
+
+        Returns
+        -------
+        DataFrame-like
+
+        Notes
+        -----
+        Uses `AnnNet.vertices_view()` and then filters by the view's vertex IDs.
         """
         # Use AnnNet's existing vertices_view() method
         df = self._graph.vertices_view(**kwargs)
@@ -308,7 +377,20 @@ class GraphView:
 
     def materialize(self, copy_attributes=True):
         """Create a concrete subgraph from this view.
-        Uses AnnNet.add_vertex(), add_edge(), add_hyperedge(), get_*_attrs()
+
+        Parameters
+        ----------
+        copy_attributes : bool, optional
+            If True, copy vertex/edge attributes into the new graph.
+
+        Returns
+        -------
+        AnnNet
+            Materialized subgraph.
+
+        Notes
+        -----
+        Uses `AnnNet.add_vertex()`, `add_edge()`, `add_hyperedge()`, and `get_*_attrs()`.
         """
         # Create new AnnNet instance
         from .graph import AnnNet
@@ -397,9 +479,24 @@ class GraphView:
     def subview(self, vertices=None, edges=None, slices=None, predicate=None):
         """Create a new GraphView by further restricting this view.
 
-        - vertices/edges: if a list/set is given, intersect with this view's vertex_ids/edge_ids.
-        - slices: defaults to this view's slices if None.
-        - predicate: applied in addition to the current filtering (AND).
+        Parameters
+        ----------
+        vertices : Iterable[str] | callable | None
+            Vertex IDs or predicate; intersects with current view if provided.
+        edges : Iterable[str] | callable | None
+            Edge IDs or predicate; intersects with current view if provided.
+        slices : Iterable[str] | None
+            Slice IDs to include. Defaults to current view's slices if None.
+        predicate : callable | None
+            Additional vertex predicate applied in conjunction with existing filters.
+
+        Returns
+        -------
+        GraphView
+
+        Notes
+        -----
+        Predicates are combined with logical AND.
         """
         # Force compute current filters
         base_vertices = self.vertex_ids
@@ -466,7 +563,12 @@ class GraphView:
     # ==================== Convenience ====================
 
     def summary(self):
-        """Human-readable summary."""
+        """Return a human-readable summary of this view.
+
+        Returns
+        -------
+        str
+        """
         lines = [
             "GraphView Summary",
             "─" * 30,
@@ -515,8 +617,28 @@ class ViewsClass:
         resolved_weight=True,
         copy=True,
     ):
-        """Build a Polars DF [DataFrame] view of edges with optional slice join.
-        Same columns/semantics as before, but vectorized (no per-edge DF scans).
+        """Build a DataFrame view of edges with optional slice join.
+
+        Parameters
+        ----------
+        slice : str, optional
+            Slice ID to join per-slice attributes.
+        include_directed : bool, optional
+            Include directedness column.
+        include_weight : bool, optional
+            Include global weight column.
+        resolved_weight : bool, optional
+            Include effective weight (slice override if present).
+        copy : bool, optional
+            Return a cloned DataFrame if True.
+
+        Returns
+        -------
+        DataFrame-like
+
+        Notes
+        -----
+        Vectorized implementation avoids per-edge scans.
         """
         if not self.edge_to_idx:
             try:
@@ -687,15 +809,14 @@ class ViewsClass:
         """Read-only vertex attribute table.
 
         Parameters
-        --
+        ----------
         copy : bool, optional
-            Return a cloned DF.
+            Return a cloned DataFrame.
 
         Returns
-        ---
-        polars.DataFrame
-            Columns: ``vertex_id`` plus pure attributes (may be empty).
-
+        -------
+        DataFrame-like
+            Columns include `vertex_id` plus pure attributes.
         """
         df = self.vertex_attributes
         try:
@@ -721,15 +842,14 @@ class ViewsClass:
         """Read-only slice attribute table.
 
         Parameters
-        --
+        ----------
         copy : bool, optional
-            Return a cloned DF.
+            Return a cloned DataFrame.
 
         Returns
-        ---
-        polars.DataFrame
-            Columns: ``slice_id`` plus pure attributes (may be empty).
-
+        -------
+        DataFrame-like
+            Columns include `slice_id` plus pure attributes.
         """
         df = self.slice_attributes
         try:
@@ -751,13 +871,20 @@ class ViewsClass:
         return out.copy(deep=True) if copy else out
 
     def aspects_view(self, copy=True):
-        """
-        View of Kivela aspects and their metadata.
+        """Return a view of Kivela aspects and their metadata.
 
-        Columns:
-        aspect : str
-        elem_layers : list[str]
-        <aspect_attr_keys>...
+        Parameters
+        ----------
+        copy : bool, optional
+            Return a cloned DataFrame.
+
+        Returns
+        -------
+        DataFrame-like
+
+        Notes
+        -----
+        Columns include `aspect`, `elem_layers`, and any aspect attribute keys.
         """
         if not getattr(self, "aspects", None):
             try:
@@ -794,20 +921,21 @@ class ViewsClass:
             return df.copy(deep=True) if copy else df
 
     def layers_view(self, copy=True):
-        """
-        Read-only table of multi-aspect layers (full Kivelä layers).
+        """Return a read-only table of multi-aspect layers.
 
-        Columns:
-        layer_tuple : list[str]   # the aspect tuple
-        layer_id    : str         # canonical id
-        <aspect columns>          # one column per aspect
-        <layer attrs>...          # metadata set by set_layer_attrs()
-        <elem attrs>...           # merged elementary layer attrs (prefixed)
+        Parameters
+        ----------
+        copy : bool, optional
+            Return a cloned DataFrame.
 
-        For a single-aspect model:
-        layer_tuple = [label]
-        layer_id    = label
-        aspect column = that label
+        Returns
+        -------
+        DataFrame-like
+
+        Notes
+        -----
+        Columns include `layer_tuple`, `layer_id`, aspect columns, layer attributes,
+        and prefixed elementary layer attributes.
         """
         # no aspects configured → no layers
         if not getattr(self, "aspects", None):
