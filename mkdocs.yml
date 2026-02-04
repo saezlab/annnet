@@ -122,7 +122,6 @@ plugins:
                     show_signature_annotations: false
                     signature_crossrefs: true
                     show_bases: false
-                    show_inheritance: false
                     show_attributes: false
                     show_class_attributes: false
                     show_if_no_docstring: false
