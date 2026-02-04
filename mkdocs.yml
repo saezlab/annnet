@@ -62,7 +62,10 @@ nav:
     -   IO annnet: learn/explanation/io_annnet.md
 
 -   Reference:
-    -   API Reference (mkdocstrings): reference/api.md
+    -   API Reference: reference/api.md
+    -   Core Graph: reference/api_core.md
+    -   Managers: reference/api_managers.md
+    -   Mixins: reference/api_mixins.md
     #-   API Documentation:
     #    -   'annnet':
     #        -   _metadata: reference/source/annnet/_metadata-docs.md
@@ -108,8 +111,9 @@ plugins:
             python:
                 options:
                     annotations_path: brief
-                    docstring_style: google
+                    docstring_style: numpy
                     heading_level: 3
+                    members_order: source
                     modernize_annotations: true
                     show_category_heading: true
                     show_object_full_path: false
@@ -117,6 +121,14 @@ plugins:
                     show_signature: true
                     show_signature_annotations: false
                     signature_crossrefs: true
+                    show_bases: false
+                    show_inheritance: false
+                    show_attributes: false
+                    show_class_attributes: false
+                    show_if_no_docstring: false
+                    show_source: false
+                    filters:
+                    - "!^_"
 -   mkdocs-jupyter
 
 extra_css:

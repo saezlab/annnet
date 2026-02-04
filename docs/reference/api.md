@@ -1,9 +1,7 @@
-# API Reference (WIP)
+# API Reference
 
-The generated API reference will be available after the ongoing refactoring is completed.
+Use the navigation to browse by module group:
 
-In the meantime:
-- Use the README and the docs pages (Project, Quickstart, Explanations) for guidance.
-- Explore the source in `annnet/` for current signatures.
-
-::: annnet
+- Core Graph
+- Managers
+- Mixins
