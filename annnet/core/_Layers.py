@@ -32,19 +32,48 @@ class LayerManager:
     # ==================== Multi-aspect awareness ====================
 
     def aspects(self):
-        """List aspect names."""
+        """List aspect names.
+
+        Returns
+        -------
+        list[str]
+            Aspect identifiers in configured order.
+        """
         return list(self._G.aspects)
 
     def elementary_layers(self):
-        """Dict[aspect -> list of elementary labels]."""
+        """Return elementary layer labels per aspect.
+
+        Returns
+        -------
+        dict[str, list[str]]
+            Mapping of aspect name to list of elementary labels.
+        """
         return {a: list(v) for a, v in self._G.elem_layers.items()}
 
     def layer_tuples(self):
-        """List all aspect-tuples (Cartesian product)."""
+        """List all aspect-tuples (Cartesian product).
+
+        Returns
+        -------
+        list[tuple[str, ...]]
+            All layer tuples in configured order.
+        """
         return list(self._G.iter_layers())
 
     def tuple_id(self, aa):
-        """Canonical string id for a layer tuple (matches AnnNet’s synthetic id)."""
+        """Canonical string id for a layer tuple.
+
+        Parameters
+        ----------
+        aa : Iterable[str]
+            Aspect-tuple layer (e.g., ``("t1","F")``).
+
+        Returns
+        -------
+        str
+            Canonical id (single label for 1 aspect, or ``"×"``-joined).
+        """
         aa = tuple(aa)
         if len(self._G.aspects) == 1:
             return aa[0]
@@ -53,69 +82,216 @@ class LayerManager:
     # ==================== Presence utilities ====================
 
     def vertex_layers(self, u: str):
-        """All layer-tuples where vertex u is present."""
+        """List all layer-tuples where vertex ``u`` is present.
+
+        Parameters
+        ----------
+        u : str
+            Vertex identifier.
+
+        Returns
+        -------
+        list[tuple[str, ...]]
+            Layer tuples where ``(u, aa)`` is in ``V_M``.
+        """
         return list(self._G.iter_vertex_layers(u))
 
     def has_presence(self, u: str, aa):
-        """True if (u, aa) ∈ V_M."""
+        """Check whether ``(u, aa)`` is in ``V_M``.
+
+        Parameters
+        ----------
+        u : str
+            Vertex identifier.
+        aa : Iterable[str]
+            Layer tuple.
+
+        Returns
+        -------
+        bool
+        """
         return self._G.has_presence(u, tuple(aa))
 
     # ==================== Aspect / layer / vertex-layer attributes ===========
 
     def set_aspect_attrs(self, aspect: str, **attrs):
-        """Attach metadata to an aspect (delegates to AnnNet.set_aspect_attrs)."""
+        """Attach metadata to an aspect.
+
+        Parameters
+        ----------
+        aspect : str
+            Aspect identifier.
+        **attrs
+            Key-value metadata to store.
+
+        Returns
+        -------
+        None
+        """
         return self._G.set_aspect_attrs(aspect, **attrs)
 
     def aspect_attrs(self, aspect: str) -> dict:
-        """Get metadata dict for an aspect."""
+        """Get metadata dict for an aspect.
+
+        Parameters
+        ----------
+        aspect : str
+            Aspect identifier.
+
+        Returns
+        -------
+        dict
+        """
         return self._G.get_aspect_attrs(aspect)
 
     def set_layer_attrs(self, aa, **attrs):
-        """Attach metadata to a Kivela layer aa (aspect tuple)."""
+        """Attach metadata to a Kivela layer (aspect tuple).
+
+        Parameters
+        ----------
+        aa : Iterable[str]
+            Layer tuple.
+        **attrs
+            Key-value metadata to store.
+
+        Returns
+        -------
+        None
+        """
         return self._G.set_layer_attrs(tuple(aa), **attrs)
 
     def layer_attrs(self, aa) -> dict:
-        """Get metadata dict for a Kivela layer aa (aspect tuple)."""
+        """Get metadata dict for a Kivela layer (aspect tuple).
+
+        Parameters
+        ----------
+        aa : Iterable[str]
+            Layer tuple.
+
+        Returns
+        -------
+        dict
+        """
         return self._G.get_layer_attrs(tuple(aa))
 
     def set_vertex_layer_attrs(self, u: str, aa, **attrs):
-        """Attach metadata to a vertex–layer pair (u, aa)."""
+        """Attach metadata to a vertex–layer pair.
+
+        Parameters
+        ----------
+        u : str
+            Vertex identifier.
+        aa : Iterable[str]
+            Layer tuple.
+        **attrs
+            Key-value metadata to store.
+
+        Returns
+        -------
+        None
+        """
         return self._G.set_vertex_layer_attrs(u, tuple(aa), **attrs)
 
     def vertex_layer_attrs(self, u: str, aa) -> dict:
-        """Get metadata dict for a vertex–layer pair (u, aa)."""
+        """Get metadata dict for a vertex–layer pair.
+
+        Parameters
+        ----------
+        u : str
+            Vertex identifier.
+        aa : Iterable[str]
+            Layer tuple.
+
+        Returns
+        -------
+        dict
+        """
         return self._G.get_vertex_layer_attrs(u, tuple(aa))
 
     # ==================== Elementary layer attributes ===========
 
     def elem_layer_id(self, aspect: str, label: str) -> str:
-        """Canonical '{aspect}_{label}' id used in AnnNet.layer_attributes."""
+        """Canonical ``"{aspect}_{label}"`` id used in ``layer_attributes``.
+
+        Parameters
+        ----------
+        aspect : str
+            Aspect identifier.
+        label : str
+            Elementary layer label.
+
+        Returns
+        -------
+        str
+        """
         return self._G._elem_layer_id(aspect, label)
 
     def set_elem_layer_attrs(self, aspect: str, label: str, **attrs):
-        """
-        Upsert attributes for elementary Kivela layer (aspect, label).
+        """Upsert attributes for an elementary layer.
 
-        Writes into AnnNet.layer_attributes with layer_id = "{aspect}_{label}".
+        Parameters
+        ----------
+        aspect : str
+            Aspect identifier.
+        label : str
+            Elementary layer label.
+        **attrs
+            Key-value metadata to store.
+
+        Returns
+        -------
+        None
         """
         return self._G.set_elementary_layer_attrs(aspect, label, **attrs)
 
     def elem_layer_attrs(self, aspect: str, label: str) -> dict:
-        """
-        Read attributes for elementary Kivela layer (aspect, label) as dict.
+        """Read attributes for an elementary layer.
 
-        Reads from AnnNet.layer_attributes.
+        Parameters
+        ----------
+        aspect : str
+            Aspect identifier.
+        label : str
+            Elementary layer label.
+
+        Returns
+        -------
+        dict
         """
         return self._G.get_elementary_layer_attrs(aspect, label)
 
     # ==================== Algebra on Kivela layers =========================
 
     def vertex_set(self, aa):
-        """Vertices present in Kivela layer aa (tuple)."""
+        """Vertices present in a Kivela layer.
+
+        Parameters
+        ----------
+        aa : Iterable[str]
+            Layer tuple.
+
+        Returns
+        -------
+        set[str]
+        """
         return self._G.layer_vertex_set(tuple(aa))
 
     def edge_set(self, aa, include_inter=False, include_coupling=False):
-        """Edges associated with Kivela layer aa."""
+        """Edges associated with a Kivela layer.
+
+        Parameters
+        ----------
+        aa : Iterable[str]
+            Layer tuple.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``aa``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``aa``.
+
+        Returns
+        -------
+        set[str]
+        """
         return self._G.layer_edge_set(
             tuple(aa),
             include_inter=include_inter,
@@ -123,7 +299,22 @@ class LayerManager:
         )
 
     def union(self, layer_tuples, include_inter=False, include_coupling=False):
-        """Set-union over Kivela layers; returns {'vertices', 'edges'}."""
+        """Set-union over Kivela layers.
+
+        Parameters
+        ----------
+        layer_tuples : Iterable[Iterable[str]]
+            Layer tuples to union.
+        include_inter : bool, optional
+            Include inter-layer edges touching any layer in the union.
+        include_coupling : bool, optional
+            Include coupling edges touching any layer in the union.
+
+        Returns
+        -------
+        dict
+            ``{"vertices": set[str], "edges": set[str]}``.
+        """
         return self._G.layer_union(
             [tuple(a) for a in layer_tuples],
             include_inter=include_inter,
@@ -131,7 +322,22 @@ class LayerManager:
         )
 
     def intersection(self, layer_tuples, include_inter=False, include_coupling=False):
-        """Set-intersection over Kivela layers; returns {'vertices', 'edges'}."""
+        """Set-intersection over Kivela layers.
+
+        Parameters
+        ----------
+        layer_tuples : Iterable[Iterable[str]]
+            Layer tuples to intersect.
+        include_inter : bool, optional
+            Include inter-layer edges touching any layer in the intersection.
+        include_coupling : bool, optional
+            Include coupling edges touching any layer in the intersection.
+
+        Returns
+        -------
+        dict
+            ``{"vertices": set[str], "edges": set[str]}``.
+        """
         return self._G.layer_intersection(
             [tuple(a) for a in layer_tuples],
             include_inter=include_inter,
@@ -139,7 +345,24 @@ class LayerManager:
         )
 
     def difference(self, layer_a, layer_b, include_inter=False, include_coupling=False):
-        """Set-difference layer_a layer_b; returns {'vertices', 'edges'}."""
+        """Set-difference over two layers.
+
+        Parameters
+        ----------
+        layer_a : Iterable[str]
+            Minuend layer tuple.
+        layer_b : Iterable[str]
+            Subtrahend layer tuple.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``layer_a``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``layer_a``.
+
+        Returns
+        -------
+        dict
+            ``{"vertices": set[str], "edges": set[str]}``.
+        """
         return self._G.layer_difference(
             tuple(layer_a),
             tuple(layer_b),
@@ -150,8 +373,31 @@ class LayerManager:
     # ==================== Layer-slice bridge ===============================
 
     def to_slice(self, aa, slice_id=None, include_inter=False, include_coupling=False, **attrs):
-        """
-        Create a slice from a single Kivela layer aa and return its slice_id.
+        """Create a slice from a single Kivela layer.
+
+        Parameters
+        ----------
+        aa : Iterable[str]
+            Layer tuple.
+        slice_id : str, optional
+            Slice identifier. Defaults to the canonical layer id.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``aa``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``aa``.
+        **attrs
+            Slice attributes to store.
+
+        Returns
+        -------
+        str
+            The created slice id.
+
+        Examples
+        --------
+        ```python
+        G.layers.to_slice(("t1", "F"), slice_id="t1_F")
+        ```
         """
         aa = tuple(aa)
         sid = slice_id or self.tuple_id(aa)
@@ -166,8 +412,25 @@ class LayerManager:
     def union_to_slice(
         self, layer_tuples, slice_id, include_inter=False, include_coupling=False, **attrs
     ):
-        """
-        Create slice from union of several Kivela layers.
+        """Create a slice from the union of several layers.
+
+        Parameters
+        ----------
+        layer_tuples : Iterable[Iterable[str]]
+            Layer tuples to union.
+        slice_id : str
+            Slice identifier.
+        include_inter : bool, optional
+            Include inter-layer edges touching any layer in the union.
+        include_coupling : bool, optional
+            Include coupling edges touching any layer in the union.
+        **attrs
+            Slice attributes to store.
+
+        Returns
+        -------
+        str
+            The created slice id.
         """
         return self._G.create_slice_from_layer_union(
             slice_id,
@@ -180,8 +443,25 @@ class LayerManager:
     def intersection_to_slice(
         self, layer_tuples, slice_id, include_inter=False, include_coupling=False, **attrs
     ):
-        """
-        Create slice from intersection of several Kivela layers.
+        """Create a slice from the intersection of several layers.
+
+        Parameters
+        ----------
+        layer_tuples : Iterable[Iterable[str]]
+            Layer tuples to intersect.
+        slice_id : str
+            Slice identifier.
+        include_inter : bool, optional
+            Include inter-layer edges touching any layer in the intersection.
+        include_coupling : bool, optional
+            Include coupling edges touching any layer in the intersection.
+        **attrs
+            Slice attributes to store.
+
+        Returns
+        -------
+        str
+            The created slice id.
         """
         return self._G.create_slice_from_layer_intersection(
             slice_id,
@@ -194,8 +474,27 @@ class LayerManager:
     def difference_to_slice(
         self, layer_a, layer_b, slice_id, include_inter=False, include_coupling=False, **attrs
     ):
-        """
-        Create slice from set-difference layer_a layer_b.
+        """Create a slice from a set-difference of two layers.
+
+        Parameters
+        ----------
+        layer_a : Iterable[str]
+            Minuend layer tuple.
+        layer_b : Iterable[str]
+            Subtrahend layer tuple.
+        slice_id : str
+            Slice identifier.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``layer_a``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``layer_a``.
+        **attrs
+            Slice attributes to store.
+
+        Returns
+        -------
+        str
+            The created slice id.
         """
         return self._G.create_slice_from_layer_difference(
             slice_id,
@@ -209,7 +508,21 @@ class LayerManager:
     # ==================== Subgraphs =======================================
 
     def subgraph(self, aa, include_inter=False, include_coupling=False):
-        """Concrete subgraph induced by Kivela layer aa."""
+        """Concrete subgraph induced by a single layer.
+
+        Parameters
+        ----------
+        aa : Iterable[str]
+            Layer tuple.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``aa``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``aa``.
+
+        Returns
+        -------
+        AnnNet
+        """
         return self._G.subgraph_from_layer_tuple(
             tuple(aa),
             include_inter=include_inter,
@@ -217,7 +530,21 @@ class LayerManager:
         )
 
     def subgraph_union(self, layer_tuples, include_inter=False, include_coupling=False):
-        """Subgraph induced by union of several Kivela layers."""
+        """Subgraph induced by the union of several layers.
+
+        Parameters
+        ----------
+        layer_tuples : Iterable[Iterable[str]]
+            Layer tuples to union.
+        include_inter : bool, optional
+            Include inter-layer edges touching any layer in the union.
+        include_coupling : bool, optional
+            Include coupling edges touching any layer in the union.
+
+        Returns
+        -------
+        AnnNet
+        """
         return self._G.subgraph_from_layer_union(
             [tuple(a) for a in layer_tuples],
             include_inter=include_inter,
@@ -225,7 +552,21 @@ class LayerManager:
         )
 
     def subgraph_intersection(self, layer_tuples, include_inter=False, include_coupling=False):
-        """Subgraph induced by intersection of several Kivela layers."""
+        """Subgraph induced by the intersection of several layers.
+
+        Parameters
+        ----------
+        layer_tuples : Iterable[Iterable[str]]
+            Layer tuples to intersect.
+        include_inter : bool, optional
+            Include inter-layer edges touching any layer in the intersection.
+        include_coupling : bool, optional
+            Include coupling edges touching any layer in the intersection.
+
+        Returns
+        -------
+        AnnNet
+        """
         return self._G.subgraph_from_layer_intersection(
             [tuple(a) for a in layer_tuples],
             include_inter=include_inter,
@@ -233,7 +574,23 @@ class LayerManager:
         )
 
     def subgraph_difference(self, layer_a, layer_b, include_inter=False, include_coupling=False):
-        """Subgraph induced by layer_a layer_b."""
+        """Subgraph induced by a set-difference of two layers.
+
+        Parameters
+        ----------
+        layer_a : Iterable[str]
+            Minuend layer tuple.
+        layer_b : Iterable[str]
+            Subtrahend layer tuple.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``layer_a``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``layer_a``.
+
+        Returns
+        -------
+        AnnNet
+        """
         return self._G.subgraph_from_layer_difference(
             tuple(layer_a),
             tuple(layer_b),
@@ -244,7 +601,17 @@ class LayerManager:
     # ==================== Intra/inter/coupling surfacing ====================
 
     def intra_edges_tuple(self, aa):
-        """Edge IDs of intra edges inside tuple-layer aa."""
+        """Edge IDs of intra edges inside a layer.
+
+        Parameters
+        ----------
+        aa : Iterable[str]
+            Layer tuple.
+
+        Returns
+        -------
+        set[str]
+        """
         aa = tuple(aa)
         # intra appear in AnnNet.edge_kind with edge_layers[eid] == aa
         return {
@@ -254,7 +621,19 @@ class LayerManager:
         }
 
     def inter_edges_between(self, aa, bb):
-        """Edge IDs of inter edges between tuple-layers aa and bb."""
+        """Edge IDs of inter edges between two layers.
+
+        Parameters
+        ----------
+        aa : Iterable[str]
+            Layer tuple A.
+        bb : Iterable[str]
+            Layer tuple B.
+
+        Returns
+        -------
+        set[str]
+        """
         aa = tuple(aa)
         bb = tuple(bb)
         return {
@@ -264,7 +643,19 @@ class LayerManager:
         }
 
     def coupling_edges_between(self, aa, bb):
-        """Edge IDs of coupling edges connecting same-vertex (aa)↔(bb)."""
+        """Edge IDs of coupling edges between two layers.
+
+        Parameters
+        ----------
+        aa : Iterable[str]
+            Layer tuple A.
+        bb : Iterable[str]
+            Layer tuple B.
+
+        Returns
+        -------
+        set[str]
+        """
         aa = tuple(aa)
         bb = tuple(bb)
         return {
@@ -276,11 +667,32 @@ class LayerManager:
     # ==================== Supra / blocks ====================
 
     def supra_adjacency(self, layers=None):
-        """Proxy to full supra A over selected layer-tuples."""
+        """Proxy to full supra adjacency over selected layers.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Layer subset. In single-aspect mode, string IDs are accepted.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+        """
         return self._G.supra_adjacency(layers)
 
     def blocks(self, layers=None):
-        """Return dict of diagonal/off-diagonal blocks."""
+        """Return supra block matrices.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Layer subset. In single-aspect mode, string IDs are accepted.
+
+        Returns
+        -------
+        dict
+            ``{"intra": A_intra, "inter": A_inter, "coupling": A_coupling}``.
+        """
         return {
             "intra": self._G.build_intra_block(layers),
             "inter": self._G.build_inter_block(layers),
@@ -294,10 +706,29 @@ class LayerClass:
     ## Aspects & layers
 
     def set_aspects(self, aspects: list[str], elem_layers: dict[str, list[str]]):
-        """
-        Define multi-aspect structure.
-        aspects: e.g., ["time","relation"]
-        elem_layers: {"time": ["t1","t2"], "relation": ["F","A"], ...}
+        """Define multi-aspect structure.
+
+        Parameters
+        ----------
+        aspects : list[str]
+            Aspect identifiers (e.g., ``["time", "relation"]``).
+        elem_layers : dict[str, list[str]]
+            Elementary labels per aspect (e.g., ``{"time": ["t1","t2"]}``).
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError
+            If ``aspects`` is empty.
+
+        Examples
+        --------
+        ```python
+        G.set_aspects(["time", "relation"], {"time": ["t1", "t2"], "relation": ["F", "A"]})
+        ```
         """
         if not aspects:
             raise ValueError("aspects must be a non-empty list")
@@ -320,7 +751,26 @@ class LayerClass:
     ## Presence (V_M)
 
     def add_presence(self, u: str, layer_tuple: tuple[str, ...]):
-        """Declare that vertex u is present in the given multi-aspect layer."""
+        """Declare that a vertex is present in a layer tuple.
+
+        Parameters
+        ----------
+        u : str
+            Vertex identifier.
+        layer_tuple : tuple[str, ...]
+            Aspect tuple layer.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        KeyError
+            If ``u`` is not a vertex.
+        ValueError
+            If ``layer_tuple`` is invalid for the configured aspects.
+        """
         self._validate_layer_tuple(layer_tuple)
         if self.entity_types.get(u) != "vertex":
             raise KeyError(f"'{u}' is not a vertex")
@@ -328,7 +778,24 @@ class LayerClass:
         self._VM.add((u, tuple(layer_tuple)))
 
     def remove_presence(self, u: str, layer_tuple: tuple[str, ...]):
-        """Remove presence (u, aa)."""
+        """Remove presence ``(u, aa)`` if it exists.
+
+        Parameters
+        ----------
+        u : str
+            Vertex identifier.
+        layer_tuple : tuple[str, ...]
+            Aspect tuple layer.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError
+            If ``layer_tuple`` is invalid for the configured aspects.
+        """
         self._validate_layer_tuple(layer_tuple)
         try:
             self._VM.remove((u, tuple(layer_tuple)))
@@ -336,15 +803,45 @@ class LayerClass:
             pass
 
     def has_presence(self, u: str, layer_tuple: tuple[str, ...]) -> bool:
+        """Check whether ``(u, aa)`` is in ``V_M``.
+
+        Parameters
+        ----------
+        u : str
+            Vertex identifier.
+        layer_tuple : tuple[str, ...]
+            Aspect tuple layer.
+
+        Returns
+        -------
+        bool
+        """
         self._validate_layer_tuple(layer_tuple)
         return (u, tuple(layer_tuple)) in self._VM
 
     def iter_layers(self):
-        """Iterate over all aspect-tuples (Cartesian product)."""
+        """Iterate over all aspect-tuples (Cartesian product).
+
+        Yields
+        ------
+        tuple[str, ...]
+            Layer tuples in configured order.
+        """
         return iter(self._all_layers)
 
     def iter_vertex_layers(self, u: str):
-        """Iterate aa where (u, aa) ∈ V_M."""
+        """Iterate layer tuples where ``(u, aa)`` is in ``V_M``.
+
+        Parameters
+        ----------
+        u : str
+            Vertex identifier.
+
+        Yields
+        ------
+        tuple[str, ...]
+            Layer tuples for ``u``.
+        """
         for uu, aa in self._VM:
             if uu == u:
                 yield aa
@@ -352,9 +849,21 @@ class LayerClass:
     ## Index for supra rows
 
     def ensure_vertex_layer_index(self, restrict_layers: list[tuple[str, ...]] | None = None):
-        """
-        Build stable mapping between vertex–layer tuples and row indices.
-        Sorting: by vertex_id (lexicographic), then by layer tuple.
+        """Build stable mapping between vertex–layer tuples and row indices.
+
+        Parameters
+        ----------
+        restrict_layers : list[tuple[str, ...]] | None, optional
+            If provided, index only these layers.
+
+        Returns
+        -------
+        int
+            Number of indexed vertex–layer pairs.
+
+        Notes
+        -----
+        Ordering is lexicographic by vertex id, then by layer tuple.
         """
         if restrict_layers is not None:
             R = {tuple(x) for x in restrict_layers}
@@ -367,14 +876,46 @@ class LayerClass:
         return len(vm)
 
     def nl_to_row(self, u: str, layer_tuple: tuple[str, ...]) -> int:
-        """Map (u, aa) -> row index (after ensure_vertex_layer_index())."""
+        """Map ``(u, aa)`` to row index.
+
+        Parameters
+        ----------
+        u : str
+            Vertex identifier.
+        layer_tuple : tuple[str, ...]
+            Aspect tuple layer.
+
+        Returns
+        -------
+        int
+
+        Raises
+        ------
+        KeyError
+            If the vertex–layer pair is not indexed.
+        """
         key = (u, tuple(layer_tuple))
         if key not in self._nl_to_row:
             raise KeyError(f"vertex–layer {key!r} not indexed; call ensure_vertex_layer_index()")
         return self._nl_to_row[key]
 
     def row_to_nl(self, row: int) -> tuple[str, tuple[str, ...]]:
-        """Map row index -> (u, aa)."""
+        """Map row index to ``(u, aa)``.
+
+        Parameters
+        ----------
+        row : int
+            Row index.
+
+        Returns
+        -------
+        tuple[str, tuple[str, ...]]
+
+        Raises
+        ------
+        KeyError
+            If the row is not indexed.
+        """
         try:
             return self._row_to_nl[row]
         except Exception:
@@ -395,9 +936,21 @@ class LayerClass:
                 raise KeyError(f"unknown elementary layer {aa[i]!r} for aspect {a!r}")
 
     def layer_id_to_tuple(self, layer_id: str) -> tuple[str, ...]:
-        """
-        Map legacy string layer_id to aspect tuple.
-        Only defined for single-aspect setups.
+        """Map legacy string layer id to aspect tuple.
+
+        Parameters
+        ----------
+        layer_id : str
+            Layer identifier (single-aspect only).
+
+        Returns
+        -------
+        tuple[str, ...]
+
+        Raises
+        ------
+        ValueError
+            If not in single-aspect mode.
         """
         if len(self.aspects) != 1:
             raise ValueError("layer_id_to_tuple is only valid when exactly 1 aspect is configured")
@@ -411,10 +964,17 @@ class LayerClass:
         return self._layer_tuple_cache[layer]
 
     def layer_tuple_to_id(self, aa: tuple[str, ...]) -> str:
-        """
-        Canonical string id for a layer tuple.
-        For single-aspect setups this is just the single element,
-        otherwise aspects are joined by '×' (matches LayerManager.tuple_id).
+        """Canonical string id for a layer tuple.
+
+        Parameters
+        ----------
+        aa : tuple[str, ...]
+            Aspect tuple layer.
+
+        Returns
+        -------
+        str
+            Canonical id (single label for 1 aspect, or ``"×"``-joined).
         """
         aa = tuple(aa)
         if len(self.aspects) == 1:
@@ -481,20 +1041,38 @@ class LayerClass:
         self.layer_attributes = build_dataframe_from_rows(new_rows)
 
     def set_elementary_layer_attrs(self, aspect: str, label: str, **attrs):
-        """
-        Attach attributes to an *elementary* Kivela layer (aspect, label).
+        """Attach attributes to an elementary Kivela layer.
 
-        Stored in `self.layer_attributes` with:
-            layer_id = "{aspect}_{label}"
+        Parameters
+        ----------
+        aspect : str
+            Aspect identifier.
+        label : str
+            Elementary layer label.
+        **attrs
+            Key-value metadata to store.
+
+        Returns
+        -------
+        None
         """
         lid = self._elem_layer_id(aspect, label)
         self._upsert_layer_attribute_row(lid, attrs)
 
     def get_elementary_layer_attrs(self, aspect: str, label: str) -> dict:
-        """
-        Get attributes for an *elementary* Kivela layer (aspect, label) as a dict.
+        """Get attributes for an elementary Kivela layer.
 
-        Returns {} if no row exists in `layer_attributes`.
+        Parameters
+        ----------
+        aspect : str
+            Aspect identifier.
+        label : str
+            Elementary layer label.
+
+        Returns
+        -------
+        dict
+            Attributes dict; empty if not set.
         """
         lid = self._elem_layer_id(aspect, label)
         df = self.layer_attributes
@@ -517,9 +1095,18 @@ class LayerClass:
         return row
 
     def set_aspect_attrs(self, aspect: str, **attrs):
-        """
-        Attach metadata to a Kivela aspect.
-        Example: set_aspect_attrs("time", order="temporal", unit="year")
+        """Attach metadata to a Kivela aspect.
+
+        Parameters
+        ----------
+        aspect : str
+            Aspect identifier.
+        **attrs
+            Key-value metadata to store.
+
+        Returns
+        -------
+        None
         """
         if aspect not in self.aspects:
             raise KeyError(f"unknown aspect {aspect!r}; known: {self.aspects!r}")
@@ -527,15 +1114,34 @@ class LayerClass:
         d.update(attrs)
 
     def get_aspect_attrs(self, aspect: str) -> dict:
-        """Return a shallow copy of metadata for a Kivela aspect."""
+        """Return a shallow copy of metadata for a Kivela aspect.
+
+        Parameters
+        ----------
+        aspect : str
+            Aspect identifier.
+
+        Returns
+        -------
+        dict
+        """
         if aspect not in self.aspects:
             raise KeyError(f"unknown aspect {aspect!r}")
         return dict(self._aspect_attrs.get(aspect, {}))
 
     def set_layer_attrs(self, layer_tuple: tuple[str, ...], **attrs):
-        """
-        Attach metadata to a Kivela layer (aspect-tuple aa).
-        Example: set_layer_attrs(("t1", "F"), time=1, relation="friendship")
+        """Attach metadata to a Kivela layer.
+
+        Parameters
+        ----------
+        layer_tuple : tuple[str, ...]
+            Aspect tuple layer.
+        **attrs
+            Key-value metadata to store.
+
+        Returns
+        -------
+        None
         """
         aa = tuple(layer_tuple)
         self._validate_layer_tuple(aa)
@@ -543,19 +1149,42 @@ class LayerClass:
         d.update(attrs)
 
     def get_layer_attrs(self, layer_tuple: tuple[str, ...]) -> dict:
-        """
-        Get metadata dict for a Kivela layer (aspect-tuple aa).
-        Returns a shallow copy; empty dict if not set.
+        """Get metadata dict for a Kivela layer.
+
+        Parameters
+        ----------
+        layer_tuple : tuple[str, ...]
+            Aspect tuple layer.
+
+        Returns
+        -------
+        dict
+            Shallow copy; empty if not set.
         """
         aa = tuple(layer_tuple)
         self._validate_layer_tuple(aa)
         return dict(self._layer_attrs.get(aa, {}))
 
     def set_vertex_layer_attrs(self, u: str, layer_tuple: tuple[str, ...], **attrs):
-        """
-        Attach metadata to a vertex–layer pair (u, aa).
-        Requires that (u, aa) ∈ V_M.
-        Example: set_vertex_layer_attrs("u1", ("t1",), activity=3.7)
+        """Attach metadata to a vertex–layer pair.
+
+        Parameters
+        ----------
+        u : str
+            Vertex identifier.
+        layer_tuple : tuple[str, ...]
+            Aspect tuple layer.
+        **attrs
+            Key-value metadata to store.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        KeyError
+            If ``(u, layer_tuple)`` is not present in ``V_M``.
         """
         aa = tuple(layer_tuple)
         self._assert_presence(u, aa)  # enforce that (u,aa) exists in V_M
@@ -564,9 +1193,19 @@ class LayerClass:
         d.update(attrs)
 
     def get_vertex_layer_attrs(self, u: str, layer_tuple: tuple[str, ...]) -> dict:
-        """
-        Get metadata dict for a vertex–layer pair (u, aa).
-        Returns a shallow copy; empty dict if not set.
+        """Get metadata dict for a vertex–layer pair.
+
+        Parameters
+        ----------
+        u : str
+            Vertex identifier.
+        layer_tuple : tuple[str, ...]
+            Aspect tuple layer.
+
+        Returns
+        -------
+        dict
+            Shallow copy; empty if not set.
         """
         aa = tuple(layer_tuple)
         key = (u, aa)
@@ -582,15 +1221,27 @@ class LayerClass:
         return self._lid_cache[aa]
 
     def set_edge_kivela_role(self, eid: str, role: str, layers):
-        """
-        Annotate an existing structural edge with Kivela semantics.
+        """Annotate an existing structural edge with Kivela semantics.
 
-        role:
-          - "intra"    -> layers = aa tuple
-          - "inter"    -> layers = (aa, bb)
-          - "coupling" -> layers = (aa, bb)
+        Parameters
+        ----------
+        eid : str
+            Edge identifier.
+        role : str
+            One of ``"intra"``, ``"inter"``, or ``"coupling"``.
+        layers : tuple | list
+            ``aa`` for ``"intra"``; ``(aa, bb)`` for ``"inter"``/``"coupling"``.
 
-        This does *not* create edges or touch incidence; it only sets metadata.
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        KeyError
+            If ``eid`` does not exist.
+        ValueError
+            If ``role`` is invalid.
         """
         # Sanity: edge must exist in the structural registry
         if eid not in getattr(self, "edge_definitions", {}) and eid not in getattr(
@@ -621,9 +1272,25 @@ class LayerClass:
     def add_intra_edge(
         self, u: str, v: str, layer: str, *, weight: float = 1.0, eid: str | None = None
     ):
-        """
-        Legacy single-axis convenience: (u,v) in 'layer' (string).
-        If exactly 1 aspect is configured, this delegates to add_intra_edge_nl with (layer,) tuple.
+        """Add an intra-layer edge in legacy single-aspect mode.
+
+        Parameters
+        ----------
+        u : str
+            Source vertex.
+        v : str
+            Target vertex.
+        layer : str
+            Layer id (single-aspect only).
+        weight : float, optional
+            Edge weight.
+        eid : str | None, optional
+            Edge id override.
+
+        Returns
+        -------
+        str
+            Edge id.
         """
         if len(getattr(self, "aspects", [])) == 1 and getattr(
             self, "_legacy_single_aspect_enabled", True
@@ -651,8 +1318,38 @@ class LayerClass:
         weight: float = 1.0,
         eid: str | None = None,
     ):
-        """
-        Add (u,v) inside a multi-aspect layer aa (tuple). Requires presence (u,aa),(v,aa) in V_M.
+        """Add an intra-layer edge for a multi-aspect layer.
+
+        Parameters
+        ----------
+        u : str
+            Source vertex.
+        v : str
+            Target vertex.
+        layer_tuple : tuple[str, ...]
+            Aspect tuple layer ``aa``.
+        weight : float, optional
+            Edge weight.
+        eid : str | None, optional
+            Edge id override.
+
+        Returns
+        -------
+        str
+            Edge id.
+
+        Raises
+        ------
+        KeyError
+            If required vertex–layer presence is missing.
+        ValueError
+            If ``layer_tuple`` is invalid.
+
+        Examples
+        --------
+        ```python
+        G.add_intra_edge_nl("u1", "u2", ("t1", "F"))
+        ```
         """
         aa = layer_tuple if isinstance(layer_tuple, tuple) else tuple(layer_tuple)
         if not getattr(self, "_fast_mode", False):
@@ -668,9 +1365,23 @@ class LayerClass:
         return eid
 
     def add_intra_edges_bulk(self, edges, layer_tuple, weight=1.0, fast_mode=True):
-        """
-        Direct matrix manipulation - bypasses add_edge overhead.
-        edges: [(u, v), ...] or [(u, v, w), ...]
+        """Bulk add intra-layer edges with direct matrix updates.
+
+        Parameters
+        ----------
+        edges : Iterable
+            ``[(u, v), ...]`` or ``[(u, v, w), ...]``.
+        layer_tuple : tuple[str, ...]
+            Aspect tuple layer.
+        weight : float, optional
+            Default weight when ``w`` is not provided.
+        fast_mode : bool, optional
+            If True, skip validation/presence checks.
+
+        Returns
+        -------
+        list[str]
+            Edge ids added.
         """
         aa = tuple(layer_tuple)
 
@@ -779,8 +1490,40 @@ class LayerClass:
         weight: float = 1.0,
         eid: str | None = None,
     ):
-        """
-        Add an inter-layer edge between (u, aa) and (v, bb). Requires presence (u,aa),(v,bb) in V_M.
+        """Add an inter-layer edge between two layer tuples.
+
+        Parameters
+        ----------
+        u : str
+            Vertex in layer ``aa``.
+        layer_a : tuple[str, ...]
+            Source layer tuple.
+        v : str
+            Vertex in layer ``bb``.
+        layer_b : tuple[str, ...]
+            Target layer tuple.
+        weight : float, optional
+            Edge weight.
+        eid : str | None, optional
+            Edge id override.
+
+        Returns
+        -------
+        str
+            Edge id.
+
+        Raises
+        ------
+        KeyError
+            If required vertex–layer presence is missing.
+        ValueError
+            If layer tuples are invalid.
+
+        Examples
+        --------
+        ```python
+        G.add_inter_edge_nl("u1", ("t1",), "u2", ("t2",))
+        ```
         """
         aa = layer_a if isinstance(layer_a, tuple) else tuple(layer_a)
         bb = layer_b if isinstance(layer_b, tuple) else tuple(layer_b)
@@ -804,8 +1547,25 @@ class LayerClass:
         weight: float = 1.0,
         eid: str | None = None,
     ):
-        """
-        Add a diagonal coupling (u, aa) <-> (u, bb). Requires presence (u,aa),(u,bb).
+        """Add a diagonal coupling edge between two layers for the same vertex.
+
+        Parameters
+        ----------
+        u : str
+            Vertex identifier.
+        layer_a : tuple[str, ...]
+            Layer tuple A.
+        layer_b : tuple[str, ...]
+            Layer tuple B.
+        weight : float, optional
+            Edge weight.
+        eid : str | None, optional
+            Edge id override.
+
+        Returns
+        -------
+        str
+            Edge id.
         """
         eid2 = self.add_inter_edge_nl(u, layer_a, u, layer_b, weight=weight, eid=eid)
         # Re-label as coupling so supra_adjacency treats it as off-diagonal coupling
@@ -815,10 +1575,16 @@ class LayerClass:
         return eid2
 
     def layer_vertex_set(self, layer_tuple):
-        """
-        Vertices present in Kivela layer aa (aspect tuple).
+        """Vertices present in a Kivela layer.
 
-        Uses V_M as SSoT for node-layer presence.
+        Parameters
+        ----------
+        layer_tuple : Iterable[str]
+            Aspect tuple layer.
+
+        Returns
+        -------
+        set[str]
         """
         aa = tuple(layer_tuple)
         return {u for (u, L) in self._VM if L == aa}
@@ -830,14 +1596,20 @@ class LayerClass:
         include_inter: bool = False,
         include_coupling: bool = False,
     ):
-        """
-        Edges associated with Kivela layer aa.
+        """Edges associated with a Kivela layer.
 
-        By default returns only intra-layer edges:
-          { eid | edge_kind[eid] == 'intra' and edge_layers[eid] == aa }
+        Parameters
+        ----------
+        layer_tuple : Iterable[str]
+            Aspect tuple layer.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``layer_tuple``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``layer_tuple``.
 
-        If include_inter=True / include_coupling=True, also includes inter/coupling
-        edges where aa participates in the layer pair (aa, bb) or (bb, aa).
+        Returns
+        -------
+        set[str]
         """
         aa = tuple(layer_tuple)
         E = set()
@@ -871,6 +1643,28 @@ class LayerClass:
         weight: float = 1.0,
         eid: str | None = None,
     ):
+        """Add an inter-layer edge in legacy single-aspect mode.
+
+        Parameters
+        ----------
+        u : str
+            Source vertex.
+        v : str
+            Target vertex.
+        layer_a : str
+            Layer id (single-aspect only).
+        layer_b : str
+            Layer id (single-aspect only).
+        weight : float, optional
+            Edge weight.
+        eid : str | None, optional
+            Edge id override.
+
+        Returns
+        -------
+        str
+            Edge id.
+        """
         if len(getattr(self, "aspects", [])) == 1 and getattr(
             self, "_legacy_single_aspect_enabled", True
         ):
@@ -892,14 +1686,21 @@ class LayerClass:
         include_inter: bool = False,
         include_coupling: bool = False,
     ):
-        """
-        Union of several Kivela layers.
+        """Union of several Kivela layers.
 
-        Returns dict:
-          {
-            "vertices": set[str],
-            "edges": set[str],
-          }
+        Parameters
+        ----------
+        layer_tuples : Iterable[Iterable[str]]
+            Layer tuples to union.
+        include_inter : bool, optional
+            Include inter-layer edges touching any layer in the union.
+        include_coupling : bool, optional
+            Include coupling edges touching any layer in the union.
+
+        Returns
+        -------
+        dict
+            ``{"vertices": set[str], "edges": set[str]}``.
         """
         Vs = []
         Es = []
@@ -925,10 +1726,21 @@ class LayerClass:
         include_inter: bool = False,
         include_coupling: bool = False,
     ):
-        """
-        Intersection of several Kivela layers.
+        """Intersection of several Kivela layers.
 
-        Empty input - empty sets.
+        Parameters
+        ----------
+        layer_tuples : Iterable[Iterable[str]]
+            Layer tuples to intersect.
+        include_inter : bool, optional
+            Include inter-layer edges touching any layer in the intersection.
+        include_coupling : bool, optional
+            Include coupling edges touching any layer in the intersection.
+
+        Returns
+        -------
+        dict
+            ``{"vertices": set[str], "edges": set[str]}``.
         """
         layer_tuples = list(layer_tuples)
         if not layer_tuples:
@@ -960,10 +1772,23 @@ class LayerClass:
         include_inter: bool = False,
         include_coupling: bool = False,
     ):
-        """
-        Set difference: elements in layer_a but not in layer_b.
+        """Set difference: elements in ``layer_a`` but not in ``layer_b``.
 
-        Returns dict {"vertices": set[str], "edges": set[str]}.
+        Parameters
+        ----------
+        layer_a : Iterable[str]
+            Minuend layer tuple.
+        layer_b : Iterable[str]
+            Subtrahend layer tuple.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``layer_a``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``layer_a``.
+
+        Returns
+        -------
+        dict
+            ``{"vertices": set[str], "edges": set[str]}``.
         """
         Va = self.layer_vertex_set(layer_a)
         Ea = self.layer_edge_set(
@@ -993,10 +1818,31 @@ class LayerClass:
         include_coupling: bool = False,
         **attributes,
     ):
-        """
-        Create a slice whose vertices/edges are induced by a single Kivela layer.
+        """Create a slice induced by a single Kivela layer.
 
-        Attributes are attached to the slice; you can include the layer tuple for traceability.
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+        layer_tuple : Iterable[str]
+            Layer tuple.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``layer_tuple``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``layer_tuple``.
+        **attributes
+            Slice attributes to store.
+
+        Returns
+        -------
+        str
+            The created slice id.
+
+        Examples
+        --------
+        ```python
+        G.create_slice_from_layer("t1_F", ("t1", "F"))
+        ```
         """
         result = self.layer_union(
             [layer_tuple],
@@ -1016,8 +1862,25 @@ class LayerClass:
         include_coupling: bool = False,
         **attributes,
     ):
-        """
-        Create a slice as union of several Kivela layers (using layer_union).
+        """Create a slice as the union of several layers.
+
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+        layer_tuples : Iterable[Iterable[str]]
+            Layer tuples to union.
+        include_inter : bool, optional
+            Include inter-layer edges touching any layer in the union.
+        include_coupling : bool, optional
+            Include coupling edges touching any layer in the union.
+        **attributes
+            Slice attributes to store.
+
+        Returns
+        -------
+        str
+            The created slice id.
         """
         result = self.layer_union(
             layer_tuples,
@@ -1037,8 +1900,25 @@ class LayerClass:
         include_coupling: bool = False,
         **attributes,
     ):
-        """
-        Create a slice as intersection of several Kivela layers (using layer_intersection).
+        """Create a slice as the intersection of several layers.
+
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+        layer_tuples : Iterable[Iterable[str]]
+            Layer tuples to intersect.
+        include_inter : bool, optional
+            Include inter-layer edges touching any layer in the intersection.
+        include_coupling : bool, optional
+            Include coupling edges touching any layer in the intersection.
+        **attributes
+            Slice attributes to store.
+
+        Returns
+        -------
+        str
+            The created slice id.
         """
         result = self.layer_intersection(
             layer_tuples,
@@ -1059,8 +1939,27 @@ class LayerClass:
         include_coupling: bool = False,
         **attributes,
     ):
-        """
-        Create a slice as difference layer_a layer_b.
+        """Create a slice as the difference of two layers.
+
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+        layer_a : Iterable[str]
+            Minuend layer tuple.
+        layer_b : Iterable[str]
+            Subtrahend layer tuple.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``layer_a``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``layer_a``.
+        **attributes
+            Slice attributes to store.
+
+        Returns
+        -------
+        str
+            The created slice id.
         """
         result = self.layer_difference(
             layer_a,
@@ -1082,13 +1981,20 @@ class LayerClass:
         include_inter: bool = False,
         include_coupling: bool = False,
     ) -> AnnNet:
-        """
-        Concrete subgraph induced by a single Kivela layer.
+        """Concrete subgraph induced by a single Kivela layer.
 
-        - Vertices = layer_vertex_set(aa)
-        - Edges    = layer_edge_set(aa, ...)
+        Parameters
+        ----------
+        layer_tuple : Iterable[str]
+            Layer tuple.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``layer_tuple``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``layer_tuple``.
 
-        Uses extract_subgraph(vertices, edges) to avoid duplicating logic.
+        Returns
+        -------
+        AnnNet
         """
         aa = tuple(layer_tuple)
         V = self.layer_vertex_set(aa)
@@ -1106,8 +2012,20 @@ class LayerClass:
         include_inter: bool = False,
         include_coupling: bool = False,
     ) -> AnnNet:
-        """
-        Concrete subgraph induced by the union of several Kivela layers.
+        """Concrete subgraph induced by the union of several layers.
+
+        Parameters
+        ----------
+        layer_tuples : Iterable[Iterable[str]]
+            Layer tuples to union.
+        include_inter : bool, optional
+            Include inter-layer edges touching any layer in the union.
+        include_coupling : bool, optional
+            Include coupling edges touching any layer in the union.
+
+        Returns
+        -------
+        AnnNet
         """
         res = self.layer_union(
             layer_tuples,
@@ -1123,8 +2041,20 @@ class LayerClass:
         include_inter: bool = False,
         include_coupling: bool = False,
     ) -> AnnNet:
-        """
-        Concrete subgraph induced by intersection of several Kivela layers.
+        """Concrete subgraph induced by the intersection of several layers.
+
+        Parameters
+        ----------
+        layer_tuples : Iterable[Iterable[str]]
+            Layer tuples to intersect.
+        include_inter : bool, optional
+            Include inter-layer edges touching any layer in the intersection.
+        include_coupling : bool, optional
+            Include coupling edges touching any layer in the intersection.
+
+        Returns
+        -------
+        AnnNet
         """
         res = self.layer_intersection(
             layer_tuples,
@@ -1141,8 +2071,22 @@ class LayerClass:
         include_inter: bool = False,
         include_coupling: bool = False,
     ) -> AnnNet:
-        """
-        Concrete subgraph induced by layer_a layer_b.
+        """Concrete subgraph induced by a set-difference of two layers.
+
+        Parameters
+        ----------
+        layer_a : Iterable[str]
+            Minuend layer tuple.
+        layer_b : Iterable[str]
+            Subtrahend layer tuple.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``layer_a``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``layer_a``.
+
+        Returns
+        -------
+        AnnNet
         """
         res = self.layer_difference(
             layer_a,
@@ -1163,6 +2107,24 @@ class LayerClass:
     ## Supra_Adjacency
 
     def supra_adjacency(self, layers: list[str] | None = None):
+        """Build the supra adjacency matrix.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers. In single-aspect mode, string ids are accepted.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+            Supra adjacency over the chosen vertex–layer index.
+
+        Examples
+        --------
+        ```python
+        A = G.supra_adjacency()
+        ```
+        """
         # Map optional legacy 'layers' (strings) to aspect tuples if needed
         if (
             layers is not None
@@ -1250,10 +2212,7 @@ class LayerClass:
     ##  Block partitions & Laplacians
 
     def _normalize_layers_arg(self, layers):
-        """
-        Normalize 'layers' argument to a list of aspect tuples or None.
-        Accepts legacy single-aspect string IDs.
-        """
+        """Normalize ``layers`` argument to aspect tuples or None."""
         if layers is None:
             return None
         if len(getattr(self, "aspects", [])) == 1 and getattr(
@@ -1263,10 +2222,7 @@ class LayerClass:
         return [tuple(L) for L in layers]
 
     def _build_block(self, include_kinds: set[str], layers: list[str] | list[tuple] | None = None):
-        """
-        Internal builder for a supra block that includes only edges with kinds in include_kinds.
-        Kinds: {"intra","inter","coupling"}.
-        """
+        """Internal builder for supra block matrices."""
 
         layers_t = self._normalize_layers_arg(layers)
         self.ensure_vertex_layer_index(layers_t)
@@ -1337,20 +2293,58 @@ class LayerClass:
         return A.tocsr()
 
     def build_intra_block(self, layers: list[str] | list[tuple] | None = None):
-        """Supra matrix containing only intra-layer edges (diagonal blocks)."""
+        """Supra matrix containing only intra-layer edges (diagonal blocks).
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+        """
         return self._build_block({"intra"}, layers)
 
     def build_inter_block(self, layers: list[str] | list[tuple] | None = None):
-        """Supra matrix containing only inter-layer (non-diagonal) edges (excludes coupling)."""
+        """Supra matrix containing only inter-layer (non-diagonal) edges.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+        """
         return self._build_block({"inter"}, layers)
 
     def build_coupling_block(self, layers: list[str] | list[tuple] | None = None):
-        """Supra matrix containing only coupling (diagonal same-vertex cross-layer) edges."""
+        """Supra matrix containing only coupling edges.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+        """
         return self._build_block({"coupling"}, layers)
 
     def supra_degree(self, layers: list[str] | list[tuple] | None = None):
-        """
-        Degree vector over the supra-graph (sum of row of supra adjacency).
+        """Degree vector over the supra-graph.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        numpy.ndarray
         """
 
         A = self.supra_adjacency(layers)
@@ -1359,10 +2353,19 @@ class LayerClass:
         return deg
 
     def supra_laplacian(self, kind: str = "comb", layers: list[str] | list[tuple] | None = None):
-        """
-        Build supra-Laplacian.
-        kind="comb" -> combinatorial L = D - A
-        kind="norm" -> normalized L_sym = I - D^{-1/2} A D^{-1/2}
+        """Build supra-Laplacian.
+
+        Parameters
+        ----------
+        kind : str, optional
+            ``"comb"`` for combinatorial ``L = D - A`` or ``"norm"`` for
+            normalized ``L = I - D^{-1/2} A D^{-1/2}``.
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
         """
 
         A = self.supra_adjacency(layers)
@@ -1404,9 +2407,19 @@ class LayerClass:
     def add_layer_coupling_pairs(
         self, layer_pairs: list[tuple[tuple[str, ...], tuple[str, ...]]], *, weight: float = 1.0
     ) -> int:
-        """
-        Generic: for each pair (aa, bb) in layer_pairs, add diagonal couplings (u,aa)<->(u,bb) for all u
-        that are present in both layers. Returns number of edges added.
+        """Add diagonal couplings for explicit layer pairs.
+
+        Parameters
+        ----------
+        layer_pairs : list[tuple[tuple[str, ...], tuple[str, ...]]]
+            Layer tuple pairs ``(aa, bb)``.
+        weight : float, optional
+            Edge weight.
+
+        Returns
+        -------
+        int
+            Number of edges added.
         """
         added = 0
         # normalize to tuples, validate once
@@ -1432,12 +2445,21 @@ class LayerClass:
     def add_categorical_coupling(
         self, aspect: str, groups: list[list[str]], *, weight: float = 1.0
     ) -> int:
-        """
-        Categorical couplings along one aspect:
-        For each vertex u and each fixed assignment of the other aspects, fully connect u across
-        the elementary layers in each group on `aspect`.
-        Example: aspect="time", groups=[["t1","t2","t3"]] connects (u,t1,⋅)-(u,t2,⋅)-(u,t3,⋅) per (other aspects).
-        Returns number of edges added.
+        """Add categorical couplings along one aspect.
+
+        Parameters
+        ----------
+        aspect : str
+            Aspect name to couple over.
+        groups : list[list[str]]
+            Groups of elementary labels to fully connect per vertex.
+        weight : float, optional
+            Edge weight.
+
+        Returns
+        -------
+        int
+            Number of edges added.
         """
         ai = self._aspect_index(aspect)
         added = 0
@@ -1461,11 +2483,19 @@ class LayerClass:
     def add_diagonal_coupling_filter(
         self, layer_filter: dict[str, set], *, weight: float = 1.0
     ) -> int:
-        """
-        Diagonal couplings inside a filtered slice of the layer space:
-        For each vertex u, connect all (u,aa) pairs where aa matches `layer_filter`.
-        layer_filter example: {"time": {"t1","t2"}, "rel": {"F"}}.
-        Returns number of edges added.
+        """Add diagonal couplings within a filtered layer subspace.
+
+        Parameters
+        ----------
+        layer_filter : dict[str, set]
+            Aspect filters (e.g., ``{"time": {"t1","t2"}}``).
+        weight : float, optional
+            Edge weight.
+
+        Returns
+        -------
+        int
+            Number of edges added.
         """
         added = 0
         # collect per vertex the matching layers actually present
@@ -1484,14 +2514,23 @@ class LayerClass:
     ## Tensor view & flattening map
 
     def tensor_index(self, layers: list[str] | list[tuple] | None = None):
-        """
-        Build consistent indices for vertices and layers used in the tensor view.
-        Uses the current vertex–layer index ordering to ensure round-trip with supra.
-        Returns:
-          vertices: list[str]
-          layers_t: list[tuple[str,...]]
-          vertex_to_i: dict[vertex->int]
-          layer_to_i: dict[layer_tuple->int]
+        """Build indices for tensor view.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        tuple
+            ``(vertices, layers_t, vertex_to_i, layer_to_i)``.
+
+        Examples
+        --------
+        ```python
+        vertices, layers_t, v2i, l2i = G.tensor_index()
+        ```
         """
         layers_t = self._normalize_layers_arg(layers)
         self.ensure_vertex_layer_index(layers_t)
@@ -1512,19 +2551,21 @@ class LayerClass:
         return vertices, layers_list, vertex_to_i, layer_to_i
 
     def adjacency_tensor_view(self, layers: list[str] | list[tuple] | None = None):
-        """
-        Sparse 4-index adjacency view: triplets (ui, ai, vi, bi, w).
-         Returns a dict:
-           {
-             "vertices": list[str],
-             "layers": list[tuple[str,...]],
-             "vertex_to_i": {...},
-             "layer_to_i": {...},
-             "ui": np.ndarray[int], "ai": np.ndarray[int],
-             "vi": np.ndarray[int], "bi": np.ndarray[int],
-             "w":  np.ndarray[float]
-           }
-         Symmetric entries are emitted once (ui,ai,vi,bi) and once swapped (vi,bi,ui,ai).
+        """Sparse 4-index adjacency view.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        dict
+            ``{"vertices","layers","vertex_to_i","layer_to_i","ui","ai","vi","bi","w"}``.
+
+        Notes
+        -----
+        Symmetric entries are emitted twice: ``(ui, ai, vi, bi)`` and ``(vi, bi, ui, ai)``.
         """
 
         vertices, layers_t, vertex_to_i, layer_to_i = self.tensor_index(layers)
@@ -1611,9 +2652,16 @@ class LayerClass:
         }
 
     def flatten_to_supra(self, tensor_view: dict):
-        """
-        f: 4-index -> supra (CSR). Uses current vertex–layer index mapping (_nl_to_row).
-        tensor_view: output of adjacency_tensor_view or unflatten_from_supra.
+        """Flatten a tensor view into a supra adjacency matrix.
+
+        Parameters
+        ----------
+        tensor_view : dict
+            Output of :meth:`adjacency_tensor_view` or :meth:`unflatten_from_supra`.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
         """
 
         # Ensure index reflects current layers subset (tensor_view["layers"])
@@ -1644,8 +2692,19 @@ class LayerClass:
         return A.tocsr()
 
     def unflatten_from_supra(self, A, layers: list[str] | list[tuple] | None = None):
-        """
-        f^{-1}: supra -> 4-index tensor triplets (same schema as adjacency_tensor_view).
+        """Unflatten a supra adjacency matrix into a tensor view.
+
+        Parameters
+        ----------
+        A : scipy.sparse.spmatrix
+            Supra adjacency matrix.
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        dict
+            Tensor view with the same schema as :meth:`adjacency_tensor_view`.
         """
 
         A = A.tocsr()
@@ -1684,10 +2743,20 @@ class LayerClass:
         include_inter: bool = True,
         layers: list[str] | list[tuple] | None = None,
     ):
-        """
-        Build supra adjacency with optional scaling of coupling edges and optional
-        inclusion of inter-layer (non-diagonal) edges.
-        A = A_intra + (include_inter ? A_inter : 0) + coupling_scale * A_coupling
+        """Build scaled supra adjacency.
+
+        Parameters
+        ----------
+        coupling_scale : float, optional
+            Scaling factor for coupling edges.
+        include_inter : bool, optional
+            Whether to include inter-layer edges.
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
         """
 
         A_intra = self.build_intra_block(layers)
@@ -1703,9 +2772,16 @@ class LayerClass:
         return A.tocsr()
 
     def transition_matrix(self, layers: list[str] | list[tuple] | None = None):
-        """
-        Row-stochastic transition matrix P = D^{-1} A (random walk on supra-graph).
-        Rows with zero degree remain zero.
+        """Row-stochastic transition matrix ``P = D^{-1} A``.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
         """
 
         A = self.supra_adjacency(layers).tocsr()
@@ -1717,8 +2793,18 @@ class LayerClass:
         return Dinv @ A
 
     def random_walk_step(self, p, layers: list[str] | list[tuple] | None = None):
-        """
-        One step of random walk distribution: p' = p P. Accepts dense 1D array-like (len = |V_M|).
+        """One random-walk step ``p' = p P``.
+
+        Parameters
+        ----------
+        p : array-like
+            Row vector of length ``|V_M|``.
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        numpy.ndarray
         """
 
         P = self.transition_matrix(layers)
@@ -1730,9 +2816,22 @@ class LayerClass:
     def diffusion_step(
         self, x, tau: float = 1.0, kind: str = "comb", layers: list[str] | list[tuple] | None = None
     ):
-        """
-        One explicit Euler step of diffusion on the supra-graph:
-          x' = x - tau * L x   where L is combinatorial (kind='comb') or normalized (kind='norm')
+        """One explicit Euler step of diffusion on the supra-graph.
+
+        Parameters
+        ----------
+        x : array-like
+            State vector of length ``|V_M|``.
+        tau : float, optional
+            Time step.
+        kind : str, optional
+            ``"comb"`` or ``"norm"``.
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        numpy.ndarray
         """
 
         L = self.supra_laplacian(kind=kind, layers=layers)
@@ -1742,9 +2841,17 @@ class LayerClass:
         return x - tau * (L @ x)
 
     def algebraic_connectivity(self, layers: list[str] | list[tuple] | None = None):
-        """
-        Second-smallest eigenvalue (Fiedler value) of the combinatorial supra-Laplacian.
-        Returns (lambda_2, fiedler_vector) or (0.0, None) if |V_M| < 2.
+        """Algebraic connectivity of the supra-graph.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        tuple[float, numpy.ndarray | None]
+            ``(lambda_2, fiedler_vector)`` or ``(0.0, None)`` if too small.
         """
 
         from scipy.sparse.linalg import eigsh
@@ -1765,8 +2872,21 @@ class LayerClass:
     def k_smallest_laplacian_eigs(
         self, k: int = 6, kind: str = "comb", layers: list[str] | list[tuple] | None = None
     ):
-        """
-        Convenience: return k smallest eigenvalues/eigenvectors of supra-Laplacian.
+        """Return k smallest eigenvalues/eigenvectors of the supra-Laplacian.
+
+        Parameters
+        ----------
+        k : int, optional
+            Number of eigenpairs to compute.
+        kind : str, optional
+            ``"comb"`` or ``"norm"``.
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray]
+            ``(eigenvalues, eigenvectors)``.
         """
 
         from scipy.sparse.linalg import eigsh
@@ -1780,9 +2900,17 @@ class LayerClass:
         return vals[order], vecs[:, order]
 
     def dominant_rw_eigenpair(self, layers: list[str] | list[tuple] | None = None):
-        """
-        Dominant eigenpair of the random-walk operator P (right eigenvector). Uses eigsh on (P+P^T)/2 fallback if needed.
-        Returns (lambda_max, v). For an irreducible RW, lambda_max≈1.
+        """Dominant eigenpair of the random-walk operator.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        tuple[float, numpy.ndarray | None]
+            ``(lambda_max, v)``.
         """
 
         from scipy.sparse.linalg import eigsh
@@ -1799,12 +2927,21 @@ class LayerClass:
     def sweep_coupling_regime(
         self, scales, metric="algebraic_connectivity", layers: list[str] | list[tuple] | None = None
     ):
-        """
-        Scan a list/array of coupling scales (omega) and evaluate a metric on the scaled supra graph.
-        metric options:
-          - "algebraic_connectivity"  -> lambda_2(L_comb(A_intra + A_inter + omega A_coup))
-          - callable(A) -> float      -> custom metric that takes a CSR supra matrix
-        Returns list of floats aligned with 'scales'.
+        """Scan coupling scales and evaluate a metric.
+
+        Parameters
+        ----------
+        scales : Iterable[float]
+            Coupling scales to evaluate.
+        metric : str | callable, optional
+            ``"algebraic_connectivity"`` or a callable ``metric(A)->float``.
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        list[float]
+            Metric values aligned with ``scales``.
         """
         results = []
         if isinstance(metric, str):
@@ -1854,9 +2991,17 @@ class LayerClass:
         return rows
 
     def layer_degree_vectors(self, layers: list[str] | list[tuple] | None = None):
-        """
-        Per-layer degree vectors (intra-layer only). Returns:
-          { layer_tuple: (rows_idx_list, deg_vector_np) }
+        """Per-layer degree vectors (intra-layer only).
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        dict
+            ``{layer_tuple: (rows_idx_list, deg_vector_np)}``.
         """
 
         A_intra = self.build_intra_block(layers).tocsr()
@@ -1881,10 +3026,16 @@ class LayerClass:
         return out
 
     def participation_coefficient(self, layers: list[str] | list[tuple] | None = None):
-        """
-        Participation coefficient per vertex (Guimerà & Amaral style on multiplex):
-          P_u = 1 - sum_L (k_u^L / k_u)^2, using intra-layer degrees only.
-        Returns dict[vertex -> float].
+        """Participation coefficient per vertex.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        dict[str, float]
         """
 
         # build per-layer deg vectors and aggregate per vertex
@@ -1910,9 +3061,16 @@ class LayerClass:
         return P
 
     def versatility(self, layers: list[str] | list[tuple] | None = None):
-        """
-        Simple versatility proxy: dominant eigenvector of supra adjacency, summed over
-        vertex's layer-copies. Returns dict[vertex -> float] normalized to unit max.
+        """Versatility proxy based on dominant eigenvector of supra adjacency.
+
+        Parameters
+        ----------
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers.
+
+        Returns
+        -------
+        dict[str, float]
         """
 
         from scipy.sparse.linalg import eigsh
@@ -1945,18 +3103,31 @@ class LayerClass:
         include_inter: bool = False,
         layers: list[str] | list[tuple] | None = None,
     ):
-        """
-        Mucha et al. multislice modularity (scorer only).
-        Uses: intra-layer A and configuration null model per layer; coupling edges scaled by 'omega'.
-        Optionally includes inter-layer (non-diagonal) edges if include_inter=True.
-        Args:
-          partition: list/array of community ids, length = |V_M| in current index.
-          gamma: resolution parameter applied uniformly to all layers.
-          omega: coupling strength multiplying the coupling block (ignores stored coupling weights).
-          include_inter: whether to include inter-layer (non-diagonal) edges in A (default False).
-          layers: optional subset of layers to score on (will rebuild the supra index).
-        Returns:
-          Q (float)
+        """Mucha et al. multislice modularity (scorer only).
+
+        Parameters
+        ----------
+        partition : array-like
+            Community ids, length ``|V_M|`` in the current index.
+        gamma : float, optional
+            Resolution parameter.
+        omega : float, optional
+            Coupling strength (binary coupling structure scaled by ``omega``).
+        include_inter : bool, optional
+            Whether to include inter-layer (non-diagonal) edges.
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers to score on.
+
+        Returns
+        -------
+        float
+            Modularity score ``Q``.
+
+        Examples
+        --------
+        ```python
+        Q = G.multislice_modularity(partition)
+        ```
         """
 
         # Ensure index over the right layers
