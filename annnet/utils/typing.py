@@ -1,4 +1,4 @@
-from enum import StrEnum, Enum
+from enum import Enum, StrEnum
 from typing import Any
 
 # ------------------------------------------------------------------------------
