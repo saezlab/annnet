@@ -51,8 +51,12 @@ def build_dataframe_from_rows(rows):
             return pl.DataFrame()
 
         # Peek at first row to detect list columns
-        first_row = rows[0] if isinstance(rows, list) else {}
-        schema_overrides = {}
+        schema_overrides = {
+            "head": pl.List(pl.Utf8),
+            "tail": pl.List(pl.Utf8),
+            "members": pl.List(pl.Utf8),
+        }
+
 
         for key, value in first_row.items():
             if isinstance(value, (list, tuple)):
@@ -180,18 +184,30 @@ def _is_nullish(val) -> bool:
 def _as_list_or_empty(val):
     if _is_nullish(val):
         return []
-    if isinstance(val, list):
-        return val
-    if isinstance(val, tuple):
-        return list(val)
+
+    # Polars Series / Array
+    try:
+        import polars as pl
+        if isinstance(val, pl.Series):
+            return val.to_list()
+    except Exception:
+        pass
+
+    # numpy array
     try:
         import numpy as np
-
         if isinstance(val, np.ndarray):
             return val.tolist()
     except Exception:
         pass
-    # fallback: if it's a single scalar, treat as singleton list
+
+    # already list / tuple
+    if isinstance(val, list):
+        return val
+    if isinstance(val, tuple):
+        return list(val)
+
+    # scalar -> singleton
     return [val]
 
 
@@ -236,7 +252,7 @@ def _build_attr_map(df, key_col: str) -> dict:
     return out
 
 
-def to_parquet_graphdir(graph: AnnNet, path):
+def to_parquet(graph: AnnNet, path):
     """Write lossless GraphDir:
       vertices.parquet, edges.parquet, slices.parquet, edge_slices.parquet, manifest.json
     Wide tables (attrs as columns). Hyperedges stored with 'kind' and head/tail/members lists.
@@ -305,8 +321,8 @@ def to_parquet_graphdir(graph: AnnNet, path):
             head_map = _endpoint_coeff_map(row, "__source_attr", S) or dict.fromkeys(S or [], 1.0)
             tail_map = _endpoint_coeff_map(row, "__target_attr", T) or dict.fromkeys(T or [], 1.0)
             # DEBUG
-            print(f"Exporting hyperedge {eid}: S={S}, T={T}, directed={row['directed']}")
-            print(f"  head_map={head_map}, tail_map={tail_map}")
+            #print(f"Exporting hyperedge {eid}: S={S}, T={T}, directed={row['directed']}")
+            #print(f"  head_map={head_map}, tail_map={tail_map}")
 
             row.update(
                 {
@@ -317,14 +333,12 @@ def to_parquet_graphdir(graph: AnnNet, path):
                     else None,
                 }
             )
-        # Right before line 260: e_rows.append(row)
-        if row["kind"] == "hyper":
-            print(f"Row to append: {row}")
+        #if row["kind"] == "hyper":
+            #print(f"Row to append: {row}")
 
         e_rows.append(row)
 
-    # After line 264, before _write_parquet_df:
-    print(f"Sample e_rows[0] if hyper: {[r for r in e_rows if r['kind'] == 'hyper'][0]}")
+    #print(f"Sample e_rows[0] if hyper: {[r for r in e_rows if r['kind'] == 'hyper'][0]}")
 
     _write_parquet_df(
         build_dataframe_from_rows(e_rows),
@@ -392,7 +406,7 @@ def to_parquet_graphdir(graph: AnnNet, path):
     (path / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
 
-def from_parquet_graphdir(path) -> AnnNet:
+def from_parquet(path) -> AnnNet:
     """Read GraphDir (lossless vs write_parquet_graphdir())."""
     from ..core.graph import AnnNet
 
@@ -444,7 +458,7 @@ def from_parquet_graphdir(path) -> AnnNet:
 
             # DEBUG: Print what you actually have
             if directed:
-                print(f"Directed hyperedge {eid}: head={head}, tail={tail}")
+                #print(f"Directed hyperedge {eid}: head={head}, tail={tail}")
                 if len(head) < 1 or len(tail) < 1:
                     print(f"  SKIPPING - invalid directed hyperedge")
                     continue
@@ -452,7 +466,7 @@ def from_parquet_graphdir(path) -> AnnNet:
             else:
                 if not members:
                     members = list(set(head) | set(tail))
-                print(f"Undirected hyperedge {eid}: members={members}, head={head}, tail={tail}")
+                #print(f"Undirected hyperedge {eid}: members={members}, head={head}, tail={tail}")
                 if len(members) < 2:
                     print(f"  SKIPPING - <2 members")
                     continue
