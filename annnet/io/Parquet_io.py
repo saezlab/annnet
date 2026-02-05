@@ -5,11 +5,6 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
-    pl = None
-
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
@@ -18,13 +13,74 @@ from ..adapters._utils import (
     _deserialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
     _deserialize_VM,
-    _df_to_rows,
-    _rows_to_df,
+    _safe_df_to_rows,
     _serialize_edge_layers,
     _serialize_layer_tuple_attrs,
     _serialize_node_layer_attrs,
     _serialize_VM,
 )
+from .io_annnet import _iter_rows, _read_parquet, _write_parquet_df
+
+
+def build_dataframe_from_rows(rows):
+    """Build a DataFrame from a list of row records using available backends.
+
+    Parameters
+    ----------
+    rows : list[dict] | list[list] | list[tuple]
+        Row records to load into a DataFrame.
+
+    Returns
+    -------
+    DataFrame-like
+        Polars DataFrame if available, otherwise pandas DataFrame.
+
+    Raises
+    ------
+    RuntimeError
+        If neither polars nor pandas is available.
+
+    Notes
+    -----
+    Uses Polars when installed for performance; otherwise falls back to pandas.
+    """
+    try:
+        import polars as pl
+
+        if not rows:
+            return pl.DataFrame()
+
+        # Peek at first row to detect list columns
+        first_row = rows[0] if isinstance(rows, list) else {}
+        schema_overrides = {}
+
+        for key, value in first_row.items():
+            if isinstance(value, (list, tuple)):
+                # Force list columns to be List(Utf8) type
+                schema_overrides[key] = pl.List(pl.Utf8)
+
+        if schema_overrides:
+            return pl.DataFrame(rows, schema_overrides=schema_overrides)
+        else:
+            return pl.DataFrame(rows)
+
+    except Exception:
+        try:
+            import pandas as pd
+
+            return pd.DataFrame.from_records(rows)
+        except Exception:
+            raise RuntimeError(
+                "No dataframe backend available. Install polars (recommended) or pandas."
+            )
+
+
+def pd_build_dataframe_from_rows(rows):
+    """Build a DataFrame from a list of row records using available backends."""
+    # Force pandas temporarily to bypass Polars list handling bug
+    import pandas as pd
+
+    return pd.DataFrame.from_records(rows)
 
 
 def _strip_nulls(d: dict):
@@ -40,16 +96,38 @@ def _strip_nulls(d: dict):
 
 
 def _is_directed_eid(graph, eid):
-    """Best-effort directedness probe; default True."""
+    """Get edge directedness. Default False for hyperedges, True for binary."""
+    kind = getattr(graph, "edge_kind", {}).get(eid)
+
+    # Check edge_directed dict first
     try:
-        return bool(getattr(graph, "edge_directed", {}).get(eid, True))
+        ed = getattr(graph, "edge_directed", {})
+        if eid in ed:
+            return bool(ed[eid])
     except Exception:
         pass
+
+    # Check attribute
     try:
         val = graph.get_edge_attribute(eid, "directed")
-        return bool(val) if val is not None else True
+        if val is not None:
+            return bool(val)
     except Exception:
-        return True
+        pass
+
+    # For hyperedges, check if S and T are identical (undirected)
+    if kind == "hyper":
+        try:
+            eidx = graph.edge_to_idx[eid]
+            S, T = graph.get_edge(eidx)
+            # If S == T, it's undirected (same member set in both)
+            if S == T:
+                return False
+        except Exception:
+            pass
+
+    # Default: True for binary, False for hyper
+    return kind != "hyper"
 
 
 def _coerce_coeff_mapping(val):
@@ -81,6 +159,42 @@ def _coerce_coeff_mapping(val):
     return {}
 
 
+def _is_nullish(val) -> bool:
+    if val is None:
+        return True
+    try:
+        if isinstance(val, float) and math.isnan(val):
+            return True
+    except Exception:
+        pass
+    try:
+        import pandas as pd
+
+        if pd.isna(val):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _as_list_or_empty(val):
+    if _is_nullish(val):
+        return []
+    if isinstance(val, list):
+        return val
+    if isinstance(val, tuple):
+        return list(val)
+    try:
+        import numpy as np
+
+        if isinstance(val, np.ndarray):
+            return val.tolist()
+    except Exception:
+        pass
+    # fallback: if it's a single scalar, treat as singleton list
+    return [val]
+
+
 def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
     """Return {vertex: float_coeff} for the given endpoint_set.
     Reads from edge_attrs[private_key] which may be serialized in multiple shapes.
@@ -101,6 +215,27 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
     return out
 
 
+def _build_attr_map(df, key_col: str) -> dict:
+    """Build {key: attrs} mapping from a dataframe-like table."""
+    out = {}
+    for rec in _iter_rows(df):
+        if not isinstance(rec, dict):
+            try:
+                rec = dict(rec)
+            except Exception:
+                continue
+        if key_col not in rec:
+            continue
+        key = rec.get(key_col)
+        if key is None:
+            continue
+        rec = dict(rec)
+        rec.pop(key_col, None)
+        if key not in out:
+            out[key] = rec
+    return out
+
+
 def to_parquet_graphdir(graph: AnnNet, path):
     """Write lossless GraphDir:
       vertices.parquet, edges.parquet, slices.parquet, edge_slices.parquet, manifest.json
@@ -110,23 +245,22 @@ def to_parquet_graphdir(graph: AnnNet, path):
     path.mkdir(parents=True, exist_ok=True)
 
     # vertices
+    v_attr_map = _build_attr_map(getattr(graph, "vertex_attributes", None), "vertex_id")
     v_rows = []
     for v in graph.vertices():
         row = {"vertex_id": v}
-        try:
-            attrs = graph.vertex_attributes.filter(
-                graph.vertex_attributes["vertex_id"] == v
-            ).to_dicts()
-            if attrs:
-                d = dict(attrs[0])
-                d.pop("vertex_id", None)
-                row.update(d)
-        except Exception:
-            pass
+        attrs = v_attr_map.get(v)
+        if attrs:
+            row.update(attrs)
         v_rows.append(row)
-    pl.DataFrame(v_rows).write_parquet(path / "vertices.parquet", compression="zstd")
+    _write_parquet_df(
+        build_dataframe_from_rows(v_rows),
+        path / "vertices.parquet",
+        compression="zstd",
+    )
 
     # edges
+    e_attr_map = _build_attr_map(getattr(graph, "edge_attributes", None), "edge_id")
     e_rows = []
     for eidx in range(graph.number_of_edges()):
         eid = graph.idx_to_edge[eidx]
@@ -138,14 +272,26 @@ def to_parquet_graphdir(graph: AnnNet, path):
             "directed": bool(_is_directed_eid(graph, eid)),
             "weight": float(getattr(graph, "edge_weights", {}).get(eid, 1.0)),
         }
-        try:
-            attrs = graph.edge_attributes.filter(graph.edge_attributes["edge_id"] == eid).to_dicts()
-            if attrs:
-                d = dict(attrs[0])
-                d.pop("edge_id", None)
-                row.update(d)
-        except Exception:
-            pass
+        attrs = e_attr_map.get(eid)
+        if attrs:
+            # Filter out structural columns to prevent contamination
+            attrs = {
+                k: v
+                for k, v in attrs.items()
+                if k
+                not in (
+                    "head",
+                    "tail",
+                    "members",
+                    "source",
+                    "target",
+                    "kind",
+                    "directed",
+                    "weight",
+                    "edge_id",
+                )
+            }
+            row.update(attrs)
 
         if row["kind"] == "binary":
             members = S | T
@@ -158,6 +304,10 @@ def to_parquet_graphdir(graph: AnnNet, path):
         else:
             head_map = _endpoint_coeff_map(row, "__source_attr", S) or dict.fromkeys(S or [], 1.0)
             tail_map = _endpoint_coeff_map(row, "__target_attr", T) or dict.fromkeys(T or [], 1.0)
+            # DEBUG
+            print(f"Exporting hyperedge {eid}: S={S}, T={T}, directed={row['directed']}")
+            print(f"  head_map={head_map}, tail_map={tail_map}")
+
             row.update(
                 {
                     "head": list(head_map.keys()),
@@ -167,8 +317,20 @@ def to_parquet_graphdir(graph: AnnNet, path):
                     else None,
                 }
             )
+        # Right before line 260: e_rows.append(row)
+        if row["kind"] == "hyper":
+            print(f"Row to append: {row}")
+
         e_rows.append(row)
-    pl.DataFrame(e_rows).write_parquet(path / "edges.parquet", compression="zstd")
+
+    # After line 264, before _write_parquet_df:
+    print(f"Sample e_rows[0] if hyper: {[r for r in e_rows if r['kind'] == 'hyper'][0]}")
+
+    _write_parquet_df(
+        build_dataframe_from_rows(e_rows),
+        path / "edges.parquet",
+        compression="zstd",
+    )
 
     # slices
     L = []
@@ -177,7 +339,11 @@ def to_parquet_graphdir(graph: AnnNet, path):
             L.append({"slice_id": lid})
     except Exception:
         pass
-    pl.DataFrame(L).write_parquet(path / "slices.parquet", compression="zstd")
+    _write_parquet_df(
+        build_dataframe_from_rows(L),
+        path / "slices.parquet",
+        compression="zstd",
+    )
 
     # edge_slices
     EL = []
@@ -197,7 +363,11 @@ def to_parquet_graphdir(graph: AnnNet, path):
                 EL.append(rec)
     except Exception:
         pass
-    pl.DataFrame(EL).write_parquet(path / "edge_slices.parquet", compression="zstd")
+    _write_parquet_df(
+        build_dataframe_from_rows(EL),
+        path / "edge_slices.parquet",
+        compression="zstd",
+    )
 
     # manifest.json (tiny)
     manifest = {
@@ -216,7 +386,7 @@ def to_parquet_graphdir(graph: AnnNet, path):
                 getattr(graph, "_vertex_layer_attrs", {})
             ),
             "layer_tuple_attrs": _serialize_layer_tuple_attrs(getattr(graph, "_layer_attrs", {})),
-            "layer_attributes": _df_to_rows(getattr(graph, "layer_attributes", pl.DataFrame())),
+            "layer_attributes": _safe_df_to_rows(getattr(graph, "layer_attributes", None)),
         },
     }
     (path / "manifest.json").write_text(json.dumps(manifest, indent=2))
@@ -227,29 +397,25 @@ def from_parquet_graphdir(path) -> AnnNet:
     from ..core.graph import AnnNet
 
     path = Path(path)
-    V = pl.read_parquet(path / "vertices.parquet")
-    E = pl.read_parquet(path / "edges.parquet")
-    L = (
-        pl.read_parquet(path / "slices.parquet", use_pyarrow=True)
-        if (path / "slices.parquet").exists()
-        else pl.DataFrame([])
-    )
+    V = _read_parquet(path / "vertices.parquet")
+    E = _read_parquet(path / "edges.parquet")
+    L = _read_parquet(path / "slices.parquet") if (path / "slices.parquet").exists() else None
     EL = (
-        pl.read_parquet(path / "edge_slices.parquet", use_pyarrow=True)
+        _read_parquet(path / "edge_slices.parquet")
         if (path / "edge_slices.parquet").exists()
-        else pl.DataFrame([])
+        else None
     )
 
     H = AnnNet()
     # vertices
-    for rec in V.to_dicts():
+    for rec in _iter_rows(V):
         vid = rec.pop("vertex_id")
         H.add_vertex(vid)
         if rec:
             H.set_vertex_attrs(vid, **rec)
 
     # edges
-    for rec in E.to_dicts():
+    for rec in _iter_rows(E):
         eid = rec.pop("edge_id")
         kind = rec.pop("kind")
         directed = bool(rec.pop("directed", True))
@@ -272,14 +438,24 @@ def from_parquet_graphdir(path) -> AnnNet:
             H.add_edge(u, v, edge_id=eid, edge_directed=directed)
 
         else:  # hyper
-            head = rec.pop("head", None) or []
-            tail = rec.pop("tail", None) or []
-            members = rec.pop("members", None) or []
+            head = _as_list_or_empty(rec.pop("head", None))
+            tail = _as_list_or_empty(rec.pop("tail", None))
+            members = _as_list_or_empty(rec.pop("members", None))
+
+            # DEBUG: Print what you actually have
             if directed:
+                print(f"Directed hyperedge {eid}: head={head}, tail={tail}")
+                if len(head) < 1 or len(tail) < 1:
+                    print(f"  SKIPPING - invalid directed hyperedge")
+                    continue
                 H.add_hyperedge(head=list(head), tail=list(tail), edge_id=eid, edge_directed=True)
             else:
                 if not members:
                     members = list(set(head) | set(tail))
+                print(f"Undirected hyperedge {eid}: members={members}, head={head}, tail={tail}")
+                if len(members) < 2:
+                    print(f"  SKIPPING - <2 members")
+                    continue
                 H.add_hyperedge(members=list(members), edge_id=eid, edge_directed=False)
 
         # weight
@@ -291,7 +467,7 @@ def from_parquet_graphdir(path) -> AnnNet:
             H.set_edge_attrs(eid, **rec)
 
     # slices
-    for rec in L.to_dicts():
+    for rec in _iter_rows(L):
         lid = rec.get("slice_id")
         try:
             if lid not in set(H.list_slices(include_default=True)):
@@ -300,7 +476,7 @@ def from_parquet_graphdir(path) -> AnnNet:
             pass
 
     # edge_slices
-    for rec in EL.to_dicts():
+    for rec in _iter_rows(EL):
         lid = rec.get("slice_id")
         eid = rec.get("edge_id")
         if lid is None or eid is None:
@@ -359,7 +535,7 @@ def from_parquet_graphdir(path) -> AnnNet:
 
             layer_attr_rows = mm.get("layer_attributes", [])
             if layer_attr_rows:
-                H.layer_attributes = _rows_to_df(layer_attr_rows)
+                H.layer_attributes = build_dataframe_from_rows(layer_attr_rows)
 
         except Exception:
             pass

@@ -12,9 +12,9 @@ from annnet.adapters.pyg_adapter import to_pyg
 from annnet.core.graph import AnnNet
 from annnet.io.cx2_io import from_cx2, to_cx2
 from annnet.io.dataframe_io import from_dataframes, to_dataframes
-from annnet.io.GraphDir_Parquet_io import from_parquet_graphdir, to_parquet_graphdir
 from annnet.io.GraphML_io import from_gexf, from_graphml, to_gexf, to_graphml
 from annnet.io.json_io import from_json, to_json
+from annnet.io.Parquet_io import from_parquet_graphdir, to_parquet_graphdir
 from annnet.io.SBML_io import from_sbml
 from annnet.io.SIF_io import from_sif, to_sif
 from benchmarks.harness.metrics import measure

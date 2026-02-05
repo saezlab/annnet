@@ -4,11 +4,11 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
 
-from annnet.io.GraphDir_Parquet_io import (
+from annnet.io.json_io import from_json, to_json  # JSON (JavaScript Object Notation)
+from annnet.io.Parquet_io import (
     from_parquet_graphdir,
     to_parquet_graphdir,
 )  # Parquet (columnar storage)
-from annnet.io.json_io import from_json, to_json  # JSON (JavaScript Object Notation)
 from annnet.io.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
 
 

@@ -73,6 +73,29 @@ def _get_edge_weight(graph: AnnNet, edge_id: str, default=1.0):
     return default
 
 
+def _build_edge_attr_map(graph: AnnNet):
+    ea = getattr(graph, "edge_attributes", None)
+    if ea is None or not hasattr(ea, "columns") or not hasattr(ea, "to_dicts"):
+        return None
+    try:
+        if "edge_id" not in ea.columns:
+            return None
+        rows = ea.to_dicts()
+        if not rows:
+            return None
+        out = {}
+        for row in rows:
+            eid = row.get("edge_id", None)
+            if eid is None:
+                continue
+            attrs = {k: v for k, v in row.items() if k != "edge_id" and v is not None}
+            if attrs:
+                out[eid] = attrs
+        return out if out else None
+    except Exception:
+        return None
+
+
 def to_sif(
     graph: AnnNet,
     path: str | None = None,
@@ -117,7 +140,6 @@ def to_sif(
             "hyperedges": {},
             "vertex_attrs": {},
             "edge_metadata": {},
-            "edge_metadata": {},
             "slices": {},
             "multilayer": {
                 "aspects": list(getattr(graph, "aspects", [])),
@@ -140,6 +162,10 @@ def to_sif(
     )
 
     if path:
+        edge_attr_map = _build_edge_attr_map(graph)
+        ew = getattr(graph, "edge_weights", None)
+        edge_weight_get = ew.get if ew is not None and hasattr(ew, "get") else None
+
         with open(path, "w", encoding="utf-8") as f:
             edge_defs = getattr(graph, "edge_definitions", {}) or {}
 
@@ -156,14 +182,24 @@ def to_sif(
                 ):
                     continue
 
-                all_attrs = _get_all_edge_attrs(graph, eid)
+                if edge_attr_map is not None:
+                    all_attrs = edge_attr_map.get(eid, {})
+                else:
+                    all_attrs = _get_all_edge_attrs(graph, eid)
                 rel = all_attrs.get(relation_attr, default_relation)
 
                 f.write(f"{src_str}\t{rel}\t{tgt_str}\n")
 
                 if lossless:
                     directed = getattr(graph, "edge_directed", {}).get(eid, True)
-                    weight = _get_edge_weight(graph, eid, 1.0)
+                    if edge_weight_get is not None:
+                        try:
+                            w = edge_weight_get(eid, 1.0)
+                            weight = float(w) if w is not None else 1.0
+                        except Exception:
+                            weight = 1.0
+                    else:
+                        weight = _get_edge_weight(graph, eid, 1.0)
 
                     manifest["binary_edges"][eid] = {
                         "source": src_str,

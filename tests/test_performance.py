@@ -9,11 +9,11 @@ import time
 import pytest
 
 from annnet.io.dataframe_io import from_dataframes, to_dataframes  # DF (DataFrame)
-from annnet.io.GraphDir_Parquet_io import (
+from annnet.io.json_io import from_json, to_json  # JSON (JavaScript Object Notation)
+from annnet.io.Parquet_io import (
     from_parquet_graphdir,
     to_parquet_graphdir,
 )  # Parquet (columnar storage)
-from annnet.io.json_io import from_json, to_json  # JSON (JavaScript Object Notation)
 
 
 class TestPerformance:

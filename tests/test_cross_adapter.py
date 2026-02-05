@@ -7,15 +7,15 @@ sys.path.insert(0, str(ROOT))
 
 import polars as pl  # PL (Polars)
 
-from annnet.io.GraphDir_Parquet_io import (
-    from_parquet_graphdir,
-    to_parquet_graphdir,
-)
 from annnet.io.GraphML_io import (
     from_graphml,
     to_graphml,
 )  # GraphML (AnnNet Markup Language)
 from annnet.io.json_io import from_json, to_json
+from annnet.io.Parquet_io import (
+    from_parquet_graphdir,
+    to_parquet_graphdir,
+)
 from annnet.io.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
 
 

@@ -5,7 +5,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
 
 from annnet.io.dataframe_io import to_dataframes  # DF (DataFrame)
-from annnet.io.GraphDir_Parquet_io import (
+from annnet.io.Parquet_io import (
     to_parquet_graphdir,
 )  # Parquet (columnar storage)
 from annnet.io.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
