@@ -407,7 +407,7 @@ def to_parquet(graph: AnnNet, path):
 
 
 def from_parquet(path) -> AnnNet:
-    """Read GraphDir (lossless vs write_parquet_graphdir())."""
+    """Read GraphDir (lossless) using bulk ops for speed."""
     from ..core.graph import AnnNet
 
     path = Path(path)
@@ -421,94 +421,218 @@ def from_parquet(path) -> AnnNet:
     )
 
     H = AnnNet()
-    # vertices
+
+    # -------------------------
+    # Vertices (bulk)
+    # -------------------------
+    # Convert vertices DF to dict rows once and bulk add
+    v_rows = []
     for rec in _iter_rows(V):
-        vid = rec.pop("vertex_id")
-        H.add_vertex(vid)
-        if rec:
-            H.set_vertex_attrs(vid, **rec)
+        v_rows.append(dict(rec))
+    if v_rows:
+        H.add_vertices_bulk(v_rows)
 
-    # edges
-    for rec in _iter_rows(E):
-        eid = rec.pop("edge_id")
-        kind = rec.pop("kind")
-        directed = bool(rec.pop("directed", True))
-        w = float(rec.pop("weight", 1.0))
+    # -------------------------
+    # Edges (bulk, columnar)
+    # -------------------------
+    # Split binary vs hyper first (avoid row-wise graph ops)
+    try:
+        # Polars / Narwhals fast path
+        binary = E.filter(E["kind"] == "binary")
+        hyper = E.filter(E["kind"] == "hyper")
+        is_polars_like = True
+    except Exception:
+        # Fallback: materialize rows and split
+        rows = list(_iter_rows(E))
+        binary = [r for r in rows if r.get("kind") == "binary"]
+        hyper = [r for r in rows if r.get("kind") == "hyper"]
+        is_polars_like = False
 
-        if kind == "binary":
-            # take endpoints and drop hyper-only columns if present
+    # ---- Binary edges ----
+    if is_polars_like:
+        # Columnar extraction
+        src = binary.get_column("source").to_list() if "source" in binary.columns else []
+        dst = binary.get_column("target").to_list() if "target" in binary.columns else []
+        eids = binary.get_column("edge_id").to_list()
+        directed = binary.get_column("directed").to_list() if "directed" in binary.columns else [True] * len(eids)
+        weights = binary.get_column("weight").to_list() if "weight" in binary.columns else [1.0] * len(eids)
+
+        # Build minimal dicts for bulk add
+        edge_rows = (
+            {"source": u, "target": v, "edge_id": eid, "edge_directed": bool(d)}
+            for u, v, eid, d in zip(src, dst, eids, directed)
+            if u is not None and v is not None
+        )
+        H.add_edges_bulk(edge_rows)
+
+        # Apply weights in batch
+        for eid, w in zip(eids, weights):
+            H.edge_weights[eid] = float(w)
+
+        # Remaining edge attrs (vectorized -> rows, but small)
+        # Drop structural columns before attaching attrs
+        drop_cols = {"edge_id", "kind", "directed", "weight", "source", "target", "head", "tail", "members"}
+        for rec in _iter_rows(binary):
+            eid = rec.get("edge_id")
+            attrs = {k: v for k, v in rec.items() if k not in drop_cols}
+            attrs = _strip_nulls(attrs)
+            if attrs:
+                H.set_edge_attrs(eid, **attrs)
+
+    else:
+        # Fallback path (still bulk, but from Python rows)
+        edge_rows = []
+        weights = {}
+        extra_attrs = {}
+        for rec in binary:
+            rec = dict(rec)
+            eid = rec.pop("edge_id")
             u = rec.pop("source", None)
             v = rec.pop("target", None)
-            # these can exist as NULL because the DF is wide
-            rec.pop("head", None)
-            rec.pop("tail", None)
-            rec.pop("members", None)
-
+            d = bool(rec.pop("directed", True))
+            w = float(rec.pop("weight", 1.0))
             if u is None or v is None:
-                # defensive: reconstruct from any leftover endpoint list (rare)
-                # if nothing found, skip cleanly
                 continue
+            edge_rows.append({"source": u, "target": v, "edge_id": eid, "edge_directed": d})
+            weights[eid] = w
+            attrs = _strip_nulls({k: v for k, v in rec.items() if k not in ("kind", "head", "tail", "members")})
+            if attrs:
+                extra_attrs[eid] = attrs
 
-            H.add_edge(u, v, edge_id=eid, edge_directed=directed)
+        if edge_rows:
+            H.add_edges_bulk(edge_rows)
+            for eid, w in weights.items():
+                H.edge_weights[eid] = w
+            if extra_attrs:
+                H.set_edge_attrs_bulk(extra_attrs)
 
-        else:  # hyper
-            head = _as_list_or_empty(rec.pop("head", None))
-            tail = _as_list_or_empty(rec.pop("tail", None))
-            members = _as_list_or_empty(rec.pop("members", None))
+    # ---- Hyperedges ----
+    if is_polars_like:
+        eids = hyper.get_column("edge_id").to_list()
+        directed = hyper.get_column("directed").to_list() if "directed" in hyper.columns else [False] * len(eids)
+        weights = hyper.get_column("weight").to_list() if "weight" in hyper.columns else [1.0] * len(eids)
 
-            # DEBUG: Print what you actually have
-            if directed:
-                #print(f"Directed hyperedge {eid}: head={head}, tail={tail}")
-                if len(head) < 1 or len(tail) < 1:
-                    print(f"  SKIPPING - invalid directed hyperedge")
-                    continue
-                H.add_hyperedge(head=list(head), tail=list(tail), edge_id=eid, edge_directed=True)
+        heads = hyper.get_column("head").to_list() if "head" in hyper.columns else [None] * len(eids)
+        tails = hyper.get_column("tail").to_list() if "tail" in hyper.columns else [None] * len(eids)
+        members = hyper.get_column("members").to_list() if "members" in hyper.columns else [None] * len(eids)
+
+        hyper_rows = []
+        for eid, d, h, t, m in zip(eids, directed, heads, tails, members):
+            d = bool(d)
+            if d:
+                hh = _as_list_or_empty(h)
+                tt = _as_list_or_empty(t)
+                if hh and tt:
+                    hyper_rows.append({"head": list(hh), "tail": list(tt), "edge_id": eid, "edge_directed": True})
             else:
-                if not members:
-                    members = list(set(head) | set(tail))
-                #print(f"Undirected hyperedge {eid}: members={members}, head={head}, tail={tail}")
-                if len(members) < 2:
-                    print(f"  SKIPPING - <2 members")
-                    continue
-                H.add_hyperedge(members=list(members), edge_id=eid, edge_directed=False)
+                mm = _as_list_or_empty(m)
+                if not mm:
+                    mm = list(set(_as_list_or_empty(h)) | set(_as_list_or_empty(t)))
+                if len(mm) >= 2:
+                    hyper_rows.append({"members": list(mm), "edge_id": eid, "edge_directed": False})
 
-        # weight
-        H.edge_weights[eid] = w
+        if hyper_rows:
+            H.add_hyperedges_bulk(hyper_rows)
 
-        # drop schema-nulls before attaching attrs (avoids head=None, etc.)
-        rec = _strip_nulls(rec)
-        if rec:
-            H.set_edge_attrs(eid, **rec)
+        for eid, w in zip(eids, weights):
+            H.edge_weights[eid] = float(w)
 
-    # slices
-    for rec in _iter_rows(L):
-        lid = rec.get("slice_id")
-        try:
-            if lid not in set(H.list_slices(include_default=True)):
-                H.add_slice(lid)
-        except Exception:
-            pass
+        # Extra attrs
+        drop_cols = {"edge_id", "kind", "directed", "weight", "source", "target", "head", "tail", "members"}
+        extra = {}
+        for rec in _iter_rows(hyper):
+            eid = rec.get("edge_id")
+            attrs = {k: v for k, v in rec.items() if k not in drop_cols}
+            attrs = _strip_nulls(attrs)
+            if attrs:
+                extra[eid] = attrs
+        if extra:
+            H.set_edge_attrs_bulk(extra)
 
-    # edge_slices
-    for rec in _iter_rows(EL):
-        lid = rec.get("slice_id")
-        eid = rec.get("edge_id")
-        if lid is None or eid is None:
-            continue
-        try:
-            H.add_edge_to_slice(lid, eid)
-        except Exception:
-            pass
-        if "weight" in rec:
+    else:
+        hyper_rows = []
+        weights = {}
+        extra_attrs = {}
+        for rec in hyper:
+            rec = dict(rec)
+            eid = rec.pop("edge_id")
+            d = bool(rec.pop("directed", False))
+            w = float(rec.pop("weight", 1.0))
+            h = _as_list_or_empty(rec.pop("head", None))
+            t = _as_list_or_empty(rec.pop("tail", None))
+            m = _as_list_or_empty(rec.pop("members", None))
+
+            if d:
+                if h and t:
+                    hyper_rows.append({"head": list(h), "tail": list(t), "edge_id": eid, "edge_directed": True})
+            else:
+                if not m:
+                    m = list(set(h) | set(t))
+                if len(m) >= 2:
+                    hyper_rows.append({"members": list(m), "edge_id": eid, "edge_directed": False})
+
+            weights[eid] = w
+            attrs = _strip_nulls({k: v for k, v in rec.items() if k != "kind"})
+            if attrs:
+                extra_attrs[eid] = attrs
+
+        if hyper_rows:
+            H.add_hyperedges_bulk(hyper_rows)
+            for eid, w in weights.items():
+                H.edge_weights[eid] = w
+            if extra_attrs:
+                H.set_edge_attrs_bulk(extra_attrs)
+
+    # -------------------------
+    # Slices
+    # -------------------------
+    if L is not None:
+        for rec in _iter_rows(L):
+            lid = rec.get("slice_id")
             try:
-                H.set_edge_slice_attrs(lid, eid, weight=float(rec["weight"]))
+                if lid not in set(H.list_slices(include_default=True)):
+                    H.add_slice(lid)
             except Exception:
-                try:
-                    H.set_edge_slice_attr(lid, eid, "weight", float(rec["weight"]))
-                except Exception:
-                    pass
+                pass
 
-    # manifest (multilayer)
+    # -------------------------
+    # Edge slices (bulk add edges to slice)
+    # -------------------------
+    if EL is not None:
+        by_slice = {}
+        slice_weights = {}
+        for rec in _iter_rows(EL):
+            lid = rec.get("slice_id")
+            eid = rec.get("edge_id")
+            if lid is None or eid is None:
+                continue
+            by_slice.setdefault(lid, []).append(eid)
+            if "weight" in rec and rec["weight"] is not None:
+                slice_weights.setdefault(lid, {})[eid] = float(rec["weight"])
+
+        for lid, eids in by_slice.items():
+            try:
+                H.add_edges_to_slice_bulk(lid, eids)
+            except Exception:
+                for eid in eids:
+                    try:
+                        H.add_edge_to_slice(lid, eid)
+                    except Exception:
+                        pass
+
+        for lid, mp in slice_weights.items():
+            for eid, w in mp.items():
+                try:
+                    H.set_edge_slice_attrs(lid, eid, weight=w)
+                except Exception:
+                    try:
+                        H.set_edge_slice_attr(lid, eid, "weight", w)
+                    except Exception:
+                        pass
+
+    # -------------------------
+    # Manifest (unchanged)
+    # -------------------------
     manifest_path = path / "manifest.json"
     if manifest_path.exists():
         try:
@@ -531,7 +655,6 @@ def from_parquet(path) -> AnnNet:
             if VM_data:
                 H._VM = _deserialize_VM(VM_data)
 
-            # edge_kind / edge_layers
             ek = mm.get("edge_kind", {})
             el_ser = mm.get("edge_layers", {})
             if ek:
