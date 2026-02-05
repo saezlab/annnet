@@ -22,28 +22,9 @@ from ..adapters._utils import (
 from .io_annnet import _iter_rows, _read_parquet, _write_parquet_df
 
 
-def build_dataframe_from_rows(rows):
-    """Build a DataFrame from a list of row records using available backends.
+def _build_dataframe_from_rows(rows):
+    """Build a DataFrame from a list of row records using available backends."""
 
-    Parameters
-    ----------
-    rows : list[dict] | list[list] | list[tuple]
-        Row records to load into a DataFrame.
-
-    Returns
-    -------
-    DataFrame-like
-        Polars DataFrame if available, otherwise pandas DataFrame.
-
-    Raises
-    ------
-    RuntimeError
-        If neither polars nor pandas is available.
-
-    Notes
-    -----
-    Uses Polars when installed for performance; otherwise falls back to pandas.
-    """
     try:
         import polars as pl
 
@@ -57,7 +38,7 @@ def build_dataframe_from_rows(rows):
             "members": pl.List(pl.Utf8),
         }
 
-
+        first_row = rows[0]
         for key, value in first_row.items():
             if isinstance(value, (list, tuple)):
                 # Force list columns to be List(Utf8) type
@@ -188,6 +169,7 @@ def _as_list_or_empty(val):
     # Polars Series / Array
     try:
         import polars as pl
+
         if isinstance(val, pl.Series):
             return val.to_list()
     except Exception:
@@ -196,6 +178,7 @@ def _as_list_or_empty(val):
     # numpy array
     try:
         import numpy as np
+
         if isinstance(val, np.ndarray):
             return val.tolist()
     except Exception:
@@ -270,7 +253,7 @@ def to_parquet(graph: AnnNet, path):
             row.update(attrs)
         v_rows.append(row)
     _write_parquet_df(
-        build_dataframe_from_rows(v_rows),
+        _build_dataframe_from_rows(v_rows),
         path / "vertices.parquet",
         compression="zstd",
     )
@@ -321,8 +304,8 @@ def to_parquet(graph: AnnNet, path):
             head_map = _endpoint_coeff_map(row, "__source_attr", S) or dict.fromkeys(S or [], 1.0)
             tail_map = _endpoint_coeff_map(row, "__target_attr", T) or dict.fromkeys(T or [], 1.0)
             # DEBUG
-            #print(f"Exporting hyperedge {eid}: S={S}, T={T}, directed={row['directed']}")
-            #print(f"  head_map={head_map}, tail_map={tail_map}")
+            # print(f"Exporting hyperedge {eid}: S={S}, T={T}, directed={row['directed']}")
+            # print(f"  head_map={head_map}, tail_map={tail_map}")
 
             row.update(
                 {
@@ -333,15 +316,15 @@ def to_parquet(graph: AnnNet, path):
                     else None,
                 }
             )
-        #if row["kind"] == "hyper":
-            #print(f"Row to append: {row}")
+        # if row["kind"] == "hyper":
+        # print(f"Row to append: {row}")
 
         e_rows.append(row)
 
-    #print(f"Sample e_rows[0] if hyper: {[r for r in e_rows if r['kind'] == 'hyper'][0]}")
+    # print(f"Sample e_rows[0] if hyper: {[r for r in e_rows if r['kind'] == 'hyper'][0]}")
 
     _write_parquet_df(
-        build_dataframe_from_rows(e_rows),
+        _build_dataframe_from_rows(e_rows),
         path / "edges.parquet",
         compression="zstd",
     )
@@ -354,7 +337,7 @@ def to_parquet(graph: AnnNet, path):
     except Exception:
         pass
     _write_parquet_df(
-        build_dataframe_from_rows(L),
+        _build_dataframe_from_rows(L),
         path / "slices.parquet",
         compression="zstd",
     )
@@ -378,7 +361,7 @@ def to_parquet(graph: AnnNet, path):
     except Exception:
         pass
     _write_parquet_df(
-        build_dataframe_from_rows(EL),
+        _build_dataframe_from_rows(EL),
         path / "edge_slices.parquet",
         compression="zstd",
     )
@@ -454,8 +437,16 @@ def from_parquet(path) -> AnnNet:
         src = binary.get_column("source").to_list() if "source" in binary.columns else []
         dst = binary.get_column("target").to_list() if "target" in binary.columns else []
         eids = binary.get_column("edge_id").to_list()
-        directed = binary.get_column("directed").to_list() if "directed" in binary.columns else [True] * len(eids)
-        weights = binary.get_column("weight").to_list() if "weight" in binary.columns else [1.0] * len(eids)
+        directed = (
+            binary.get_column("directed").to_list()
+            if "directed" in binary.columns
+            else [True] * len(eids)
+        )
+        weights = (
+            binary.get_column("weight").to_list()
+            if "weight" in binary.columns
+            else [1.0] * len(eids)
+        )
 
         # Build minimal dicts for bulk add
         edge_rows = (
@@ -471,7 +462,17 @@ def from_parquet(path) -> AnnNet:
 
         # Remaining edge attrs (vectorized -> rows, but small)
         # Drop structural columns before attaching attrs
-        drop_cols = {"edge_id", "kind", "directed", "weight", "source", "target", "head", "tail", "members"}
+        drop_cols = {
+            "edge_id",
+            "kind",
+            "directed",
+            "weight",
+            "source",
+            "target",
+            "head",
+            "tail",
+            "members",
+        }
         for rec in _iter_rows(binary):
             eid = rec.get("edge_id")
             attrs = {k: v for k, v in rec.items() if k not in drop_cols}
@@ -495,7 +496,9 @@ def from_parquet(path) -> AnnNet:
                 continue
             edge_rows.append({"source": u, "target": v, "edge_id": eid, "edge_directed": d})
             weights[eid] = w
-            attrs = _strip_nulls({k: v for k, v in rec.items() if k not in ("kind", "head", "tail", "members")})
+            attrs = _strip_nulls(
+                {k: v for k, v in rec.items() if k not in ("kind", "head", "tail", "members")}
+            )
             if attrs:
                 extra_attrs[eid] = attrs
 
@@ -509,12 +512,26 @@ def from_parquet(path) -> AnnNet:
     # ---- Hyperedges ----
     if is_polars_like:
         eids = hyper.get_column("edge_id").to_list()
-        directed = hyper.get_column("directed").to_list() if "directed" in hyper.columns else [False] * len(eids)
-        weights = hyper.get_column("weight").to_list() if "weight" in hyper.columns else [1.0] * len(eids)
+        directed = (
+            hyper.get_column("directed").to_list()
+            if "directed" in hyper.columns
+            else [False] * len(eids)
+        )
+        weights = (
+            hyper.get_column("weight").to_list() if "weight" in hyper.columns else [1.0] * len(eids)
+        )
 
-        heads = hyper.get_column("head").to_list() if "head" in hyper.columns else [None] * len(eids)
-        tails = hyper.get_column("tail").to_list() if "tail" in hyper.columns else [None] * len(eids)
-        members = hyper.get_column("members").to_list() if "members" in hyper.columns else [None] * len(eids)
+        heads = (
+            hyper.get_column("head").to_list() if "head" in hyper.columns else [None] * len(eids)
+        )
+        tails = (
+            hyper.get_column("tail").to_list() if "tail" in hyper.columns else [None] * len(eids)
+        )
+        members = (
+            hyper.get_column("members").to_list()
+            if "members" in hyper.columns
+            else [None] * len(eids)
+        )
 
         hyper_rows = []
         for eid, d, h, t, m in zip(eids, directed, heads, tails, members):
@@ -523,7 +540,9 @@ def from_parquet(path) -> AnnNet:
                 hh = _as_list_or_empty(h)
                 tt = _as_list_or_empty(t)
                 if hh and tt:
-                    hyper_rows.append({"head": list(hh), "tail": list(tt), "edge_id": eid, "edge_directed": True})
+                    hyper_rows.append(
+                        {"head": list(hh), "tail": list(tt), "edge_id": eid, "edge_directed": True}
+                    )
             else:
                 mm = _as_list_or_empty(m)
                 if not mm:
@@ -538,7 +557,17 @@ def from_parquet(path) -> AnnNet:
             H.edge_weights[eid] = float(w)
 
         # Extra attrs
-        drop_cols = {"edge_id", "kind", "directed", "weight", "source", "target", "head", "tail", "members"}
+        drop_cols = {
+            "edge_id",
+            "kind",
+            "directed",
+            "weight",
+            "source",
+            "target",
+            "head",
+            "tail",
+            "members",
+        }
         extra = {}
         for rec in _iter_rows(hyper):
             eid = rec.get("edge_id")
@@ -564,7 +593,9 @@ def from_parquet(path) -> AnnNet:
 
             if d:
                 if h and t:
-                    hyper_rows.append({"head": list(h), "tail": list(t), "edge_id": eid, "edge_directed": True})
+                    hyper_rows.append(
+                        {"head": list(h), "tail": list(t), "edge_id": eid, "edge_directed": True}
+                    )
             else:
                 if not m:
                     m = list(set(h) | set(t))
@@ -672,7 +703,7 @@ def from_parquet(path) -> AnnNet:
 
             layer_attr_rows = mm.get("layer_attributes", [])
             if layer_attr_rows:
-                H.layer_attributes = build_dataframe_from_rows(layer_attr_rows)
+                H.layer_attributes = _build_dataframe_from_rows(layer_attr_rows)
 
         except Exception:
             pass

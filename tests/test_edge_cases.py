@@ -6,8 +6,8 @@ sys.path.insert(0, str(ROOT))
 
 from annnet.io.json_io import from_json, to_json  # JSON (JavaScript Object Notation)
 from annnet.io.Parquet_io import (
-    from_parquet_graphdir,
-    to_parquet_graphdir,
+    from_parquet,
+    to_parquet,
 )  # Parquet (columnar storage)
 from annnet.io.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
 
@@ -23,8 +23,8 @@ class TestEdgeCases:
         G_json = from_json(tmpdir_fixture / "empty.json")
         assert len(list(G_json.vertices())) == 0
 
-        to_parquet_graphdir(G, tmpdir_fixture / "empty_dir")
-        G_parquet = from_parquet_graphdir(tmpdir_fixture / "empty_dir")
+        to_parquet(G, tmpdir_fixture / "empty_dir")
+        G_parquet = from_parquet(tmpdir_fixture / "empty_dir")
         assert len(list(G_parquet.vertices())) == 0
 
         from annnet.io.dataframe_io import from_dataframes, to_dataframes
@@ -54,8 +54,8 @@ class TestEdgeCases:
         to_json(G, tmpdir_fixture / "special.json")
         G_json = from_json(tmpdir_fixture / "special.json")
         assert set(G.vertices()) == set(G_json.vertices())
-        to_parquet_graphdir(G, tmpdir_fixture / "special_dir")
-        G_parquet = from_parquet_graphdir(tmpdir_fixture / "special_dir")
+        to_parquet(G, tmpdir_fixture / "special_dir")
+        G_parquet = from_parquet(tmpdir_fixture / "special_dir")
         assert set(G.vertices()) == set(G_parquet.vertices())
 
     def test_large_weights_and_extreme_values(self, tmpdir_fixture):
@@ -82,8 +82,8 @@ class TestEdgeCases:
         to_json(G, tmpdir_fixture / "loop.json")
         G_json = from_json(tmpdir_fixture / "loop.json")
         assert "loop" in G_json.edge_to_idx
-        to_parquet_graphdir(G, tmpdir_fixture / "loop_dir")
-        G_parquet = from_parquet_graphdir(tmpdir_fixture / "loop_dir")
+        to_parquet(G, tmpdir_fixture / "loop_dir")
+        G_parquet = from_parquet(tmpdir_fixture / "loop_dir")
         assert "loop" in G_parquet.edge_to_idx
         to_sif(
             G,
@@ -140,7 +140,7 @@ class TestEdgeCases:
             u = f"v{random.randint(0, n_vertices - 1)}"  # nosec B311
             v = f"v{random.randint(0, n_vertices - 1)}"  # nosec B311
             G.add_edge(u, v, edge_id=f"e{i}", weight=random.random())  # nosec B311
-        to_parquet_graphdir(G, tmpdir_fixture / "large_dir")
-        G_parquet = from_parquet_graphdir(tmpdir_fixture / "large_dir")
+        to_parquet(G, tmpdir_fixture / "large_dir")
+        G_parquet = from_parquet(tmpdir_fixture / "large_dir")
         assert len(list(G_parquet.vertices())) == n_vertices
         assert G_parquet.number_of_edges() == n_edges

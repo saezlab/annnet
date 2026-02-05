@@ -6,7 +6,7 @@ sys.path.insert(0, str(ROOT))
 
 from annnet.io.dataframe_io import to_dataframes  # DF (DataFrame)
 from annnet.io.Parquet_io import (
-    to_parquet_graphdir,
+    to_parquet,
 )  # Parquet (columnar storage)
 from annnet.io.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
 
@@ -35,7 +35,7 @@ class TestIntegration:
         to_sif(G, tmpdir_fixture / "network.sif", relation_attr="interaction_type")
         dfs = to_dataframes(G)
         dfs["edges"].write_csv(tmpdir_fixture / "interactions.csv")
-        to_parquet_graphdir(G, tmpdir_fixture / "network_archive")
+        to_parquet(G, tmpdir_fixture / "network_archive")
         assert (tmpdir_fixture / "network.sif").exists()
         assert (tmpdir_fixture / "interactions.csv").exists()
         assert (tmpdir_fixture / "network_archive").exists()

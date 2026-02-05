@@ -13,8 +13,8 @@ from annnet.io.GraphML_io import (
 )  # GraphML (AnnNet Markup Language)
 from annnet.io.json_io import from_json, to_json
 from annnet.io.Parquet_io import (
-    from_parquet_graphdir,
-    to_parquet_graphdir,
+    from_parquet,
+    to_parquet,
 )
 from annnet.io.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
 
@@ -25,7 +25,7 @@ class TestCrossAdapter:
     def test_all_adapters_lossless(self, complex_graph, tmpdir_fixture):
         G = complex_graph
         to_json(G, tmpdir_fixture / "graph.json", public_only=False)
-        to_parquet_graphdir(G, tmpdir_fixture / "graphdir")
+        to_parquet(G, tmpdir_fixture / "graphdir")
         to_sif(
             G,
             tmpdir_fixture / "graph.sif",
@@ -35,7 +35,7 @@ class TestCrossAdapter:
         to_graphml(G, tmpdir_fixture / "graph.graphml", hyperedge_mode="reify")
 
         G_json = from_json(tmpdir_fixture / "graph.json")
-        G_parquet = from_parquet_graphdir(tmpdir_fixture / "graphdir")
+        G_parquet = from_parquet(tmpdir_fixture / "graphdir")
         G_sif = from_sif(
             tmpdir_fixture / "graph.sif", manifest=tmpdir_fixture / "graph.sif.manifest.json"
         )

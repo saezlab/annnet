@@ -9,7 +9,7 @@ from annnet.adapters.igraph_adapter import from_igraph, to_igraph
 from annnet.adapters.networkx_adapter import from_nx, to_nx
 from annnet.core.graph import AnnNet
 from annnet.io.json_io import from_json, to_json
-from annnet.io.Parquet_io import from_parquet_graphdir, to_parquet_graphdir
+from annnet.io.Parquet_io import from_parquet, to_parquet
 from annnet.io.SIF_io import from_sif, to_sif
 
 try:
@@ -138,8 +138,8 @@ class TestMultilayerAdapters(unittest.TestCase):
     def test_graphdir_roundtrip(self):
         G = self._build_multilayer_graph()
         path = os.path.join(self.test_dir, "graph_dir")
-        to_parquet_graphdir(G, path)
-        G2 = from_parquet_graphdir(path)
+        to_parquet(G, path)
+        G2 = from_parquet(path)
         self._assert_multilayer_equal(G, G2)
 
     def test_sif_roundtrip(self):
