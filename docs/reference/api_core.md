@@ -6,3 +6,5 @@
       inherited_members: false
       show_root_heading: true
       show_bases: false
+      filters:
+      - "!^_"
