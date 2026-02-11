@@ -960,14 +960,14 @@ class AnnNet(
         """
         if lid not in self._slices:
             raise KeyError(f"slice {lid} does not exist")
-        
+
         if eid not in self.edge_definitions:
             if eid not in self.entity_to_idx:
                 self._register_edge_as_entity(eid)
             self.edge_definitions[eid] = (None, None, "edge_entity")
             self.edge_weights[eid] = 1.0
             self.edge_directed[eid] = False
-        
+
         self._slices[lid]["edges"].add(eid)
 
     def _propagate_to_shared_slices(self, edge_id, source, target):
