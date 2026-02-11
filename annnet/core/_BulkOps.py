@@ -991,7 +991,6 @@ class BulkOps:
         # intern hot strings
         try:
             import sys as _sys
-
             norm = [
                 (_sys.intern(eid) if isinstance(eid, str) else eid, attrs) for eid, attrs in norm
             ]
@@ -1010,6 +1009,11 @@ class BulkOps:
                 self.entity_types[eid] = "edge"
                 self._num_entities = idx + 1
                 new_rows += 1
+            
+            if eid not in self.edge_definitions:
+                self.edge_definitions[eid] = (None, None, "edge_entity")
+                self.edge_weights[eid] = 1.0
+                self.edge_directed[eid] = False
 
         if new_rows:
             self._grow_rows_to(self._num_entities)
