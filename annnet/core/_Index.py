@@ -1,5 +1,3 @@
-import narwhals as nw
-
 try:
     import polars as pl
 except Exception:
@@ -290,13 +288,16 @@ class IndexManager:
         -------
         dict
         """
+        counts = {"vertex": 0, "edge": 0}
+        for t in self._G.entity_types.values():
+            counts[t] = counts.get(t, 0) + 1
         return {
             "n_entities": len(self._G.entity_to_idx),
-            "n_vertices": sum(1 for t in self._G.entity_types.values() if t == "vertex"),
-            "n_edge_entities": sum(1 for t in self._G.entity_types.values() if t == "edge"),
+            "n_vertices": counts["vertex"],
+            "n_edge_entities": counts["edge"],
             "n_edges": len(self._G.edge_to_idx),
-            "max_row": max(self._G.idx_to_entity.keys()) if self._G.idx_to_entity else -1,
-            "max_col": max(self._G.idx_to_edge.keys()) if self._G.idx_to_edge else -1,
+            "max_row": self._G._num_entities - 1,
+            "max_col": self._G._num_edges - 1,
         }
 
 
