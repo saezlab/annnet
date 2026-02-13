@@ -211,12 +211,7 @@ class AttributesClass:
         if df is None or not hasattr(df, "columns") or key not in df.columns:
             return default
 
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame):
             rows = df.filter(pl.col("vertex_id") == vertex_id)
             if rows.height == 0:
                 return default
@@ -275,18 +270,12 @@ class AttributesClass:
         attribute = getattr(attribute, "value", attribute)
 
         df = self.vertex_attributes
-        df = self.vertex_attributes
         if df is None or not hasattr(df, "columns"):
             return None
         if "vertex_id" not in df.columns or attribute not in df.columns:
             return None
 
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame):
             if df.height == 0:
                 return None
             rows = df.filter(pl.col("vertex_id") == vertex_id)
@@ -393,12 +382,7 @@ class AttributesClass:
         if df is None or not hasattr(df, "columns") or key not in df.columns:
             return default
 
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame):
             rows = df.filter(pl.col("edge_id") == edge_id)
             if rows.height == 0:
                 return default
@@ -458,12 +442,7 @@ class AttributesClass:
         if "edge_id" not in df.columns or attribute not in df.columns:
             return None
 
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame):
             if df.height == 0:
                 return None
             rows = df.filter(pl.col("edge_id") == edge_id)
@@ -529,12 +508,7 @@ class AttributesClass:
         if df is None or not hasattr(df, "columns") or key not in df.columns:
             return default
 
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame):
             rows = df.filter(pl.col("slice_id") == slice_id)
             if rows.height == 0:
                 return default
@@ -606,12 +580,7 @@ class AttributesClass:
         # Ensure edge_slice_attributes compares strings to strings (defensive against prior bad writes),
         # but only cast when actually needed (skip no-op with_columns).
         df = self.edge_slice_attributes
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame) and df.height > 0:
+        if is_polars and isinstance(df, pl.DataFrame) and df.height > 0:
             to_cast = []
             if "slice_id" in df.columns and df.schema["slice_id"] != pl.Utf8:
                 to_cast.append(pl.col("slice_id").cast(pl.Utf8))
@@ -648,12 +617,7 @@ class AttributesClass:
         if df is None or not hasattr(df, "columns") or key not in df.columns:
             return default
 
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame):
             rows = df.filter((pl.col("slice_id") == slice_id) & (pl.col("edge_id") == edge_id))
             if rows.height == 0:
                 return default
@@ -736,12 +700,7 @@ class AttributesClass:
                 and hasattr(df, "columns")
                 and {"slice_id", "edge_id", "weight"} <= set(df.columns)
             ):
-                try:
-                    import polars as pl
-                except Exception:
-                    pl = None
-
-                if pl is not None and isinstance(df, pl.DataFrame) and df.height > 0:
+                if is_polars and isinstance(df, pl.DataFrame) and df.height > 0:
                     rows = df.filter(
                         (pl.col("slice_id") == slice) & (pl.col("edge_id") == edge_id)
                     ).select("weight")
@@ -990,8 +949,6 @@ class AttributesClass:
             if col not in schema:
                 # Add new column with appropriate null-casting
                 if is_polars:
-                    import polars as pl
-
                     pdf = nw.to_native(nw_df)
                     pl_target = self._dtype_for_value(val, prefer="polars")
                     pdf = pdf.with_columns(pl.lit(None).cast(pl_target).alias(col))
@@ -1098,7 +1055,7 @@ class AttributesClass:
         # 2. Existence Check
         try:
             key_cache = getattr(self, cache_name, None)
-            current_df_id = id(nw.to_native(nw_df))
+            current_df_id = id(df)
             if key_cache is None or getattr(self, df_id_name, None) != current_df_id:
                 if key_cols == ("slice_id", "edge_id"):
                     key_cache = set(
@@ -1360,14 +1317,9 @@ class AttributesClass:
             eid = edge
 
         df = self.edge_attributes
-        # Polars-safe: iterate the (at most one) row as a dict
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
 
         # Polars fast-path
-        if pl is not None and isinstance(df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame):
             for row in df.filter(pl.col("edge_id") == eid).iter_rows(named=True):
                 return dict(row)
             return {}
@@ -1407,12 +1359,8 @@ class AttributesClass:
             Attribute dictionary for that vertex. Empty if not found.
         """
         df = self.vertex_attributes
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
 
-        if pl is not None and isinstance(df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame):
             for row in df.filter(pl.col("vertex_id") == vertex).iter_rows(named=True):
                 return dict(row)
             return {}
@@ -1453,14 +1401,9 @@ class AttributesClass:
         """
         df = self.edge_attributes
 
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
         if indexes is not None:
             wanted = [self.idx_to_edge[i] for i in indexes]
-            if pl is not None and isinstance(df, pl.DataFrame):
+            if is_polars and isinstance(df, pl.DataFrame):
                 df = df.filter(pl.col("edge_id").is_in(wanted))
             else:
                 import narwhals as nw
@@ -1469,7 +1412,7 @@ class AttributesClass:
                     nw.from_native(df, pass_through=True).filter(nw.col("edge_id").is_in(wanted))
                 )
 
-        if pl is not None and isinstance(df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame):
             return {row["edge_id"]: dict(row) for row in df.iter_rows(named=True)}
 
         # non-Polars
@@ -1507,7 +1450,7 @@ class AttributesClass:
             pl = None
 
         if vertices is not None:
-            if pl is not None and isinstance(df, pl.DataFrame):
+            if is_polars and isinstance(df, pl.DataFrame):
                 df = df.filter(pl.col("vertex_id").is_in(list(vertices)))
             else:
                 import narwhals as nw
@@ -1518,7 +1461,7 @@ class AttributesClass:
                     )
                 )
 
-        if pl is not None and isinstance(df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame):
             return {row["vertex_id"]: dict(row) for row in df.iter_rows(named=True)}
 
         try:
@@ -1553,12 +1496,7 @@ class AttributesClass:
         if df is None or not hasattr(df, "columns"):
             return {}
 
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame):
             if key not in df.columns:
                 return {row["edge_id"]: default for row in df.iter_rows(named=True)}
             return {
@@ -1600,12 +1538,7 @@ class AttributesClass:
         if df is None or not hasattr(df, "columns") or key not in df.columns:
             return []
 
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame):
             return [row["edge_id"] for row in df.iter_rows(named=True) if row.get(key) == value]
 
         import narwhals as nw
@@ -1707,12 +1640,7 @@ class AttributesClass:
             return
 
         # schema alignment using _ensure_attr_columns + Utf8 upcast rule
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame) and isinstance(add_df, pl.DataFrame):
+        if is_polars and isinstance(df, pl.DataFrame) and isinstance(add_df, pl.DataFrame):
             # Polars fast-path
             need_cols = {c: None for c in add_df.columns if c not in df.columns}
             if need_cols:

@@ -16,12 +16,9 @@ def _get_numeric_supertype(left, right):
     For mixed signed/unsigned, promotes to Float64 for safety.
     """
 
-    def _dtype_cls(dt):
-        return dt.base_type() if hasattr(dt, "base_type") else dt
-
-    left_cls = _dtype_cls(left)
-    right_cls = _dtype_cls(right)
-
+    left_cls = left.base_type() if hasattr(left, "base_type") else left
+    right_cls = right.base_type() if hasattr(right, "base_type") else right
+    
     # If either is float, result is float (wider float wins)
     if left_cls.is_float() or right_cls.is_float():
         if left_cls == nw.Float64 or right_cls == nw.Float64:

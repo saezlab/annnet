@@ -742,10 +742,9 @@ class LayerClass:
             self._all_layers = ()
             return
         # build cartesian product (tuple of tuples)
-        try:
-            spaces = [self.elem_layers[a] for a in self.aspects]
-        except KeyError as e:
-            raise KeyError(f"elem_layers missing for aspect {e!s}")
+        spaces = [self.elem_layers.get(a, []) for a in self.aspects]
+        if not all(spaces) and self.aspects:
+            return  # No valid Cartesian product possible
         self._all_layers = tuple(itertools.product(*spaces)) if all(spaces) else ()
 
     ## Presence (V_M)
@@ -1012,33 +1011,7 @@ class LayerClass:
         This avoids all schema/dtype headaches (Polars infers them).
         """
         df = self.layer_attributes
-
-        # Convert existing DF to list of dict rows
-        rows = df.to_dicts() if df.height > 0 else []
-
-        # Find if we already have a row for this layer_id
-        existing = None
-        new_rows = []
-        for r in rows:
-            if r.get("layer_id") == layer_id:
-                existing = r
-                # don't append the old version
-            else:
-                new_rows.append(r)
-
-        if existing is None:
-            base = {"layer_id": layer_id}
-        else:
-            base = dict(existing)  # copy
-
-        # Merge new attrs (override old keys)
-        base.update(attrs)
-
-        # Append updated row
-        new_rows.append(base)
-
-        # Rebuild DF; Polars will infer schema and fill missing values with nulls
-        self.layer_attributes = build_dataframe_from_rows(new_rows)
+        self.layer_attributes = self._upsert_row(self.layer_attributes, layer_id, attrs)
 
     def set_elementary_layer_attrs(self, aspect: str, label: str, **attrs):
         """Attach attributes to an elementary Kivela layer.
@@ -1431,8 +1404,6 @@ class LayerClass:
         # Batch insert edges
         edge_ids = []
 
-        self.edge_kind = getattr(self, "edge_kind", {})
-        self.edge_layers = getattr(self, "edge_layers", {})
         for u, v, w in edge_data:
             base_eid = f"{u}>{v}@{Lid}"
             eid = base_eid

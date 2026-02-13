@@ -117,7 +117,7 @@ class History:
         if isinstance(x, dict):
             return {str(k): self._jsonify(v) for k, v in x.items()}
         # NumPy scalars
-        if isinstance(x, (np.generic,)):
+        if isinstance(x, np.generic):
             return x.item()
         # Polars, SciPy, or other heavy objects -> just a tag
         t = type(x).__name__
@@ -178,11 +178,9 @@ class History:
             "unregister_slice",
         ]
         for name in to_wrap:
-            if hasattr(self, name):
-                fn = getattr(self, name)
-                # Avoid double-wrapping
-                if getattr(fn, "__wrapped__", None) is None:
-                    setattr(self, name, self._log_mutation(name)(fn))
+            fn = getattr(self, name, None)
+            if fn and getattr(fn, "__wrapped__", None) is None:
+                setattr(self, name, self._log_mutation(name)(fn))
 
     def history(self, as_df: bool = False):
         """Return the append-only mutation history.

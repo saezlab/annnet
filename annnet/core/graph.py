@@ -131,7 +131,6 @@ class AnnNet(
         # Attribute storage using polars preferably
         self._annotations_backend = annotations_backend
         self._init_annotation_tables(annotations)
-        self.edge_kind = {}
         self.hyperedge_definitions = {}
         self.graph_attributes = {}
         self.graph_attributes.update(kwargs)
@@ -1405,9 +1404,6 @@ class AnnNet(
         else:
             eid = self.idx_to_edge[index]
 
-        kind = self.edge_kind.get(eid)
-
-        eid = self.idx_to_edge[index]
         kind = self.edge_kind.get(eid)
 
         if kind == "hyper":

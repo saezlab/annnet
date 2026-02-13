@@ -749,11 +749,9 @@ class SliceClass:
             return {"vertices": set(), "edges": set()}
 
         if len(slice_ids) == 1:
-            slice_id = slice_ids[0]
-            return {
-                "vertices": self._slices[slice_id]["vertices"].copy(),
-                "edges": self._slices[slice_id]["edges"].copy(),
-            }
+            sid = slice_ids[0]
+            data = self._slices.get(sid, {"vertices": set(), "edges": set()})
+            return {"vertices": data["vertices"].copy(), "edges": data["edges"].copy()}
 
         # Start with first slice
         common_vertices = self._slices[slice_ids[0]]["vertices"].copy()
