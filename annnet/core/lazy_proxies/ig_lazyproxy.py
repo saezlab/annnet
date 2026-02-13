@@ -14,14 +14,25 @@ if TYPE_CHECKING:
 
 
 class _LazyIGProxy:
-    """Lazy, cached igraph adapter:
-    - On-demand backend conversion (no persistent igraph graph).
-    - Cache keyed by options until AnnNet._version changes.
-    - Selective edge-attr exposure (keep only needed weights/capacity).
-    - Clear warnings when conversion is lossy.
-    - Auto label-ID mapping for vertex args (kwargs + positionals).
-    - _ig_simple=True collapses parallel edges to simple (Di)AnnNet.
-    - _ig_edge_aggs={"weight":"min","capacity":"sum"} for parallel-edge aggregation.
+    """Lazy igraph proxy attached to an AnnNet instance.
+
+    This proxy lets you call igraph algorithms as `G.ig.<algo>(...)`. On first
+    use (or after a graph mutation), AnnNet is converted to an igraph graph
+    and cached; subsequent calls reuse the cached backend until the AnnNet
+    version changes.
+
+    Conversion produces a **manifest** dictionary that preserves information
+    igraph cannot represent (e.g., hyperedges, per-edge directedness, slices,
+    multilayer metadata, stable edge IDs). The manifest is JSON-serializable
+    and can be persisted by the adapter.
+
+    Notes
+    -----
+    - Requires the optional `python-igraph` dependency.
+    - The typical usage pattern is `G.ig.algorithm(...)`, which lazily converts,
+      runs the igraph algorithm, and returns its output.
+    - `_ig_simple=True` collapses parallel edges to a simple graph; `_ig_edge_aggs`
+      controls aggregation (e.g., `{\"weight\":\"min\",\"capacity\":\"sum\"}`).
     """
 
     def __init__(self, owner: AnnNet):

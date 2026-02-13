@@ -3081,6 +3081,23 @@ class _LazyNXProxyDynamic:
 
 
 class _LazyNXProxy(_LazyNXProxyDynamic, _LazyNXProxyAutogen):
-    """Final NX proxy with both autocomplete and dynamic fallback."""
+    """Lazy NetworkX proxy attached to an AnnNet instance.
+
+    This proxy lets you call NetworkX algorithms as `G.nx.<algo>(...)`. On first
+    use (or after a graph mutation), AnnNet is converted to a NetworkX graph
+    and cached; subsequent calls reuse the cached backend until the AnnNet
+    version changes.
+
+    Conversion produces a **manifest** dictionary that preserves information
+    NetworkX cannot represent (e.g., hyperedges, per-edge directedness, slices,
+    multilayer metadata, stable edge IDs). The manifest is JSON-serializable
+    and can be persisted with `annnet.adapters.networkx_adapter.save_manifest`.
+
+    Notes
+    -----
+    - Requires the optional `networkx` dependency.
+    - The typical usage pattern is `G.nx.algorithm(...)`, which lazily converts,
+      runs the NetworkX algorithm, and returns its output.
+    """
 
     pass

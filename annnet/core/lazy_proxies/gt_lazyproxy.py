@@ -2,12 +2,24 @@
 
 
 class _LazyGTProxy:
-    """
-    graph-tool lazy proxy.
-    Supports:
-        G.gt.topology.shortest_distance(...)
-        G.gt.centrality.betweenness(...)
-        G.gt.flow.push_relabel_max_flow(...)
+    """Lazy graph-tool proxy attached to an AnnNet instance.
+
+    This proxy lets you call graph-tool algorithms via namespaces such as:
+    `G.gt.topology.shortest_distance(...)`, `G.gt.centrality.betweenness(...)`,
+    and `G.gt.flow.push_relabel_max_flow(...)`.
+
+    On first use (or after a graph mutation), AnnNet is converted to a graph-tool
+    graph and cached; subsequent calls reuse the cached backend until the AnnNet
+    version changes. Conversion produces a **manifest** dictionary that preserves
+    information graph-tool cannot represent (e.g., hyperedges, per-edge directedness,
+    slices, multilayer metadata, stable edge IDs). The manifest is JSON-serializable
+    and can be persisted by the adapter.
+
+    Notes
+    -----
+    - Requires the optional `graph-tool` dependency (not on PyPI).
+    - The typical usage pattern is `G.gt.<namespace>.<algo>(...)`, which lazily
+      converts, runs the graph-tool algorithm, and returns its output.
     """
 
     # lazy module loader
