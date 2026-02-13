@@ -1,7 +1,5 @@
-# API Reference
+# API Reference (Moved)
 
-Use the navigation to browse by module group:
+This page has been replaced by the curated API Reference.
 
-- Core Graph
-- Managers
-- Mixins
+- Start here: [API Overview](index.md)

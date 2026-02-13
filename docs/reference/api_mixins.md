@@ -1,25 +1,8 @@
-# Mixins
+# Mixins (Moved)
 
-::: annnet.core._Layers.LayerClass
-    options:
-      members: true
-      filters:
-      - "!^_"
+This page has been replaced by the curated API Reference.
 
-::: annnet.core._History.History
-    options:
-      members: true
-      filters:
-      - "!^_"
-
-::: annnet.core._Annotation.AttributesClass
-    options:
-      members: true
-      filters:
-      - "!^_"
-
-::: annnet.core._BulkOps.BulkOps
-    options:
-      members: true
-      filters:
-      - "!^_"
+- Core + Attributes: [Core + Attributes](annnet_core.md)
+- Slices: [Slices](annnet_slices.md)
+- Layers: [Layers](annnet_layers.md)
+- API overview: [API Overview](index.md)

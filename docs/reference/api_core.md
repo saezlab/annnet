@@ -1,10 +1,6 @@
-# Core Graph
+# Core Graph (Moved)
 
-::: annnet.core.graph.AnnNet
-    options:
-      members: true
-      inherited_members: false
-      show_root_heading: true
-      show_bases: false
-      filters:
-      - "!^_"
+This page has been replaced by the curated API Reference.
+
+- AnnNet core: [Core + Attributes](annnet_core.md)
+- API overview: [API Overview](index.md)

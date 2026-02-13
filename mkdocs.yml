@@ -62,10 +62,14 @@ nav:
     -   IO annnet: learn/explanation/io_annnet.md
 
 -   Reference:
-    -   API Reference: reference/api.md
-    -   Core Graph: reference/api_core.md
-    -   Managers: reference/api_managers.md
-    -   Mixins: reference/api_mixins.md
+    -   API Overview: reference/index.md
+    -   Annotated Network:
+        -   Core + Attributes: reference/annnet_core.md
+        -   Slices: reference/annnet_slices.md
+        -   Layers: reference/annnet_layers.md
+    -   Algorithms: reference/algorithms.md
+    -   Storage (.annnet): reference/storage.md
+    -   Interoperability: reference/interoperability.md
     #-   API Documentation:
     #    -   'annnet':
     #        -   _metadata: reference/source/annnet/_metadata-docs.md

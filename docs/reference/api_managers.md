@@ -1,31 +1,7 @@
-# Managers
+# Managers (Moved)
 
-::: annnet.core._Slices.SliceManager
-    options:
-      members: true
-      filters:
-      - "!^_"
+This page has been replaced by the curated API Reference.
 
-::: annnet.core._Layers.LayerManager
-    options:
-      members: true
-      filters:
-      - "!^_"
-
-::: annnet.core._Views.GraphView
-    options:
-      members: true
-      filters:
-      - "!^_"
-
-::: annnet.core._Index.IndexManager
-    options:
-      members: true
-      filters:
-      - "!^_"
-
-::: annnet.core._Cache.CacheManager
-    options:
-      members: true
-      filters:
-      - "!^_"
+- Slices: [Slices](annnet_slices.md)
+- Layers: [Layers](annnet_layers.md)
+- API overview: [API Overview](index.md)
