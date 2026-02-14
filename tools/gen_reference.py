@@ -51,7 +51,7 @@ def write_module_page(module: str, path: Path) -> Path:
         f.write("      show_root_heading: true\n")
         f.write("      show_root_toc_entry: false\n")
         f.write("      filters:\n")
-        f.write("      - \"!^_\"\n")
+        f.write('      - "!^_"\n')
     return out_path
 
 
