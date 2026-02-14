@@ -13,6 +13,14 @@ Parquet + JSON. This page documents the primary read/write API.
     options:
       show_root_heading: true
 
+???+ note "Internal helpers"
+    ::: annnet.io.io_annnet
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
 ## Parquet GraphDir (Lossless)
 
 ::: annnet.io.Parquet_io.to_parquet
@@ -22,3 +30,11 @@ Parquet + JSON. This page documents the primary read/write API.
 ::: annnet.io.Parquet_io.from_parquet
     options:
       show_root_heading: true
+
+???+ note "Internal helpers"
+    ::: annnet.io.Parquet_io
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"

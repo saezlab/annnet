@@ -27,6 +27,14 @@ See `annnet.adapters.networkx_adapter` in source for full details.
       filters:
       - "!^_"
 
+???+ note "Internal helpers"
+    ::: annnet.adapters.igraph_adapter
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
 ### graph-tool (optional)
 
 ::: annnet.adapters.graphtool_adapter
@@ -35,6 +43,14 @@ See `annnet.adapters.networkx_adapter` in source for full details.
       show_root_heading: true
       filters:
       - "!^_"
+
+???+ note "Internal helpers"
+    ::: annnet.adapters.graphtool_adapter
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
 
 ### PyTorch Geometric (optional)
 
@@ -52,6 +68,14 @@ See `annnet.adapters.pyg_adapter` in source for full details.
       show_root_heading: true
       filters:
       - "!^_"
+
+???+ note "Internal helpers"
+    ::: annnet.adapters.manager
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
 
 ## File Formats
 
@@ -75,6 +99,14 @@ See `annnet.io.GraphML_io` in source for full details.
       filters:
       - "!^_"
 
+???+ note "Internal helpers"
+    ::: annnet.io.SIF_io
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
 ### SBML
 
 ::: annnet.io.SBML_io
@@ -83,6 +115,14 @@ See `annnet.io.GraphML_io` in source for full details.
       show_root_heading: true
       filters:
       - "!^_"
+
+???+ note "Internal helpers"
+    ::: annnet.io.SBML_io
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
 
 ### SBML (COBRA)
 
@@ -93,6 +133,14 @@ See `annnet.io.GraphML_io` in source for full details.
       filters:
       - "!^_"
 
+???+ note "Internal helpers"
+    ::: annnet.io.sbml_cobra_io
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
 ### CX2
 
 ::: annnet.io.cx2_io
@@ -101,6 +149,14 @@ See `annnet.io.GraphML_io` in source for full details.
       show_root_heading: true
       filters:
       - "!^_"
+
+???+ note "Internal helpers"
+    ::: annnet.io.cx2_io
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
 
 ### JSON / NDJSON
 
@@ -111,6 +167,14 @@ See `annnet.io.GraphML_io` in source for full details.
       filters:
       - "!^_"
 
+???+ note "Internal helpers"
+    ::: annnet.io.json_io
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
 ### CSV
 
 ::: annnet.io.csv_io
@@ -119,6 +183,14 @@ See `annnet.io.GraphML_io` in source for full details.
       show_root_heading: true
       filters:
       - "!^_"
+
+???+ note "Internal helpers"
+    ::: annnet.io.csv_io
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
 
 ### Excel
 
@@ -129,6 +201,14 @@ See `annnet.io.GraphML_io` in source for full details.
       filters:
       - "!^_"
 
+???+ note "Internal helpers"
+    ::: annnet.io.excel
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
 ### DataFrames (Polars/Pandas/Narwhals)
 
 ::: annnet.io.dataframe_io
@@ -137,3 +217,11 @@ See `annnet.io.GraphML_io` in source for full details.
       show_root_heading: true
       filters:
       - "!^_"
+
+???+ note "Internal helpers"
+    ::: annnet.io.dataframe_io
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"

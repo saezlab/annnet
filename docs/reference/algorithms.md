@@ -9,11 +9,19 @@
       filters:
       - "!^_"
 
+???+ note "Internal helpers"
+    ::: annnet.algorithms.traversal.Traversal
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
 ## Lazy Proxies (NetworkX, igraph, graph-tool)
 
-These proxies provide a thin, lazy bridge to optional backends. They are
-exposed through `AnnNet` for convenience but require the corresponding
-dependency to be installed.
+These proxies provide a thin, lazy bridge to optional backends. Internal
+proxy classes and helper functions are intentionally hidden from this
+reference; see the source if you need implementation details.
 
 ::: annnet.core.lazy_proxies.nx_lazyproxy._LazyNXProxy
     options:

@@ -102,3 +102,82 @@ operations, history, and cache control.
       show_root_heading: true
       filters:
       - "!^_"
+
+???+ note "Internal helpers"
+    ::: annnet.core.graph.AnnNet
+        options:
+          members: true
+          inherited_members: false
+          show_root_heading: false
+          filters:
+          - "^_"
+
+    ::: annnet.core._Index.IndexManager
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
+    ::: annnet.core._Index.IndexMapping
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
+    ::: annnet.core._Annotation.AttributesClass
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
+    ::: annnet.core._BulkOps.BulkOps
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
+    ::: annnet.core._History.History
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
+    ::: annnet.core._History.GraphDiff
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
+    ::: annnet.core._Cache.CacheManager
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
+    ::: annnet.core._Cache.Operations
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
+    ::: annnet.core._Views.GraphView
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
+
+    ::: annnet.core._Views.ViewsClass
+        options:
+          members: true
+          show_root_heading: false
+          filters:
+          - "^_"
