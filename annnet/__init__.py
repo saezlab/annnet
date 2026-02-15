@@ -60,7 +60,7 @@ _lazy_symbols: dict[str, tuple[str, str]] = {
     "to_sif": ("annnet.io.SIF_io", "to_sif"),
     "from_sif": ("annnet.io.SIF_io", "from_sif"),
     # SBML (common direction)
-    "from_sbml": ("annnet.io.sbml_io", "from_sbml"),
+    "from_sbml": ("annnet.io.SBML_io", "from_sbml"),
     # Parquet GraphDir
     "write_parquet_graphdir": (
         "annnet.io.GraphDir_Parquet_io",

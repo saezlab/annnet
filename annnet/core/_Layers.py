@@ -1011,7 +1011,33 @@ class LayerClass:
         This avoids all schema/dtype headaches (Polars infers them).
         """
         df = self.layer_attributes
-        self.layer_attributes = self._upsert_row(self.layer_attributes, layer_id, attrs)
+        
+        # Convert existing DF to list of dict rows
+        rows = df.to_dicts() if df.height > 0 else []
+
+        # Find if we already have a row for this layer_id
+        existing = None
+        new_rows = []
+        for r in rows:
+            if r.get("layer_id") == layer_id:
+                existing = r
+                # don't append the old version
+            else:
+                new_rows.append(r)
+
+        if existing is None:
+            base = {"layer_id": layer_id}
+        else:
+            base = dict(existing)  # copy
+
+        # Merge new attrs (override old keys)
+        base.update(attrs)
+
+        # Append updated row
+        new_rows.append(base)
+
+        # Rebuild DF; Polars will infer schema and fill missing values with nulls
+        self.layer_attributes = build_dataframe_from_rows(new_rows)
 
     def set_elementary_layer_attrs(self, aspect: str, label: str, **attrs):
         """Attach attributes to an elementary Kivela layer.
