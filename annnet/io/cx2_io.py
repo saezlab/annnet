@@ -180,14 +180,52 @@ def _jsonify(obj):
 # --- Core Adapter: to_cx2 ---
 
 
-def to_cx2(G: AnnNet, *, export_name="annnet export", hyperedges="skip") -> list[dict[str, Any]]:
+def to_cx2(G: AnnNet, *, export_name="annnet export", layer = None, include_inter = False, include_coupling = False, hyperedges="skip") -> list[dict[str, Any]]:
     """
-    Convert an AnnNet AnnNet -> CX2 compliant JSON list.
+    Convert an AnnNet graph to CX2 compliant JSON format.
 
     The output is a list of aspect dictionaries (CX2 format).
-    Complex AnnNet features (hyperedges, slices, etc.) are serialized
-    into a JSON string and stored in 'networkAttributes' under '__AnnNet_Manifest__'.
+    Complex AnnNet features (hyperedges, slices, multilayer structure) are 
+    serialized into a JSON string stored in networkAttributes under '__AnnNet_Manifest__'.
+
+    Parameters
+    ----------
+    G : AnnNet
+        The graph to export.
+    export_name : str, default "annnet export"
+        Name of the exported network (stored in networkAttributes).
+    layer : tuple of str, optional
+        Elementary layer tuple specifying which layer to export. If provided,
+        only the subgraph for that layer is exported. Useful for multilayer graphs
+        where flattening creates unreadable visualizations in Cytoscape (e.g., 
+        coupling edges become self-loops). If None, exports the entire graph.
+        Example: layer=("social", "2020") for a 2-aspect multilayer network.
+    hyperedges : {"skip", "expand", "reify"}, default "skip"
+        How to handle hyperedges in the export:
+        - "skip": Omit hyperedges entirely
+        - "expand": Convert to cartesian product of pairwise edges
+        - "reify": Create explicit hyperedge nodes with membership edges
+
+    Returns
+    -------
+    list of dict
+        CX2-compliant JSON structure (list of aspect dictionaries).
+
+    Notes
+    -----
+    - Cytoscape does not natively support multilayer networks. When exporting
+      multilayer graphs without specifying a layer, coupling edges may appear
+      as self-loops and the visualization becomes cluttered.
+    - Use the `layer` parameter to export individual elementary layers for
+      clean, interpretable Cytoscape visualizations.
+    - The full multilayer structure is preserved in the manifest regardless
+      of the `layer` parameter, enabling lossless round-trip via from_cx2().
     """
+
+    if layer is not None:
+        if not isinstance(layer, tuple):
+            raise TypeError(f"layer must be a tuple, got {type(layer).__name__}")
+        G = G.subgraph_from_layer_tuple(layer, include_coupling= include_coupling, include_inter= include_inter)
 
     # 1. Prepare Manifest (Lossless storage of complex features)
     vert_rows = _safe_df_to_rows(getattr(G, "vertex_attributes", None))
