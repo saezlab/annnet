@@ -1011,7 +1011,7 @@ class LayerClass:
         This avoids all schema/dtype headaches (Polars infers them).
         """
         df = self.layer_attributes
-        
+
         # Convert existing DF to list of dict rows
         rows = df.to_dicts() if df.height > 0 else []
 

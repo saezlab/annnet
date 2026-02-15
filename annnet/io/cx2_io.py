@@ -180,12 +180,20 @@ def _jsonify(obj):
 # --- Core Adapter: to_cx2 ---
 
 
-def to_cx2(G: AnnNet, *, export_name="annnet export", layer = None, include_inter = False, include_coupling = False, hyperedges="skip") -> list[dict[str, Any]]:
+def to_cx2(
+    G: AnnNet,
+    *,
+    export_name="annnet export",
+    layer=None,
+    include_inter=False,
+    include_coupling=False,
+    hyperedges="skip",
+) -> list[dict[str, Any]]:
     """
     Convert an AnnNet graph to CX2 compliant JSON format.
 
     The output is a list of aspect dictionaries (CX2 format).
-    Complex AnnNet features (hyperedges, slices, multilayer structure) are 
+    Complex AnnNet features (hyperedges, slices, multilayer structure) are
     serialized into a JSON string stored in networkAttributes under '__AnnNet_Manifest__'.
 
     Parameters
@@ -197,7 +205,7 @@ def to_cx2(G: AnnNet, *, export_name="annnet export", layer = None, include_inte
     layer : tuple of str, optional
         Elementary layer tuple specifying which layer to export. If provided,
         only the subgraph for that layer is exported. Useful for multilayer graphs
-        where flattening creates unreadable visualizations in Cytoscape (e.g., 
+        where flattening creates unreadable visualizations in Cytoscape (e.g.,
         coupling edges become self-loops). If None, exports the entire graph.
         Example: layer=("social", "2020") for a 2-aspect multilayer network.
     hyperedges : {"skip", "expand", "reify"}, default "skip"
@@ -225,7 +233,9 @@ def to_cx2(G: AnnNet, *, export_name="annnet export", layer = None, include_inte
     if layer is not None:
         if not isinstance(layer, tuple):
             raise TypeError(f"layer must be a tuple, got {type(layer).__name__}")
-        G = G.subgraph_from_layer_tuple(layer, include_coupling= include_coupling, include_inter= include_inter)
+        G = G.subgraph_from_layer_tuple(
+            layer, include_coupling=include_coupling, include_inter=include_inter
+        )
 
     # 1. Prepare Manifest (Lossless storage of complex features)
     vert_rows = _safe_df_to_rows(getattr(G, "vertex_attributes", None))
@@ -1074,14 +1084,23 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
     return G
 
 
-# -------------------------------------------------- Browser visualzaion Cytoscape.js 
+# -------------------------------------------------- Browser visualzaion Cytoscape.js
 
-def show(G: AnnNet, *, export_name="annnet export", layer=None, 
-         include_inter=False, include_coupling=False, hyperedges="skip",
-         port=None, auto_open=True) -> str:
+
+def show(
+    G: AnnNet,
+    *,
+    export_name="annnet export",
+    layer=None,
+    include_inter=False,
+    include_coupling=False,
+    hyperedges="skip",
+    port=None,
+    auto_open=True,
+) -> str:
     """
     Visualize graph in web browser using Cytoscape.js.
-    
+
     Parameters
     ----------
     G : AnnNet
@@ -1109,12 +1128,12 @@ def show(G: AnnNet, *, export_name="annnet export", layer=None,
         Port for local web server. If None, finds available port automatically.
     auto_open : bool, default True
         If True, automatically open browser.
-    
+
     Returns
     -------
     str
         Local URL to the visualization.
-    
+
     Notes
     -----
     For multilayer graphs:
@@ -1122,9 +1141,9 @@ def show(G: AnnNet, *, export_name="annnet export", layer=None,
       appearing as self-loops (messy but shows full structure)
     - With layer parameter: shows clean single-layer view without coupling edges
       (recommended for visualization)
-    
+
     Press Ctrl+C in terminal to stop the web server.
-    
+
     Examples
     --------
     >>> G.show()  # Show entire graph (all layers flattened)
@@ -1132,35 +1151,35 @@ def show(G: AnnNet, *, export_name="annnet export", layer=None,
     >>> G.show(layer=("social", "2020"), include_coupling=True)  # With self-loops
     """
     import json
+    import socket
+    import tempfile
+    import threading
     import webbrowser
     from http.server import HTTPServer, SimpleHTTPRequestHandler
     from pathlib import Path
-    import tempfile
-    import threading
-    import socket
-    
+
     def find_free_port():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(('', 0))
+            s.bind(("", 0))
             s.listen(1)
             port = s.getsockname()[1]
         return port
-    
+
     if port is None:
         port = find_free_port()
-    
+
     # to_cx2 already handles layer extraction internally
     cx2_data = to_cx2(
-        G, 
-        export_name=export_name, 
+        G,
+        export_name=export_name,
         layer=layer,
         include_inter=include_inter,
         include_coupling=include_coupling,
-        hyperedges=hyperedges
+        hyperedges=hyperedges,
     )
-    
+
     cytoscape_json = _cx2_to_cytoscapejs(cx2_data)
-    
+
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -1245,74 +1264,71 @@ def show(G: AnnNet, *, export_name="annnet export", layer=None,
     </body>
     </html>
     """
-    
+
     temp_dir = tempfile.mkdtemp()
     html_path = Path(temp_dir) / "index.html"
     html_path.write_text(html_content)
-    
+
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=temp_dir, **kwargs)
-        
+
         def log_message(self, format, *args):
             pass
-    
+
     try:
-        server = HTTPServer(('localhost', port), Handler)
+        server = HTTPServer(("localhost", port), Handler)
     except OSError as e:
         if e.errno == 98:
             port = find_free_port()
-            server = HTTPServer(('localhost', port), Handler)
+            server = HTTPServer(("localhost", port), Handler)
         else:
             raise
-    
+
     url = f"http://localhost:{port}"
-    
+
     def run_server():
         print(f"Serving visualization at {url}")
         print("Press Ctrl+C to stop")
         server.serve_forever()
-    
+
     thread = threading.Thread(target=run_server, daemon=True)
     thread.start()
-    
+
     if auto_open:
         webbrowser.open(url)
-    
+
     return url
+
 
 def _cx2_to_cytoscapejs(cx2_data: list[dict]) -> dict:
     """Convert CX2 format to Cytoscape.js format."""
     nodes = []
     edges = []
-    
+
     node_map = {}
-    
+
     for aspect in cx2_data:
-        if 'nodes' in aspect:
-            for node in aspect['nodes']:
-                node_id = str(node['id'])
-                node_map[node['id']] = node_id
-                label = node.get('v', {}).get('name', node_id)
-                nodes.append({
-                    'data': {
-                        'id': node_id,
-                        'label': label,
-                        **node.get('v', {})
+        if "nodes" in aspect:
+            for node in aspect["nodes"]:
+                node_id = str(node["id"])
+                node_map[node["id"]] = node_id
+                label = node.get("v", {}).get("name", node_id)
+                nodes.append({"data": {"id": node_id, "label": label, **node.get("v", {})}})
+
+        if "edges" in aspect:
+            for edge in aspect["edges"]:
+                source = str(edge["s"])
+                target = str(edge["t"])
+                edges.append(
+                    {
+                        "data": {
+                            "id": str(edge["id"]),
+                            "source": source,
+                            "target": target,
+                            **edge.get("v", {}),
+                        }
                     }
-                })
-        
-        if 'edges' in aspect:
-            for edge in aspect['edges']:
-                source = str(edge['s'])
-                target = str(edge['t'])
-                edges.append({
-                    'data': {
-                        'id': str(edge['id']),
-                        'source': source,
-                        'target': target,
-                        **edge.get('v', {})
-                    }
-                })
-    
-    return {'nodes': nodes, 'edges': edges}
+                )
+
+    return {"nodes": nodes, "edges": edges}
