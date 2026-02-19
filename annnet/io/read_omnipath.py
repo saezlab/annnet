@@ -452,7 +452,11 @@ def read_omnipath(
                         f"[vertex annotations] downloading from OmniPath archive (~114MB, one-time)..."
                     )
                     t_ann = time.perf_counter()
-                    resp = _requests.get(_ANN_URL, stream=True)
+                    resp = _requests.get(
+                        _ANN_URL,
+                        stream=True,
+                        timeout=(5, 60),  # (connect_timeout, read_timeout)
+                    )
                     resp.raise_for_status()
                     os.makedirs(os.path.dirname(_cache_path), exist_ok=True)
                     with open(_cache_path, "wb") as _f:
