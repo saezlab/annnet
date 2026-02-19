@@ -498,6 +498,7 @@ class BulkOps:
         Behavior mirrors `add_edge()` but grows the matrix once to reduce overhead.
         """
         slice = self._current_slice if slice is None else slice
+        pending_attrs = {}
 
         # Normalize into dicts
         norm = []
@@ -548,16 +549,14 @@ class BulkOps:
 
         entity_to_idx = self.entity_to_idx
         M = self._matrix
-        # 1) Ensure endpoints exist (global); we’ll rely on slice handling below to add membership.
+        # 1) Ensure endpoints exist (global)
         for d in norm:
             s, t = d["source"], d["target"]
             et = d.get("edge_type", "regular")
             if s not in entity_to_idx:
-                # vertex or edge-entity depending on mode?
                 if et == "vertex_edge" and isinstance(s, str) and s.startswith("edge_"):
                     self.add_edge_entity(s)
                 else:
-                    # bare global insert (no slice side-effects; membership handled later)
                     idx = self._num_entities
                     self.entity_to_idx[s] = idx
                     self.idx_to_entity[idx] = s
@@ -608,9 +607,7 @@ class BulkOps:
             # update vs create
             if edge_id in self.edge_to_idx:
                 col = self.edge_to_idx[edge_id]
-                # keep old_type on update (mimic add_edge)
                 old_s, old_t, old_type = self.edge_definitions[edge_id]
-                # clear only previous cells (no full column wipe)
                 try:
                     M[self.entity_to_idx[old_s], col] = 0
                 except Exception:
@@ -620,16 +617,14 @@ class BulkOps:
                         M[self.entity_to_idx[old_t], col] = 0
                     except Exception:
                         pass
-                # write new
                 M[s_idx, col] = w
                 if s != t:
                     M[t_idx, col] = -w if is_dir else w
                 self.edge_definitions[edge_id] = (s, t, old_type)
                 self.edge_weights[edge_id] = w
                 self.edge_directed[edge_id] = is_dir
-                # keep attribute side-effect for directedness flag
-                self.set_edge_attrs(
-                    edge_id, edge_type=(EdgeType.DIRECTED if is_dir else EdgeType.UNDIRECTED)
+                pending_attrs.setdefault(edge_id, {})["edge_type"] = (
+                    EdgeType.DIRECTED if is_dir else EdgeType.UNDIRECTED
                 )
             else:
                 col = self._num_edges
@@ -639,7 +634,6 @@ class BulkOps:
                 self.edge_weights[edge_id] = w
                 self.edge_directed[edge_id] = is_dir
                 self._num_edges = col + 1
-                # write cells
                 M[s_idx, col] = w
                 if s != t:
                     M[t_idx, col] = -w if is_dir else w
@@ -664,12 +658,15 @@ class BulkOps:
             elif prop == "all":
                 self._propagate_to_all_slices(edge_id, s, t)
 
-            # per-edge extra attributes
             attrs = d.get("attributes") or d.get("attrs") or {}
             if attrs:
-                self.set_edge_attrs(edge_id, **attrs)
+                pending_attrs.setdefault(edge_id, {}).update(attrs)
 
             out_ids.append(edge_id)
+
+        # flush all edge attribute writes in one bulk call
+        if pending_attrs:
+            self.set_edge_attrs_bulk(pending_attrs)
 
         return out_ids
 
