@@ -64,7 +64,7 @@ def run(scale):
         existing = set(G.vertices())
         to_add = [vid for vid in unique_vids if vid not in existing]
         if to_add:
-            G.add_vertices_bulk(({"vertex_id": vid} for vid in to_add))
+            G.add_vertices_bulk({"vertex_id": vid} for vid in to_add)
 
         for vid, aa in presence_pairs:
             G.add_presence(vid, aa)

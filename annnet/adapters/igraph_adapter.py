@@ -319,6 +319,7 @@ def _export_legacy(
         except KeyError:
             return x
 
+    processed_vattrs = {}
     for v in vertices:
         v_attr = dict(vattr_map.get(v, {}))
         if public_only:
@@ -327,12 +328,11 @@ def _export_legacy(
             }
         else:
             v_attr = {k: _serialize_value(val) for k, val in v_attr.items()}
+        processed_vattrs[v] = v_attr
 
-        # Ensure attribute columns exist and then write row value
-        for k, val in v_attr.items():
-            if k not in G.vs.attributes():
-                G.vs[k] = [None] * G.vcount()
-            G.vs[vidx[v]][k] = val
+    all_vattr_keys = set().union(*processed_vattrs.values()) if processed_vattrs else set()
+    for k in all_vattr_keys:
+        G.vs[k] = [processed_vattrs[v].get(k) for v in vertices]
 
     # Helper: directedness per edge-id (fallback if helper missing)
     def _is_dir_eid(g, eid):
@@ -342,22 +342,19 @@ def _export_legacy(
             return bool(getattr(g, "edge_directed", {}).get(eid, getattr(g, "directed", True)))
 
     # Add edges (binary & vertex-edge). Hyperedges: skip or expand
-    etab = getattr(graph, "edge_attributes", None)
     eattr_map = {}
     try:
-        if (
-            etab is not None
-            and hasattr(etab, "to_dicts")
-            and etab.height > 0
-            and "edge_id" in etab.columns
-        ):
-            for row in etab.to_dicts():
+        for row in _rows(getattr(graph, "edge_attributes", None)):
+            eid = row.get("edge_id")
+            if eid is not None:
                 d = dict(row)
-                eid = d.pop("edge_id", None)
-                if eid is not None:
-                    eattr_map[eid] = d
+                d.pop("edge_id", None)
+                eattr_map[eid] = d
     except Exception:
         eattr_map = {}
+    # collect all edges as tuples first, write them in one bulk call
+    edge_tuples = []
+    edge_payloads = []  # list of dicts, parallel to edge_tuples
 
     for eidx in range(graph.number_of_edges()):
         eid = graph.idx_to_edge[eidx]
@@ -372,101 +369,72 @@ def _export_legacy(
             e_attr = {k: _serialize_value(val) for k, val in e_attr.items()}
 
         weight = graph.edge_weights.get(eid, 1.0)
-        if public_only:
-            e_attr["weight"] = weight
-        else:
-            e_attr["__weight"] = weight
+        e_attr["weight" if public_only else "__weight"] = weight
+        e_attr["eid"] = eid
 
         is_hyper = graph.edge_kind.get(eid) == "hyper"
         is_dir = _is_dir_eid(graph, eid)
         members = S | T
 
-        # Binary / vertex-edge path ----------
         if not is_hyper and len(members) <= 2:
             if len(members) == 1:
-                # self-loop
                 u = next(iter(members))
-                # Guard: endpoint must be indexed (should be by construction)
                 if u not in vidx:
                     continue
-                G.add_edge(vidx[u], vidx[u])
-                e = G.es[-1]
-                e["eid"] = eid
-                for k, val in e_attr.items():
-                    e[k] = val
+                edge_tuples.append((vidx[u], vidx[u]))
+                edge_payloads.append(e_attr)
             else:
                 if is_dir:
-                    # directed: source in S, target in T
-                    uu = next(iter(S))
-                    vv = next(iter(T))
+                    uu, vv = next(iter(S)), next(iter(T))
                     if uu in vidx and vv in vidx:
-                        G.add_edge(vidx[uu], vidx[vv])
-                        e = G.es[-1]
-                        e["eid"] = eid
-                        for k, val in e_attr.items():
-                            e[k] = val
+                        edge_tuples.append((vidx[uu], vidx[vv]))
+                        edge_payloads.append(e_attr)
                 else:
-                    # undirected edge; emit bidirectionally if `directed=True`
                     u, v = tuple(members)
-                    if (u in vidx) and (v in vidx):
+                    if u in vidx and v in vidx:
                         if directed:
-                            G.add_edge(vidx[u], vidx[v])
-                            e = G.es[-1]
-                            e["eid"] = eid
-                            for k, val in e_attr.items():
-                                e[k] = val
-                            G.add_edge(vidx[v], vidx[u])
-                            e = G.es[-1]
-                            e["eid"] = eid
-                            for k, val in e_attr.items():
-                                e[k] = val
+                            edge_tuples.append((vidx[u], vidx[v]))
+                            edge_payloads.append(e_attr)
+                            edge_tuples.append((vidx[v], vidx[u]))
+                            edge_payloads.append(e_attr)
                         else:
-                            G.add_edge(vidx[u], vidx[v])
-                            e = G.es[-1]
-                            e["eid"] = eid
-                            for k, val in e_attr.items():
-                                e[k] = val
-            continue  # done with this edge
+                            edge_tuples.append((vidx[u], vidx[v]))
+                            edge_payloads.append(e_attr)
+            continue
 
-        # ---------- Hyperedge path ----------
         if skip_hyperedges:
             continue
 
         if is_dir:
-            # expand head × tail
             for u in S:
                 for v in T:
                     if u not in vidx or v not in vidx:
                         continue
-                    G.add_edge(vidx[u], vidx[v])
-                    e = G.es[-1]
-                    e["eid"] = eid
+                    p = dict(e_attr)
                     if not directed:
-                        e["directed"] = True  # mark orientation in an undirected export
-                    for k, val in e_attr.items():
-                        e[k] = val
+                        p["directed"] = True
+                    edge_tuples.append((vidx[u], vidx[v]))
+                    edge_payloads.append(p)
         else:
-            # undirected hyperedge: clique (or bidir clique if directed=True)
             mem = [m for m in members if m in vidx]
             n = len(mem)
-            if directed:
-                for a in range(n):
-                    for b in range(n):
-                        if a == b:
-                            continue
-                        G.add_edge(vidx[mem[a]], vidx[mem[b]])
-                        e = G.es[-1]
-                        e["eid"] = eid
-                        for k, val in e_attr.items():
-                            e[k] = val
-            else:
-                for a in range(n):
-                    for b in range(a + 1, n):
-                        G.add_edge(vidx[mem[a]], vidx[mem[b]])
-                        e = G.es[-1]
-                        e["eid"] = eid
-                        for k, val in e_attr.items():
-                            e[k] = val
+            pairs = (
+                [(a, b) for a in range(n) for b in range(n) if a != b]
+                if directed
+                else [(a, b) for a in range(n) for b in range(a + 1, n)]
+            )
+            for a, b in pairs:
+                edge_tuples.append((vidx[mem[a]], vidx[mem[b]]))
+                edge_payloads.append(e_attr)
+
+    # ONE bulk C-level call instead of individual add_edge() calls
+    G.add_edges(edge_tuples)
+
+    # Write edge attrs column-wise — one C call per attribute key
+    if edge_payloads:
+        all_eattr_keys = set().union(*edge_payloads)
+        for k in all_eattr_keys:
+            G.es[k] = [p.get(k) for p in edge_payloads]
 
     return G
 
@@ -511,36 +479,37 @@ def to_igraph(
     )
 
     # -------------- collect vertex/edge attrs for manifest --------------
-    vertex_attrs = {}
-    for v in graph.vertices():
-        vtab = getattr(graph, "vertex_attributes", None)
-        v_rows = []
-        try:
-            if vtab is not None and hasattr(vtab, "filter"):
-                v_rows = _rows(vtab.filter(vtab["vertex_id"] == v))
-        except Exception:
-            v_rows = []
-        attrs = dict(v_rows[0]) if v_rows else {}
-        attrs.pop("vertex_id", None)
-        if public_only:
-            attrs = {k: val for k, val in attrs.items() if not str(k).startswith("__")}
-        vertex_attrs[v] = _attrs_to_dict(attrs)
+    _raw_vertex_attrs = {
+        row["vertex_id"]: {k: v for k, v in row.items() if k != "vertex_id"}
+        for row in _rows(getattr(graph, "vertex_attributes", None))
+        if row.get("vertex_id") is not None
+    }
+    vertex_attrs = {
+        v: _attrs_to_dict(
+            {
+                k: val
+                for k, val in _raw_vertex_attrs.get(v, {}).items()
+                if not public_only or not str(k).startswith("__")
+            }
+        )
+        for v in graph.vertices()
+    }
 
-    edge_attrs = {}
-    for eidx in range(graph.number_of_edges()):
-        eid = graph.idx_to_edge[eidx]
-        etab = getattr(graph, "edge_attributes", None)
-        e_rows = []
-        try:
-            if etab is not None and hasattr(etab, "filter"):
-                e_rows = _rows(etab.filter(etab["edge_id"] == eid))
-        except Exception:
-            e_rows = []
-        attrs = dict(e_rows[0]) if e_rows else {}
-        attrs.pop("edge_id", None)
-        if public_only:
-            attrs = {k: val for k, val in attrs.items() if not str(k).startswith("__")}
-        edge_attrs[eid] = _attrs_to_dict(attrs)
+    _raw_edge_attrs = {
+        row["edge_id"]: {k: v for k, v in row.items() if k != "edge_id"}
+        for row in _rows(getattr(graph, "edge_attributes", None))
+        if row.get("edge_id") is not None
+    }
+    edge_attrs = {
+        graph.idx_to_edge[eidx]: _attrs_to_dict(
+            {
+                k: val
+                for k, val in _raw_edge_attrs.get(graph.idx_to_edge[eidx], {}).items()
+                if not public_only or not str(k).startswith("__")
+            }
+        )
+        for eidx in range(graph.number_of_edges())
+    }
 
     # -------------- topology snapshot (regular vs hyper) --------------
     manifest_edges = {}
@@ -1065,71 +1034,54 @@ def from_igraph(
                     vertex_ids.add(v)
 
     # Add vertices now (no he:: nodes will be included since they aren't in the manifest)
-    for v in vertex_ids:
-        try:
-            H.add_vertex(v)
-        except Exception:
-            pass
+    if vertex_ids:
+        H.add_vertices_bulk([{"vertex_id": v} for v in vertex_ids])
 
     # -------- edges/hyperedges (from manifest = SSOT) --------
+    edge_directed_cache = manifest.get("edge_directed", {}) or {}
+    regular_edges_bulk = []
+    hyperedges_bulk = []
+
     for eid, defn in edges_def.items():
         kind = defn[-1]
+        is_dir = bool(edge_directed_cache.get(eid, True))
         if kind == "regular":
             u, v = defn[0], defn[1]
-            is_dir = bool(manifest.get("edge_directed", {}).get(eid, True))
-            try:
-                H.add_edge(u, v, edge_id=eid, edge_directed=is_dir)
-            except Exception:
-                pass
-
+            regular_edges_bulk.append(
+                {"source": u, "target": v, "edge_id": eid, "edge_directed": is_dir}
+            )
         elif kind == "hyper":
             head_map, tail_map = defn[0], defn[1]
             if isinstance(head_map, dict) and isinstance(tail_map, dict):
-                head = list(head_map.keys())
-                tail = list(tail_map.keys())
-                is_dir = bool(manifest.get("edge_directed", {}).get(eid, True))
-                try:
-                    if is_dir:
-                        H.add_hyperedge(head=head, tail=tail, edge_id=eid, edge_directed=True)
-                    else:
-                        members = list(set(head) | set(tail))
-                        H.add_hyperedge(members=members, edge_id=eid, edge_directed=False)
-                except Exception:
-                    # degrade only if truly 1→1
-                    if len(head) == 1 and len(tail) == 1:
-                        try:
-                            H.add_edge(head[0], tail[0], edge_id=eid, edge_directed=True)
-                        except Exception:
-                            pass
-
-                # restore endpoint coeffs
-                try:
-                    existing_src = H.get_edge_attribute(eid, "__source_attr") or {}
-                except Exception:
-                    existing_src = {}
-                try:
-                    existing_tgt = H.get_edge_attribute(eid, "__target_attr") or {}
-                except Exception:
-                    existing_tgt = {}
-
-                src_map = {u: {"__value": float(c)} for u, c in (head_map or {}).items()}
-                tgt_map = {v: {"__value": float(c)} for v, c in (tail_map or {}).items()}
-                try:
-                    H.set_edge_attrs(
-                        eid,
-                        __source_attr={**existing_src, **src_map},
-                        __target_attr={**existing_tgt, **tgt_map},
+                head, tail = list(head_map), list(tail_map)
+                attrs = {
+                    "__source_attr": {u: {"__value": float(c)} for u, c in head_map.items()},
+                    "__target_attr": {v: {"__value": float(c)} for v, c in tail_map.items()},
+                }
+                if is_dir:
+                    hyperedges_bulk.append(
+                        {
+                            "head": head,
+                            "tail": tail,
+                            "edge_id": eid,
+                            "edge_directed": True,
+                            "attributes": attrs,
+                        }
                     )
-                except Exception:
-                    pass
-        else:
-            # unknown → best-effort binary
-            try:
-                u, v = defn[0], defn[1]
-                is_dir = bool(manifest.get("edge_directed", {}).get(eid, True))
-                H.add_edge(u, v, edge_id=eid, edge_directed=is_dir)
-            except Exception:
-                pass
+                else:
+                    hyperedges_bulk.append(
+                        {
+                            "members": list(set(head) | set(tail)),
+                            "edge_id": eid,
+                            "edge_directed": False,
+                            "attributes": attrs,
+                        }
+                    )
+
+    if regular_edges_bulk:
+        H.add_edges_bulk(regular_edges_bulk, default_edge_directed=True)
+    if hyperedges_bulk:
+        H.add_hyperedges_bulk(hyperedges_bulk)
 
     # -------- baseline weights --------
     for eid, w in (manifest.get("weights", {}) or {}).items():
@@ -1139,29 +1091,25 @@ def from_igraph(
             pass
 
     # -------- slices + per-slice overrides --------
+    existing_slices = set(H.list_slices(include_default=True))
     for lid, eids in (manifest.get("slices", {}) or {}).items():
-        try:
-            if lid not in set(H.list_slices(include_default=True)):
-                H.add_slice(lid)
-        except Exception:
-            pass
-        for eid in eids or []:
+        if lid not in existing_slices:
             try:
-                H.add_edge_to_slice(lid, eid)
+                H.add_slice(lid)
+                existing_slices.add(lid)
             except Exception:
                 pass
+        if eids:
+            H.add_edges_to_slice_bulk(lid, eids)
 
     for lid, per_edge in (manifest.get("slice_weights", {}) or {}).items():
-        try:
-            if lid not in set(H.list_slices(include_default=True)):
-                H.add_slice(lid)
-        except Exception:
-            pass
-        for eid, w in (per_edge or {}).items():
+        if lid not in existing_slices:
             try:
-                H.add_edge_to_slice(lid, eid)
+                H.add_slice(lid)
+                existing_slices.add(lid)
             except Exception:
                 pass
+        for eid, w in (per_edge or {}).items():
             try:
                 H.set_edge_slice_attrs(lid, eid, weight=float(w))
             except Exception:
@@ -1209,19 +1157,23 @@ def from_igraph(
         H.layer_attributes = _rows_to_df(layer_attr_rows)
 
     # -------- restore vertex/edge attrs --------
-    for vid, attrs in (manifest.get("vertex_attrs", {}) or {}).items():
-        if attrs:
-            try:
-                H.set_vertex_attrs(vid, **attrs)
-            except Exception:
-                pass
+    vertex_attrs_cache = manifest.get("vertex_attrs", {}) or {}
+    if vertex_attrs_cache:
+        for vid, attrs in vertex_attrs_cache.items():
+            if attrs:
+                try:
+                    H.set_vertex_attrs(vid, **attrs)
+                except Exception:
+                    pass
 
-    for eid, attrs in (manifest.get("edge_attrs", {}) or {}).items():
-        if attrs:
-            try:
-                H.set_edge_attrs(eid, **attrs)
-            except Exception:
-                pass
+    edge_attrs_cache = manifest.get("edge_attrs", {}) or {}
+    if edge_attrs_cache:
+        for eid, attrs in edge_attrs_cache.items():
+            if attrs:
+                try:
+                    H.set_edge_attrs(eid, **attrs)
+                except Exception:
+                    pass
 
     # -------- OPTIONAL: pull in reified HEs from igG not present in manifest --------
     if hyperedge == "reified":

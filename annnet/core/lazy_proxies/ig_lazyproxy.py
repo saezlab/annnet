@@ -21,10 +21,10 @@ class _LazyIGProxy:
     and cached; subsequent calls reuse the cached backend until the AnnNet
     version changes.
 
-    Conversion produces a **manifest** dictionary that preserves information
-    igraph cannot represent (e.g., hyperedges, per-edge directedness, slices,
-    multilayer metadata, stable edge IDs). The manifest is JSON-serializable
-    and can be persisted by the adapter.
+    Conversion is optimized for speed and does not build a manifest. This
+    means features that require a manifest (slices, reified hyperedges,
+    multilayer metadata, stable edge IDs) are not preserved on the proxy path.
+    Use adapters.igraph_adapter.to_igraph(...) for full-fidelity export.
 
     Notes
     -----
@@ -102,6 +102,16 @@ class _LazyIGProxy:
 
             # keep only attributes actually needed by the called function
             needed_edge_attrs = self._needed_edge_attrs_for_ig(name, kwargs)
+
+            if str(hyperedge_mode).lower() == "reify":
+                import warnings
+
+                warnings.warn(
+                    "Lazy igraph proxy does not support hyperedge_mode='reify'; "
+                    "falling back to 'skip'.",
+                    category=RuntimeWarning,
+                    stacklevel=3,
+                )
 
             # build/reuse backend
             igG = self._get_or_make_ig(
@@ -200,24 +210,23 @@ class _LazyIGProxy:
         simple: bool,
         edge_aggs: dict | None,
     ):
-        # try both adapter entry points: to_ig / to_igraph
-
+        # Fast-path: skip manifest creation for lazy proxy use
         from ...adapters import igraph_adapter as _gg_ig  # annnet.adapters.igraph_adapter
 
-        conv = None
-        for cand in ("to_ig", "to_igraph"):
-            conv = getattr(_gg_ig, cand, None) or conv
-        if conv is None:
+        to_backend = getattr(_gg_ig, "to_backend", None)
+        if to_backend is None:
+            # fallback to legacy name if present
+            to_backend = getattr(_gg_ig, "_export_legacy", None)
+        if to_backend is None:
             raise RuntimeError(
-                "igraph adapter missing: expected adapters.igraph_adapter.to_ig(...) or .to_igraph(...)."
+                "igraph adapter missing: expected adapters.igraph_adapter.to_backend(...) or _export_legacy(...)."
             )
 
-        igG, manifest = conv(
+        skip_hyperedges = str(hyperedge_mode).lower() != "expand"
+        igG = to_backend(
             self._G,
             directed=directed,
-            hyperedge_mode=hyperedge_mode,
-            slice=slice,
-            slices=slices,
+            skip_hyperedges=skip_hyperedges,
             public_only=True,
         )
 
@@ -229,10 +238,6 @@ class _LazyIGProxy:
             igG = self._collapse_multiedges(
                 igG, directed=directed, aggregations=edge_aggs, needed_attrs=needed_attrs
             )
-
-        self._warn_on_loss(
-            hyperedge_mode=hyperedge_mode, slice=slice, slices=slices, manifest=manifest
-        )
         return igG
 
     def _get_or_make_ig(
