@@ -65,9 +65,11 @@ def run(scale):
     node_edge_ids = []
 
     def _node_edge_create():
+        edges = []
         for i, eid in enumerate(base_edges):
             u = f"v{i % scale.vertices}"
-            node_edge_ids.append(G.add_edge(u, eid, weight=1.0, as_entity=False))
+            edges.append({"source": u, "target": eid, "weight": 1.0})
+        node_edge_ids.extend(G.add_edges_bulk(edges))
 
     with measure() as m_node_edge_create:
         mem_node_edge_create = _measure_mem(_node_edge_create)
@@ -104,15 +106,16 @@ def run(scale):
     ee_ids = []
 
     def _edge_edge_create():
+        edges = []
         for i in range(len(edge_entities) - 1):
-            ee_ids.append(
-                G.add_edge(
-                    edge_entities[i],
-                    edge_entities[i + 1],
-                    weight=1.0,
-                    as_entity=False,
-                )
+            edges.append(
+                {
+                    "source": edge_entities[i],
+                    "target": edge_entities[i + 1],
+                    "weight": 1.0,
+                }
             )
+        ee_ids.extend(G.add_edges_bulk(edges))
 
     with measure() as m_edge_edge_create:
         mem_edge_edge_create = _measure_mem(_edge_edge_create)

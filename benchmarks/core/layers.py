@@ -52,13 +52,22 @@ def run(scale):
 
     with measure() as m_presence:
         vid_counter = 0
+        presence_pairs = []
+        unique_vids = set()
         for aa in layer_tuples[: min(len(layer_tuples), scale.slices)]:
             for i in range(vertices_per_layer):
                 vid = f"v{vid_counter}"
-                if vid not in G.vertices():
-                    G.add_vertex(vid)
-                G.add_presence(vid, aa)
+                presence_pairs.append((vid, aa))
+                unique_vids.add(vid)
                 vid_counter += 1
+
+        existing = set(G.vertices())
+        to_add = [vid for vid in unique_vids if vid not in existing]
+        if to_add:
+            G.add_vertices_bulk(({"vertex_id": vid} for vid in to_add))
+
+        for vid, aa in presence_pairs:
+            G.add_presence(vid, aa)
 
     presence_counts = {
         str(aa): len(G.layer_vertex_set(aa)) for aa in layer_tuples[: min(10, len(layer_tuples))]

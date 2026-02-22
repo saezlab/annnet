@@ -160,18 +160,18 @@ def run(scale):
     out["gexf_vertices"] = G8.number_of_vertices()
     out["gexf_edges"] = G8.number_of_edges()"""
 
-    # Parquet GraphDir adapter
+    # Parquet adapter
     with tempfile.TemporaryDirectory() as td:
         parquet_dir = os.path.join(td, "graph_parquet")
         with measure() as m_parquet_export:
-            to_parquet_graphdir(graph, parquet_dir)
+            to_parquet(graph, parquet_dir)
         parquet_size = sum(
             os.path.getsize(os.path.join(parquet_dir, f))
             for f in os.listdir(parquet_dir)
             if os.path.isfile(os.path.join(parquet_dir, f))
         )
         with measure() as m_parquet_import:
-            G9 = from_parquet_graphdir(parquet_dir)
+            G9 = from_parquet(parquet_dir)
     out["parquet_export"] = m_parquet_export
     out["parquet_import"] = m_parquet_import
     out["parquet_size_bytes"] = parquet_size

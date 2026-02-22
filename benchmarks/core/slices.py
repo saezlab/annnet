@@ -47,20 +47,16 @@ def run(scale):
     }
 
     with measure() as m_shared:
-        for i in range(50):
-            G.add_vertex(
-                f"shared_v{i}",
-                slice=slice_ids[0],
-                propagate="shared",
-            )
+        G.add_vertices_bulk(
+            ({"vertex_id": f"shared_v{i}"} for i in range(50)),
+            slice=slice_ids[0],
+        )
 
     with measure() as m_all:
-        for i in range(50):
-            G.add_vertex(
-                f"all_v{i}",
-                slice=slice_ids[0],
-                propagate="all",
-            )
+        G.add_vertices_bulk(
+            ({"vertex_id": f"all_v{i}"} for i in range(50)),
+            slice=slice_ids[0],
+        )
 
     shared_presence = {
         sid: sum(v.startswith("shared_") for v in list(G.get_slice_vertices(sid)))
