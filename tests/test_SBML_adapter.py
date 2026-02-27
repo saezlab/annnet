@@ -49,12 +49,14 @@ class DummyReaction:
         reversible: bool = False,
         reactants=None,
         products=None,
+        modifiers=None,
     ):
         self._id = rid
         self._name = name
         self._reversible = reversible
         self._reactants = reactants or []
         self._products = products or []
+        self._modifiers = modifiers or []
 
     def getId(self):
         return self._id or ""
@@ -70,6 +72,9 @@ class DummyReaction:
 
     def getListOfProducts(self):
         return self._products
+
+    def getListOfModifiers(self):
+        return self._modifiers
 
 
 class DummyModel:
@@ -126,6 +131,17 @@ class DummyGraph:
 
     def add_vertices_bulk(self, ids, slice=None):
         self.vertices.update(ids)
+
+    def add_hyperedges_bulk(self, hyperedges, *, slice=None):
+        for h in hyperedges:
+            self.add_hyperedge(
+                head=h["head"],
+                tail=h["tail"],
+                slice=h.get("slice", slice),
+                edge_id=h["edge_id"],
+                edge_directed=h.get("edge_directed", True),
+                weight=h.get("weight", 1.0),
+            )
 
     def add_hyperedge(
         self,

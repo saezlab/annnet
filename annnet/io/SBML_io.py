@@ -1,73 +1,54 @@
 from __future__ import annotations
 
-import types
 import warnings
 from collections.abc import Iterable
-
-import numpy as np
 
 warnings.filterwarnings("ignore", message="Signature .*numpy.longdouble.*")
 
 from ..core.graph import AnnNet
 
 try:
-    import libsbml  # python-libsbml
-except ImportError:  # pragma: no cover
+    import libsbml
+except ImportError:
     libsbml = None
-
-# ----------------------- utilities -----------------------
-
-
-def _monkeypatch_set_hyperedge_coeffs(G) -> bool:
-    """Add set_hyperedge_coeffs(edge_id, coeffs) to AnnNet instance if missing.
-    Writes per-vertex coefficients into the incidence column.
-    Returns True if patch was applied, False if already available.
-    """
-    if hasattr(G, "set_hyperedge_coeffs"):
-        return False  # already there
-
-    def set_hyperedge_coeffs(self, edge_id: str, coeffs: dict[str, float]) -> None:
-        col = self.edge_to_idx[edge_id]
-        for vid, coeff in coeffs.items():
-            row = self.entity_to_idx[vid]
-            self._matrix[row, col] = float(coeff)
-
-    G.set_hyperedge_coeffs = types.MethodType(set_hyperedge_coeffs, G)  # type: ignore
-    return True
-
-
-def _ensure_vertices(G, vertices: Iterable[str], slice: str | None) -> None:
-    # `add_vertices_bulk` exists and handles missing vertices efficiently.
-    G.add_vertices_bulk(list(vertices), slice=slice)
-
 
 BOUNDARY_SOURCE = "__BOUNDARY_SOURCE__"
 BOUNDARY_SINK = "__BOUNDARY_SINK__"
 
 
+# ── tiny helpers ──────────────────────────────────────────────────────────────
+
+
+def _call(obj, method, default=None):
+    """Call obj.method() if it exists, else return default."""
+    fn = getattr(obj, method, None)
+    return fn() if fn is not None else default
+
+
+def _isset(obj, setter_name: str) -> bool:
+    """Return True if obj has an isSet* method that returns True."""
+    fn = getattr(obj, setter_name, None)
+    return bool(fn()) if fn is not None else False
+
+
 def _ensure_boundary_vertices(G, slice: str) -> None:
-    # idempotent – AnnNet.add_vertices_bulk ignores existing ids
     G.add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
 
 
-# ---------------- SBML / libSBML-based import ----------------
+# ── SBML reader ───────────────────────────────────────────────────────────────
 
 
 def _read_sbml_model(path: str):
-    """Read SBML with libSBML and return the Model object."""
     if libsbml is None:
         raise ImportError(
-            "python-libsbml is required for SBML import without COBRApy. "
-            "Install it e.g. with `pip install python-libsbml`."
+            "python-libsbml is required for SBML import. Install with `pip install python-libsbml`."
         )
 
     doc = libsbml.readSBML(path)
     if doc is None:
         raise ValueError(f"libSBML failed to read file: {path}")
 
-    # Fail on serious SBML errors
     if doc.getNumErrors() > 0:
-        # Collect only errors with severity >= ERROR
         msgs = []
         for i in range(doc.getNumErrors()):
             err = doc.getError(i)
@@ -83,6 +64,105 @@ def _read_sbml_model(path: str):
     return model
 
 
+# ── compartment → slice ───────────────────────────────────────────────────────
+
+
+def _register_compartments(G, model, default_slice: str) -> None:
+    """Create one AnnNet slice per SBML compartment, carrying compartment metadata.
+    No-ops gracefully if the graph or model does not support the required API.
+    """
+    get_compartments = getattr(model, "getListOfCompartments", None)
+    if get_compartments is None:
+        return
+    has_slice = getattr(G, "has_slice", None)
+    add_slice = getattr(G, "add_slice", None)
+    if add_slice is None:
+        return
+
+    for c in get_compartments():
+        cid = _call(c, "getId")
+        if not cid or cid == default_slice:
+            continue
+        if has_slice is not None and has_slice(cid):
+            continue
+        attrs = {}
+        name = _call(c, "getName")
+        if name:
+            attrs["name"] = name
+        if _isset(c, "isSetSize"):
+            attrs["size"] = _call(c, "getSize")
+        if _isset(c, "isSetSpatialDimensions"):
+            attrs["spatial_dimensions"] = _call(c, "getSpatialDimensions")
+        if _isset(c, "isSetUnits"):
+            attrs["units"] = _call(c, "getUnits")
+        sbo = _call(c, "getSBOTermID")
+        if sbo:
+            attrs["sbo_term"] = sbo
+        constant = _call(c, "getConstant")
+        if constant is not None:
+            attrs["constant"] = bool(constant)
+        outside = _call(c, "getOutside")  # L2 parent compartment
+        if outside:
+            attrs["outside"] = outside
+        add_slice(cid, **attrs)
+
+
+# ── species → vertices ────────────────────────────────────────────────────────
+
+
+def _register_species(G, model, default_slice: str) -> dict[str, str]:
+    """Add all species as vertices into their compartment slice.
+    Returns a mapping sid -> compartment_id for later use by reactions.
+    """
+    sid_to_compartment: dict[str, str] = {}
+    by_slice: dict[str, list] = {}
+
+    for s in model.getListOfSpecies():
+        sid = _call(s, "getId")
+        if not sid:
+            continue
+
+        compartment = _call(s, "getCompartment") or default_slice
+        sid_to_compartment[sid] = compartment
+
+        attrs: dict = {}
+        name = _call(s, "getName")
+        if name:
+            attrs["name"] = name
+        if compartment != default_slice:
+            attrs["compartment"] = compartment
+        sbo = _call(s, "getSBOTermID")
+        if sbo:
+            attrs["sbo_term"] = sbo
+        meta_id = _call(s, "getMetaId")
+        if meta_id:
+            attrs["meta_id"] = meta_id
+        if _isset(s, "isSetInitialAmount"):
+            attrs["initial_amount"] = _call(s, "getInitialAmount")
+        if _isset(s, "isSetInitialConcentration"):
+            attrs["initial_concentration"] = _call(s, "getInitialConcentration")
+        has_only = _call(s, "getHasOnlySubstanceUnits")
+        if has_only is not None:
+            attrs["has_only_substance_units"] = bool(has_only)
+        bc = _call(s, "getBoundaryCondition")
+        if bc is not None:
+            attrs["boundary_condition"] = bool(bc)
+        const = _call(s, "getConstant")
+        if const is not None:
+            attrs["constant"] = bool(const)
+
+        target = compartment if compartment else default_slice
+        by_slice.setdefault(target, []).append((sid, attrs) if attrs else sid)
+
+    for target_slice, items in by_slice.items():
+        G.add_vertices_bulk(items, slice=target_slice)
+
+    return sid_to_compartment
+
+
+# ── main builder ──────────────────────────────────────────────────────────────
+
+
 def _graph_from_sbml_model(
     model,
     graph: AnnNet | None = None,
@@ -90,11 +170,18 @@ def _graph_from_sbml_model(
     slice: str = "default",
     preserve_stoichiometry: bool = True,
 ) -> AnnNet:
-    """Build a AnnNet from an SBML model using only libSBML.
+    """Build an AnnNet from an SBML model using only libSBML.
 
-    - Vertices: SBML species ids (plus global boundary source/sink nodes).
-    - Hyperedges: reactions, tail = reactants, head = products.
-    - Stoichiometry: signed coefficients (reactants negative, products positive).
+    Vertices  : SBML species ids assigned to their compartment slice.
+                Boundary placeholders go into the default slice.
+    Slices    : One AnnNet slice per SBML compartment (with metadata).
+    Hyperedges: reactions — tail = reactants + modifiers, head = products.
+    Stoichiometry:
+        reactants  : -stoich  (consumed)
+        products   : +stoich  (produced)
+        modifiers  : -1.0     (regulatory input, not consumed)
+    Edge attrs: reversible, name, sbo_term, kinetic_law, local_params,
+                modifier_roles, compartment, meta_id, is_boundary, …
     """
     if graph is None:
         if AnnNet is None:
@@ -102,108 +189,168 @@ def _graph_from_sbml_model(
         G = AnnNet(directed=True)
     else:
         G = graph
-    # Ensure all species + boundary placeholders exist
-    species_ids: list[str] = [s.getId() for s in model.getListOfSpecies()]
-    _ensure_vertices(G, species_ids, slice)
+
+    _register_compartments(G, model, slice)
+    sid_to_compartment = _register_species(G, model, slice)
     _ensure_boundary_vertices(G, slice)
 
-    # Try to enable per-vertex coefficients
-    if preserve_stoichiometry:
-        _monkeypatch_set_hyperedge_coeffs(G)
+    hyperedges: list[dict] = []
+    coeffs_map: dict[str, dict[str, float]] = {}
+    edge_attrs_map: dict[str, dict] = {}
+    rxn_slices_map: dict[str, set[str]] = {}
 
-    # Iterate reactions
     for rxn in model.getListOfReactions():
-        rid = rxn.getId() or rxn.getName()
+        rid = _call(rxn, "getId") or _call(rxn, "getName")
         if not rid:
-            # skip nameless reactions; they cannot be indexed reliably
             continue
 
         coeffs: dict[str, float] = {}
-        tail: list[str] = []  # reactants
-        head: list[str] = []  # products
+        tail: list[str] = []
+        head: list[str] = []
 
-        # Reactants: negative stoichiometry
-        for sr in rxn.getListOfReactants():
-            sid = sr.getSpecies()
+        for sr in _call(rxn, "getListOfReactants") or []:
+            sid = _call(sr, "getSpecies")
             if not sid:
                 continue
-            sto = sr.getStoichiometry()
-            if sto == 0.0:
-                sto = 1.0  # SBML default if not set
+            sto = _call(sr, "getStoichiometry") or 1.0
             coeffs[sid] = coeffs.get(sid, 0.0) - float(sto)
             tail.append(sid)
 
-        # Products: positive stoichiometry
-        for sr in rxn.getListOfProducts():
-            sid = sr.getSpecies()
+        for sr in _call(rxn, "getListOfProducts") or []:
+            sid = _call(sr, "getSpecies")
             if not sid:
                 continue
-            sto = sr.getStoichiometry()
-            if sto == 0.0:
-                sto = 1.0
+            sto = _call(sr, "getStoichiometry") or 1.0
             coeffs[sid] = coeffs.get(sid, 0.0) + float(sto)
             head.append(sid)
 
-        # Deduplicate while preserving order
+        # modifiers: regulatory inputs → tail, coefficient -1
+        modifier_roles: dict[str, str] = {}
+        for sr in _call(rxn, "getListOfModifiers") or []:
+            sid = _call(sr, "getSpecies")
+            if not sid:
+                continue
+            if sid not in coeffs:
+                coeffs[sid] = -1.0
+            if sid not in tail:
+                tail.append(sid)
+            sbo = _call(sr, "getSBOTermID")
+            if sbo:
+                modifier_roles[sid] = sbo
+
         tail = list(dict.fromkeys(tail))
         head = list(dict.fromkeys(head))
 
         if not head and not tail:
-            # Ignore truly empty reaction
             continue
 
-        boundary: tuple[str, str] | None = None
+        is_boundary = False
+        boundary_kind = None
+        boundary_node = None
 
         if not head:
-            # Sink: products empty -> route to SINK on head side
             head = [BOUNDARY_SINK]
-            boundary = ("sink", BOUNDARY_SINK)
-            # Sum of absolute reactant stoichiometries
-            sink_coeff = float(sum(-v for v in coeffs.values() if v < 0.0))
-            coeffs[BOUNDARY_SINK] = sink_coeff
+            is_boundary = True
+            boundary_kind = "sink"
+            boundary_node = BOUNDARY_SINK
+            coeffs[BOUNDARY_SINK] = float(sum(-v for v in coeffs.values() if v < 0.0))
 
         elif not tail:
-            # Source: reactants empty -> route from SOURCE on tail side
             tail = [BOUNDARY_SOURCE]
-            boundary = ("source", BOUNDARY_SOURCE)
-            source_coeff = float(-sum(v for v in coeffs.values() if v > 0.0))
-            coeffs[BOUNDARY_SOURCE] = source_coeff
+            is_boundary = True
+            boundary_kind = "source"
+            boundary_node = BOUNDARY_SOURCE
+            coeffs[BOUNDARY_SOURCE] = float(-sum(v for v in coeffs.values() if v > 0.0))
 
-        eid_added = G.add_hyperedge(
-            head=head,
-            tail=tail,
-            slice=slice,
-            edge_id=rid,
-            edge_directed=True,
-            weight=1.0,
+        hyperedges.append(
+            {
+                "edge_id": rid,
+                "head": head,
+                "tail": tail,
+                "slice": slice,
+                "weight": 1.0,
+                "edge_directed": True,
+            }
         )
+        coeffs_map[rid] = coeffs
 
-        # Write exact coefficients if supported; else stash as attribute
-        if preserve_stoichiometry and hasattr(G, "set_hyperedge_coeffs"):
-            G.set_hyperedge_coeffs(eid_added, coeffs)
+        # ── edge attributes ──────────────────────────────────────────────────
+        attrs: dict = {"reversible": bool(_call(rxn, "getReversible", False))}
+
+        name = _call(rxn, "getName")
+        if name:
+            attrs["name"] = name
+        sbo = _call(rxn, "getSBOTermID")
+        if sbo:
+            attrs["sbo_term"] = sbo
+        meta_id = _call(rxn, "getMetaId")
+        if meta_id:
+            attrs["meta_id"] = meta_id
+        rxn_comp = _call(rxn, "getCompartment")  # L3 only
+        if rxn_comp:
+            attrs["compartment"] = rxn_comp
+        if modifier_roles:
+            attrs["modifier_roles"] = modifier_roles
+
+        if _isset(rxn, "isSetKineticLaw"):
+            kl = _call(rxn, "getKineticLaw")
+            if kl is not None:
+                formula = _call(kl, "getFormula")
+                if formula:
+                    attrs["kinetic_law"] = formula
+                local_params = {}
+                for lp in _call(kl, "getListOfLocalParameters") or []:
+                    pid = _call(lp, "getId")
+                    if pid and _isset(lp, "isSetValue"):
+                        local_params[pid] = _call(lp, "getValue")
+                if local_params:
+                    attrs["local_params"] = local_params
+
+        if is_boundary:
+            attrs["is_boundary"] = True
+            attrs["boundary_kind"] = boundary_kind
+            attrs["boundary_node"] = boundary_node
+
+        edge_attrs_map[rid] = attrs
+
+        # ── compartment slices this reaction touches ─────────────────────────
+        rxn_slices: set[str] = set()
+        for sid in list(tail) + list(head):
+            if sid in (BOUNDARY_SOURCE, BOUNDARY_SINK):
+                continue
+            comp = sid_to_compartment.get(sid)
+            if comp and comp != slice:
+                rxn_slices.add(comp)
+        rxn_slices_map[rid] = rxn_slices
+
+    # ── bulk insert ───────────────────────────────────────────────────────────
+    G.add_hyperedges_bulk(hyperedges, slice=slice)
+
+    # ── stoichiometry ─────────────────────────────────────────────────────────
+    for rid, coeffs in coeffs_map.items():
+        if preserve_stoichiometry:
+            G.set_hyperedge_coeffs(rid, coeffs)
         else:
-            G.set_edge_attrs(eid_added, stoich=coeffs)
+            G.set_edge_attrs(rid, stoich=coeffs)
 
-        # Basic reaction metadata
-        attrs = {
-            "name": rxn.getName() or None,
-            "reversible": bool(rxn.getReversible()),
-        }
-        clean = {k: v for k, v in attrs.items() if v is not None}
-        if clean:
-            G.set_edge_attrs(eid_added, **clean)
+    # ── edge attributes ───────────────────────────────────────────────────────
+    for rid, attrs in edge_attrs_map.items():
+        G.set_edge_attrs(rid, **attrs)
 
-        # Mark boundary reactions for easy filtering
-        if boundary:
-            kind, bnode = boundary
-            G.set_edge_attrs(
-                eid_added,
-                is_boundary=True,
-                boundary_kind=kind,
-                boundary_node=bnode,
-            )
+    # ── assign reactions to their compartment slices ──────────────────────────
+    add_edge_to_slice = getattr(G, "add_edge_to_slice", None)
+    if add_edge_to_slice is not None:
+        for rid, rxn_slices in rxn_slices_map.items():
+            for cid in rxn_slices:
+                try:
+                    add_edge_to_slice(cid, rid)
+                except Exception:
+                    pass
 
     return G
+
+
+# ── public entry point ────────────────────────────────────────────────────────
 
 
 def from_sbml(
@@ -213,20 +360,21 @@ def from_sbml(
     slice: str = "default",
     preserve_stoichiometry: bool = True,
 ) -> AnnNet:
-    """Read SBML using python-libsbml.
+    """Read an SBML file into an AnnNet hypergraph.
 
     Parameters
     ----------
     path:
-        Path to the SBML file.
+        Path to the .xml / .sbml file.
     graph:
-        Optional existing AnnNet to add entities/edges to.
+        Optional existing AnnNet to merge into.
     slice:
-        AnnNet slice name.
+        AnnNet slice name for default placement. Compartment-specific
+        species will additionally appear in their compartment slice.
     preserve_stoichiometry:
-        If True, store per-vertex stoichiometric coefficients
-        (either via `set_hyperedge_coeffs` if available, or as
-        an edge attribute `stoich`).
+        Write signed stoichiometric coefficients into the incidence matrix
+        via set_hyperedge_coeffs (reactants negative, products positive,
+        modifiers -1). Default True.
     """
     model = _read_sbml_model(path)
     return _graph_from_sbml_model(
