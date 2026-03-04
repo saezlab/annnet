@@ -1365,6 +1365,14 @@ class AnnNet(
         if self._current_slice == slice_id:
             self._current_slice = self._default_slice
 
+    def remove_orphans(self):
+        """Remove all vertices with no incident edges from the AnnNet graph."""
+        orphans = [v for v in list(self.vertices()) if len(self.incident_edges(v)) == 0]
+        for v in orphans:
+            self.remove_vertex(v)
+        print(f"Removed {len(orphans)} orphan nodes. Remaining: {self.number_of_vertices()}")
+        return len(orphans)
+
     # Basic queries & metrics
 
     def get_vertex(self, index: int) -> str:

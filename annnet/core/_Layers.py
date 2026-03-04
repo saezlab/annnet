@@ -680,6 +680,76 @@ class LayerManager:
         """
         return self._G.supra_adjacency(layers)
 
+    def supra_incidence(
+        self,
+        layers: list[str] | list[tuple[str, ...]] | None = None,
+        include_inter: bool = True,
+        include_coupling: bool = True,
+    ) -> tuple[sp.csr_matrix, list[str]]:
+        """Build the supra-incidence matrix over selected layers.
+
+            Unlike supra_adjacency, this preserves the full hyperedge structure —
+            a k-ary hyperedge becomes a single column with k nonzero entries, with
+            stoichiometric coefficients intact. Binary intra, inter, coupling, and
+            hyperedges are all handled in a unified column-oriented representation.
+
+            Rows  : vertex-layer pairs (u, aa) — identical index to supra_adjacency,
+                    built by ensure_vertex_layer_index.
+            Cols  : one per selected edge, ordered as: intra edges (per layer, sorted
+                    by eid), then inter/coupling edges, then unassigned hyperedges last.
+
+            Column sign convention (matches _matrix):
+                - Binary directed   : +w at source row, -w at target row
+                - Binary undirected : +w at both rows
+                - Hyperedge directed: +w at head rows, -w at tail rows (stoich-aware)
+                - Hyperedge undirected: +w at all member rows (stoich-aware)
+                - Inter/coupling    : +w at (u, La) row, -w at (v, Lb) row (directed)
+
+            Hyperedges MUST have a layer assignment in edge_layers (set via
+            set_edge_kivela_role(eid, "intra", layer_tuple) after add_hyperedge).
+            Hyperedges without a layer assignment are collected in the returned
+            skipped list and excluded from the matrix — they do NOT silently corrupt
+            the result.
+
+            Parameters
+            ----------
+            layers : list[str] | list[tuple[str, ...]] | None
+                Optional subset of layers. None = all layers in V_M.
+                Single-aspect string ids are accepted.
+            include_inter : bool
+                Include inter-layer edges in the output columns. Default True.
+            include_coupling : bool
+                Include coupling edges in the output columns. Default True.
+
+            Returns
+            -------
+            B : scipy.sparse.csr_matrix
+                Shape (|V_M|, |E_selected|). Rows are vertex-layer pairs in the
+                order given by self._row_to_nl after ensure_vertex_layer_index.
+            edge_ids : list[str]
+                Edge id for each column of B, in column order. Use this to map
+                columns back to edges for interpretability.
+            skipped : list[str]
+                Edge ids that were excluded because their layer assignment could
+                not be resolved. Inspect these if B looks sparse.
+
+            Notes
+            -----
+            The hypergraph random-walk diffusion operator follows directly::
+
+                B_csr = B  (this output)
+                D_v = diag(|B| @ ones)          # vertex degree (sum of |entries| per row)
+                D_e = diag(|B|.T @ ones)        # edge degree (sum of |entries| per col)
+                Theta = D_v_inv @ B @ D_e_inv @ B.T
+
+            Examples
+            --------
+        ```python
+            B, eids, skipped = G.supra_incidence()
+        ```
+        """
+        return self._G.supra_incidence(layers)
+
     def blocks(self, layers=None):
         """Return supra block matrices.
 
@@ -746,6 +816,30 @@ class LayerClass:
         if not all(spaces) and self.aspects:
             return  # No valid Cartesian product possible
         self._all_layers = tuple(itertools.product(*spaces)) if all(spaces) else ()
+
+    def add_elementary_layer(self, aspect: str, label: str):
+        """
+        Register a new elementary layer label under an existing aspect.
+
+        Parameters
+        ----------
+        aspect : str
+            Existing aspect name.
+        label : str
+            New elementary layer label.
+
+        Returns
+        -------
+        None
+        """
+        if aspect not in self.aspects:
+            raise KeyError(f"Unknown aspect {aspect!r}")
+
+        if label in self.elem_layers[aspect]:
+            return  # already exists
+
+        self.elem_layers[aspect].append(label)
+        self._rebuild_all_layers_cache()
 
     ## Presence (V_M)
 
@@ -1255,7 +1349,9 @@ class LayerClass:
         if role == "intra":
             aa = tuple(layers)
             self._validate_layer_tuple(aa)
-            self.edge_kind[eid] = "intra"
+            # preserve "hyper" kind — hyperedges tagged as intra keep their topology
+            if self.edge_kind.get(eid) != "hyper":
+                self.edge_kind[eid] = "intra"
             self.edge_layers[eid] = aa
         elif role in {"inter", "coupling"}:
             La, Lb = layers
@@ -1613,7 +1709,7 @@ class LayerClass:
         for eid, kind in self.edge_kind.items():
             layers = self.edge_layers.get(eid)
 
-            if kind == "intra":
+            if kind in {"intra", "hyper"}:
                 if layers == aa:
                     E.add(eid)
 
@@ -2205,6 +2301,282 @@ class LayerClass:
             A[ru, rv] = A.get((ru, rv), 0.0) + w
             A[rv, ru] = A.get((rv, ru), 0.0) + w  # undirected; adapt if directed
         return A.tocsr()
+
+    ## Supra_Incidence
+
+    def supra_incidence(
+        self,
+        layers: list[str] | list[tuple[str, ...]] | None = None,
+        include_inter: bool = True,
+        include_coupling: bool = True,
+    ) -> tuple[sp.csr_matrix, list[str]]:
+        """Build the supra-incidence matrix over selected layers.
+
+            Unlike supra_adjacency, this preserves the full hyperedge structure —
+            a k-ary hyperedge becomes a single column with k nonzero entries, with
+            stoichiometric coefficients intact. Binary intra, inter, coupling, and
+            hyperedges are all handled in a unified column-oriented representation.
+
+            Rows  : vertex-layer pairs (u, aa) — identical index to supra_adjacency,
+                    built by ensure_vertex_layer_index.
+            Cols  : one per selected edge, ordered as: intra edges (per layer, sorted
+                    by eid), then inter/coupling edges, then unassigned hyperedges last.
+
+            Column sign convention (matches _matrix):
+                - Binary directed   : +w at source row, -w at target row
+                - Binary undirected : +w at both rows
+                - Hyperedge directed: +w at head rows, -w at tail rows (stoich-aware)
+                - Hyperedge undirected: +w at all member rows (stoich-aware)
+                - Inter/coupling    : +w at (u, La) row, -w at (v, Lb) row (directed)
+
+            Hyperedges MUST have a layer assignment in edge_layers (set via
+            set_edge_kivela_role(eid, "intra", layer_tuple) after add_hyperedge).
+            Hyperedges without a layer assignment are collected in the returned
+            skipped list and excluded from the matrix — they do NOT silently corrupt
+            the result.
+
+            Parameters
+            ----------
+            layers : list[str] | list[tuple[str, ...]] | None
+                Optional subset of layers. None = all layers in V_M.
+                Single-aspect string ids are accepted.
+            include_inter : bool
+                Include inter-layer edges in the output columns. Default True.
+            include_coupling : bool
+                Include coupling edges in the output columns. Default True.
+
+            Returns
+            -------
+            B : scipy.sparse.csr_matrix
+                Shape (|V_M|, |E_selected|). Rows are vertex-layer pairs in the
+                order given by self._row_to_nl after ensure_vertex_layer_index.
+            edge_ids : list[str]
+                Edge id for each column of B, in column order. Use this to map
+                columns back to edges for interpretability.
+            skipped : list[str]
+                Edge ids that were excluded because their layer assignment could
+                not be resolved. Inspect these if B looks sparse.
+
+            Notes
+            -----
+            The hypergraph random-walk diffusion operator follows directly::
+
+                B_csr = B  (this output)
+                D_v = diag(|B| @ ones)          # vertex degree (sum of |entries| per row)
+                D_e = diag(|B|.T @ ones)        # edge degree (sum of |entries| per col)
+                Theta = D_v_inv @ B @ D_e_inv @ B.T
+
+            Examples
+            --------
+        ```python
+            B, eids, skipped = G.supra_incidence()
+        ```
+        """
+        # 0. Normalise layers argument — identical pattern to supra_adjacency
+
+        if (
+            layers is not None
+            and len(getattr(self, "aspects", [])) == 1
+            and getattr(self, "_legacy_single_aspect_enabled", True)
+        ):
+            layers_t = [self.layer_id_to_tuple(L) for L in layers]
+        else:
+            layers_t = None if layers is None else [tuple(L) for L in layers]
+
+        self.ensure_vertex_layer_index(layers_t)
+        n_rows = len(self._row_to_nl)
+
+        # 1. Materialise _matrix as CSC (compressed sparse column) for fast column slicing — one call, reused for every hyperedge column.     #
+        M_csc = self._matrix.tocsc()
+
+        # 2. Helper: normalise a layer label to a tuple, same guard as supra_adjacency.                                                  #
+
+        def _to_tuple(L):
+            if isinstance(L, tuple):
+                return L
+            if len(getattr(self, "aspects", [])) == 1 and getattr(
+                self, "_legacy_single_aspect_enabled", True
+            ):
+                return self.layer_id_to_tuple(L)
+            return None  # unresolvable
+
+        # 3. Collect columns — three passes matching supra_adjacency's logic.
+        # We build lists of (row_indices, values) per column, then assemble into a single COO (coordinate format) matrix at the end.
+        col_data: list[tuple[list[int], list[float]]] = []
+        edge_ids: list[str] = []
+        skipped: list[str] = []
+
+        for eid, kind in self.edge_kind.items():
+            # 3a. INTRA binary edge
+
+            if kind == "intra":
+                raw_L = self.edge_layers.get(eid)
+                if raw_L is None:
+                    skipped.append(eid)
+                    continue
+                L = _to_tuple(raw_L)
+                if L is None:
+                    skipped.append(eid)
+                    continue
+                if layers_t is not None and L not in layers_t:
+                    continue
+
+                try:
+                    u, v, _etype = self.edge_definitions[eid]
+                except KeyError:
+                    skipped.append(eid)
+                    continue
+                if u is None or v is None:
+                    skipped.append(eid)
+                    continue
+
+                ru = self._nl_to_row.get((u, L))
+                rv = self._nl_to_row.get((v, L))
+                if ru is None or rv is None:
+                    skipped.append(eid)
+                    continue
+
+                w = float(self.edge_weights.get(eid, 1.0))
+                is_dir = self.edge_directed.get(eid, True)
+
+                if is_dir:
+                    rows_out = [ru, rv]
+                    vals_out = [w, -w]
+                else:
+                    rows_out = [ru, rv]
+                    vals_out = [w, w]
+
+                col_data.append((rows_out, vals_out))
+                edge_ids.append(eid)
+
+            # 3b. HYPER edge — read stoichiometry directly from _matrix
+
+            elif kind == "hyper":
+                raw_L = self.edge_layers.get(eid)
+                if raw_L is None:
+                    # No layer assignment — skip and report
+                    skipped.append(eid)
+                    continue
+                L = _to_tuple(raw_L)
+                if L is None:
+                    skipped.append(eid)
+                    continue
+                if layers_t is not None and L not in layers_t:
+                    continue
+
+                hdef = self.hyperedge_definitions.get(eid)
+                if hdef is None:
+                    skipped.append(eid)
+                    continue
+
+                col_idx = self.edge_to_idx.get(eid)
+                if col_idx is None:
+                    skipped.append(eid)
+                    continue
+
+                # Extract the full column from _matrix (sparse, so only nonzero entries — includes exact stoichiometric coefficients if set_hyperedge_coeffs was called).
+                col_vec = M_csc.getcol(col_idx)
+                nz_rows_in_flat, _ = col_vec.nonzero()
+
+                rows_out = []
+                vals_out = []
+                for flat_row in nz_rows_in_flat:
+                    entity_id = self.idx_to_entity.get(flat_row)
+                    if entity_id is None:
+                        continue
+                    supra_row = self._nl_to_row.get((entity_id, L))
+                    if supra_row is None:
+                        # Entity exists in _matrix but not in V_M for this layer — presence was never declared. Skip this entry rather than silently placing it in the wrong row.
+                        continue
+                    coeff = float(col_vec[flat_row, 0])
+                    rows_out.append(supra_row)
+                    vals_out.append(coeff)
+
+                if not rows_out:
+                    # Hyperedge has a layer but no members landed in V_M — almost certainly a missing add_presence call.
+                    skipped.append(eid)
+                    continue
+
+                col_data.append((rows_out, vals_out))
+                edge_ids.append(eid)
+
+            # 3c. INTER / COUPLING edges
+
+            elif kind in {"inter", "coupling"}:
+                if kind == "inter" and not include_inter:
+                    continue
+                if kind == "coupling" and not include_coupling:
+                    continue
+
+                raw_layers = self.edge_layers.get(eid)
+                if raw_layers is None:
+                    skipped.append(eid)
+                    continue
+                La_raw, Lb_raw = raw_layers
+                La = _to_tuple(La_raw)
+                Lb = _to_tuple(Lb_raw)
+                if La is None or Lb is None:
+                    skipped.append(eid)
+                    continue
+                if layers_t is not None and (La not in layers_t or Lb not in layers_t):
+                    continue
+
+                try:
+                    u, v, _etype = self.edge_definitions[eid]
+                except KeyError:
+                    skipped.append(eid)
+                    continue
+                if u is None or v is None:
+                    skipped.append(eid)
+                    continue
+
+                ru = self._nl_to_row.get((u, La))
+                rv = self._nl_to_row.get((v, Lb))
+                if ru is None or rv is None:
+                    skipped.append(eid)
+                    continue
+
+                w = float(self.edge_weights.get(eid, 1.0))
+                is_dir = self.edge_directed.get(eid, True)
+
+                if is_dir:
+                    rows_out = [ru, rv]
+                    vals_out = [w, -w]
+                else:
+                    rows_out = [ru, rv]
+                    vals_out = [w, w]
+
+                col_data.append((rows_out, vals_out))
+                edge_ids.append(eid)
+
+            # kind == "hyper" already handled; any other unknown kind: skip
+            else:
+                continue
+
+        # 4. Assemble COO matrix then convert to CSR
+
+        n_cols = len(col_data)
+
+        if n_cols == 0:
+            B = sp.csr_matrix((n_rows, 0), dtype=float)
+            return B, edge_ids, skipped
+
+        all_rows: list[int] = []
+        all_cols: list[int] = []
+        all_vals: list[float] = []
+
+        for col_j, (rows_j, vals_j) in enumerate(col_data):
+            all_rows.extend(rows_j)
+            all_cols.extend([col_j] * len(rows_j))
+            all_vals.extend(vals_j)
+
+        B = sp.coo_matrix(
+            (all_vals, (all_rows, all_cols)),
+            shape=(n_rows, n_cols),
+            dtype=float,
+        ).tocsr()
+
+        return B, edge_ids, skipped
 
     ##  Block partitions & Laplacians
 
