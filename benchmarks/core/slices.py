@@ -110,14 +110,10 @@ def run(scale):
     }
 
     with measure() as m_derived:
-        tmp_sid = "tmp_even"
-        G.add_slice(tmp_sid)
-        for v in G.vertices():
-            if v.endswith("0"):
-                G.add_vertex_to_slice(tmp_sid, v)
-
-        derived_result = {"vertices": G.get_slice_vertices(tmp_sid), "edges": set()}
-        derived_sid = G.create_slice_from_operation("derived_even", derived_result)
+        filtered_verts = {v for v in G.vertices() if v.endswith("0")}
+        derived_sid = G.create_slice_from_operation(
+            "derived_even", {"vertices": filtered_verts, "edges": set()}
+        )
 
     results["derived_slice"] = {
         "metrics": m_derived,

@@ -79,33 +79,11 @@ def run(scale):
         "sample_layer_counts": presence_counts,
     }
 
-    with measure() as m_intra_edges:
-        intra_count = 0
-        for aa in layer_tuples[: min(len(layer_tuples), scale.slices)]:
-            verts = list(G.layer_vertex_set(aa))
-            if len(verts) < 2:
-                continue
-
-            n_edges = min(len(verts), scale.edges // len(layer_tuples))
-            for i in range(n_edges):
-                u = verts[i % len(verts)]
-                v = verts[(i + 1) % len(verts)]
-                G.add_intra_edge_nl(u, v, aa, weight=1.0)
-                intra_count += 1
-
-    intra_edge_counts = {
-        str(aa): len(G.layer_edge_set(aa, include_inter=False, include_coupling=False))
-        for aa in layer_tuples[: min(10, len(layer_tuples))]
-    }
-
-    results["intra_edges"] = {
-        "metrics": m_intra_edges,
-        "total_intra": intra_count,
-        "sample_counts": intra_edge_counts,
-    }
-
     # ------------------------------------------------------------------
-    # FAST bulk intra-layer edges (direct matrix path)
+    # Intra-layer edges via bulk path (add_intra_edges_bulk, fast_mode=True)
+    # Single-call add_intra_edge_nl is intentionally avoided here because
+    # running it before the bulk pass would double the edge count and
+    # produce misleading timing comparisons.
     # ------------------------------------------------------------------
 
     bulk_by_layer = {}
@@ -115,33 +93,29 @@ def run(scale):
             continue
 
         n_edges = min(len(verts), scale.edges // len(layer_tuples))
-        edges_uv = []
-        for i in range(n_edges):
-            u = verts[i % len(verts)]
-            v = verts[(i + 1) % len(verts)]
-            edges_uv.append((u, v))
-
+        edges_uv = [
+            (verts[i % len(verts)], verts[(i + 1) % len(verts)]) for i in range(n_edges)
+        ]
         if edges_uv:
             bulk_by_layer[aa] = edges_uv
 
     with measure() as m_intra_edges_bulk:
         bulk_count = 0
         for aa, edges_uv in bulk_by_layer.items():
-            eids = G.add_intra_edges_bulk(
-                edges_uv,
-                layer_tuple=aa,
-                fast_mode=True,
-            )
+            eids = G.add_intra_edges_bulk(edges_uv, layer_tuple=aa, fast_mode=True)
             bulk_count += len(eids)
+
+    intra_count = bulk_count
+
+    intra_edge_counts = {
+        str(aa): len(G.layer_edge_set(aa, include_inter=False, include_coupling=False))
+        for aa in layer_tuples[: min(10, len(layer_tuples))]
+    }
 
     results["intra_edges_bulk"] = {
         "metrics": m_intra_edges_bulk,
-        "total_intra": bulk_count,
-        "speedup_vs_single": (
-            results["intra_edges"]["metrics"]["wall_time_s"] / m_intra_edges_bulk["wall_time_s"]
-            if m_intra_edges_bulk["wall_time_s"] > 0
-            else None
-        ),
+        "total_intra": intra_count,
+        "sample_counts": intra_edge_counts,
     }
 
     with measure() as m_inter_edges:

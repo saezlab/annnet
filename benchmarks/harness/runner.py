@@ -7,9 +7,9 @@ from .scales import SCALES
 BENCH_ROOT = Path(__file__).resolve().parents[1]
 
 
-def discover_benchmarks():
+def discover_benchmarks(pkgs=("core", "io", "adapters")):
     benches = []
-    for pkg in ("core", "io", "adapters"):
+    for pkg in pkgs:
         pkg_dir = BENCH_ROOT / pkg
         for py in pkg_dir.glob("*.py"):
             if py.name.startswith("_"):
@@ -18,11 +18,11 @@ def discover_benchmarks():
     return benches
 
 
-def run(scale_name="small"):
+def run(scale_name="small", pkgs=("core", "io", "adapters")):
     scale = SCALES[scale_name]
     results = {"scale": scale_name, "benchmarks": {}}
 
-    for modname in discover_benchmarks():
+    for modname in discover_benchmarks(pkgs=pkgs):
         mod = importlib.import_module(modname)
         if hasattr(mod, "run"):
             try:
@@ -41,8 +41,16 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--scale", default="small", choices=SCALES.keys())
     p.add_argument("--out", default="benchmark_results.json")
+    p.add_argument(
+        "--pkg",
+        nargs="+",
+        default=["core", "io", "adapters"],
+        choices=["core", "io", "adapters"],
+        metavar="PKG",
+        help="benchmark packages to run (default: all)",
+    )
     args = p.parse_args()
 
-    res = run(args.scale)
+    res = run(args.scale, pkgs=tuple(args.pkg))
     Path(args.out).write_text(json.dumps(res, indent=2))
     print(f"Wrote {args.out}")

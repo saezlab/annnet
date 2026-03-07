@@ -1,9 +1,5 @@
 """
-Full attribute benchmark.
-
-Compares:
-- per-entity attribute mutation (slow path)
-- bulk attribute mutation (new fast path)
+Attribute benchmark (bulk paths only).
 
 Measures:
 - wall time
@@ -37,24 +33,7 @@ def run(scale):
     )
 
     # ------------------------------------------------------------------
-    # Baseline: per-vertex attribute mutation (SLOW)
-    # ------------------------------------------------------------------
-    with measure() as m_vertex_single:
-        for i in range(scale.vertices):
-            G.set_vertex_attrs(
-                f"v{i}",
-                kind="gene",
-                score=i % 7,
-            )
-
-    results["vertex_attrs_single"] = {
-        "metrics": m_vertex_single,
-        "rows": scale.vertices,
-        "rows_per_sec": scale.vertices / m_vertex_single["wall_time_s"],
-    }
-
-    # ------------------------------------------------------------------
-    # Bulk vertex attributes (FASTER)
+    # Bulk vertex attributes
     # ------------------------------------------------------------------
     items = [(f"v{i}", {"kind": "gene", "score": i % 7}) for i in range(scale.vertices)]
 
