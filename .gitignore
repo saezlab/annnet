@@ -67,6 +67,9 @@ dist/
 test_venv/
 *venv*/
 test_venv/
+notebooks/data
+
+
 # pixi environments
 .pixi/*
 !.pixi/config.toml
