@@ -623,6 +623,16 @@ class BulkOps:
                 self.edge_definitions[edge_id] = (s, t, old_type)
                 self.edge_weights[edge_id] = w
                 self.edge_directed[edge_id] = is_dir
+                if (old_s, old_t) != (s, t):
+                    lst = self._adj.get((old_s, old_t))
+                    if lst:
+                        try:
+                            lst.remove(edge_id)
+                        except ValueError:
+                            pass
+                        if not lst:
+                            del self._adj[(old_s, old_t)]
+                    self._adj.setdefault((s, t), []).append(edge_id)
                 pending_attrs.setdefault(edge_id, {})["edge_type"] = (
                     EdgeType.DIRECTED if is_dir else EdgeType.UNDIRECTED
                 )
@@ -637,6 +647,7 @@ class BulkOps:
                 M[s_idx, col] = w
                 if s != t:
                     M[t_idx, col] = -w if is_dir else w
+                self._adj.setdefault((s, t), []).append(edge_id)
 
             # slice membership + optional per-slice weight
             if slice_local is not None:
@@ -1185,6 +1196,7 @@ class BulkOps:
             if c in old_to_new:
                 M_new[r, old_to_new[c]] = v
         self._matrix = M_new
+        self._csr_cache = None
 
         # Rebuild edge mappings
         self.idx_to_edge.clear()
@@ -1197,7 +1209,17 @@ class BulkOps:
         # Metadata cleanup (vectorized)
         # Dicts
         for eid in drop:
-            self.edge_definitions.pop(eid, None)
+            defn = self.edge_definitions.pop(eid, None)
+            if defn is not None:
+                key = (defn[0], defn[1])
+                lst = self._adj.get(key)
+                if lst:
+                    try:
+                        lst.remove(eid)
+                    except ValueError:
+                        pass
+                    if not lst:
+                        del self._adj[key]
             self.edge_weights.pop(eid, None)
             self.edge_directed.pop(eid, None)
             self.edge_kind.pop(eid, None)
@@ -1271,6 +1293,7 @@ class BulkOps:
             if r in old_to_new:
                 M_new[old_to_new[r], c] = v
         self._matrix = M_new
+        self._csr_cache = None
 
         # 5) Rebuild entity mappings
         new_entity_to_idx = {}

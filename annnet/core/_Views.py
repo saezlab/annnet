@@ -387,12 +387,7 @@ class GraphView:
         -------
         AnnNet
             Materialized subgraph.
-
-        Notes
-        -----
-        Uses `AnnNet.add_vertex()`, `add_edge()`, `add_hyperedge()`, and `get_*_attrs()`.
         """
-        # Create new AnnNet instance
         from .graph import AnnNet
 
         subG = AnnNet(directed=self._graph.directed)
@@ -400,79 +395,98 @@ class GraphView:
         vertex_ids = self.vertex_ids
         edge_ids = self.edge_ids
 
-        # Determine which vertices to copy
+        # vset is a set for O(1) membership checks throughout
         if vertex_ids is not None:
-            vertices_to_copy = vertex_ids
+            vset = vertex_ids  # already a set from _compute_ids
         else:
-            vertices_to_copy = [
-                vid for vid, vtype in self._graph.entity_types.items() if vtype == "vertex"
-            ]
+            vset = {vid for vid, vtype in self._graph.entity_types.items() if vtype == "vertex"}
 
-        # Copy vertices (uses AnnNet.add_vertex, get_vertex_attrs)
-        for vid in vertices_to_copy:
-            if copy_attributes:
-                attrs = self._graph.get_vertex_attrs(vid)
-                # drop structural keys
-                attrs = {k: v for k, v in attrs.items() if k not in self._graph._vertex_RESERVED}
-                subG.add_vertex(vid, **attrs)
-            else:
-                subG.add_vertex(vid)
+        # ---- Copy vertices in one bulk call ----
+        if copy_attributes:
+            # obs is the already-filtered vertex attr DataFrame — one scan replaces N individual lookups
+            obs_df = self.obs
+            try:
+                if pl is not None and isinstance(obs_df, pl.DataFrame):
+                    vertex_records = obs_df.to_dicts()
+                else:
+                    import narwhals as nw
+                    vertex_records = nw.from_native(obs_df, eager_only=True).to_pandas().to_dict(orient="records")
+            except Exception:
+                vertex_records = [{"vertex_id": vid} for vid in vset]
+            subG.add_vertices_bulk(vertex_records)
+        else:
+            subG.add_vertices_bulk({"vertex_id": vid} for vid in vset)
 
-        # Determine which edges to copy
+        # ---- Collect all edge attrs in one bulk scan ----
+        edge_attrs_map = {}
+        if copy_attributes:
+            var_df = self.var  # already-filtered edge attr DataFrame
+            try:
+                if pl is not None and isinstance(var_df, pl.DataFrame) and "edge_id" in var_df.columns:
+                    for row in var_df.to_dicts():
+                        eid = row.pop("edge_id", None)
+                        if eid is not None:
+                            edge_attrs_map[eid] = row
+                else:
+                    import narwhals as nw
+                    native = nw.from_native(var_df, eager_only=True).to_pandas()
+                    for row in native.to_dict(orient="records"):
+                        eid = row.pop("edge_id", None)
+                        if eid is not None:
+                            edge_attrs_map[eid] = row
+            except Exception:
+                pass
+
+        # ---- Determine which edges to copy ----
         if edge_ids is not None:
-            edges_to_copy = edge_ids
+            eids_to_copy = edge_ids
         else:
-            edges_to_copy = self._graph.edge_to_idx.keys()
+            eids_to_copy = self._graph.edge_to_idx.keys()
 
-        # Copy edges (uses AnnNet methods)
-        for eid in edges_to_copy:
-            # Binary edges
+        # ---- Partition into binary and hyperedges ----
+        binary_edges = []
+        hyper_edges = []
+
+        for eid in eids_to_copy:
             if eid in self._graph.edge_definitions:
                 source, target, edge_type = self._graph.edge_definitions[eid]
-
-                if source not in vertices_to_copy or target not in vertices_to_copy:
+                if source not in vset or target not in vset:
                     continue
-
                 weight = self._graph.edge_weights.get(eid, 1.0)
                 directed = self._graph.edge_directed.get(eid, self._graph.directed)
+                d = {
+                    "source": source,
+                    "target": target,
+                    "weight": weight,
+                    "edge_type": edge_type,
+                    "edge_directed": directed,
+                }
+                if copy_attributes and eid in edge_attrs_map:
+                    d["attributes"] = edge_attrs_map[eid]
+                binary_edges.append(d)
 
-                if copy_attributes:
-                    attrs = self._graph.get_edge_attrs(eid)
-                    subG.add_edge(source, target, weight=weight, directed=directed, **attrs)
-                else:
-                    subG.add_edge(source, target, weight=weight, directed=directed)
-
-            # Hyperedges
             elif eid in self._graph.hyperedge_definitions:
                 hdef = self._graph.hyperedge_definitions[eid]
-
+                weight = self._graph.edge_weights.get(eid, 1.0)
                 if hdef.get("directed", False):
                     heads = list(hdef.get("head", []))
                     tails = list(hdef.get("tail", []))
-
-                    if not all(h in vertices_to_copy for h in heads):
+                    if not all(h in vset for h in heads) or not all(t in vset for t in tails):
                         continue
-                    if not all(t in vertices_to_copy for t in tails):
-                        continue
-
-                    weight = self._graph.edge_weights.get(eid, 1.0)
-                    if copy_attributes:
-                        attrs = self._graph.get_edge_attrs(eid)
-                        subG.add_hyperedge(head=heads, tail=tails, weight=weight, **attrs)
-                    else:
-                        subG.add_hyperedge(head=heads, tail=tails, weight=weight)
+                    d = {"head": heads, "tail": tails, "weight": weight}
                 else:
                     members = list(hdef.get("members", []))
-
-                    if not all(m in vertices_to_copy for m in members):
+                    if not all(m in vset for m in members):
                         continue
+                    d = {"members": members, "weight": weight}
+                if copy_attributes and eid in edge_attrs_map:
+                    d["attributes"] = edge_attrs_map[eid]
+                hyper_edges.append(d)
 
-                    weight = self._graph.edge_weights.get(eid, 1.0)
-                    if copy_attributes:
-                        attrs = self._graph.get_edge_attrs(eid)
-                        subG.add_hyperedge(members=members, weight=weight, **attrs)
-                    else:
-                        subG.add_hyperedge(members=members, weight=weight)
+        if binary_edges:
+            subG.add_edges_bulk(binary_edges)
+        if hyper_edges:
+            subG.add_hyperedges_bulk(hyper_edges)
 
         return subG
 
