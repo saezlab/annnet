@@ -23,7 +23,7 @@ import numpy as np
 from annnet.core.graph import AnnNet
 from benchmarks.harness.metrics import measure
 
-MAX_SPECTRAL_N = 2000
+MAX_SPECTRAL_N = 6000
 MAX_DENSE_COMPARE_N = 1500
 
 
@@ -31,8 +31,12 @@ def run(scale):
     results = {}
     G = AnnNet(directed=True)
 
-    n_aspects = min(3, max(2, scale.slices // 10))
-    n_elem_per_aspect = max(2, scale.slices // n_aspects)
+    # Fixed layer structure — independent of scale.slices which is too small
+    # to produce a meaningful multilayer graph. These values give ~20 layer
+    # tuples and enough vertices/edges to stress the supra-matrix and
+    # spectral code paths at every scale level.
+    n_aspects = 2
+    n_elem_per_aspect = 5  # 5^2 = 25 layer tuples
 
     aspects = [f"aspect_{i}" for i in range(n_aspects)]
     elem_layers = {a: [f"{a}_e{j}" for j in range(n_elem_per_aspect)] for a in aspects}
@@ -41,6 +45,8 @@ def run(scale):
         G.set_aspects(aspects, elem_layers)
 
     layer_tuples = list(G.iter_layers())
+    n_active_layers = min(len(layer_tuples), 20)
+
     results["aspect_setup"] = {
         "metrics": m_aspect_setup,
         "n_aspects": n_aspects,
@@ -48,14 +54,21 @@ def run(scale):
         "n_layer_tuples": len(layer_tuples),
     }
 
-    vertices_per_layer = min(10, scale.vertices)
+    vertices_per_layer = max(20, scale.vertices // 50)
+    # Half the budget is shared across all layers so that coupling,
+    # layer intersection, and participation coefficient have real data.
+    n_shared = vertices_per_layer // 2
+    n_unique = vertices_per_layer - n_shared
+    shared_vids = [f"shared_v{i}" for i in range(n_shared)]
 
     with measure() as m_presence:
-        vid_counter = 0
         presence_pairs = []
-        unique_vids = set()
-        for aa in layer_tuples[: min(len(layer_tuples), scale.slices)]:
-            for i in range(vertices_per_layer):
+        unique_vids = set(shared_vids)
+        vid_counter = 0
+        for aa in layer_tuples[:n_active_layers]:
+            for vid in shared_vids:
+                presence_pairs.append((vid, aa))
+            for _ in range(n_unique):
                 vid = f"v{vid_counter}"
                 presence_pairs.append((vid, aa))
                 unique_vids.add(vid)
@@ -87,15 +100,13 @@ def run(scale):
     # ------------------------------------------------------------------
 
     bulk_by_layer = {}
-    for aa in layer_tuples[: min(len(layer_tuples), scale.slices)]:
+    for aa in layer_tuples[:n_active_layers]:
         verts = list(G.layer_vertex_set(aa))
         if len(verts) < 2:
             continue
 
-        n_edges = min(len(verts), scale.edges // len(layer_tuples))
-        edges_uv = [
-            (verts[i % len(verts)], verts[(i + 1) % len(verts)]) for i in range(n_edges)
-        ]
+        n_edges = min(len(verts), scale.edges // n_active_layers)
+        edges_uv = [(verts[i % len(verts)], verts[(i + 1) % len(verts)]) for i in range(n_edges)]
         if edges_uv:
             bulk_by_layer[aa] = edges_uv
 
@@ -246,6 +257,17 @@ def run(scale):
         "intra_nnz": blocks["intra"].nnz,
         "inter_nnz": blocks["inter"].nnz,
         "coupling_nnz": blocks["coupling"].nnz,
+    }
+
+    with measure() as m_supra_incidence:
+        supra_B, supra_B_edge_ids, supra_B_skipped = G.supra_incidence(layers=None)
+
+    results["supra_incidence"] = {
+        "metrics": m_supra_incidence,
+        "shape": list(supra_B.shape),
+        "nnz": supra_B.nnz,
+        "n_edges": len(supra_B_edge_ids),
+        "n_skipped": len(supra_B_skipped),
     }
 
     with measure() as m_tensor:

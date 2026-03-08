@@ -83,6 +83,37 @@ def run(scale):
     with measure() as m_vertex_incidence_lists:
         inc_lists = G.get_vertex_incidence_matrix_as_lists(values=False)
 
+    # ------------------------------------------------------------------
+    # Snapshot + diff
+    # ------------------------------------------------------------------
+    with measure() as m_snapshot:
+        G.snapshot("before_mutation")
+        G.add_vertices_bulk(
+            ({"vertex_id": f"snap_v{i}"} for i in range(500)),
+            slice="base",
+        )
+        G.snapshot("after_mutation")
+
+    with measure() as m_diff:
+        d = G.diff("before_mutation", "after_mutation")
+
+    # ------------------------------------------------------------------
+    # Deletions (bulk paths)
+    # ------------------------------------------------------------------
+    edges_all = list(G.edges())
+    edges_to_remove = edges_all[: len(edges_all) // 10]  # drop 10%
+
+    with measure() as m_remove_edges_bulk:
+        G._remove_edges_bulk(edges_to_remove)
+
+    with measure() as m_remove_orphans:
+        G.remove_orphans()
+
+    verts_to_remove = [v for v in list(G.vertices()) if v.startswith("snap_v")]
+
+    with measure() as m_remove_vertices_bulk:
+        G._remove_vertices_bulk(verts_to_remove)
+
     return {
         "copy": m_copy,
         "copy_with_history": m_copy_history,
@@ -96,6 +127,23 @@ def run(scale):
         "vertex_incidence_sparse": m_vertex_incidence_sparse,
         "vertex_incidence_dense": m_vertex_incidence_dense,
         "vertex_incidence_lists": m_vertex_incidence_lists,
+        "snapshot": m_snapshot,
+        "diff": {
+            "metrics": m_diff,
+            "added_vertices": len(d.vertices_added),
+            "removed_vertices": len(d.vertices_removed),
+            "added_edges": len(d.edges_added),
+            "removed_edges": len(d.edges_removed),
+        },
+        "remove_edges_bulk": {
+            "metrics": m_remove_edges_bulk,
+            "count": len(edges_to_remove),
+        },
+        "remove_orphans": m_remove_orphans,
+        "remove_vertices_bulk": {
+            "metrics": m_remove_vertices_bulk,
+            "count": len(verts_to_remove),
+        },
         "total_vertices": G.number_of_vertices(),
         "total_edges": G.number_of_edges(),
         "subgraph_v_vertices": G_sub_v.number_of_vertices(),
