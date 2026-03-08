@@ -115,6 +115,7 @@ class AnnNet(
         self.edge_definitions = {}  # edge_id -> (source, target, edge_type)
         self.edge_weights = {}  # edge_id -> weight
         self.edge_directed = {}  # Per-edge directedness; edge_id -> bool  (None = Mixed, True=directed, False=undirected)
+        self._adj = {}  # (source, target) -> [edge_id, ...] for O(1) has_edge lookup
 
         # flexible-direction behavior
         self.edge_direction_policy = {}  # eid -> policy dict
@@ -125,6 +126,7 @@ class AnnNet(
 
         # Sparse incidence matrix
         self._matrix = sp.dok_matrix((0, 0), dtype=np.float32)
+        self._csr_cache = None  # invalidated whenever _matrix is reassigned
         self._num_entities = 0
         self._num_edges = 0
 
@@ -152,6 +154,7 @@ class AnnNet(
         n = int(n) if n and n > 0 else 0
         e = int(e) if e and e > 0 else 0
         self._matrix = sp.dok_matrix((n, e), dtype=np.float32)
+        self._csr_cache = None
 
         # grow-only helpers to avoid per-insert exact resizes
         def _grow_rows_to(target: int):
@@ -603,9 +606,19 @@ class AnnNet(
                 edge_id, edge_type=(EdgeType.DIRECTED if is_dir else EdgeType.UNDIRECTED)
             )
 
-            # if source/target changed, update definition
+            # if source/target changed, update definition and adjacency index
             old_src, old_tgt, old_type = edge_defs[edge_id]
             edge_defs[edge_id] = (source, target, old_type)  # keep old_type by default
+            if (old_src, old_tgt) != (source, target):
+                lst = self._adj.get((old_src, old_tgt))
+                if lst:
+                    try:
+                        lst.remove(edge_id)
+                    except ValueError:
+                        pass
+                    if not lst:
+                        del self._adj[(old_src, old_tgt)]
+                self._adj.setdefault((source, target), []).append(edge_id)
 
             # ensure matrix has enough rows (in case vertices were added since creation)
             self._grow_rows_to(self._num_entities)
@@ -640,6 +653,7 @@ class AnnNet(
             edge_w[edge_id] = weight
             edge_dir[edge_id] = is_dir
             self._num_edges = col_idx + 1
+            self._adj.setdefault((source, target), []).append(edge_id)
 
             # grow-only to current logical capacity
             self._grow_rows_to(self._num_entities)
@@ -1172,6 +1186,7 @@ class AnnNet(
             else:
                 M_new[r, c] = v
         self._matrix = M_new
+        self._csr_cache = None
 
         # mappings (preserve relative order of remaining edges)
         # Remove the deleted edge id
@@ -1187,7 +1202,17 @@ class AnnNet(
 
         # Metadata cleanup
         # Edge definitions / weights / directedness
-        self.edge_definitions.pop(edge_id, None)
+        defn = self.edge_definitions.pop(edge_id, None)
+        if defn is not None:
+            key = (defn[0], defn[1])
+            lst = self._adj.get(key)
+            if lst:
+                try:
+                    lst.remove(edge_id)
+                except ValueError:
+                    pass
+                if not lst:
+                    del self._adj[key]
         self.edge_weights.pop(edge_id, None)
         if edge_id in self.edge_directed:
             self.edge_directed.pop(edge_id, None)
@@ -1294,6 +1319,7 @@ class AnnNet(
             else:
                 M_new[r, c] = v
         self._matrix = M_new
+        self._csr_cache = None
 
         # Update entity mappings
         del self.entity_to_idx[vertex_id]
@@ -1367,9 +1393,15 @@ class AnnNet(
 
     def remove_orphans(self):
         """Remove all vertices with no incident edges from the AnnNet graph."""
-        orphans = [v for v in list(self.vertices()) if len(self.incident_edges(v)) == 0]
-        for v in orphans:
-            self.remove_vertex(v)
+        csr = self._get_csr()  # cached — O(1) if matrix unchanged
+        orphans = []
+        for idx in range(self._num_entities):
+            ent = self.idx_to_entity[idx]
+            if self.entity_types.get(ent) == "vertex":
+                if csr.indptr[idx + 1] - csr.indptr[idx] == 0:  # O(1) row-nnz check
+                    orphans.append(ent)
+        if orphans:
+            self._remove_vertices_bulk(orphans)
         print(f"Removed {len(orphans)} orphan nodes. Remaining: {self.number_of_vertices()}")
         return len(orphans)
 
@@ -1522,10 +1554,7 @@ class AnnNet(
 
         # ---- Mode 2: source + target only ----
         if edge_id is None and source is not None and target is not None:
-            eids: list[str] = []
-            for eid, (src, tgt, _) in self.edge_definitions.items():
-                if src == source and tgt == target:
-                    eids.append(eid)
+            eids = list(self._adj.get((source, target), []))
             return (len(eids) > 0, eids)
 
         # ---- Mode 3: edge_id + source + target ----
@@ -1572,11 +1601,13 @@ class AnnNet(
         list[str]
             Edge IDs (may be empty).
         """
-        edge_ids = []
-        for eid, (src, tgt, _) in self.edge_definitions.items():
-            if src == source and tgt == target:
-                edge_ids.append(eid)
-        return edge_ids
+        return list(self._adj.get((source, target), []))
+
+    def _get_csr(self):
+        """Return a cached CSR view of _matrix. Rebuilt when _csr_cache is None."""
+        if self._csr_cache is None:
+            self._csr_cache = self._matrix.tocsr()
+        return self._csr_cache
 
     def degree(self, entity_id):
         """Degree of a vertex or edge-entity (number of incident non-zero entries).
@@ -1595,8 +1626,8 @@ class AnnNet(
             return 0
 
         entity_idx = self.entity_to_idx[entity_id]
-        row = self._matrix.getrow(entity_idx)
-        return len(row.nonzero()[1])
+        csr = self._get_csr()
+        return int(csr.indptr[entity_idx + 1] - csr.indptr[entity_idx])
 
     def vertices(self):
         """Get all vertex IDs (excluding edge-entities).
