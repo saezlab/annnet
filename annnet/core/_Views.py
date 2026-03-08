@@ -410,7 +410,12 @@ class GraphView:
                     vertex_records = obs_df.to_dicts()
                 else:
                     import narwhals as nw
-                    vertex_records = nw.from_native(obs_df, eager_only=True).to_pandas().to_dict(orient="records")
+
+                    vertex_records = (
+                        nw.from_native(obs_df, eager_only=True)
+                        .to_pandas()
+                        .to_dict(orient="records")
+                    )
             except Exception:
                 vertex_records = [{"vertex_id": vid} for vid in vset]
             subG.add_vertices_bulk(vertex_records)
@@ -422,13 +427,18 @@ class GraphView:
         if copy_attributes:
             var_df = self.var  # already-filtered edge attr DataFrame
             try:
-                if pl is not None and isinstance(var_df, pl.DataFrame) and "edge_id" in var_df.columns:
+                if (
+                    pl is not None
+                    and isinstance(var_df, pl.DataFrame)
+                    and "edge_id" in var_df.columns
+                ):
                     for row in var_df.to_dicts():
                         eid = row.pop("edge_id", None)
                         if eid is not None:
                             edge_attrs_map[eid] = row
                 else:
                     import narwhals as nw
+
                     native = nw.from_native(var_df, eager_only=True).to_pandas()
                     for row in native.to_dict(orient="records"):
                         eid = row.pop("edge_id", None)
