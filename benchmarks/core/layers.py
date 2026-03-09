@@ -286,7 +286,11 @@ def run(scale):
         "n_vertices": len(tensor_view["vertices"]),
         "n_layers": len(tensor_view["layers"]),
         "n_edges": int(len(tensor_view["w"])),
-        "reconstruction_matches": bool(np.allclose(A_reconstructed.toarray(), supra_A.toarray())),
+        "reconstruction_matches": (
+            bool(np.allclose(A_reconstructed.toarray(), supra_A.toarray()))
+            if supra_A.shape[0] * supra_A.shape[1] <= 50_000_000  # 50M entries ≈ 200MB
+            else "skipped_large"
+        ),
     }
 
     if len(G._VM) >= 2:

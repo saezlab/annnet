@@ -13,5 +13,6 @@ class Scale:
 SCALES = {
     "small": Scale("small", 1_000, 5_000, 200, 3),
     "medium": Scale("medium", 10_000, 50_000, 4_000, 5),
-    "large": Scale("large", 100_000, 500_000, 20_000, 5),
+    "large": Scale("large", 100_000, 500_000, 20_000, 10),
+    "real": Scale("real", 100_000, 200_000, 20_000, 10),
 }

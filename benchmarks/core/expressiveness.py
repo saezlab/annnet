@@ -24,10 +24,11 @@ def run(scale):
             for i in range(scale.edges)
         )
 
+    _all_verts = [f"v{i}" for i in range(scale.vertices)]
     with measure() as m_hypero:
         G.add_hyperedges_bulk(
             {
-                "members": random.sample([f"v{i}" for i in range(scale.vertices)], 3),
+                "members": random.sample(_all_verts, 3),
                 "weight": 1.0,
             }
             for _ in range(scale.hyperedges)

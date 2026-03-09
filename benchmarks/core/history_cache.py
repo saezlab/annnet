@@ -77,8 +77,15 @@ def run(scale):
     with measure() as m_vertex_incidence_sparse:
         M_sparse = G.vertex_incidence_matrix(values=True, sparse=True)
 
-    with measure() as m_vertex_incidence_dense:
-        M_dense = G.vertex_incidence_matrix(values=True, sparse=False)
+    _dense_entries = G._matrix.shape[0] * G._matrix.shape[1]
+    _dense_limit = 500_000_000  # 500M float32 entries ≈ 2GB
+    if _dense_entries <= _dense_limit:
+        with measure() as m_vertex_incidence_dense:
+            M_dense = G.vertex_incidence_matrix(values=True, sparse=False)
+    else:
+        m_vertex_incidence_dense = {
+            "skipped": f"matrix too large ({_dense_entries:,} entries > {_dense_limit:,} limit)"
+        }
 
     with measure() as m_vertex_incidence_lists:
         inc_lists = G.get_vertex_incidence_matrix_as_lists(values=False)
