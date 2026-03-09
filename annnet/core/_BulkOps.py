@@ -633,6 +633,20 @@ class BulkOps:
                         if not lst:
                             del self._adj[(old_s, old_t)]
                     self._adj.setdefault((s, t), []).append(edge_id)
+                    for _old, _new, _index in (
+                        (old_s, s, self._src_to_edges),
+                        (old_t, t, self._tgt_to_edges),
+                    ):
+                        if _old != _new:
+                            _lst = _index.get(_old)
+                            if _lst:
+                                try:
+                                    _lst.remove(edge_id)
+                                except ValueError:
+                                    pass
+                                if not _lst:
+                                    del _index[_old]
+                            _index.setdefault(_new, []).append(edge_id)
                 pending_attrs.setdefault(edge_id, {})["edge_type"] = (
                     EdgeType.DIRECTED if is_dir else EdgeType.UNDIRECTED
                 )
@@ -648,6 +662,8 @@ class BulkOps:
                 if s != t:
                     M[t_idx, col] = -w if is_dir else w
                 self._adj.setdefault((s, t), []).append(edge_id)
+                self._src_to_edges.setdefault(s, []).append(edge_id)
+                self._tgt_to_edges.setdefault(t, []).append(edge_id)
 
             # slice membership + optional per-slice weight
             if slice_local is not None:
@@ -800,6 +816,12 @@ class BulkOps:
         slices = self._slices
         num_edges = self._num_edges
 
+        # Bypass scipy DOK __setitem__ validation chain (isintlike + ndim + asarray per write).
+        # _set_intXint skips validation and writes directly to the backing store (~0.65µs vs ~18µs).
+        # Falls back to plain __setitem__ on very old scipy that lacks this private method.
+        _m_fast_set = getattr(M, "_set_intXint", None)
+        _m_dtype = M.dtype.type  # e.g. np.float32
+
         out_ids = []
 
         # Batch attribute writes
@@ -827,13 +849,13 @@ class BulkOps:
                 # clear old cells (binary or hyper)
                 if e_id in hyperedge_definitions:
                     h = hyperedge_definitions[e_id]
-                    if h.get("members"):
-                        rows = h["members"]
-                    else:
-                        rows = set(h.get("head", ())) | set(h.get("tail", ()))
+                    rows = h.get("members") or (list(h.get("head", ())) + list(h.get("tail", ())))
                     for vid in rows:
                         try:
-                            M[entity_to_idx[vid], col] = 0
+                            if _m_fast_set is not None:
+                                _m_fast_set(entity_to_idx[vid], col, 0)
+                            else:
+                                M[entity_to_idx[vid], col] = 0
                         except Exception:
                             pass
                 else:
@@ -841,12 +863,18 @@ class BulkOps:
                     if old is not None:
                         os, ot, _ = old
                         try:
-                            M[entity_to_idx[os], col] = 0
+                            if _m_fast_set is not None:
+                                _m_fast_set(entity_to_idx[os], col, 0)
+                            else:
+                                M[entity_to_idx[os], col] = 0
                         except Exception:
                             pass
                         if ot is not None and ot != os:
                             try:
-                                M[entity_to_idx[ot], col] = 0
+                                if _m_fast_set is not None:
+                                    _m_fast_set(entity_to_idx[ot], col, 0)
+                                else:
+                                    M[entity_to_idx[ot], col] = 0
                             except Exception:
                                 pass
             else:
@@ -857,17 +885,30 @@ class BulkOps:
 
             # write new column values + metadata
             if members is not None:
-                for u in members:
-                    M[entity_to_idx[u], col] = w
+                fw = _m_dtype(w)
+                if _m_fast_set is not None:
+                    for u in members:
+                        _m_fast_set(entity_to_idx[u], col, fw)
+                else:
+                    for u in members:
+                        M[entity_to_idx[u], col] = fw
                 hyperedge_definitions[e_id] = {"directed": False, "members": set(members)}
                 edge_directed[e_id] = False
                 edge_kind[e_id] = "hyper"
                 edge_definitions[e_id] = (None, None, "hyper")
             else:
-                for u in head:
-                    M[entity_to_idx[u], col] = w
-                for v in tail:
-                    M[entity_to_idx[v], col] = -w
+                fw = _m_dtype(w)
+                neg_fw = _m_dtype(-w)
+                if _m_fast_set is not None:
+                    for u in head:
+                        _m_fast_set(entity_to_idx[u], col, fw)
+                    for v in tail:
+                        _m_fast_set(entity_to_idx[v], col, neg_fw)
+                else:
+                    for u in head:
+                        M[entity_to_idx[u], col] = fw
+                    for v in tail:
+                        M[entity_to_idx[v], col] = neg_fw
                 hyperedge_definitions[e_id] = {
                     "directed": True,
                     "head": set(head),
@@ -902,6 +943,7 @@ class BulkOps:
             out_ids.append(e_id)
 
         self._num_edges = num_edges
+        self._csr_cache = None  # matrix was mutated; invalidate cached CSR
 
         # SINGLE BULK WRITE FOR ALL ATTRIBUTES
         if attrs_batch:
@@ -1211,15 +1253,24 @@ class BulkOps:
         for eid in drop:
             defn = self.edge_definitions.pop(eid, None)
             if defn is not None:
-                key = (defn[0], defn[1])
-                lst = self._adj.get(key)
+                s, t = defn[0], defn[1]
+                lst = self._adj.get((s, t))
                 if lst:
                     try:
                         lst.remove(eid)
                     except ValueError:
                         pass
                     if not lst:
-                        del self._adj[key]
+                        del self._adj[(s, t)]
+                for v, index in ((s, self._src_to_edges), (t, self._tgt_to_edges)):
+                    _lst = index.get(v)
+                    if _lst:
+                        try:
+                            _lst.remove(eid)
+                        except ValueError:
+                            pass
+                        if not _lst:
+                            del index[v]
             self.edge_weights.pop(eid, None)
             self.edge_directed.pop(eid, None)
             self.edge_kind.pop(eid, None)

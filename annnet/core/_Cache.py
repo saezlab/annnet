@@ -1060,6 +1060,14 @@ class Operations:
         if sparse:
             return M
         else:
+            rows, cols = M.shape
+            estimated_gb = rows * cols * 4 / 1024**3
+            if estimated_gb > 2.0:
+                raise MemoryError(
+                    f"Dense conversion would require ~{estimated_gb:.1f} GB "
+                    f"({rows:,} × {cols:,} float32). "
+                    "Use sparse=True instead, or call .toarray() explicitly if you are certain."
+                )
             return M.toarray()
 
     def __hash__(self) -> int:

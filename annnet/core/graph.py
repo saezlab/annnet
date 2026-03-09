@@ -116,6 +116,8 @@ class AnnNet(
         self.edge_weights = {}  # edge_id -> weight
         self.edge_directed = {}  # Per-edge directedness; edge_id -> bool  (None = Mixed, True=directed, False=undirected)
         self._adj = {}  # (source, target) -> [edge_id, ...] for O(1) has_edge lookup
+        self._src_to_edges = {}  # source -> [edge_id, ...] for O(degree) out_edges
+        self._tgt_to_edges = {}  # target -> [edge_id, ...] for O(degree) in_edges
 
         # flexible-direction behavior
         self.edge_direction_policy = {}  # eid -> policy dict
@@ -619,6 +621,20 @@ class AnnNet(
                     if not lst:
                         del self._adj[(old_src, old_tgt)]
                 self._adj.setdefault((source, target), []).append(edge_id)
+                for _old, _new, _index in (
+                    (old_src, source, self._src_to_edges),
+                    (old_tgt, target, self._tgt_to_edges),
+                ):
+                    if _old != _new:
+                        _lst = _index.get(_old)
+                        if _lst:
+                            try:
+                                _lst.remove(edge_id)
+                            except ValueError:
+                                pass
+                            if not _lst:
+                                del _index[_old]
+                        _index.setdefault(_new, []).append(edge_id)
 
             # ensure matrix has enough rows (in case vertices were added since creation)
             self._grow_rows_to(self._num_entities)
@@ -654,6 +670,8 @@ class AnnNet(
             edge_dir[edge_id] = is_dir
             self._num_edges = col_idx + 1
             self._adj.setdefault((source, target), []).append(edge_id)
+            self._src_to_edges.setdefault(source, []).append(edge_id)
+            self._tgt_to_edges.setdefault(target, []).append(edge_id)
 
             # grow-only to current logical capacity
             self._grow_rows_to(self._num_entities)
@@ -864,17 +882,20 @@ class AnnNet(
             col_idx = self.edge_to_idx[edge_id]
             # clear: delete only previously set cells instead of zeroing whole column
             # handle prior hyperedge or binary edge reuse
+            _m_fast_set_clear = getattr(M, "_set_intXint", None)
             prev_h = self.hyperedge_definitions.get(edge_id)
             if prev_h is not None:
                 if prev_h.get("directed", False):
-                    rows_to_clear = prev_h["head"] | prev_h["tail"]
+                    rows_to_clear = list(prev_h["head"]) + list(prev_h["tail"])
                 else:
                     rows_to_clear = prev_h["members"]
                 for vid in rows_to_clear:
                     try:
-                        M[entity_to_idx[vid], col_idx] = 0
+                        if _m_fast_set_clear is not None:
+                            _m_fast_set_clear(entity_to_idx[vid], col_idx, 0)
+                        else:
+                            M[entity_to_idx[vid], col_idx] = 0
                     except KeyError:
-                        # vertex may not exist anymore; ignore
                         pass
             else:
                 # maybe it was a binary edge before
@@ -883,34 +904,55 @@ class AnnNet(
                     src, tgt, _ = prev
                     if src is not None:
                         try:
-                            M[entity_to_idx[src], col_idx] = 0
+                            if _m_fast_set_clear is not None:
+                                _m_fast_set_clear(entity_to_idx[src], col_idx, 0)
+                            else:
+                                M[entity_to_idx[src], col_idx] = 0
                         except KeyError:
                             pass
                     if tgt is not None and tgt != src:
                         try:
-                            M[entity_to_idx[tgt], col_idx] = 0
+                            if _m_fast_set_clear is not None:
+                                _m_fast_set_clear(entity_to_idx[tgt], col_idx, 0)
+                            else:
+                                M[entity_to_idx[tgt], col_idx] = 0
                         except KeyError:
                             pass
 
         self._grow_rows_to(self._num_entities)
 
-        # write column entries
+        # write column entries — use _set_intXint to bypass scipy validation overhead
+        # (~0.65µs/write vs ~18µs for the full __setitem__ validation chain)
+        _m_fast_set = getattr(M, "_set_intXint", None)
+        _m_dtype = M.dtype.type
         w = float(weight)
         if members is not None:
             # undirected: +w at each member
-            for u in members:
-                M[entity_to_idx[u], col_idx] = w
+            fw = _m_dtype(w)
+            if _m_fast_set is not None:
+                for u in members:
+                    _m_fast_set(entity_to_idx[u], col_idx, fw)
+            else:
+                for u in members:
+                    M[entity_to_idx[u], col_idx] = fw
             self.hyperedge_definitions[edge_id] = {
                 "directed": False,
                 "members": set(members),
             }
         else:
             # directed: +w on head, -w on tail
-            for u in head:
-                M[entity_to_idx[u], col_idx] = w
-            mw = -w
-            for v in tail:
-                M[entity_to_idx[v], col_idx] = mw
+            fw = _m_dtype(w)
+            neg_fw = _m_dtype(-w)
+            if _m_fast_set is not None:
+                for u in head:
+                    _m_fast_set(entity_to_idx[u], col_idx, fw)
+                for v in tail:
+                    _m_fast_set(entity_to_idx[v], col_idx, neg_fw)
+            else:
+                for u in head:
+                    M[entity_to_idx[u], col_idx] = fw
+                for v in tail:
+                    M[entity_to_idx[v], col_idx] = neg_fw
             self.hyperedge_definitions[edge_id] = {
                 "directed": True,
                 "head": set(head),
@@ -1204,7 +1246,8 @@ class AnnNet(
         # Edge definitions / weights / directedness
         defn = self.edge_definitions.pop(edge_id, None)
         if defn is not None:
-            key = (defn[0], defn[1])
+            s, t = defn[0], defn[1]
+            key = (s, t)
             lst = self._adj.get(key)
             if lst:
                 try:
@@ -1213,6 +1256,15 @@ class AnnNet(
                     pass
                 if not lst:
                     del self._adj[key]
+            for v, index in ((s, self._src_to_edges), (t, self._tgt_to_edges)):
+                _lst = index.get(v)
+                if _lst:
+                    try:
+                        _lst.remove(edge_id)
+                    except ValueError:
+                        pass
+                    if not _lst:
+                        del index[v]
         self.edge_weights.pop(edge_id, None)
         if edge_id in self.edge_directed:
             self.edge_directed.pop(edge_id, None)
@@ -1755,16 +1807,22 @@ class AnnNet(
         V = self._normalize_vertices_arg(vertices)
         if not V:
             return
-        for j in range(self.number_of_edges()):
-            S, T = self.get_edge(j)
-            eid = self.idx_to_edge[j]
-            directed = self._is_directed_edge(eid)
-            if directed:
-                if T & V:
-                    yield j, (S, T)
-            else:
-                if (S | T) & V:
-                    yield j, (S, T)
+        seen = set()
+        for v in V:
+            # directed: yield if v is target; undirected: yield for any endpoint
+            for eid in self._tgt_to_edges.get(v, []):
+                if eid not in seen:
+                    seen.add(eid)
+                    j = self.edge_to_idx.get(eid)
+                    if j is not None:
+                        yield j, self.get_edge(j)
+            # undirected edges where v is the source also appear in in_edges
+            for eid in self._src_to_edges.get(v, []):
+                if eid not in seen and not self._is_directed_edge(eid):
+                    seen.add(eid)
+                    j = self.edge_to_idx.get(eid)
+                    if j is not None:
+                        yield j, self.get_edge(j)
 
     def out_edges(self, vertices):
         """Iterate over all edges that are **outgoing** from one or more vertices.
@@ -1788,16 +1846,22 @@ class AnnNet(
         V = self._normalize_vertices_arg(vertices)
         if not V:
             return
-        for j in range(self.number_of_edges()):
-            S, T = self.get_edge(j)
-            eid = self.idx_to_edge[j]
-            directed = self._is_directed_edge(eid)
-            if directed:
-                if S & V:
-                    yield j, (S, T)
-            else:
-                if (S | T) & V:
-                    yield j, (S, T)
+        seen = set()
+        for v in V:
+            # directed: yield if v is source; undirected: yield for any endpoint
+            for eid in self._src_to_edges.get(v, []):
+                if eid not in seen:
+                    seen.add(eid)
+                    j = self.edge_to_idx.get(eid)
+                    if j is not None:
+                        yield j, self.get_edge(j)
+            # undirected edges where v is the target also appear in out_edges
+            for eid in self._tgt_to_edges.get(v, []):
+                if eid not in seen and not self._is_directed_edge(eid):
+                    seen.add(eid)
+                    j = self.edge_to_idx.get(eid)
+                    if j is not None:
+                        yield j, self.get_edge(j)
 
     def get_or_create_vertex_by_attrs(self, slice=None, **attrs) -> str:
         """Return vertex ID for the given composite-key attributes.
