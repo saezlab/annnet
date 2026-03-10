@@ -1,4 +1,6 @@
 # tests/test_networkx_adapter.py
+import base64
+import gzip
 import json
 import os
 import sys
@@ -125,7 +127,7 @@ class TestCX2Adapter(unittest.TestCase):
         self.assertIn("__AnnNet_Manifest__", net_attrs)
 
         manifest_json = net_attrs["__AnnNet_Manifest__"]
-        manifest = json.loads(manifest_json)
+        manifest = json.loads(gzip.decompress(base64.b64decode(manifest_json)).decode())
 
         # Check that our "hidden" slices data survived
         # Note: The adapter uses _serialize_slices. We assume the mock/implementation

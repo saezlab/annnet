@@ -13,6 +13,8 @@ CX2 'networkAttributes'.
 
 from __future__ import annotations
 
+import base64
+import gzip
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -703,7 +705,9 @@ def to_cx2(
                 {
                     "name": export_name,
                     "directed": bool(G.directed) if G.directed is not None else True,
-                    "__AnnNet_Manifest__": json.dumps(_jsonify(manifest)),
+                    "__AnnNet_Manifest__": base64.b64encode(
+                        gzip.compress(json.dumps(_jsonify(manifest)).encode())
+                    ).decode(),
                 }
             ]
         },
@@ -802,8 +806,12 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
     manifest = None
     if manifest_str:
         try:
-            manifest = json.loads(manifest_str)
-        except:
+            # Support both compressed (gzip+base64) and legacy plain-JSON manifests
+            try:
+                manifest = json.loads(gzip.decompress(base64.b64decode(manifest_str)).decode())
+            except Exception:
+                manifest = json.loads(manifest_str)
+        except Exception:
             manifest = None
     visual_props = aspects.get("visualProperties", [])
 
