@@ -4,8 +4,8 @@ __all__ = ["available_backends", "load_adapter"]
 
 # name -> (pip_import_name, submodule, class_name)
 _BACKENDS = {
-    "networkx": ("networkx", ".networkx", "NetworkXAdapter"),
-    "igraph": ("igraph", ".igraph", "IGraphAdapter"),  # pip pkg is python-igraph; import is igraph
+    "networkx": ("networkx", ".networkx_adapter", "NetworkXAdapter"),
+    "igraph": ("igraph", ".igraph_adapter", "IGraphAdapter"),
 }
 
 
