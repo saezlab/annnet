@@ -148,6 +148,45 @@ class TestBackends(unittest.TestCase):
         labels = [e.get("label") for e in Gd.get_edges()]
         self.assertTrue(any(lbl and re.search(r"w=", lbl) for lbl in labels))
 
+    def test_undirected_binary_edges_no_center_node_graphviz(self):
+        """Undirected binary edges must NOT be rendered as hyperedges with center nodes."""
+        if not self.HAS_GRAPHVIZ:
+            self.skipTest("graphviz package not installed")
+        g = AnnNet(directed=False)
+        g.add_vertex("A")
+        g.add_vertex("B")
+        g.add_vertex("C")
+        g.add_edge("A", "B", weight=1.0)
+        g.add_edge("B", "C", weight=2.0)
+        Gv = plotting.to_graphviz(g)
+        src = Gv.source
+        # No center nodes should exist
+        self.assertNotIn("e_0_center", src)
+        self.assertNotIn("e_1_center", src)
+        # Both endpoints should appear exactly once as nodes, not as a self-loop
+        self.assertIn("A", src)
+        self.assertIn("B", src)
+        self.assertIn("C", src)
+        # Edges should be present with no-arrow style
+        self.assertIn("arrowhead=none", src)
+
+    def test_undirected_binary_edges_no_center_node_pydot(self):
+        """Undirected binary edges must NOT be rendered as hyperedges with center nodes."""
+        if not self.HAS_PYDOT:
+            self.skipTest("pydot package not installed")
+        g = AnnNet(directed=False)
+        g.add_vertex("A")
+        g.add_vertex("B")
+        g.add_vertex("C")
+        g.add_edge("A", "B", weight=1.0)
+        g.add_edge("B", "C", weight=2.0)
+        Gd = plotting.to_pydot(g)
+        node_names = {n.get_name().strip('"') for n in Gd.get_nodes()}
+        # No center nodes should exist
+        self.assertNotIn("e_0_center", node_names)
+        self.assertNotIn("e_1_center", node_names)
+        self.assertEqual(len(Gd.get_edges()), 2)
+
     def test_render_type_error_for_unknown_object(self):
         with self.assertRaises(TypeError):
             plotting.render(object(), "out.svg", format="svg")

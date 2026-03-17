@@ -143,6 +143,8 @@ def edge_style_from_weights(
             raw_vals.append(1.0)
 
     x = _normalize(raw_vals)
+    if np.all(x == x[0]):
+        x = np.full_like(x, 0.5)
     styles: dict[int, dict[str, str]] = {}
     for j, xv in zip(eidxs, x):
         pen = min_width + float(xv) * (max_width - min_width)
@@ -182,6 +184,20 @@ def _add_nodes_pydot(
         attrs = {"shape": "circle"}
         attrs.update(custom_vertex_attr.get(v, {}))
         Gd.add_node(pydot.Node(v, **attrs))
+
+
+def _is_true_hyperedge(S: frozenset, T: frozenset) -> bool:
+    """Return True only for genuine hyperedges, not undirected binary edges.
+
+    Undirected binary edges are represented as (frozenset({u,v}), frozenset({u,v}))
+    and must NOT be treated as hyperedges.
+    """
+    if len(S) <= 1 and len(T) <= 1:
+        return False
+    # Undirected binary edge: S == T and exactly 2 members
+    if S == T and len(S) == 2:
+        return False
+    return True
 
 
 def to_graphviz(
@@ -229,8 +245,7 @@ def to_graphviz(
         if custom_edge_attr and j in custom_edge_attr:
             e_attr.update(custom_edge_attr[j])
 
-        # Hyperedge if |S|>1 or |T|>1
-        if len(S) > 1 or len(T) > 1:
+        if _is_true_hyperedge(S, T):
             center = f"e_{j}_center"
             Gv.node(center, shape="square", width="0.1", height="0.1", label="")
             for u in S:
@@ -240,37 +255,32 @@ def to_graphviz(
             for v in T:
                 Gv.edge(center, str(v), **e_attr)
         else:
-            # binary edge
-            u = next(iter(S))
-            v = next(iter(T))
-            # Directed if S != T
-            if S != T:
+            # binary edge (directed or undirected)
+            if S == T:
+                # undirected: S == T; extract the two distinct endpoints (or self-loop)
+                nodes = list(S)
+                uu, vv = (nodes[0], nodes[1]) if len(nodes) == 2 else (nodes[0], nodes[0])
+                a = {"arrowhead": "none", "dir": "none"}
+                a.update(e_attr)
+                Gv.edge(str(uu), str(vv), **a)
+            else:
+                # directed binary edge
+                u = next(iter(S))
+                v = next(iter(T))
                 head = "normal"
-                # if a sign attribute exists, tee for negative interaction (optional)
                 inter = graph.get_attr_edge(graph.idx_to_edge[j], "interaction", default=None)
                 if isinstance(inter, (int, float)) and inter < 0:
                     head = "tee"
                 a = {"arrowhead": head}
                 a.update(e_attr)
                 Gv.edge(str(u), str(v), **a)
-            else:
-                a = {"arrowhead": "none", "dir": "none"}
-                a.update(e_attr)
-                uu, vv = list(S)[0], list(T)[0]
-                Gv.edge(str(uu), str(vv), **a)
 
     if suppress_warnings:
         _suppress_repr_warnings(Gv)
     if (
-        len(
-            [
-                1
-                for j in range(graph.number_of_edges())
-                if len(graph.get_edge(j)[0]) > 1 or len(graph.get_edge(j)[1]) > 1
-            ]
-        )
-        > 0
-    ) and graph_attr is None:
+        any(_is_true_hyperedge(*graph.get_edge(j)) for j in range(graph.number_of_edges()))
+        and graph_attr is None
+    ):
         Gv.graph_attr["splines"] = "true"
     return Gv
 
@@ -316,7 +326,7 @@ def to_pydot(
         if custom_edge_attr and j in custom_edge_attr:
             e_attr.update(custom_edge_attr[j])
 
-        if len(S) > 1 or len(T) > 1:
+        if _is_true_hyperedge(S, T):
             center = f"e_{j}_center"
             Gd.add_node(pydot.Node(center, shape="square", width="0.1", height="0.1", label=""))
             for u in S:
@@ -326,9 +336,17 @@ def to_pydot(
             for v in T:
                 Gd.add_edge(pydot.Edge(center, str(v), **e_attr))
         else:
-            u = next(iter(S))
-            v = next(iter(T))
-            if S != T:
+            # binary edge (directed or undirected)
+            if S == T:
+                # undirected: extract the two distinct endpoints (or self-loop)
+                nodes = list(S)
+                uu, vv = (nodes[0], nodes[1]) if len(nodes) == 2 else (nodes[0], nodes[0])
+                a = {"arrowhead": "none", "dir": "none"}
+                a.update(e_attr)
+                Gd.add_edge(pydot.Edge(str(uu), str(vv), **a))
+            else:
+                u = next(iter(S))
+                v = next(iter(T))
                 head = "normal"
                 inter = graph.get_attr_edge(graph.idx_to_edge[j], "interaction", default=None)
                 if isinstance(inter, (int, float)) and inter < 0:
@@ -336,22 +354,11 @@ def to_pydot(
                 a = {"arrowhead": head}
                 a.update(e_attr)
                 Gd.add_edge(pydot.Edge(str(u), str(v), **a))
-            else:
-                a = {"arrowhead": "none", "dir": "none"}
-                a.update(e_attr)
-                uu, vv = list(S)[0], list(T)[0]
-                Gd.add_edge(pydot.Edge(str(uu), str(vv), **a))
 
     if (
-        len(
-            [
-                1
-                for j in range(graph.number_of_edges())
-                if len(graph.get_edge(j)[0]) > 1 or len(graph.get_edge(j)[1]) > 1
-            ]
-        )
-        > 0
-    ) and graph_attr is None:
+        any(_is_true_hyperedge(*graph.get_edge(j)) for j in range(graph.number_of_edges()))
+        and graph_attr is None
+    ):
         Gd.set_splines("true")
     return Gd
 
