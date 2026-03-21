@@ -9,7 +9,7 @@ from annnet.io.json_io import (
     write_ndjson,
 )  # JSON (JavaScript Object Notation), NDJSON (Newline-Delimited JSON)
 
-from .helpers import assert_edge_attrs_equal, assert_graphs_equal, assert_vertex_attrs_equal
+from .conftest import assert_edge_attrs_equal, assert_graphs_equal, assert_vertex_attrs_equal
 
 
 class TestJSONAdapter:

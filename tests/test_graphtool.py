@@ -24,25 +24,7 @@ except Exception:
 from annnet.adapters.graphtool_adapter import from_graphtool, to_graphtool
 
 
-def _build_graph() -> AnnNet:
-    g = AnnNet(directed=True)
-
-    g.add_vertex("A", label="alpha", kind="src")
-    g.add_vertex("B", label="beta")
-    g.add_vertex("C", label="gamma", kind="sink")
-
-    e1 = g.add_edge("A", "B", weight=2.0, interaction=+1, tag="ab")
-    e2 = g.add_edge("B", "C", weight=1.0, edge_directed=False, interaction=-1)
-    e3 = g.add_hyperedge(head=["A", "B"], tail=["C"], weight=0.5, interaction=+1)
-
-    g.add_slice("Lw", region="EMEA")
-    g.set_edge_slice_attrs("Lw", e1, weight=5.0)
-
-    g.add_slice("L0")
-
-    assert g.number_of_edges() >= 3
-    return g
-
+from .conftest import build_adapter_graph as _build_graph
 
 _BUILD_GRAPH = _build_graph
 

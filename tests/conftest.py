@@ -193,3 +193,32 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
     )
+
+
+# ======================================================================
+# SHARED GRAPH BUILDER (used by networkx, igraph, graphtool adapter tests)
+# ======================================================================
+
+
+def build_adapter_graph() -> AnnNet:
+    """Directed graph with 3 vertices, binary+hyperedge, and two slices.
+
+    Identical graph used across networkx, igraph, and graphtool adapter tests
+    to ensure cross-adapter comparability.
+    """
+    g = AnnNet(directed=True)
+
+    g.add_vertex("A", label="alpha", kind="src")
+    g.add_vertex("B", label="beta")
+    g.add_vertex("C", label="gamma", kind="sink")
+
+    e1 = g.add_edge("A", "B", weight=2.0, interaction=+1, tag="ab")
+    g.add_edge("B", "C", weight=1.0, edge_directed=False, interaction=-1)
+    g.add_hyperedge(head=["A", "B"], tail=["C"], weight=0.5, interaction=+1)
+
+    g.add_slice("Lw", region="EMEA")
+    g.set_edge_slice_attrs("Lw", e1, weight=5.0)
+    g.add_slice("L0")
+
+    assert g.number_of_edges() >= 3
+    return g

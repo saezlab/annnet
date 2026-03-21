@@ -8,7 +8,7 @@ from annnet.io.Parquet_io import (
     to_parquet,
 )  # Parquet (columnar storage)
 
-from .helpers import assert_edge_attrs_equal, assert_graphs_equal, assert_vertex_attrs_equal
+from .conftest import assert_edge_attrs_equal, assert_graphs_equal, assert_vertex_attrs_equal
 
 
 class TestGraphDirAdapter:

@@ -24,30 +24,7 @@ except Exception:
     HAS_IG = False
 
 
-def _build_graph() -> AnnNet:
-    """Build a realistic test graph using the real AnnNet class."""
-    g = AnnNet(directed=True)
-
-    # vertices with some attributes
-    g.add_vertex("A", label="alpha", kind="src")
-    g.add_vertex("B", label="beta")
-    g.add_vertex("C", label="gamma", kind="sink")
-
-    # edges: directed, undirected, and a hyperedge
-    e1 = g.add_edge("A", "B", weight=2.0, interaction=+1, tag="ab")
-    e2 = g.add_edge("B", "C", weight=1.0, edge_directed=False, interaction=-1)
-    e3 = g.add_hyperedge(head=["A", "B"], tail=["C"], weight=0.5, interaction=+1)
-
-    # slice + per-slice override for e1
-    g.add_slice("Lw", region="EMEA")
-    g.set_edge_slice_attrs("Lw", e1, weight=5.0)
-
-    # a second slice with no overrides to test fallback
-    g.add_slice("L0")
-
-    # basic sanity
-    assert g.number_of_edges() >= 3
-    return g
+from .conftest import build_adapter_graph as _build_graph
 
 
 class TestIgraphAdapter(unittest.TestCase):
