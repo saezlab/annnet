@@ -4,6 +4,9 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
 
+import pytest
+
+from annnet.core.graph import AnnNet
 from annnet.io.json_io import from_json, to_json  # JSON (JavaScript Object Notation)
 from annnet.io.Parquet_io import (
     from_parquet,
@@ -12,135 +15,181 @@ from annnet.io.Parquet_io import (
 from annnet.io.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
 
 
-class TestEdgeCases:
-    """Edge cases and error handling."""
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-    def test_empty_graph_all_adapters(self, tmpdir_fixture):
-        from annnet.core.graph import AnnNet
+def _roundtrip_json(G, tmpdir, name="g"):
+    p = tmpdir / f"{name}.json"
+    to_json(G, p)
+    return from_json(p)
 
-        G = AnnNet()
-        to_json(G, tmpdir_fixture / "empty.json")
-        G_json = from_json(tmpdir_fixture / "empty.json")
-        assert len(list(G_json.vertices())) == 0
 
-        to_parquet(G, tmpdir_fixture / "empty_dir")
-        G_parquet = from_parquet(tmpdir_fixture / "empty_dir")
-        assert len(list(G_parquet.vertices())) == 0
+def _roundtrip_parquet(G, tmpdir, name="g"):
+    p = tmpdir / f"{name}_dir"
+    to_parquet(G, p)
+    return from_parquet(p)
 
+
+def _roundtrip_sif(G, tmpdir, name="g"):
+    sif_p = tmpdir / f"{name}.sif"
+    man_p = tmpdir / f"{name}.manifest.json"
+    to_sif(G, sif_p, lossless=True, manifest_path=man_p)
+    return from_sif(sif_p, manifest=man_p)
+
+
+# ---------------------------------------------------------------------------
+# Empty-graph — each adapter is a separate parametrized case
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("adapter", ["json", "parquet", "dataframe"])
+def test_empty_graph(adapter, tmpdir_fixture):
+    G = AnnNet()
+
+    if adapter == "json":
+        G2 = _roundtrip_json(G, tmpdir_fixture, "empty")
+    elif adapter == "parquet":
+        G2 = _roundtrip_parquet(G, tmpdir_fixture, "empty")
+    else:
         from annnet.io.dataframe_io import from_dataframes, to_dataframes
-
         dfs = to_dataframes(G)
-        G_df = from_dataframes(**dfs)
-        assert len(list(G_df.vertices())) == 0
+        G2 = from_dataframes(**dfs)
 
-    def test_special_characters_in_ids(self, tmpdir_fixture):
-        from annnet.core.graph import AnnNet
+    assert len(list(G2.vertices())) == 0
 
-        G = AnnNet()
-        special_ids = [
-            "node with spaces",
-            "node-with-dashes",
-            "node_with_underscores",
-            "node.with.dots",
-            "α",
-            "β",
-            "γ",
-            "node\twith\ttabs",
-        ]
-        for vid in special_ids:
-            G.add_vertex(vid)
-        G.add_edge(special_ids[0], special_ids[1], edge_id="e1")
-        G.add_edge("α", "β", edge_id="e2")
-        to_json(G, tmpdir_fixture / "special.json")
-        G_json = from_json(tmpdir_fixture / "special.json")
-        assert set(G.vertices()) == set(G_json.vertices())
-        to_parquet(G, tmpdir_fixture / "special_dir")
-        G_parquet = from_parquet(tmpdir_fixture / "special_dir")
-        assert set(G.vertices()) == set(G_parquet.vertices())
 
-    def test_large_weights_and_extreme_values(self, tmpdir_fixture):
-        from annnet.core.graph import AnnNet
+# ---------------------------------------------------------------------------
+# Special characters in vertex IDs — json and parquet tested separately
+# ---------------------------------------------------------------------------
 
-        G = AnnNet()
-        G.add_vertex("A")
-        G.add_vertex("B")
-        G.add_edge("A", "B", edge_id="e1", weight=1e10)
-        G.add_edge("A", "B", edge_id="e2", weight=1e-10)
-        G.add_edge("A", "B", edge_id="e3", weight=0.0)
-        to_json(G, tmpdir_fixture / "extreme.json")
-        G_json = from_json(tmpdir_fixture / "extreme.json")
-        assert abs(G_json.edge_weights.get("e1", 0) - 1e10) < 1e-6
-        assert abs(G_json.edge_weights.get("e2", 0) - 1e-10) < 1e-15
-        assert abs(G_json.edge_weights.get("e3", 1) - 0.0) < 1e-10
+SPECIAL_IDS = [
+    "node with spaces",
+    "node-with-dashes",
+    "node_with_underscores",
+    "node.with.dots",
+    "α",
+    "β",
+    "γ",
+    "node\twith\ttabs",
+]
 
-    def test_self_loops(self, tmpdir_fixture):
-        from annnet.core.graph import AnnNet
 
-        G = AnnNet()
-        G.add_vertex("A")
-        G.add_edge("A", "A", edge_id="loop", weight=2.5)
-        to_json(G, tmpdir_fixture / "loop.json")
-        G_json = from_json(tmpdir_fixture / "loop.json")
-        assert "loop" in G_json.edge_to_idx
-        to_parquet(G, tmpdir_fixture / "loop_dir")
-        G_parquet = from_parquet(tmpdir_fixture / "loop_dir")
-        assert "loop" in G_parquet.edge_to_idx
-        to_sif(
-            G,
-            tmpdir_fixture / "loop.sif",
-            lossless=True,
-            manifest_path=tmpdir_fixture / "loop.manifest.json",
-        )
-        G_sif = from_sif(
-            tmpdir_fixture / "loop.sif", manifest=tmpdir_fixture / "loop.manifest.json"
-        )
-        assert "loop" in G_sif.edge_to_idx
+def _build_special_graph():
+    G = AnnNet()
+    for vid in SPECIAL_IDS:
+        G.add_vertex(vid)
+    G.add_edge(SPECIAL_IDS[0], SPECIAL_IDS[1], edge_id="e1")
+    G.add_edge("α", "β", edge_id="e2")
+    return G
 
-    def test_parallel_edges(self, tmpdir_fixture):
-        from annnet.core.graph import AnnNet
 
-        G = AnnNet()
-        G.add_vertex("A")
-        G.add_vertex("B")
-        G.add_edge("A", "B", edge_id="e1", weight=1.0)
-        G.add_edge("A", "B", edge_id="e2", weight=2.0)
-        G.add_edge("A", "B", edge_id="e3", weight=3.0)
-        to_json(G, tmpdir_fixture / "parallel.json")
-        G_json = from_json(tmpdir_fixture / "parallel.json")
-        assert "e1" in G_json.edge_to_idx
-        assert "e2" in G_json.edge_to_idx
-        assert "e3" in G_json.edge_to_idx
-        assert G_json.number_of_edges() == 3
+@pytest.mark.parametrize("adapter", ["json", "parquet"])
+def test_special_characters_in_ids(adapter, tmpdir_fixture):
+    G = _build_special_graph()
 
-    def test_null_and_none_handling(self, tmpdir_fixture):
-        from annnet.core.graph import AnnNet
+    if adapter == "json":
+        G2 = _roundtrip_json(G, tmpdir_fixture, "special")
+    else:
+        G2 = _roundtrip_parquet(G, tmpdir_fixture, "special")
 
-        G = AnnNet()
-        G.add_vertex("A")
-        G.set_vertex_attrs("A", present="value", missing=None, zero=0, empty_string="")
-        to_json(G, tmpdir_fixture / "nulls.json")
-        G_json = from_json(tmpdir_fixture / "nulls.json")
-        attrs = G_json.get_vertex_attrs("A") or {}
-        assert attrs.get("present") == "value"
-        assert attrs.get("zero") == 0
-        assert "missing" not in attrs or attrs.get("missing") is None
+    assert set(G.vertices()) == set(G2.vertices())
 
-    def test_very_large_graph(self, tmpdir_fixture):
-        import random
 
-        from annnet.core.graph import AnnNet
+# ---------------------------------------------------------------------------
+# Extreme weights — json only
+# ---------------------------------------------------------------------------
 
-        G = AnnNet()
-        n_vertices = 1000
-        n_edges = 2000
-        for i in range(n_vertices):
-            G.add_vertex(f"v{i}")
-        random.seed(42)
-        for i in range(n_edges):
-            u = f"v{random.randint(0, n_vertices - 1)}"  # nosec B311
-            v = f"v{random.randint(0, n_vertices - 1)}"  # nosec B311
-            G.add_edge(u, v, edge_id=f"e{i}", weight=random.random())  # nosec B311
-        to_parquet(G, tmpdir_fixture / "large_dir")
-        G_parquet = from_parquet(tmpdir_fixture / "large_dir")
-        assert len(list(G_parquet.vertices())) == n_vertices
-        assert G_parquet.number_of_edges() == n_edges
+def test_large_weights_and_extreme_values(tmpdir_fixture):
+    G = AnnNet()
+    G.add_vertex("A")
+    G.add_vertex("B")
+    G.add_edge("A", "B", edge_id="e1", weight=1e10)
+    G.add_edge("A", "B", edge_id="e2", weight=1e-10)
+    G.add_edge("A", "B", edge_id="e3", weight=0.0)
+
+    G2 = _roundtrip_json(G, tmpdir_fixture, "extreme")
+
+    assert abs(G2.edge_weights.get("e1", 0) - 1e10) < 1e-6
+    assert abs(G2.edge_weights.get("e2", 0) - 1e-10) < 1e-15
+    assert abs(G2.edge_weights.get("e3", 1) - 0.0) < 1e-10
+
+
+# ---------------------------------------------------------------------------
+# Self-loops — json, parquet, sif tested separately
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("adapter", ["json", "parquet", "sif"])
+def test_self_loops(adapter, tmpdir_fixture):
+    G = AnnNet()
+    G.add_vertex("A")
+    G.add_edge("A", "A", edge_id="loop", weight=2.5)
+
+    if adapter == "json":
+        G2 = _roundtrip_json(G, tmpdir_fixture, "loop")
+    elif adapter == "parquet":
+        G2 = _roundtrip_parquet(G, tmpdir_fixture, "loop")
+    else:
+        G2 = _roundtrip_sif(G, tmpdir_fixture, "loop")
+
+    assert "loop" in G2.edge_to_idx
+
+
+# ---------------------------------------------------------------------------
+# Parallel edges — json
+# ---------------------------------------------------------------------------
+
+def test_parallel_edges(tmpdir_fixture):
+    G = AnnNet()
+    G.add_vertex("A")
+    G.add_vertex("B")
+    G.add_edge("A", "B", edge_id="e1", weight=1.0)
+    G.add_edge("A", "B", edge_id="e2", weight=2.0)
+    G.add_edge("A", "B", edge_id="e3", weight=3.0)
+
+    G2 = _roundtrip_json(G, tmpdir_fixture, "parallel")
+
+    assert "e1" in G2.edge_to_idx
+    assert "e2" in G2.edge_to_idx
+    assert "e3" in G2.edge_to_idx
+    assert G2.number_of_edges() == 3
+
+
+# ---------------------------------------------------------------------------
+# None / null attribute handling — json
+# ---------------------------------------------------------------------------
+
+def test_null_and_none_handling(tmpdir_fixture):
+    G = AnnNet()
+    G.add_vertex("A")
+    G.set_vertex_attrs("A", present="value", missing=None, zero=0, empty_string="")
+
+    G2 = _roundtrip_json(G, tmpdir_fixture, "nulls")
+
+    attrs = G2.get_vertex_attrs("A") or {}
+    assert attrs.get("present") == "value"
+    assert attrs.get("zero") == 0
+    assert "missing" not in attrs or attrs.get("missing") is None
+
+
+# ---------------------------------------------------------------------------
+# Large graph — parquet only
+# ---------------------------------------------------------------------------
+
+def test_very_large_graph(tmpdir_fixture):
+    import random
+
+    G = AnnNet()
+    n_vertices = 1000
+    n_edges = 2000
+    for i in range(n_vertices):
+        G.add_vertex(f"v{i}")
+    random.seed(42)
+    for i in range(n_edges):
+        u = f"v{random.randint(0, n_vertices - 1)}"  # nosec B311
+        v = f"v{random.randint(0, n_vertices - 1)}"  # nosec B311
+        G.add_edge(u, v, edge_id=f"e{i}", weight=random.random())  # nosec B311
+
+    G2 = _roundtrip_parquet(G, tmpdir_fixture, "large")
+
+    assert len(list(G2.vertices())) == n_vertices
+    assert G2.number_of_edges() == n_edges

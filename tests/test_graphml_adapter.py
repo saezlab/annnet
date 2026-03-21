@@ -8,7 +8,7 @@ from annnet.io.GraphML_io import (
     to_graphml,
 )  # GraphML (AnnNet Markup Language)
 
-from .helpers import assert_graphs_equal
+from .conftest import assert_graphs_equal
 
 
 class TestGraphMLAdapter:

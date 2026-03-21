@@ -33,27 +33,27 @@ class TestLazyGTProxy(unittest.TestCase):
         d = G.gt.topology.shortest_distance(G, source="a", target="b", weights="weight")
         self.assertAlmostEqual(float(d), 3.0)
 
-        # --- topology: label_components ---
+    # --- topology: label_components ---
 
-        def test_label_components(self):
-            G = AnnNet()
-            G.add_vertex("x")
-            G.add_vertex("y")
-            G.add_edge("x", "y")
+    def test_label_components(self):
+        G = AnnNet()
+        G.add_vertex("x")
+        G.add_vertex("y")
+        G.add_edge("x", "y")
 
-            # directed=False ensures we look for Weakly Connected Components (1 component)
-            comp, hist = G.gt.topology.label_components(G, directed=False)
+        # directed=False ensures we look for Weakly Connected Components (1 component)
+        comp, hist = G.gt.topology.label_components(G, directed=False)
 
-            # Check that the histogram has exactly 1 entry (meaning 1 component found)
-            self.assertEqual(len(hist), 1)
+        # Check that the histogram has exactly 1 entry (meaning 1 component found)
+        self.assertEqual(len(hist), 1)
 
-            vp = comp
-            gtg = G.gt.backend()
+        vp = comp
+        gtg = G.gt.backend()
 
-            # Check both vertices are in the same component
-            comp_id_0 = int(vp[gtg.vertex(0)])
-            comp_id_1 = int(vp[gtg.vertex(1)])
-            self.assertEqual(comp_id_0, comp_id_1)
+        # Check both vertices are in the same component
+        comp_id_0 = int(vp[gtg.vertex(0)])
+        comp_id_1 = int(vp[gtg.vertex(1)])
+        self.assertEqual(comp_id_0, comp_id_1)
 
     # --- centrality: betweenness ---
 

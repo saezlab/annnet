@@ -230,5 +230,83 @@ class TestGraphBasics(unittest.TestCase):
         self.assertAlmostEqual(self.g._matrix[u3i, col], 3.5, places=7)
 
 
+class TestErrorPaths(unittest.TestCase):
+    """Error handling and boundary conditions."""
+
+    def setUp(self):
+        self.g = AnnNet(directed=True)
+
+    # ------------------------------------------------------------------ #
+    # remove_vertex                                                        #
+    # ------------------------------------------------------------------ #
+
+    def test_remove_nonexistent_vertex_raises_key_error(self):
+        with self.assertRaises(KeyError):
+            self.g.remove_vertex("does_not_exist")
+
+    def test_remove_vertex_twice_raises_on_second(self):
+        self.g.add_vertex("A")
+        self.g.remove_vertex("A")
+        with self.assertRaises(KeyError):
+            self.g.remove_vertex("A")
+
+    # ------------------------------------------------------------------ #
+    # remove_edge                                                          #
+    # ------------------------------------------------------------------ #
+
+    def test_remove_nonexistent_edge_raises_key_error(self):
+        with self.assertRaises(KeyError):
+            self.g.remove_edge("ghost_edge")
+
+    def test_remove_edge_twice_raises_on_second(self):
+        self.g.add_vertex("A")
+        self.g.add_vertex("B")
+        eid = self.g.add_edge("A", "B", edge_id="e1")
+        self.g.remove_edge(eid)
+        with self.assertRaises(KeyError):
+            self.g.remove_edge(eid)
+
+    # ------------------------------------------------------------------ #
+    # add_vertex — upsert semantics                                        #
+    # ------------------------------------------------------------------ #
+
+    def test_duplicate_vertex_is_upsert_not_error(self):
+        self.g.add_vertex("A", score=1.0)
+        self.g.add_vertex("A", score=2.0)   # should update, not raise
+        self.assertEqual(self.g.number_of_vertices(), 1)
+        self.assertEqual(self.g.get_attr_vertex("A", "score"), 2.0)
+
+    # ------------------------------------------------------------------ #
+    # add_edge — auto-creates missing vertices                             #
+    # ------------------------------------------------------------------ #
+
+    def test_add_edge_auto_creates_missing_vertices(self):
+        # Neither X nor Y exist yet
+        eid = self.g.add_edge("X", "Y", edge_id="auto_e")
+        self.assertIn("X", self.g.entity_to_idx)
+        self.assertIn("Y", self.g.entity_to_idx)
+        self.assertIn("auto_e", self.g.edge_to_idx)
+
+    # ------------------------------------------------------------------ #
+    # add_edge — invalid arguments                                         #
+    # ------------------------------------------------------------------ #
+
+    def test_add_edge_non_numeric_weight_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            self.g.add_edge("A", "B", weight="heavy")
+
+    def test_add_edge_invalid_propagate_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            self.g.add_edge("A", "B", propagate="invalid_mode")
+
+    # ------------------------------------------------------------------ #
+    # remove_slice guard                                                   #
+    # ------------------------------------------------------------------ #
+
+    def test_remove_default_slice_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            self.g.remove_slice("default")
+
+
 if __name__ == "__main__":
     unittest.main()
