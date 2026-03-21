@@ -272,7 +272,7 @@ class TestErrorPaths(unittest.TestCase):
 
     def test_duplicate_vertex_is_upsert_not_error(self):
         self.g.add_vertex("A", score=1.0)
-        self.g.add_vertex("A", score=2.0)   # should update, not raise
+        self.g.add_vertex("A", score=2.0)  # should update, not raise
         self.assertEqual(self.g.number_of_vertices(), 1)
         self.assertEqual(self.g.get_attr_vertex("A", "score"), 2.0)
 

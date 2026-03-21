@@ -6,8 +6,8 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from annnet.core.graph import AnnNet
 from annnet.core._Views import GraphView
+from annnet.core.graph import AnnNet
 
 
 def _build_graph():
@@ -125,6 +125,7 @@ class TestGraphViewObs(unittest.TestCase):
         obs = view.obs
         try:
             import polars as pl
+
             rows = obs.to_dicts()
         except Exception:
             rows = obs.to_dict(orient="records")
@@ -139,6 +140,7 @@ class TestGraphViewObs(unittest.TestCase):
         obs = view.obs
         try:
             import polars as pl
+
             rows = obs.to_dicts()
         except Exception:
             rows = obs.to_dict(orient="records")
@@ -156,6 +158,7 @@ class TestGraphViewVar(unittest.TestCase):
         var = view.var
         try:
             import polars as pl
+
             rows = var.to_dicts()
         except Exception:
             rows = var.to_dict(orient="records")
@@ -169,6 +172,7 @@ class TestGraphViewVar(unittest.TestCase):
         var = view.var
         try:
             import polars as pl
+
             rows = var.to_dicts()
         except Exception:
             rows = var.to_dict(orient="records")
@@ -274,8 +278,8 @@ class TestGraphViewConvenience(unittest.TestCase):
         view = GraphView(G)
         s = view.summary()
         self.assertIsInstance(s, str)
-        self.assertIn("3", s)   # 3 vertices
-        self.assertIn("2", s)   # 2 edges
+        self.assertIn("3", s)  # 3 vertices
+        self.assertIn("2", s)  # 2 edges
 
     def test_repr(self):
         G = _build_graph()
@@ -297,6 +301,7 @@ class TestViewsClassEdgesView(unittest.TestCase):
         df = G.edges_view()
         try:
             import polars as pl
+
             rows = df.to_dicts()
         except Exception:
             rows = df.to_dict(orient="records")
@@ -316,6 +321,7 @@ class TestViewsClassEdgesView(unittest.TestCase):
         df = G.edges_view(slice="sig", resolved_weight=True)
         try:
             import polars as pl
+
             row = df.filter(pl.col("edge_id") == "e1").to_dicts()[0]
         except Exception:
             row = df[df["edge_id"] == "e1"].to_dict(orient="records")[0]
@@ -336,6 +342,7 @@ class TestViewsClassVerticesView(unittest.TestCase):
         df = G.vertices_view()
         try:
             import polars as pl
+
             rows = df.to_dicts()
         except Exception:
             rows = df.to_dict(orient="records")

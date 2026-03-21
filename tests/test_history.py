@@ -8,8 +8,8 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from annnet.core.graph import AnnNet
 from annnet.core._History import GraphDiff
+from annnet.core.graph import AnnNet
 
 
 def _make_snapshot(label, vertex_ids, edge_ids, slice_ids=None):
@@ -127,6 +127,7 @@ class TestExportHistory(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.tmpdir)
 
     def test_export_returns_zero_when_empty(self):

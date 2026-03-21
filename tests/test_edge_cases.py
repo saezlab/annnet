@@ -14,10 +14,10 @@ from annnet.io.Parquet_io import (
 )  # Parquet (columnar storage)
 from annnet.io.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _roundtrip_json(G, tmpdir, name="g"):
     p = tmpdir / f"{name}.json"
@@ -42,6 +42,7 @@ def _roundtrip_sif(G, tmpdir, name="g"):
 # Empty-graph — each adapter is a separate parametrized case
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("adapter", ["json", "parquet", "dataframe"])
 def test_empty_graph(adapter, tmpdir_fixture):
     G = AnnNet()
@@ -52,6 +53,7 @@ def test_empty_graph(adapter, tmpdir_fixture):
         G2 = _roundtrip_parquet(G, tmpdir_fixture, "empty")
     else:
         from annnet.io.dataframe_io import from_dataframes, to_dataframes
+
         dfs = to_dataframes(G)
         G2 = from_dataframes(**dfs)
 
@@ -99,6 +101,7 @@ def test_special_characters_in_ids(adapter, tmpdir_fixture):
 # Extreme weights — json only
 # ---------------------------------------------------------------------------
 
+
 def test_large_weights_and_extreme_values(tmpdir_fixture):
     G = AnnNet()
     G.add_vertex("A")
@@ -117,6 +120,7 @@ def test_large_weights_and_extreme_values(tmpdir_fixture):
 # ---------------------------------------------------------------------------
 # Self-loops — json, parquet, sif tested separately
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("adapter", ["json", "parquet", "sif"])
 def test_self_loops(adapter, tmpdir_fixture):
@@ -138,6 +142,7 @@ def test_self_loops(adapter, tmpdir_fixture):
 # Parallel edges — json
 # ---------------------------------------------------------------------------
 
+
 def test_parallel_edges(tmpdir_fixture):
     G = AnnNet()
     G.add_vertex("A")
@@ -158,6 +163,7 @@ def test_parallel_edges(tmpdir_fixture):
 # None / null attribute handling — json
 # ---------------------------------------------------------------------------
 
+
 def test_null_and_none_handling(tmpdir_fixture):
     G = AnnNet()
     G.add_vertex("A")
@@ -174,6 +180,7 @@ def test_null_and_none_handling(tmpdir_fixture):
 # ---------------------------------------------------------------------------
 # Large graph — parquet only
 # ---------------------------------------------------------------------------
+
 
 def test_very_large_graph(tmpdir_fixture):
     import random

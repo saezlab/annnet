@@ -1,9 +1,9 @@
 """Unit tests for annnet/io/GraphML_io.py — to_gexf / from_gexf."""
 
 import os
+import shutil
 import sys
 import tempfile
-import shutil
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

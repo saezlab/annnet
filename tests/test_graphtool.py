@@ -23,7 +23,6 @@ except Exception:
 
 from annnet.adapters.graphtool_adapter import from_graphtool, to_graphtool
 
-
 from .conftest import build_adapter_graph as _build_graph
 
 _BUILD_GRAPH = _build_graph
