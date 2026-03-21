@@ -16,8 +16,8 @@ from annnet.io.Parquet_io import (
 )  # Parquet (columnar storage)
 
 # Generous soft thresholds (seconds) — only fail on clear regression
-_THRESHOLD_COMPLEX = 5.0   # complex_graph (6 vertices, 6 edges) per adapter
-_THRESHOLD_LARGE = 30.0    # 5 000 vertices / 10 000 edges round-trip
+_THRESHOLD_COMPLEX = 5.0  # complex_graph (6 vertices, 6 edges) per adapter
+_THRESHOLD_LARGE = 30.0  # 5 000 vertices / 10 000 edges round-trip
 
 
 class TestPerformance:
@@ -98,6 +98,7 @@ class TestPerformance:
     def test_large_graph_parquet_speed(self, tmpdir_fixture):
         """Parquet round-trip on a large graph must stay within threshold."""
         import random
+
         from annnet.core.graph import AnnNet
 
         G = AnnNet()
