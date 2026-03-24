@@ -112,42 +112,54 @@ requires-python = ">=3.10"
 version = "0.1.0"
 
 [project.optional-dependencies]
+# DataFrame backends
 polars = ["polars>=0.20.0"]   # recommended dataframe annotations
+pandas = ["pandas>=1.5"]
+pyarrow = ["pyarrow>=10"]
+
+# Graph backends
 networkx = ["networkx>=3.3"]
 igraph   = ["python-igraph>=0.11"]
-pandas = ["pandas>=1.5"]
 pyg = [
   "torch>=2.2",
   "torch-geometric>=2.5",
 ]
+
+# Plot backends
+matplotlib  = ["matplotlib>=3.5"]
+pydot = ["pydot"]
+graphviz = ["graphviz"]
+
+# IO modules
 excel    = ["openpyxl>=3.1"]          # used by annnet/io/excel.py
-sbml     = ["lxml>=4.9"]                # used by sbml_adapter.py
+sbml     = ["lxml>=4.9"]              # used by sbml_adapter.py
 parquet  = ["pyarrow>=10"]            # used by GraphDir_Parquet_adapter.py
 zarr_io  = ["zarr>=2.18", "numcodecs>=0.12"]  # used by io_annnet.py
-matplotlib  = ["matplotlib>=3.5"]
-io = [
-  "pandas>=2.0",    # excel loader needs it
-  "pyarrow>=10",    # parquet adapter
-  "zarr>=2.18",
-  "numcodecs>=0.12",
-  "lxml>=4.9",        # SBML adapter
-  "toml>=0.10",     # metadata loading
-  "narwhals>=1.9",
-]
+
+# Bundles
 backends = [
   "networkx>=3.3",
   "python-igraph>=0.11",
-  # graphtool cannot be installed via pip
+  # graph-tool cannot be installed via pip
+  # PyG will be a proper backand, for now mostly IO module
 ]
+
 plot = [
   "matplotlib>=3.5",
   "pydot",
   "graphviz"
 ]
-bio = [
-  "lxml>=4.9",
-  "cobra>=0.26"
+
+io = [
+  "pandas>=2.0",    # excel loader needs it
+  "openpyxl>=3.1",
+  "pyarrow>=10",    # parquet adapter
+  "zarr>=2.18",
+  "numcodecs>=0.12",
+  "lxml>=4.9",      # SBML adapter
+  "toml>=0.10",     # metadata loading
 ]
+
 storage = [
   "pyarrow>=10",
   "zarr>=2.18",
@@ -175,8 +187,6 @@ all = [
   # graphtool is not on PyPI
 ]
 
-
-
 # make CI tools installable via `.[dev]`
 dev = [
   "ruff>=0.6",
@@ -186,6 +196,15 @@ dev = [
   "build>=1.2",
   "twine>=5.0",
 ]
+
+# Flavours
+metabo = [
+  "lxml>=4.9",
+  "cobra>=0.26",
+  "graphviz"
+]
+
+# add others if needed ;)
 
 [tool.hatch.build]
 exclude = [

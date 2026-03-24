@@ -15,6 +15,11 @@ class TestPublicAPI:
         assert an.Attr is not None
         assert an.Attributes is not None
         assert an.Edge is not None
+        assert an.__version__
+        assert an.__license__
+        assert callable(an.get_metadata)
+        assert callable(an.get_latest_version)
+        assert callable(an.info)
 
         for name in [
             "available_backends",
@@ -67,6 +72,15 @@ class TestPublicAPI:
             "render",
         ]:
             assert callable(getattr(an, name))
+
+    def test_metadata_exports_resolve(self):
+        meta = an.get_metadata()
+        summary = an.info()
+
+        assert meta["version"] == an.__version__
+        assert meta["license"] == an.__license__
+        assert isinstance(str(summary), str)
+        assert "graph backends" in str(summary).lower()
 
     def test_top_level_submodules_resolve(self):
         assert an.core.AnnNet is an.AnnNet

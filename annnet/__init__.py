@@ -7,6 +7,17 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 from typing import Any
 
+from ._metadata import __author__
+from ._metadata import __authors__
+from ._metadata import __version__
+from ._metadata import __license__
+from ._metadata import __maintainers__
+from ._metadata import __title__
+from ._metadata import get_metadata
+from ._metadata import get_latest_version
+from ._metadata import info
+from ._metadata import metadata as __metadata__
+
 _lazy_submodules = {
     "adapters": "annnet.adapters",
     "io": "annnet.io",
@@ -88,7 +99,20 @@ _lazy_functions: dict[str, tuple[str, str]] = {
     "render": ("annnet.utils.plotting", "render"),
 }
 
-__all__ = sorted(set(_lazy_submodules) | set(_lazy_objects) | set(_lazy_functions))
+_metadata_exports = {
+    "__title__",
+    "__version__",
+    "__author__",
+    "__authors__",
+    "__maintainers__",
+    "__license__",
+    "__metadata__",
+    "get_metadata",
+    "get_latest_version",
+    "info",
+}
+
+__all__ = sorted(set(_lazy_submodules) | set(_lazy_objects) | set(_lazy_functions) | _metadata_exports)
 
 
 def _make_lazy_function(module_name: str, attr_name: str):
@@ -120,12 +144,3 @@ def __getattr__(name: str) -> Any:
 
 def __dir__() -> list[str]:
     return sorted(list(globals().keys()) + list(__all__))
-
-
-try:
-    from ._version import __version__  # type: ignore
-except Exception:
-    try:
-        __version__ = _pkg_version("annnet")
-    except PackageNotFoundError:
-        __version__ = "0.0.0"
