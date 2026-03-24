@@ -13,11 +13,16 @@ jobs:
         -   uses: ./.github/actions/setup
             with:
                 python-version: ${{ matrix.python-version }}
-        -   name: Install optional test dependencies
+        -   name: Install test dependency group
             shell: bash
             run: |
                 source .venv/bin/activate
-                uv pip install polars pandas networkx zarr numcodecs pyarrow python-igraph matplotlib torch torch-geometric
+                uv sync --group tests
+        -   name: Install PyG-only test dependencies
+            shell: bash
+            run: |
+                source .venv/bin/activate
+                uv pip install torch torch-geometric
         -   name: Run tests with coverage
             run: |
                 source .venv/bin/activate
@@ -37,7 +42,7 @@ jobs:
             with:
                 environments: dev
                 cache: true
-        -   name: Run graph-tool tests only
+        -   name: Run graph-tool-specific tests in Pixi env
             run:  |
                 pip install polars
                 pixi run test-gt

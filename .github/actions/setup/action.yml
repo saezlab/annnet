@@ -20,10 +20,10 @@ runs:
         echo "$HOME/.cargo/bin" >> "$GITHUB_PATH" || true
         hash -r
 
-    # Create venv and install extras
-    - name: Create virtualenv and install extras
+    # Create venv and install repo dependency groups used by lint/docs jobs
+    - name: Create virtualenv and install dependency groups
       shell: bash
       run: |
         uv venv .venv
         source .venv/bin/activate
-        uv pip install -e ".[dev,tests,docs]"
+        uv sync --group dev --group docs

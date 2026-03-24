@@ -68,8 +68,11 @@ test_venv/
 *venv*/
 test_venv/
 notebooks/data
-
+site/
 
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+
+# cache
+.cache/

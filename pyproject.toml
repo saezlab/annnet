@@ -20,6 +20,7 @@ docs = [
 ]
 tests = [
     "pytest>=7.0",
+    "pytest-cov>=5.0",
     "tox>=4.11",
     "tox-gh>=1.5.0",
     "coverage>=6.0",
@@ -27,7 +28,14 @@ tests = [
     "diff_cover",
     "ruff",
     "polars>=0.20.0",
-    "narwhals>=1.9"
+    "pandas>=1.5",
+    "networkx>=3.3",
+    "python-igraph>=0.11",
+    "pyarrow>=10",
+    "zarr>=2.18",
+    "numcodecs>=0.12",
+    "matplotlib>=3.5",
+    "narwhals>=1.9",
 ]
 
 [lint.isort]
@@ -73,7 +81,7 @@ inline-quotes = "single"
 [project]
 authors = [
     { name = "Youssef Zerta", email = "youssef.zerta@biomedtech.ueuromed.org" },
-    { name = "Bottazzi Daniele", email = "daniele.bottazzi@mail.polimi.it" },
+    { name = "Daniele Bottazzi", email = "daniele.bottazzi@mail.polimi.it" },
     { name = "Denes Turei", email = "turei.denes@gmail.com" }
 ]
 classifiers = [
@@ -108,6 +116,10 @@ polars = ["polars>=0.20.0"]   # recommended dataframe annotations
 networkx = ["networkx>=3.3"]
 igraph   = ["python-igraph>=0.11"]
 pandas = ["pandas>=1.5"]
+pyg = [
+  "torch>=2.2",
+  "torch-geometric>=2.5",
+]
 excel    = ["openpyxl>=3.1"]          # used by annnet/io/excel.py
 sbml     = ["lxml>=4.9"]                # used by sbml_adapter.py
 parquet  = ["pyarrow>=10"]            # used by GraphDir_Parquet_adapter.py
@@ -143,7 +155,7 @@ storage = [
   "pandas>=2.0"
 ]
 
-# "everything"
+# "everything except conda packages adn PyG"
 all = [
   "polars",
   "networkx>=3.3",
@@ -175,24 +187,6 @@ dev = [
   "twine>=5.0",
 ]
 
-# unit-test helpers via `.[tests]`
-tests = [
-  "coverage>=6.0",
-  "tox>=4.11",
-  "tox-gh>=1.5.0",
-  "diff_cover",
-  "codecov-cli>=10.2.0",
-  "narwhals>=1.9",
-]
-
-# switch docs extra to **MkDocs** (workflows call mkdocs)
-docs = [
-  "mkdocs>=1.6",
-  "mkdocs-material>=9.5",
-  "mkdocstrings[python]>=0.25",
-  "mkdocs-jupyter>=0.25",
-]
-
 [tool.hatch.build]
 exclude = [
   "**/__pycache__/**",
@@ -219,8 +213,8 @@ an = "annnet:main"
 an-demo = "annnet.demo.demo:main"
 
 [project.urls]
-Documentation = "https://annnet.readthedocs.io/"
-Homepage = "https://github.com/saezlab/annnet"
+Documentation = "https://saezlab.github.io/annnet/reference/"
+Homepage = "https://saezlab.github.io/annnet/"
 Issues = "https://github.com/saezlab/annnet/issues"
 Repository = "https://github.com/saezlab/annnet"
 
@@ -335,8 +329,8 @@ base_python = [
 commands = [
     "pytest --cov --cov-append --cov-config={toxinidir}/.coveragerc --ignore docs/ {posargs:-vv {env:_PYTEST_TOX_POSARGS:}}"
 ]
-deps = [
-    ".[tests]"
+dependency_groups = [
+    "tests"
 ]
 passenv = "TOXENV,CI,CODECOV_*,GITHUB_ACTIONS"
 platform = [
@@ -356,14 +350,14 @@ commands = [
 
 [tool.tox.env.covclean]
 skip_install = true
-deps = [".[tests]"]
+dependency_groups = ["tests"]
 commands = [
   ["coverage", "erase"]
 ]
 
 [tool.tox.env.coverage]
 skip_install = true
-deps = [".[tests]"]
+dependency_groups = ["tests"]
 depends = ["py39", "py310", "py311", "py312", "py313"]
 parallel_show_output = true
 commands = [
@@ -428,7 +422,7 @@ python = "3.12.*"
 graph-tool = "*"
 
 [tool.pixi.pypi-dependencies]
-annnet = { path = ".", editable = true, extras = ["tests", "dev", "networkx", "igraph", "pandas", "excel", "sbml", "parquet", "zarr_io"]}
+annnet = { path = ".", editable = true, extras = ["all", "dev"]}
 
 [tool.pixi.environments]
 dev = { solve-group = "default" }
@@ -436,3 +430,4 @@ dev = { solve-group = "default" }
 [tool.pixi.tasks]
 _pytest = { cmd = "pytest" }
 test-all = { depends-on = [{ task = "_pytest", environment = "dev" }] }
+test-gt = { cmd = "pytest tests/test_graphtool.py tests/test_lazy_gt_proxy.py", environment = "dev" }

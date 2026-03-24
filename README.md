@@ -119,7 +119,22 @@ pixi run test-all     # runs pytest in the Pixi dev env (with graph-tool)
 
 Notes:
 - `graph-tool` is only available on some platforms (e.g., macOS arm may need Rosetta, linux-64 is supported); the Pixi manifest includes multiple platforms.
-- The Pixi env installs annnet editable with extras `all`, `tests`, and `dev`, plus graph-tool from conda-forge.
+- The Pixi env installs annnet editable with extras `all` and `dev`, plus graph-tool from conda-forge.
+
+### Docs with uv
+
+Use the module entrypoint instead of the `mkdocs` console script. In this repo, that path picks up the startup customizations used to avoid Jupyter warning noise during docs builds.
+
+```bash
+uv sync --group docs
+uv run python -m mkdocs serve
+```
+
+For a one-off build:
+
+```bash
+uv run python -m mkdocs build --strict
+```
 
 ---
 

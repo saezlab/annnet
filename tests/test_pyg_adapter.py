@@ -23,6 +23,10 @@ try:
     HAS_TORCH = True
 except Exception:
     HAS_TORCH = False
+    torch = None
+    HeteroData = None
+
+HAS_CUDA = bool(HAS_TORCH and torch.cuda.is_available())
 
 try:
     import polars as pl
@@ -38,8 +42,10 @@ try:
 except Exception:
     HAS_PANDAS = False
 
-# Import adapter under test
-from annnet.adapters.pyg_adapter import to_pyg
+if HAS_TORCH:
+    from annnet.adapters.pyg_adapter import to_pyg
+else:
+    to_pyg = None
 
 
 def _build_graph() -> AnnNet:
@@ -333,7 +339,7 @@ class TestPyGAdapter(unittest.TestCase):
         self.assertEqual(data[etype].edge_index.device.type, "cpu")
         self.assertEqual(data[etype].edge_weight.device.type, "cpu")
 
-    @unittest.skipUnless(torch.cuda.is_available(), "CUDA not available")
+    @unittest.skipUnless(HAS_CUDA, "CUDA not available")
     def test_device_placement_cuda(self):
         """Data should be on CUDA when device='cuda'."""
         g = _BUILD_GRAPH()
