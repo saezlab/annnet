@@ -173,7 +173,7 @@ def get_latest_version(
         return None
 
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
+        with urllib.request.urlopen(url, timeout=timeout) as response:  # nosec B310
             content = response.read().decode()
         match = re.search(r'version\s*=\s*"(.*)"', content)
         if match:
