@@ -1,5 +1,6 @@
 import pathlib
 import sys
+from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -81,6 +82,11 @@ class TestPublicAPI:
         assert meta["license"] == an.__license__
         assert isinstance(str(summary), str)
         assert "graph backends" in str(summary).lower()
+
+    def test_get_latest_version_rejects_non_http_schemes(self):
+        with patch("urllib.request.urlopen") as urlopen:
+            assert an.get_latest_version("file:///tmp/pyproject.toml") is None
+            urlopen.assert_not_called()
 
     def test_top_level_submodules_resolve(self):
         assert an.core.AnnNet is an.AnnNet

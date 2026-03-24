@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections import OrderedDict
 from dataclasses import dataclass
 from html import escape
@@ -9,7 +10,6 @@ from importlib import metadata as importlib_metadata
 from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
-import sys
 
 try:  # Python 3.11+
     import tomllib
@@ -105,9 +105,7 @@ def _project_optional_dependencies(meta: dict[str, Any]) -> dict[str, list[str]]
 def _optional_dependency_bundles(meta: dict[str, Any]) -> OrderedDict[str, list[str]]:
     optional = _project_optional_dependencies(meta)
     aggregate = {"io", "backends", "plot", "bio", "storage", "all", "dev"}
-    return OrderedDict(
-        (name, deps) for name, deps in optional.items() if name in aggregate
-    )
+    return OrderedDict((name, deps) for name, deps in optional.items() if name in aggregate)
 
 
 def _author_links(authors: list[str]) -> str:
@@ -119,7 +117,7 @@ def _author_links(authors: list[str]) -> str:
             email = email[:-1].strip()
             rendered.append(
                 f"{escape(name)} "
-                f"<a href=\"mailto:{escape(email)}\" style=\"text-decoration:none\" title=\"{escape(email)}\">&#9993;</a>"
+                f'<a href="mailto:{escape(email)}" style="text-decoration:none" title="{escape(email)}">&#9993;</a>'
             )
         else:
             rendered.append(escape(author))
@@ -168,10 +166,15 @@ def get_latest_version(
 
     import re
     import urllib.request
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return None
 
     try:
-        response = urllib.request.urlopen(url, timeout=timeout)
-        content = response.read().decode()
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            content = response.read().decode()
         match = re.search(r'version\s*=\s*"(.*)"', content)
         if match:
             return match.group(1)
@@ -255,9 +258,7 @@ class AnnNetInfo:
         return info
 
     def __str__(self) -> str:
-        return "\n".join(
-            f"{item['title']}: {item['message']}" for item in self._info().values()
-        )
+        return "\n".join(f"{item['title']}: {item['message']}" for item in self._info().values())
 
     __repr__ = __str__
 
@@ -294,7 +295,7 @@ class AnnNetInfo:
             for name, deps in groups.items():
                 title = ", ".join(deps)
                 chips.append(
-                    f"<span title=\"{escape(title)}\" style='display:inline-flex;align-items:center;"
+                    f'<span title="{escape(title)}" style=\'display:inline-flex;align-items:center;'
                     "padding:0.12rem 0.45rem;margin:0.08rem 0.35rem 0.08rem 0;"
                     "border:1px solid #d0d7de;border-radius:999px;'>"
                     f"<span>{escape(name)}</span>"
@@ -398,7 +399,7 @@ class AnnNetInfo:
             )
 
         return (
-            "<div style='font-family:system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;"
+            '<div style=\'font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;'
             "border:1px solid #d0d7de;border-radius:12px;padding:1rem 1.1rem;"
             "max-width:820px;background:#fff;'>"
             "<div style='display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:0.6rem;'>"

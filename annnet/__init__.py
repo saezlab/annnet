@@ -7,15 +7,17 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 from typing import Any
 
-from ._metadata import __author__
-from ._metadata import __authors__
-from ._metadata import __version__
-from ._metadata import __license__
-from ._metadata import __maintainers__
-from ._metadata import __title__
-from ._metadata import get_metadata
-from ._metadata import get_latest_version
-from ._metadata import info
+from ._metadata import (
+    __author__,
+    __authors__,
+    __license__,
+    __maintainers__,
+    __title__,
+    __version__,
+    get_latest_version,
+    get_metadata,
+    info,
+)
 from ._metadata import metadata as __metadata__
 
 _lazy_submodules = {
@@ -112,7 +114,9 @@ _metadata_exports = {
     "info",
 }
 
-__all__ = sorted(set(_lazy_submodules) | set(_lazy_objects) | set(_lazy_functions) | _metadata_exports)
+__all__ = sorted(
+    set(_lazy_submodules) | set(_lazy_objects) | set(_lazy_functions) | _metadata_exports
+)
 
 
 def _make_lazy_function(module_name: str, attr_name: str):

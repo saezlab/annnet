@@ -8,6 +8,7 @@ dev = [
     "pre-commit>=2.17.0",
     "bump2version",
     "twine",
+    "ruff>=0.6",
     "black>=24.0",
     "mypy>=1.0"
 ]
