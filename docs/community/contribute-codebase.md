@@ -12,9 +12,9 @@ For more substantial changes or additions, please read on.
 
 ## Larger Contributions
 
-If you want to contribute a larger change, please create an
-[issue](./contribute.md#categories) first. This will allow us to discuss the
-change and make sure that it fits into the project.  It can happen that
+If you want to contribute a larger change, please start from the
+[Join us](./index.md#how-we-work) page and open a discussion first. This will allow us to discuss the
+change and make sure that it fits into the project. It can happen that
 development for a feature is already in progress, so it is important to check
 first to avoid duplicate work. If you have any questions, feel free to approach
 us in any way you like.

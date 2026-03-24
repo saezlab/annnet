@@ -31,53 +31,72 @@ theme:
 nav:
 -   Home: index.md
 
--   About:
-    -   Project: 'annnet-project/project.md'
-    -   Design philosophy: 'annnet-project/design-philosophy.md'
-    -   Use Cases:
-        -   Overview: 'annnet-project/use-cases.md'
-        -   SBUC Notebook: notebooks/SBUC.ipynb
-    -   About: about.md
-
--   Get Started:
-    -   Installation: installation.md
-    -   Quickstart: learn/tutorials/quickstart.md
-
--   Learn:
+-   Installation: installation.md
+-   Quickstart: quickstart.md
+-   Tutorials and Use Cases:
+    -   HowTo's and Use Cases: tutorials/index.md
     -   Tutorials:
-        -   Basics: learn/tutorials/tutorial0001_basics.md
-        -   HowTo / FAQ:
-            -   learn/guides/index.md
-    - HowTo / FAQ:
-      - learn/guides/index.md
+        -   AnnNet Showcase: tutorials/notebooks/annnet_showcase.ipynb
+        -   AnnNet Demo: tutorials/notebooks/Demo.ipynb
+        -   Multi-Condition Causal Signaling: tutorials/notebooks/UC1.ipynb
+        -   HEK293 multilayer network: tutorials/notebooks/UC2.ipynb
+        -   Multilayer Systems Biology: tutorials/notebooks/SBUC.ipynb
+        -   DataFrame backends: tutorials/notebooks/SBUC-nopolars.ipynb
+        
 
 -   Explanations:
-    -   learn/explanation/index.md
-    -   Architecture Overview: learn/explanation/architecture-overview.md
-    -   Math (Incidence): learn/explanation/math-incidence.md
-    -   Math (Multilayer): learn/explanation/math-multilayer.md
-    -   Managers and Views: learn/explanation/managers-and-views.md
-    -   History and Diffs: learn/explanation/history-and-diffs.md
-    -   Interoperability: learn/explanation/interoperability.md
-    -   IO annnet: learn/explanation/io_annnet.md
+    -   Overview: explanations/index.md
+    -   Design principles: explanations/design-philosophy.md
+    -   Package architecture: explanations/architecture-overview.md
+    -   Incidence representation: explanations/math-incidence.md
+    -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
+    -   Slices and views: explanations/managers-and-views.md
+    -   Interoperability: explanations/interoperability.md
+    -   Storage and IO: explanations/io-annnet.md
+    -   Tracking changes: explanations/history-and-diffs.md
+    -   Typical analysis patterns: explanations/common-patterns.md
 
--   Reference:
-    -   API Overview: reference/index.md
-    -   Annotated Network:
-        -   Core + Attributes: reference/annnet_core.md
-        -   Slices: reference/annnet_slices.md
-        -   Layers: reference/annnet_layers.md
-    -   Algorithms: reference/algorithms.md
-    -   Storage (.annnet): reference/storage.md
-    -   Interoperability: reference/interoperability.md
-    #-   API Documentation:
-    #    -   'annnet':
-    #        -   _metadata: reference/source/annnet/_metadata-docs.md
+-   API Reference:
+    -   Overview: reference/index.md
+    -   Core:
+        -   Graph: reference/core/graph.md
+        -   Indexing: reference/core/indexing.md
+        -   Attributes: reference/core/attributes.md
+        -   Bulk operations: reference/core/bulk-operations.md
+        -   History: reference/core/history.md
+        -   Cache and operations: reference/core/cache.md
+        -   Views: reference/core/views.md
+        -   Slices: reference/core/slices.md
+        -   Layers: reference/core/layers.md
+    -   Algorithms:
+        -   Traversal: reference/algorithms/traversal.md
+    -   IO:
+        -   Native .annnet format: reference/io/annnet-format.md
+        -   Parquet: reference/io/parquet.md
+        -   GraphML and GEXF: reference/io/graphml-gexf.md
+        -   SIF: reference/io/sif.md
+        -   SBML: reference/io/sbml.md
+        -   CX2: reference/io/cx2.md
+        -   JSON and NDJSON: reference/io/json.md
+        -   CSV: reference/io/csv.md
+        -   Excel: reference/io/excel.md
+        -   DataFrames: reference/io/dataframes.md
+        -   OmniPath: reference/io/omnipath.md
+    -   Adapters:
+        -   Adapter manager: reference/adapters/manager.md
+        -   NetworkX adapter: reference/adapters/networkx.md
+        -   igraph adapter: reference/adapters/igraph.md
+        -   graph-tool adapter: reference/adapters/graphtool.md
+        -   PyTorch Geometric adapter: reference/adapters/pyg.md
+    -   Utilities:
+        -   Typing: reference/utils/typing.md
+        -   Validation: reference/utils/validation.md
+        -   Plotting: reference/utils/plotting.md
+
 -   Community:
     -   Join Us: community/index.md
-    -   Where to Start: community/contribute.md
     -   Contribute to the Documentation: community/contribute-docs.md
-    -   Contribute to the Code Base: community/contribute-codebase.md
+    -   Contribute to the package code: community/contribute-codebase.md
 
 
 
@@ -128,11 +147,13 @@ plugins:
                     show_bases: false
                     show_if_no_docstring: false
                     show_source: false
-                    filters:
-                    - "!^_"
 -   mkdocs-jupyter
+
+hooks:
+  # Quiet Jupyter/nbformat warning noise during docs builds.
+  - tools/mkdocs_hooks.py
 
 extra_css:
   - assets/overrides.css
 
-copyright: © Copyright 2021-2025, Saez-lab development team.
+copyright: © Copyright 2021-2026, Saez-lab development team.

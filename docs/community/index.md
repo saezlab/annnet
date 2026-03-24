@@ -1,25 +1,39 @@
-Welcome to the annnet community! We follow open-source principles and
-encourage any sort of contribution. We communicate on GitHub, where we also
-organise our projects.
+# Join us
+
+There are many useful ways to contribute to annnet besides writing package
+code. Improvements to the documentation, examples, and contributor workflows
+all help move the project forward.
 
 <div class="grid cards" markdown>
 
--   :octicons-book-24:{ .lg .middle } __Where to Start__
+-   :octicons-book-24:{ .lg .middle } __Contribute to the documentation__
 
     ---
 
-    If you'd like to learn how to contribute to our projects, please follow
-    the steps outlined in the contribution guide.
+    Improve guides, explanations, examples, and API docs when something is
+    missing, confusing, or out of date.
 
-    [:octicons-arrow-right-24: To the contribution guide](contribute.md)
+    [:octicons-arrow-right-24: Open the docs guide](contribute-docs.md)
+
+-   :octicons-code-24:{ .lg .middle } __Contribute to the package code__
+
+    ---
+
+    Work on bug fixes, tests, new features, and package internals when you are
+    ready to contribute to the library itself.
+
+    [:octicons-arrow-right-24: Open the code guide](contribute-codebase.md)
 
 </div>
 
+## How we work
 
-## Contributing Guidelines GitHub Links
+For larger changes, start with a short discussion before implementation so we
+can confirm scope and avoid duplicate work.
 
-- [Contribution guidelines](https://github.com/annnet/annnet/blob/main/CONTRIBUTING.md)
+Common contribution paths:
 
-- [Code of Conduct](https://github.com/annnet/annnet/blob/main/CODE_OF_CONDUCT.md)
-
-- [Developer Guide](https://github.com/annnet/annnet/blob/main/DEVELOPER.md)
+- Bug reports
+- New feature requests
+- Documentation improvements
+- Package and test-suite changes

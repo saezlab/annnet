@@ -27,4 +27,6 @@ jobs:
                 restore-keys: |
                     mkdocs-material-
         -   name: Build documentation with mkdocs
+            env:
+                JUPYTER_PLATFORM_DIRS: "1"
             run: .venv/bin/mkdocs gh-deploy --force
