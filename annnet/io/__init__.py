@@ -17,11 +17,11 @@ _lazy_symbols: dict[str, tuple[str, str]] = {
     "to_dataframes": ("annnet.io.dataframe_io", "to_dataframes"),
     "from_dataframes": ("annnet.io.dataframe_io", "from_dataframes"),
     # CSV / Excel
-    "load_csv_to_graph": ("annnet.io.csv_io", "load_csv_to_graph"),
+    "from_csv": ("annnet.io.csv_io", "load_csv_to_graph"),
     "from_dataframe": ("annnet.io.csv_io", "from_dataframe"),
-    "export_edge_list_csv": ("annnet.io.csv_io", "export_edge_list_csv"),
-    "export_hyperedge_csv": ("annnet.io.csv_io", "export_hyperedge_csv"),
-    "load_excel_to_graph": ("annnet.io.excel", "load_excel_to_graph"),
+    "edges_to_csv": ("annnet.io.csv_io", "export_edge_list_csv"),
+    "hyperedge_to_csv": ("annnet.io.csv_io", "export_hyperedge_csv"),
+    "from_excel": ("annnet.io.excel", "load_excel_to_graph"),
     # SIF / GraphML / GEXF / CX2
     "to_sif": ("annnet.io.SIF_io", "to_sif"),
     "from_sif": ("annnet.io.SIF_io", "from_sif"),
@@ -38,7 +38,7 @@ _lazy_symbols: dict[str, tuple[str, str]] = {
     # SBML
     "from_sbml": ("annnet.io.SBML_io", "from_sbml"),
     "from_cobra_model": ("annnet.io.sbml_cobra_io", "from_cobra_model"),
-    "from_sbml_cobra": ("annnet.io.sbml_cobra_io", "from_sbml"),
+    "from_sbml_via_cobra": ("annnet.io.sbml_cobra_io", "from_sbml"),
     # OmniPath
     "read_omnipath": ("annnet.io.read_omnipath", "read_omnipath"),
 }

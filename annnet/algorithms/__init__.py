@@ -5,10 +5,6 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-_lazy_submodules = {
-    "traversal": "annnet.algorithms.traversal",
-}
-
 _lazy_symbols: dict[str, tuple[str, str]] = {
     "Traversal": ("annnet.algorithms.traversal", "Traversal"),
 }
