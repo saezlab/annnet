@@ -334,12 +334,28 @@ def _graph_from_sbml_model(
             G.set_edge_attrs(rid, stoich=coeffs)
 
     # ── edge attributes ───────────────────────────────────────────────────────
-    for rid, attrs in edge_attrs_map.items():
-        G.set_edge_attrs(rid, **attrs)
+    if edge_attrs_map:
+        set_edge_attrs_bulk = getattr(G, "set_edge_attrs_bulk", None)
+        if set_edge_attrs_bulk is not None:
+            set_edge_attrs_bulk(edge_attrs_map)
+        else:
+            for rid, attrs in edge_attrs_map.items():
+                G.set_edge_attrs(rid, **attrs)
 
     # ── assign reactions to their compartment slices ──────────────────────────
+    add_edges_to_slice_bulk = getattr(G, "add_edges_to_slice_bulk", None)
     add_edge_to_slice = getattr(G, "add_edge_to_slice", None)
-    if add_edge_to_slice is not None:
+    if add_edges_to_slice_bulk is not None:
+        by_slice: dict[str, list[str]] = {}
+        for rid, rxn_slices in rxn_slices_map.items():
+            for cid in rxn_slices:
+                by_slice.setdefault(cid, []).append(rid)
+        for cid, rids in by_slice.items():
+            try:
+                add_edges_to_slice_bulk(cid, rids)
+            except Exception:
+                pass
+    elif add_edge_to_slice is not None:
         for rid, rxn_slices in rxn_slices_map.items():
             for cid in rxn_slices:
                 try:
