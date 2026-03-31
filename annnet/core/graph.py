@@ -1454,7 +1454,6 @@ class AnnNet(
                     orphans.append(ent)
         if orphans:
             self._remove_vertices_bulk(orphans)
-        print(f"Removed {len(orphans)} orphan nodes. Remaining: {self.number_of_vertices()}")
         return len(orphans)
 
     # Basic queries & metrics
@@ -1532,7 +1531,7 @@ class AnnNet(
         if vertex_id in self.entity_to_idx:
             row_idx = self.entity_to_idx[vertex_id]
             try:
-                incident.extend(self._matrix.tocsr().getrow(row_idx).indices.tolist())
+                incident.extend(self._get_csr().getrow(row_idx).indices.tolist())
                 return incident
             except Exception:
                 # fallback if matrix is not in CSR (compressed sparse row) format
@@ -1759,18 +1758,32 @@ class AnnNet(
         """
         return self._num_edges
 
+    def global_vertex_count(self):
+        """Count unique vertices present across all slices (union of memberships).
+
+        Returns
+        -------
+        int
+            Number of vertices across slices.
+        """
+        all_vertices = set()
+        for slice_data in self._slices.values():
+            all_vertices.update(slice_data["vertices"])
+        return len(all_vertices)
+
     def global_entity_count(self):
-        """Count unique entities present across all slices (union of memberships).
+        """Count unique entities present across all slices (vertices + edge-entities).
 
         Returns
         -------
         int
             Number of entities across slices.
         """
-        all_vertices = set()
+        all_entities = set()
         for slice_data in self._slices.values():
-            all_vertices.update(slice_data["vertices"])
-        return len(all_vertices)
+            all_entities.update(slice_data["vertices"])
+            all_entities.update(slice_data["edges"])
+        return len(all_entities)
 
     def global_edge_count(self):
         """Count unique edges present across all slices (union of memberships).
