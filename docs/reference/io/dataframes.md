@@ -4,5 +4,5 @@ DataFrame conversion helpers from `annnet.io.dataframe_io`.
 
 ::: annnet.io.dataframe_io
     options:
-      members: true
+      filters: public
       show_root_heading: true

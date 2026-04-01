@@ -4,5 +4,5 @@ Parquet GraphDir helpers from `annnet.io.Parquet_io`.
 
 ::: annnet.io.Parquet_io
     options:
-      members: true
+      filters: public
       show_root_heading: true

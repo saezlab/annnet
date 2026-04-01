@@ -4,5 +4,5 @@ Excel helpers from `annnet.io.excel`.
 
 ::: annnet.io.excel
     options:
-      members: true
+      filters: public
       show_root_heading: true

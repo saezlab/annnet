@@ -4,5 +4,5 @@ JSON helpers from `annnet.io.json_io`.
 
 ::: annnet.io.json_io
     options:
-      members: true
+      filters: public
       show_root_heading: true

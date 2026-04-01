@@ -4,10 +4,10 @@ Cache and execution helpers from `annnet.core._Cache`.
 
 ::: annnet.core._Cache.CacheManager
     options:
-      members: true
+      filters: public
       show_root_heading: true
 
 ::: annnet.core._Cache.Operations
     options:
-      members: true
+      filters: public
       show_root_heading: true

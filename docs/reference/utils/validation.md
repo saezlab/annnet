@@ -4,5 +4,5 @@ Validation helpers from `annnet.utils.validation`.
 
 ::: annnet.utils.validation
     options:
-      members: true
+      filters: public
       show_root_heading: true

@@ -6,12 +6,12 @@ Adapter loading helpers from `annnet.adapters` and `annnet.adapters.manager`.
 
 ::: annnet.adapters
     options:
-      members: true
+      filters: public
       show_root_heading: true
 
 ## Manager helpers
 
 ::: annnet.adapters.manager
     options:
-      members: true
+      filters: public
       show_root_heading: true

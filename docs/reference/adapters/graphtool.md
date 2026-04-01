@@ -4,5 +4,5 @@ graph-tool conversion helpers from `annnet.adapters.graphtool_adapter`.
 
 ::: annnet.adapters.graphtool_adapter
     options:
-      members: true
+      filters: public
       show_root_heading: true

@@ -4,5 +4,5 @@ Public typing helpers from `annnet.utils.typing`.
 
 ::: annnet.utils.typing
     options:
-      members: true
+      filters: public
       show_root_heading: true

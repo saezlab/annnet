@@ -4,10 +4,10 @@ Change tracking helpers from `annnet.core._History`.
 
 ::: annnet.core._History.GraphDiff
     options:
-      members: true
+      filters: public
       show_root_heading: true
 
 ::: annnet.core._History.History
     options:
-      members: true
+      filters: public
       show_root_heading: true

@@ -4,10 +4,10 @@ Indexing and topology helpers from `annnet.core._Index`.
 
 ::: annnet.core._Index.IndexManager
     options:
-      members: true
+      filters: public
       show_root_heading: true
 
 ::: annnet.core._Index.IndexMapping
     options:
-      members: true
+      filters: public
       show_root_heading: true

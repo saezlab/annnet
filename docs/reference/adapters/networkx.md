@@ -4,5 +4,5 @@ NetworkX conversion helpers from `annnet.adapters.networkx_adapter`.
 
 ::: annnet.adapters.networkx_adapter
     options:
-      members: true
+      filters: public
       show_root_heading: true

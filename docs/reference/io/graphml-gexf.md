@@ -4,5 +4,5 @@ GraphML and GEXF helpers from `annnet.io.GraphML_io`.
 
 ::: annnet.io.GraphML_io
     options:
-      members: true
+      filters: public
       show_root_heading: true

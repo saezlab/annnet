@@ -6,7 +6,7 @@ Primary graph objects from `annnet.core.graph`.
 
 ::: annnet.core.graph.AnnNet
     options:
-      members: true
+      filters: public
       inherited_members: false
       show_root_heading: true
       show_bases: false

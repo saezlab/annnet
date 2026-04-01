@@ -4,5 +4,5 @@ Attribute table helpers from `annnet.core._Annotation`.
 
 ::: annnet.core._Annotation.AttributesClass
     options:
-      members: true
+      filters: public
       show_root_heading: true
