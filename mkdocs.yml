@@ -36,6 +36,12 @@ nav:
 -   Tutorials and Use Cases:
     -   HowTo's and Use Cases: tutorials/index.md
     -   Tutorials:
+        -   Tutorial index: tutorials/notebooks/tutos/00_tutorial_index.ipynb
+        -   Quickstart graph basics: tutorials/notebooks/tutos/01_quickstart_graph_basics.ipynb
+        -   Attributes, views, and indexing: tutorials/notebooks/tutos/02_attributes_views_and_indexing.ipynb
+        -   Slices and multilayer workflows: tutorials/notebooks/tutos/03_slices_and_multilayer_workflows.ipynb
+        -   Traversal and history: tutorials/notebooks/tutos/04_traversal_and_history.ipynb
+        -   IO and interoperability: tutorials/notebooks/tutos/05_io_and_interoperability.ipynb
         -   AnnNet Showcase: tutorials/notebooks/annnet_showcase.ipynb
         -   AnnNet Demo: tutorials/notebooks/Demo.ipynb
         -   Multi-Condition Causal Signaling: tutorials/notebooks/UC1.ipynb
@@ -147,7 +153,8 @@ plugins:
                     show_bases: false
                     show_if_no_docstring: false
                     show_source: false
--   mkdocs-jupyter
+-   mkdocs-jupyter:
+        execute: false
 
 hooks:
   # Quiet Jupyter/nbformat warning noise during docs builds.

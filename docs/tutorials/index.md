@@ -4,6 +4,60 @@ This section collects some useful HowTo tutorials and Use Case notebooks.
 
 Main tutorial notebooks.
 
+## Step-by-step tutorials
+
+<div class="grid cards annnet-feature-cards" markdown>
+
+-   __Tutorial index__
+
+    ---
+
+    Entry point for the staged tutorial series.
+
+    [Open notebook](notebooks/tutos/00_tutorial_index.ipynb)
+
+-   __Quickstart graph basics__
+
+    ---
+
+    First hands-on tutorial covering core graph construction and inspection.
+
+    [Open notebook](notebooks/tutos/01_quickstart_graph_basics.ipynb)
+
+-   __Attributes, views, and indexing__
+
+    ---
+
+    Focused walkthrough of annotations, indexing helpers, and graph views.
+
+    [Open notebook](notebooks/tutos/02_attributes_views_and_indexing.ipynb)
+
+-   __Slices and multilayer workflows__
+
+    ---
+
+    Practical examples for slicing, layering, and multilayer analysis patterns.
+
+    [Open notebook](notebooks/tutos/03_slices_and_multilayer_workflows.ipynb)
+
+-   __Traversal and history__
+
+    ---
+
+    Traversal helpers and change-tracking workflows.
+
+    [Open notebook](notebooks/tutos/04_traversal_and_history.ipynb)
+
+-   __IO and interoperability__
+
+    ---
+
+    Reading, writing, and exchanging data with supported formats and tools.
+
+    [Open notebook](notebooks/tutos/05_io_and_interoperability.ipynb)
+
+</div>
+
 ## Showcase and orientation
 
 <div class="grid cards annnet-feature-cards" markdown>
