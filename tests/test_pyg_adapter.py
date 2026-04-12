@@ -64,12 +64,12 @@ def _build_graph() -> AnnNet:
 
     # Binary edges: directed and undirected
     e1 = g.add_edge("p1", "g1", weight=2.0, interaction=+1, tag="regulates")
-    e2 = g.add_edge("p2", "g2", weight=1.0, edge_directed=False, interaction=-1, tag="inhibits")
+    e2 = g.add_edge("p2", "g2", weight=1.0, directed=False, interaction=-1, tag="inhibits")
     e3 = g.add_edge("d1", "p1", weight=0.5, interaction=+1, tag="targets")
     e4 = g.add_edge("p3", "g1", weight=1.5, interaction=+1, tag="activates")
 
     # Hyperedge
-    e5 = g.add_hyperedge(head=["g1", "g2"], tail=["p1"], weight=3.0, interaction=+1, edge_id="he1")
+    e5 = g.add_edge(src=["g1", "g2"], tgt=["p1"], weight=3.0, interaction=+1, edge_id="he1")
 
     g.add_slice("active_only", region="high_expr")
     g.add_vertex_to_slice("active_only", "p1")
@@ -278,7 +278,7 @@ class TestPyGAdapter(unittest.TestCase):
         member_edge_types = [et for et in data.edge_types if "member_of" in et]
         self.assertGreater(len(member_edge_types), 0)
 
-        # Check specific membership (he1: head=[g1,g2], tail=[p1])
+        # Check specific membership (he1: head=[g1,g2], tgt=[p1])
         # Should have protein->hypernode and gene->hypernode edges
         protein_member = ("protein", "member_of", "hypernode")
         gene_member = ("gene", "member_of", "hypernode")
@@ -303,7 +303,7 @@ class TestPyGAdapter(unittest.TestCase):
         pg_edges_expand = data[("protein", "edge", "gene")].edge_index.shape[1]
         pg_edges_skip = data_skip[("protein", "edge", "gene")].edge_index.shape[1]
 
-        # he1 is directed: tail=[p1] to head=[g1, g2]
+        # he1 is directed: tgt=[p1] to head=[g1, g2]
         # Should add 2 edges: p1->g1, p1->g2
         # But p1->g1 already exists as e1, so might not add duplicate
         # Still, expand should have >= skip
@@ -319,7 +319,7 @@ class TestPyGAdapter(unittest.TestCase):
         g.add_vertex("h1", kind="B")
         g.add_vertex("h2", kind="B")
 
-        g.add_hyperedge(tail=["t1", "t2"], head=["h1", "h2"], edge_id="he_test", edge_directed=True)
+        g.add_edge(src=["h1", "h2"], tgt=["t1", "t2"], edge_id="he_test", directed=True)
 
         data = to_pyg(g, hyperedge_mode="expand")
 

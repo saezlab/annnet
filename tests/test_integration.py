@@ -30,7 +30,7 @@ class TestIntegration:
             ("CHEK2", "TP53", "phosphorylation"),
         ]
         for i, (src, tgt, interaction_type) in enumerate(interactions):
-            G.add_edge(src, tgt, edge_id=f"int_{i}", edge_directed=True)
+            G.add_edge(src, tgt, edge_id=f"int_{i}", directed=True)
             G.set_edge_attrs(f"int_{i}", interaction_type=interaction_type, confidence=0.9)
         to_sif(G, tmpdir_fixture / "network.sif", relation_attr="interaction_type")
         dfs = to_dataframes(G)

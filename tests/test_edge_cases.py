@@ -107,8 +107,8 @@ def test_large_weights_and_extreme_values(tmpdir_fixture):
     G.add_vertex("A")
     G.add_vertex("B")
     G.add_edge("A", "B", edge_id="e1", weight=1e10)
-    G.add_edge("A", "B", edge_id="e2", weight=1e-10)
-    G.add_edge("A", "B", edge_id="e3", weight=0.0)
+    G.add_edge("A", "B", edge_id="e2", weight=1e-10, parallel="parallel")
+    G.add_edge("A", "B", edge_id="e3", weight=0.0, parallel="parallel")
 
     G2 = _roundtrip_json(G, tmpdir_fixture, "extreme")
 
@@ -148,8 +148,8 @@ def test_parallel_edges(tmpdir_fixture):
     G.add_vertex("A")
     G.add_vertex("B")
     G.add_edge("A", "B", edge_id="e1", weight=1.0)
-    G.add_edge("A", "B", edge_id="e2", weight=2.0)
-    G.add_edge("A", "B", edge_id="e3", weight=3.0)
+    G.add_edge("A", "B", edge_id="e2", weight=2.0, parallel="parallel")
+    G.add_edge("A", "B", edge_id="e3", weight=3.0, parallel="parallel")
 
     G2 = _roundtrip_json(G, tmpdir_fixture, "parallel")
 
@@ -194,7 +194,7 @@ def test_very_large_graph(tmpdir_fixture):
     for i in range(n_edges):
         u = f"v{random.randint(0, n_vertices - 1)}"  # nosec B311
         v = f"v{random.randint(0, n_vertices - 1)}"  # nosec B311
-        G.add_edge(u, v, edge_id=f"e{i}", weight=random.random())  # nosec B311
+        G.add_edge(u, v, edge_id=f"e{i}", weight=random.random(), parallel="parallel")  # nosec B311
 
     G2 = _roundtrip_parquet(G, tmpdir_fixture, "large")
 

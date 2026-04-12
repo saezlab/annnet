@@ -26,6 +26,12 @@ def build_small():
 
 
 class TestLazyGTProxy(unittest.TestCase):
+    def test_dir_exposes_namespaces_and_algorithms(self):
+        G = build_small()
+        names = dir(G.gt)
+        self.assertIn("topology", names)
+        self.assertIn("shortest_distance", names)
+
     # --- topology: shortest distance ---
 
     def test_shortest_distance_basic(self):
@@ -54,6 +60,17 @@ class TestLazyGTProxy(unittest.TestCase):
         comp_id_0 = int(vp[gtg.vertex(0)])
         comp_id_1 = int(vp[gtg.vertex(1)])
         self.assertEqual(comp_id_0, comp_id_1)
+
+    def test_direct_unique_algorithm_without_explicit_graph_arg(self):
+        G = AnnNet()
+        G.add_vertex("x")
+        G.add_vertex("y")
+        G.add_edge("x", "y")
+
+        # label_largest_component returns a VertexPropertyMap (bool per vertex).
+        # directed=False → weakly-connected components; both vertices are in the same WCC.
+        comp = G.gt.label_largest_component(directed=False)
+        self.assertEqual(int(comp.a.sum()), 2)
 
     # --- centrality: betweenness ---
 

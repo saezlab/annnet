@@ -36,7 +36,7 @@ class TestAnnNetIO(unittest.TestCase):
         G.add_edge("v3", "v4", edge_id="e3", weight=0.5)
 
         # Hyperedge (undirected)
-        G.add_hyperedge(members=["v1", "v2", "v3"], edge_id="h1", weight=3.0)
+        G.add_edge(src=["v1", "v2", "v3"], edge_id="h1", weight=3.0)
 
         # Some unstructured metadata (will go to uns/)
         G.graph_attributes["project"] = "unittest"
@@ -98,21 +98,32 @@ class TestAnnNetIO(unittest.TestCase):
             G2, out_path = self._roundtrip(use_archive=use_archive)
 
             # Top-level counts
-            self.assertEqual(len(self.G.entity_to_idx), len(G2.entity_to_idx))
-            self.assertEqual(self.G._num_edges, G2._num_edges)
+            self.assertEqual(len(self.G._entities), len(G2._entities))
+            self.assertEqual(len(self.G._col_to_edge), len(G2._col_to_edge))
             self.assertEqual(set(self.G._slices.keys()), set(G2._slices.keys()))
-            self.assertEqual(self.G.edge_weights, G2.edge_weights)
+            # edge weights preserved
+            for eid, rec in self.G._edges.items():
+                self.assertAlmostEqual(rec.weight, G2._edges[eid].weight, places=5)
 
             # Hyperedges preserved
-            self.assertTrue(hasattr(G2, "hyperedge_definitions"))
-            self.assertGreater(len(G2.hyperedge_definitions), 0)
+            hyper_count = sum(1 for r in G2._edges.values() if r.etype == "hyper")
+            self.assertGreater(hyper_count, 0)
 
-            # A couple of identity maps should match
-            self.assertEqual(self.G.entity_to_idx, G2.entity_to_idx)
-            self.assertEqual(self.G.edge_to_idx, G2.edge_to_idx)
+            # Entity and edge index maps match
+            self.assertEqual(
+                {eid: r.row_idx for eid, r in self.G._entities.items()},
+                {eid: r.row_idx for eid, r in G2._entities.items()},
+            )
+            self.assertEqual(
+                {eid: r.col_idx for eid, r in self.G._edges.items() if r.col_idx >= 0},
+                {eid: r.col_idx for eid, r in G2._edges.items() if r.col_idx >= 0},
+            )
 
-            # Edge metadata
-            self.assertEqual(self.G.edge_directed, G2.edge_directed)
+            # Edge directedness preserved
+            for eid, rec in self.G._edges.items():
+                self.assertEqual(rec.directed, G2._edges[eid].directed)
+
+            # Multilayer edge kind dict preserved
             self.assertEqual(self.G.edge_kind, G2.edge_kind)
 
             # slices: same edge sets, vertex sets
@@ -204,8 +215,8 @@ class TestAnnNetIO(unittest.TestCase):
                 self.G.edge_layers = {}
             if not hasattr(self.G, "_layer_attrs"):
                 self.G._layer_attrs = {}
-            if not hasattr(self.G, "_vertex_layer_attrs"):
-                self.G._vertex_layer_attrs = {}
+            if not hasattr(self.G, "_state_attrs"):
+                self.G._state_attrs = {}
             if not hasattr(self.G, "_aspect_attrs"):
                 self.G._aspect_attrs = {}
 
@@ -226,7 +237,7 @@ class TestAnnNetIO(unittest.TestCase):
             # Attributes
             self.G._aspect_attrs = {"time": {"unit": "seconds"}}
             self.G._layer_attrs = {("t1", "bus"): {"cost": 10}}
-            self.G._vertex_layer_attrs = {("v1", ("t1", "bus")): {"status": "active"}}
+            self.G._state_attrs = {("v1", ("t1", "bus")): {"status": "active"}}
 
             # Elementary layer attributes (Polars DataFrame)
             self.G.layer_attributes = pl.DataFrame(
@@ -248,8 +259,8 @@ class TestAnnNetIO(unittest.TestCase):
             self.assertEqual(G2.aspects, ["time", "transport"])
             self.assertEqual(G2.elem_layers, self.G.elem_layers)
 
-            # Vertex Presence
-            self.assertEqual(len(G2._VM), 3)
+            # Vertex Presence — _VM now includes basal flat-graph entries too
+            self.assertGreaterEqual(len(G2._VM), 3)
             self.assertIn(("v1", ("t1", "bus")), G2._VM)
             self.assertIn(("v2", ("t2", "train")), G2._VM)
 
@@ -264,7 +275,7 @@ class TestAnnNetIO(unittest.TestCase):
             # Attributes
             self.assertEqual(G2._aspect_attrs["time"]["unit"], "seconds")
             self.assertEqual(G2._layer_attrs[("t1", "bus")]["cost"], 10)
-            self.assertEqual(G2._vertex_layer_attrs[("v1", ("t1", "bus"))]["status"], "active")
+            self.assertEqual(G2._state_attrs[("v1", ("t1", "bus"))]["status"], "active")
 
             # Verify DataFrame attributes
             self.assertFalse(G2.layer_attributes.is_empty())
@@ -409,12 +420,12 @@ class TestAnnNetIO(unittest.TestCase):
             annnet_write(G, out_path, compression="zstd", overwrite=True)
             G2 = annnet_read(out_path)
 
-            self.assertEqual(G._num_entities, G2._num_entities)
-            self.assertEqual(G._num_edges, G2._num_edges)
+            self.assertEqual(len(G._entities), len(G2._entities))
+            self.assertEqual(len(G._col_to_edge), len(G2._col_to_edge))
             self.assertEqual(G._matrix.shape, G2._matrix.shape)
 
             for eid in (eids[0], eids[len(eids) // 2], eids[-1]):
-                self.assertEqual(G.edge_weights[eid], G2.edge_weights[eid])
+                self.assertEqual(G._edges[eid].weight, G2._edges[eid].weight)
 
             self.assertLessEqual(len(G2._matrix), int(n_edges * 2))
             self.assertLess(len(G2._matrix), n_vertices * 50)

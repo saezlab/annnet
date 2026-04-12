@@ -118,6 +118,13 @@ class TestLazyIGProxy(unittest.TestCase):
         with self.assertWarns(RuntimeWarning):
             G.ig.distances(source="a", target="c", weights="weight", _ig_hyperedge="reify")
 
+    @unittest.skipUnless(HAS_IG, "python-igraph not installed")
+    def test_dir_exposes_algorithms(self):
+        G = build_small()
+        names = dir(G.ig)
+        self.assertIn("distances", names)
+        self.assertIn("get_shortest_paths", names)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

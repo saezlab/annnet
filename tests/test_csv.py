@@ -49,7 +49,7 @@ class TestCSVIO(unittest.TestCase):
         self.e_ab = self.G.add_edge("A", "B", directed=True, weight=1.0, slice="L1", color="red")
         self.e_bc = self.G.add_edge("B", "C", directed=False, weight=2.0, slice="L1", tag="x")
         # Hyperedge on a different slice
-        self.h_abc = self.G.add_hyperedge(members={"A", "B", "C"}, weight=3.0, slice="L2", note="h")
+        self.h_abc = self.G.add_edge(src=["A", "B", "C"], weight=3.0, slice="L2", note="h")
 
     def test_edge_list_roundtrip(self):
         # ---- Export binary edge list to CSV (in-memory) ----

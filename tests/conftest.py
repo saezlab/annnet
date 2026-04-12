@@ -49,23 +49,23 @@ def complex_graph():
     G.add_vertex("node with space")
 
     # Binary edges (mixed directed/undirected)
-    G.add_edge("A", "B", edge_id="e1", edge_directed=True, weight=1.5)
+    G.add_edge("A", "B", edge_id="e1", directed=True, weight=1.5)
     G.set_edge_attrs("e1", relation="activates", confidence=0.9)
 
-    G.add_edge("B", "A", edge_id="e2", edge_directed=False, weight=2.0)
+    G.add_edge("B", "A", edge_id="e2", directed=False, weight=2.0)
     G.set_edge_attrs("e2", relation="interacts", confidence=0.85)
 
-    G.add_edge("C", "C", edge_id="loop", edge_directed=True, weight=0.5)
+    G.add_edge("C", "C", edge_id="loop", directed=True, weight=0.5)
     G.set_edge_attrs("loop", relation="self_regulation")
 
-    G.add_edge("A", "B", edge_id="parallel", edge_directed=True, weight=3.14)
+    G.add_edge("A", "B", edge_id="parallel", directed=True, weight=3.14)
     G.set_edge_attrs("parallel", relation="inhibits", tag="secondary")
 
     # Hyperedges
-    G.add_hyperedge(head=["B", "C"], tail=["A"], edge_id="h1", edge_directed=True, weight=0.7)
+    G.add_edge(src=["B", "C"], tgt=["A"], edge_id="h1", directed=True, weight=0.7)
     G.set_edge_attrs("h1", pathway="signaling", complex="ABC")
 
-    G.add_hyperedge(members=["A", "D", "E"], edge_id="h2", edge_directed=False, weight=5.0)
+    G.add_edge(src=["A", "D", "E"], edge_id="h2", directed=False, weight=5.0)
     G.set_edge_attrs("h2", complex="trimer", stability=0.75)
 
     # slices
@@ -213,8 +213,8 @@ def build_adapter_graph() -> AnnNet:
     g.add_vertex("C", label="gamma", kind="sink")
 
     e1 = g.add_edge("A", "B", weight=2.0, interaction=+1, tag="ab")
-    g.add_edge("B", "C", weight=1.0, edge_directed=False, interaction=-1)
-    g.add_hyperedge(head=["A", "B"], tail=["C"], weight=0.5, interaction=+1)
+    g.add_edge("B", "C", weight=1.0, directed=False, interaction=-1)
+    g.add_edge(src=["A", "B"], tgt=["C"], weight=0.5, interaction=+1)
 
     g.add_slice("Lw", region="EMEA")
     g.set_edge_slice_attrs("Lw", e1, weight=5.0)

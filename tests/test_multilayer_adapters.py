@@ -35,36 +35,26 @@ class TestMultilayerAdapters(unittest.TestCase):
         shutil.rmtree(self.test_dir)
 
     def _build_multilayer_graph(self):
-        G = AnnNet()
-        # 1. Aspects & Elementary Layers
-        G.aspects = ["time", "transport"]
-        G.elem_layers = {"time": ["t1", "t2"], "transport": ["bus", "train"]}
+        # Use the constructor to set aspects — this is the proper API.
+        G = AnnNet(aspects={"time": ["t1", "t2"], "transport": ["bus", "train"]})
         G._rebuild_all_layers_cache()
 
-        # 2. Vertices & VM (mapping nodes to layers)
-        G.add_vertex("u")
-        G.add_vertex("v")
-        # u is present in (t1, bus) and (t2, train)
-        G._VM = {
-            ("u", ("t1", "bus")),
-            ("u", ("t2", "train")),
-            ("v", ("t1", "bus")),
-        }
+        # 2. Vertices in their respective layers
+        # u is present in (t1, bus) and (t2, train); v is present in (t1, bus)
+        G.add_vertex("u", layer=("t1", "bus"))
+        G.add_vertex("u", layer=("t2", "train"))
+        G.add_vertex("v", layer=("t1", "bus"))
 
-        # 3. Edges & Edge Layers
-        # e1: u -> v in layer (t1, bus)
-        e1 = G.add_edge("u", "v")
-        G.edge_layers[e1] = ("t1", "bus")
-        G.edge_kind[e1] = "intra"
+        # 3. Multilayer edges use explicit supra-node endpoints
+        # e1: u(t1,bus) -> v(t1,bus)  => inferred intra edge
+        G.add_edge(("u", ("t1", "bus")), ("v", ("t1", "bus")))
 
-        # e2: u(t1,bus) -> u(t2,train) (coupling)
-        e2 = G.add_edge("u", "u")
-        G.edge_layers[e2] = (("t1", "bus"), ("t2", "train"))
-        G.edge_kind[e2] = "coupling"
+        # e2: u(t1,bus) -> u(t2,train) => inferred coupling edge
+        G.add_edge(("u", ("t1", "bus")), ("u", ("t2", "train")))
 
         # 4. Attributes
         # Node-layer attribute
-        G._vertex_layer_attrs[("u", ("t1", "bus"))] = {"cost": 10.0}
+        G._state_attrs[("u", ("t1", "bus"))] = {"cost": 10.0}
 
         # Layer-tuple attribute
         G._layer_attrs[("t1", "bus")] = {"freq": "high"}
@@ -102,7 +92,7 @@ class TestMultilayerAdapters(unittest.TestCase):
         self.assertEqual(get_edge_specs(G1), get_edge_specs(G2))
 
         # Node-layer attrs
-        self.assertEqual(G1._vertex_layer_attrs, G2._vertex_layer_attrs)
+        self.assertEqual(G1._state_attrs, G2._state_attrs)
 
         # Layer-tuple attrs
         self.assertEqual(G1._layer_attrs, G2._layer_attrs)

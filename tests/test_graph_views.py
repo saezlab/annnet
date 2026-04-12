@@ -33,8 +33,8 @@ def _build_hyperedge_graph():
     for v in ["A", "B", "C", "D"]:
         G.add_vertex(v)
     G.add_edge("A", "B", edge_id="e1", weight=1.0)
-    G.add_hyperedge(head=["A", "B"], tail=["C"], edge_id="h1", weight=0.5)
-    G.add_hyperedge(members=["B", "C", "D"], edge_id="h2", weight=1.5)
+    G.add_edge(src=["A", "B"], tgt=["C"], edge_id="h1", weight=0.5)
+    G.add_edge(src=["B", "C", "D"], edge_id="h2", weight=1.5)
     return G
 
 
@@ -332,6 +332,21 @@ class TestViewsClassEdgesView(unittest.TestCase):
         df = G.edges_view()
         # Should return empty DataFrame without error
         self.assertEqual(len(df), 0)
+
+    def test_edges_view_uses_source_target_for_hyperedges(self):
+        G = _build_hyperedge_graph()
+        df = G.edges_view()
+        try:
+            import polars as pl
+
+            rows = {r["edge_id"]: r for r in df.to_dicts()}
+        except Exception:
+            rows = {r["edge_id"]: r for r in df.to_dict(orient="records")}
+
+        self.assertEqual(rows["h1"]["source"], "A|B")
+        self.assertEqual(rows["h1"]["target"], "C")
+        self.assertEqual(rows["h2"]["source"], "B|C|D")
+        self.assertIsNone(rows["h2"]["target"])
 
 
 class TestViewsClassVerticesView(unittest.TestCase):

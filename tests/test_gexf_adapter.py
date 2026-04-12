@@ -38,7 +38,7 @@ def _build_with_hyperedges():
     for v in ["A", "B", "C"]:
         G.add_vertex(v)
     G.add_edge("A", "B", edge_id="e1", weight=1.0)
-    G.add_hyperedge(head=["A", "B"], tail=["C"], edge_id="h1", weight=0.5)
+    G.add_edge(src=["A", "B"], tgt=["C"], edge_id="h1", weight=0.5)
     return G
 
 

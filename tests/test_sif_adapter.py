@@ -61,8 +61,8 @@ class TestSIFAdapter:
         G = AnnNet(directed=None)
         G.add_vertex("A")
         G.add_vertex("B")
-        G.add_edge("A", "B", edge_id="e_dir", edge_directed=True)
-        G.add_edge("B", "A", edge_id="e_undir", edge_directed=False)
+        G.add_edge("A", "B", edge_id="e_dir", directed=True)
+        G.add_edge("B", "A", edge_id="e_undir", directed=False)
         to_sif(
             G,
             tmpdir_fixture / "net.sif",

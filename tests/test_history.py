@@ -170,6 +170,17 @@ class TestExportHistory(unittest.TestCase):
         # The JSON export should succeed and match len(G.history())
         self.assertEqual(n, len(G.history()))
 
+    def test_export_csv_serializes_nested_payloads(self):
+        G = AnnNet(aspects={"condition": ["healthy", "treated"], "time": ["t0", "t1"]})
+        G.add_vertex("A", layer=("healthy", "t0"))
+        G.add_vertex("A", layer=("treated", "t1"))
+        path = os.path.join(self.tmpdir, "hist.csv")
+        n = G.export_history(path)
+        self.assertGreater(n, 0)
+        self.assertTrue(os.path.exists(path))
+        text = open(path, encoding="utf-8").read()
+        self.assertIn("add_vertex", text)
+
 
 class TestSnapshot(unittest.TestCase):
     """snapshot(), diff(), list_snapshots()."""

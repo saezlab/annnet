@@ -166,7 +166,7 @@ class TestHyperedgeTraversal(unittest.TestCase):
         for v in ["A", "B", "C"]:
             G.add_vertex(v)
         # A is in head, B and C are in tail
-        G.add_hyperedge(head=["A"], tail=["B", "C"])
+        G.add_edge(src=["A"], tgt=["B", "C"])
         nbrs = G.neighbors("A")
         self.assertIn("B", nbrs)
         self.assertIn("C", nbrs)
@@ -175,7 +175,7 @@ class TestHyperedgeTraversal(unittest.TestCase):
         G = AnnNet(directed=True)
         for v in ["A", "B", "C"]:
             G.add_vertex(v)
-        G.add_hyperedge(head=["A"], tail=["B", "C"])
+        G.add_edge(src=["A"], tgt=["B", "C"])
         nbrs = G.neighbors("B")
         self.assertIn("A", nbrs)
 
@@ -183,7 +183,7 @@ class TestHyperedgeTraversal(unittest.TestCase):
         G = AnnNet(directed=True)
         for v in ["A", "B", "C"]:
             G.add_vertex(v)
-        G.add_hyperedge(members=["A", "B", "C"])
+        G.add_edge(src=["A", "B", "C"])
         for v in ["A", "B", "C"]:
             nbrs = G.neighbors(v)
             others = {"A", "B", "C"} - {v}
@@ -194,7 +194,7 @@ class TestHyperedgeTraversal(unittest.TestCase):
         G = AnnNet(directed=True)
         for v in ["A", "B", "C"]:
             G.add_vertex(v)
-        G.add_hyperedge(head=["A"], tail=["B", "C"])
+        G.add_edge(src=["A"], tgt=["B", "C"])
         out = G.out_neighbors("A")
         self.assertIn("B", out)
         self.assertIn("C", out)
@@ -204,7 +204,7 @@ class TestHyperedgeTraversal(unittest.TestCase):
         G = AnnNet(directed=True)
         for v in ["A", "B", "C"]:
             G.add_vertex(v)
-        G.add_hyperedge(head=["A"], tail=["B", "C"])
+        G.add_edge(src=["A"], tgt=["B", "C"])
         inn = G.in_neighbors("B")
         self.assertIn("A", inn)
 

@@ -139,7 +139,7 @@ class DummyGraph:
                 tail=h["tail"],
                 slice=h.get("slice", slice),
                 edge_id=h["edge_id"],
-                edge_directed=h.get("edge_directed", True),
+                directed=h.get("edge_directed", True),
                 weight=h.get("weight", 1.0),
             )
 
@@ -150,7 +150,7 @@ class DummyGraph:
         tail,
         slice,
         edge_id,
-        edge_directed,
+        directed,
         weight,
     ):
         edge = {
@@ -158,7 +158,7 @@ class DummyGraph:
             "head": list(head),
             "tail": list(tail),
             "slice": slice,
-            "directed": edge_directed,
+            "directed": directed,
             "weight": weight,
             "attrs": {},
         }

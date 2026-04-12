@@ -171,7 +171,7 @@ class TestLazyNXProxy(unittest.TestCase):
         G = AnnNet()
         G.add_vertex("a")
         G.add_vertex("b")
-        G.add_hyperedge(members=["a", "b"])  # hyperedge
+        G.add_edge(src=["a", "b"])  # hyperedge
 
         with self.assertWarns(RuntimeWarning):
             G.nx.backend(hyperedge_mode="skip")
@@ -210,6 +210,12 @@ class TestLazyNXProxy(unittest.TestCase):
             _nx_directed=True,
         )
         self.assertAlmostEqual(d, 5.0)  # still correct
+
+    def test_dir_exposes_algorithms(self):
+        G = build_small()
+        names = dir(G.nx)
+        self.assertIn("shortest_path_length", names)
+        self.assertIn("degree_centrality", names)
 
 
 if __name__ == "__main__":
