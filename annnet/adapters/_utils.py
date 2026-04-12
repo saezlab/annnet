@@ -1,11 +1,16 @@
 # ---- robust helpers (keep in sync across adapters) ----
+import ast as _ast
 import json as _json
+from enum import Enum
+from typing import Any
 
 
 def _is_directed_eid(graph, eid):
     """Best-effort directedness probe; default True."""
     try:
-        return bool(getattr(graph, "edge_directed", {}).get(eid, True))
+        rec = getattr(graph, "_edges", {}).get(eid)
+        if rec is not None and rec.directed is not None:
+            return bool(rec.directed)
     except Exception:
         pass
     try:
@@ -42,6 +47,109 @@ def _coerce_coeff_mapping(val):
                 out[k] = v
         return out
     return {}
+
+
+def _serialize_value(val: Any) -> Any:
+    if isinstance(val, Enum):
+        return val.name
+    if hasattr(val, "items"):
+        return dict(val)
+    return val
+
+
+def _attrs_to_dict(attrs_dict: dict) -> dict:
+    out = {}
+    for key, val in attrs_dict.items():
+        if isinstance(val, Enum):
+            out[key] = val.name
+        elif hasattr(val, "items"):
+            out[key] = {
+                inner_key: (inner_val.name if isinstance(inner_val, Enum) else inner_val)
+                for inner_key, inner_val in dict(val).items()
+            }
+        else:
+            out[key] = val
+    return out
+
+
+def _serialize_endpoint(endpoint: Any) -> Any:
+    """Convert an endpoint into a JSON-safe representation."""
+    if isinstance(endpoint, tuple) and len(endpoint) == 2 and isinstance(endpoint[1], tuple):
+        return {"kind": "supra", "vertex": endpoint[0], "layer": list(endpoint[1])}
+    return endpoint
+
+
+def _deserialize_endpoint(value: Any) -> Any:
+    """Restore a structural endpoint from JSON-safe or legacy serialized forms."""
+    if isinstance(value, dict) and value.get("kind") == "supra":
+        return (value.get("vertex"), tuple(value.get("layer") or []))
+    if isinstance(value, list) and len(value) == 2 and isinstance(value[1], list):
+        return (value[0], tuple(value[1]))
+    if isinstance(value, str):
+        try:
+            parsed = _json.loads(value)
+        except Exception:
+            parsed = None
+        if parsed is not None and parsed != value:
+            return _deserialize_endpoint(parsed)
+        if value.startswith("(") and value.endswith(")"):
+            try:
+                parsed = _ast.literal_eval(value)
+            except Exception:
+                parsed = None
+            if (
+                isinstance(parsed, tuple)
+                and len(parsed) == 2
+                and isinstance(parsed[1], (tuple, list))
+            ):
+                return (parsed[0], tuple(parsed[1]))
+    return value
+
+
+def _rows_like(table):
+    if table is None:
+        return []
+    if hasattr(table, "to_dicts"):
+        try:
+            return list(table.to_dicts())
+        except Exception:
+            pass
+    if hasattr(table, "to_dict"):
+        try:
+            recs = table.to_dict(orient="records")
+            if isinstance(recs, list):
+                return recs
+        except Exception:
+            pass
+    if hasattr(table, "to_pylist"):
+        try:
+            return list(table.to_pylist())
+        except Exception:
+            pass
+    if hasattr(table, "fetchall") and hasattr(table, "columns"):
+        try:
+            cols = list(table.columns)
+            return [dict(zip(cols, row)) for row in table.fetchall()]
+        except Exception:
+            pass
+    if isinstance(table, dict):
+        keys = list(table.keys())
+        if keys and isinstance(table[keys[0]], list):
+            n = len(table[keys[0]])
+            return [{k: table[k][i] for k in keys} for i in range(n)]
+    if isinstance(table, list) and table and isinstance(table[0], dict):
+        return list(table)
+    return []
+
+
+def save_manifest(manifest: dict, path: str):
+    with open(path, "w") as f:
+        _json.dump(manifest, f, indent=2)
+
+
+def load_manifest(path: str) -> dict:
+    with open(path) as f:
+        return _json.load(f)
 
 
 def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
-from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 try:
     import polars as pl  # optional
@@ -11,6 +9,7 @@ except Exception:  # ModuleNotFoundError, etc.
 
 
 from ._utils import (
+    _attrs_to_dict,
     _deserialize_edge_layers,
     _deserialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
@@ -18,11 +17,15 @@ from ._utils import (
     _df_to_rows,
     _endpoint_coeff_map,
     _is_directed_eid,
+    _rows_like,
     _rows_to_df,
+    _serialize_value,
     _serialize_edge_layers,
     _serialize_layer_tuple_attrs,
     _serialize_node_layer_attrs,
     _serialize_VM,
+    load_manifest,
+    save_manifest,
 )
 
 if TYPE_CHECKING:
@@ -150,70 +153,6 @@ def _collect_slices_and_weights(graph) -> tuple[dict, dict]:
 
     return slices_section, slice_weights
 
-
-def _serialize_value(v: Any) -> Any:
-    if isinstance(v, Enum):
-        return v.name
-    if hasattr(v, "items"):
-        return dict(v)
-    return v
-
-
-def _attrs_to_dict(attrs_dict: dict) -> dict:
-    out = {}
-    for k, v in attrs_dict.items():
-        if isinstance(v, Enum):
-            out[k] = v.name
-        elif hasattr(v, "items"):
-            out[k] = {kk: (vv.name if isinstance(vv, Enum) else vv) for kk, vv in dict(v).items()}
-        else:
-            out[k] = v
-    return out
-
-
-def _rows(t):
-    """Backend-agnostic: convert a table-ish object to list[dict]."""
-    if t is None:
-        return []
-    # polars
-    if hasattr(t, "to_dicts"):
-        try:
-            return list(t.to_dicts())
-        except Exception:
-            pass
-    # pandas
-    if hasattr(t, "to_dict"):
-        try:
-            recs = t.to_dict(orient="records")
-            if isinstance(recs, list):
-                return recs
-        except Exception:
-            pass
-    # narwhals / other df-likes
-    if hasattr(t, "to_pylist"):
-        try:
-            return list(t.to_pylist())
-        except Exception:
-            pass
-    # sqlite cursor-like
-    if hasattr(t, "fetchall") and hasattr(t, "columns"):
-        try:
-            cols = list(t.columns)
-            return [dict(zip(cols, row)) for row in t.fetchall()]
-        except Exception:
-            pass
-    # dict-of-columns
-    if isinstance(t, dict):
-        keys = list(t.keys())
-        if keys and isinstance(t[keys[0]], list):
-            n = len(t[keys[0]])
-            return [{k: t[k][i] for k in keys} for i in range(n)]
-    # already list-of-dicts
-    if isinstance(t, list) and t and isinstance(t[0], dict):
-        return list(t)
-    return []
-
-
 def _safe_df_to_rows(df):
     """Never crash if df is None or backend is missing."""
     if df is None:
@@ -222,7 +161,7 @@ def _safe_df_to_rows(df):
         return _df_to_rows(df)
     except Exception:
         # fallback to generic rows() conversion
-        return _rows(df)
+        return _rows_like(df)
 
 
 def _export_legacy(
@@ -265,24 +204,23 @@ def _export_legacy(
     # Ensure endpoints that appear in edges are also included
     endpoints = set()
     for eidx in range(graph.number_of_edges()):
-        eid = graph.idx_to_edge[eidx]
-        # graph.get_edge(eidx) returns (S, T) as sets for both binary and hyper encodings
-        try:
-            S, T = graph.get_edge(eidx)
-        except Exception:
-            S, T = set(), set()
+        eid = graph._col_to_edge[eidx]
+        rec = graph._edges[eid]
+        if rec.etype == "hyper":
+            S, T = set(rec.src or []), set(rec.tgt or [])
+        else:
+            S = set() if rec.src is None else {rec.src}
+            T = set() if rec.tgt is None else {rec.tgt}
         endpoints.update(S)
         endpoints.update(T)
 
     # If we are going to expand hyperedges, include their members/head/tail too
     if not skip_hyperedges:
-        for eid, hdef in getattr(graph, "hyperedge_definitions", {}).items():
-            if isinstance(hdef, dict):
-                if hdef.get("members") is not None:
-                    endpoints.update(hdef.get("members", []))
-                else:
-                    endpoints.update(hdef.get("head", []))
-                    endpoints.update(hdef.get("tail", []))
+        for rec in graph._edges.values():
+            if rec.col_idx < 0 or rec.etype != "hyper":
+                continue
+            endpoints.update(rec.src or [])
+            endpoints.update(rec.tgt or [])
 
     vertices = list(dict.fromkeys(list(base_vertices) + [v for v in endpoints]))  # stable order
     vidx = {v: i for i, v in enumerate(vertices)}
@@ -312,13 +250,6 @@ def _export_legacy(
     except Exception:
         vattr_map = {}
 
-    def _serialize_value(x):
-        # reuse your serializer if it exists; otherwise passthrough
-        try:
-            return globals()["_serialize_value"](x)
-        except KeyError:
-            return x
-
     processed_vattrs = {}
     for v in vertices:
         v_attr = dict(vattr_map.get(v, {}))
@@ -339,12 +270,15 @@ def _export_legacy(
         try:
             return _is_directed_eid(g, eid)  # use existing helper if present
         except NameError:
-            return bool(getattr(g, "edge_directed", {}).get(eid, getattr(g, "directed", True)))
+            rec = getattr(g, "_edges", {}).get(eid)
+            if rec is not None and rec.directed is not None:
+                return bool(rec.directed)
+            return bool(getattr(g, "directed", True))
 
     # Add edges (binary & vertex-edge). Hyperedges: skip or expand
     eattr_map = {}
     try:
-        for row in _rows(getattr(graph, "edge_attributes", None)):
+        for row in _rows_like(getattr(graph, "edge_attributes", None)):
             eid = row.get("edge_id")
             if eid is not None:
                 d = dict(row)
@@ -357,8 +291,13 @@ def _export_legacy(
     edge_payloads = []  # list of dicts, parallel to edge_tuples
 
     for eidx in range(graph.number_of_edges()):
-        eid = graph.idx_to_edge[eidx]
-        S, T = graph.get_edge(eidx)
+        eid = graph._col_to_edge[eidx]
+        rec = graph._edges[eid]
+        if rec.etype == "hyper":
+            S, T = set(rec.src or []), set(rec.tgt or [])
+        else:
+            S = set() if rec.src is None else {rec.src}
+            T = set() if rec.tgt is None else {rec.tgt}
 
         e_attr = dict(eattr_map.get(eid, {}))
         if public_only:
@@ -368,11 +307,11 @@ def _export_legacy(
         else:
             e_attr = {k: _serialize_value(val) for k, val in e_attr.items()}
 
-        weight = graph.edge_weights.get(eid, 1.0)
+        weight = 1.0 if rec.weight is None else rec.weight
         e_attr["weight" if public_only else "__weight"] = weight
         e_attr["eid"] = eid
 
-        is_hyper = graph.edge_kind.get(eid) == "hyper"
+        is_hyper = rec.etype == "hyper"
         is_dir = _is_dir_eid(graph, eid)
         members = S | T
 
@@ -481,7 +420,7 @@ def to_igraph(
     # -------------- collect vertex/edge attrs for manifest --------------
     _raw_vertex_attrs = {
         row["vertex_id"]: {k: v for k, v in row.items() if k != "vertex_id"}
-        for row in _rows(getattr(graph, "vertex_attributes", None))
+        for row in _rows_like(getattr(graph, "vertex_attributes", None))
         if row.get("vertex_id") is not None
     }
     vertex_attrs = {
@@ -497,14 +436,14 @@ def to_igraph(
 
     _raw_edge_attrs = {
         row["edge_id"]: {k: v for k, v in row.items() if k != "edge_id"}
-        for row in _rows(getattr(graph, "edge_attributes", None))
+        for row in _rows_like(getattr(graph, "edge_attributes", None))
         if row.get("edge_id") is not None
     }
     edge_attrs = {
-        graph.idx_to_edge[eidx]: _attrs_to_dict(
+        graph._col_to_edge[eidx]: _attrs_to_dict(
             {
                 k: val
-                for k, val in _raw_edge_attrs.get(graph.idx_to_edge[eidx], {}).items()
+                for k, val in _raw_edge_attrs.get(graph._col_to_edge[eidx], {}).items()
                 if not public_only or not str(k).startswith("__")
             }
         )
@@ -514,9 +453,14 @@ def to_igraph(
     # -------------- topology snapshot (regular vs hyper) --------------
     manifest_edges = {}
     for eidx in range(graph.number_of_edges()):
-        S, T = graph.get_edge(eidx)
-        eid = graph.idx_to_edge[eidx]
-        is_hyper = graph.edge_kind.get(eid) == "hyper"
+        eid = graph._col_to_edge[eidx]
+        rec = graph._edges[eid]
+        is_hyper = rec.etype == "hyper"
+        if is_hyper:
+            S, T = set(rec.src or []), set(rec.tgt or [])
+        else:
+            S = set() if rec.src is None else {rec.src}
+            T = set() if rec.tgt is None else {rec.tgt}
         if not is_hyper:
             members = S | T
             if len(members) == 1:
@@ -537,9 +481,6 @@ def to_igraph(
             manifest_edges[eid] = (head_map, tail_map, "hyper")
 
     # ---------- slices + per-slice weights for manifest ----------
-    def _rows_from_table(t):
-        return _rows(t)
-
     all_eids = list(manifest_edges.keys())
 
     # discover slices
@@ -575,7 +516,7 @@ def to_igraph(
                     if eid not in seen:
                         arr.append(eid)
                         seen.add(eid)
-    for r in _rows_from_table(t):
+    for r in _rows_like(t):
         lid = r.get("slice") or r.get("slice_id") or r.get("lid")
         if lid is None:
             continue
@@ -634,7 +575,9 @@ def to_igraph(
 
     # baseline weights
     try:
-        base_weights = {eid: float(w) for eid, w in getattr(graph, "edge_weights", {}).items()}
+        base_weights = {
+            eid: float(rec.weight) for eid, rec in graph._edges.items() if rec.weight is not None
+        }
     except Exception:
         base_weights = {}
 
@@ -736,9 +679,13 @@ def to_igraph(
     aspects = list(getattr(graph, "aspects", []))
     elem_layers = dict(getattr(graph, "elem_layers", {}))
     VM_serialized = _serialize_VM(getattr(graph, "_VM", set()))
-    edge_kind = dict(getattr(graph, "edge_kind", {}))
+    edge_kind = {
+        eid: ("hyper" if rec.etype == "hyper" else rec.ml_kind)
+        for eid, rec in graph._edges.items()
+        if rec.col_idx >= 0 and (rec.etype == "hyper" or rec.ml_kind is not None)
+    }
     edge_layers_ser = _serialize_edge_layers(getattr(graph, "edge_layers", {}))
-    node_layer_attrs_ser = _serialize_node_layer_attrs(getattr(graph, "_vertex_layer_attrs", {}))
+    node_layer_attrs_ser = _serialize_node_layer_attrs(getattr(graph, "_state_attrs", {}))
 
     # aspect and layer-tuple level attributes (dicts)
     aspect_attrs = dict(getattr(graph, "_aspect_attrs", {}))
@@ -773,54 +720,6 @@ def to_igraph(
 
     return igG, manifest
 
-
-def save_manifest(manifest: dict, path: str):
-    """Write manifest to JSON file.
-
-    Parameters
-    ----------
-    manifest : dict
-        Manifest dictionary from to_igraph().
-    path : str
-        Output file path (typically .json extension).
-
-    Returns
-    -------
-    None
-
-    Raises
-    ------
-    OSError
-        If file cannot be written.
-
-    """
-    with open(path, "w") as f:
-        json.dump(manifest, f, indent=2)
-
-
-def load_manifest(path: str) -> dict:
-    """Load manifest from JSON file.
-
-    Parameters
-    ----------
-    path : str
-        Path to manifest JSON file created by save_manifest().
-
-    Returns
-    -------
-    dict
-        Manifest dictionary suitable for from_igraph().
-
-    Raises
-    ------
-    OSError
-        If file cannot be read.
-    json.JSONDecodeError
-        If file contains invalid JSON.
-
-    """
-    with open(path) as f:
-        return json.load(f)
 
 
 def _ig_collect_reified(
@@ -1086,7 +985,9 @@ def from_igraph(
     # -------- baseline weights --------
     for eid, w in (manifest.get("weights", {}) or {}).items():
         try:
-            H.edge_weights[eid] = float(w)
+            rec = H._edges.get(eid)
+            if rec is not None:
+                rec.weight = float(w)
         except Exception:
             pass
 
@@ -1140,13 +1041,20 @@ def from_igraph(
     ek = mm.get("edge_kind", {})
     el_ser = mm.get("edge_layers", {})
     if ek:
-        H.edge_kind.update(ek)
+        for eid, kind in ek.items():
+            rec = H._edges.get(eid)
+            if rec is None:
+                continue
+            if kind == "hyper":
+                rec.etype = "hyper"
+            else:
+                rec.ml_kind = kind
     if el_ser:
         H.edge_layers.update(_deserialize_edge_layers(el_ser))
 
     nl_attrs_ser = mm.get("node_layer_attrs", [])
     if nl_attrs_ser:
-        H._vertex_layer_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+        H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
 
     layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
     if layer_tuple_attrs_ser:
@@ -1195,8 +1103,8 @@ def from_igraph(
 
             if directed:
                 try:
-                    H.add_hyperedge(
-                        head=list(head_map), tail=list(tail_map), edge_id=eid, edge_directed=True
+                    H.add_edge(
+                        src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True
                     )
                 except Exception:
                     pass
@@ -1211,7 +1119,7 @@ def from_igraph(
             else:
                 members = list(set(head_map) | set(tail_map))
                 try:
-                    H.add_hyperedge(members=members, edge_id=eid, edge_directed=False)
+                    H.add_edge(src=members, edge_id=eid, directed=False)
                 except Exception:
                     pass
                 try:
@@ -1320,8 +1228,8 @@ def from_ig_only(
                     pass
             if directed:
                 try:
-                    H.add_hyperedge(
-                        head=list(head_map), tail=list(tail_map), edge_id=eid, edge_directed=True
+                    H.add_edge(
+                        src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True
                     )
                 except Exception:
                     pass
@@ -1336,7 +1244,7 @@ def from_ig_only(
             else:
                 members = list(set(head_map) | set(tail_map))
                 try:
-                    H.add_hyperedge(members=members, edge_id=eid, edge_directed=False)
+                    H.add_edge(src=members, edge_id=eid, directed=False)
                 except Exception:
                     pass
                 try:
@@ -1381,9 +1289,9 @@ def from_ig_only(
         except Exception:
             pass
         try:
-            H.add_edge(src, dst, edge_id=eid, edge_directed=e_directed)
+            H.add_edge(src, dst, edge_id=eid, directed=e_directed)
         except Exception:
-            H.add_edge(src, dst, edge_id=eid, edge_directed=True)
+            H.add_edge(src, dst, edge_id=eid, directed=True)
 
         try:
             H.edge_weights[eid] = float(w)

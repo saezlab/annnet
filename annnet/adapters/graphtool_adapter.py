@@ -68,6 +68,11 @@ def to_graphtool(
     if gt is None:
         raise RuntimeError("graph-tool is not installed; cannot call to_graphtool")
 
+    def _project_vertex_id(node):
+        if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
+            return node[0]
+        return node
+
     # 1) graph-tool AnnNet (directed flag from AnnNet)
     directed = bool(G.directed) if G.directed is not None else True
     gtG = gt.Graph(directed=directed)
@@ -76,9 +81,18 @@ def to_graphtool(
     vmap = {}  # annnet_id -> gt.Vertex
     vp_id = gtG.new_vertex_property("string")
 
-    for u, t in G.entity_types.items():
-        if t != "vertex":
+    vertex_ids = []
+    seen_vertex_ids = set()
+    for ekey, rec in sorted(G._entities.items(), key=lambda item: item[1].row_idx):
+        if rec.kind != "vertex":
             continue
+        u = ekey[0]
+        if u in seen_vertex_ids:
+            continue
+        seen_vertex_ids.add(u)
+        vertex_ids.append(u)
+
+    for u in vertex_ids:
         v = gtG.add_vertex()
         vmap[u] = v
         vp_id[v] = str(u)
@@ -110,20 +124,17 @@ def to_graphtool(
                 else:
                     edge_props[col] = gtG.new_edge_property("string")
 
-    for eid, defn in G.edge_definitions.items():
-        try:
-            u, v, etype = defn
-        except ValueError:
-            # weird or malformed definition; skip
+    for eid, rec in G._edges.items():
+        if rec.col_idx < 0 or rec.etype == "hyper":
             continue
-
+        u, v = _project_vertex_id(rec.src), _project_vertex_id(rec.tgt)
         if u not in vmap or v not in vmap:
             # not a pure vertex-vertex edge; hyperedge/hybrid -> only in manifest
             continue
 
         e = gtG.add_edge(vmap[u], vmap[v])
         ep_id[e] = str(eid)
-        ep_w[e] = float(G.edge_weights.get(eid, 1.0))
+        ep_w[e] = float(1.0 if rec.weight is None else rec.weight)
 
         # Set additional edge properties from edge_attributes
         if edge_props and hasattr(G, "edge_attributes"):
@@ -156,17 +167,33 @@ def to_graphtool(
     slices_data = _serialize_slices(getattr(G, "_slices", {}))
 
     # 6) hyperedges and direction info
-    hyperedges = dict(getattr(G, "hyperedge_definitions", {}))
-    edge_directed = dict(getattr(G, "edge_directed", {}))
+    hyperedges = {
+        eid: (
+            {"directed": True, "head": list(rec.src or []), "tail": list(rec.tgt or [])}
+            if rec.tgt is not None
+            else {"directed": False, "members": list(rec.src or [])}
+        )
+        for eid, rec in G._edges.items()
+        if rec.col_idx >= 0 and rec.etype == "hyper"
+    }
+    edge_directed = {
+        eid: bool(rec.directed)
+        for eid, rec in G._edges.items()
+        if rec.col_idx >= 0 and rec.directed is not None
+    }
     edge_direction_policy = dict(getattr(G, "edge_direction_policy", {}))
 
     # 7) multilayer / Kivela metadata
     aspects = list(getattr(G, "aspects", []))
     elem_layers = dict(getattr(G, "elem_layers", {}))
     VM_serialized = _serialize_VM(getattr(G, "_VM", set()))
-    edge_kind = dict(getattr(G, "edge_kind", {}))
+    edge_kind = {
+        eid: ("hyper" if rec.etype == "hyper" else rec.ml_kind)
+        for eid, rec in G._edges.items()
+        if rec.col_idx >= 0 and (rec.etype == "hyper" or rec.ml_kind is not None)
+    }
     edge_layers_ser = _serialize_edge_layers(getattr(G, "edge_layers", {}))
-    node_layer_attrs_ser = _serialize_node_layer_attrs(getattr(G, "_vertex_layer_attrs", {}))
+    node_layer_attrs_ser = _serialize_node_layer_attrs(getattr(G, "_state_attrs", {}))
 
     # aspect and layer-tuple level attributes (dicts)
     aspect_attrs = dict(getattr(G, "_aspect_attrs", {}))
@@ -180,12 +207,18 @@ def to_graphtool(
             "attributes": dict(getattr(G, "graph_attributes", {})),
         },
         "vertices": {
-            "types": dict(G.entity_types),
+            "types": {ekey[0]: ent.kind for ekey, ent in G._entities.items() if ent.kind == "vertex"},
             "attributes": vert_rows,
         },
         "edges": {
-            "definitions": dict(G.edge_definitions),
-            "weights": dict(G.edge_weights),
+            "definitions": {
+                eid: (rec.src, rec.tgt, rec.etype)
+                for eid, rec in G._edges.items()
+                if rec.col_idx >= 0 and rec.etype != "hyper"
+            },
+            "weights": {
+                eid: rec.weight for eid, rec in G._edges.items() if rec.col_idx >= 0 and rec.weight is not None
+            },
             "directed": edge_directed,
             "direction_policy": edge_direction_policy,
             "hyperedges": hyperedges,
@@ -304,11 +337,17 @@ def from_graphtool(
 
     weights = emeta.get("weights", {})
     if weights:
-        G.edge_weights.update(weights)
+        for eid, w in weights.items():
+            rec = G._edges.get(eid)
+            if rec is not None:
+                rec.weight = float(w)
 
     e_directed = emeta.get("directed", {})
     if e_directed:
-        G.edge_directed.update(e_directed)
+        for eid, val in e_directed.items():
+            rec = G._edges.get(eid)
+            if rec is not None:
+                rec.directed = bool(val)
 
     e_dir_policy = emeta.get("direction_policy", {})
     if e_dir_policy:
@@ -316,14 +355,33 @@ def from_graphtool(
 
     hyperedges = emeta.get("hyperedges", {})
     if hyperedges:
-        G.hyperedge_definitions = dict(hyperedges)
+        for eid, meta in hyperedges.items():
+            rec = G._edges.get(eid)
+            if rec is None:
+                continue
+            rec.etype = "hyper"
+            if meta.get("directed"):
+                rec.src = list(meta.get("head", []))
+                rec.tgt = list(meta.get("tail", []))
+                rec.directed = True
+            else:
+                rec.src = list(meta.get("members", []))
+                rec.tgt = None
+                rec.directed = False
 
     kivela_edge = emeta.get("kivela", {})
     if kivela_edge:
         ek = kivela_edge.get("edge_kind", {})
         el_ser = kivela_edge.get("edge_layers", {})
         if ek:
-            G.edge_kind.update(ek)
+            for eid, kind in ek.items():
+                rec = G._edges.get(eid)
+                if rec is None:
+                    continue
+                if kind == "hyper":
+                    rec.etype = "hyper"
+                else:
+                    rec.ml_kind = kind
         if el_ser:
             G.edge_layers.update(_deserialize_edge_layers(el_ser))
 
@@ -372,13 +430,20 @@ def from_graphtool(
     ek2 = mm.get("edge_kind", {})
     el2_ser = mm.get("edge_layers", {})
     if ek2:
-        G.edge_kind.update(ek2)
+        for eid, kind in ek2.items():
+            rec = G._edges.get(eid)
+            if rec is None:
+                continue
+            if kind == "hyper":
+                rec.etype = "hyper"
+            else:
+                rec.ml_kind = kind
     if el2_ser:
         G.edge_layers.update(_deserialize_edge_layers(el2_ser))
 
     nl_attrs_ser = mm.get("node_layer_attrs", [])
     if nl_attrs_ser:
-        G._vertex_layer_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+        G._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
 
     layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
     if layer_tuple_attrs_ser:
