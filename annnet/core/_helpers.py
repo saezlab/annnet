@@ -112,8 +112,9 @@ class EntityRecord:
     Vertices are plain nodes; edge-entities are edges that can also
     be endpoints of other edges.
     """
-    row_idx: int   # row index in the incidence matrix
-    kind: str      # "vertex" | "edge_entity"
+
+    row_idx: int  # row index in the incidence matrix
+    kind: str  # "vertex" | "edge_entity"
 
 
 @dataclass(slots=True)
@@ -130,15 +131,16 @@ class EdgeRecord:
     For hyperedges src holds the head-set (directed) or all-members set
     (undirected); tgt holds the tail-set or None.
     """
-    src: object              # str (binary) | frozenset (hyper) | None
-    tgt: object              # str (binary) | frozenset (directed hyper) | None
+
+    src: object  # str (binary) | frozenset (hyper) | None
+    tgt: object  # str (binary) | frozenset (directed hyper) | None
     weight: float
-    directed: object         # bool | None — None means inherit graph default
-    etype: str               # "binary" | "hyper" | "vertex_edge"
-    col_idx: int             # column index in the incidence matrix (-1 if no column)
-    ml_kind: object          # str | None — "intra" | "inter" | "coupling"
-    ml_layers: object        # tuple | None — multilayer layer assignment
-    direction_policy: object # dict | None — flexible direction config
+    directed: object  # bool | None — None means inherit graph default
+    etype: str  # "binary" | "hyper" | "vertex_edge"
+    col_idx: int  # column index in the incidence matrix (-1 if no column)
+    ml_kind: object  # str | None — "intra" | "inter" | "coupling"
+    ml_layers: object  # tuple | None — multilayer layer assignment
+    direction_policy: object  # dict | None — flexible direction config
 
 
 def _external_entity_kind(kind: str) -> str:
@@ -333,7 +335,8 @@ class EdgeDirectedCompat(_CompatMapping):
 class EdgeDefinitionsCompat(_CompatMapping):
     def keys(self):
         return [
-            eid for eid, rec in self._G._edges.items()
+            eid
+            for eid, rec in self._G._edges.items()
             if rec.etype != "hyper" and rec.src is not None
         ]
 
@@ -413,7 +416,8 @@ class EdgeDirectionPolicyCompat(_CompatMapping):
 class EdgeKindCompat(_CompatMapping):
     def keys(self):
         return {
-            eid for eid, rec in self._G._edges.items()
+            eid
+            for eid, rec in self._G._edges.items()
             if rec.etype == "hyper" or rec.ml_kind is not None
         }
 

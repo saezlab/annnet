@@ -19,10 +19,10 @@ from ._utils import (
     _is_directed_eid,
     _rows_like,
     _rows_to_df,
-    _serialize_value,
     _serialize_edge_layers,
     _serialize_layer_tuple_attrs,
     _serialize_node_layer_attrs,
+    _serialize_value,
     _serialize_VM,
     load_manifest,
     save_manifest,
@@ -152,6 +152,7 @@ def _collect_slices_and_weights(graph) -> tuple[dict, dict]:
         slices_section[lid] = uniq
 
     return slices_section, slice_weights
+
 
 def _safe_df_to_rows(df):
     """Never crash if df is None or backend is missing."""
@@ -721,7 +722,6 @@ def to_igraph(
     return igG, manifest
 
 
-
 def _ig_collect_reified(
     igG,
     he_node_flag="is_hyperedge",
@@ -1103,9 +1103,7 @@ def from_igraph(
 
             if directed:
                 try:
-                    H.add_edge(
-                        src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True
-                    )
+                    H.add_edge(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
                 except Exception:
                     pass
                 try:
@@ -1228,9 +1226,7 @@ def from_ig_only(
                     pass
             if directed:
                 try:
-                    H.add_edge(
-                        src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True
-                    )
+                    H.add_edge(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
                 except Exception:
                     pass
                 try:

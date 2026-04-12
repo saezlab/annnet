@@ -14,8 +14,8 @@ except Exception:  # ModuleNotFoundError, etc.
     pl = None
 
 from ..adapters._utils import (
-    _deserialize_endpoint,
     _deserialize_edge_layers,
+    _deserialize_endpoint,
     _deserialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
     _deserialize_VM,
@@ -153,9 +153,7 @@ def to_sif(
                     if rec.etype == "hyper" or rec.ml_kind is not None
                 },
                 "edge_layers": _serialize_edge_layers(getattr(graph, "edge_layers", {})),
-                "node_layer_attrs": _serialize_node_layer_attrs(
-                    getattr(graph, "_state_attrs", {})
-                ),
+                "node_layer_attrs": _serialize_node_layer_attrs(getattr(graph, "_state_attrs", {})),
                 "layer_tuple_attrs": _serialize_layer_tuple_attrs(
                     getattr(graph, "_layer_attrs", {})
                 ),

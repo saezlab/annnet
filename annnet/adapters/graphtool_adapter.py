@@ -207,7 +207,9 @@ def to_graphtool(
             "attributes": dict(getattr(G, "graph_attributes", {})),
         },
         "vertices": {
-            "types": {ekey[0]: ent.kind for ekey, ent in G._entities.items() if ent.kind == "vertex"},
+            "types": {
+                ekey[0]: ent.kind for ekey, ent in G._entities.items() if ent.kind == "vertex"
+            },
             "attributes": vert_rows,
         },
         "edges": {
@@ -217,7 +219,9 @@ def to_graphtool(
                 if rec.col_idx >= 0 and rec.etype != "hyper"
             },
             "weights": {
-                eid: rec.weight for eid, rec in G._edges.items() if rec.col_idx >= 0 and rec.weight is not None
+                eid: rec.weight
+                for eid, rec in G._edges.items()
+                if rec.col_idx >= 0 and rec.weight is not None
             },
             "directed": edge_directed,
             "direction_policy": edge_direction_policy,

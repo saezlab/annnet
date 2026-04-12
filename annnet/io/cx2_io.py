@@ -267,13 +267,9 @@ def to_cx2(
                 for eid, rec in G._edges.items()
                 if rec.etype != "hyper"
             },
-            "weights": {
-                eid: rec.weight for eid, rec in G._edges.items() if rec.weight is not None
-            },
+            "weights": {eid: rec.weight for eid, rec in G._edges.items() if rec.weight is not None},
             "directed": {
-                eid: bool(rec.directed)
-                for eid, rec in G._edges.items()
-                if rec.directed is not None
+                eid: bool(rec.directed) for eid, rec in G._edges.items() if rec.directed is not None
             },
             "direction_policy": dict(getattr(G, "edge_direction_policy", {})),
             "hyperedges": {
@@ -650,7 +646,10 @@ def to_cx2(
             "id": cx_eid,
             "s": cx_u,
             "t": cx_v,
-            "v": {"interaction": str(eid), "weight": float(1.0 if rec.weight is None else rec.weight)},
+            "v": {
+                "interaction": str(eid),
+                "weight": float(1.0 if rec.weight is None else rec.weight),
+            },
         }
 
         # Attach attributes

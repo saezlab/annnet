@@ -12,8 +12,8 @@ except Exception:  # ModuleNotFoundError, etc.
     pl = None
 
 from ..adapters._utils import (
-    _deserialize_endpoint,
     _deserialize_edge_layers,
+    _deserialize_endpoint,
     _deserialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
     _deserialize_VM,
@@ -21,8 +21,8 @@ from ..adapters._utils import (
     _endpoint_coeff_map,
     _is_directed_eid,
     _rows_to_df,
-    _serialize_endpoint,
     _serialize_edge_layers,
+    _serialize_endpoint,
     _serialize_layer_tuple_attrs,
     _serialize_node_layer_attrs,
     _serialize_VM,
@@ -264,9 +264,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
                 "VM": _serialize_VM(getattr(graph, "_VM", set())),
                 "edge_kind": dict(getattr(graph, "edge_kind", {})),
                 "edge_layers": _serialize_edge_layers(getattr(graph, "edge_layers", {})),
-                "node_layer_attrs": _serialize_node_layer_attrs(
-                    getattr(graph, "_state_attrs", {})
-                ),
+                "node_layer_attrs": _serialize_node_layer_attrs(getattr(graph, "_state_attrs", {})),
                 "layer_tuple_attrs": _serialize_layer_tuple_attrs(
                     getattr(graph, "_layer_attrs", {})
                 ),

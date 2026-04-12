@@ -812,7 +812,9 @@ class LayerClass:
         placeholder = self._placeholder_layer_coord()
         if any(ekey[1] == placeholder for ekey in self._entities):
             return True
-        if any((isinstance(key, tuple) and len(key) == 2 and key[1] == placeholder) for key in self._VM):
+        if any(
+            (isinstance(key, tuple) and len(key) == 2 and key[1] == placeholder) for key in self._VM
+        ):
             return True
         if any(key[1] == placeholder for key in self._state_attrs):
             return True
@@ -836,7 +838,9 @@ class LayerClass:
             return
         if self._placeholder_layer_referenced():
             return
-        if not all(any(val != "_" for val in self._layers.get(aspect, set())) for aspect in self._aspects):
+        if not all(
+            any(val != "_" for val in self._layers.get(aspect, set())) for aspect in self._aspects
+        ):
             return
         for aspect in self._aspects:
             self._layers.get(aspect, set()).discard("_")
@@ -869,7 +873,9 @@ class LayerClass:
         """
         if isinstance(aspects, dict):
             if elem_layers is not None:
-                raise ValueError("Pass either aspects=list[...] or aspects={aspect: layers}, not both.")
+                raise ValueError(
+                    "Pass either aspects=list[...] or aspects={aspect: layers}, not both."
+                )
             elem_layers = aspects
             aspects = list(aspects.keys())
 
@@ -933,7 +939,9 @@ class LayerClass:
                 raise KeyError(f"Unknown aspect {aspect!r}. Valid: {list(self._aspects)!r}")
             labels = {str(v) for v in values}
             if not labels:
-                raise ValueError(f"Aspect {aspect!r} must receive at least one elementary layer value.")
+                raise ValueError(
+                    f"Aspect {aspect!r} must receive at least one elementary layer value."
+                )
             self._layers.setdefault(aspect, set()).update(labels)
         self._rebuild_all_layers_cache()
         self._drop_unused_placeholder_layers()
@@ -1005,27 +1013,22 @@ class LayerClass:
 
             for slice_id, meta in self._slices.items():
                 flat._slices[slice_id] = {
-                    "vertices": {v[0] if isinstance(v, tuple) and len(v) == 2 else v for v in meta["vertices"]},
+                    "vertices": {
+                        v[0] if isinstance(v, tuple) and len(v) == 2 else v
+                        for v in meta["vertices"]
+                    },
                     "edges": set(meta["edges"]),
                     "attributes": dict(meta["attributes"]),
                 }
 
             vertex_ids = sorted(
-                {
-                    ekey[0]
-                    for ekey, rec in self._entities.items()
-                    if rec.kind == "vertex"
-                }
+                {ekey[0] for ekey, rec in self._entities.items() if rec.kind == "vertex"}
             )
             for vid in vertex_ids:
                 flat.add_vertex(vid)
 
             edge_entity_ids = sorted(
-                {
-                    ekey[0]
-                    for ekey, rec in self._entities.items()
-                    if rec.kind == "edge_entity"
-                }
+                {ekey[0] for ekey, rec in self._entities.items() if rec.kind == "edge_entity"}
             )
             edge_entity_id_set = set(edge_entity_ids)
             for eid in edge_entity_ids:
@@ -1069,7 +1072,9 @@ class LayerClass:
                 if flat_rec is not None and rec.direction_policy is not None:
                     flat_rec.direction_policy = copy.deepcopy(rec.direction_policy)
 
-            flat.slice_edge_weights = {lid: dict(weights) for lid, weights in self.slice_edge_weights.items()}
+            flat.slice_edge_weights = {
+                lid: dict(weights) for lid, weights in self.slice_edge_weights.items()
+            }
             flat.vertex_attributes = _clone_table(self.vertex_attributes)
             flat.edge_attributes = _clone_table(self.edge_attributes)
             flat.slice_attributes = _clone_table(self.slice_attributes)
@@ -1813,6 +1818,7 @@ class LayerClass:
 
         # Intern hot strings + collect edge data
         import sys as _sys
+
         all_vertices: set[str] = set()
         edge_data: list[tuple[str, str, float]] = []
         for e in edges:
@@ -1877,9 +1883,15 @@ class LayerClass:
                 c = col_idx
                 col_idx += 1
                 rec = EdgeRecord(
-                    src=u, tgt=v, weight=w, directed=is_dir,
-                    etype="binary", col_idx=c,
-                    ml_kind="intra", ml_layers=aa, direction_policy=None,
+                    src=u,
+                    tgt=v,
+                    weight=w,
+                    directed=is_dir,
+                    etype="binary",
+                    col_idx=c,
+                    ml_kind="intra",
+                    ml_layers=aa,
+                    direction_policy=None,
                 )
                 _edges[eid] = rec
                 _col_to_edge[c] = eid

@@ -283,7 +283,9 @@ def _write_structure(graph, path: Path, compression: str):
     edge_to_idx = {eid: rec.col_idx for eid, rec in graph._edges.items() if rec.col_idx >= 0}
     idx_to_edge = dict(graph._col_to_edge)
     edge_weights = {eid: rec.weight for eid, rec in graph._edges.items()}
-    edge_directed = {eid: rec.directed for eid, rec in graph._edges.items() if rec.directed is not None}
+    edge_directed = {
+        eid: rec.directed for eid, rec in graph._edges.items() if rec.directed is not None
+    }
     edge_kind = {eid: rec.etype for eid, rec in graph._edges.items()}
 
     dict_to_parquet(entity_to_idx, path / "entity_to_idx.parquet", "entity_id", "idx")
@@ -297,7 +299,9 @@ def _write_structure(graph, path: Path, compression: str):
 
     # Edge definitions (binary + vertex_edge only; no hyper)
     bin_edges = {
-        eid: rec for eid, rec in graph._edges.items() if rec.etype != "hyper" and rec.src is not None
+        eid: rec
+        for eid, rec in graph._edges.items()
+        if rec.etype != "hyper" and rec.src is not None
     }
     default_dir = True if graph.directed is None else graph.directed
     edge_def_df = _df_from_dict(
@@ -306,7 +310,9 @@ def _write_structure(graph, path: Path, compression: str):
             "source": [rec.src for rec in bin_edges.values()],
             "target": [rec.tgt for rec in bin_edges.values()],
             "edge_type": [
-                "DIRECTED" if (rec.directed if rec.directed is not None else default_dir) else "UNDIRECTED"
+                "DIRECTED"
+                if (rec.directed if rec.directed is not None else default_dir)
+                else "UNDIRECTED"
                 for rec in bin_edges.values()
             ],
         }

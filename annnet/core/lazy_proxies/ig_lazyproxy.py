@@ -187,7 +187,9 @@ class _LazyIGProxy(_LazyProxyBase):
             raise RuntimeError("igraph adapter missing")
 
         skip_hyperedges = str(hyperedge_mode).lower() != "expand"
-        igG = to_backend(self._G, directed=directed, skip_hyperedges=skip_hyperedges, public_only=True)
+        igG = to_backend(
+            self._G, directed=directed, skip_hyperedges=skip_hyperedges, public_only=True
+        )
         self._prune_edge_attributes(igG, needed_attrs)
         if simple:
             igG = self._collapse_multiedges(
@@ -240,10 +242,17 @@ class _LazyIGProxy(_LazyProxyBase):
         import warnings
 
         msgs = []
-        if any(rec.etype == "hyper" for rec in self._G._edges.values()) and hyperedge_mode != "expand":
+        if (
+            any(rec.etype == "hyper" for rec in self._G._edges.values())
+            and hyperedge_mode != "expand"
+        ):
             msgs.append("hyperedges dropped (hyperedge_mode='skip')")
         slices_dict = getattr(self._G, "_slices", None)
-        if isinstance(slices_dict, dict) and len(slices_dict) > 1 and (slice is None and not slices):
+        if (
+            isinstance(slices_dict, dict)
+            and len(slices_dict) > 1
+            and (slice is None and not slices)
+        ):
             msgs.append("multiple slices flattened into single igraph graph")
         if manifest is None:
             msgs.append("no manifest provided; round-trip fidelity not guaranteed")

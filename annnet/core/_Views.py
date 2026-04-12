@@ -217,7 +217,9 @@ class GraphView:
             candidate_vertices = (
                 vertex_ids
                 if vertex_ids is not None
-                else {ekey[0] for ekey, rec in self._graph._entities.items() if rec.kind == "vertex"}
+                else {
+                    ekey[0] for ekey, rec in self._graph._entities.items() if rec.kind == "vertex"
+                }
             )
 
             if callable(self._vertices_filter):
@@ -682,17 +684,13 @@ class ViewsClass:
         _default_dir = True if self.directed is None else self.directed
         _edge_recs = [self._edges[eid] for eid in eids_raw]
         kinds = [
-            "hyper" if rec.etype == "hyper" else (rec.ml_kind or "binary")
-            for rec in _edge_recs
+            "hyper" if rec.etype == "hyper" else (rec.ml_kind or "binary") for rec in _edge_recs
         ]
 
         need_global = include_weight or resolved_weight
         global_w = [rec.weight for rec in _edge_recs] if need_global else None
         dirs = (
-            [
-                rec.directed if rec.directed is not None else _default_dir
-                for rec in _edge_recs
-            ]
+            [rec.directed if rec.directed is not None else _default_dir for rec in _edge_recs]
             if include_directed
             else None
         )

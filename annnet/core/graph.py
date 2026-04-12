@@ -22,18 +22,18 @@ from ._helpers import (
     EdgeDefinitionsCompat,
     EdgeDirectedCompat,
     EdgeDirectionPolicyCompat,
+    EdgeKindCompat,
     EdgeLayersCompat,
     EdgeRecord,
     EdgeToIdxCompat,
+    EdgeType,
     EdgeWeightsCompat,
+    EntityRecord,
     EntityToIdxCompat,
     EntityTypesCompat,
-    EdgeType,
-    EntityRecord,
     HyperedgeDefinitionsCompat,
     IdxToEdgeCompat,
     IdxToEntityCompat,
-    EdgeKindCompat,
     _df_filter_not_equal,
     _slice_RESERVED,
     _vertex_RESERVED,
@@ -140,16 +140,16 @@ class AnnNet(
         self._vid_to_ekeys: dict[str, list[tuple]] = {}
 
         # --- Edge store (all edges with matrix columns) ---
-        self._edges: dict[str, EdgeRecord] = {}         # edge_id   -> EdgeRecord
-        self._col_to_edge: dict[int, str] = {}          # col_idx   -> edge_id
+        self._edges: dict[str, EdgeRecord] = {}  # edge_id   -> EdgeRecord
+        self._col_to_edge: dict[int, str] = {}  # col_idx   -> edge_id
 
         # --- Adjacency indices (derived from _edges, kept updated incrementally) ---
-        self._adj: dict = {}             # (src, tgt) -> [edge_id, ...]
-        self._src_to_edges: dict = {}    # src -> [edge_id, ...]
-        self._tgt_to_edges: dict = {}    # tgt -> [edge_id, ...]
+        self._adj: dict = {}  # (src, tgt) -> [edge_id, ...]
+        self._src_to_edges: dict = {}  # src -> [edge_id, ...]
+        self._tgt_to_edges: dict = {}  # tgt -> [edge_id, ...]
 
         # --- Composite vertex key support ---
-        self._vertex_key_fields = None   # tuple[str, ...] | None
+        self._vertex_key_fields = None  # tuple[str, ...] | None
         self._vertex_key_index: dict = {}  # key_tuple -> vertex_id
 
         # --- Sparse incidence matrix ---
@@ -184,7 +184,7 @@ class AnnNet(
         self._next_edge_id = 0
 
         # --- Slice state ---
-        self._slices: dict = {}   # slice_id -> {"vertices": set, "edges": set, "attributes": dict}
+        self._slices: dict = {}  # slice_id -> {"vertices": set, "edges": set, "attributes": dict}
         self._current_slice: str | None = None
         self._default_slice: str = "default"
         self.slice_edge_weights: defaultdict = defaultdict(dict)  # slice_id -> {edge_id: weight}
@@ -310,7 +310,9 @@ class AnnNet(
             stacklevel=3,
         )
 
-    def _resolve_vertex_insert_coord(self, layer_spec, *, vertex_ids=None, context="add_vertex") -> tuple:
+    def _resolve_vertex_insert_coord(
+        self, layer_spec, *, vertex_ids=None, context="add_vertex"
+    ) -> tuple:
         """Resolve layer placement for vertex insertion, using placeholder fallback when needed."""
         if layer_spec is not None:
             return self._make_layer_coord(layer_spec)
@@ -626,9 +628,15 @@ class AnnNet(
 
         if edge_entity_id not in self._edges:
             self._edges[edge_entity_id] = EdgeRecord(
-                src=None, tgt=None, weight=1.0, directed=False,
-                etype="vertex_edge", col_idx=-1,
-                ml_kind=None, ml_layers=None, direction_policy=None,
+                src=None,
+                tgt=None,
+                weight=1.0,
+                directed=False,
+                etype="vertex_edge",
+                col_idx=-1,
+                ml_kind=None,
+                ml_layers=None,
+                direction_policy=None,
             )
 
         slice = slice or self._current_slice
@@ -670,9 +678,15 @@ class AnnNet(
             raise TypeError(f"If src is dict, tgt must be dict or None, got {type(tgt).__name__!r}")
 
         # Supra-node binary edge: (vid, layer_coord) tuples
-        if (isinstance(src, tuple) and len(src) == 2 and isinstance(src[1], tuple)
-                and tgt is not None
-                and isinstance(tgt, tuple) and len(tgt) == 2 and isinstance(tgt[1], tuple)):
+        if (
+            isinstance(src, tuple)
+            and len(src) == 2
+            and isinstance(src[1], tuple)
+            and tgt is not None
+            and isinstance(tgt, tuple)
+            and len(tgt) == 2
+            and isinstance(tgt[1], tuple)
+        ):
             return frozenset({src}), frozenset({tgt}), None, "binary"
 
         # Plain string binary edge
@@ -690,7 +704,9 @@ class AnnNet(
                 return frozenset(src_seq), frozenset(), None, "hyper"
             if isinstance(tgt, (list, set, frozenset)):
                 return frozenset(src_seq), frozenset(tgt), None, "hyper"
-            raise TypeError(f"If src is list/set, tgt must be list/set or None, got {type(tgt).__name__!r}")
+            raise TypeError(
+                f"If src is list/set, tgt must be list/set or None, got {type(tgt).__name__!r}"
+            )
 
         raise TypeError(
             f"src must be str, tuple (supra-node), list, set, or dict; got {type(src).__name__!r}"
@@ -826,9 +842,7 @@ class AnnNet(
         if not isinstance(weight, (int, float)):
             raise TypeError(f"weight must be numeric, got {type(weight).__name__!r}")
         if flexible is not None and (
-            not isinstance(flexible, dict)
-            or "var" not in flexible
-            or "threshold" not in flexible
+            not isinstance(flexible, dict) or "var" not in flexible or "threshold" not in flexible
         ):
             raise ValueError(
                 "flexible must be a dict with keys {'var','threshold'[,'scope','above','tie']}"
@@ -837,19 +851,13 @@ class AnnNet(
         slice = slice if slice is not None else self._current_slice
 
         # ── 1. Parse inputs ────────────────────────────────────────────────
-        src_nodes, tgt_nodes, col_entries_literal, etype = self._parse_edge_inputs(
-            src, tgt, weight
-        )
+        src_nodes, tgt_nodes, col_entries_literal, etype = self._parse_edge_inputs(src, tgt, weight)
 
         if self.is_multilayer:
             non_supra = [
                 node
                 for node in (src_nodes | tgt_nodes)
-                if not (
-                    isinstance(node, tuple)
-                    and len(node) == 2
-                    and isinstance(node[1], tuple)
-                )
+                if not (isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple))
             ]
             if non_supra:
                 sample = ", ".join(repr(node) for node in non_supra[:3])
@@ -921,11 +929,7 @@ class AnnNet(
         for node in endpoint_set:
             ekey = self._resolve_entity_key(node)
             if ekey not in _ent:
-                if (
-                    isinstance(node, tuple)
-                    and len(node) == 2
-                    and isinstance(node[1], tuple)
-                ):
+                if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
                     self.add_vertex(node[0], layer=node[1], slice=slice)
                 else:
                     self.add_vertex(node, slice=slice)
@@ -966,18 +970,30 @@ class AnnNet(
         # ── 9. Infer ml_kind for supra-node edges ──────────────────────────
         ml_kind = None
         ml_layers = None
-        if (etype == "binary"
-                and isinstance(src, tuple) and len(src) == 2 and isinstance(src[1], tuple)
-                and isinstance(tgt, tuple) and len(tgt) == 2 and isinstance(tgt[1], tuple)):
+        if (
+            etype == "binary"
+            and isinstance(src, tuple)
+            and len(src) == 2
+            and isinstance(src[1], tuple)
+            and isinstance(tgt, tuple)
+            and len(tgt) == 2
+            and isinstance(tgt[1], tuple)
+        ):
             ml_kind = self._infer_ml_kind(src, tgt)
             ml_layers = (src[1], tgt[1])
 
         # ── 10. Store / update EdgeRecord ──────────────────────────────────
         if is_new:
             _edg[edge_id] = EdgeRecord(
-                src=src_store, tgt=tgt_store, weight=float(weight),
-                directed=is_dir, etype=rec_etype, col_idx=col_idx,
-                ml_kind=ml_kind, ml_layers=ml_layers, direction_policy=flexible,
+                src=src_store,
+                tgt=tgt_store,
+                weight=float(weight),
+                directed=is_dir,
+                etype=rec_etype,
+                col_idx=col_idx,
+                ml_kind=ml_kind,
+                ml_layers=ml_layers,
+                direction_policy=flexible,
             )
             self._adj.setdefault((src_store, tgt_store), []).append(edge_id)
             if src_store is not None:
@@ -1090,9 +1106,15 @@ class AnnNet(
             if eid not in self._entities:
                 self._register_edge_as_entity(eid)
             self._edges[eid] = EdgeRecord(
-                src=None, tgt=None, weight=1.0, directed=False,
-                etype="vertex_edge", col_idx=-1,
-                ml_kind=None, ml_layers=None, direction_policy=None,
+                src=None,
+                tgt=None,
+                weight=1.0,
+                directed=False,
+                etype="vertex_edge",
+                col_idx=-1,
+                ml_kind=None,
+                ml_layers=None,
+                direction_policy=None,
             )
 
         self._slices[lid]["edges"].add(eid)
@@ -1546,7 +1568,11 @@ class AnnNet(
                 return (M, M)
         else:
             u, v = rec.src, rec.tgt
-            d = rec.directed if rec.directed is not None else (True if self.directed is None else self.directed)
+            d = (
+                rec.directed
+                if rec.directed is not None
+                else (True if self.directed is None else self.directed)
+            )
             if d:
                 return (frozenset([u]), frozenset([v]))
             else:
@@ -1726,8 +1752,11 @@ class AnnNet(
         list[str]
             Vertex IDs.
         """
-        return [eid[0] if isinstance(eid, tuple) else eid
-                for eid, rec in self._entities.items() if rec.kind == "vertex"]
+        return [
+            eid[0] if isinstance(eid, tuple) else eid
+            for eid, rec in self._entities.items()
+            if rec.kind == "vertex"
+        ]
 
     def edges(self):
         """Get all edge IDs.
@@ -1764,7 +1793,8 @@ class AnnNet(
         """
         default_dir = True if self.directed is None else self.directed
         return [
-            eid for eid, rec in self._edges.items()
+            eid
+            for eid, rec in self._edges.items()
             if rec.col_idx >= 0 and (rec.directed if rec.directed is not None else default_dir)
         ]
 
@@ -1778,7 +1808,8 @@ class AnnNet(
         """
         default_dir = True if self.directed is None else self.directed
         return [
-            eid for eid, rec in self._edges.items()
+            eid
+            for eid, rec in self._edges.items()
             if rec.col_idx >= 0 and not (rec.directed if rec.directed is not None else default_dir)
         ]
 
@@ -2290,8 +2321,11 @@ class AnnNet(
                 "slices": len(self._slices),
             },
             # Store minimal state for comparison (uses existing AnnNet attributes)
-            "vertex_ids": set(eid[0] if isinstance(eid, tuple) else eid
-                          for eid, r in self._entities.items() if r.kind == "vertex"),
+            "vertex_ids": set(
+                eid[0] if isinstance(eid, tuple) else eid
+                for eid, r in self._entities.items()
+                if r.kind == "vertex"
+            ),
             "edge_ids": set(self._col_to_edge.values()),
             "slice_ids": set(self._slices.keys()),
         }
@@ -2346,8 +2380,11 @@ class AnnNet(
         return {
             "label": "current",
             "version": self._version,
-            "vertex_ids": set(eid[0] if isinstance(eid, tuple) else eid
-                          for eid, r in self._entities.items() if r.kind == "vertex"),
+            "vertex_ids": set(
+                eid[0] if isinstance(eid, tuple) else eid
+                for eid, r in self._entities.items()
+                if r.kind == "vertex"
+            ),
             "edge_ids": set(self._col_to_edge.values()),
             "slice_ids": set(self._slices.keys()),
         }
@@ -2398,8 +2435,7 @@ class AnnNet(
         """Elementary layer labels per aspect (empty dict for flat graphs)."""
         if self._aspects == ("_",):
             return {}
-        return {k: sorted(v) for k, v in self._layers.items()
-                if k != "_"}
+        return {k: sorted(v) for k, v in self._layers.items() if k != "_"}
 
     @elem_layers.setter
     def elem_layers(self, val: dict[str, list[str]]):
@@ -2448,7 +2484,9 @@ class AnnNet(
         self._row_to_entity.clear()
         self._vid_to_ekeys.clear()
         for entity_id, row_idx in dict(mapping).items():
-            self._register_entity_record(entity_id, EntityRecord(row_idx=int(row_idx), kind="vertex"))
+            self._register_entity_record(
+                entity_id, EntityRecord(row_idx=int(row_idx), kind="vertex")
+            )
 
     @property
     def idx_to_entity(self) -> dict:

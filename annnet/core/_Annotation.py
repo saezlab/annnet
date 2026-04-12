@@ -43,6 +43,7 @@ if pl is not None:
 
 _NUMERIC_DTYPES = _NUMERIC_PL_DTYPES if is_polars else _NUMERIC_NW_DTYPES
 
+
 class AttributesClass:
     # Attributes & weights
 

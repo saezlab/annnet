@@ -77,7 +77,9 @@ class _LazyGTProxy(_LazyProxyBase):
             raise AttributeError(
                 f"G.gt attribute '{name}' is ambiguous across namespaces; call it via G.gt.<namespace>.{name}(...)"
             )
-        raise AttributeError(f"G.gt has no attribute '{name}'. Only namespaces: {list(self._namespaces.keys())}")
+        raise AttributeError(
+            f"G.gt has no attribute '{name}'. Only namespaces: {list(self._namespaces.keys())}"
+        )
 
     def __dir__(self):
         names = set(super().__dir__()) | set(self._namespaces.keys())
@@ -108,11 +110,7 @@ class _LazyGTProxy(_LazyProxyBase):
     def _coerce_vertices(self, bound, kwargs, gtG):
         label_field = self._infer_label_field()
         id_map = self._build_id_map(gtG)
-        vertex_ids = {
-            ekey[0]
-            for ekey, rec in self._G._entities.items()
-            if rec.kind == "vertex"
-        }
+        vertex_ids = {ekey[0] for ekey, rec in self._G._entities.items() if rec.kind == "vertex"}
 
         def map_one(x):
             # AnnNet internal id?

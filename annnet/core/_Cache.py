@@ -5,6 +5,7 @@ import time
 from typing import TYPE_CHECKING
 
 import narwhals as nw
+
 from ._helpers import EntityRecord
 
 try:
@@ -449,7 +450,9 @@ class Operations:
                         if set(h["members"]).issubset(V):
                             keep.add(eid)
                     else:
-                        if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(V):
+                        if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(
+                            V
+                        ):
                             keep.add(eid)
                 else:
                     s, t = rec.src, rec.tgt
@@ -554,8 +557,10 @@ class Operations:
                 if rec.tgt is not None:
                     rec.src, rec.tgt = rec.tgt, rec.src
                 continue
-            edge_is_directed = rec.directed if rec.directed is not None else (
-                True if g.directed is None else g.directed
+            edge_is_directed = (
+                rec.directed
+                if rec.directed is not None
+                else (True if g.directed is None else g.directed)
             )
             if edge_is_directed:
                 rec.src, rec.tgt = rec.tgt, rec.src
@@ -717,9 +722,9 @@ class Operations:
                         "target": rec.tgt,
                         "edge_id": eid,
                         "edge_type": rec.etype,
-                        "edge_directed": rec.directed if rec.directed is not None else (
-                            True if self.directed is None else self.directed
-                        ),
+                        "edge_directed": rec.directed
+                        if rec.directed is not None
+                        else (True if self.directed is None else self.directed),
                         "weight": w,
                         "attributes": attrs,
                     }
@@ -843,8 +848,7 @@ class Operations:
         # 3) Clone entity/index mappings
         # ---------------------------------------------------------------
         new._entities = {
-            k: EntityRecord(row_idx=v.row_idx, kind=v.kind)
-            for k, v in self._entities.items()
+            k: EntityRecord(row_idx=v.row_idx, kind=v.kind) for k, v in self._entities.items()
         }
         new._row_to_entity = dict(self._row_to_entity)
         new._rebuild_entity_indexes()

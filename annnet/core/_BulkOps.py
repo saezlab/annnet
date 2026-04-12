@@ -638,8 +638,8 @@ class BulkOps:
         _M_zero_keys: list = []
         # Batch slice membership: collect per-slice edge IDs and vertex pairs.
         # Applied after the loop with single bulk set.update() calls.
-        _slice_eids: dict = {}   # slice_id -> list[edge_id]
-        _slice_vids: dict = {}   # slice_id -> list[vid]
+        _slice_eids: dict = {}  # slice_id -> list[edge_id]
+        _slice_vids: dict = {}  # slice_id -> list[vid]
         _slice_weights: list = []  # (slice_id, edge_id, weight) for per-slice weights
 
         for d in norm:
@@ -724,9 +724,15 @@ class BulkOps:
                     rec.col_idx = col
                 else:
                     self._edges[edge_id] = EdgeRecord(
-                        src=s, tgt=t, weight=w, directed=is_dir,
-                        etype="binary", col_idx=col,
-                        ml_kind=None, ml_layers=None, direction_policy=None,
+                        src=s,
+                        tgt=t,
+                        weight=w,
+                        directed=is_dir,
+                        etype="binary",
+                        col_idx=col,
+                        ml_kind=None,
+                        ml_layers=None,
+                        direction_policy=None,
                     )
                 _M_writes[(s_idx, col)] = fw
                 if s != t:
@@ -952,9 +958,15 @@ class BulkOps:
                 col = len(self._col_to_edge)
                 self._col_to_edge[col] = e_id
                 rec = EdgeRecord(
-                    src=None, tgt=None, weight=1.0, directed=False,
-                    etype="hyper", col_idx=col,
-                    ml_kind=None, ml_layers=None, direction_policy=None,
+                    src=None,
+                    tgt=None,
+                    weight=1.0,
+                    directed=False,
+                    etype="hyper",
+                    col_idx=col,
+                    ml_kind=None,
+                    ml_layers=None,
+                    direction_policy=None,
                 )
                 self._edges[e_id] = rec
 
@@ -1043,7 +1055,9 @@ class BulkOps:
             self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
         L = self._slices[slice]
 
-        add_edges = {eid for eid in edge_ids if eid in self._edges and self._edges[eid].col_idx >= 0}
+        add_edges = {
+            eid for eid in edge_ids if eid in self._edges and self._edges[eid].col_idx >= 0
+        }
         if not add_edges:
             return
 
@@ -1127,9 +1141,15 @@ class BulkOps:
 
             if eid not in self._edges:
                 self._edges[eid] = EdgeRecord(
-                    src=None, tgt=None, weight=1.0, directed=False,
-                    etype="vertex_edge", col_idx=-1,
-                    ml_kind=None, ml_layers=None, direction_policy=None,
+                    src=None,
+                    tgt=None,
+                    weight=1.0,
+                    directed=False,
+                    etype="vertex_edge",
+                    col_idx=-1,
+                    ml_kind=None,
+                    ml_layers=None,
+                    direction_policy=None,
                 )
 
         if new_rows:
@@ -1313,7 +1333,12 @@ class BulkOps:
         # Adjacency + primary record cleanup
         for eid in drop:
             rec = self._edges.pop(eid, None)
-            if rec is not None and rec.etype != "hyper" and rec.src is not None and rec.tgt is not None:
+            if (
+                rec is not None
+                and rec.etype != "hyper"
+                and rec.src is not None
+                and rec.tgt is not None
+            ):
                 s, t = rec.src, rec.tgt
                 lst = self._adj.get((s, t))
                 if lst:
@@ -1387,9 +1412,7 @@ class BulkOps:
             self._remove_edges_bulk(drop_es)
 
         # 3) Build row keep list and old->new map
-        keep_idx = sorted(
-            rec.row_idx for eid, rec in self._entities.items() if eid not in drop_vs
-        )
+        keep_idx = sorted(rec.row_idx for eid, rec in self._entities.items() if eid not in drop_vs)
         old_to_new = {old: new for new, old in enumerate(keep_idx)}
         new_rows = len(keep_idx)
 
@@ -1420,13 +1443,14 @@ class BulkOps:
 
         # 6) Clean vertex attributes and slice memberships
         drop_vertex_ids = {
-            ent[0] if isinstance(ent, tuple) and len(ent) == 2 else ent
-            for ent in drop_vs
+            ent[0] if isinstance(ent, tuple) and len(ent) == 2 else ent for ent in drop_vs
         }
         va = self.vertex_attributes
         if va is not None and hasattr(va, "columns") and "vertex_id" in va.columns:
             if pl is not None and isinstance(va, pl.DataFrame) and va.height:
-                self.vertex_attributes = va.filter(~pl.col("vertex_id").is_in(list(drop_vertex_ids)))
+                self.vertex_attributes = va.filter(
+                    ~pl.col("vertex_id").is_in(list(drop_vertex_ids))
+                )
             else:
                 import narwhals as nw
 

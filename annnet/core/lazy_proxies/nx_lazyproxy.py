@@ -298,10 +298,17 @@ class _LazyNXProxy(_LazyProxyBase):
         import warnings
 
         msgs = []
-        if any(rec.etype == "hyper" for rec in self._G._edges.values()) and hyperedge_mode != "expand":
+        if (
+            any(rec.etype == "hyper" for rec in self._G._edges.values())
+            and hyperedge_mode != "expand"
+        ):
             msgs.append("hyperedges dropped (hyperedge_mode='skip')")
         slices_dict = getattr(self._G, "_slices", None)
-        if isinstance(slices_dict, dict) and len(slices_dict) > 1 and (slice is None and not slices):
+        if (
+            isinstance(slices_dict, dict)
+            and len(slices_dict) > 1
+            and (slice is None and not slices)
+        ):
             msgs.append("multiple slices flattened into single NX graph")
         if manifest is None:
             msgs.append("no manifest provided; round-trip fidelity not guaranteed")

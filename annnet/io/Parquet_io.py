@@ -9,14 +9,14 @@ if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
 from ..adapters._utils import (
-    _deserialize_endpoint,
     _deserialize_edge_layers,
+    _deserialize_endpoint,
     _deserialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
     _deserialize_VM,
     _safe_df_to_rows,
-    _serialize_endpoint,
     _serialize_edge_layers,
+    _serialize_endpoint,
     _serialize_layer_tuple_attrs,
     _serialize_node_layer_attrs,
     _serialize_VM,
@@ -388,9 +388,7 @@ def to_parquet(graph: AnnNet, path):
             "VM": _serialize_VM(getattr(graph, "_VM", set())),
             "edge_kind": dict(getattr(graph, "edge_kind", {})),
             "edge_layers": _serialize_edge_layers(getattr(graph, "edge_layers", {})),
-            "node_layer_attrs": _serialize_node_layer_attrs(
-                getattr(graph, "_state_attrs", {})
-            ),
+            "node_layer_attrs": _serialize_node_layer_attrs(getattr(graph, "_state_attrs", {})),
             "layer_tuple_attrs": _serialize_layer_tuple_attrs(getattr(graph, "_layer_attrs", {})),
             "layer_attributes": _safe_df_to_rows(getattr(graph, "layer_attributes", None)),
         },

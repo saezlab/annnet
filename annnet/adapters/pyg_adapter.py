@@ -304,7 +304,7 @@ def _process_hyperedge_expand(
                     graph, eid, str(t), str(s), data, manifest, device, v_attrs_map, e_attrs_map
                 )
     else:
-        members = list(hdef.get("members", []))
+        members = list(rec.src or [])
         for i in range(len(members)):
             for j in range(i + 1, len(members)):
                 _add_expanded_edge(

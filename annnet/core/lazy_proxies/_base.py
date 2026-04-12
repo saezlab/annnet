@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class _LazyProxyBase:
     VERTEX_LABEL_FIELDS = ("name", "label", "title", "slug", "external_id", "string_id")
 
-    _G: "AnnNet"
+    _G: AnnNet
 
     def _freeze_cache_value(self, value):
         if value is None:

@@ -758,9 +758,7 @@ def _ingest_hyperedge(
             for ent in members:
                 G.add_vertex(ent)
             for L in slice:
-                G.add_edge(
-                    src=list(members), slice=L, directed=False, weight=weight, **pure_attrs
-                )
+                G.add_edge(src=list(members), slice=L, directed=False, weight=weight, **pure_attrs)
         else:
             head = _split_set(row[hcol]) if hcol else set()
             tail = _split_set(row[tcol]) if tcol else set()
@@ -768,7 +766,12 @@ def _ingest_hyperedge(
                 G.add_vertex(ent)
             for L in slice:
                 G.add_edge(
-                    src=list(head), tgt=list(tail), slice=L, directed=True, weight=weight, **pure_attrs
+                    src=list(head),
+                    tgt=list(tail),
+                    slice=L,
+                    directed=True,
+                    weight=weight,
+                    **pure_attrs,
                 )
 
 
@@ -834,9 +837,7 @@ def _ingest_incidence(
                     src=list(pos), tgt=list(neg), directed=True, weight=1.0, slice=default_slice
                 )
             else:
-                G.add_edge(
-                    src=list(pos or neg), directed=False, weight=1.0, slice=default_slice
-                )
+                G.add_edge(src=list(pos or neg), directed=False, weight=1.0, slice=default_slice)
 
 
 def _ingest_adjacency(

@@ -36,10 +36,10 @@ from ._utils import (
     _rows_like,
     _rows_to_df,
     _safe_df_to_rows,
-    _serialize_value,
     _serialize_edge_layers,
     _serialize_layer_tuple_attrs,
     _serialize_node_layer_attrs,
+    _serialize_value,
     _serialize_VM,
     load_manifest,
     save_manifest,
@@ -55,6 +55,7 @@ def _time(label, timings):
 
 
 # ---------------
+
 
 def _export_legacy(
     graph: AnnNet,
@@ -597,6 +598,7 @@ def to_nx(
 
     return nxG, manifest
 
+
 def from_nx(
     nxG,
     manifest,
@@ -1037,9 +1039,7 @@ def from_nx_only(
                     pass
             if directed:
                 try:
-                    H.add_edge(
-                        src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True
-                    )
+                    H.add_edge(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
                 except Exception:
                     pass
                 H.set_edge_attrs(

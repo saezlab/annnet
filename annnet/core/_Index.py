@@ -83,8 +83,7 @@ class IndexManager:
         -------
         list[int]
         """
-        return [self._G._entities[self._G._resolve_entity_key(eid)].row_idx
-                for eid in entity_ids]
+        return [self._G._entities[self._G._resolve_entity_key(eid)].row_idx for eid in entity_ids]
 
     def rows_to_entities(self, rows):
         """Batch convert row indices to entity IDs.
@@ -374,6 +373,7 @@ class IndexMapping:
         """INTERNAL: Ensure a row for ``vertex_id`` exists in the vertex attribute DF."""
         try:
             import sys as _sys
+
             if isinstance(vertex_id, str):
                 vertex_id = _sys.intern(vertex_id)
         except Exception:
@@ -397,6 +397,7 @@ class IndexMapping:
                             ids = set(df.get_column("vertex_id").to_list())
                     else:
                         import narwhals as nw
+
                         ndf = nw.from_native(df)
                         try:
                             ids = set(nw.to_native(ndf.select("vertex_id")).to_series().to_list())
@@ -426,12 +427,14 @@ class IndexMapping:
         if is_empty:
             try:
                 import polars as pl
+
                 self.vertex_attributes = pl.DataFrame(
                     {"vertex_id": [vertex_id]}, schema={"vertex_id": pl.Utf8}
                 )
             except Exception:
                 try:
                     import pandas as pd
+
                     self.vertex_attributes = pd.DataFrame({"vertex_id": [vertex_id]})
                 except Exception:
                     raise RuntimeError(
@@ -464,9 +467,11 @@ class IndexMapping:
         else:
             try:
                 import pandas as pd
+
                 self.vertex_attributes = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
             except Exception:
                 import narwhals as nw
+
                 ndf = nw.from_native(df)
                 nrow = nw.from_native(pd.DataFrame([row]))
                 self.vertex_attributes = nw.to_native(nw.concat([ndf, nrow], how="vertical"))

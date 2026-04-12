@@ -403,9 +403,7 @@ def from_dataframes(
                     if is_directed:
                         head = [v for v, r in zip(data["vertices"], data["roles"]) if r == "head"]
                         tail = [v for v, r in zip(data["vertices"], data["roles"]) if r == "tail"]
-                        G.add_edge(
-                            src=head, tgt=tail, edge_id=eid, directed=True, weight=weight
-                        )
+                        G.add_edge(src=head, tgt=tail, edge_id=eid, directed=True, weight=weight)
                     else:
                         G.add_edge(
                             src=data["vertices"],
