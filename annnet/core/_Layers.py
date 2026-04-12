@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import copy
 import itertools
+import warnings
 from typing import TYPE_CHECKING
 
 import narwhals as nw
@@ -15,7 +17,7 @@ import scipy.sparse as sp
 if TYPE_CHECKING:
     from .graph import AnnNet
 
-from ._helpers import build_dataframe_from_rows
+from ._helpers import EdgeRecord, EntityRecord, build_dataframe_from_rows
 
 
 class LayerManager:
@@ -51,6 +53,14 @@ class LayerManager:
         """
         return {a: list(v) for a, v in self._G.elem_layers.items()}
 
+    def set_aspects(self, aspects):
+        """Declare the aspect dimensions for the graph."""
+        return self._G.set_aspects(aspects)
+
+    def set_elementary_layers(self, layers_by_aspect: dict[str, list[str]]):
+        """Declare concrete elementary layer values for existing aspects."""
+        return self._G.set_elementary_layers(layers_by_aspect)
+
     def layer_tuples(self):
         """List all aspect-tuples (Cartesian product).
 
@@ -60,6 +70,10 @@ class LayerManager:
             All layer tuples in configured order.
         """
         return list(self._G.iter_layers())
+
+    def layers(self):
+        """List all realized layer tuples."""
+        return self.layer_tuples()
 
     def tuple_id(self, aa):
         """Canonical string id for a layer tuple.
@@ -78,6 +92,10 @@ class LayerManager:
         if len(self._G.aspects) == 1:
             return aa[0]
         return "×".join(aa)
+
+    def layer_id(self, aa):
+        """Canonical string id for a layer tuple."""
+        return self.tuple_id(aa)
 
     # ==================== Presence utilities ====================
 
@@ -226,6 +244,10 @@ class LayerManager:
         """
         return self._G._elem_layer_id(aspect, label)
 
+    def elementary_layer_id(self, aspect: str, label: str) -> str:
+        """Canonical id for an elementary layer."""
+        return self.elem_layer_id(aspect, label)
+
     def set_elem_layer_attrs(self, aspect: str, label: str, **attrs):
         """Upsert attributes for an elementary layer.
 
@@ -244,6 +266,10 @@ class LayerManager:
         """
         return self._G.set_elementary_layer_attrs(aspect, label, **attrs)
 
+    def set_elementary_layer_attrs(self, aspect: str, label: str, **attrs):
+        """Upsert attributes for an elementary layer."""
+        return self.set_elem_layer_attrs(aspect, label, **attrs)
+
     def elem_layer_attrs(self, aspect: str, label: str) -> dict:
         """Read attributes for an elementary layer.
 
@@ -259,6 +285,10 @@ class LayerManager:
         dict
         """
         return self._G.get_elementary_layer_attrs(aspect, label)
+
+    def elementary_layer_attrs(self, aspect: str, label: str) -> dict:
+        """Read attributes for an elementary layer."""
+        return self.elem_layer_attrs(aspect, label)
 
     # ==================== Algebra on Kivela layers =========================
 
@@ -613,11 +643,10 @@ class LayerManager:
         set[str]
         """
         aa = tuple(aa)
-        # intra appear in AnnNet.edge_kind with edge_layers[eid] == aa
         return {
             eid
-            for eid, k in self._G.edge_kind.items()
-            if k == "intra" and self._G.edge_layers[eid] == aa
+            for eid, rec in self._G._edges.items()
+            if rec.ml_kind == "intra" and rec.ml_layers == aa
         }
 
     def inter_edges_between(self, aa, bb):
@@ -638,8 +667,8 @@ class LayerManager:
         bb = tuple(bb)
         return {
             eid
-            for eid, k in self._G.edge_kind.items()
-            if k == "inter" and self._G.edge_layers[eid] == (aa, bb)
+            for eid, rec in self._G._edges.items()
+            if rec.ml_kind == "inter" and rec.ml_layers == (aa, bb)
         }
 
     def coupling_edges_between(self, aa, bb):
@@ -660,8 +689,8 @@ class LayerManager:
         bb = tuple(bb)
         return {
             eid
-            for eid, k in self._G.edge_kind.items()
-            if k == "coupling" and self._G.edge_layers[eid] == (aa, bb)
+            for eid, rec in self._G._edges.items()
+            if rec.ml_kind == "coupling" and rec.ml_layers == (aa, bb)
         }
 
     # ==================== Supra / blocks ====================
@@ -769,13 +798,51 @@ class LayerManager:
             "coupling": self._G.build_coupling_block(layers),
         }
 
+    def flatten(self):
+        """Flatten the owner graph in-place and return it."""
+        return self._G.flatten_layers()
+
 
 class LayerClass:
     # Multilayers
 
     ## Aspects & layers
 
-    def set_aspects(self, aspects: list[str], elem_layers: dict[str, list[str]]):
+    def _placeholder_layer_referenced(self) -> bool:
+        placeholder = self._placeholder_layer_coord()
+        if any(ekey[1] == placeholder for ekey in self._entities):
+            return True
+        if any((isinstance(key, tuple) and len(key) == 2 and key[1] == placeholder) for key in self._VM):
+            return True
+        if any(key[1] == placeholder for key in self._state_attrs):
+            return True
+        for rec in self._edges.values():
+            layers = rec.ml_layers
+            if layers is None:
+                continue
+            if layers == placeholder:
+                return True
+            if (
+                isinstance(layers, tuple)
+                and len(layers) == 2
+                and all(isinstance(x, tuple) for x in layers)
+                and placeholder in layers
+            ):
+                return True
+        return False
+
+    def _drop_unused_placeholder_layers(self) -> None:
+        if self._aspects == ("_",):
+            return
+        if self._placeholder_layer_referenced():
+            return
+        if not all(any(val != "_" for val in self._layers.get(aspect, set())) for aspect in self._aspects):
+            return
+        for aspect in self._aspects:
+            self._layers.get(aspect, set()).discard("_")
+        self._rebuild_all_layers_cache()
+
+    def set_aspects(self, aspects, elem_layers: dict[str, list[str]] | None = None):
         """Define multi-aspect structure.
 
         Parameters
@@ -800,12 +867,76 @@ class LayerClass:
         G.set_aspects(["time", "relation"], {"time": ["t1", "t2"], "relation": ["F", "A"]})
         ```
         """
+        if isinstance(aspects, dict):
+            if elem_layers is not None:
+                raise ValueError("Pass either aspects=list[...] or aspects={aspect: layers}, not both.")
+            elem_layers = aspects
+            aspects = list(aspects.keys())
+
         if not aspects:
             raise ValueError("aspects must be a non-empty list")
-        # normalize & copy
-        self.aspects = list(aspects)
-        self.elem_layers = {a: list(elem_layers.get(a, [])) for a in self.aspects}
+        aspects = list(aspects)
+        elem_layers = elem_layers or {}
+        old_aspects = tuple(getattr(self, "_aspects", ("_",)))
+        old_placeholder = ("_",) if old_aspects == ("_",) else tuple("_" for _ in old_aspects)
+        new_placeholder = tuple("_" for _ in aspects)
+
+        had_existing_flat_entities = bool(self._entities) and old_aspects == ("_",)
+
+        self._aspects = tuple(aspects)
+        self._layers = {}
+        for aspect in aspects:
+            values = set(elem_layers.get(aspect, []))
+            values.add("_")
+            self._layers[aspect] = values
+
+        if had_existing_flat_entities:
+            self._entities = {
+                (vid, new_placeholder if coord == old_placeholder else coord): rec
+                for (vid, coord), rec in self._entities.items()
+            }
+            self._state_attrs = {
+                (vid, new_placeholder if coord == old_placeholder else coord): attrs
+                for (vid, coord), attrs in self._state_attrs.items()
+            }
+            self._VM = {
+                (vid, new_placeholder if coord == old_placeholder else coord)
+                for (vid, coord) in self._VM
+            }
+            self._nl_to_row = {
+                (vid, new_placeholder if coord == old_placeholder else coord): row
+                for (vid, coord), row in self._nl_to_row.items()
+            }
+            self._row_to_nl = [
+                (vid, new_placeholder if coord == old_placeholder else coord)
+                for (vid, coord) in self._row_to_nl
+            ]
+            self._rebuild_entity_indexes()
+            warnings.warn(
+                f"Declared aspects {tuple(aspects)!r}; existing flat vertices were reassigned "
+                f"to placeholder layer {new_placeholder!r}. Set explicit layer coordinates if needed.",
+                UserWarning,
+                stacklevel=2,
+            )
+        else:
+            self._rebuild_entity_indexes()
+
         self._rebuild_all_layers_cache()
+        self._drop_unused_placeholder_layers()
+
+    def set_elementary_layers(self, layers_by_aspect: dict[str, list[str]]):
+        """Declare concrete elementary layer values for existing aspects."""
+        if self._aspects == ("_",):
+            raise ValueError("No aspects are configured; call layers.set_aspects(...) first.")
+        for aspect, values in layers_by_aspect.items():
+            if aspect not in self._aspects:
+                raise KeyError(f"Unknown aspect {aspect!r}. Valid: {list(self._aspects)!r}")
+            labels = {str(v) for v in values}
+            if not labels:
+                raise ValueError(f"Aspect {aspect!r} must receive at least one elementary layer value.")
+            self._layers.setdefault(aspect, set()).update(labels)
+        self._rebuild_all_layers_cache()
+        self._drop_unused_placeholder_layers()
 
     def _rebuild_all_layers_cache(self):
         if not self.aspects:
@@ -816,6 +947,178 @@ class LayerClass:
         if not all(spaces) and self.aspects:
             return  # No valid Cartesian product possible
         self._all_layers = tuple(itertools.product(*spaces)) if all(spaces) else ()
+
+    def flatten_layers(self):
+        """Remove multilayer structure in-place and project to a flat graph.
+
+        Returns
+        -------
+        AnnNet
+            The mutated graph itself.
+
+        Notes
+        -----
+        This projects vertex identities from ``(vertex_id, layer_tuple)`` to bare
+        ``vertex_id`` strings and drops multilayer-only metadata such as aspects,
+        layer registries, supra-node attributes, and multilayer edge roles.
+        """
+        if self._aspects == ("_",):
+            return self
+
+        def _clone_table(df):
+            if df is None:
+                return None
+            if hasattr(df, "clone"):
+                return df.clone()
+            if hasattr(df, "copy"):
+                return df.copy()
+            return df
+
+        def _project_node(node):
+            if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
+                return node[0]
+            return node
+
+        def _project_members(members):
+            if members is None:
+                return None
+            if isinstance(members, (set, frozenset, list, tuple)):
+                return sorted({_project_node(m) for m in members})
+            return _project_node(members)
+
+        history_flag = getattr(self, "_history_enabled", True)
+        self._history_enabled = False
+        try:
+            flat = self.__class__(
+                directed=self.directed,
+                annotations_backend=getattr(self, "_annotations_backend", "polars"),
+            )
+            flat._history_enabled = False
+
+            flat.graph_attributes = dict(self.graph_attributes)
+            flat._vertex_key_fields = self._vertex_key_fields
+            flat._vertex_key_index = dict(self._vertex_key_index)
+            flat._legacy_single_aspect_enabled = self._legacy_single_aspect_enabled
+            flat.vertex_aligned = False
+            flat._default_slice = self._default_slice
+            flat._current_slice = self._current_slice
+
+            for slice_id, meta in self._slices.items():
+                flat._slices[slice_id] = {
+                    "vertices": {v[0] if isinstance(v, tuple) and len(v) == 2 else v for v in meta["vertices"]},
+                    "edges": set(meta["edges"]),
+                    "attributes": dict(meta["attributes"]),
+                }
+
+            vertex_ids = sorted(
+                {
+                    ekey[0]
+                    for ekey, rec in self._entities.items()
+                    if rec.kind == "vertex"
+                }
+            )
+            for vid in vertex_ids:
+                flat.add_vertex(vid)
+
+            edge_entity_ids = sorted(
+                {
+                    ekey[0]
+                    for ekey, rec in self._entities.items()
+                    if rec.kind == "edge_entity"
+                }
+            )
+            edge_entity_id_set = set(edge_entity_ids)
+            for eid in edge_entity_ids:
+                if flat._resolve_entity_key(eid) not in flat._entities:
+                    flat.add_edge_entity(eid)
+
+            edge_items = sorted(
+                self._edges.items(),
+                key=lambda item: (
+                    item[1].col_idx < 0,
+                    item[1].col_idx if item[1].col_idx >= 0 else 10**12,
+                    item[0],
+                ),
+            )
+            for eid, rec in edge_items:
+                if rec.col_idx < 0 and rec.src is None and rec.tgt is None:
+                    if eid not in flat._edges:
+                        flat.add_edge_entity(eid)
+                    continue
+
+                if rec.etype == "hyper":
+                    src = _project_members(rec.src) or []
+                    tgt = _project_members(rec.tgt) if rec.tgt is not None else None
+                    flat.add_edge(
+                        src=src,
+                        tgt=tgt,
+                        edge_id=eid,
+                        weight=rec.weight,
+                        directed=rec.directed,
+                    )
+                else:
+                    flat.add_edge(
+                        _project_node(rec.src),
+                        _project_node(rec.tgt),
+                        edge_id=eid,
+                        weight=rec.weight,
+                        directed=rec.directed,
+                        as_entity=(eid in edge_entity_id_set),
+                    )
+                flat_rec = flat._edges.get(eid)
+                if flat_rec is not None and rec.direction_policy is not None:
+                    flat_rec.direction_policy = copy.deepcopy(rec.direction_policy)
+
+            flat.slice_edge_weights = {lid: dict(weights) for lid, weights in self.slice_edge_weights.items()}
+            flat.vertex_attributes = _clone_table(self.vertex_attributes)
+            flat.edge_attributes = _clone_table(self.edge_attributes)
+            flat.slice_attributes = _clone_table(self.slice_attributes)
+            flat.edge_slice_attributes = _clone_table(self.edge_slice_attributes)
+
+            # Keep the flat graph's empty layer table/schema and drop multilayer-only state.
+            flat._aspect_attrs = {}
+            flat._layer_attrs = {}
+            flat._state_attrs = {}
+            flat._all_layers = ()
+            flat._rebuild_entity_indexes()
+
+            self._aspects = flat._aspects
+            self._layers = flat._layers
+            self._entities = flat._entities
+            self._row_to_entity = flat._row_to_entity
+            self._vid_to_ekeys = flat._vid_to_ekeys
+            self._edges = flat._edges
+            self._col_to_edge = flat._col_to_edge
+            self._adj = flat._adj
+            self._src_to_edges = flat._src_to_edges
+            self._tgt_to_edges = flat._tgt_to_edges
+            self._matrix = flat._matrix
+            self._csr_cache = None
+            self._next_edge_id = flat._next_edge_id
+            self._slices = flat._slices
+            self._current_slice = flat._current_slice
+            self._default_slice = flat._default_slice
+            self.slice_edge_weights = flat.slice_edge_weights
+            self.vertex_attributes = flat.vertex_attributes
+            self.edge_attributes = flat.edge_attributes
+            self.slice_attributes = flat.slice_attributes
+            self.edge_slice_attributes = flat.edge_slice_attributes
+            self.layer_attributes = flat.layer_attributes
+            self._all_layers = flat._all_layers
+            self.vertex_aligned = flat.vertex_aligned
+            self._V = flat._V
+            self._VM = flat._VM
+            self._nl_to_row = flat._nl_to_row
+            self._row_to_nl = flat._row_to_nl
+            self._aspect_attrs = flat._aspect_attrs
+            self._layer_attrs = flat._layer_attrs
+            self._state_attrs = flat._state_attrs
+            self._vertex_key_fields = flat._vertex_key_fields
+            self._vertex_key_index = flat._vertex_key_index
+            self._legacy_single_aspect_enabled = flat._legacy_single_aspect_enabled
+        finally:
+            self._history_enabled = history_flag
+        return self
 
     def add_elementary_layer(self, aspect: str, label: str):
         """
@@ -832,14 +1135,15 @@ class LayerClass:
         -------
         None
         """
-        if aspect not in self.aspects:
+        if aspect not in self._aspects:
             raise KeyError(f"Unknown aspect {aspect!r}")
 
-        if label in self.elem_layers[aspect]:
+        if label in self._layers[aspect]:
             return  # already exists
 
-        self.elem_layers[aspect].append(label)
+        self._layers[aspect].add(label)
         self._rebuild_all_layers_cache()
+        self._drop_unused_placeholder_layers()
 
     ## Presence (V_M)
 
@@ -865,7 +1169,9 @@ class LayerClass:
             If ``layer_tuple`` is invalid for the configured aspects.
         """
         self._validate_layer_tuple(layer_tuple)
-        if self.entity_types.get(u) != "vertex":
+        ekey = self._resolve_entity_key(u)
+        rec = self._entities.get(ekey)
+        if rec is None or rec.kind != "vertex":
             raise KeyError(f"'{u}' is not a vertex")
         self._V.add(u)
         self._VM.add((u, tuple(layer_tuple)))
@@ -1017,14 +1323,14 @@ class LayerClass:
     ## Validation helpers
 
     def _validate_layer_tuple(self, aa: tuple[str, ...]):
-        if not self.aspects:
+        if self._aspects == ("_",):
             raise ValueError("no aspects are configured; call set_aspects(...) first")
-        if len(aa) != len(self.aspects):
+        if len(aa) != len(self._aspects):
             raise ValueError(
-                f"layer tuple rank mismatch: expected {len(self.aspects)}, got {len(aa)}"
+                f"layer tuple rank mismatch: expected {len(self._aspects)}, got {len(aa)}"
             )
-        for i, a in enumerate(self.aspects):
-            allowed = self.elem_layers.get(a, [])
+        for i, a in enumerate(self._aspects):
+            allowed = self._layers.get(a, set())
             if aa[i] not in allowed:
                 raise KeyError(f"unknown elementary layer {aa[i]!r} for aspect {a!r}")
 
@@ -1045,7 +1351,7 @@ class LayerClass:
         ValueError
             If not in single-aspect mode.
         """
-        if len(self.aspects) != 1:
+        if len(self._aspects) != 1:
             raise ValueError("layer_id_to_tuple is only valid when exactly 1 aspect is configured")
         return (layer_id,)
 
@@ -1070,7 +1376,7 @@ class LayerClass:
             Canonical id (single label for 1 aspect, or ``"×"``-joined).
         """
         aa = tuple(aa)
-        if len(self.aspects) == 1:
+        if len(self._aspects) == 1:
             return aa[0]
         return "×".join(aa)
 
@@ -1083,12 +1389,12 @@ class LayerClass:
         This is the key used in `layer_attributes.layer_id`:
             layer_id = "{aspect}_{label}"
         """
-        if aspect not in self.aspects:
-            raise KeyError(f"unknown aspect {aspect!r}; known: {self.aspects!r}")
-        allowed = self.elem_layers.get(aspect, [])
+        if aspect not in self._aspects:
+            raise KeyError(f"unknown aspect {aspect!r}; known: {list(self._aspects)!r}")
+        allowed = self._layers.get(aspect, set())
         if label not in allowed:
             raise KeyError(
-                f"unknown elementary layer {label!r} for aspect {aspect!r}; known: {allowed!r}"
+                f"unknown elementary layer {label!r} for aspect {aspect!r}; known: {sorted(allowed)!r}"
             )
         return f"{aspect}_{label}"
 
@@ -1201,8 +1507,8 @@ class LayerClass:
         -------
         None
         """
-        if aspect not in self.aspects:
-            raise KeyError(f"unknown aspect {aspect!r}; known: {self.aspects!r}")
+        if aspect not in self._aspects:
+            raise KeyError(f"unknown aspect {aspect!r}; known: {list(self._aspects)!r}")
         d = self._aspect_attrs.setdefault(aspect, {})
         d.update(attrs)
 
@@ -1218,7 +1524,7 @@ class LayerClass:
         -------
         dict
         """
-        if aspect not in self.aspects:
+        if aspect not in self._aspects:
             raise KeyError(f"unknown aspect {aspect!r}")
         return dict(self._aspect_attrs.get(aspect, {}))
 
@@ -1282,7 +1588,7 @@ class LayerClass:
         aa = tuple(layer_tuple)
         self._assert_presence(u, aa)  # enforce that (u,aa) exists in V_M
         key = (u, aa)
-        d = self._vertex_layer_attrs.setdefault(key, {})
+        d = self._state_attrs.setdefault(key, {})
         d.update(attrs)
 
     def get_vertex_layer_attrs(self, u: str, layer_tuple: tuple[str, ...]) -> dict:
@@ -1302,7 +1608,7 @@ class LayerClass:
         """
         aa = tuple(layer_tuple)
         key = (u, aa)
-        return dict(self._vertex_layer_attrs.get(key, {}))
+        return dict(self._state_attrs.get(key, {}))
 
     ## explicit vertex–layer edge APIs
 
@@ -1336,10 +1642,15 @@ class LayerClass:
         ValueError
             If ``role`` is invalid.
         """
+        warnings.warn(
+            "set_edge_kivela_role() is deprecated; multilayer role should be inferred from "
+            "explicit supra-node endpoints in add_edge().",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Sanity: edge must exist in the structural registry
-        if eid not in getattr(self, "edge_definitions", {}) and eid not in getattr(
-            self, "hyperedge_definitions", {}
-        ):
+        rec = self._edges.get(eid)
+        if rec is None:
             raise KeyError(
                 f"Kivela annotation for unknown edge {eid!r}; "
                 "create the edge via add_edge/add_hyperedge first."
@@ -1350,17 +1661,17 @@ class LayerClass:
             aa = tuple(layers)
             self._validate_layer_tuple(aa)
             # preserve "hyper" kind — hyperedges tagged as intra keep their topology
-            if self.edge_kind.get(eid) != "hyper":
-                self.edge_kind[eid] = "intra"
-            self.edge_layers[eid] = aa
+            if rec.etype != "hyper":
+                rec.ml_kind = "intra"
+            rec.ml_layers = aa
         elif role in {"inter", "coupling"}:
             La, Lb = layers
             La = tuple(La)
             Lb = tuple(Lb)
             self._validate_layer_tuple(La)
             self._validate_layer_tuple(Lb)
-            self.edge_kind[eid] = role
-            self.edge_layers[eid] = (La, Lb)
+            rec.ml_kind = role
+            rec.ml_layers = (La, Lb)
         else:
             raise ValueError(f"unknown Kivela role {role!r}")
 
@@ -1446,6 +1757,11 @@ class LayerClass:
         G.add_intra_edge_nl("u1", "u2", ("t1", "F"))
         ```
         """
+        warnings.warn(
+            "add_intra_edge_nl() is deprecated; prefer add_edge((u, layer), (v, layer), ...).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         aa = layer_tuple if isinstance(layer_tuple, tuple) else tuple(layer_tuple)
         if not getattr(self, "_fast_mode", False):
             self._validate_layer_tuple(aa)
@@ -1489,81 +1805,102 @@ class LayerClass:
                 self._assert_presence(v, aa)
 
         Lid = self._layer_tuple_to_lid(aa)
-        entity_to_idx = self.entity_to_idx
-        edge_to_idx = self.edge_to_idx
-        idx_to_edge = self.idx_to_edge
-        edge_defs = self.edge_definitions
-        edge_w = self.edge_weights
-        edge_dir = self.edge_directed
+        _ents = self._entities
+        _edges = self._edges
+        _col_to_edge = self._col_to_edge
         slices = self._slices
         M = self._matrix
 
-        # Ensure all vertices exist
-        all_vertices = set()
-        edge_data = []
+        # Intern hot strings + collect edge data
+        import sys as _sys
+        all_vertices: set[str] = set()
+        edge_data: list[tuple[str, str, float]] = []
         for e in edges:
             if isinstance(e, tuple):
                 u, v = e[0], e[1]
-                w = e[2] if len(e) > 2 else weight
+                w = float(e[2]) if len(e) > 2 else float(weight)
             else:
                 u, v = e["u"], e["v"]
-                w = e.get("weight", weight)
-            all_vertices.update([u, v])
+                w = float(e.get("weight", weight))
+            if isinstance(u, str):
+                u = _sys.intern(u)
+            if isinstance(v, str):
+                v = _sys.intern(v)
+            all_vertices.update((u, v))
             edge_data.append((u, v, w))
 
-        missing = [v for v in all_vertices if v not in entity_to_idx]
-        if missing:
-            self.add_vertices_bulk(missing, slice=self._current_slice)
+        # Ensure all vertices exist in _entities — compute coord once
+        coord = self._make_layer_coord(None)
+        for vid in all_vertices:
+            ekey = (vid, coord)
+            if ekey not in _ents:
+                idx = len(_ents)
+                _ents[ekey] = EntityRecord(row_idx=idx, kind="vertex")
+                self._row_to_entity[idx] = ekey
+                self._V.add(vid)
+                self._VM.add(ekey)
 
-        # Grow matrix once
-        self._grow_rows_to(self._num_entities)
-        num_new_edges = len(edge_data)
-        start_col = self._num_edges
-        self._num_edges += num_new_edges
-        self._grow_cols_to(self._num_edges)
+        # Grow rows once if needed
+        self._grow_rows_to(len(_ents))
+
+        # Build vertex → row_idx cache (O(1) per lookup in inner loop)
+        row_cache: dict[str, int] = {vid: _ents[(vid, coord)].row_idx for vid in all_vertices}
+
+        # Pre-size columns for new edges (all edge_data are assumed new)
+        num_new = len(edge_data)
+        start_col = len(_col_to_edge)
+        self._grow_cols_to(start_col + num_new)
+
+        # Batch edge directedness
+        is_dir = bool(self.directed) if self.directed is not None else False
+
+        # scipy fast-set bypass
+        _m_fast_set = getattr(M, "_set_intXint", None)
+
+        edge_ids: list[str] = []
         col_idx = start_col
-
-        # Batch insert edges
-        edge_ids = []
 
         for u, v, w in edge_data:
             base_eid = f"{u}>{v}@{Lid}"
             eid = base_eid
             k = 1
-            while eid in edge_to_idx:
+            while eid in _edges:
                 eid = f"{base_eid}#{k}"
                 k += 1
 
-            if eid in edge_to_idx:
-                # Update existing - rare in bulk creation
-                c = edge_to_idx[eid]
+            if eid in _edges:
+                # Update existing (rare in bulk creation) — just reuse column
+                rec = _edges[eid]
+                c = rec.col_idx
             else:
-                # Create new
-                edge_to_idx[eid] = col_idx
-                idx_to_edge[col_idx] = eid
+                # Create new column
                 c = col_idx
                 col_idx += 1
+                rec = EdgeRecord(
+                    src=u, tgt=v, weight=w, directed=is_dir,
+                    etype="binary", col_idx=c,
+                    ml_kind="intra", ml_layers=aa, direction_policy=None,
+                )
+                _edges[eid] = rec
+                _col_to_edge[c] = eid
+                self._adj.setdefault((u, v), []).append(eid)
+                self._src_to_edges.setdefault(u, []).append(eid)
+                self._tgt_to_edges.setdefault(v, []).append(eid)
 
-            edge_defs[eid] = (u, v, "regular")
-            edge_w[eid] = w
-            edge_dir[eid] = (
-                bool(self.directed) if self.directed is not None else False
-            )  # eventhough intra edges typically undirected
-
-            source_idx = entity_to_idx[u]
-            target_idx = entity_to_idx[v]
-
-            M[source_idx, c] = w
-            if u != v:
-                M[target_idx, c] = w
-
-            # Kivela metadata
-            self.edge_kind[eid] = "intra"
-            self.edge_layers[eid] = aa
+            # Write matrix
+            fw = float(w)
+            src_row = row_cache[u]
+            tgt_row = row_cache[v]
+            if _m_fast_set is not None:
+                _m_fast_set(src_row, c, fw)
+                if u != v:
+                    _m_fast_set(tgt_row, c, fw)
+            else:
+                M[src_row, c] = fw
+                if u != v:
+                    M[tgt_row, c] = fw
 
             edge_ids.append(eid)
-
-        self._num_edges = col_idx
 
         # Batch slice registration
         if Lid not in slices:
@@ -1618,6 +1955,11 @@ class LayerClass:
         G.add_inter_edge_nl("u1", ("t1",), "u2", ("t2",))
         ```
         """
+        warnings.warn(
+            "add_inter_edge_nl() is deprecated; prefer add_edge((u, layer_a), (v, layer_b), ...).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         aa = layer_a if isinstance(layer_a, tuple) else tuple(layer_a)
         bb = layer_b if isinstance(layer_b, tuple) else tuple(layer_b)
         if not getattr(self, "_fast_mode", False):
@@ -1660,6 +2002,11 @@ class LayerClass:
         str
             Edge id.
         """
+        warnings.warn(
+            "add_coupling_edge_nl() is deprecated; prefer add_edge((u, layer_a), (u, layer_b), ...).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         eid2 = self.add_inter_edge_nl(u, layer_a, u, layer_b, weight=weight, eid=eid)
         # Re-label as coupling so supra_adjacency treats it as off-diagonal coupling
         aa = tuple(layer_a)
@@ -1706,8 +2053,9 @@ class LayerClass:
         """
         aa = tuple(layer_tuple)
         E = set()
-        for eid, kind in self.edge_kind.items():
-            layers = self.edge_layers.get(eid)
+        for eid, rec in self._edges.items():
+            kind = "hyper" if rec.etype == "hyper" else rec.ml_kind
+            layers = rec.ml_layers
 
             if kind in {"intra", "hyper"}:
                 if layers == aa:
@@ -1766,8 +2114,9 @@ class LayerClass:
         # Fallback in non-multi-aspect mode
         eid = eid or f"{u}--{v}=={layer_a}~{layer_b}"
         self.add_edge(u, v, weight=weight, edge_id=eid)
-        self.edge_kind[eid] = "inter"
-        self.edge_layers[eid] = (layer_a, layer_b)
+        rec = self._edges[eid]
+        rec.ml_kind = "inter"
+        rec.ml_layers = (layer_a, layer_b)
         return eid
 
     ## Layer algebra
@@ -2233,10 +2582,11 @@ class LayerClass:
         A = sp.dok_matrix((n, n), dtype=float)
 
         # Fill diagonal blocks from intra-layer edges
-        for eid, kind in self.edge_kind.items():
+        for eid, rec in self._edges.items():
+            kind = rec.ml_kind
             if kind != "intra":
                 continue
-            L = self.edge_layers[eid]
+            L = rec.ml_layers
             # normalize L to tuple
             if not isinstance(L, tuple):
                 if len(getattr(self, "aspects", [])) == 1 and getattr(
@@ -2250,23 +2600,21 @@ class LayerClass:
             if layers_t is not None and L not in layers_t:
                 continue
             # resolve endpoints (u,v) in layer L
-            try:
-                u, v, _etype = self.edge_definitions[eid]
-            except KeyError:
-                continue
+            u, v = rec.src, rec.tgt
             ru = self._nl_to_row.get((u, L))
             rv = self._nl_to_row.get((v, L))
             if ru is None or rv is None:
                 continue
-            w = self.edge_weights.get(eid, 1)
+            w = rec.weight if rec.weight is not None else 1
             A[ru, rv] = A.get((ru, rv), 0.0) + w
             A[rv, ru] = A.get((rv, ru), 0.0) + w  # undirected; adapt if directed
 
         # Fill off-diagonal blocks from inter-layer/coupling edges
-        for eid, kind in self.edge_kind.items():
+        for eid, rec in self._edges.items():
+            kind = rec.ml_kind
             if kind not in {"inter", "coupling"}:
                 continue
-            La, Lb = self.edge_layers[eid]
+            La, Lb = rec.ml_layers
             # normalize La/Lb to tuples
             if not isinstance(La, tuple):
                 if len(getattr(self, "aspects", [])) == 1 and getattr(
@@ -2289,15 +2637,12 @@ class LayerClass:
             if layers_t is not None and (La not in layers_t or Lb not in layers_t):
                 continue
             # endpoints
-            try:
-                u, v, _etype = self.edge_definitions[eid]
-            except KeyError:
-                continue
+            u, v = rec.src, rec.tgt
             ru = self._nl_to_row.get((u, La))
             rv = self._nl_to_row.get((v, Lb))
             if ru is None or rv is None:
                 continue
-            w = self.edge_weights.get(eid, 1)
+            w = rec.weight if rec.weight is not None else 1
             A[ru, rv] = A.get((ru, rv), 0.0) + w
             A[rv, ru] = A.get((rv, ru), 0.0) + w  # undirected; adapt if directed
         return A.tocsr()
@@ -2406,11 +2751,13 @@ class LayerClass:
         edge_ids: list[str] = []
         skipped: list[str] = []
 
-        for eid, kind in self.edge_kind.items():
+        default_dir = True if self.directed is None else self.directed
+        for eid, rec in self._edges.items():
+            kind = "hyper" if rec.etype == "hyper" else rec.ml_kind
             # 3a. INTRA binary edge
 
             if kind == "intra":
-                raw_L = self.edge_layers.get(eid)
+                raw_L = rec.ml_layers
                 if raw_L is None:
                     skipped.append(eid)
                     continue
@@ -2421,11 +2768,7 @@ class LayerClass:
                 if layers_t is not None and L not in layers_t:
                     continue
 
-                try:
-                    u, v, _etype = self.edge_definitions[eid]
-                except KeyError:
-                    skipped.append(eid)
-                    continue
+                u, v = rec.src, rec.tgt
                 if u is None or v is None:
                     skipped.append(eid)
                     continue
@@ -2436,8 +2779,8 @@ class LayerClass:
                     skipped.append(eid)
                     continue
 
-                w = float(self.edge_weights.get(eid, 1.0))
-                is_dir = self.edge_directed.get(eid, True)
+                w = float(rec.weight if rec.weight is not None else 1.0)
+                is_dir = rec.directed if rec.directed is not None else default_dir
 
                 if is_dir:
                     rows_out = [ru, rv]
@@ -2452,7 +2795,7 @@ class LayerClass:
             # 3b. HYPER edge — read stoichiometry directly from _matrix
 
             elif kind == "hyper":
-                raw_L = self.edge_layers.get(eid)
+                raw_L = rec.ml_layers
                 if raw_L is None:
                     # No layer assignment — skip and report
                     skipped.append(eid)
@@ -2464,13 +2807,8 @@ class LayerClass:
                 if layers_t is not None and L not in layers_t:
                     continue
 
-                hdef = self.hyperedge_definitions.get(eid)
-                if hdef is None:
-                    skipped.append(eid)
-                    continue
-
-                col_idx = self.edge_to_idx.get(eid)
-                if col_idx is None:
+                col_idx = rec.col_idx
+                if col_idx < 0:
                     skipped.append(eid)
                     continue
 
@@ -2481,7 +2819,8 @@ class LayerClass:
                 rows_out = []
                 vals_out = []
                 for flat_row in nz_rows_in_flat:
-                    entity_id = self.idx_to_entity.get(flat_row)
+                    entity_key = self._row_to_entity.get(flat_row)
+                    entity_id = entity_key[0] if isinstance(entity_key, tuple) else entity_key
                     if entity_id is None:
                         continue
                     supra_row = self._nl_to_row.get((entity_id, L))
@@ -2508,7 +2847,7 @@ class LayerClass:
                 if kind == "coupling" and not include_coupling:
                     continue
 
-                raw_layers = self.edge_layers.get(eid)
+                raw_layers = rec.ml_layers
                 if raw_layers is None:
                     skipped.append(eid)
                     continue
@@ -2521,11 +2860,7 @@ class LayerClass:
                 if layers_t is not None and (La not in layers_t or Lb not in layers_t):
                     continue
 
-                try:
-                    u, v, _etype = self.edge_definitions[eid]
-                except KeyError:
-                    skipped.append(eid)
-                    continue
+                u, v = rec.src, rec.tgt
                 if u is None or v is None:
                     skipped.append(eid)
                     continue
@@ -2536,8 +2871,8 @@ class LayerClass:
                     skipped.append(eid)
                     continue
 
-                w = float(self.edge_weights.get(eid, 1.0))
-                is_dir = self.edge_directed.get(eid, True)
+                w = float(rec.weight if rec.weight is not None else 1.0)
+                is_dir = rec.directed if rec.directed is not None else default_dir
 
                 if is_dir:
                     rows_out = [ru, rv]
@@ -2600,10 +2935,11 @@ class LayerClass:
 
         # Intra-layer edges (diagonal blocks)
         if "intra" in include_kinds:
-            for eid, kind in self.edge_kind.items():
+            for eid, rec in self._edges.items():
+                kind = rec.ml_kind
                 if kind != "intra":
                     continue
-                L = self.edge_layers[eid]
+                L = rec.ml_layers
                 if not isinstance(L, tuple):
                     if len(getattr(self, "aspects", [])) == 1 and getattr(
                         self, "_legacy_single_aspect_enabled", True
@@ -2613,24 +2949,22 @@ class LayerClass:
                         continue
                 if layers_t is not None and L not in layers_t:
                     continue
-                try:
-                    u, v, _etype = self.edge_definitions[eid]
-                except KeyError:
-                    continue
+                u, v = rec.src, rec.tgt
                 ru = self._nl_to_row.get((u, L))
                 rv = self._nl_to_row.get((v, L))
                 if ru is None or rv is None:
                     continue
-                w = self.edge_weights.get(eid, 1.0)
+                w = rec.weight if rec.weight is not None else 1.0
                 A[ru, rv] = A.get((ru, rv), 0.0) + w
                 A[rv, ru] = A.get((rv, ru), 0.0) + w
 
         # Inter/coupling edges (off-diagonal blocks)
         if include_kinds & {"inter", "coupling"}:
-            for eid, kind in self.edge_kind.items():
+            for eid, rec in self._edges.items():
+                kind = rec.ml_kind
                 if kind not in include_kinds:
                     continue
-                La, Lb = self.edge_layers[eid]
+                La, Lb = rec.ml_layers
                 if not isinstance(La, tuple):
                     if len(getattr(self, "aspects", [])) == 1 and getattr(
                         self, "_legacy_single_aspect_enabled", True
@@ -2647,15 +2981,12 @@ class LayerClass:
                         continue
                 if layers_t is not None and (La not in layers_t or Lb not in layers_t):
                     continue
-                try:
-                    u, v, _etype = self.edge_definitions[eid]
-                except KeyError:
-                    continue
+                u, v = rec.src, rec.tgt
                 ru = self._nl_to_row.get((u, La))
                 rv = self._nl_to_row.get((v, Lb))
                 if ru is None or rv is None:
                     continue
-                w = self.edge_weights.get(eid, 1.0)
+                w = rec.weight if rec.weight is not None else 1.0
                 A[ru, rv] = A.get((ru, rv), 0.0) + w
                 A[rv, ru] = A.get((rv, ru), 0.0) + w
 
@@ -2945,10 +3276,11 @@ class LayerClass:
         wv = []
 
         # Intra edges -> (u,aa)↔(v,aa)
-        for eid, kind in self.edge_kind.items():
+        for eid, rec in self._edges.items():
+            kind = rec.ml_kind
             if kind != "intra":
                 continue
-            L = self.edge_layers[eid]
+            L = rec.ml_layers
             if not isinstance(L, tuple):
                 if len(getattr(self, "aspects", [])) == 1 and getattr(
                     self, "_legacy_single_aspect_enabled", True
@@ -2958,13 +3290,10 @@ class LayerClass:
                     continue
             if layers is not None and L not in set(layers_t):
                 continue
-            try:
-                u, v, _etype = self.edge_definitions[eid]
-            except KeyError:
-                continue
+            u, v = rec.src, rec.tgt
             if (u, L) not in self._nl_to_row or (v, L) not in self._nl_to_row:
                 continue
-            w = self.edge_weights.get(eid, 1.0)
+            w = rec.weight if rec.weight is not None else 1.0
             ui.extend((vertex_to_i[u], vertex_to_i[v]))
             vi.extend((vertex_to_i[v], vertex_to_i[u]))
             a = layer_to_i[L]
@@ -2973,10 +3302,11 @@ class LayerClass:
             wv.extend((w, w))
 
         # Inter / coupling -> (u,aa)↔(v,bb)
-        for eid, kind in self.edge_kind.items():
+        for eid, rec in self._edges.items():
+            kind = rec.ml_kind
             if kind not in {"inter", "coupling"}:
                 continue
-            La, Lb = self.edge_layers[eid]
+            La, Lb = rec.ml_layers
             if not isinstance(La, tuple):
                 if len(getattr(self, "aspects", [])) == 1 and getattr(
                     self, "_legacy_single_aspect_enabled", True
@@ -2995,13 +3325,10 @@ class LayerClass:
                 S = set(layers_t)
                 if La not in S or Lb not in S:
                     continue
-            try:
-                u, v, _etype = self.edge_definitions[eid]
-            except KeyError:
-                continue
+            u, v = rec.src, rec.tgt
             if (u, La) not in self._nl_to_row or (v, Lb) not in self._nl_to_row:
                 continue
-            w = self.edge_weights.get(eid, 1.0)
+            w = rec.weight if rec.weight is not None else 1.0
             ui.extend((vertex_to_i[u], vertex_to_i[v]))
             vi.extend((vertex_to_i[v], vertex_to_i[u]))
             ai.extend((layer_to_i[La], layer_to_i[Lb]))

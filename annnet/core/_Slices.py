@@ -897,16 +897,15 @@ class SliceClass:
             undirected_match = False
 
         out: dict[str, list[str]] = {}
+        default_dir = True if self.directed is None else self.directed
         for lid, ldata in slices_view.items():
             matches = []
             for eid in ldata["edges"]:
-                # skip hyper-edges for (source,target) mode
-                if self.edge_kind.get(eid) == "hyper":
+                rec = self._edges.get(eid)
+                if rec is None or rec.col_idx < 0 or rec.etype == "hyper":
                     continue
-                s, t, _ = self.edge_definitions[eid]
-                edge_is_directed = self.edge_directed.get(
-                    eid, True if self.directed is None else self.directed
-                )
+                s, t = rec.src, rec.tgt
+                edge_is_directed = rec.directed if rec.directed is not None else default_dir
                 if s == source and t == target:
                     matches.append(eid)
                 elif undirected_match and not edge_is_directed and s == target and t == source:
@@ -969,14 +968,14 @@ class SliceClass:
         for lid, ldata in slices_view.items():
             matches = []
             for eid in ldata["edges"]:
-                if self.edge_kind.get(eid) != "hyper":
+                rec = self._edges.get(eid)
+                if rec is None or rec.col_idx < 0 or rec.etype != "hyper":
                     continue
-                meta = self.hyperedge_definitions.get(eid, {})
-                if undirected and (not meta.get("directed", False)):
-                    if set(meta.get("members", ())) == members:
+                if undirected and rec.tgt is None:
+                    if set(rec.src) == members:
                         matches.append(eid)
-                elif (not undirected) and meta.get("directed", False):
-                    if set(meta.get("head", ())) == head and set(meta.get("tail", ())) == tail:
+                elif (not undirected) and rec.tgt is not None:
+                    if set(rec.src) == head and set(rec.tgt) == tail:
                         matches.append(eid)
             if matches:
                 out[lid] = matches

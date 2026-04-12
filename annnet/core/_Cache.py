@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import copy
 import time
 from typing import TYPE_CHECKING
 
 import narwhals as nw
+from ._helpers import EntityRecord
 
 try:
     import polars as pl
@@ -11,6 +13,18 @@ except Exception:
     pl = None
 if TYPE_CHECKING:
     from .graph import AnnNet
+
+
+def _hyper_def(rec):
+    """Build hyperedge metadata dict from an EdgeRecord (no compat proxy)."""
+    if rec.tgt is not None:
+        return {"directed": True, "head": set(rec.src), "tail": set(rec.tgt)}
+    return {"directed": False, "members": set(rec.src)}
+
+
+def _is_hyper(graph, eid):
+    rec = graph._edges.get(eid)
+    return rec is not None and rec.etype == "hyper"
 
 
 class CacheManager:
@@ -255,24 +269,28 @@ class Operations:
         """
         # normalize to edge_id set
         if all(isinstance(e, int) for e in edges):
-            E = {self.idx_to_edge[e] for e in edges}
+            E = {self._col_to_edge[e] for e in edges}
         else:
             E = set(edges)
+
+        default_dir = True if self.directed is None else self.directed
 
         # collect incident vertices and partition edges
         V = set()
         bin_payload, hyper_payload = [], []
         for eid in E:
-            kind = self.edge_kind.get(eid, "binary")
-            if kind == "hyper":
-                h = self.hyperedge_definitions[eid]
+            rec = self._edges.get(eid)
+            if rec is None or rec.col_idx < 0:
+                continue
+            if rec.etype == "hyper":
+                h = _hyper_def(rec)
                 if h.get("members"):
                     V.update(h["members"])
                     hyper_payload.append(
                         {
                             "members": list(h["members"]),
                             "edge_id": eid,
-                            "weight": self.edge_weights.get(eid, 1.0),
+                            "weight": rec.weight,
                         }
                     )
                 else:
@@ -283,11 +301,13 @@ class Operations:
                             "head": list(h.get("head", ())),
                             "tail": list(h.get("tail", ())),
                             "edge_id": eid,
-                            "weight": self.edge_weights.get(eid, 1.0),
+                            "weight": rec.weight,
                         }
                     )
             else:
-                s, t, etype = self.edge_definitions[eid]
+                s, t, etype = rec.src, rec.tgt, rec.etype
+                if s is None or t is None:
+                    continue
                 V.add(s)
                 V.add(t)
                 bin_payload.append(
@@ -296,10 +316,8 @@ class Operations:
                         "target": t,
                         "edge_id": eid,
                         "edge_type": etype,
-                        "edge_directed": self.edge_directed.get(
-                            eid, True if self.directed is None else self.directed
-                        ),
-                        "weight": self.edge_weights.get(eid, 1.0),
+                        "edge_directed": rec.directed if rec.directed is not None else default_dir,
+                        "weight": rec.weight,
                     }
                 )
 
@@ -349,18 +367,21 @@ class Operations:
 
         # collect edges fully inside V
         E_bin, E_hyper_members, E_hyper_dir = [], [], []
-        for eid, (s, t, et) in self.edge_definitions.items():
-            if et == "hyper":
+        for eid, rec in self._edges.items():
+            if rec.col_idx < 0 or rec.src is None:
                 continue
-            if s in V and t in V:
-                E_bin.append(eid)
-        for eid, h in self.hyperedge_definitions.items():
-            if h.get("members"):
-                if set(h["members"]).issubset(V):
-                    E_hyper_members.append(eid)
+            if rec.etype == "hyper":
+                h = _hyper_def(rec)
+                if h.get("members"):
+                    if set(h["members"]).issubset(V):
+                        E_hyper_members.append(eid)
+                else:
+                    if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(V):
+                        E_hyper_dir.append(eid)
             else:
-                if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(V):
-                    E_hyper_dir.append(eid)
+                s, t = rec.src, rec.tgt
+                if s is not None and t is not None and s in V and t in V:
+                    E_bin.append(eid)
 
         # payloads
         v_rows = [
@@ -368,36 +389,38 @@ class Operations:
             for v in V
         ]
 
+        default_dir = True if self.directed is None else self.directed
+
         bin_payload = []
         for eid in E_bin:
-            s, t, etype = self.edge_definitions[eid]
+            rec = self._edges[eid]
             bin_payload.append(
                 {
-                    "source": s,
-                    "target": t,
+                    "source": rec.src,
+                    "target": rec.tgt,
                     "edge_id": eid,
-                    "edge_type": etype,
-                    "edge_directed": self.edge_directed.get(
-                        eid, True if self.directed is None else self.directed
-                    ),
-                    "weight": self.edge_weights.get(eid, 1.0),
+                    "edge_type": rec.etype,
+                    "edge_directed": rec.directed if rec.directed is not None else default_dir,
+                    "weight": rec.weight,
                 }
             )
 
         hyper_payload = []
         for eid in E_hyper_members:
-            m = self.hyperedge_definitions[eid]["members"]
+            rec = self._edges[eid]
+            h = _hyper_def(rec)
             hyper_payload.append(
-                {"members": list(m), "edge_id": eid, "weight": self.edge_weights.get(eid, 1.0)}
+                {"members": list(h["members"]), "edge_id": eid, "weight": rec.weight}
             )
         for eid in E_hyper_dir:
-            h = self.hyperedge_definitions[eid]
+            rec = self._edges[eid]
+            h = _hyper_def(rec)
             hyper_payload.append(
                 {
                     "head": list(h.get("head", ())),
                     "tail": list(h.get("tail", ())),
                     "edge_id": eid,
-                    "weight": self.edge_weights.get(eid, 1.0),
+                    "weight": rec.weight,
                 }
             )
 
@@ -417,20 +440,20 @@ class Operations:
             g.add_slice(lid, **meta["attributes"])
             keep = set()
             for eid in meta["edges"]:
-                kind = self.edge_kind.get(eid, "binary")
-                if kind == "hyper":
-                    h = self.hyperedge_definitions[eid]
+                rec = self._edges.get(eid)
+                if rec is None or rec.col_idx < 0:
+                    continue
+                if rec.etype == "hyper":
+                    h = _hyper_def(rec)
                     if h.get("members"):
                         if set(h["members"]).issubset(V):
                             keep.add(eid)
                     else:
-                        if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(
-                            V
-                        ):
+                        if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(V):
                             keep.add(eid)
                 else:
-                    s, t, _ = self.edge_definitions[eid]
-                    if s in V and t in V:
+                    s, t = rec.src, rec.tgt
+                    if s is not None and t is not None and s in V and t in V:
                         keep.add(eid)
             if keep:
                 g.add_edges_to_slice_bulk(lid, keep)
@@ -462,7 +485,7 @@ class Operations:
 
         if edges is not None:
             if all(isinstance(e, int) for e in edges):
-                E = {self.idx_to_edge[e] for e in edges}
+                E = {self._col_to_edge[e] for e in edges}
             else:
                 E = set(edges)
         else:
@@ -480,9 +503,11 @@ class Operations:
         kept_edges = set()
         kept_vertices = set(V)
         for eid in E:
-            kind = self.edge_kind.get(eid, "binary")
-            if kind == "hyper":
-                h = self.hyperedge_definitions[eid]
+            rec = self._edges.get(eid)
+            if rec is None or rec.col_idx < 0:
+                continue
+            if rec.etype == "hyper":
+                h = _hyper_def(rec)
                 if h.get("members"):
                     if set(h["members"]).issubset(V):
                         kept_edges.add(eid)
@@ -490,8 +515,8 @@ class Operations:
                     if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(V):
                         kept_edges.add(eid)
             else:
-                s, t, _ = self.edge_definitions[eid]
-                if s in V and t in V:
+                s, t = rec.src, rec.tgt
+                if s is not None and t is not None and s in V and t in V:
                     kept_edges.add(eid)
 
         return self.edge_subgraph(kept_edges).subgraph(kept_vertices)
@@ -522,18 +547,18 @@ class Operations:
         """
         g = self.copy()
 
-        for eid, defn in g.edge_definitions.items():
-            if not g._is_directed_edge(eid):
+        for rec in g._edges.values():
+            if rec.col_idx < 0:
                 continue
-            # Binary edge: swap endpoints
-            u, v, etype = defn
-            g.edge_definitions[eid] = (v, u, etype)
-
-        for eid, meta in g.hyperedge_definitions.items():
-            if not meta.get("directed", False):
+            if rec.etype == "hyper":
+                if rec.tgt is not None:
+                    rec.src, rec.tgt = rec.tgt, rec.src
                 continue
-            # Hyperedge: swap head and tail sets
-            meta["head"], meta["tail"] = meta["tail"], meta["head"]
+            edge_is_directed = rec.directed if rec.directed is not None else (
+                True if g.directed is None else g.directed
+            )
+            if edge_is_directed:
+                rec.src, rec.tgt = rec.tgt, rec.src
 
         return g
 
@@ -659,19 +684,17 @@ class Operations:
         # partition edges
         bin_payload, hyper_payload = [], []
         for eid in E:
-            w = (
-                eff_w.get(eid, self.edge_weights.get(eid, 1.0))
-                if resolve_slice_weights
-                else self.edge_weights.get(eid, 1.0)
-            )
-            kind = self.edge_kind.get(eid, "binary")
+            rec = self._edges.get(eid)
+            if rec is None or rec.col_idx < 0:
+                continue
+            base_weight = rec.weight if rec.weight is not None else 1.0
+            w = eff_w.get(eid, base_weight) if resolve_slice_weights else base_weight
             attrs = e_attrs.get(eid, {})
-            if kind == "hyper":
-                h = self.hyperedge_definitions[eid]
-                if h.get("members"):
+            if rec.etype == "hyper":
+                if rec.tgt is None:
                     hyper_payload.append(
                         {
-                            "members": list(h["members"]),
+                            "members": list(rec.src),
                             "edge_id": eid,
                             "weight": w,
                             "attributes": attrs,
@@ -680,23 +703,22 @@ class Operations:
                 else:
                     hyper_payload.append(
                         {
-                            "head": list(h.get("head", ())),
-                            "tail": list(h.get("tail", ())),
+                            "head": list(rec.src),
+                            "tail": list(rec.tgt),
                             "edge_id": eid,
                             "weight": w,
                             "attributes": attrs,
                         }
                     )
             else:
-                s, t, et = self.edge_definitions[eid]
                 bin_payload.append(
                     {
-                        "source": s,
-                        "target": t,
+                        "source": rec.src,
+                        "target": rec.tgt,
                         "edge_id": eid,
-                        "edge_type": et,
-                        "edge_directed": self.edge_directed.get(
-                            eid, True if self.directed is None else self.directed
+                        "edge_type": rec.etype,
+                        "edge_directed": rec.directed if rec.directed is not None else (
+                            True if self.directed is None else self.directed
                         ),
                         "weight": w,
                         "attributes": attrs,
@@ -820,10 +842,12 @@ class Operations:
         # ---------------------------------------------------------------
         # 3) Clone entity/index mappings
         # ---------------------------------------------------------------
-        new._num_entities = self._num_entities
-        new.entity_to_idx = self.entity_to_idx.copy()
-        new.idx_to_entity = self.idx_to_entity.copy()
-        new.entity_types = self.entity_types.copy()
+        new._entities = {
+            k: EntityRecord(row_idx=v.row_idx, kind=v.kind)
+            for k, v in self._entities.items()
+        }
+        new._row_to_entity = dict(self._row_to_entity)
+        new._rebuild_entity_indexes()
 
         # Vertex-layer presence
         new._V = self._V.copy()
@@ -836,18 +860,9 @@ class Operations:
         # ---------------------------------------------------------------
         # 4) Clone edge/index mappings
         # ---------------------------------------------------------------
-        new._num_edges = self._num_edges
-        new.edge_to_idx = self.edge_to_idx.copy()
-        new.idx_to_edge = self.idx_to_edge.copy()
-        new.edge_definitions = {
-            eid: (s, t, etype) for eid, (s, t, etype) in self.edge_definitions.items()
-        }
-        new.edge_weights = self.edge_weights.copy()
-        new.edge_directed = self.edge_directed.copy()
-        new.edge_kind = self.edge_kind.copy()
-        new.edge_layers = self.edge_layers.copy()
+        new._edges = {eid: copy.copy(rec) for eid, rec in self._edges.items()}
+        new._col_to_edge = dict(self._col_to_edge)
         new._next_edge_id = self._next_edge_id
-        new.edge_direction_policy = {k: v.copy() for k, v in self.edge_direction_policy.items()}
 
         # ---------------------------------------------------------------
         # 5) Clone slice structure (vertices, edges, attributes)
@@ -869,15 +884,7 @@ class Operations:
         new.slice_edge_weights = {lid: m.copy() for lid, m in self.slice_edge_weights.items()}
 
         # ---------------------------------------------------------------
-        # 7) Clone hyperedges
-        # ---------------------------------------------------------------
-        new.hyperedge_definitions = {
-            eid: {k: (v.copy() if isinstance(v, (set, list, dict)) else v) for k, v in hdef.items()}
-            for eid, hdef in self.hyperedge_definitions.items()
-        }
-
-        # ---------------------------------------------------------------
-        # 8) Clone attribute tables (Polars DF → clone is fast / zero-copy)
+        # 7) Clone attribute tables (Polars DF → clone is fast / zero-copy)
         # ---------------------------------------------------------------
         new.vertex_attributes = self.vertex_attributes.clone()
         new.edge_attributes = self.edge_attributes.clone()
@@ -886,7 +893,7 @@ class Operations:
         new.layer_attributes = self.layer_attributes.clone()
 
         # ---------------------------------------------------------------
-        # 9) Clone Kivela metadata
+        # 8) Clone Kivela metadata
         # ---------------------------------------------------------------
         new.aspects = list(self.aspects)
         new.elem_layers = {k: list(v) for k, v in self.elem_layers.items()}
@@ -894,7 +901,7 @@ class Operations:
 
         new._aspect_attrs = {a: m.copy() for a, m in self._aspect_attrs.items()}
         new._layer_attrs = {aa: m.copy() for aa, m in self._layer_attrs.items()}
-        new._vertex_layer_attrs = {k: m.copy() for k, m in self._vertex_layer_attrs.items()}
+        new._state_attrs = {k: m.copy() for k, m in self._state_attrs.items()}
 
         # ---------------------------------------------------------------
         # 10) Copy global graph attributes
@@ -940,7 +947,9 @@ class Operations:
         matrix_bytes = self._matrix.nnz * (4 + 4 + 4)
         # Estimate dict memory: ~100 bytes per entry
         dict_bytes = (
-            len(self.entity_to_idx) + len(self.edge_to_idx) + len(self.edge_weights)
+            len(self._entities)
+            + len(self._col_to_edge)
+            + sum(1 for r in self._edges.values() if r.weight is not None)
         ) * 100
 
         df_bytes = 0
@@ -1104,7 +1113,7 @@ class Operations:
 
         for j in range(self.number_of_edges()):
             S, T = self.get_edge(j)
-            eid = self.idx_to_edge[j]
+            eid = self._col_to_edge[j]
             directed = self._is_directed_edge(eid)
             edge_defs.append((eid, tuple(sorted(S)), tuple(sorted(T)), directed))
 

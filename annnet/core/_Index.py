@@ -4,6 +4,16 @@ except Exception:
     pl = None
 
 
+def _entity_kind(rec):
+    """Return the external kind string for an EntityRecord."""
+    k = rec.kind
+    if k == "vertex":
+        return "vertex"
+    if k in ("edge", "edge_entity"):
+        return "edge"
+    return k
+
+
 class IndexManager:
     """Namespace for index operations.
     Provides clean API over existing dicts.
@@ -32,9 +42,11 @@ class IndexManager:
         KeyError
             If the entity is not found.
         """
-        if entity_id not in self._G.entity_to_idx:
+        ekey = self._G._resolve_entity_key(entity_id)
+        rec = self._G._entities.get(ekey)
+        if rec is None:
             raise KeyError(f"Entity '{entity_id}' not found")
-        return self._G.entity_to_idx[entity_id]
+        return rec.row_idx
 
     def row_to_entity(self, row):
         """Map a matrix row index to its entity ID.
@@ -54,9 +66,10 @@ class IndexManager:
         KeyError
             If the row index is not found.
         """
-        if row not in self._G.idx_to_entity:
+        ekey = self._G._row_to_entity.get(row)
+        if ekey is None:
             raise KeyError(f"Row {row} not found")
-        return self._G.idx_to_entity[row]
+        return ekey[0]  # bare vid
 
     def entities_to_rows(self, entity_ids):
         """Batch convert entity IDs to row indices.
@@ -70,7 +83,8 @@ class IndexManager:
         -------
         list[int]
         """
-        return [self._G.entity_to_idx[eid] for eid in entity_ids]
+        return [self._G._entities[self._G._resolve_entity_key(eid)].row_idx
+                for eid in entity_ids]
 
     def rows_to_entities(self, rows):
         """Batch convert row indices to entity IDs.
@@ -84,7 +98,7 @@ class IndexManager:
         -------
         list[str]
         """
-        return [self._G.idx_to_entity[r] for r in rows]
+        return [self._G._row_to_entity[r][0] for r in rows]
 
     # ==================== Edge Indexes ====================
 
@@ -106,9 +120,10 @@ class IndexManager:
         KeyError
             If the edge is not found.
         """
-        if edge_id not in self._G.edge_to_idx:
+        rec = self._G._edges.get(edge_id)
+        if rec is None or rec.col_idx < 0:
             raise KeyError(f"Edge '{edge_id}' not found")
-        return self._G.edge_to_idx[edge_id]
+        return rec.col_idx
 
     def col_to_edge(self, col):
         """Map a matrix column index to its edge ID.
@@ -128,9 +143,10 @@ class IndexManager:
         KeyError
             If the column index is not found.
         """
-        if col not in self._G.idx_to_edge:
+        eid = self._G._col_to_edge.get(col)
+        if eid is None:
             raise KeyError(f"Column {col} not found")
-        return self._G.idx_to_edge[col]
+        return eid
 
     def edges_to_cols(self, edge_ids):
         """Batch convert edge IDs to column indices.
@@ -144,7 +160,7 @@ class IndexManager:
         -------
         list[int]
         """
-        return [self._G.edge_to_idx[eid] for eid in edge_ids]
+        return [self._G._edges[eid].col_idx for eid in edge_ids]
 
     def cols_to_edges(self, cols):
         """Batch convert column indices to edge IDs.
@@ -158,7 +174,7 @@ class IndexManager:
         -------
         list[str]
         """
-        return [self._G.idx_to_edge[c] for c in cols]
+        return [self._G._col_to_edge[c] for c in cols]
 
     # ==================== Utilities ====================
 
@@ -180,9 +196,11 @@ class IndexManager:
         KeyError
             If the entity is not found.
         """
-        if entity_id not in self._G.entity_types:
+        ekey = self._G._resolve_entity_key(entity_id)
+        rec = self._G._entities.get(ekey)
+        if rec is None:
             raise KeyError(f"Entity '{entity_id}' not found")
-        return self._G.entity_types[entity_id]
+        return _entity_kind(rec)
 
     def is_vertex(self, entity_id):
         """Check whether an entity ID refers to a vertex.
@@ -224,7 +242,8 @@ class IndexManager:
         -------
         bool
         """
-        return entity_id in self._G.entity_to_idx
+        ekey = self._G._resolve_entity_key(entity_id)
+        return ekey in self._G._entities
 
     def has_vertex(self, vertex_id: str) -> bool:
         """Check if an ID exists and is a vertex.
@@ -238,7 +257,9 @@ class IndexManager:
         -------
         bool
         """
-        return self._G.entity_types.get(vertex_id) == "vertex"
+        ekey = self._G._resolve_entity_key(vertex_id)
+        rec = self._G._entities.get(ekey)
+        return rec is not None and rec.kind == "vertex"
 
     def has_edge_id(self, edge_id: str) -> bool:
         """Check if an edge ID exists.
@@ -252,7 +273,8 @@ class IndexManager:
         -------
         bool
         """
-        return edge_id in self._G.edge_to_idx
+        rec = self._G._edges.get(edge_id)
+        return rec is not None and rec.col_idx >= 0
 
     def edge_count(self) -> int:
         """Return the number of edges in the graph.
@@ -261,7 +283,7 @@ class IndexManager:
         -------
         int
         """
-        return len(self._G.edge_to_idx)
+        return len(self._G._col_to_edge)
 
     def entity_count(self) -> int:
         """Return the number of entities (vertices + edge-entities).
@@ -270,7 +292,7 @@ class IndexManager:
         -------
         int
         """
-        return len(self._G.entity_to_idx)
+        return len(self._G._entities)
 
     def vertex_count(self) -> int:
         """Return the number of true vertices (excludes edge-entities).
@@ -279,7 +301,7 @@ class IndexManager:
         -------
         int
         """
-        return sum(1 for t in self._G.entity_types.values() if t == "vertex")
+        return sum(1 for rec in self._G._entities.values() if rec.kind == "vertex")
 
     def stats(self):
         """Return index statistics for entities and edges.
@@ -289,15 +311,18 @@ class IndexManager:
         dict
         """
         counts = {"vertex": 0, "edge": 0}
-        for t in self._G.entity_types.values():
-            counts[t] = counts.get(t, 0) + 1
+        for rec in self._G._entities.values():
+            k = _entity_kind(rec)
+            counts[k] = counts.get(k, 0) + 1
+        n_ents = len(self._G._entities)
+        n_edges = len(self._G._col_to_edge)
         return {
-            "n_entities": len(self._G.entity_to_idx),
+            "n_entities": n_ents,
             "n_vertices": counts["vertex"],
             "n_edge_entities": counts["edge"],
-            "n_edges": len(self._G.edge_to_idx),
-            "max_row": self._G._num_entities - 1,
-            "max_col": self._G._num_edges - 1,
+            "n_edges": n_edges,
+            "max_row": n_ents - 1,
+            "max_col": n_edges - 1,
         }
 
 
@@ -342,22 +367,13 @@ class IndexMapping:
                     self.vertex_attributes = pd.DataFrame({"vertex_id": pd.Series(dtype="string")})
                 except Exception:
                     raise RuntimeError(
-                        "Cannot initialize vertex_attributes: install polars (recommended) or pandas."
+                        "Cannot initialise vertex_attributes: neither Polars nor Pandas is installed."
                     )
 
     def _ensure_vertex_row(self, vertex_id: str) -> None:
-        """INTERNAL: Ensure a row for ``vertex_id`` exists in the vertex attribute DF.
-
-        Notes
-        -
-        - Appends a new row with ``vertex_id`` and ``None`` for other columns if absent.
-        - Preserves existing schema and columns.
-
-        """
-        # Intern for cheaper dict ops
+        """INTERNAL: Ensure a row for ``vertex_id`` exists in the vertex attribute DF."""
         try:
             import sys as _sys
-
             if isinstance(vertex_id, str):
                 vertex_id = _sys.intern(vertex_id)
         except Exception:
@@ -365,75 +381,62 @@ class IndexMapping:
 
         df = self.vertex_attributes
 
-        # Build/refresh a cached id-set if needed (auto-invalidates on DF object change)
+        # Build/refresh cached id-set (auto-invalidates on DF object change)
         try:
             cached_ids = getattr(self, "_vertex_attr_ids", None)
             cached_df_id = getattr(self, "_vertex_attr_df_id", None)
             if cached_ids is None or cached_df_id != id(df):
                 ids = set()
                 try:
-                    import polars as pl  # optional
+                    import polars as pl
                 except Exception:
                     pl = None
-
                 if df is not None and hasattr(df, "columns") and "vertex_id" in df.columns:
-                    # One-time scan to seed cache
                     if pl is not None and isinstance(df, pl.DataFrame):
                         if df.height > 0:
-                            try:
-                                ids = set(df.get_column("vertex_id").to_list())
-                            except Exception:
-                                ids = set(df.select("vertex_id").to_series().to_list())
+                            ids = set(df.get_column("vertex_id").to_list())
                     else:
                         import narwhals as nw
-
                         ndf = nw.from_native(df)
                         try:
                             ids = set(nw.to_native(ndf.select("vertex_id")).to_series().to_list())
                         except Exception:
-                            # fallback: convert to native and pull column
                             native = nw.to_native(ndf)
                             col = native["vertex_id"]
                             ids = set(col.to_list() if hasattr(col, "to_list") else list(col))
                 self._vertex_attr_ids = ids
                 self._vertex_attr_df_id = id(df)
         except Exception:
-            # If anything about caching fails, proceed without it
             self._vertex_attr_ids = None
             self._vertex_attr_df_id = None
 
-        # membership check via cache when available
         ids = getattr(self, "_vertex_attr_ids", None)
         if ids is not None and vertex_id in ids:
             return
 
-        # If DF is empty, create the first row with the canonical schema
         is_empty = False
         try:
-            is_empty = df.is_empty()  # polars-like
+            is_empty = df.is_empty()
         except Exception:
             try:
-                is_empty = len(df) == 0  # pandas-like
+                is_empty = len(df) == 0
             except Exception:
                 is_empty = False
 
         if is_empty:
             try:
                 import polars as pl
-
                 self.vertex_attributes = pl.DataFrame(
                     {"vertex_id": [vertex_id]}, schema={"vertex_id": pl.Utf8}
                 )
             except Exception:
                 try:
                     import pandas as pd
-
                     self.vertex_attributes = pd.DataFrame({"vertex_id": [vertex_id]})
                 except Exception:
                     raise RuntimeError(
-                        "Cannot initialize vertex_attributes row: install polars (recommended) or pandas."
+                        "Cannot initialize vertex_attributes row: install polars or pandas."
                     )
-            # keep cache in sync
             try:
                 if isinstance(self._vertex_attr_ids, set):
                     self._vertex_attr_ids.add(vertex_id)
@@ -444,11 +447,9 @@ class IndexMapping:
                 pass
             return
 
-        # Align columns: create a single dict with all columns present
         row = dict.fromkeys(df.columns)
         row["vertex_id"] = vertex_id
 
-        # Append one row efficiently
         try:
             import polars as pl
         except Exception:
@@ -461,19 +462,15 @@ class IndexMapping:
                 new_df = pl.concat([df, pl.DataFrame([row])], how="vertical")
             self.vertex_attributes = new_df
         else:
-            # generic fallback (narwhals -> native)
             try:
                 import pandas as pd
-
                 self.vertex_attributes = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
             except Exception:
                 import narwhals as nw
-
                 ndf = nw.from_native(df)
-                nrow = nw.from_native(pd.DataFrame([row]))  # requires pandas
+                nrow = nw.from_native(pd.DataFrame([row]))
                 self.vertex_attributes = nw.to_native(nw.concat([ndf, nrow], how="vertical"))
 
-        # Update cache after mutation
         try:
             if isinstance(self._vertex_attr_ids, set):
                 self._vertex_attr_ids.add(vertex_id)
@@ -486,25 +483,18 @@ class IndexMapping:
     def _vertex_key_enabled(self) -> bool:
         return bool(self._vertex_key_fields)
 
-    def _build_key_from_attrs(self, attrs: dict) -> tuple | None:
-        """Return tuple of field values in declared order, or None if any missing."""
+    def _build_key_from_attrs(self, attrs: dict) -> "tuple | None":
         if not self._vertex_key_fields:
             return None
         vals = []
         for f in self._vertex_key_fields:
             if f not in attrs or attrs[f] is None:
-                return None  # incomplete — not indexable
+                return None
             vals.append(attrs[f])
         return tuple(vals)
 
-    def _current_key_of_vertex(self, vertex_id) -> tuple | None:
-        """Read the current key tuple of a vertex from vertex_attributes (None if incomplete)."""
+    def _current_key_of_vertex(self, vertex_id) -> "tuple | None":
         if not self._vertex_key_fields:
             return None
         cur = {f: self.get_attr_vertex(vertex_id, f, None) for f in self._vertex_key_fields}
         return self._build_key_from_attrs(cur)
-
-    def _gen_vertex_id_from_key(self, key_tuple: tuple) -> str:
-        """Deterministic, human-readable vertex_id from a composite key."""
-        parts = [f"{f}={repr(v)}" for f, v in zip(self._vertex_key_fields, key_tuple)]
-        return "cid:" + "|".join(parts)
