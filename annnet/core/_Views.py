@@ -120,18 +120,21 @@ class GraphView:
 
         # Get row and column indices
         if vertex_ids is not None:
-            rows = [
-                self._graph.entity_to_idx[nid]
-                for nid in vertex_ids
-                if nid in self._graph.entity_to_idx
-            ]
+            rows = []
+            for nid in vertex_ids:
+                ekey = self._graph._resolve_entity_key(nid)
+                rec = self._graph._entities.get(ekey)
+                if rec is not None:
+                    rows.append(rec.row_idx)
         else:
             rows = list(range(self._graph._matrix.shape[0]))
 
         if edge_ids is not None:
-            cols = [
-                self._graph.edge_to_idx[eid] for eid in edge_ids if eid in self._graph.edge_to_idx
-            ]
+            cols = []
+            for eid in edge_ids:
+                rec = self._graph._edges.get(eid)
+                if rec is not None and rec.col_idx >= 0:
+                    cols.append(rec.col_idx)
         else:
             cols = list(range(self._graph._matrix.shape[1]))
 
@@ -177,7 +180,7 @@ class GraphView:
         """
         vertex_ids = self.vertex_ids
         if vertex_ids is None:
-            return sum(1 for t in self._graph.entity_types.values() if t == "vertex")
+            return sum(1 for rec in self._graph._entities.values() if rec.kind == "vertex")
         return len(vertex_ids)
 
     @property
@@ -190,7 +193,7 @@ class GraphView:
         """
         edge_ids = self.edge_ids
         if edge_ids is None:
-            return len(self._graph.edge_to_idx)
+            return len(self._graph._col_to_edge)
         return len(edge_ids)
 
     # ==================== Internal Computation ====================
@@ -214,9 +217,7 @@ class GraphView:
             candidate_vertices = (
                 vertex_ids
                 if vertex_ids is not None
-                else set(
-                    vid for vid, vtype in self._graph.entity_types.items() if vtype == "vertex"
-                )
+                else {ekey[0] for ekey, rec in self._graph._entities.items() if rec.kind == "vertex"}
             )
 
             if callable(self._vertices_filter):
@@ -238,7 +239,7 @@ class GraphView:
         # Step 3: Apply edge filter
         if self._edges_filter is not None:
             candidate_edges = (
-                edge_ids if edge_ids is not None else set(self._graph.edge_to_idx.keys())
+                edge_ids if edge_ids is not None else set(self._graph._col_to_edge.values())
             )
 
             if callable(self._edges_filter):
@@ -268,27 +269,24 @@ class GraphView:
                     pass
             vertex_ids = filtered_vertices
 
-        # Step 5: Filter edges by vertex connectivity (uses AnnNet.edge_definitions, hyperedge_definitions)
+        # Step 5: Filter edges by vertex connectivity
         if vertex_ids is not None and edge_ids is not None:
             filtered_edges = set()
             for eid in edge_ids:
-                # Binary/vertex-edge edges
-                if eid in self._graph.edge_definitions:
-                    source, target, _ = self._graph.edge_definitions[eid]
-                    if source in vertex_ids and target in vertex_ids:
-                        filtered_edges.add(eid)
-                # Hyperedges
-                elif eid in self._graph.hyperedge_definitions:
-                    hdef = self._graph.hyperedge_definitions[eid]
-                    if hdef.get("directed", False):
-                        heads = set(hdef.get("head", []))
-                        tails = set(hdef.get("tail", []))
-                        if heads.issubset(vertex_ids) and tails.issubset(vertex_ids):
+                rec = self._graph._edges.get(eid)
+                if rec is None or rec.col_idx < 0:
+                    continue
+                if rec.etype == "hyper":
+                    if rec.tgt is not None:
+                        if set(rec.src).issubset(vertex_ids) and set(rec.tgt).issubset(vertex_ids):
                             filtered_edges.add(eid)
                     else:
-                        members = set(hdef.get("members", []))
-                        if members.issubset(vertex_ids):
+                        if set(rec.src).issubset(vertex_ids):
                             filtered_edges.add(eid)
+                else:
+                    s, t = rec.src, rec.tgt
+                    if s is not None and t is not None and s in vertex_ids and t in vertex_ids:
+                        filtered_edges.add(eid)
             edge_ids = filtered_edges
 
         # Cache results
@@ -399,7 +397,7 @@ class GraphView:
         if vertex_ids is not None:
             vset = vertex_ids  # already a set from _compute_ids
         else:
-            vset = {vid for vid, vtype in self._graph.entity_types.items() if vtype == "vertex"}
+            vset = {ekey[0] for ekey, rec in self._graph._entities.items() if rec.kind == "vertex"}
 
         # ---- Copy vertices in one bulk call ----
         if copy_attributes:
@@ -451,47 +449,49 @@ class GraphView:
         if edge_ids is not None:
             eids_to_copy = edge_ids
         else:
-            eids_to_copy = self._graph.edge_to_idx.keys()
+            eids_to_copy = self._graph._col_to_edge.values()
 
         # ---- Partition into binary and hyperedges ----
         binary_edges = []
         hyper_edges = []
 
         for eid in eids_to_copy:
-            if eid in self._graph.edge_definitions:
-                source, target, edge_type = self._graph.edge_definitions[eid]
-                if source not in vset or target not in vset:
-                    continue
-                weight = self._graph.edge_weights.get(eid, 1.0)
-                directed = self._graph.edge_directed.get(eid, self._graph.directed)
-                d = {
-                    "source": source,
-                    "target": target,
-                    "weight": weight,
-                    "edge_type": edge_type,
-                    "edge_directed": directed,
-                }
-                if copy_attributes and eid in edge_attrs_map:
-                    d["attributes"] = edge_attrs_map[eid]
-                binary_edges.append(d)
-
-            elif eid in self._graph.hyperedge_definitions:
-                hdef = self._graph.hyperedge_definitions[eid]
-                weight = self._graph.edge_weights.get(eid, 1.0)
-                if hdef.get("directed", False):
-                    heads = list(hdef.get("head", []))
-                    tails = list(hdef.get("tail", []))
+            rec = self._graph._edges.get(eid)
+            if rec is None or rec.col_idx < 0:
+                continue
+            weight = rec.weight if rec.weight is not None else 1.0
+            if rec.etype == "hyper":
+                if rec.tgt is not None:
+                    heads = list(rec.src)
+                    tails = list(rec.tgt)
                     if not all(h in vset for h in heads) or not all(t in vset for t in tails):
                         continue
                     d = {"head": heads, "tail": tails, "weight": weight}
                 else:
-                    members = list(hdef.get("members", []))
+                    members = list(rec.src)
                     if not all(m in vset for m in members):
                         continue
                     d = {"members": members, "weight": weight}
                 if copy_attributes and eid in edge_attrs_map:
                     d["attributes"] = edge_attrs_map[eid]
                 hyper_edges.append(d)
+            else:
+                source, target = rec.src, rec.tgt
+                if source is None or target is None:
+                    continue
+                if source not in vset or target not in vset:
+                    continue
+                directed = rec.directed if rec.directed is not None else self._graph.directed
+                d = {
+                    "source": source,
+                    "target": target,
+                    "weight": weight,
+                    "edge_type": rec.etype,
+                    "edge_directed": directed,
+                }
+                if copy_attributes and eid in edge_attrs_map:
+                    d["attributes"] = edge_attrs_map[eid]
+                binary_edges.append(d)
 
         if binary_edges:
             subG.add_edges_bulk(binary_edges)
@@ -664,7 +664,7 @@ class ViewsClass:
         -----
         Vectorized implementation avoids per-edge scans.
         """
-        if not self.edge_to_idx:
+        if not self._col_to_edge:
             try:
                 import polars as pl
 
@@ -676,18 +676,22 @@ class ViewsClass:
                     {"edge_id": pd.Series(dtype="string"), "kind": pd.Series(dtype="string")}
                 )
 
-        # Keep original keys for dict lookups
-        eids_raw = list(self.edge_to_idx.keys())
+        eids_raw = list(self._col_to_edge.values())
         eids_str = [str(eid) for eid in eids_raw]  # Stringified for DataFrame
 
-        kinds = [self.edge_kind.get(eid, "binary") for eid in eids_raw]
+        _default_dir = True if self.directed is None else self.directed
+        _edge_recs = [self._edges[eid] for eid in eids_raw]
+        kinds = [
+            "hyper" if rec.etype == "hyper" else (rec.ml_kind or "binary")
+            for rec in _edge_recs
+        ]
 
         need_global = include_weight or resolved_weight
-        global_w = [self.edge_weights.get(eid, None) for eid in eids_raw] if need_global else None
+        global_w = [rec.weight for rec in _edge_recs] if need_global else None
         dirs = (
             [
-                self.edge_directed.get(eid, True if self.directed is None else self.directed)
-                for eid in eids_raw
+                rec.directed if rec.directed is not None else _default_dir
+                for rec in _edge_recs
             ]
             if include_directed
             else None
@@ -696,25 +700,28 @@ class ViewsClass:
         src, tgt, etype = [], [], []
         head, tail, members = [], [], []
 
-        for eid_raw, k in zip(eids_raw, kinds):
-            if k == "hyper":
-                h = self.hyperedge_definitions[eid_raw]
-                if h.get("directed", False):
-                    head.append(tuple(str(x) for x in sorted(h.get("head", ()))))
-                    tail.append(tuple(str(x) for x in sorted(h.get("tail", ()))))
+        for rec in _edge_recs:
+            if rec.etype == "hyper":
+                if rec.tgt is not None:
+                    src_vals = tuple(str(x) for x in sorted(rec.src))
+                    tgt_vals = tuple(str(x) for x in sorted(rec.tgt))
+                    head.append(src_vals)
+                    tail.append(tgt_vals)
                     members.append(None)
+                    src.append("|".join(src_vals))
+                    tgt.append("|".join(tgt_vals))
                 else:
+                    src_vals = tuple(str(x) for x in sorted(rec.src))
                     head.append(None)
                     tail.append(None)
-                    members.append(tuple(str(x) for x in sorted(h.get("members", ()))))
-                src.append(None)
-                tgt.append(None)
+                    members.append(src_vals)
+                    src.append("|".join(src_vals))
+                    tgt.append(None)
                 etype.append(None)
             else:
-                s, t, et = self.edge_definitions[eid_raw]
-                src.append(str(s) if s is not None else None)
-                tgt.append(str(t) if t is not None else None)
-                etype.append(str(et) if et is not None else None)
+                src.append(str(rec.src) if rec.src is not None else None)
+                tgt.append(str(rec.tgt) if rec.tgt is not None else None)
+                etype.append(str(rec.etype) if rec.etype is not None else None)
                 head.append(None)
                 tail.append(None)
                 members.append(None)

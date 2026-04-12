@@ -168,6 +168,7 @@ class History:
             "add_edge_entity",
             "add_edge",
             "add_hyperedge",
+            "flatten_layers",
             "remove_edge",
             "remove_vertex",
             "set_vertex_attrs",
@@ -273,7 +274,19 @@ class History:
                 json.dump(df.to_dicts(), f, ensure_ascii=False)
             return len(df)
         if p.endswith(".csv"):
-            df.write_csv(path)
+            rows = df.to_dicts() if hasattr(df, "to_dicts") else list(self._history)
+            flat_rows = []
+            for row in rows:
+                flat_row = {}
+                for key, value in row.items():
+                    if isinstance(value, (dict, list, tuple, set, frozenset)):
+                        import json
+
+                        flat_row[key] = json.dumps(self._jsonify(value), ensure_ascii=False)
+                    else:
+                        flat_row[key] = value
+                flat_rows.append(flat_row)
+            pl.DataFrame(flat_rows).write_csv(path)
             return len(df)
         # Default to Parquet if unknown
         df.write_parquet(path + ".parquet")
