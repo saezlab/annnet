@@ -34,9 +34,9 @@ def _monkeypatch_set_hyperedge_coeffs(G) -> bool:
         return False  # already there
 
     def set_hyperedge_coeffs(self, edge_id: str, coeffs: dict[str, float]) -> None:
-        col = self.edge_to_idx[edge_id]
+        col = self._edges[edge_id].col_idx
         for vid, coeff in coeffs.items():
-            row = self.entity_to_idx[vid]
+            row = self._entities[self._resolve_entity_key(vid)].row_idx
             self._matrix[row, col] = float(coeff)
 
     G.set_hyperedge_coeffs = types.MethodType(set_hyperedge_coeffs, G)  # type: ignore
@@ -113,12 +113,12 @@ def _graph_from_stoich(
             source_coeff = float(-sum(v for v in col if v > 0))  # negative sum of products
             coeffs[BOUNDARY_SOURCE] = source_coeff
 
-        eid_added = G.add_hyperedge(
-            head=head,
-            tail=tail,
+        eid_added = G.add_edge(
+            src=head,
+            tgt=tail,
             slice=slice,
             edge_id=eid,
-            edge_directed=True,
+            directed=True,
             weight=1.0,
         )
 

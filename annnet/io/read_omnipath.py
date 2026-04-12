@@ -501,7 +501,7 @@ def read_omnipath(
                             {k: v for k, v in row.items() if k != "vertex_id" and v is not None},
                         )
                         for row in flat.to_dicts()
-                        if row["vertex_id"] in G.entity_to_idx
+                        if G._resolve_entity_key(row["vertex_id"]) in G._entities
                     ]
                 )
                 print(f"[vertex annotations] loaded  shape={G.vertex_attributes.shape}")

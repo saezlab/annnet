@@ -9,11 +9,13 @@ if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
 from ..adapters._utils import (
+    _deserialize_endpoint,
     _deserialize_edge_layers,
     _deserialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
     _deserialize_VM,
     _safe_df_to_rows,
+    _serialize_endpoint,
     _serialize_edge_layers,
     _serialize_layer_tuple_attrs,
     _serialize_node_layer_attrs,
@@ -82,15 +84,11 @@ def _strip_nulls(d: dict):
 
 def _is_directed_eid(graph, eid):
     """Get edge directedness. Default False for hyperedges, True for binary."""
-    kind = getattr(graph, "edge_kind", {}).get(eid)
+    rec = getattr(graph, "_edges", {}).get(eid)
+    kind = "hyper" if rec is not None and rec.etype == "hyper" else "binary"
 
-    # Check edge_directed dict first
-    try:
-        ed = getattr(graph, "edge_directed", {})
-        if eid in ed:
-            return bool(ed[eid])
-    except Exception:
-        pass
+    if rec is not None and rec.directed is not None:
+        return bool(rec.directed)
 
     # Check attribute
     try:
@@ -103,8 +101,8 @@ def _is_directed_eid(graph, eid):
     # For hyperedges, check if S and T are identical (undirected)
     if kind == "hyper":
         try:
-            eidx = graph.edge_to_idx[eid]
-            S, T = graph.get_edge(eidx)
+            S = set(rec.src or [])
+            T = set(rec.tgt or [])
             # If S == T, it's undirected (same member set in both)
             if S == T:
                 return False
@@ -262,14 +260,20 @@ def to_parquet(graph: AnnNet, path):
     e_attr_map = _build_attr_map(getattr(graph, "edge_attributes", None), "edge_id")
     e_rows = []
     for eidx in range(graph.number_of_edges()):
-        eid = graph.idx_to_edge[eidx]
-        S, T = graph.get_edge(eidx)
-        kind = graph.edge_kind.get(eid)
+        eid = graph._col_to_edge[eidx]
+        rec = graph._edges[eid]
+        is_hyper = rec.etype == "hyper"
+        if is_hyper:
+            S = set(rec.src or [])
+            T = set(rec.tgt or [])
+        else:
+            S = set() if rec.src is None else {rec.src}
+            T = set() if rec.tgt is None else {rec.tgt}
         row = {
             "edge_id": eid,
-            "kind": ("hyper" if kind == "hyper" else "binary"),
+            "kind": ("hyper" if is_hyper else "binary"),
             "directed": bool(_is_directed_eid(graph, eid)),
-            "weight": float(getattr(graph, "edge_weights", {}).get(eid, 1.0)),
+            "weight": float(1.0 if rec.weight is None else rec.weight),
         }
         attrs = e_attr_map.get(eid)
         if attrs:
@@ -299,7 +303,12 @@ def to_parquet(graph: AnnNet, path):
                 v = u
             else:
                 u, v = sorted(members)
-            row.update({"source": u, "target": v})
+            row.update(
+                {
+                    "source": json.dumps(_serialize_endpoint(u), ensure_ascii=False),
+                    "target": json.dumps(_serialize_endpoint(v), ensure_ascii=False),
+                }
+            )
         else:
             head_map = _endpoint_coeff_map(row, "__source_attr", S) or dict.fromkeys(S or [], 1.0)
             tail_map = _endpoint_coeff_map(row, "__target_attr", T) or dict.fromkeys(T or [], 1.0)
@@ -380,7 +389,7 @@ def to_parquet(graph: AnnNet, path):
             "edge_kind": dict(getattr(graph, "edge_kind", {})),
             "edge_layers": _serialize_edge_layers(getattr(graph, "edge_layers", {})),
             "node_layer_attrs": _serialize_node_layer_attrs(
-                getattr(graph, "_vertex_layer_attrs", {})
+                getattr(graph, "_state_attrs", {})
             ),
             "layer_tuple_attrs": _serialize_layer_tuple_attrs(getattr(graph, "_layer_attrs", {})),
             "layer_attributes": _safe_df_to_rows(getattr(graph, "layer_attributes", None)),
@@ -450,7 +459,12 @@ def from_parquet(path) -> AnnNet:
 
         # Build minimal dicts for bulk add
         edge_rows = (
-            {"source": u, "target": v, "edge_id": eid, "edge_directed": bool(d)}
+            {
+                "source": _deserialize_endpoint(u),
+                "target": _deserialize_endpoint(v),
+                "edge_id": eid,
+                "edge_directed": bool(d),
+            }
             for u, v, eid, d in zip(src, dst, eids, directed)
             if u is not None and v is not None
         )
@@ -458,7 +472,9 @@ def from_parquet(path) -> AnnNet:
 
         # Apply weights in batch
         for eid, w in zip(eids, weights):
-            H.edge_weights[eid] = float(w)
+            rec = H._edges.get(eid)
+            if rec is not None:
+                rec.weight = float(w)
 
         # Remaining edge attrs (vectorized -> rows, but small)
         # Drop structural columns before attaching attrs
@@ -488,8 +504,8 @@ def from_parquet(path) -> AnnNet:
         for rec in binary:
             rec = dict(rec)
             eid = rec.pop("edge_id")
-            u = rec.pop("source", None)
-            v = rec.pop("target", None)
+            u = _deserialize_endpoint(rec.pop("source", None))
+            v = _deserialize_endpoint(rec.pop("target", None))
             d = bool(rec.pop("directed", True))
             w = float(rec.pop("weight", 1.0))
             if u is None or v is None:
@@ -505,7 +521,9 @@ def from_parquet(path) -> AnnNet:
         if edge_rows:
             H.add_edges_bulk(edge_rows)
             for eid, w in weights.items():
-                H.edge_weights[eid] = w
+                rec = H._edges.get(eid)
+                if rec is not None:
+                    rec.weight = w
             if extra_attrs:
                 H.set_edge_attrs_bulk(extra_attrs)
 
@@ -554,7 +572,9 @@ def from_parquet(path) -> AnnNet:
             H.add_hyperedges_bulk(hyper_rows)
 
         for eid, w in zip(eids, weights):
-            H.edge_weights[eid] = float(w)
+            rec = H._edges.get(eid)
+            if rec is not None:
+                rec.weight = float(w)
 
         # Extra attrs
         drop_cols = {
@@ -610,7 +630,9 @@ def from_parquet(path) -> AnnNet:
         if hyper_rows:
             H.add_hyperedges_bulk(hyper_rows)
             for eid, w in weights.items():
-                H.edge_weights[eid] = w
+                rec = H._edges.get(eid)
+                if rec is not None:
+                    rec.weight = w
             if extra_attrs:
                 H.set_edge_attrs_bulk(extra_attrs)
 
@@ -689,13 +711,20 @@ def from_parquet(path) -> AnnNet:
             ek = mm.get("edge_kind", {})
             el_ser = mm.get("edge_layers", {})
             if ek:
-                H.edge_kind.update(ek)
+                for eid, kind in ek.items():
+                    rec = H._edges.get(eid)
+                    if rec is None:
+                        continue
+                    if kind == "hyper":
+                        rec.etype = "hyper"
+                    else:
+                        rec.ml_kind = kind
             if el_ser:
                 H.edge_layers.update(_deserialize_edge_layers(el_ser))
 
             nl_attrs_ser = mm.get("node_layer_attrs", [])
             if nl_attrs_ser:
-                H._vertex_layer_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+                H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
 
             layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
             if layer_tuple_attrs_ser:

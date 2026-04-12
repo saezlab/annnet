@@ -14,6 +14,7 @@ except Exception:  # ModuleNotFoundError, etc.
     pl = None
 
 from ..adapters._utils import (
+    _deserialize_endpoint,
     _deserialize_edge_layers,
     _deserialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
@@ -21,6 +22,7 @@ from ..adapters._utils import (
     _df_to_rows,
     _rows_to_df,
     _serialize_edge_layers,
+    _serialize_endpoint,
     _serialize_layer_tuple_attrs,
     _serialize_node_layer_attrs,
     _serialize_VM,
@@ -63,13 +65,12 @@ def _get_all_edge_attrs(graph: AnnNet, edge_id: str):
 
 
 def _get_edge_weight(graph: AnnNet, edge_id: str, default=1.0):
-    ew = getattr(graph, "edge_weights", None)
-    if ew is not None and hasattr(ew, "get"):
-        try:
-            w = ew.get(edge_id, default)
-            return float(w) if w is not None else default
-        except Exception:
-            pass
+    try:
+        rec = getattr(graph, "_edges", {}).get(edge_id)
+        if rec is not None and rec.weight is not None:
+            return float(rec.weight)
+    except Exception:
+        pass
     return default
 
 
@@ -146,10 +147,14 @@ def to_sif(
                 "aspect_attrs": dict(getattr(graph, "_aspect_attrs", {})),
                 "elem_layers": dict(getattr(graph, "elem_layers", {})),
                 "VM": _serialize_VM(getattr(graph, "_VM", set())),
-                "edge_kind": dict(getattr(graph, "edge_kind", {})),
+                "edge_kind": {
+                    eid: ("hyper" if rec.etype == "hyper" else rec.ml_kind)
+                    for eid, rec in graph._edges.items()
+                    if rec.etype == "hyper" or rec.ml_kind is not None
+                },
                 "edge_layers": _serialize_edge_layers(getattr(graph, "edge_layers", {})),
                 "node_layer_attrs": _serialize_node_layer_attrs(
-                    getattr(graph, "_vertex_layer_attrs", {})
+                    getattr(graph, "_state_attrs", {})
                 ),
                 "layer_tuple_attrs": _serialize_layer_tuple_attrs(
                     getattr(graph, "_layer_attrs", {})
@@ -163,13 +168,12 @@ def to_sif(
 
     if path:
         edge_attr_map = _build_edge_attr_map(graph)
-        ew = getattr(graph, "edge_weights", None)
-        edge_weight_get = ew.get if ew is not None and hasattr(ew, "get") else None
 
         with open(path, "w", encoding="utf-8") as f:
-            edge_defs = getattr(graph, "edge_definitions", {}) or {}
-
-            for eid, (src, tgt, _etype) in edge_defs.items():
+            for eid, rec in graph._edges.items():
+                if rec.etype == "hyper":
+                    continue
+                src, tgt = rec.src, rec.tgt
                 if src is None or tgt is None:
                     continue
                 src_str = str(src).strip()
@@ -191,19 +195,14 @@ def to_sif(
                 f.write(f"{src_str}\t{rel}\t{tgt_str}\n")
 
                 if lossless:
-                    directed = getattr(graph, "edge_directed", {}).get(eid, True)
-                    if edge_weight_get is not None:
-                        try:
-                            w = edge_weight_get(eid, 1.0)
-                            weight = float(w) if w is not None else 1.0
-                        except Exception:
-                            weight = 1.0
-                    else:
-                        weight = _get_edge_weight(graph, eid, 1.0)
+                    directed = rec.directed if rec.directed is not None else True
+                    weight = _get_edge_weight(graph, eid, 1.0)
 
                     manifest["binary_edges"][eid] = {
                         "source": src_str,
                         "target": tgt_str,
+                        "source_endpoint": _serialize_endpoint(src),
+                        "target_endpoint": _serialize_endpoint(tgt),
                         "directed": directed,
                     }
 
@@ -269,20 +268,14 @@ def to_sif(
                         manifest["vertex_attrs"][svid] = attrs
 
     if lossless:
-        edge_kind = getattr(graph, "edge_kind", {}) or {}
-        hyp_defs = getattr(graph, "hyperedge_definitions", {}) or {}
-
-        for eid, kind in edge_kind.items():
-            if kind != "hyper":
-                continue
-            meta = hyp_defs.get(eid)
-            if not meta:
+        for eid, rec in graph._edges.items():
+            if rec.etype != "hyper":
                 continue
 
-            directed = bool(meta.get("directed", False))
-            head = list(meta.get("head", [])) if directed else []
-            tail = list(meta.get("tail", [])) if directed else []
-            members = list(meta.get("members", [])) if not directed else []
+            directed = rec.tgt is not None
+            head = list(rec.src or []) if directed else []
+            tail = list(rec.tgt or []) if directed else []
+            members = list(rec.src or []) if not directed else []
 
             weight = _get_edge_weight(graph, eid, 1.0)
             attrs = _get_all_edge_attrs(graph, eid)
@@ -543,8 +536,8 @@ def from_sif(
 
                 append(
                     {
-                        "source": src,
-                        "target": tgt,
+                        "source": _deserialize_endpoint(info.get("source_endpoint", src)),
+                        "target": _deserialize_endpoint(info.get("target_endpoint", tgt)),
                         "weight": weight,
                         "edge_id": orig_eid,
                         "edge_directed": edge_directed_val,
@@ -640,12 +633,19 @@ def from_sif(
             ek = mm.get("edge_kind", {})
             el_ser = mm.get("edge_layers", {})
             if ek:
-                H.edge_kind.update(ek)
+                for eid, kind in ek.items():
+                    rec = H._edges.get(eid)
+                    if rec is None:
+                        continue
+                    if kind == "hyper":
+                        rec.etype = "hyper"
+                    else:
+                        rec.ml_kind = kind
             if el_ser:
                 H.edge_layers.update(_deserialize_edge_layers(el_ser))
             nl_attrs_ser = mm.get("node_layer_attrs", [])
             if nl_attrs_ser:
-                H._vertex_layer_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+                H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
             layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
             if layer_tuple_attrs_ser:
                 H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)

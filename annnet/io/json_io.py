@@ -12,6 +12,7 @@ except Exception:  # ModuleNotFoundError, etc.
     pl = None
 
 from ..adapters._utils import (
+    _deserialize_endpoint,
     _deserialize_edge_layers,
     _deserialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
@@ -20,23 +21,12 @@ from ..adapters._utils import (
     _endpoint_coeff_map,
     _is_directed_eid,
     _rows_to_df,
+    _serialize_endpoint,
     _serialize_edge_layers,
     _serialize_layer_tuple_attrs,
     _serialize_node_layer_attrs,
     _serialize_VM,
 )
-
-
-def _is_directed_eid(graph, eid):
-    try:
-        return bool(getattr(graph, "edge_directed", {}).get(eid, True))
-    except Exception:
-        pass
-    try:
-        val = graph.get_edge_attribute(eid, "directed")
-        return bool(val) if val is not None else True
-    except Exception:
-        return True
 
 
 def _coerce_coeff_mapping(val):
@@ -100,6 +90,14 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
     return out
 
 
+def _edge_endpoint_sets(rec):
+    if rec.etype == "hyper":
+        return set(rec.src or []), set(rec.tgt or [])
+    src = set() if rec.src is None else {rec.src}
+    tgt = set() if rec.tgt is None else {rec.tgt}
+    return src, tgt
+
+
 def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     """Node-link JSON with x-extensions (slices, edge_slices, hyperedges).
     Lossless vs your core (IDs, attrs, parallel, hyperedges, slices).
@@ -126,9 +124,10 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     edges = []
     hyperedges = []
     for eidx in range(graph.number_of_edges()):
-        eid = graph.idx_to_edge[eidx]
-        S, T = graph.get_edge(eidx)
-        kind = graph.edge_kind.get(eid)
+        eid = graph._col_to_edge[eidx]
+        rec = graph._edges[eid]
+        S, T = _edge_endpoint_sets(rec)
+        is_hyper = rec.etype == "hyper"
 
         # attrs
         try:
@@ -142,7 +141,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
 
         # weight + directed
         try:
-            w = float(getattr(graph, "edge_weights", {}).get(eid, 1.0))
+            w = float(1.0 if rec.weight is None else rec.weight)
         except Exception:
             w = 1.0
         try:
@@ -150,7 +149,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
         except Exception:
             directed = True
 
-        if kind == "hyper":
+        if is_hyper:
             # endpoint coeffs from private maps if present; else 1.0
             head_map = _endpoint_coeff_map(d, "__source_attr", S) or dict.fromkeys(S or [], 1.0)
             tail_map = _endpoint_coeff_map(d, "__target_attr", T) or dict.fromkeys(T or [], 1.0)
@@ -159,9 +158,13 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
                 {
                     "id": eid,
                     "directed": bool(directed),
-                    "head": list(head_map.keys()) if directed else None,
-                    "tail": list(tail_map.keys()) if directed else None,
-                    "members": None if directed else list({*head_map.keys(), *tail_map.keys()}),
+                    "head": [_serialize_endpoint(x) for x in head_map.keys()] if directed else None,
+                    "tail": [_serialize_endpoint(x) for x in tail_map.keys()] if directed else None,
+                    "members": (
+                        None
+                        if directed
+                        else [_serialize_endpoint(x) for x in {*head_map.keys(), *tail_map.keys()}]
+                    ),
                     "attrs": d,
                     "weight": w,
                 }
@@ -177,8 +180,8 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
             edges.append(
                 {
                     "id": eid,
-                    "source": u,
-                    "target": v,
+                    "source": _serialize_endpoint(u),
+                    "target": _serialize_endpoint(v),
                     "directed": bool(directed),
                     "weight": w,
                     "attrs": d,
@@ -262,7 +265,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
                 "edge_kind": dict(getattr(graph, "edge_kind", {})),
                 "edge_layers": _serialize_edge_layers(getattr(graph, "edge_layers", {})),
                 "node_layer_attrs": _serialize_node_layer_attrs(
-                    getattr(graph, "_vertex_layer_attrs", {})
+                    getattr(graph, "_state_attrs", {})
                 ),
                 "layer_tuple_attrs": _serialize_layer_tuple_attrs(
                     getattr(graph, "_layer_attrs", {})
@@ -282,30 +285,46 @@ def from_json(path) -> AnnNet:
     with open(path, encoding="utf-8") as f:
         doc = json.load(f)
     H = AnnNet()
+    ext = doc.get("x-extensions") or {}
+    mm = ext.get("multilayer", {})
+    aspects = mm.get("aspects", [])
+    elem_layers = mm.get("elem_layers", {})
+    if aspects:
+        H.set_aspects(aspects)
+        if elem_layers:
+            H.set_elementary_layers(elem_layers)
 
     # vertices
     for nd in doc.get("nodes", []):
         vid = nd.get("id")
         if vid is None:
             continue
-        H.add_vertex(vid)
         vattrs = {k: v for k, v in nd.items() if k != "id"}
-        if vattrs:
-            H.set_vertex_attrs(vid, **vattrs)
+        if aspects:
+            H._ensure_vertex_table()
+            H._ensure_vertex_row(vid)
+            if vattrs:
+                H.set_vertex_attrs(vid, **vattrs)
+        else:
+            H.add_vertex(vid)
+            if vattrs:
+                H.set_vertex_attrs(vid, **vattrs)
 
     # edges (binary)
     for e in doc.get("edges", []):
         eid = e.get("id")
-        u = e.get("source")
-        v = e.get("target")
+        u = _deserialize_endpoint(e.get("source"))
+        v = _deserialize_endpoint(e.get("target"))
         if eid is None or u is None or v is None:
             continue
         directed = bool(e.get("directed", True))
-        H.add_edge(u, v, edge_id=eid, edge_directed=directed)
+        H.add_edge(u, v, edge_id=eid, directed=directed, parallel="parallel")
         # weight
         w = e.get("weight", 1.0)
         try:
-            H.edge_weights[eid] = float(w)
+            rec = H._edges.get(eid)
+            if rec is not None:
+                rec.weight = float(w)
         except Exception:
             pass
         # attrs (except handled)
@@ -318,23 +337,24 @@ def from_json(path) -> AnnNet:
             H.set_edge_attrs(eid, **attrs)
 
     # hyperedges + slices
-    ext = doc.get("x-extensions") or {}
     for h in ext.get("hyperedges", []):
         eid = h.get("id")
         directed = bool(h.get("directed", True))
         if directed:
-            head = list(h.get("head") or [])
-            tail = list(h.get("tail") or [])
-            H.add_hyperedge(head=head, tail=tail, edge_id=eid, edge_directed=True)
+            head = [_deserialize_endpoint(x) for x in list(h.get("head") or [])]
+            tail = [_deserialize_endpoint(x) for x in list(h.get("tail") or [])]
+            H.add_edge(src=head, tgt=tail, edge_id=eid, directed=True)
             # stash endpoint coeffs if provided (optional schema: __source_attr/__target_attr)
             # If absent, default 1.0 will be implied by your exporter on the next round-trip.
         else:
-            members = list(h.get("members") or [])
-            H.add_hyperedge(members=members, edge_id=eid, edge_directed=False)
+            members = [_deserialize_endpoint(x) for x in list(h.get("members") or [])]
+            H.add_edge(src=members, edge_id=eid, directed=False)
         # weight + attrs
         w = h.get("weight", 1.0)
         try:
-            H.edge_weights[eid] = float(w)
+            rec = H._edges.get(eid)
+            if rec is not None:
+                rec.weight = float(w)
         except Exception:
             pass
         attrs = {
@@ -376,13 +396,6 @@ def from_json(path) -> AnnNet:
 
     # multilayer / Kivela
     mm = ext.get("multilayer", {})
-    aspects = mm.get("aspects", [])
-    elem_layers = mm.get("elem_layers", {})
-
-    if aspects:
-        H.aspects = list(aspects)
-        H.elem_layers = dict(elem_layers or {})
-        H._rebuild_all_layers_cache()
 
     aspect_attrs = mm.get("aspect_attrs", {})
     if aspect_attrs:
@@ -396,13 +409,20 @@ def from_json(path) -> AnnNet:
     ek = mm.get("edge_kind", {})
     el_ser = mm.get("edge_layers", {})
     if ek:
-        H.edge_kind.update(ek)
+        for eid, kind in ek.items():
+            rec = H._edges.get(eid)
+            if rec is None:
+                continue
+            if kind == "hyper":
+                rec.etype = "hyper"
+            else:
+                rec.ml_kind = kind
     if el_ser:
         H.edge_layers.update(_deserialize_edge_layers(el_ser))
 
     nl_attrs_ser = mm.get("node_layer_attrs", [])
     if nl_attrs_ser:
-        H._vertex_layer_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+        H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
 
     layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
     if layer_tuple_attrs_ser:
@@ -444,9 +464,10 @@ def write_ndjson(graph: AnnNet, dir_path):
         open(f"{dir_path}/hyperedges.ndjson", "w", encoding="utf-8") as fh,
     ):
         for eidx in range(graph.number_of_edges()):
-            eid = graph.idx_to_edge[eidx]
-            S, T = graph.get_edge(eidx)
-            kind = graph.edge_kind.get(eid)
+            eid = graph._col_to_edge[eidx]
+            rec = graph._edges[eid]
+            S, T = _edge_endpoint_sets(rec)
+            is_hyper = rec.etype == "hyper"
 
             try:
                 ea = graph.edge_attributes.filter(
@@ -458,7 +479,7 @@ def write_ndjson(graph: AnnNet, dir_path):
             d.pop("edge_id", None)
 
             try:
-                w = float(getattr(graph, "edge_weights", {}).get(eid, 1.0))
+                w = float(1.0 if rec.weight is None else rec.weight)
             except Exception:
                 w = 1.0
             try:
@@ -466,7 +487,7 @@ def write_ndjson(graph: AnnNet, dir_path):
             except Exception:
                 directed = True
 
-            if kind == "hyper":
+            if is_hyper:
                 head_map = _endpoint_coeff_map(d, "__source_attr", S) or dict.fromkeys(S or [], 1.0)
                 tail_map = _endpoint_coeff_map(d, "__target_attr", T) or dict.fromkeys(T or [], 1.0)
                 obj = {"id": eid, "directed": directed, "weight": w}

@@ -22,6 +22,15 @@ except ImportError:
     from ..core.graph import AnnNet
 
 
+def _edge_weight(rec) -> float:
+    return 1.0 if rec.weight is None else float(rec.weight)
+
+
+def _edge_directed(graph: AnnNet, rec) -> bool:
+    default = True if graph.directed is None else graph.directed
+    return rec.directed if rec.directed is not None else default
+
+
 def to_dataframes(
     graph: AnnNet,
     *,
@@ -74,19 +83,17 @@ def to_dataframes(
 
     # 2. Binary edges table
     edges_data = []
-    for eid, (src, tgt, etype) in graph.edge_definitions.items():
-        if etype == "hyper":
+    for eid, rec in graph._edges.items():
+        if rec.col_idx < 0 or rec.etype == "hyper":
             continue
 
         row = {
             "edge_id": eid,
-            "source": src,
-            "target": tgt,
-            "weight": graph.edge_weights.get(eid, 1.0),
-            "directed": graph.edge_directed.get(
-                eid, True if graph.directed is None else graph.directed
-            ),
-            "edge_type": etype,
+            "source": rec.src,
+            "target": rec.tgt,
+            "weight": _edge_weight(rec),
+            "directed": _edge_directed(graph, rec),
+            "edge_type": rec.etype,
         }
 
         attrs = graph.edge_attributes.filter(pl.col("edge_id") == eid).to_dicts()
@@ -119,9 +126,11 @@ def to_dataframes(
         hyperedges_data = []
 
         if explode_hyperedges:
-            for eid, meta in graph.hyperedge_definitions.items():
-                directed = meta.get("directed", False)
-                weight = graph.edge_weights.get(eid, 1.0)
+            for eid, rec in graph._edges.items():
+                if rec.col_idx < 0 or rec.etype != "hyper":
+                    continue
+                directed = rec.tgt is not None
+                weight = _edge_weight(rec)
 
                 attrs = graph.edge_attributes.filter(pl.col("edge_id") == eid).to_dicts()
                 attr_dict = {}
@@ -134,7 +143,7 @@ def to_dataframes(
                         }
 
                 if directed:
-                    for v in meta.get("head", []):
+                    for v in rec.src:
                         row = {
                             "edge_id": eid,
                             "vertex_id": v,
@@ -145,7 +154,7 @@ def to_dataframes(
                         row.update(attr_dict)
                         hyperedges_data.append(row)
 
-                    for v in meta.get("tail", []):
+                    for v in rec.tgt:
                         row = {
                             "edge_id": eid,
                             "vertex_id": v,
@@ -156,7 +165,7 @@ def to_dataframes(
                         row.update(attr_dict)
                         hyperedges_data.append(row)
                 else:
-                    for v in meta.get("members", []):
+                    for v in rec.src:
                         row = {
                             "edge_id": eid,
                             "vertex_id": v,
@@ -167,9 +176,11 @@ def to_dataframes(
                         row.update(attr_dict)
                         hyperedges_data.append(row)
         else:
-            for eid, meta in graph.hyperedge_definitions.items():
-                directed = meta.get("directed", False)
-                weight = graph.edge_weights.get(eid, 1.0)
+            for eid, rec in graph._edges.items():
+                if rec.col_idx < 0 or rec.etype != "hyper":
+                    continue
+                directed = rec.tgt is not None
+                weight = _edge_weight(rec)
 
                 row = {
                     "edge_id": eid,
@@ -178,13 +189,13 @@ def to_dataframes(
                 }
 
                 if directed:
-                    row["head"] = list(meta.get("head", []))
-                    row["tail"] = list(meta.get("tail", []))
+                    row["head"] = list(rec.src)
+                    row["tail"] = list(rec.tgt)
                     row["members"] = None
                 else:
                     row["head"] = None
                     row["tail"] = None
-                    row["members"] = list(meta.get("members", []))
+                    row["members"] = list(rec.src)
 
                 attrs = graph.edge_attributes.filter(pl.col("edge_id") == eid).to_dicts()
                 if attrs:
@@ -392,14 +403,14 @@ def from_dataframes(
                     if is_directed:
                         head = [v for v, r in zip(data["vertices"], data["roles"]) if r == "head"]
                         tail = [v for v, r in zip(data["vertices"], data["roles"]) if r == "tail"]
-                        G.add_hyperedge(
-                            head=head, tail=tail, edge_id=eid, edge_directed=True, weight=weight
+                        G.add_edge(
+                            src=head, tgt=tail, edge_id=eid, directed=True, weight=weight
                         )
                     else:
-                        G.add_hyperedge(
-                            members=data["vertices"],
+                        G.add_edge(
+                            src=data["vertices"],
                             edge_id=eid,
-                            edge_directed=False,
+                            directed=False,
                             weight=weight,
                         )
             else:
@@ -415,18 +426,18 @@ def from_dataframes(
                     members = row.pop("members", None)
 
                     if directed_he:
-                        G.add_hyperedge(
-                            head=head or [],
-                            tail=tail or [],
+                        G.add_edge(
+                            src=head or [],
+                            tgt=tail or [],
                             edge_id=eid,
-                            edge_directed=True,
+                            directed=True,
                             weight=weight,
                         )
                     else:
-                        G.add_hyperedge(
-                            members=members or [],
+                        G.add_edge(
+                            src=members or [],
                             edge_id=eid,
-                            edge_directed=False,
+                            directed=False,
                             weight=weight,
                         )
 

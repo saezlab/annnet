@@ -43,6 +43,7 @@ from ..adapters._utils import (
     _serialize_slices,
     _serialize_VM,
 )
+from ..core._helpers import EntityRecord
 
 # --- Helpers ---
 CX_STYLE_KEY = "__cx_style__"
@@ -257,18 +258,40 @@ def to_cx2(
             "attributes": g_attrs,
         },
         "vertices": {
-            "types": dict(G.entity_types),
+            "types": {ekey[0]: ent.kind for ekey, ent in G._entities.items()},
             "attributes": vert_rows,
         },
         "edges": {
-            "definitions": dict(G.edge_definitions),
-            "weights": dict(G.edge_weights),
-            "directed": dict(getattr(G, "edge_directed", {})),
+            "definitions": {
+                eid: (rec.src, rec.tgt, rec.etype)
+                for eid, rec in G._edges.items()
+                if rec.etype != "hyper"
+            },
+            "weights": {
+                eid: rec.weight for eid, rec in G._edges.items() if rec.weight is not None
+            },
+            "directed": {
+                eid: bool(rec.directed)
+                for eid, rec in G._edges.items()
+                if rec.directed is not None
+            },
             "direction_policy": dict(getattr(G, "edge_direction_policy", {})),
-            "hyperedges": dict(getattr(G, "hyperedge_definitions", {})),
+            "hyperedges": {
+                eid: (
+                    {"directed": True, "head": list(rec.src or []), "tail": list(rec.tgt or [])}
+                    if rec.tgt is not None
+                    else {"directed": False, "members": list(rec.src or [])}
+                )
+                for eid, rec in G._edges.items()
+                if rec.etype == "hyper"
+            },
             "attributes": edge_rows,
             "kivela": {
-                "edge_kind": dict(getattr(G, "edge_kind", {})),
+                "edge_kind": {
+                    eid: ("hyper" if rec.etype == "hyper" else rec.ml_kind)
+                    for eid, rec in G._edges.items()
+                    if rec.etype == "hyper" or rec.ml_kind is not None
+                },
                 "edge_layers": _serialize_edge_layers(getattr(G, "edge_layers", {})),
             },
         },
@@ -282,9 +305,13 @@ def to_cx2(
             "aspect_attrs": dict(getattr(G, "_aspect_attrs", {})),
             "elem_layers": dict(getattr(G, "elem_layers", {})),
             "VM": _serialize_VM(getattr(G, "_VM", set())),
-            "edge_kind": dict(getattr(G, "edge_kind", {})),
+            "edge_kind": {
+                eid: ("hyper" if rec.etype == "hyper" else rec.ml_kind)
+                for eid, rec in G._edges.items()
+                if rec.etype == "hyper" or rec.ml_kind is not None
+            },
             "edge_layers": _serialize_edge_layers(getattr(G, "edge_layers", {})),
-            "node_layer_attrs": _serialize_node_layer_attrs(getattr(G, "_vertex_layer_attrs", {})),
+            "node_layer_attrs": _serialize_node_layer_attrs(getattr(G, "_state_attrs", {})),
             "layer_tuple_attrs": _serialize_layer_tuple_attrs(getattr(G, "_layer_attrs", {})),
             "layer_attributes": layer_attr_rows,
         },
@@ -455,21 +482,20 @@ def to_cx2(
             if id_col in r:
                 e_attrs_map[str(r[id_col])] = r
 
-    for eid, defn in G.edge_definitions.items():
-        is_hyper = eid in G.hyperedge_definitions
+    for eid, rec in G._edges.items():
+        is_hyper = rec.etype == "hyper"
 
         # --- Hyperedge handling ---
         if is_hyper:
             if hyperedges == "skip":
                 continue
 
-            hdef = G.hyperedge_definitions[eid]
-            directed = hdef.get("directed", True)
+            directed = rec.tgt is not None
             if directed:
-                S = set(hdef["head"])
-                T = set(hdef["tail"])
+                S = set(rec.src or [])
+                T = set(rec.tgt or [])
             else:
-                members = set(hdef["members"])
+                members = set(rec.src or [])
                 S = members
                 T = members
 
@@ -498,7 +524,7 @@ def to_cx2(
                                     "t": node_map[v],
                                     "v": {
                                         "interaction": str(eid),
-                                        "weight": float(G.edge_weights.get(eid, 1.0)),
+                                        "weight": float(1.0 if rec.weight is None else rec.weight),
                                         **clean_attrs,
                                     },
                                 }
@@ -522,7 +548,7 @@ def to_cx2(
                                     "t": node_map[v],
                                     "v": {
                                         "interaction": str(eid),
-                                        "weight": float(G.edge_weights.get(eid, 1.0)),
+                                        "weight": float(1.0 if rec.weight is None else rec.weight),
                                         **clean_attrs,
                                     },
                                 }
@@ -551,7 +577,7 @@ def to_cx2(
                 }
                 cx_nodes.append(he_node)
 
-                weight = float(G.edge_weights.get(eid, 1.0))
+                weight = float(1.0 if rec.weight is None else rec.weight)
 
                 if directed:
                     # tail -> HE
@@ -610,10 +636,7 @@ def to_cx2(
             # unknown hyperedge mode - skip
             continue
 
-        try:
-            u, v, _ = defn
-        except Exception:
-            continue
+        u, v = rec.src, rec.tgt
 
         if u not in node_map or v not in node_map:
             continue
@@ -627,7 +650,7 @@ def to_cx2(
             "id": cx_eid,
             "s": cx_u,
             "t": cx_v,
-            "v": {"interaction": str(eid), "weight": float(G.edge_weights.get(eid, 1.0))},
+            "v": {"interaction": str(eid), "weight": float(1.0 if rec.weight is None else rec.weight)},
         }
 
         # Attach attributes
@@ -857,7 +880,16 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         if v_rows:
             G.vertex_attributes = _rows_to_df(v_rows)
         if vmeta.get("types"):
-            G.entity_types.update(vmeta["types"])
+            for vid, kind in vmeta["types"].items():
+                try:
+                    ekey = G._resolve_entity_key(vid)
+                except Exception:
+                    continue
+                if ekey in G._entities:
+                    G._entities[ekey].kind = kind
+                else:
+                    row_idx = max(G._row_to_entity.keys(), default=-1) + 1
+                    G._register_entity_record(ekey, EntityRecord(row_idx=row_idx, kind=kind))
 
         # --- Edges + hyperedges ---
         emeta = manifest.get("edges", {})
@@ -869,11 +901,21 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
         # weights, directed flags, definitions
         if emeta.get("weights"):
-            G.edge_weights.update(emeta["weights"])
+            for eid, w in emeta["weights"].items():
+                rec = G._edges.get(eid)
+                if rec is not None:
+                    rec.weight = float(w)
         if emeta.get("directed"):
-            G.edge_directed.update(emeta["directed"])
+            for eid, val in emeta["directed"].items():
+                rec = G._edges.get(eid)
+                if rec is not None:
+                    rec.directed = bool(val)
         if emeta.get("definitions"):
-            G.edge_definitions = dict(emeta["definitions"])
+            for eid, defn in emeta["definitions"].items():
+                rec = G._edges.get(eid)
+                if rec is None:
+                    continue
+                rec.src, rec.tgt, rec.etype = defn
         if emeta.get("direction_policy"):
             G.edge_direction_policy.update(emeta["direction_policy"])
 
@@ -903,8 +945,19 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
                         "directed": False,
                         "members": set(info.get("members", [])),
                     }
-
-            G.hyperedge_definitions = fixed
+            for eid, info in fixed.items():
+                rec = G._edges.get(eid)
+                if rec is None:
+                    continue
+                rec.etype = "hyper"
+                if info["directed"]:
+                    rec.src = list(info.get("head", []))
+                    rec.tgt = list(info.get("tail", []))
+                    rec.directed = True
+                else:
+                    rec.src = list(info.get("members", []))
+                    rec.tgt = None
+                    rec.directed = False
 
         # --- Expanded hyperedges (if present) ---
         exp = emeta.get("expanded", {})
@@ -936,7 +989,14 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         # --- Layers (Kivela)---
         kiv = emeta.get("kivela", {})
         if kiv.get("edge_kind"):
-            G.edge_kind.update(kiv["edge_kind"])
+            for eid, kind in kiv["edge_kind"].items():
+                rec = G._edges.get(eid)
+                if rec is None:
+                    continue
+                if kind == "hyper":
+                    rec.etype = "hyper"
+                else:
+                    rec.ml_kind = kind
         if kiv.get("edge_layers"):
             G.edge_layers.update(kiv["edge_layers"])
 
@@ -967,7 +1027,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         if mm.get("aspect_attrs"):
             G._aspect_attrs = mm["aspect_attrs"]
         if mm.get("node_layer_attrs"):
-            G._vertex_layer_attrs = mm["node_layer_attrs"]
+            G._state_attrs = mm["node_layer_attrs"]
         if mm.get("layer_tuple_attrs"):
             G._layer_attrs = mm["layer_tuple_attrs"]
         if mm.get("layer_attributes"):

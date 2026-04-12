@@ -731,6 +731,12 @@ def _ingest_hyperedge(
     wcol = _pick_first(df, WGT_COLS)
     lcol = _pick_first(df, slice_COLS)
 
+    if not mcol and not hcol:
+        raise ValueError(
+            "Hyperedge schema requires a 'members' column (undirected) or 'head'/'tail' columns "
+            f"(directed). Available columns: {list(df.columns)}"
+        )
+
     attrs_cols = _attr_columns(df, [c for c in [mcol, hcol, tcol, wcol, lcol] if c])
 
     for row in df.iter_rows(named=True):
@@ -752,8 +758,8 @@ def _ingest_hyperedge(
             for ent in members:
                 G.add_vertex(ent)
             for L in slice:
-                G.add_hyperedge(
-                    members=members, slice=L, directed=False, weight=weight, **pure_attrs
+                G.add_edge(
+                    src=list(members), slice=L, directed=False, weight=weight, **pure_attrs
                 )
         else:
             head = _split_set(row[hcol]) if hcol else set()
@@ -761,8 +767,8 @@ def _ingest_hyperedge(
             for ent in head | tail:
                 G.add_vertex(ent)
             for L in slice:
-                G.add_hyperedge(
-                    head=head, tail=tail, slice=L, directed=True, weight=weight, **pure_attrs
+                G.add_edge(
+                    src=list(head), tgt=list(tail), slice=L, directed=True, weight=weight, **pure_attrs
                 )
 
 
@@ -824,12 +830,12 @@ def _ingest_incidence(
         else:
             # hyperedge
             if neg and pos:
-                G.add_hyperedge(
-                    head=set(pos), tail=set(neg), directed=True, weight=1.0, slice=default_slice
+                G.add_edge(
+                    src=list(pos), tgt=list(neg), directed=True, weight=1.0, slice=default_slice
                 )
             else:
-                G.add_hyperedge(
-                    members=set(pos or neg), directed=False, weight=1.0, slice=default_slice
+                G.add_edge(
+                    src=list(pos or neg), directed=False, weight=1.0, slice=default_slice
                 )
 
 

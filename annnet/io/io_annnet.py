@@ -171,11 +171,11 @@ def _write_dir(graph, path: str | Path, *, compression="zstd", overwrite=False):
         "graph_version": graph._version,
         "directed": graph.directed,
         "counts": {
-            "vertices": sum(1 for t in graph.entity_types.values() if t == "vertex"),
-            "edges": graph._num_edges,
-            "entities": graph._num_entities,
+            "vertices": sum(1 for r in graph._entities.values() if r.kind == "vertex"),
+            "edges": len(graph._col_to_edge),
+            "entities": len(graph._entities),
             "slices": len(graph._slices),
-            "hyperedges": sum(1 for k in graph.edge_kind.values() if k == "hyper"),
+            "hyperedges": sum(1 for rec in graph._edges.values() if rec.etype == "hyper"),
             "aspects": len(getattr(graph, "aspects", [])),
         },
         "slices": list(graph._slices.keys()),
@@ -269,48 +269,67 @@ def _write_structure(graph, path: Path, compression: str):
         df = _df_from_dict({id_name: list(d.keys()), val_name: list(d.values())})
         _write_parquet_df(df, filepath, compression=compression)
 
-    dict_to_parquet(graph.entity_to_idx, path / "entity_to_idx.parquet", "entity_id", "idx")
-    dict_to_parquet(graph.idx_to_entity, path / "idx_to_entity.parquet", "idx", "entity_id")
-    dict_to_parquet(graph.entity_types, path / "entity_types.parquet", "entity_id", "type")
-    dict_to_parquet(graph.edge_to_idx, path / "edge_to_idx.parquet", "edge_id", "idx")
-    dict_to_parquet(graph.idx_to_edge, path / "idx_to_edge.parquet", "idx", "edge_id")
-    dict_to_parquet(graph.edge_weights, path / "edge_weights.parquet", "edge_id", "weight")
-    dict_to_parquet(graph.edge_directed, path / "edge_directed.parquet", "edge_id", "directed")
-    dict_to_parquet(graph.edge_kind, path / "edge_kind.parquet", "edge_id", "kind")
+    # Derive entity dicts from _entities / _row_to_entity
+    # Keys are (vid, layer_coord) tuples; serialize as bare vid for parquet compat.
+    # TODO: add entity_supra_node.parquet to store layer_coord for multilayer graphs.
+    def _eid_str(eid):
+        return eid[0] if isinstance(eid, tuple) else eid
 
-    # Edge definitions (tuples > struct column)
+    entity_to_idx = {_eid_str(eid): r.row_idx for eid, r in graph._entities.items()}
+    idx_to_entity = {idx: _eid_str(eid) for idx, eid in graph._row_to_entity.items()}
+    entity_types = {_eid_str(eid): r.kind for eid, r in graph._entities.items()}
 
+    # Derive edge index dicts from _edges / _col_to_edge
+    edge_to_idx = {eid: rec.col_idx for eid, rec in graph._edges.items() if rec.col_idx >= 0}
+    idx_to_edge = dict(graph._col_to_edge)
+    edge_weights = {eid: rec.weight for eid, rec in graph._edges.items()}
+    edge_directed = {eid: rec.directed for eid, rec in graph._edges.items() if rec.directed is not None}
+    edge_kind = {eid: rec.etype for eid, rec in graph._edges.items()}
+
+    dict_to_parquet(entity_to_idx, path / "entity_to_idx.parquet", "entity_id", "idx")
+    dict_to_parquet(idx_to_entity, path / "idx_to_entity.parquet", "idx", "entity_id")
+    dict_to_parquet(entity_types, path / "entity_types.parquet", "entity_id", "type")
+    dict_to_parquet(edge_to_idx, path / "edge_to_idx.parquet", "edge_id", "idx")
+    dict_to_parquet(idx_to_edge, path / "idx_to_edge.parquet", "idx", "edge_id")
+    dict_to_parquet(edge_weights, path / "edge_weights.parquet", "edge_id", "weight")
+    dict_to_parquet(edge_directed, path / "edge_directed.parquet", "edge_id", "directed")
+    dict_to_parquet(edge_kind, path / "edge_kind.parquet", "edge_id", "kind")
+
+    # Edge definitions (binary + vertex_edge only; no hyper)
+    bin_edges = {
+        eid: rec for eid, rec in graph._edges.items() if rec.etype != "hyper" and rec.src is not None
+    }
+    default_dir = True if graph.directed is None else graph.directed
     edge_def_df = _df_from_dict(
         {
-            "edge_id": list(graph.edge_definitions.keys()),
-            "source": [v[0] for v in graph.edge_definitions.values()],
-            "target": [v[1] for v in graph.edge_definitions.values()],
-            "edge_type": [v[2] for v in graph.edge_definitions.values()],
+            "edge_id": list(bin_edges.keys()),
+            "source": [rec.src for rec in bin_edges.values()],
+            "target": [rec.tgt for rec in bin_edges.values()],
+            "edge_type": [
+                "DIRECTED" if (rec.directed if rec.directed is not None else default_dir) else "UNDIRECTED"
+                for rec in bin_edges.values()
+            ],
         }
     )
     _write_parquet_df(edge_def_df, path / "edge_definitions.parquet", compression=compression)
 
-    # Hyperedge definitions (lists > list column)
-    if graph.hyperedge_definitions:
+    # Hyperedge definitions
+    hyper_edges = {eid: rec for eid, rec in graph._edges.items() if rec.etype == "hyper"}
+    if hyper_edges:
         eids, dirs, mems, heads, tails = [], [], [], [], []
-
-        for eid, h in graph.hyperedge_definitions.items():
+        for eid, rec in hyper_edges.items():
             eids.append(eid)
-            is_dir = bool(h.get("directed", False))
+            is_dir = rec.tgt is not None
             dirs.append(is_dir)
-
             if is_dir:
-                # directed hyperedge: store head/tail lists; no members
-                heads.append(sorted(map(str, h.get("head", ()))))
-                tails.append(sorted(map(str, h.get("tail", ()))))
+                heads.append(sorted(map(str, rec.src)))
+                tails.append(sorted(map(str, rec.tgt)))
                 mems.append(None)
             else:
-                # undirected hyperedge: store members list; no head/tail
                 heads.append(None)
                 tails.append(None)
-                mems.append(sorted(map(str, h.get("members", ()))))
+                mems.append(sorted(map(str, rec.src)))
 
-        # Polars: keep explicit List(Utf8) dtypes; Non-polars: let pandas/pyarrow infer list columns.
         if _have_polars():
             import polars as pl
 
@@ -322,13 +341,7 @@ def _write_structure(graph, path: Path, compression: str):
             hyper_df.write_parquet(path / "hyperedge_definitions.parquet", compression=compression)
         else:
             hyper_df = _df_from_dict(
-                {
-                    "edge_id": eids,
-                    "directed": dirs,
-                    "members": mems,
-                    "head": heads,
-                    "tail": tails,
-                }
+                {"edge_id": eids, "directed": dirs, "members": mems, "head": heads, "tail": tails}
             )
             _write_parquet_df(
                 hyper_df, path / "hyperedge_definitions.parquet", compression=compression
@@ -417,6 +430,13 @@ def _write_multilayers(graph, path: Path, compression: str):
     el_df = _df_from_dict({"edge_id": eids, "layer_1": l1s, "layer_2": l2s})
     _write_parquet_df(el_df, path / "edge_layers.parquet", compression=compression)
 
+    # 3b. Multilayer edge kind ("intra"/"inter"/"coupling") — separate from structural etype
+    if getattr(graph, "edge_kind", None):
+        ek_df = _df_from_dict(
+            {"edge_id": list(graph.edge_kind.keys()), "ml_kind": list(graph.edge_kind.values())}
+        )
+        _write_parquet_df(ek_df, path / "edge_ml_kind.parquet", compression=compression)
+
     # 4. Attributes (Specific Layer Stores)
 
     # 4a. Elementary Layer Attributes (Already a Polars DF in graph.py)
@@ -450,10 +470,10 @@ def _write_multilayers(graph, path: Path, compression: str):
         _write_parquet_df(la_df, path / "tuple_layer_attributes.parquet", compression=compression)
 
     # 4d. Vertex-Layer Attributes
-    if hasattr(graph, "_vertex_layer_attrs") and graph._vertex_layer_attrs:
+    if hasattr(graph, "_state_attrs") and graph._state_attrs:
         vla_data = [
             {"vertex_id": u, "layer": list(aa), "attributes": json.dumps(attrs)}
-            for (u, aa), attrs in graph._vertex_layer_attrs.items()
+            for (u, aa), attrs in graph._state_attrs.items()
         ]
         vla_df = _df_from_dict(vla_data)
         _write_parquet_df(vla_df, path / "vertex_layer_attributes.parquet", compression=compression)
@@ -785,54 +805,83 @@ def _load_structure(graph, path: Path, lazy: bool):
         df = _read_parquet(filepath)
         return dict(zip(df[key_col], df[val_col]))
 
-    graph.entity_to_idx = parquet_to_dict(path / "entity_to_idx.parquet", "entity_id", "idx")
-    graph.idx_to_entity = parquet_to_dict(path / "idx_to_entity.parquet", "idx", "entity_id")
-    graph.entity_types = parquet_to_dict(path / "entity_types.parquet", "entity_id", "type")
-    graph.edge_to_idx = parquet_to_dict(path / "edge_to_idx.parquet", "edge_id", "idx")
-    graph.idx_to_edge = parquet_to_dict(path / "idx_to_edge.parquet", "idx", "edge_id")
-    graph.edge_weights = parquet_to_dict(path / "edge_weights.parquet", "edge_id", "weight")
-    graph.edge_directed = parquet_to_dict(path / "edge_directed.parquet", "edge_id", "directed")
-    graph.edge_kind = parquet_to_dict(path / "edge_kind.parquet", "edge_id", "kind")
+    from annnet.core._helpers import EdgeRecord, EntityRecord
 
-    # Edge definitions
-    edge_def_df = _read_parquet(path / "edge_definitions.parquet")
-    graph.edge_definitions = {
-        row["edge_id"]: (row["source"], row["target"], row["edge_type"])
-        for row in _iter_rows(edge_def_df)
+    # Build _entities and _row_to_entity from Parquet
+    entity_to_idx = parquet_to_dict(path / "entity_to_idx.parquet", "entity_id", "idx")
+    entity_types = parquet_to_dict(path / "entity_types.parquet", "entity_id", "type")
+    # _entities keys are (vid, layer_coord) tuples; flat graphs use ("_",) as basal layer.
+    raw_idx_to_entity = parquet_to_dict(path / "idx_to_entity.parquet", "idx", "entity_id")
+    graph._row_to_entity = {int(k): (v, ("_",)) for k, v in raw_idx_to_entity.items()}
+    graph._entities = {
+        (eid, ("_",)): EntityRecord(row_idx=int(idx), kind=entity_types.get(eid, "vertex"))
+        for eid, idx in entity_to_idx.items()
     }
+    graph._rebuild_entity_indexes()
 
-    # Hyperedges
+    # Load per-edge metadata for reconstruction
+    edge_to_idx = parquet_to_dict(path / "edge_to_idx.parquet", "edge_id", "idx")
+    graph._col_to_edge = parquet_to_dict(path / "idx_to_edge.parquet", "idx", "edge_id")
+    edge_weights = parquet_to_dict(path / "edge_weights.parquet", "edge_id", "weight")
+    edge_directed = parquet_to_dict(path / "edge_directed.parquet", "edge_id", "directed")
+    edge_kind = parquet_to_dict(path / "edge_kind.parquet", "edge_id", "kind")
+
+    # Reconstruct _edges from edge_definitions + hyperedge_definitions
+    graph._edges = {}
+
+    edge_def_df = _read_parquet(path / "edge_definitions.parquet")
+    for row in _iter_rows(edge_def_df):
+        eid = row["edge_id"]
+        etype = edge_kind.get(eid, "binary")
+        graph._edges[eid] = EdgeRecord(
+            src=row["source"],
+            tgt=row["target"],
+            weight=float(edge_weights.get(eid, 1.0)),
+            directed=edge_directed.get(eid),
+            etype=etype,
+            col_idx=int(edge_to_idx.get(eid, -1)),
+            ml_kind=None,
+            ml_layers=None,
+            direction_policy=None,
+        )
+
     hyper_path = path / "hyperedge_definitions.parquet"
     if hyper_path.exists():
         hyper_df = _read_parquet(hyper_path)
-        graph.hyperedge_definitions = {}
-        # Expect columns: edge_id, directed, members, head, tail
         for row in _iter_rows(hyper_df):
             eid = row["edge_id"]
-            if row.get("directed", False):
-                head = row.get("head")
-                tail = row.get("tail")
-                if head is None:
-                    head = []
-                if tail is None:
-                    tail = []
-                graph.hyperedge_definitions[eid] = {
-                    "directed": True,
-                    "head": head,
-                    "tail": tail,
-                }
+            is_dir = bool(row.get("directed", False))
+            head = row.get("head") or []
+            tail = row.get("tail") or []
+            members = row.get("members") or []
+            if is_dir:
+                src = frozenset(head)
+                tgt = frozenset(tail)
             else:
-                members = row.get("members")
-                if members is None:
-                    members = []
-                graph.hyperedge_definitions[eid] = {
-                    "directed": False,
-                    "members": members,
-                }
+                src = frozenset(members)
+                tgt = None
+            graph._edges[eid] = EdgeRecord(
+                src=src,
+                tgt=tgt,
+                weight=float(edge_weights.get(eid, 1.0)),
+                directed=is_dir,
+                etype="hyper",
+                col_idx=int(edge_to_idx.get(eid, -1)),
+                ml_kind=None,
+                ml_layers=None,
+                direction_policy=None,
+            )
 
-    # Update counts
-    graph._num_entities = len(graph.entity_to_idx)
-    graph._num_edges = len(graph.edge_to_idx)
+    # Rebuild adjacency indices from _edges
+    graph._adj = {}
+    graph._src_to_edges = {}
+    graph._tgt_to_edges = {}
+    for eid, rec in graph._edges.items():
+        if rec.etype != "hyper" and rec.src is not None and rec.tgt is not None:
+            key = (rec.src, rec.tgt)
+            graph._adj.setdefault(key, []).append(eid)
+            graph._src_to_edges.setdefault(rec.src, []).append(eid)
+            graph._tgt_to_edges.setdefault(rec.tgt, []).append(eid)
 
 
 def _load_tables(graph, path: Path):
@@ -891,6 +940,12 @@ def _load_multilayers(graph, path: Path):
                 # Inter/Coupling: stored as two lists, convert to (tuple, tuple)
                 graph.edge_layers[eid] = (tuple(l1), tuple(l2))
 
+    # 3b. Multilayer edge kind
+    if (path / "edge_ml_kind.parquet").exists():
+        ek_df = _read_parquet(path / "edge_ml_kind.parquet")
+        for row in _iter_rows(ek_df):
+            graph.edge_kind[row["edge_id"]] = row["ml_kind"]
+
     # 4. Attributes
 
     # 4a. Elementary Layer Attributes (Load directly into Polars)
@@ -913,7 +968,7 @@ def _load_multilayers(graph, path: Path):
         vla_df = _read_parquet(path / "vertex_layer_attributes.parquet")
         for row in _iter_rows(vla_df):
             key = (row["vertex_id"], tuple(row["layer"]))
-            graph._vertex_layer_attrs[key] = json.loads(row["attributes"])
+            graph._state_attrs[key] = json.loads(row["attributes"])
 
 
 def _load_slices(graph, path: Path):
