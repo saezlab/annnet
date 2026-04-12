@@ -1,7 +1,9 @@
 ## Lazy graph-tool proxy
 
+from ._base import _LazyProxyBase
 
-class _LazyGTProxy:
+
+class _LazyGTProxy(_LazyProxyBase):
     """Lazy graph-tool proxy attached to an AnnNet instance.
 
     This proxy lets you call graph-tool algorithms via namespaces such as:
@@ -63,9 +65,28 @@ class _LazyGTProxy:
     def __getattr__(self, name):
         if name in self._namespaces:
             return self._namespaces[name]
-        raise AttributeError(
-            f"G.gt has no attribute '{name}'. Only namespaces: {list(self._namespaces.keys())}"
-        )
+        matches = []
+        for namespace in self._namespaces.values():
+            try:
+                matches.append(getattr(namespace, name))
+            except AttributeError:
+                continue
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise AttributeError(
+                f"G.gt attribute '{name}' is ambiguous across namespaces; call it via G.gt.<namespace>.{name}(...)"
+            )
+        raise AttributeError(f"G.gt has no attribute '{name}'. Only namespaces: {list(self._namespaces.keys())}")
+
+    def __dir__(self):
+        names = set(super().__dir__()) | set(self._namespaces.keys())
+        for namespace in self._namespaces.values():
+            try:
+                names.update(dir(namespace))
+            except Exception:
+                continue
+        return sorted(names)
 
     # Conversion
 
@@ -87,12 +108,19 @@ class _LazyGTProxy:
     def _coerce_vertices(self, bound, kwargs, gtG):
         label_field = self._infer_label_field()
         id_map = self._build_id_map(gtG)
+        vertex_ids = {
+            ekey[0]
+            for ekey, rec in self._G._entities.items()
+            if rec.kind == "vertex"
+        }
 
         def map_one(x):
             # AnnNet internal id?
             if hasattr(x, "__class__") and x.__class__.__module__.startswith("graph_tool."):
                 return x
-            if x in self._G.entity_types:
+            if isinstance(x, tuple) and len(x) == 2 and isinstance(x[1], tuple):
+                vid = x[0]
+            elif x in vertex_ids:
                 vid = x
             else:
                 vid = self._lookup_vertex_id(label_field, x)
@@ -134,26 +162,12 @@ class _LazyGTProxy:
     # Label inference
 
     def _infer_label_field(self):
-        G = self._G
-        if getattr(G, "default_label_field", None):
-            return G.default_label_field
-        va = getattr(G, "vertex_attributes", None)
-        if va is None or not hasattr(va, "columns"):
-            return None
-        for c in ("name", "label", "title", "slug", "external_id", "string_id"):
-            if c in va.columns:
-                return c
-        return None
+        return super()._infer_label_field()
 
     def _lookup_vertex_id(self, field, val):
         if field is None:
             return None
-        va = self._G.vertex_attributes
-        matches = va.filter(va[field] == val)
-        if matches.height == 0:
-            return None
-        id_col = "vertex_id" if "vertex_id" in va.columns else "id" if "id" in va.columns else "vid"
-        return matches.select(id_col).item(0, 0)
+        return self._lookup_vertex_id_by_label(field, val)
 
     # Lossy conversion warnings
 
@@ -189,6 +203,20 @@ class _GTNamespaceProxy:
             raise AttributeError(f"graph_tool.{self._module_name} has no function '{name}'")
         return self._wrap(func)
 
+    def __dir__(self):
+        mod = self._load()
+        names = set(super().__dir__())
+        for name in dir(mod):
+            if name.startswith("_"):
+                continue
+            try:
+                attr = getattr(mod, name)
+            except Exception:
+                continue
+            if callable(attr):
+                names.add(name)
+        return sorted(names)
+
     def _wrap(self, func):
         def call(*args, **kwargs):
             parent = self._parent
@@ -197,8 +225,15 @@ class _GTNamespaceProxy:
             has_owner = any(a is parent._G for a in args) or any(
                 v is parent._G for v in kwargs.values()
             )
-
             gtG = None
+
+            try:
+                import inspect
+
+                sig = inspect.signature(func)
+            except Exception:
+                sig = None
+
             if has_owner:
                 gtG = parent._get_or_make_gt()
 
@@ -207,13 +242,28 @@ class _GTNamespaceProxy:
                 for k, v in list(kwargs.items()):
                     if v is parent._G:
                         kwargs[k] = gtG
+            elif sig is not None:
+                params = list(sig.parameters.values())
+                if params:
+                    first = params[0]
+                    needs_graph = (
+                        first.kind
+                        in (
+                            first.POSITIONAL_ONLY,
+                            first.POSITIONAL_OR_KEYWORD,
+                        )
+                        and first.default is inspect._empty
+                        and first.name in {"g", "graph", "G"}
+                        and len(args) == 0
+                        and first.name not in kwargs
+                    )
+                    if needs_graph:
+                        gtG = parent._get_or_make_gt()
+                        args = (gtG,)
 
             # bind signature
             try:
-                import inspect
-
-                sig = inspect.signature(func)
-                bound = sig.bind_partial(*args, **kwargs)
+                bound = sig.bind_partial(*args, **kwargs) if sig is not None else None
             except Exception:
                 bound = None
 

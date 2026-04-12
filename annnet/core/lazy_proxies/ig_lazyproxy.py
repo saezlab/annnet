@@ -1,46 +1,40 @@
-## Lazy iGraph proxy
 from __future__ import annotations
 
 import inspect
 from typing import TYPE_CHECKING
 
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
-    pl = None
+from ._base import _LazyProxyBase
 
 if TYPE_CHECKING:
     from ..graph import AnnNet
 
 
-class _LazyIGProxy:
-    """Lazy igraph proxy attached to an AnnNet instance.
+class _LazyIGProxy(_LazyProxyBase):
+    """Lazy igraph proxy attached to an AnnNet instance."""
 
-    This proxy lets you call igraph algorithms as `G.ig.<algo>(...)`. On first
-    use (or after a graph mutation), AnnNet is converted to an igraph graph
-    and cached; subsequent calls reuse the cached backend until the AnnNet
-    version changes.
-
-    Conversion is optimized for speed and does not build a manifest. This
-    means features that require a manifest (slices, reified hyperedges,
-    multilayer metadata, stable edge IDs) are not preserved on the proxy path.
-    Use adapters.igraph_adapter.to_igraph(...) for full-fidelity export.
-
-    Notes
-    -----
-    - Requires the optional `python-igraph` dependency.
-    - The typical usage pattern is `G.ig.algorithm(...)`, which lazily converts,
-      runs the igraph algorithm, and returns its output.
-    - `_ig_simple=True` collapses parallel edges to a simple graph; `_ig_edge_aggs`
-      controls aggregation (e.g., `{\"weight\":\"min\",\"capacity\":\"sum\"}`).
-    """
+    VERTEX_KEYS = {
+        "source",
+        "target",
+        "u",
+        "v",
+        "vertex",
+        "vertices",
+        "vs",
+        "to",
+        "fr",
+        "root",
+        "roots",
+        "neighbors",
+        "nbunch",
+        "path",
+        "cut",
+    }
 
     def __init__(self, owner: AnnNet):
         self._G = owner
-        self._cache = {}  # key -> {"igG": ig.AnnNet, "version": int}
+        self._cache = {}
         self.cache_enabled = True
 
-    #  public API
     def clear(self):
         self._cache.clear()
 
@@ -54,13 +48,9 @@ class _LazyIGProxy:
             simple=True,
             edge_aggs=None,
         )
-        out = []
         names = igG.vs["name"] if "name" in igG.vs.attributes() else None
-        for i in range(min(max(0, int(k)), igG.vcount())):
-            out.append(names[i] if names else i)
-        return out
+        return [names[i] if names else i for i in range(min(max(0, int(k)), igG.vcount()))]
 
-    # public helper so tests don’t touch private API
     def backend(
         self,
         *,
@@ -72,48 +62,40 @@ class _LazyIGProxy:
         simple: bool = False,
         edge_aggs: dict | None = None,
     ):
-        needed_attrs = needed_attrs or set()
         return self._get_or_make_ig(
             directed=directed,
             hyperedge_mode=hyperedge_mode,
             slice=slice,
             slices=slices,
-            needed_attrs=needed_attrs,
+            needed_attrs=needed_attrs or set(),
             simple=simple,
             edge_aggs=edge_aggs,
         )
 
-    # - dynamic dispatch -
     def __getattr__(self, name: str):
         def wrapper(*args, **kwargs):
             import igraph as _ig
 
-            # proxy-only knobs (consumed here)
             directed = bool(kwargs.pop("_ig_directed", True))
-            hyperedge_mode = kwargs.pop("_ig_hyperedge", "skip")  # "skip" | "expand"
+            hyperedge_mode = kwargs.pop("_ig_hyperedge", "skip")
             slice = kwargs.pop("_ig_slice", None)
             slices = kwargs.pop("_ig_slices", None)
             label_field = kwargs.pop("_ig_label_field", None)
             guess_labels = kwargs.pop("_ig_guess_labels", True)
             simple = bool(kwargs.pop("_ig_simple", False))
-            edge_aggs = kwargs.pop(
-                "_ig_edge_aggs", None
-            )  # {"weight":"min","capacity":"sum"} or callables
+            edge_aggs = kwargs.pop("_ig_edge_aggs", None)
 
-            # keep only attributes actually needed by the called function
             needed_edge_attrs = self._needed_edge_attrs_for_ig(name, kwargs)
 
             if str(hyperedge_mode).lower() == "reify":
                 import warnings
 
                 warnings.warn(
-                    "Lazy igraph proxy does not support hyperedge_mode='reify'; "
-                    "falling back to 'skip'.",
+                    "Lazy igraph proxy does not support hyperedge_mode='reify'; falling back to 'skip'.",
                     category=RuntimeWarning,
                     stacklevel=3,
                 )
 
-            # build/reuse backend
             igG = self._get_or_make_ig(
                 directed=directed,
                 hyperedge_mode=hyperedge_mode,
@@ -124,26 +106,20 @@ class _LazyIGProxy:
                 edge_aggs=edge_aggs,
             )
 
-            # replace any AnnNet instance with igG
             args = list(args)
-            for i, v in enumerate(args):
-                if v is self._G:
-                    args[i] = igG
-            for k, v in list(kwargs.items()):
-                if v is self._G:
-                    kwargs[k] = igG
+            for idx, value in enumerate(args):
+                if value is self._G:
+                    args[idx] = igG
+            for key, value in list(kwargs.items()):
+                if value is self._G:
+                    kwargs[key] = igG
 
-            # resolve target callable: prefer bound AnnNet method, else module-level
             target = getattr(igG, name, None)
             if not callable(target):
                 target = getattr(_ig, name, None)
             if not callable(target):
-                raise AttributeError(
-                    f"igraph has no callable '{name}'. "
-                    f"Use native igraph names, e.g. community_multilevel, pagerank, shortest_paths_dijkstra, components, etc."
-                )
+                raise AttributeError(f"igraph has no callable '{name}'")
 
-            # bind to signature (best effort) so we can coerce vertex args
             try:
                 sig = inspect.signature(target)
                 bound = sig.bind_partial(*args, **kwargs)
@@ -153,7 +129,6 @@ class _LazyIGProxy:
             try:
                 if label_field is None and guess_labels:
                     label_field = self._infer_label_field()
-
                 if bound is not None:
                     self._coerce_vertices_in_bound(bound, igG, label_field)
                     bound.apply_defaults()
@@ -162,39 +137,34 @@ class _LazyIGProxy:
                     self._coerce_vertices_in_kwargs(kwargs, igG, label_field)
                     pargs, pkwargs = list(args), dict(kwargs)
             except Exception:
-                pargs, pkwargs = list(args), dict(kwargs)  # let igraph raise if invalid
+                pargs, pkwargs = list(args), dict(kwargs)
 
             try:
                 raw = target(*pargs, **pkwargs)
-                return self._map_output_vertices(raw)
-            except (KeyError, ValueError) as e:
+                return raw
+            except (KeyError, ValueError) as exc:
                 sample = self.peek_vertices(5)
                 tip = (
-                    f"{e}. Vertices must match this graph's vertex IDs.\n"
-                    f"- If you passed labels, set _ig_label_field=<vertex label column> "
-                    f"or rely on auto-guess ('name'/'label'/'title').\n"
-                    f"- Example: G.ig.shortest_paths_dijkstra(G, source='a', target='z', weights='weight', _ig_label_field='name')\n"
+                    f"{exc}. Vertices must match this graph's vertex IDs.\n"
+                    f"- If you passed labels, set _ig_label_field=<vertex label column>.\n"
+                    f"- Example: G.ig.distances(source='a', target='z', weights='weight', _ig_label_field='name')\n"
                     f"- A few vertex IDs igraph sees: {sample}"
                 )
-                raise type(e)(tip) from e
+                raise type(exc)(tip) from exc
 
         return wrapper
 
-    # -- internals ---
+    def __dir__(self):
+        import igraph as _ig
+
+        graph_obj = getattr(_ig, "Graph", None)
+        return sorted(set(super().__dir__()) | self._callable_names(_ig, graph_obj))
+
     def _needed_edge_attrs_for_ig(self, func_name: str, kwargs: dict) -> set:
-        """Heuristic: igraph uses `weights` (plural) for edge weights in most algos,
-        some accept both; flows use 'capacity' if you forward them to adapters.
-        """
         needed = set()
-        # weight(s)
-        w = kwargs.get("weights", kwargs.get("weight", None))
-        if w is None:
-            # sometimes user passes True to mean default "weight"
-            if "weights" in kwargs and kwargs["weights"] is not None:
-                needed.add(str(kwargs["weights"]))
-        else:
-            needed.add(str(w))
-        # capacity (if you forward flow-like algos to ig backends)
+        weight_name = kwargs.get("weights", kwargs.get("weight", None))
+        if weight_name is not None:
+            needed.add(str(weight_name))
         if "capacity" in kwargs and kwargs["capacity"] is not None:
             needed.add(str(kwargs["capacity"]))
         return needed
@@ -210,30 +180,15 @@ class _LazyIGProxy:
         simple: bool,
         edge_aggs: dict | None,
     ):
-        # Fast-path: skip manifest creation for lazy proxy use
-        from ...adapters import igraph_adapter as _gg_ig  # annnet.adapters.igraph_adapter
+        from ...adapters import igraph_adapter as _gg_ig
 
-        to_backend = getattr(_gg_ig, "to_backend", None)
+        to_backend = getattr(_gg_ig, "to_backend", None) or getattr(_gg_ig, "_export_legacy", None)
         if to_backend is None:
-            # fallback to legacy name if present
-            to_backend = getattr(_gg_ig, "_export_legacy", None)
-        if to_backend is None:
-            raise RuntimeError(
-                "igraph adapter missing: expected adapters.igraph_adapter.to_backend(...) or _export_legacy(...)."
-            )
+            raise RuntimeError("igraph adapter missing")
 
         skip_hyperedges = str(hyperedge_mode).lower() != "expand"
-        igG = to_backend(
-            self._G,
-            directed=directed,
-            skip_hyperedges=skip_hyperedges,
-            public_only=True,
-        )
-
-        # keep only requested edge attrs (or none at all)
-        igG = self._prune_edge_attributes(igG, needed_attrs)
-
-        # igraph lacks is_multigraph(); always collapse when simple=True
+        igG = to_backend(self._G, directed=directed, skip_hyperedges=skip_hyperedges, public_only=True)
+        self._prune_edge_attributes(igG, needed_attrs)
         if simple:
             igG = self._collapse_multiedges(
                 igG, directed=directed, aggregations=edge_aggs, needed_attrs=needed_attrs
@@ -254,11 +209,11 @@ class _LazyIGProxy:
         key = (
             bool(directed),
             str(hyperedge_mode),
-            tuple(sorted(slices)) if slices else None,
+            self._freeze_cache_value(slices),
             str(slice) if slice is not None else None,
-            tuple(sorted(needed_attrs)) if needed_attrs else (),
+            self._freeze_cache_value(needed_attrs),
             bool(simple),
-            tuple(sorted(edge_aggs.items())) if isinstance(edge_aggs, dict) else None,
+            self._freeze_cache_value(edge_aggs),
         )
         version = getattr(self._G, "_version", None)
         entry = self._cache.get(key)
@@ -284,26 +239,12 @@ class _LazyIGProxy:
     def _warn_on_loss(self, *, hyperedge_mode, slice, slices, manifest):
         import warnings
 
-        has_hyper = False
-        try:
-            ek = getattr(self._G, "edge_kind", {})
-            if hasattr(ek, "values"):
-                has_hyper = any(str(v).lower() == "hyper" for v in ek.values())
-        except Exception:
-            pass
         msgs = []
-        if has_hyper and hyperedge_mode != "expand":
+        if any(rec.etype == "hyper" for rec in self._G._edges.values()) and hyperedge_mode != "expand":
             msgs.append("hyperedges dropped (hyperedge_mode='skip')")
-        try:
-            slices_dict = getattr(self._G, "_slices", None)
-            if (
-                isinstance(slices_dict, dict)
-                and len(slices_dict) > 1
-                and (slice is None and not slices)
-            ):
-                msgs.append("multiple slices flattened into single igraph graph")
-        except Exception:
-            pass
+        slices_dict = getattr(self._G, "_slices", None)
+        if isinstance(slices_dict, dict) and len(slices_dict) > 1 and (slice is None and not slices):
+            msgs.append("multiple slices flattened into single igraph graph")
         if manifest is None:
             msgs.append("no manifest provided; round-trip fidelity not guaranteed")
         if msgs:
@@ -313,188 +254,41 @@ class _LazyIGProxy:
                 stacklevel=3,
             )
 
-    # -- label/ID mapping helpers
-    def _infer_label_field(self) -> str | None:
-        try:
-            if hasattr(self._G, "default_label_field") and self._G.default_label_field:
-                return self._G.default_label_field
-            va = getattr(self._G, "vertex_attributes", None)
-            cols = list(va.columns) if va is not None and hasattr(va, "columns") else []
-            for c in ("name", "label", "title", "slug", "external_id", "string_id"):
-                if c in cols:
-                    return c
-        except Exception:
-            pass
-        return None
-
-    def _vertex_id_col(self) -> str:
-        try:
-            va = self._G.vertex_attributes
-            cols = list(va.columns)
-            for k in ("vertex_id", "id", "vid"):
-                if k in cols:
-                    return k
-        except Exception:
-            pass
-        return "vertex_id"
-
-    def _lookup_vertex_id_by_label(self, label_field: str, val):
-        try:
-            va = self._G.vertex_attributes
-            if va is None or not hasattr(va, "columns") or label_field not in va.columns:
-                return None
-            id_col = self._vertex_id_col()
-            try:
-                # type: ignore
-
-                matches = va.filter(pl.col(label_field) == val)
-                if matches.height == 0:
-                    return None
-                try:
-                    return matches.select(id_col).to_series().to_list()[0]
-                except Exception:
-                    return matches.select(id_col).item(0, 0)
-            except Exception:
-                for row in va.to_dicts():
-                    if row.get(label_field) == val:
-                        return row.get(id_col)
-        except Exception:
-            return None
-        return None
-
     def _name_to_index_map(self, igG):
         names = igG.vs["name"] if "name" in igG.vs.attributes() else None
-        return {n: i for i, n in enumerate(names)} if names is not None else {}
+        return {name: idx for idx, name in enumerate(names)} if names is not None else {}
 
-    def _coerce_vertex(self, x, igG, label_field: str | None):
-        # already an index?
-        if isinstance(x, int) and 0 <= x < igG.vcount():
-            return x
-        # graph-level mapping (label -> vertex_id)
+    def _coerce_vertex(self, value, igG, label_field: str | None):
+        if isinstance(value, int) and 0 <= value < igG.vcount():
+            return value
         if label_field:
-            cand = self._lookup_vertex_id_by_label(label_field, x)
-            if cand is not None:
-                x = cand
-        # igraph name -> index
-        name_to_idx = self._name_to_index_map(igG)
-        if x in name_to_idx:
-            return name_to_idx[x]
-        # if user already passed internal vertex_id string, try treating it as name
-        if isinstance(x, str) and x in name_to_idx:
-            return name_to_idx[x]
-        return x  # let igraph validate/raise
+            candidate = self._lookup_vertex_id_by_label(label_field, value)
+            if candidate is not None:
+                value = candidate
+        return self._name_to_index_map(igG).get(value, value)
 
     def _coerce_vertex_or_iter(self, obj, igG, label_field: str | None):
         if isinstance(obj, (list, tuple, set)):
-            coerced = [self._coerce_vertex(v, igG, label_field) for v in obj]
+            coerced = [self._coerce_vertex(value, igG, label_field) for value in obj]
             return type(obj)(coerced) if not isinstance(obj, set) else set(coerced)
         return self._coerce_vertex(obj, igG, label_field)
 
     def _coerce_vertices_in_kwargs(self, kwargs: dict, igG, label_field: str | None):
-        vertex_keys = {
-            "source",
-            "target",
-            "u",
-            "v",
-            "vertex",
-            "vertices",
-            "vs",
-            "to",
-            "fr",
-            "root",
-            "roots",
-            "neighbors",
-            "nbunch",
-            "path",
-            "cut",
-        }
         for key in list(kwargs.keys()):
-            if key in vertex_keys:
+            if key in self.VERTEX_KEYS:
                 kwargs[key] = self._coerce_vertex_or_iter(kwargs[key], igG, label_field)
 
     def _coerce_vertices_in_bound(self, bound, igG, label_field: str | None):
-        vertex_keys = {
-            "source",
-            "target",
-            "u",
-            "v",
-            "vertex",
-            "vertices",
-            "vs",
-            "to",
-            "fr",
-            "root",
-            "roots",
-            "neighbors",
-            "nbunch",
-            "path",
-            "cut",
-        }
         for key in list(bound.arguments.keys()):
-            if key in vertex_keys:
+            if key in self.VERTEX_KEYS:
                 bound.arguments[key] = self._coerce_vertex_or_iter(
                     bound.arguments[key], igG, label_field
                 )
 
-    def _map_output_vertices(self, obj):
-        """Map igraph output structures (indices, set/list/tuple/dict) back to AnnNet row indices."""
-        G = self._G
-        id2row = G.entity_to_idx  # entity_id → row index
-        idx2id = G.idx_to_entity  # row index → entity_id
-
-        def map_idx(i):
-            # if igraph returned an index, convert: index -> internal entity_id -> row index
-            if isinstance(i, int) and i in idx2id:
-                eid = idx2id[i]
-                return id2row.get(eid, i)
-            return i
-
-        # Dict
-        if isinstance(obj, dict):
-            out = {}
-            for k, v in obj.items():
-                out[map_idx(k)] = self._map_output_vertices(v)
-            return out
-
-        # List
-        if isinstance(obj, list):
-            return [self._map_output_vertices(x) for x in obj]
-
-        # Tuple
-        if isinstance(obj, tuple):
-            return tuple(self._map_output_vertices(x) for x in obj)
-
-        # Set
-        if isinstance(obj, set):
-            return {self._map_output_vertices(x) for x in obj}
-
-        # Leaf
-        return map_idx(obj)
-
-    # -- edge-attr & multiedge helpers ---
     def _prune_edge_attributes(self, igG, needed_attrs: set):
-        import igraph as _ig
-
-        if not needed_attrs:
-            # keep only 'name' on vertices, drop all edge attrs quickly by rebuild
-            H = _ig.Graph(directed=igG.is_directed())
-            H.add_vertices(igG.vcount())
-            if "name" in igG.vs.attributes():
-                H.vs["name"] = igG.vs["name"]
-            H.add_edges([e.tuple for e in igG.es])
-            return H
-        # keep only specific attrs
-        H = _ig.Graph(directed=igG.is_directed())
-        H.add_vertices(igG.vcount())
-        if "name" in igG.vs.attributes():
-            H.vs["name"] = igG.vs["name"]
-        edges = [e.tuple for e in igG.es]
-        H.add_edges(edges)
-        have = set(igG.es.attributes())
-        for k in needed_attrs:
-            if k in have:
-                H.es[k] = igG.es[k]
-        return H
+        removable = set(igG.es.attributes()) - set(needed_attrs)
+        for attr in removable:
+            del igG.es[attr]
 
     def _collapse_multiedges(
         self, igG, *, directed: bool, aggregations: dict | None, needed_attrs: set
@@ -508,7 +302,7 @@ class _LazyIGProxy:
 
         aggregations = aggregations or {}
 
-        def _agg_for(key):
+        def agg_for(key):
             agg = aggregations.get(key)
             if callable(agg):
                 return agg
@@ -519,29 +313,27 @@ class _LazyIGProxy:
             if agg == "max":
                 return max
             if agg == "mean":
-                return lambda vals: (sum(vals) / len(vals)) if vals else None
+                return lambda values: (sum(values) / len(values)) if values else None
             if key == "capacity":
                 return sum
             if key == "weight":
                 return min
-            return lambda vals: next(iter(vals)) if vals else None
+            return lambda values: next(iter(values)) if values else None
 
-        # bucket edges
-        buckets = {}  # (u,v) or sorted(u,v) -> {attr: [vals]}
-        for e in igG.es:
-            u, v = e.tuple
-            key = (u, v) if directed else tuple(sorted((u, v)))
-            entry = buckets.setdefault(key, {})
-            for k, val in e.attributes().items():
-                if needed_attrs and k not in needed_attrs:
+        buckets = {}
+        for edge in igG.es:
+            u, v = edge.tuple
+            edge_key = (u, v) if directed else tuple(sorted((u, v)))
+            entry = buckets.setdefault(edge_key, {})
+            for key, value in edge.attributes().items():
+                if needed_attrs and key not in needed_attrs:
                     continue
-                entry.setdefault(k, []).append(val)
+                entry.setdefault(key, []).append(value)
 
         edges = list(buckets.keys())
         H.add_edges(edges)
-        # aggregate per attribute
-        all_attrs = set(k for _, attrs in buckets.items() for k in attrs.keys())
-        for k in all_attrs:
-            agg = _agg_for(k)
-            H.es[k] = [agg(buckets[edge].get(k, [])) for edge in edges]
+        all_attrs = {key for attrs in buckets.values() for key in attrs.keys()}
+        for key in all_attrs:
+            agg = agg_for(key)
+            H.es[key] = [agg(buckets[edge].get(key, [])) for edge in edges]
         return H
