@@ -9,7 +9,9 @@ except Exception:
 import scipy.sparse as sp
 
 from ._helpers import (
+    EdgeRecord,
     EdgeType,
+    EntityRecord,
     _get_numeric_supertype,
 )
 
@@ -35,7 +37,7 @@ def _to_polars_if_possible(df):
 class BulkOps:
     # Bulk build graph
 
-    def add_vertices_bulk(self, vertices, slice=None):
+    def add_vertices_bulk(self, vertices, layer=None, slice=None):
         """Bulk add vertices with a Polars fast path when available.
 
         Parameters
@@ -45,6 +47,10 @@ class BulkOps:
             - `vertex_id` (str)
             - `(vertex_id, attrs)` tuple
             - dict containing `vertex_id` plus attributes
+        layer : str | dict | tuple | None, optional
+            Layer spec for all vertices in this batch. Forwarded to
+            ``_make_layer_coord`` once — no per-vertex overhead.
+            ``None`` means the flat/default layer.
         slice : str, optional
             Target slice. Defaults to the active slice.
 
@@ -90,21 +96,27 @@ class BulkOps:
         except Exception:
             pass
 
-        # Entity registration
+        # Entity registration — compute layer coord ONCE for the whole batch
+        coord = self._resolve_vertex_insert_coord(
+            layer,
+            vertex_ids=norm_vids,
+            context="add_vertices_bulk",
+        )
 
         new_rows = 0
         for vid in norm_vids:
-            if vid not in self.entity_to_idx:
-                idx = self._num_entities
-                self.entity_to_idx[vid] = idx
-                self.idx_to_entity[idx] = vid
-                self.entity_types[vid] = "vertex"
-                self._num_entities = idx + 1
+            ekey = (vid, coord)
+            if ekey not in self._entities:
+                idx = len(self._entities)
+                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind="vertex"))
                 new_rows += 1
+            # Maintain _V / _VM caches for _Layers.py compat
+            self._V.add(vid)
+            self._VM.add(ekey)
         if new_rows:
-            self._grow_rows_to(self._num_entities)
+            self._grow_rows_to(len(self._entities))
 
-        # Slice membership
+        # Slice membership (slice tracks bare vids for _Slices.py compat)
 
         if slice not in self._slices:
             self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
@@ -119,7 +131,7 @@ class BulkOps:
         # If not Polars, fall back to Narwhals
 
         if pl is None or not isinstance(df, pl.DataFrame):
-            return self.add_vertices_bulk_nw(vertices, slice=slice)
+            return self.add_vertices_bulk_nw(vertices, layer=layer, slice=slice)
 
         # Build ONE incoming DF
         # Collect all keys once to avoid repeated set growth in loops
@@ -143,7 +155,7 @@ class BulkOps:
             df, is_pl2 = _to_polars_if_possible(df_tmp)
             if not is_pl2:
                 # backend drifted away from Polars -> fallback to Narwhals behavior
-                return self.add_vertices_bulk_nw(vertices, slice=slice)
+                return self.add_vertices_bulk_nw(vertices, layer=layer, slice=slice)
 
         # Split inserts vs updates
         nrows = len(df)
@@ -233,7 +245,7 @@ class BulkOps:
 
         self.vertex_attributes = df
 
-    def add_vertices_bulk_nw(self, vertices, slice=None):
+    def add_vertices_bulk_nw(self, vertices, layer=None, slice=None):
         """Bulk add vertices using Narwhals-compatible operations.
 
         Parameters
@@ -288,19 +300,25 @@ class BulkOps:
         except Exception:
             pass
 
-        # ENTITY REGISTRATION
+        # ENTITY REGISTRATION — compute layer coord once for the whole batch
+        coord = self._resolve_vertex_insert_coord(
+            layer,
+            vertex_ids=[vid for vid, _ in norm],
+            context="add_vertices_bulk",
+        )
+
         new_rows = 0
         for vid, _ in norm:
-            if vid not in self.entity_to_idx:
-                idx = self._num_entities
-                self.entity_to_idx[vid] = idx
-                self.idx_to_entity[idx] = vid
-                self.entity_types[vid] = "vertex"
-                self._num_entities = idx + 1
+            ekey = (vid, coord)
+            if ekey not in self._entities:
+                idx = len(self._entities)
+                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind="vertex"))
+                self._V.add(vid)
+                self._VM.add(ekey)
                 new_rows += 1
 
         if new_rows:
-            self._grow_rows_to(self._num_entities)
+            self._grow_rows_to(len(self._entities))
 
         # SLICE MEMBERSHIP
         if slice not in self._slices:
@@ -505,6 +523,14 @@ class BulkOps:
         for it in edges:
             if isinstance(it, dict):
                 d = dict(it)
+                # Accept src/tgt aliases for source/target
+                if "src" in d and "source" not in d:
+                    d["source"] = d.pop("src")
+                if "tgt" in d and "target" not in d:
+                    d["target"] = d.pop("tgt")
+                # Accept directed alias for edge_directed
+                if "directed" in d and "edge_directed" not in d:
+                    d["edge_directed"] = d.pop("directed")
             elif isinstance(it, (tuple, list)):
                 if len(it) == 2:
                     d = {"source": it[0], "target": it[1], "weight": default_weight}
@@ -547,41 +573,75 @@ class BulkOps:
         except Exception:
             pass
 
-        entity_to_idx = self.entity_to_idx
         M = self._matrix
-        # 1) Ensure endpoints exist (global)
+        # Bypass scipy DOK __setitem__ validation chain (isintlike + ndim + asarray per write).
+        # _set_intXint skips validation and writes directly to the backing store.
+        # Falls back to plain __setitem__ on very old scipy that lacks this private method.
+        _m_fast_set = getattr(M, "_set_intXint", None)
+        _m_dtype = M.dtype.type  # e.g. np.float32
+
+        # 1) Ensure endpoints exist — collect unique vids first, resolve coord once,
+        #    then build endpoint_cache: {vid: row_idx} for O(1) lookup in inner loop.
+        unique_vids: dict[str, str] = {}  # vid -> edge_type (for vertex_edge check)
         for d in norm:
             s, t = d["source"], d["target"]
             et = d.get("edge_type", "regular")
-            if s not in entity_to_idx:
-                if et == "vertex_edge" and isinstance(s, str) and s.startswith("edge_"):
-                    self.add_edge_entity(s)
+            unique_vids[s] = et
+            unique_vids[t] = et
+
+        # Flat graphs: coord is fixed for all binary endpoints
+        coord = self._make_layer_coord(None)
+
+        endpoint_cache: dict[str, int] = {}  # vid -> row_idx
+        for vid, et in unique_vids.items():
+            ekey = (vid, coord)
+            if ekey not in self._entities:
+                if et == "vertex_edge" and isinstance(vid, str) and vid.startswith("edge_"):
+                    self.add_edge_entity(vid)
                 else:
-                    idx = self._num_entities
-                    self.entity_to_idx[s] = idx
-                    self.idx_to_entity[idx] = s
-                    self.entity_types[s] = "vertex"
-                    self._num_entities = idx + 1
-            if t not in entity_to_idx:
-                if et == "vertex_edge" and isinstance(t, str) and t.startswith("edge_"):
-                    self.add_edge_entity(t)
-                else:
-                    idx = self._num_entities
-                    self.entity_to_idx[t] = idx
-                    self.idx_to_entity[idx] = t
-                    self.entity_types[t] = "vertex"
-                    self._num_entities = idx + 1
+                    idx = len(self._entities)
+                    self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind="vertex"))
+                    self._V.add(vid)
+                    self._VM.add(ekey)
+            endpoint_cache[vid] = self._entities[ekey].row_idx
 
         # Grow rows once if needed
-        self._grow_rows_to(self._num_entities)
+        self._grow_rows_to(len(self._entities))
 
-        # 2) Pre-size columns for new edges
-        new_count = sum(1 for d in norm if d.get("edge_id") not in self.edge_to_idx)
+        # 2) Pre-size columns for new edges and pre-generate auto edge IDs
+        _edges_store = self._edges
+        new_count = 0
+        _need_auto_id = []  # indices into norm that need auto edge_id
+        for _i, d in enumerate(norm):
+            eid = d.get("edge_id")
+            if eid not in _edges_store or _edges_store[eid].col_idx < 0:
+                new_count += 1
+            if eid is None:
+                _need_auto_id.append(_i)
+
         if new_count:
-            self._grow_cols_to(self._num_edges + new_count)
+            self._grow_cols_to(len(self._col_to_edge) + new_count)
+
+        # Pre-generate auto IDs in one pass (avoids 50k f-string format calls in loop)
+        if _need_auto_id:
+            _base_id = self._next_edge_id
+            self._next_edge_id += len(_need_auto_id)
+            _auto_ids = iter(range(_base_id, _base_id + len(_need_auto_id)))
+            for _i in _need_auto_id:
+                norm[_i]["edge_id"] = f"edge_{next(_auto_ids)}"
 
         # 3) Create/update columns
         out_ids = []
+        # Batch matrix writes: collect (row, col) -> val for new/updated entries,
+        # and keys to zero-out (update path only). Applied in one shot after the loop.
+        _M_writes: dict = {}
+        _M_zero_keys: list = []
+        # Batch slice membership: collect per-slice edge IDs and vertex pairs.
+        # Applied after the loop with single bulk set.update() calls.
+        _slice_eids: dict = {}   # slice_id -> list[edge_id]
+        _slice_vids: dict = {}   # slice_id -> list[vid]
+        _slice_weights: list = []  # (slice_id, edge_id, weight) for per-slice weights
+
         for d in norm:
             s, t = d["source"], d["target"]
             w = d["weight"]
@@ -598,31 +658,32 @@ class BulkOps:
                 is_dir = self.directed
             else:
                 is_dir = True
-            s_idx = self.entity_to_idx[s]
-            t_idx = self.entity_to_idx[t]
+            s_idx = endpoint_cache[s]
+            t_idx = endpoint_cache[t]
 
-            if edge_id is None:
-                edge_id = self._get_next_edge_id()
+            fw = _m_dtype(w)
 
             # update vs create
-            if edge_id in self.edge_to_idx:
-                col = self.edge_to_idx[edge_id]
-                old_s, old_t, old_type = self.edge_definitions[edge_id]
+            if edge_id in self._edges and self._edges[edge_id].col_idx >= 0:
+                rec = self._edges[edge_id]
+                col = rec.col_idx
+                old_s, old_t = rec.src, rec.tgt
                 try:
-                    M[self.entity_to_idx[old_s], col] = 0
+                    _M_zero_keys.append((self._entity_row(old_s), col))
                 except Exception:
                     pass
                 if old_t is not None and old_t != old_s:
                     try:
-                        M[self.entity_to_idx[old_t], col] = 0
+                        _M_zero_keys.append((self._entity_row(old_t), col))
                     except Exception:
                         pass
-                M[s_idx, col] = w
+                _M_writes[(s_idx, col)] = fw
                 if s != t:
-                    M[t_idx, col] = -w if is_dir else w
-                self.edge_definitions[edge_id] = (s, t, old_type)
-                self.edge_weights[edge_id] = w
-                self.edge_directed[edge_id] = is_dir
+                    _M_writes[(t_idx, col)] = _m_dtype(-w) if is_dir else fw
+                rec.src = s
+                rec.tgt = t
+                rec.weight = w
+                rec.directed = is_dir
                 if (old_s, old_t) != (s, t):
                     lst = self._adj.get((old_s, old_t))
                     if lst:
@@ -651,33 +712,40 @@ class BulkOps:
                     EdgeType.DIRECTED if is_dir else EdgeType.UNDIRECTED
                 )
             else:
-                col = self._num_edges
-                self.edge_to_idx[edge_id] = col
-                self.idx_to_edge[col] = edge_id
-                self.edge_definitions[edge_id] = (s, t, etype)
-                self.edge_weights[edge_id] = w
-                self.edge_directed[edge_id] = is_dir
-                self._num_edges = col + 1
-                M[s_idx, col] = w
+                col = len(self._col_to_edge)
+                self._col_to_edge[col] = edge_id
+                if edge_id in self._edges:
+                    rec = self._edges[edge_id]
+                    rec.src = s
+                    rec.tgt = t
+                    rec.weight = w
+                    rec.directed = is_dir
+                    rec.etype = "binary"
+                    rec.col_idx = col
+                else:
+                    self._edges[edge_id] = EdgeRecord(
+                        src=s, tgt=t, weight=w, directed=is_dir,
+                        etype="binary", col_idx=col,
+                        ml_kind=None, ml_layers=None, direction_policy=None,
+                    )
+                _M_writes[(s_idx, col)] = fw
                 if s != t:
-                    M[t_idx, col] = -w if is_dir else w
+                    _M_writes[(t_idx, col)] = _m_dtype(-w) if is_dir else fw
                 self._adj.setdefault((s, t), []).append(edge_id)
                 self._src_to_edges.setdefault(s, []).append(edge_id)
                 self._tgt_to_edges.setdefault(t, []).append(edge_id)
 
-            # slice membership + optional per-slice weight
+            # slice membership + optional per-slice weight (batched, applied after loop)
             if slice_local is not None:
-                if slice_local not in self._slices:
-                    self._slices[slice_local] = {
-                        "vertices": set(),
-                        "edges": set(),
-                        "attributes": {},
-                    }
-                self._slices[slice_local]["edges"].add(edge_id)
-                self._slices[slice_local]["vertices"].update((s, t))
+                _lst = _slice_eids.get(slice_local)
+                if _lst is None:
+                    _slice_eids[slice_local] = [edge_id]
+                    _slice_vids[slice_local] = [s, t]
+                else:
+                    _lst.append(edge_id)
+                    _slice_vids[slice_local].extend((s, t))
                 if slice_w is not None:
-                    self.set_edge_slice_attrs(slice_local, edge_id, weight=float(slice_w))
-                    self.slice_edge_weights.setdefault(slice_local, {})[edge_id] = float(slice_w)
+                    _slice_weights.append((slice_local, edge_id, float(slice_w)))
 
             # propagation
             if prop == "shared":
@@ -690,6 +758,24 @@ class BulkOps:
                 pending_attrs.setdefault(edge_id, {}).update(attrs)
 
             out_ids.append(edge_id)
+
+        # Apply matrix writes in one batch (C-level dict ops, bypasses per-call Python overhead)
+        for key in _M_zero_keys:
+            dict.pop(M, key, None)
+        if _M_writes:
+            dict.update(M, _M_writes)
+            self._csr_cache = None
+
+        # Flush batched slice membership (one set.update per slice instead of E individual adds)
+        for sid, eids in _slice_eids.items():
+            if sid not in self._slices:
+                self._slices[sid] = {"vertices": set(), "edges": set(), "attributes": {}}
+            self._slices[sid]["edges"].update(eids)
+        for sid, vids in _slice_vids.items():
+            self._slices[sid]["vertices"].update(vids)
+        for sid, eid, sw in _slice_weights:
+            self.set_edge_slice_attrs(sid, eid, weight=sw)
+            self.slice_edge_weights.setdefault(sid, {})[eid] = sw
 
         # flush all edge attribute writes in one bulk call
         if pending_attrs:
@@ -736,6 +822,9 @@ class BulkOps:
             if not isinstance(it, dict):
                 continue
             d = dict(it)
+            # Accept directed alias for edge_directed
+            if "directed" in d and "edge_directed" not in d:
+                d["edge_directed"] = d.pop("directed")
             d.setdefault("weight", default_weight)
             if "slice" not in d:
                 d["slice"] = slice
@@ -775,11 +864,6 @@ class BulkOps:
         except Exception:
             pass
 
-        entity_to_idx = self.entity_to_idx
-        entity_types = self.entity_types
-        idx_to_entity = self.idx_to_entity
-        num_entities = self._num_entities
-
         # Collect ALL unique vertices first
         all_verts = set()
         for d in items:
@@ -789,32 +873,25 @@ class BulkOps:
                 all_verts.update(d.get("head", []))
                 all_verts.update(d.get("tail", []))
 
-        # Single pass vertex creation
+        # Single pass vertex creation — compute coord once for the flat/default layer
+        coord = self._make_layer_coord(None)
         for u in all_verts:
-            if u not in entity_to_idx:
-                entity_to_idx[u] = num_entities
-                idx_to_entity[num_entities] = u
-                entity_types[u] = "vertex"
-                num_entities += 1
+            ekey = (u, coord)
+            if ekey not in self._entities:
+                idx = len(self._entities)
+                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind="vertex"))
+                self._V.add(u)
+                self._VM.add(ekey)
 
-        self._num_entities = num_entities
-        self._grow_rows_to(num_entities)
+        self._grow_rows_to(len(self._entities))
 
         # Pre-size columns
-        edge_to_idx = self.edge_to_idx
-        new_count = sum(1 for d in items if d.get("edge_id") not in edge_to_idx)
+        new_count = sum(1 for d in items if d.get("edge_id") not in self._edges)
         if new_count:
-            self._grow_cols_to(self._num_edges + new_count)
+            self._grow_cols_to(len(self._col_to_edge) + new_count)
 
         M = self._matrix
-        edge_definitions = self.edge_definitions
-        hyperedge_definitions = self.hyperedge_definitions
-        edge_weights = self.edge_weights
-        edge_directed = self.edge_directed
-        edge_kind = self.edge_kind
-        idx_to_edge = self.idx_to_edge
         slices = self._slices
-        num_edges = self._num_edges
 
         # Bypass scipy DOK __setitem__ validation chain (isintlike + ndim + asarray per write).
         # _set_intXint skips validation and writes directly to the backing store (~0.65µs vs ~18µs).
@@ -844,81 +921,74 @@ class BulkOps:
             if e_id is None:
                 e_id = self._get_next_edge_id()
 
-            if e_id in edge_to_idx:
-                col = edge_to_idx[e_id]
-                # clear old cells (binary or hyper)
-                if e_id in hyperedge_definitions:
-                    h = hyperedge_definitions[e_id]
-                    rows = h.get("members") or (list(h.get("head", ())) + list(h.get("tail", ())))
-                    for vid in rows:
+            if e_id in self._edges:
+                rec = self._edges[e_id]
+                col = rec.col_idx
+                # clear old cells
+                if rec.etype == "hyper":
+                    old_verts = rec.src if rec.tgt is None else (rec.src | rec.tgt)
+                    for vid in old_verts:
                         try:
+                            r = self._entity_row(vid)
                             if _m_fast_set is not None:
-                                _m_fast_set(entity_to_idx[vid], col, 0)
+                                _m_fast_set(r, col, 0)
                             else:
-                                M[entity_to_idx[vid], col] = 0
+                                M[r, col] = 0
                         except Exception:
                             pass
                 else:
-                    old = edge_definitions.get(e_id)
-                    if old is not None:
-                        os, ot, _ = old
+                    for vid in (rec.src, rec.tgt):
+                        if vid is None:
+                            continue
                         try:
+                            r = self._entity_row(vid)
                             if _m_fast_set is not None:
-                                _m_fast_set(entity_to_idx[os], col, 0)
+                                _m_fast_set(r, col, 0)
                             else:
-                                M[entity_to_idx[os], col] = 0
+                                M[r, col] = 0
                         except Exception:
                             pass
-                        if ot is not None and ot != os:
-                            try:
-                                if _m_fast_set is not None:
-                                    _m_fast_set(entity_to_idx[ot], col, 0)
-                                else:
-                                    M[entity_to_idx[ot], col] = 0
-                            except Exception:
-                                pass
             else:
-                col = num_edges
-                edge_to_idx[e_id] = col
-                idx_to_edge[col] = e_id
-                num_edges = col + 1
+                col = len(self._col_to_edge)
+                self._col_to_edge[col] = e_id
+                rec = EdgeRecord(
+                    src=None, tgt=None, weight=1.0, directed=False,
+                    etype="hyper", col_idx=col,
+                    ml_kind=None, ml_layers=None, direction_policy=None,
+                )
+                self._edges[e_id] = rec
 
             # write new column values + metadata
             if members is not None:
                 fw = _m_dtype(w)
                 if _m_fast_set is not None:
                     for u in members:
-                        _m_fast_set(entity_to_idx[u], col, fw)
+                        _m_fast_set(self._entity_row(u), col, fw)
                 else:
                     for u in members:
-                        M[entity_to_idx[u], col] = fw
-                hyperedge_definitions[e_id] = {"directed": False, "members": set(members)}
-                edge_directed[e_id] = False
-                edge_kind[e_id] = "hyper"
-                edge_definitions[e_id] = (None, None, "hyper")
+                        M[self._entity_row(u), col] = fw
+                rec.src = frozenset(members)
+                rec.tgt = None
+                rec.directed = False
             else:
                 fw = _m_dtype(w)
                 neg_fw = _m_dtype(-w)
                 if _m_fast_set is not None:
                     for u in head:
-                        _m_fast_set(entity_to_idx[u], col, fw)
+                        _m_fast_set(self._entity_row(u), col, fw)
                     for v in tail:
-                        _m_fast_set(entity_to_idx[v], col, neg_fw)
+                        _m_fast_set(self._entity_row(v), col, neg_fw)
                 else:
                     for u in head:
-                        M[entity_to_idx[u], col] = fw
+                        M[self._entity_row(u), col] = fw
                     for v in tail:
-                        M[entity_to_idx[v], col] = neg_fw
-                hyperedge_definitions[e_id] = {
-                    "directed": True,
-                    "head": set(head),
-                    "tail": set(tail),
-                }
-                edge_directed[e_id] = True
-                edge_kind[e_id] = "hyper"
-                edge_definitions[e_id] = (None, None, "hyper")
+                        M[self._entity_row(v), col] = neg_fw
+                rec.src = frozenset(head)
+                rec.tgt = frozenset(tail)
+                rec.directed = True
 
-            edge_weights[e_id] = w
+            rec.weight = w
+            rec.etype = "hyper"
 
             # slice membership
             if slice_local is not None:
@@ -942,7 +1012,6 @@ class BulkOps:
 
             out_ids.append(e_id)
 
-        self._num_edges = num_edges
         self._csr_cache = None  # matrix was mutated; invalidate cached CSR
 
         # SINGLE BULK WRITE FOR ALL ATTRIBUTES
@@ -974,7 +1043,7 @@ class BulkOps:
             self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
         L = self._slices[slice]
 
-        add_edges = {eid for eid in edge_ids if eid in self.edge_to_idx}
+        add_edges = {eid for eid in edge_ids if eid in self._edges and self._edges[eid].col_idx >= 0}
         if not add_edges:
             return
 
@@ -982,18 +1051,16 @@ class BulkOps:
 
         verts = set()
         for eid in add_edges:
-            kind = self.edge_kind.get(eid, "binary")
-            if kind == "hyper":
-                h = self.hyperedge_definitions[eid]
-                if h.get("members") is not None:
-                    verts.update(h["members"])
-                else:
-                    verts.update(h.get("head", ()))
-                    verts.update(h.get("tail", ()))
+            rec = self._edges[eid]
+            if rec.etype == "hyper":
+                verts.update(rec.src)
+                if rec.tgt is not None:
+                    verts.update(rec.tgt)
             else:
-                s, t, _ = self.edge_definitions[eid]
-                verts.add(s)
-                verts.add(t)
+                if rec.src is not None:
+                    verts.add(rec.src)
+                if rec.tgt is not None:
+                    verts.add(rec.tgt)
 
         L["vertices"].update(verts)
 
@@ -1050,24 +1117,23 @@ class BulkOps:
         except Exception:
             pass
 
-        # create missing rows as type 'edge'
+        # create missing rows as type 'edge_entity'
         new_rows = 0
         for eid, _ in norm:
-            if eid not in self.entity_to_idx:
-                idx = self._num_entities
-                self.entity_to_idx[eid] = idx
-                self.idx_to_entity[idx] = eid
-                self.entity_types[eid] = "edge"
-                self._num_entities = idx + 1
+            if eid not in self._entities:
+                idx = len(self._entities)
+                self._register_entity_record(eid, EntityRecord(row_idx=idx, kind="edge_entity"))
                 new_rows += 1
 
-            if eid not in self.edge_definitions:
-                self.edge_definitions[eid] = (None, None, "edge_entity")
-                self.edge_weights[eid] = 1.0
-                self.edge_directed[eid] = False
+            if eid not in self._edges:
+                self._edges[eid] = EdgeRecord(
+                    src=None, tgt=None, weight=1.0, directed=False,
+                    etype="vertex_edge", col_idx=-1,
+                    ml_kind=None, ml_layers=None, direction_policy=None,
+                )
 
         if new_rows:
-            self._grow_rows_to(self._num_entities)
+            self._grow_rows_to(len(self._entities))
 
         # slice membership
         if slice not in self._slices:
@@ -1190,7 +1256,7 @@ class BulkOps:
         -----
         This is faster than calling `remove_edge` in a loop.
         """
-        to_drop = [eid for eid in edge_ids if eid in self.edge_to_idx]
+        to_drop = [eid for eid in edge_ids if eid in self._edges and self._edges[eid].col_idx >= 0]
         if not to_drop:
             return
         self._remove_edges_bulk(to_drop)
@@ -1211,7 +1277,7 @@ class BulkOps:
         -----
         This is faster than calling `remove_vertex` in a loop.
         """
-        to_drop = [vid for vid in vertex_ids if vid in self.entity_to_idx]
+        to_drop = [vid for vid in vertex_ids if vid in self._entities]
         if not to_drop:
             return
         self._remove_vertices_bulk(to_drop)
@@ -1221,39 +1287,34 @@ class BulkOps:
         if not drop:
             return
 
-        # Columns to keep, old->new remap
-        keep_pairs = sorted(
-            ((idx, eid) for eid, idx in self.edge_to_idx.items() if eid not in drop)
-        )
-        old_to_new = {
-            old: new for new, (old, _eid) in enumerate(((old, eid) for old, eid in keep_pairs))
-        }
+        # Columns to keep, old->new remap.
+        # _col_to_edge is insertion-ordered (col keys are 0,1,2,...) so iterating it
+        # gives columns in ascending order without sorting — O(E) vs O(E log E).
+        keep_pairs = [(col, eid) for col, eid in self._col_to_edge.items() if eid not in drop]
+        old_to_new = {old: new for new, (old, _eid) in enumerate(keep_pairs)}
         new_cols = len(keep_pairs)
 
-        # Rebuild matrix once
+        # Rebuild matrix once (batch dict op avoids per-entry Python __setitem__ overhead)
         M_old = self._matrix  # DOK
         rows, _cols = M_old.shape
         M_new = sp.dok_matrix((rows, new_cols), dtype=M_old.dtype)
-        for (r, c), v in M_old.items():
-            if c in old_to_new:
-                M_new[r, old_to_new[c]] = v
+        new_data = {(r, old_to_new[c]): v for (r, c), v in M_old.items() if c in old_to_new}
+        if new_data:
+            dict.update(M_new, new_data)
         self._matrix = M_new
         self._csr_cache = None
 
-        # Rebuild edge mappings
-        self.idx_to_edge.clear()
-        self.edge_to_idx.clear()
+        # Rebuild edge col mappings
+        self._col_to_edge.clear()
         for new_idx, (old_idx, eid) in enumerate(keep_pairs):
-            self.idx_to_edge[new_idx] = eid
-            self.edge_to_idx[eid] = new_idx
-        self._num_edges = new_cols
+            self._col_to_edge[new_idx] = eid
+            self._edges[eid].col_idx = new_idx
 
-        # Metadata cleanup (vectorized)
-        # Dicts
+        # Adjacency + primary record cleanup
         for eid in drop:
-            defn = self.edge_definitions.pop(eid, None)
-            if defn is not None:
-                s, t = defn[0], defn[1]
+            rec = self._edges.pop(eid, None)
+            if rec is not None and rec.etype != "hyper" and rec.src is not None and rec.tgt is not None:
+                s, t = rec.src, rec.tgt
                 lst = self._adj.get((s, t))
                 if lst:
                     try:
@@ -1271,10 +1332,11 @@ class BulkOps:
                             pass
                         if not _lst:
                             del index[v]
-            self.edge_weights.pop(eid, None)
-            self.edge_directed.pop(eid, None)
-            self.edge_kind.pop(eid, None)
-            self.hyperedge_definitions.pop(eid, None)
+            # Clear multilayer metadata kept on EdgeRecord.
+            rec2 = self._edges.get(eid)
+            if rec2 is not None:
+                rec2.ml_kind = None
+            self.edge_layers.pop(eid, None)
         for slice_data in self._slices.values():
             slice_data["edges"].difference_update(drop)
         for d in self.slice_edge_weights.values():
@@ -1308,19 +1370,16 @@ class BulkOps:
         if not drop_vs:
             return
 
-        # 1) Collect incident edges (binary + hyper)
+        # 1) Collect incident edges (binary + hyper) in one pass
         drop_es = set()
-        for eid, (s, t, _typ) in list(self.edge_definitions.items()):
-            if s in drop_vs or t in drop_vs:
-                drop_es.add(eid)
-        for eid, hdef in list(self.hyperedge_definitions.items()):
-            if hdef.get("members"):
-                if drop_vs & set(hdef["members"]):
+        for eid, rec in list(self._edges.items()):
+            if rec.etype == "hyper":
+                if drop_vs & set(rec.src):
+                    drop_es.add(eid)
+                elif rec.tgt is not None and (drop_vs & set(rec.tgt)):
                     drop_es.add(eid)
             else:
-                if (drop_vs & set(hdef.get("head", ()))) or (
-                    drop_vs & set(hdef.get("tail", ()))
-                ):  # directed
+                if rec.src in drop_vs or rec.tgt in drop_vs:
                     drop_es.add(eid)
 
         # 2) Drop all those edges in one pass
@@ -1328,49 +1387,55 @@ class BulkOps:
             self._remove_edges_bulk(drop_es)
 
         # 3) Build row keep list and old->new map
-        keep_idx = []
-        for idx in range(self._num_entities):
-            ent = self.idx_to_entity[idx]
-            if ent not in drop_vs:
-                keep_idx.append(idx)
+        keep_idx = sorted(
+            rec.row_idx for eid, rec in self._entities.items() if eid not in drop_vs
+        )
         old_to_new = {old: new for new, old in enumerate(keep_idx)}
         new_rows = len(keep_idx)
 
-        # 4) Rebuild matrix rows once
+        # 4) Rebuild matrix rows once (batch dict op avoids per-entry Python __setitem__ overhead)
         M_old = self._matrix  # DOK
         _rows, cols = M_old.shape
         M_new = sp.dok_matrix((new_rows, cols), dtype=M_old.dtype)
-        for (r, c), v in M_old.items():
-            if r in old_to_new:
-                M_new[old_to_new[r], c] = v
+        new_data = {(old_to_new[r], c): v for (r, c), v in M_old.items() if r in old_to_new}
+        if new_data:
+            dict.update(M_new, new_data)
         self._matrix = M_new
         self._csr_cache = None
 
         # 5) Rebuild entity mappings
-        new_entity_to_idx = {}
-        new_idx_to_entity = {}
+        new_entities = {}
+        new_row_to_entity = {}
         for new_i, old_i in enumerate(keep_idx):
-            ent = self.idx_to_entity[old_i]
-            new_entity_to_idx[ent] = new_i
-            new_idx_to_entity[new_i] = ent
-        self.entity_to_idx = new_entity_to_idx
-        self.idx_to_entity = new_idx_to_entity
-        # types: drop removed
+            ent = self._row_to_entity[old_i]
+            old_rec = self._entities[ent]
+            new_entities[ent] = EntityRecord(row_idx=new_i, kind=old_rec.kind)
+            new_row_to_entity[new_i] = ent
+        # remove dropped entities
         for vid in drop_vs:
-            self.entity_types.pop(vid, None)
-        self._num_entities = new_rows
+            pass  # they're not in new_entities, no action needed
+        self._entities = new_entities
+        self._row_to_entity = new_row_to_entity
+        self._rebuild_entity_indexes()
 
         # 6) Clean vertex attributes and slice memberships
+        drop_vertex_ids = {
+            ent[0] if isinstance(ent, tuple) and len(ent) == 2 else ent
+            for ent in drop_vs
+        }
         va = self.vertex_attributes
         if va is not None and hasattr(va, "columns") and "vertex_id" in va.columns:
             if pl is not None and isinstance(va, pl.DataFrame) and va.height:
-                self.vertex_attributes = va.filter(~pl.col("vertex_id").is_in(list(drop_vs)))
+                self.vertex_attributes = va.filter(~pl.col("vertex_id").is_in(list(drop_vertex_ids)))
             else:
                 import narwhals as nw
 
                 self.vertex_attributes = nw.to_native(
-                    nw.from_native(va).filter(~nw.col("vertex_id").is_in(list(drop_vs)))
+                    nw.from_native(va).filter(~nw.col("vertex_id").is_in(list(drop_vertex_ids)))
                 )
 
         for slice_data in self._slices.values():
-            slice_data["vertices"].difference_update(drop_vs)
+            slice_data["vertices"].difference_update(drop_vertex_ids)
+
+        self._V.difference_update(drop_vertex_ids)
+        self._VM.difference_update(drop_vs)
