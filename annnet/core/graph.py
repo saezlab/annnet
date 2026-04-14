@@ -59,30 +59,51 @@ class AnnNet(
     AttributesClass,
     Traversal,
 ):
-    """Sparse incidence-matrix graph with slices, attributes, parallel edges, and hyperedges.
+    """Incidence-based graph with slices, multilayer coordinates, and rich edge types.
 
-    The graph is backed by a DOK (Dictionary Of Keys) sparse matrix and exposes
-    sliceed views and attribute tables stored as Polars DF (DataFrame). Supports:
-    vertices, binary edges (directed/undirected), edge-entities (vertex-edge hybrids),
-    k-ary hyperedges (directed/undirected), per-slice membership and weights,
-    and Polars-backed attribute upserts.
+    AnnNet stores topology in a sparse incidence matrix backed by canonical
+    entity and edge registries. A row represents an entity, typically a vertex
+    or an edge-entity, and a column represents an edge. The class supports:
+
+    - binary directed and undirected edges
+    - hyperedges, including directed head/tail hyperedges
+    - edge-entities that can themselves participate as endpoints
+    - slice membership and per-slice edge weights
+    - optional multilayer coordinates on vertices and edges
+    - dataframe-backed attribute storage
 
     Parameters
-    --
-    directed : bool, optional
-        Whether edges are directed by default. Individual edges can override this.
+    ----------
+    directed : bool | None, optional
+        Default directedness for newly created binary edges. If ``None``,
+        methods fall back to directed semantics unless a per-edge flag is set.
+    v : int, optional
+        Initial row capacity for the incidence matrix.
+    e : int, optional
+        Initial column capacity for the incidence matrix.
+    annotations : dict | None, optional
+        Pre-built annotation tables to use instead of creating empty tables.
+    annotations_backend : {"polars", "pandas"}, optional
+        Preferred backend for newly initialized annotation tables.
+    aspects : dict[str, list[str]] | None, optional
+        Initial multilayer aspect declaration. If omitted, the graph starts
+        flat with a single placeholder aspect ``"_"``.
+    **kwargs
+        Initial graph-level attributes stored in :attr:`graph_attributes`.
 
     Notes
-    -
-    - Incidence columns encode orientation: +w on source/head, −w on target/tail for
-      directed edges; +w on all members for undirected edges/hyperedges.
-    - Attributes are **pure**: structural keys are filtered out so attribute tables
-      contain only user data.
+    -----
+    Directed incidence columns use positive values for sources or heads and
+    negative values for targets or tails. Undirected binary edges and
+    undirected hyperedges use positive values for all incident entities.
 
     See Also
-
-    add_vertex, add_edge, add_hyperedge, edges_view, vertices_view, slices_view
-
+    --------
+    add_vertex
+    add_edge
+    add_vertices_bulk
+    add_edges_bulk
+    view
     """
 
     # Construction
@@ -96,23 +117,28 @@ class AnnNet(
         aspects: dict | None = None,
         **kwargs,
     ):
-        """Initialize an empty incidence-matrix graph.
+        """Initialize an empty :class:`AnnNet` graph.
 
         Parameters
-        --
-        directed : bool, optional
-            Global default for edge directionality. Individual edges can override this.
+        ----------
+        directed : bool | None, optional
+            Default directedness for newly created binary edges.
+        v : int, optional
+            Initial row capacity for the sparse incidence matrix.
+        e : int, optional
+            Initial column capacity for the sparse incidence matrix.
+        annotations : dict | None, optional
+            Existing annotation tables keyed by table name.
+        annotations_backend : {"polars", "pandas"}, optional
+            Backend used when empty annotation tables need to be created.
+        aspects : dict[str, list[str]] | None, optional
+            Initial multilayer aspect registry.
+        **kwargs
+            Initial graph-level attributes.
 
         Notes
-        -
-        - Stores entities (vertices and edge-entities), edges (including parallels), and
-        an incidence matrix in DOK (Dictionary Of Keys) sparse format.
-        - Attribute tables are Polars DF (DataFrame) with canonical key columns:
-        ``vertex_attributes(vertex_id)``, ``edge_attributes(edge_id)``,
-        ``slice_attributes(slice_id)``, and
-        ``edge_slice_attributes(slice_id, edge_id, weight)``.
-        - A ``'default'`` slice is created and set active.
-
+        -----
+        A default slice named ``"default"`` is always created and made active.
         """
         self.directed = directed
 
@@ -497,29 +523,34 @@ class AnnNet(
     # Build graph
 
     def add_vertex(self, vertex_id, slice=None, layer=None, **attributes):
-        """Add (or upsert) a vertex and optionally attach it to a slice.
+        """Add or update a vertex.
 
         Parameters
         ----------
         vertex_id : str
-            Vertex identifier (unique across entities).
+            Vertex identifier.
         slice : str, optional
-            Target slice. Defaults to the active slice.
+            Slice receiving the vertex membership. Defaults to the active slice.
         layer : str | dict | tuple | None, optional
-            Layer specification. None → flat/basal layer. str → single-aspect shorthand.
-            dict → {aspect: value}. tuple → ordered values per aspect.
+            Multilayer placement. Accepted forms are:
+
+            - ``None`` for the flat graph default, or for placeholder placement
+              in a layered graph
+            - ``str`` for the single-aspect shorthand
+            - ``dict`` mapping aspect name to value
+            - canonical coordinate tuple
         **attributes
-            Vertex attributes to upsert.
+            Vertex attributes to upsert into the vertex attribute table.
 
         Returns
         -------
         str
-            The vertex ID (echoed).
+            The inserted vertex identifier.
 
         Notes
         -----
-        Ensures a row exists in the vertex attribute table and resizes the
-        incidence matrix if needed.
+        In multilayer graphs, omitting ``layer`` places the vertex at the
+        placeholder coordinate ``("_", ..., "_")`` and emits a warning.
         """
         if slice is None:
             slice = self._current_slice
@@ -561,73 +592,12 @@ class AnnNet(
 
         return vid
 
-    def add_vertices(self, vertices, slice=None, **attributes):
-        """Add multiple vertices in a single call.
+    def _ensure_edge_entity_placeholder(self, edge_id, slice=None, **attributes):
+        """Ensure a connectable edge-entity placeholder exists without structural incidence."""
+        self._register_edge_as_entity(edge_id)
 
-        Parameters
-        ----------
-        vertices : Iterable[str] | Iterable[tuple[str, dict]] | Iterable[dict]
-            Vertices to add. Each item can be:
-            - `vertex_id` (str)
-            - `(vertex_id, attrs)` tuple
-            - dict containing `vertex_id` plus attributes
-        slice : str, optional
-            Target slice. Defaults to the active slice.
-        **attributes
-            Attributes applied to all vertices (merged with per-vertex attrs).
-
-        Returns
-        -------
-        list[str]
-            The vertex IDs added (in input order).
-        """
-        warnings.warn(
-            "add_vertices() is a compatibility alias; prefer add_vertices_bulk().",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        # normalize to [(vertex_id, per_attrs), ...]
-        it = []
-        for item in vertices:
-            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], dict):
-                it.append({"vertex_id": item[0], **item[1], **attributes})
-            elif isinstance(item, dict):
-                d = dict(item)
-                d.update(attributes)
-                it.append(d)
-            else:
-                it.append({"vertex_id": item, **attributes})
-        self.add_vertices_bulk(
-            [(d["vertex_id"], {k: v for k, v in d.items() if k != "vertex_id"}) for d in it],
-            slice=slice,
-        )
-        return [d["vertex_id"] for d in it]
-
-    def add_edge_entity(self, edge_entity_id, slice=None, **attributes):
-        """Register a connectable edge-entity.
-
-        Parameters
-        ----------
-        edge_entity_id : str
-            Identifier for the edge-entity.
-        slice : str, optional
-            Slice to place the edge-entity into. Defaults to the active slice.
-        **attributes
-            Edge attributes to upsert.
-
-        Returns
-        -------
-        str
-            The edge-entity ID.
-
-        Notes
-        -----
-        Deprecated: prefer `add_edge(..., as_entity=True)`.
-        """
-        self._register_edge_as_entity(edge_entity_id)
-
-        if edge_entity_id not in self._edges:
-            self._edges[edge_entity_id] = EdgeRecord(
+        if edge_id not in self._edges:
+            self._edges[edge_id] = EdgeRecord(
                 src=None,
                 tgt=None,
                 weight=1.0,
@@ -643,10 +613,10 @@ class AnnNet(
         if slice is not None:
             if slice not in self._slices:
                 self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
-            self._slices[slice]["edges"].add(edge_entity_id)
+            self._slices[slice]["edges"].add(edge_id)
         if attributes:
-            self.set_edge_attrs(edge_entity_id, **attributes)
-        return edge_entity_id
+            self.set_edge_attrs(edge_id, **attributes)
+        return edge_id
 
     def _register_edge_as_entity(self, edge_id):
         """Make an existing edge connectable as an endpoint."""
@@ -783,7 +753,7 @@ class AnnNet(
 
     def add_edge(
         self,
-        src,
+        src=None,
         tgt=None,
         *,
         weight=1.0,
@@ -796,44 +766,58 @@ class AnnNet(
         flexible=None,
         **attrs,
     ):
-        """Unified edge builder — dispatches on src/tgt types.
-
-        Dispatch table
-        ──────────────
-        src=str,   tgt=str          → binary edge
-        src=tuple, tgt=tuple        → binary supra-node edge (ml_kind inferred)
-        src=list,  tgt=None         → undirected hyperedge (all nodes +weight)
-        src=list,  tgt=list         → directed hyperedge (src +weight, tgt −weight)
-        src=dict,  tgt=dict         → stoichiometric hyperedge (literal matrix entries)
-        src=dict,  tgt=None         → stoichiometric hyperedge (neg=source, pos=target)
+        """Add or update an edge.
 
         Parameters
         ----------
-        src : str | tuple | list | dict
+        src : str | tuple | list | dict | None
+            Edge source specification. Supported forms are:
+
+            - ``str`` or ``(vertex_id, layer_coord)`` for a binary edge source
+            - ``list`` for hyperedge members or heads
+            - ``dict`` for explicit incidence coefficients
+            - ``None`` only when creating an edge-entity placeholder via
+              ``as_entity=True`` and ``edge_id=...``
         tgt : str | tuple | list | dict | None
-        weight : float
-            Magnitude for list/str forms. Ignored for dict forms (literal values used).
+            Edge target specification. ``None`` indicates an undirected
+            hyperedge when ``src`` is a list or dict.
+        weight : float, optional
+            Default coefficient magnitude for binary edges and list-based
+            hyperedges.
         edge_id : str | None
-            Explicit ID. Auto-generated if None.
+            Explicit edge identifier. If omitted, a fresh identifier is generated.
         directed : bool | None
-            Edge directionality. None → inherit graph default.
-        parallel : {'update', 'error', 'parallel'}
-            'update'   – update the last edge with same endpoint set (default)
-            'error'    – raise if same endpoint set already exists
-            'parallel' – always create a new edge
+            Per-edge directedness override.
+        parallel : {"update", "error", "parallel"}, optional
+            Policy for duplicate endpoint sets when ``edge_id`` is not supplied.
         slice : str | None
+            Slice receiving the edge membership. Defaults to the active slice.
         as_entity : bool
-            Register this edge as a connectable entity (gets a matrix row).
-        propagate : {'none', 'shared', 'all'}
+            If ``True``, also register the edge as an entity with its own row.
+            When combined with ``src is None`` and ``tgt is None``, this creates
+            a connectable edge-entity placeholder with no structural incidence.
+        propagate : {"none", "shared", "all"}, optional
+            Slice propagation strategy for the created edge.
         flexible : dict | None
-            Direction-policy config for flexible-direction edges.
+            Flexible-direction policy configuration.
         **attrs
-            Edge attributes to upsert.
+            Edge attributes to upsert into the edge attribute table.
 
         Returns
         -------
         str
-            The edge_id of the created or updated edge.
+            Identifier of the created or updated edge.
+
+        Notes
+        -----
+        This is the canonical edge constructor. It covers binary edges,
+        supra-node edges, undirected and directed hyperedges, stoichiometric
+        hyperedges, and edge-entities.
+
+        Raises
+        ------
+        ValueError
+            If the argument combination is invalid or structurally ambiguous.
         """
         if parallel not in {"update", "error", "parallel"}:
             raise ValueError(f"parallel must be 'update'|'error'|'parallel', got {parallel!r}")
@@ -849,6 +833,13 @@ class AnnNet(
             )
 
         slice = slice if slice is not None else self._current_slice
+
+        if src is None and tgt is None:
+            if as_entity:
+                if edge_id is None:
+                    raise ValueError("edge_id is required when creating an edge-entity without endpoints.")
+                return self._ensure_edge_entity_placeholder(edge_id, slice=slice, **attrs)
+            raise ValueError("add_edge requires structural endpoints unless as_entity=True.")
 
         # ── 1. Parse inputs ────────────────────────────────────────────────
         src_nodes, tgt_nodes, col_entries_literal, etype = self._parse_edge_inputs(src, tgt, weight)
@@ -1070,15 +1061,21 @@ class AnnNet(
 
         return edge_id
 
-    def set_hyperedge_coeffs(self, edge_id: str, coeffs: dict[str, float]) -> None:
-        """Write per-vertex coefficients into the incidence column.
+    def set_edge_coeffs(self, edge_id: str, coeffs: dict[str, float]) -> None:
+        """Overwrite incidence coefficients for an existing edge.
 
         Parameters
         ----------
         edge_id : str
-            Hyperedge ID to update.
+            Edge identifier.
         coeffs : dict[str, float]
-            Mapping of vertex ID to coefficient value.
+            Mapping from entity identifier to numeric coefficient.
+
+        Notes
+        -----
+        This method is currently edge-type preserving in intent: callers should
+        only provide coefficient patterns consistent with the existing edge
+        topology.
         """
         col = self._edges[edge_id].col_idx
         for vid, coeff in coeffs.items():
@@ -1157,8 +1154,8 @@ class AnnNet(
         """Normalize a single vertex or an iterable of vertices into a set.
 
         This internal utility function standardizes input for methods like
-        `in_edges()` and `out_edges()` by converting the argument into a set
-        of vertex identifiers.
+        `incident_edges()` by converting the argument into a set of vertex
+        identifiers.
 
         Parameters
         --
@@ -1579,21 +1576,9 @@ class AnnNet(
                 M = frozenset([u, v])
                 return (M, M)
 
-    def incident_edges(self, vertex_id) -> list[int]:
-        """Return all edge indices incident to a given vertex.
-
-        Parameters
-        ----------
-        vertex_id : str
-            Vertex identifier.
-
-        Returns
-        -------
-        list[int]
-            Edge indices incident to the vertex.
-        """
+    def _incident_edge_indices(self, vertex_id) -> list[int]:
+        """Return matrix column indices of all edges incident to a vertex."""
         incident = []
-        # Fast path: direct matrix row lookup
         ent = self._entities.get(vertex_id)
         if ent is not None:
             try:
@@ -1601,8 +1586,6 @@ class AnnNet(
                 return incident
             except Exception:
                 pass
-
-        # Fallback: scan _edges
         for j in range(len(self._col_to_edge)):
             eid = self._col_to_edge[j]
             rec = self._edges[eid]
@@ -1612,7 +1595,6 @@ class AnnNet(
             else:
                 if rec.src == vertex_id or rec.tgt == vertex_id:
                     incident.append(j)
-
         return incident
 
     def _is_directed_edge(self, edge_id):
@@ -1783,169 +1765,165 @@ class AnnNet(
             edges.append((rec.src, rec.tgt, edge_id, rec.weight))
         return edges
 
-    def get_directed_edges(self):
-        """List IDs of directed edges.
+    def get_edges_by_direction(self, directed: bool):
+        """List edge identifiers matching a directedness flag.
+
+        Parameters
+        ----------
+        directed : bool
+            Desired directedness.
 
         Returns
         -------
         list[str]
-            Directed edge IDs.
+            Edge identifiers whose effective directedness matches ``directed``.
         """
         default_dir = True if self.directed is None else self.directed
         return [
             eid
             for eid, rec in self._edges.items()
-            if rec.col_idx >= 0 and (rec.directed if rec.directed is not None else default_dir)
+            if rec.col_idx >= 0
+            and bool(rec.directed if rec.directed is not None else default_dir) is bool(directed)
         ]
 
-    def get_undirected_edges(self):
-        """List IDs of undirected edges.
+    def global_count(self, kind: str) -> int:
+        """Count unique members across all slices.
 
-        Returns
-        -------
-        list[str]
-            Undirected edge IDs.
-        """
-        default_dir = True if self.directed is None else self.directed
-        return [
-            eid
-            for eid, rec in self._edges.items()
-            if rec.col_idx >= 0 and not (rec.directed if rec.directed is not None else default_dir)
-        ]
-
-    def number_of_vertices(self):
-        """Count vertices (excluding edge-entities).
+        Parameters
+        ----------
+        kind : {"vertices", "edges", "entities"}
+            Membership domain to count.
 
         Returns
         -------
         int
-            Number of vertices.
+            Number of unique members observed across all slices.
         """
-        return sum(1 for r in self._entities.values() if r.kind == "vertex")
-
-    def number_of_edges(self):
-        """Count edges (columns in the incidence matrix).
-
-        Returns
-        -------
-        int
-            Number of edges.
-        """
-        return len(self._col_to_edge)
-
-    def global_vertex_count(self):
-        """Count unique vertices present across all slices (union of memberships).
-
-        Returns
-        -------
-        int
-            Number of vertices across slices.
-        """
-        all_vertices = set()
+        if kind not in {"vertices", "edges", "entities"}:
+            raise ValueError("kind must be one of {'vertices', 'edges', 'entities'}")
+        members = set()
         for slice_data in self._slices.values():
-            all_vertices.update(slice_data["vertices"])
-        return len(all_vertices)
+            if kind in {"vertices", "entities"}:
+                members.update(slice_data["vertices"])
+            if kind in {"edges", "entities"}:
+                members.update(slice_data["edges"])
+        return len(members)
 
-    def global_entity_count(self):
-        """Count unique entities present across all slices (vertices + edge-entities).
+    # ── Backward-compat thin wrappers ─────────────────────────────────────────
 
-        Returns
-        -------
-        int
-            Number of entities across slices.
-        """
-        all_entities = set()
-        for slice_data in self._slices.values():
-            all_entities.update(slice_data["vertices"])
-            all_entities.update(slice_data["edges"])
-        return len(all_entities)
+    def number_of_vertices(self) -> int:
+        """Number of vertices. Prefer the ``nv`` property."""
+        return self.nv
 
-    def global_edge_count(self):
-        """Count unique edges present across all slices (union of memberships).
+    def number_of_edges(self) -> int:
+        """Number of edges. Prefer the ``ne`` property."""
+        return self.ne
 
-        Returns
-        -------
-        int
-            Number of edges across slices.
-        """
-        all_edges = set()
-        for slice_data in self._slices.values():
-            all_edges.update(slice_data["edges"])
-        return len(all_edges)
+    def global_vertex_count(self) -> int:
+        """Unique vertices across all slices. Prefer ``global_count('vertices')``."""
+        return self.global_count("vertices")
+
+    def global_entity_count(self) -> int:
+        """Unique entities across all slices. Prefer ``global_count('entities')``."""
+        return self.global_count("entities")
+
+    def global_edge_count(self) -> int:
+        """Unique edges across all slices. Prefer ``global_count('edges')``."""
+        return self.global_count("edges")
 
     def in_edges(self, vertices):
-        """Iterate over all edges that are **incoming** to one or more vertices.
-
-        Parameters
-        ----------
-        vertices : str | Iterable[str]
-            Vertex ID or iterable of vertex IDs. All edges whose target set
-            intersects with this set will be yielded.
-
-        Yields
-        ------
-        tuple[int, tuple[frozenset, frozenset]]
-            `(edge_index, (S, T))` where `S` is sources/heads and `T` is targets/tails.
-
-        Notes
-        -----
-        Works with binary and hyperedges. Undirected edges appear in both
-        `in_edges()` and `out_edges()`.
-        """
-        V = self._normalize_vertices_arg(vertices)
-        if not V:
-            return
-        seen = set()
-        for v in V:
-            for eid in self._tgt_to_edges.get(v, []):
-                if eid not in seen:
-                    seen.add(eid)
-                    rec = self._edges.get(eid)
-                    if rec is not None and rec.col_idx >= 0:
-                        yield rec.col_idx, self.get_edge(rec.col_idx)
-            for eid in self._src_to_edges.get(v, []):
-                if eid not in seen and not self._is_directed_edge(eid):
-                    seen.add(eid)
-                    rec = self._edges.get(eid)
-                    if rec is not None and rec.col_idx >= 0:
-                        yield rec.col_idx, self.get_edge(rec.col_idx)
+        """Incoming edges. Prefer ``incident_edges(direction='in')``."""
+        return self.incident_edges(vertices, direction="in")
 
     def out_edges(self, vertices):
-        """Iterate over all edges that are **outgoing** from one or more vertices.
+        """Outgoing edges. Prefer ``incident_edges(direction='out')``."""
+        return self.incident_edges(vertices, direction="out")
+
+    def get_directed_edges(self) -> list[str]:
+        """Directed edge IDs. Prefer ``get_edges_by_direction(True)``."""
+        return self.get_edges_by_direction(True)
+
+    def get_undirected_edges(self) -> list[str]:
+        """Undirected edge IDs. Prefer ``get_edges_by_direction(False)``."""
+        return self.get_edges_by_direction(False)
+
+    # ── Traversal ────────────────────────────────────────────────────────────
+
+    def incident_edges(self, vertices, direction: str = "both"):
+        """Iterate over edges incident to one or more vertices.
 
         Parameters
         ----------
         vertices : str | Iterable[str]
-            Vertex ID or iterable of vertex IDs. All edges whose source set
-            intersects with this set will be yielded.
+            One vertex identifier or an iterable of identifiers.
+        direction : {"in", "out", "both"}, optional
+            Directional filter applied to binary edges. Undirected edges are
+            yielded for both directions.
 
         Yields
         ------
-        tuple[int, tuple[frozenset, frozenset]]
-            `(edge_index, (S, T))` where `S` is sources/heads and `T` is targets/tails.
-
-        Notes
-        -----
-        Works with binary and hyperedges. Undirected edges appear in both
-        `out_edges()` and `in_edges()`.
+        tuple[int, tuple]
+            Pairs of ``(column_index, edge_tuple)`` as returned by
+            :meth:`get_edge`.
         """
+        if direction not in {"in", "out", "both"}:
+            raise ValueError("direction must be 'in', 'out', or 'both'")
         V = self._normalize_vertices_arg(vertices)
         if not V:
             return
         seen = set()
         for v in V:
-            for eid in self._src_to_edges.get(v, []):
-                if eid not in seen:
-                    seen.add(eid)
-                    rec = self._edges.get(eid)
-                    if rec is not None and rec.col_idx >= 0:
-                        yield rec.col_idx, self.get_edge(rec.col_idx)
-            for eid in self._tgt_to_edges.get(v, []):
+            if direction in {"in", "both"}:
+                for eid in self._tgt_to_edges.get(v, []):
+                    if eid not in seen:
+                        seen.add(eid)
+                        rec = self._edges.get(eid)
+                        if rec is not None and rec.col_idx >= 0:
+                            yield rec.col_idx, self.get_edge(rec.col_idx)
+            if direction in {"out", "both"}:
+                for eid in self._src_to_edges.get(v, []):
+                    if eid not in seen:
+                        seen.add(eid)
+                        rec = self._edges.get(eid)
+                        if rec is not None and rec.col_idx >= 0:
+                            yield rec.col_idx, self.get_edge(rec.col_idx)
+            if direction == "in":
+                secondary = self._src_to_edges.get(v, [])
+            elif direction == "out":
+                secondary = self._tgt_to_edges.get(v, [])
+            else:
+                secondary = []
+            for eid in secondary:
                 if eid not in seen and not self._is_directed_edge(eid):
                     seen.add(eid)
                     rec = self._edges.get(eid)
                     if rec is not None and rec.col_idx >= 0:
                         yield rec.col_idx, self.get_edge(rec.col_idx)
+
+    @property
+    def nv(self):
+        """Total number of vertices in the graph."""
+        return sum(1 for r in self._entities.values() if r.kind == "vertex")
+
+    @property
+    def ne(self):
+        """Total number of edges in the graph."""
+        return len(self._col_to_edge)
+
+    @property
+    def num_vertices(self):
+        """Alias for `nv`."""
+        return self.nv
+
+    @property
+    def num_edges(self):
+        """Alias for `ne`."""
+        return self.ne
+
+    @property
+    def shape(self):
+        """AnnNet shape as a tuple: (num_vertices, num_edges)."""
+        return (self.nv, self.ne)
 
     def get_or_create_vertex_by_attrs(self, slice=None, **attrs) -> str:
         """Return vertex ID for the given composite-key attributes.
@@ -2054,55 +2032,6 @@ class AnnNet(
         """
         return tuple(self.edges())
 
-    @property
-    def num_vertices(self):
-        """Total number of vertices in the graph.
-
-        Returns
-        -------
-        int
-        """
-        return self.number_of_vertices()
-
-    @property
-    def num_edges(self):
-        """Total number of edges in the graph.
-
-        Returns
-        -------
-        int
-        """
-        return self.number_of_edges()
-
-    @property
-    def nv(self):
-        """Shorthand for `num_vertices`.
-
-        Returns
-        -------
-        int
-        """
-        return self.num_vertices
-
-    @property
-    def ne(self):
-        """Shorthand for `num_edges`.
-
-        Returns
-        -------
-        int
-        """
-        return self.num_edges
-
-    @property
-    def shape(self):
-        """AnnNet shape as a tuple: (num_vertices, num_edges).
-
-        Returns
-        -------
-        tuple[int, int]
-        """
-        return (self.num_vertices, self.num_edges)
 
     # Lazy proxies
     ## Lazy NetworkX proxy
@@ -2241,7 +2170,7 @@ class AnnNet(
 
     # I/O
     def write(self, path, **kwargs):
-        """Save to .annnet format (zero loss).
+        """Write the graph to the native ``.annnet`` format.
 
         Parameters
         ----------
@@ -2256,7 +2185,7 @@ class AnnNet(
 
     @classmethod
     def read(cls, path, **kwargs):
-        """Load from .annnet format.
+        """Read a graph from the native ``.annnet`` format.
 
         Parameters
         ----------
@@ -2275,7 +2204,7 @@ class AnnNet(
 
     # View API
     def view(self, vertices=None, edges=None, slices=None, predicate=None):
-        """Create a lazy view/subgraph.
+        """Create a lazy graph view.
 
         Parameters
         ----------
@@ -2286,7 +2215,7 @@ class AnnNet(
         slices : Iterable[str], optional
             Slice IDs to include.
         predicate : callable, optional
-            Predicate applied to vertices/edges for filtering.
+            Predicate used for additional filtering.
 
         Returns
         -------
@@ -2296,7 +2225,7 @@ class AnnNet(
 
     # Audit
     def snapshot(self, label=None):
-        """Create a named snapshot of current graph state.
+        """Capture a lightweight snapshot of the current graph state.
 
         Parameters
         ----------
@@ -2306,7 +2235,7 @@ class AnnNet(
         Returns
         -------
         dict
-            Snapshot metadata.
+            Snapshot metadata record.
         """
         if label is None:
             label = f"snapshot_{len(self._snapshots)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -2316,8 +2245,8 @@ class AnnNet(
             "version": self._version,
             "timestamp": datetime.now(UTC).isoformat(),
             "counts": {
-                "vertices": self.number_of_vertices(),
-                "edges": self.number_of_edges(),
+                "vertices": self.nv,
+                "edges": self.ne,
                 "slices": len(self._slices),
             },
             # Store minimal state for comparison (uses existing AnnNet attributes)

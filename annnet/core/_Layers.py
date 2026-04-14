@@ -21,11 +21,12 @@ from ._helpers import EdgeRecord, EntityRecord, build_dataframe_from_rows
 
 
 class LayerManager:
-    """Manager for Kivela multi-layer operations.
+    """Namespace for multilayer operations.
 
-    Provides organized namespace for layer operations by delegating to AnnNet methods.
-    All heavy lifting is done by the AnnNet class; this is just a clean API surface.
-
+    ``LayerManager`` is the primary public entry point for aspect declaration,
+    elementary layer metadata, supra-node presence, layer-induced set algebra,
+    and supra-matrix constructions. Methods delegate to the underlying
+    :class:`annnet.core.graph.AnnNet` instance.
     """
 
     def __init__(self, graph):
@@ -61,41 +62,16 @@ class LayerManager:
         """Declare concrete elementary layer values for existing aspects."""
         return self._G.set_elementary_layers(layers_by_aspect)
 
-    def layer_tuples(self):
-        """List all aspect-tuples (Cartesian product).
-
-        Returns
-        -------
-        list[tuple[str, ...]]
-            All layer tuples in configured order.
-        """
-        return list(self._G.iter_layers())
-
     def layers(self):
         """List all realized layer tuples."""
-        return self.layer_tuples()
+        return list(self._G.iter_layers())
 
-    def tuple_id(self, aa):
-        """Canonical string id for a layer tuple.
-
-        Parameters
-        ----------
-        aa : Iterable[str]
-            Aspect-tuple layer (e.g., ``("t1","F")``).
-
-        Returns
-        -------
-        str
-            Canonical id (single label for 1 aspect, or ``"×"``-joined).
-        """
+    def layer_id(self, aa):
+        """Canonical string id for a layer tuple."""
         aa = tuple(aa)
         if len(self._G.aspects) == 1:
             return aa[0]
         return "×".join(aa)
-
-    def layer_id(self, aa):
-        """Canonical string id for a layer tuple."""
-        return self.tuple_id(aa)
 
     # ==================== Presence utilities ====================
 
@@ -228,37 +204,21 @@ class LayerManager:
 
     # ==================== Elementary layer attributes ===========
 
-    def elem_layer_id(self, aspect: str, label: str) -> str:
-        """Canonical ``"{aspect}_{label}"`` id used in ``layer_attributes``.
-
-        Parameters
-        ----------
-        aspect : str
-            Aspect identifier.
-        label : str
-            Elementary layer label.
-
-        Returns
-        -------
-        str
-        """
-        return self._G._elem_layer_id(aspect, label)
-
     def elementary_layer_id(self, aspect: str, label: str) -> str:
         """Canonical id for an elementary layer."""
-        return self.elem_layer_id(aspect, label)
+        return self._G._elem_layer_id(aspect, label)
 
-    def set_elem_layer_attrs(self, aspect: str, label: str, **attrs):
-        """Upsert attributes for an elementary layer.
+    def set_elementary_layer_attrs(self, aspect: str, label: str, **attrs):
+        """Upsert attributes for a declared elementary layer.
 
         Parameters
         ----------
         aspect : str
-            Aspect identifier.
+            Aspect name.
         label : str
-            Elementary layer label.
+            Elementary layer label within ``aspect``.
         **attrs
-            Key-value metadata to store.
+            Attribute key-value pairs to store.
 
         Returns
         -------
@@ -266,29 +226,22 @@ class LayerManager:
         """
         return self._G.set_elementary_layer_attrs(aspect, label, **attrs)
 
-    def set_elementary_layer_attrs(self, aspect: str, label: str, **attrs):
-        """Upsert attributes for an elementary layer."""
-        return self.set_elem_layer_attrs(aspect, label, **attrs)
-
-    def elem_layer_attrs(self, aspect: str, label: str) -> dict:
-        """Read attributes for an elementary layer.
+    def elementary_layer_attrs(self, aspect: str, label: str) -> dict:
+        """Return attributes stored for an elementary layer.
 
         Parameters
         ----------
         aspect : str
-            Aspect identifier.
+            Aspect name.
         label : str
             Elementary layer label.
 
         Returns
         -------
         dict
+            Attribute mapping for the elementary layer.
         """
         return self._G.get_elementary_layer_attrs(aspect, label)
-
-    def elementary_layer_attrs(self, aspect: str, label: str) -> dict:
-        """Read attributes for an elementary layer."""
-        return self.elem_layer_attrs(aspect, label)
 
     # ==================== Algebra on Kivela layers =========================
 
@@ -430,7 +383,7 @@ class LayerManager:
         ```
         """
         aa = tuple(aa)
-        sid = slice_id or self.tuple_id(aa)
+        sid = slice_id or self.layer_id(aa)
         return self._G.create_slice_from_layer(
             sid,
             aa,
@@ -1033,7 +986,7 @@ class LayerClass:
             edge_entity_id_set = set(edge_entity_ids)
             for eid in edge_entity_ids:
                 if flat._resolve_entity_key(eid) not in flat._entities:
-                    flat.add_edge_entity(eid)
+                    flat.add_edge(edge_id=eid, as_entity=True)
 
             edge_items = sorted(
                 self._edges.items(),
@@ -1046,7 +999,7 @@ class LayerClass:
             for eid, rec in edge_items:
                 if rec.col_idx < 0 and rec.src is None and rec.tgt is None:
                     if eid not in flat._edges:
-                        flat.add_edge_entity(eid)
+                        flat.add_edge(edge_id=eid, as_entity=True)
                     continue
 
                 if rec.etype == "hyper":
@@ -1836,7 +1789,7 @@ class LayerClass:
             edge_data.append((u, v, w))
 
         # Ensure all vertices exist in _entities — compute coord once
-        coord = self._make_layer_coord(None)
+        coord = self._make_layer_coord(aa)
         for vid in all_vertices:
             ekey = (vid, coord)
             if ekey not in _ents:
@@ -2824,7 +2777,7 @@ class LayerClass:
                     skipped.append(eid)
                     continue
 
-                # Extract the full column from _matrix (sparse, so only nonzero entries — includes exact stoichiometric coefficients if set_hyperedge_coeffs was called).
+                # Extract the full column from _matrix (sparse, so only nonzero entries — includes exact stoichiometric coefficients if set_edge_coeffs was called).
                 col_vec = M_csc.getcol(col_idx)
                 nz_rows_in_flat, _ = col_vec.nonzero()
 

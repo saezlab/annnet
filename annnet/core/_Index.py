@@ -15,8 +15,11 @@ def _entity_kind(rec):
 
 
 class IndexManager:
-    """Namespace for index operations.
-    Provides clean API over existing dicts.
+    """Namespace for entity-row and edge-column lookups.
+
+    The manager exposes the incidence-matrix indexing layer without surfacing
+    the internal storage dicts directly. It is the preferred public path for
+    translating between graph identifiers and matrix coordinates.
     """
 
     def __init__(self, graph):
@@ -326,29 +329,27 @@ class IndexManager:
 
 
 class IndexMapping:
-    # ID + entity ensure helpers
+    """Internal indexing helpers used by :class:`annnet.core.graph.AnnNet`."""
 
     def _get_next_edge_id(self) -> str:
-        """INTERNAL: Generate a unique edge ID for parallel edges.
+        """Generate a fresh edge identifier.
 
         Returns
-        ---
+        -------
         str
-            Fresh ``edge_<n>`` identifier (monotonic counter).
-
+            Fresh ``edge_<n>`` identifier from the monotonic internal counter.
         """
         edge_id = f"edge_{self._next_edge_id}"
         self._next_edge_id += 1
         return edge_id
 
     def _ensure_vertex_table(self) -> None:
-        """INTERNAL: Ensure the vertex attribute table exists with a canonical schema.
+        """Ensure the vertex attribute table exists with a canonical schema.
 
         Notes
-        -
-        - Creates an empty Polars DF [DataFrame] with a single ``Utf8`` ``vertex_id`` column
-        if missing or malformed.
-
+        -----
+        Creates an empty dataframe with a canonical ``vertex_id`` column when
+        the current vertex attribute table is missing or malformed.
         """
         df = getattr(self, "vertex_attributes", None)
 

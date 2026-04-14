@@ -165,7 +165,6 @@ class History:
         # Mutating methods to wrap. Add here if you add new mutators.
         to_wrap = [
             "add_vertex",
-            "add_edge_entity",
             "add_edge",
             "add_hyperedge",
             "flatten_layers",

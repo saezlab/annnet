@@ -35,10 +35,14 @@ def _to_polars_if_possible(df):
 
 
 class BulkOps:
-    # Bulk build graph
+    """Batched mutation API for :class:`annnet.core.graph.AnnNet`.
+
+    These methods mirror the scalar graph construction API while reducing
+    repeated dataframe updates, sparse-matrix growth, and index maintenance.
+    """
 
     def add_vertices_bulk(self, vertices, layer=None, slice=None):
-        """Bulk add vertices with a Polars fast path when available.
+        """Add many vertices in one pass.
 
         Parameters
         ----------
@@ -60,7 +64,9 @@ class BulkOps:
 
         Notes
         -----
-        Falls back to Narwhals-based logic when Polars is unavailable.
+        This is the batched companion to :meth:`annnet.core.graph.AnnNet.add_vertex`.
+        A Polars fast path is used when possible; otherwise the method falls
+        back to a schema-safe row-upsert implementation.
         """
         slice = slice or self._current_slice
 
@@ -131,7 +137,7 @@ class BulkOps:
         # If not Polars, fall back to Narwhals
 
         if pl is None or not isinstance(df, pl.DataFrame):
-            return self.add_vertices_bulk_nw(vertices, layer=layer, slice=slice)
+            return self._add_vertices_bulk_fallback(vertices, layer=layer, slice=slice)
 
         # Build ONE incoming DF
         # Collect all keys once to avoid repeated set growth in loops
@@ -155,7 +161,7 @@ class BulkOps:
             df, is_pl2 = _to_polars_if_possible(df_tmp)
             if not is_pl2:
                 # backend drifted away from Polars -> fallback to Narwhals behavior
-                return self.add_vertices_bulk_nw(vertices, layer=layer, slice=slice)
+                return self._add_vertices_bulk_fallback(vertices, layer=layer, slice=slice)
 
         # Split inserts vs updates
         nrows = len(df)
@@ -245,8 +251,8 @@ class BulkOps:
 
         self.vertex_attributes = df
 
-    def add_vertices_bulk_nw(self, vertices, layer=None, slice=None):
-        """Bulk add vertices using Narwhals-compatible operations.
+    def _add_vertices_bulk_fallback(self, vertices, layer=None, slice=None):
+        """Fallback implementation for :meth:`add_vertices_bulk`.
 
         Parameters
         ----------
@@ -261,7 +267,8 @@ class BulkOps:
 
         Notes
         -----
-        This path is slower than the Polars fast path but preserves behavior.
+        This path is slower than the Polars fast path but preserves the same
+        input contract and side effects.
         """
 
         slice = slice or self._current_slice
@@ -478,27 +485,31 @@ class BulkOps:
         edges,
         *,
         slice=None,
+        as_entity=False,
         default_weight=1.0,
         default_edge_type="regular",
         default_propagate="none",
         default_slice_weight=None,
         default_edge_directed=None,
     ):
-        """Bulk add or update binary edges (and vertex-edge edges).
+        """Add many binary or vertex-edge edges in one pass.
 
         Parameters
         ----------
         edges : Iterable
-            Each item can be:
-            - `(source, target)`
-            - `(source, target, weight)`
-            - dict with keys `source`, `target`, and optional edge fields.
+            Batch payload. Each item may be a tuple ``(source, target)``,
+            ``(source, target, weight)``, or a dict with ``source`` and
+            ``target`` plus optional edge fields.
         slice : str, optional
             Default slice to place edges into.
+        as_entity : bool, optional
+            If True, each created edge is also registered as a connectable
+            entity (gets a matrix row). Equivalent to ``as_entity=True`` on
+            :meth:`add_edge`. Default False.
         default_weight : float, optional
             Default weight for edges missing an explicit weight.
         default_edge_type : str, optional
-            Default edge type when not provided.
+            Default edge type when not provided explicitly.
         default_propagate : {'none', 'shared', 'all'}, optional
             Default slice propagation mode.
         default_slice_weight : float, optional
@@ -513,7 +524,8 @@ class BulkOps:
 
         Notes
         -----
-        Behavior mirrors `add_edge()` but grows the matrix once to reduce overhead.
+        This is the batched companion to :meth:`annnet.core.graph.AnnNet.add_edge`
+        for binary and vertex-edge payloads.
         """
         slice = self._current_slice if slice is None else slice
         pending_attrs = {}
@@ -597,7 +609,7 @@ class BulkOps:
             ekey = (vid, coord)
             if ekey not in self._entities:
                 if et == "vertex_edge" and isinstance(vid, str) and vid.startswith("edge_"):
-                    self.add_edge_entity(vid)
+                    self._ensure_edge_entity_placeholder(vid)
                 else:
                     idx = len(self._entities)
                     self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind="vertex"))
@@ -787,6 +799,14 @@ class BulkOps:
         if pending_attrs:
             self.set_edge_attrs_bulk(pending_attrs)
 
+        # register all created edges as connectable entities (batch, after the loop)
+        if as_entity:
+            for eid in out_ids:
+                self._register_edge_as_entity(eid)
+                rec = self._edges[eid]
+                if rec.etype == "binary":
+                    rec.etype = "vertex_edge"
+
         return out_ids
 
     def add_hyperedges_bulk(
@@ -797,14 +817,13 @@ class BulkOps:
         default_weight=1.0,
         default_edge_directed=None,
     ):
-        """Bulk add or update hyperedges.
+        """Add many hyperedges in one pass.
 
         Parameters
         ----------
         hyperedges : Iterable[dict]
-            Each item can be:
-            - `{'members': [...], 'edge_id': ..., 'weight': ..., 'slice': ..., 'attributes': {...}}`
-            - `{'head': [...], 'tail': [...], ...}`
+            Hyperedge payloads. Each item may define either ``members`` for an
+            undirected hyperedge or ``head`` and ``tail`` for a directed one.
         slice : str, optional
             Default slice for hyperedges missing an explicit slice.
         default_weight : float, optional
@@ -819,7 +838,8 @@ class BulkOps:
 
         Notes
         -----
-        Behavior mirrors `add_hyperedge()` but grows the matrix once to reduce overhead.
+        This method is the batched hyperedge companion to
+        :meth:`annnet.core.graph.AnnNet.add_edge`.
         """
         slice = self._current_slice if slice is None else slice
 
@@ -1077,93 +1097,6 @@ class BulkOps:
                     verts.add(rec.tgt)
 
         L["vertices"].update(verts)
-
-    def add_edge_entities_bulk(self, items, slice=None):
-        """Bulk add edge-entities (vertex-edge hybrids).
-
-        Parameters
-        ----------
-        items : Iterable
-            Accepts:
-            - iterable of string IDs
-            - iterable of `(edge_entity_id, attrs)` tuples
-            - iterable of dicts with key `edge_entity_id` (or `id`)
-        slice : str, optional
-            Target slice. Defaults to the active slice.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        Attribute inserts are batched for efficiency.
-        """
-        slice = slice or self._current_slice
-
-        # normalize -> [(eid, attrs)]
-        norm = []
-        for it in items:
-            if isinstance(it, dict):
-                eid = it.get("edge_entity_id") or it.get("id")
-                if eid is None:
-                    continue
-                a = {k: v for k, v in it.items() if k not in ("edge_entity_id", "id")}
-                norm.append((eid, a))
-            elif isinstance(it, (tuple, list)) and it:
-                eid = it[0]
-                a = it[1] if len(it) > 1 and isinstance(it[1], dict) else {}
-                norm.append((eid, a))
-            else:
-                norm.append((it, {}))
-        if not norm:
-            return
-
-        # intern hot strings
-        try:
-            import sys as _sys
-
-            norm = [
-                (_sys.intern(eid) if isinstance(eid, str) else eid, attrs) for eid, attrs in norm
-            ]
-            if isinstance(slice, str):
-                slice = _sys.intern(slice)
-        except Exception:
-            pass
-
-        # create missing rows as type 'edge_entity'
-        new_rows = 0
-        for eid, _ in norm:
-            if eid not in self._entities:
-                idx = len(self._entities)
-                self._register_entity_record(eid, EntityRecord(row_idx=idx, kind="edge_entity"))
-                new_rows += 1
-
-            if eid not in self._edges:
-                self._edges[eid] = EdgeRecord(
-                    src=None,
-                    tgt=None,
-                    weight=1.0,
-                    directed=False,
-                    etype="vertex_edge",
-                    col_idx=-1,
-                    ml_kind=None,
-                    ml_layers=None,
-                    direction_policy=None,
-                )
-
-        if new_rows:
-            self._grow_rows_to(len(self._entities))
-
-        # slice membership
-        if slice not in self._slices:
-            self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
-        self._slices[slice]["edges"].update(eid for eid, _ in norm)
-
-        # attributes go to edge table
-        attrs_to_write = {eid: attrs for eid, attrs in norm if attrs}
-        if attrs_to_write:
-            self.set_edge_attrs_bulk(attrs_to_write)
 
     def set_vertex_key(self, *fields: str):
         """Declare composite key fields and rebuild the uniqueness index.

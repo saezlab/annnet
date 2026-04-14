@@ -1,5 +1,4 @@
 import math
-import warnings
 from typing import Any
 
 import narwhals as nw
@@ -45,7 +44,12 @@ _NUMERIC_DTYPES = _NUMERIC_PL_DTYPES if is_polars else _NUMERIC_NW_DTYPES
 
 
 class AttributesClass:
-    # Attributes & weights
+    """Attribute accessors and upsert helpers.
+
+    This mixin owns graph-, vertex-, edge-, slice-, and edge-slice-level
+    metadata. Structural topology is intentionally excluded; only non-structural
+    user attributes are stored in the annotation tables.
+    """
 
     def set_graph_attribute(self, key, value):
         """Set a graph-level attribute.
@@ -248,67 +252,6 @@ class AttributesClass:
 
         return default if val is None else val
 
-    def get_vertex_attribute(self, vertex_id, attribute):  # legacy alias
-        """(Legacy alias) Get a single vertex attribute from the Polars DF [DataFrame].
-
-        Parameters
-        ----------
-        vertex_id : str
-            Vertex identifier.
-        attribute : str or enum.Enum
-            Column name or enum with `.value`.
-
-        Returns
-        -------
-        Any | None
-            Scalar value if present, else None.
-
-        See Also
-        --------
-        get_attr_vertex
-        """
-        # allow Attr enums
-        attribute = getattr(attribute, "value", attribute)
-
-        df = self.vertex_attributes
-        if df is None or not hasattr(df, "columns"):
-            return None
-        if "vertex_id" not in df.columns or attribute not in df.columns:
-            return None
-
-        if is_polars and isinstance(df, pl.DataFrame):
-            if df.height == 0:
-                return None
-            rows = df.filter(pl.col("vertex_id") == vertex_id)
-            if rows.height == 0:
-                return None
-            s = rows.get_column(attribute)
-            return s.item(0) if s.len() else None
-
-        import narwhals as nw
-
-        rows = nw.to_native(
-            nw.from_native(df, pass_through=True).filter(nw.col("vertex_id") == vertex_id)
-        )
-        if (hasattr(rows, "__len__") and len(rows) == 0) or (getattr(rows, "height", None) == 0):
-            return None
-
-        # first scalar value of column
-        try:
-            col = rows[attribute]
-            return (
-                col.iloc[0]
-                if hasattr(col, "iloc")
-                else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
-            )
-        except Exception:
-            r0 = (
-                rows.to_dict(orient="records")[0]
-                if hasattr(rows, "to_dict")
-                else rows.to_dicts()[0]
-            )
-            return r0.get(attribute, None)
-
     def set_edge_attrs(self, edge_id, **attrs):
         """Upsert pure edge attributes (non-structural) into the edge DF.
 
@@ -414,66 +357,6 @@ class AttributesClass:
             val = r0.get(key, None)
 
         return default if val is None else val
-
-    def get_edge_attribute(self, edge_id, attribute):  # legacy alias
-        """(Legacy alias) Get a single edge attribute from the Polars DF [DataFrame].
-
-        Parameters
-        ----------
-        edge_id : str
-            Edge identifier.
-        attribute : str or enum.Enum
-            Column name or enum with `.value`.
-
-        Returns
-        -------
-        Any | None
-            Scalar value if present, else None.
-
-        See Also
-        --------
-        get_attr_edge
-        """
-        # allow Attr enums
-        attribute = getattr(attribute, "value", attribute)
-
-        df = self.edge_attributes
-        if df is None or not hasattr(df, "columns"):
-            return None
-        if "edge_id" not in df.columns or attribute not in df.columns:
-            return None
-
-        if is_polars and isinstance(df, pl.DataFrame):
-            if df.height == 0:
-                return None
-            rows = df.filter(pl.col("edge_id") == edge_id)
-            if rows.height == 0:
-                return None
-            s = rows.get_column(attribute)
-            return s.item(0) if s.len() else None
-
-        import narwhals as nw
-
-        rows = nw.to_native(
-            nw.from_native(df, pass_through=True).filter(nw.col("edge_id") == edge_id)
-        )
-        if (hasattr(rows, "__len__") and len(rows) == 0) or (getattr(rows, "height", None) == 0):
-            return None
-
-        try:
-            col = rows[attribute]
-            return (
-                col.iloc[0]
-                if hasattr(col, "iloc")
-                else (col.to_list()[0] if hasattr(col, "to_list") else list(col)[0])
-            )
-        except Exception:
-            r0 = (
-                rows.to_dict(orient="records")[0]
-                if hasattr(rows, "to_dict")
-                else rows.to_dicts()[0]
-            )
-            return r0.get(attribute, None)
 
     def set_slice_attrs(self, slice_id, **attrs):
         """Upsert pure slice attributes.
@@ -1182,26 +1065,9 @@ class AttributesClass:
             return df
 
         nw_df = nw.from_native(df, eager_only=True)
-
-        # Build complete update DataFrame
-        update_records = []
-        for idx, attrs in updates.items():
-            if isinstance(idx, tuple):
-                record = {"slice_id": idx[0], "edge_id": idx[1], **attrs}
-            else:
-                cols = set(nw_df.columns)
-                if "vertex_id" in cols:
-                    record = {"vertex_id": idx, **attrs}
-                elif "edge_id" in cols:
-                    record = {"edge_id": idx, **attrs}
-                else:
-                    record = {"slice_id": idx, **attrs}
-            update_records.append(record)
-
-        update_df = nw.DataFrame.from_dicts(update_records, backend=nw.get_native_namespace(nw_df))
+        cols = set(nw_df.columns)
 
         # Determine join keys
-        cols = set(nw_df.columns)
         if {"slice_id", "edge_id"} <= cols:
             join_keys = ["slice_id", "edge_id"]
         elif "vertex_id" in cols:
@@ -1211,12 +1077,43 @@ class AttributesClass:
         else:
             join_keys = ["slice_id"]
 
-        # Anti-join to get rows NOT being updated
-        unchanged = nw_df.join(update_df.select(join_keys), on=join_keys, how="anti")
+        native = nw.to_native(nw_df)
 
-        # Combine: unchanged rows + all update rows
-        result = nw.concat([unchanged, update_df], how="diagonal")
+        # Convert existing rows to a dict keyed by join-key tuple — O(n)
+        try:
+            existing_rows = native.to_dicts()
+        except AttributeError:
+            try:
+                existing_rows = native.to_dict(orient="records")
+            except Exception:
+                existing_rows = []
 
+        def _key(row):
+            return tuple(row.get(k) for k in join_keys)
+
+        row_map = {_key(r): r for r in existing_rows}
+
+        # Apply each update in-place or insert new row — O(updates)
+        for idx, attrs in updates.items():
+            if isinstance(idx, tuple):
+                key_part = {"slice_id": idx[0], "edge_id": idx[1]}
+            elif "vertex_id" in cols:
+                key_part = {"vertex_id": idx}
+            elif "edge_id" in cols:
+                key_part = {"edge_id": idx}
+            else:
+                key_part = {"slice_id": idx}
+
+            k = tuple(key_part.get(kk) for kk in join_keys)
+            if k in row_map:
+                row_map[k].update(attrs)
+            else:
+                row_map[k] = {**key_part, **attrs}
+
+        # Rebuild DataFrame once — O(n)
+        final_records = list(row_map.values())
+        backend = nw.get_native_namespace(nw_df)
+        result = nw.DataFrame.from_dicts(final_records, backend=backend)
         return nw.to_native(result)
 
     def _variables_watched_by_vertices(self):
@@ -1717,157 +1614,3 @@ class AttributesClass:
                 w = r.get("weight")
                 if w is not None:
                     self.slice_edge_weights[slice_id][r["edge_id"]] = float(w)
-
-    # ── Aspect attributes ────────────────────────────────────────────────────
-
-    def set_aspect_attrs(self, aspect: str, **attrs):
-        """Set attributes on a declared aspect.
-
-        Parameters
-        ----------
-        aspect : str
-            Aspect name (must be declared at graph init).
-        **attrs
-            Attribute key/value pairs.
-        """
-        if aspect not in self._aspects:
-            raise ValueError(f"Unknown aspect {aspect!r}. Valid: {self._aspects}")
-        if aspect not in self._aspect_attrs:
-            self._aspect_attrs[aspect] = {}
-        self._aspect_attrs[aspect].update(attrs)
-
-    def get_aspect_attr(self, aspect: str, key: str, default=None):
-        """Get a single aspect attribute.
-
-        Parameters
-        ----------
-        aspect : str
-        key : str
-        default : Any, optional
-        """
-        if aspect not in self._aspects:
-            raise ValueError(f"Unknown aspect {aspect!r}. Valid: {self._aspects}")
-        return self._aspect_attrs.get(aspect, {}).get(key, default)
-
-    def get_aspect_attrs(self, aspect: str) -> dict:
-        """Return a copy of all attributes for an aspect.
-
-        Parameters
-        ----------
-        aspect : str
-        """
-        if aspect not in self._aspects:
-            raise ValueError(f"Unknown aspect {aspect!r}. Valid: {self._aspects}")
-        return dict(self._aspect_attrs.get(aspect, {}))
-
-    # ── Elementary layer attributes ──────────────────────────────────────────
-
-    def set_layer_attrs(self, aspect: str, layer_value: str, **attrs):
-        """Set attributes on a specific elementary layer.
-
-        Parameters
-        ----------
-        aspect : str
-            Aspect name.
-        layer_value : str
-            Layer value within that aspect (must be declared at graph init).
-        **attrs
-            Attribute key/value pairs.
-        """
-        if aspect not in self._aspects:
-            raise ValueError(f"Unknown aspect {aspect!r}. Valid: {self._aspects}")
-        if layer_value not in self._layers[aspect]:
-            raise ValueError(
-                f"Unknown layer value {layer_value!r} for aspect {aspect!r}. "
-                f"Valid: {sorted(self._layers[aspect])}"
-            )
-        self._layer_attrs.setdefault(aspect, {}).setdefault(layer_value, {}).update(attrs)
-
-    def get_layer_attr(self, aspect: str, layer_value: str, key: str, default=None):
-        """Get a single elementary layer attribute.
-
-        Parameters
-        ----------
-        aspect : str
-        layer_value : str
-        key : str
-        default : Any, optional
-        """
-        return self._layer_attrs.get(aspect, {}).get(layer_value, {}).get(key, default)
-
-    def get_layer_attrs(self, aspect: str, layer_value: str) -> dict:
-        """Return a copy of all attributes for an elementary layer.
-
-        Parameters
-        ----------
-        aspect : str
-        layer_value : str
-        """
-        if aspect not in self._aspects:
-            raise ValueError(f"Unknown aspect {aspect!r}. Valid: {self._aspects}")
-        if layer_value not in self._layers[aspect]:
-            raise ValueError(
-                f"Unknown layer value {layer_value!r} for aspect {aspect!r}. "
-                f"Valid: {sorted(self._layers[aspect])}"
-            )
-        return dict(self._layer_attrs.get(aspect, {}).get(layer_value, {}))
-
-    # ── State attributes (supra-node level) ──────────────────────────────────
-
-    def set_state_attrs(self, vertex_id: str, layer, **attrs):
-        """Set attributes on a specific supra-node (actor × layer).
-
-        Unlike actor-level vertex attributes (shared across all layer-copies),
-        state attributes belong to a single (vertex_id, layer_coord) pair.
-
-        Parameters
-        ----------
-        vertex_id : str
-            Actor identifier.
-        layer : str | dict | tuple | None
-            Layer specification (same forms as add_vertex's layer= parameter).
-        **attrs
-            Attribute key/value pairs.
-        """
-        warnings.warn(
-            "set_state_attrs() is deprecated; prefer layers.set_vertex_layer_attrs().",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        coord = self._make_layer_coord(layer)
-        return self.set_vertex_layer_attrs(vertex_id, coord, **attrs)
-
-    def get_state_attr(self, vertex_id: str, layer, key: str, default=None):
-        """Get a single state attribute for a supra-node.
-
-        Parameters
-        ----------
-        vertex_id : str
-        layer : str | dict | tuple | None
-        key : str
-        default : Any, optional
-        """
-        warnings.warn(
-            "get_state_attr() is deprecated; prefer layers.vertex_layer_attrs()[key] or "
-            "get_vertex_layer_attrs().",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        coord = self._make_layer_coord(layer)
-        return self.get_vertex_layer_attrs(vertex_id, coord).get(key, default)
-
-    def get_state_attrs(self, vertex_id: str, layer) -> dict:
-        """Return a copy of all state attributes for a supra-node.
-
-        Parameters
-        ----------
-        vertex_id : str
-        layer : str | dict | tuple | None
-        """
-        warnings.warn(
-            "get_state_attrs() is deprecated; prefer layers.vertex_layer_attrs().",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        coord = self._make_layer_coord(layer)
-        return self.get_vertex_layer_attrs(vertex_id, coord)

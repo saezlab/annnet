@@ -29,7 +29,11 @@ def _is_hyper(graph, eid):
 
 
 class CacheManager:
-    """Cache manager for materialized views (CSR/CSC)."""
+    """Materialized matrix cache manager.
+
+    The cache manager owns derived sparse representations such as CSR, CSC, and
+    adjacency. Cached values are invalidated against the graph version counter.
+    """
 
     def __init__(self, graph):
         self._G = graph
@@ -249,7 +253,7 @@ class CacheManager:
 
 
 class Operations:
-    # Slicing / copying / accounting
+    """Topology materialization and graph-copy operations."""
 
     def edge_subgraph(self, edges) -> AnnNet:
         """Create a subgraph containing only a specified subset of edges.
@@ -385,10 +389,23 @@ class Operations:
                     E_bin.append(eid)
 
         # payloads
-        v_rows = [
-            {"vertex_id": v, **(self._row_attrs(self.vertex_attributes, "vertex_id", v) or {})}
-            for v in V
-        ]
+        va = self.vertex_attributes
+        va_lookup: dict = {}
+        if va is not None and hasattr(va, "columns") and "vertex_id" in va.columns:
+            try:
+                for row in va.to_dicts():
+                    vid = row.pop("vertex_id", None)
+                    if vid is not None:
+                        va_lookup[vid] = row
+            except AttributeError:
+                try:
+                    for row in va.to_dict(orient="records"):
+                        vid = row.pop("vertex_id", None)
+                        if vid is not None:
+                            va_lookup[vid] = row
+                except Exception:
+                    pass
+        v_rows = [{"vertex_id": v, **va_lookup.get(v, {})} for v in V]
 
         default_dir = True if self.directed is None else self.directed
 
@@ -600,10 +617,23 @@ class Operations:
         g.set_active_slice(slice_id)
 
         # vertices with attrs (edge-entities share same table)
-        v_rows = [
-            {"vertex_id": v, **(self._row_attrs(self.vertex_attributes, "vertex_id", v) or {})}
-            for v in V
-        ]
+        va = self.vertex_attributes
+        va_lookup: dict = {}
+        if va is not None and hasattr(va, "columns") and "vertex_id" in va.columns:
+            try:
+                for row in va.to_dicts():
+                    vid = row.pop("vertex_id", None)
+                    if vid is not None:
+                        va_lookup[vid] = row
+            except AttributeError:
+                try:
+                    for row in va.to_dict(orient="records"):
+                        vid = row.pop("vertex_id", None)
+                        if vid is not None:
+                            va_lookup[vid] = row
+                except Exception:
+                    pass
+        v_rows = [{"vertex_id": v, **va_lookup.get(v, {})} for v in V]
         g.add_vertices_bulk(v_rows, slice=slice_id)
 
         # edge attrs
@@ -1115,7 +1145,7 @@ class Operations:
         vertex_ids = tuple(sorted(self.vertices()))
         edge_defs = []
 
-        for j in range(self.number_of_edges()):
+        for j in range(self.ne):
             S, T = self.get_edge(j)
             eid = self._col_to_edge[j]
             directed = self._is_directed_edge(eid)
