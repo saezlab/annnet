@@ -54,6 +54,8 @@ nav:
     -   Overview: explanations/index.md
     -   Design principles: explanations/design-philosophy.md
     -   Package architecture: explanations/architecture-overview.md
+    -   Internal representation: explanations/internal-representation.md
+    -   Mutation and derived state: explanations/mutation-and-derived-state.md
     -   Incidence representation: explanations/math-incidence.md
     -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
     -   Slices and views: explanations/managers-and-views.md
