@@ -204,7 +204,7 @@ def _export_legacy(
 
     # Ensure endpoints that appear in edges are also included
     endpoints = set()
-    for eidx in range(graph.number_of_edges()):
+    for eidx in range(graph.ne):
         eid = graph._col_to_edge[eidx]
         rec = graph._edges[eid]
         if rec.etype == "hyper":
@@ -291,7 +291,7 @@ def _export_legacy(
     edge_tuples = []
     edge_payloads = []  # list of dicts, parallel to edge_tuples
 
-    for eidx in range(graph.number_of_edges()):
+    for eidx in range(graph.ne):
         eid = graph._col_to_edge[eidx]
         rec = graph._edges[eid]
         if rec.etype == "hyper":
@@ -448,12 +448,12 @@ def to_igraph(
                 if not public_only or not str(k).startswith("__")
             }
         )
-        for eidx in range(graph.number_of_edges())
+        for eidx in range(graph.ne)
     }
 
     # -------------- topology snapshot (regular vs hyper) --------------
     manifest_edges = {}
-    for eidx in range(graph.number_of_edges()):
+    for eidx in range(graph.ne):
         eid = graph._col_to_edge[eidx]
         rec = graph._edges[eid]
         is_hyper = rec.etype == "hyper"

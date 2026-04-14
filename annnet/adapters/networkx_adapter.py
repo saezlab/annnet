@@ -125,7 +125,7 @@ def _export_legacy(
         G.add_node(v, **v_attr)
 
     # ADD EDGES WITH CACHED ATTRIBUTES
-    for eidx in range(graph.number_of_edges()):
+    for eidx in range(graph.ne):
         eid = graph._col_to_edge[eidx]
         rec = graph._edges[eid]
         is_hyper = rec.etype == "hyper"
@@ -270,7 +270,7 @@ def to_nx(
     # HOIST LOOKUPS
     vertex_attributes_df = graph.vertex_attributes
     edge_attributes_df = graph.edge_attributes
-    num_edges = graph.number_of_edges()
+    num_edges = graph.ne
 
     # Vertex attributes - BATCH READ
     vertex_attrs = {}
