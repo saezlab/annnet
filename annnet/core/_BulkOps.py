@@ -76,10 +76,17 @@ class BulkOps:
         norm_attrs = []
         for it in vertices:
             if isinstance(it, dict):
-                vid = it.get("vertex_id") or it.get("id") or it.get("name")
+                if it.get("vertex_id"):
+                    vid = it["vertex_id"]; _id_keys = {"vertex_id"}
+                elif it.get("id"):
+                    vid = it["id"]; _id_keys = {"vertex_id", "id"}
+                elif it.get("name"):
+                    vid = it["name"]; _id_keys = {"vertex_id", "id", "name"}
+                else:
+                    vid = None
                 if vid is None:
                     continue
-                attrs = {k: v for k, v in it.items() if k not in ("vertex_id", "id", "name")}
+                attrs = {k: v for k, v in it.items() if k not in _id_keys}
             elif isinstance(it, (tuple, list)) and it:
                 vid = it[0]
                 attrs = it[1] if len(it) > 1 and isinstance(it[1], dict) else {}
@@ -278,10 +285,17 @@ class BulkOps:
         norm = []
         for it in vertices:
             if isinstance(it, dict):
-                vid = it.get("vertex_id") or it.get("id") or it.get("name")
+                if it.get("vertex_id"):
+                    vid = it["vertex_id"]; _id_keys = {"vertex_id"}
+                elif it.get("id"):
+                    vid = it["id"]; _id_keys = {"vertex_id", "id"}
+                elif it.get("name"):
+                    vid = it["name"]; _id_keys = {"vertex_id", "id", "name"}
+                else:
+                    vid = None
                 if vid is None:
                     continue
-                attrs = {k: v for k, v in it.items() if k not in ("vertex_id", "id", "name")}
+                attrs = {k: v for k, v in it.items() if k not in _id_keys}
                 norm.append((vid, attrs))
 
             elif isinstance(it, (tuple, list)) and it:

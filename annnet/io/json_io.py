@@ -293,22 +293,33 @@ def from_json(path) -> AnnNet:
             H.set_elementary_layers(elem_layers)
 
     # vertices
-    for nd in doc.get("nodes", []):
-        vid = nd.get("id")
-        if vid is None:
-            continue
-        vattrs = {k: v for k, v in nd.items() if k != "id"}
-        if aspects:
+    # Multilayer graphs use _ensure_vertex_row (avoids layer contamination via bulk insert).
+    if aspects:
+        for nd in doc.get("nodes", []):
+            vid = nd.get("id")
+            if vid is None:
+                continue
+            vattrs = {k: v for k, v in nd.items() if k != "id"}
             H._ensure_vertex_table()
             H._ensure_vertex_row(vid)
             if vattrs:
                 H.set_vertex_attrs(vid, **vattrs)
-        else:
-            H.add_vertex(vid)
-            if vattrs:
-                H.set_vertex_attrs(vid, **vattrs)
+    else:
+        vertex_dicts = []
+        for nd in doc.get("nodes", []):
+            vid = nd.get("id")
+            if vid is None:
+                continue
+            row = {"vertex_id": vid}
+            row.update({k: v for k, v in nd.items() if k != "id"})
+            vertex_dicts.append(row)
+        if vertex_dicts:
+            H.add_vertices_bulk(vertex_dicts)
 
     # edges (binary)
+    # Multilayer graphs use supra-node tuples as endpoints — add_edges_bulk is flat-only,
+    # so fall back to scalar add_edge for multilayer.
+    edge_dicts = []
     for e in doc.get("edges", []):
         eid = e.get("id")
         u = _deserialize_endpoint(e.get("source"))
@@ -316,81 +327,86 @@ def from_json(path) -> AnnNet:
         if eid is None or u is None or v is None:
             continue
         directed = bool(e.get("directed", True))
-        H.add_edge(u, v, edge_id=eid, directed=directed, parallel="parallel")
-        # weight
         w = e.get("weight", 1.0)
-        try:
+        attrs = {k: val for k, val in e.items()
+                 if k not in {"id", "source", "target", "directed", "weight"}}
+        if aspects:
+            # supra-node endpoints: must use scalar add_edge
+            H.add_edge(u, v, edge_id=eid, directed=directed, parallel="parallel")
             rec = H._edges.get(eid)
             if rec is not None:
                 rec.weight = float(w)
-        except Exception:
-            pass
-        # attrs (except handled)
-        attrs = {
-            k: val
-            for k, val in e.items()
-            if k not in {"id", "source", "target", "directed", "weight"}
-        }
-        if attrs:
-            H.set_edge_attrs(eid, **attrs)
+            if attrs:
+                H.set_edge_attrs(eid, **attrs)
+        else:
+            entry = {"source": u, "target": v, "edge_id": eid,
+                     "directed": directed, "weight": w}
+            if attrs:
+                entry["attributes"] = attrs
+            edge_dicts.append(entry)
+    if edge_dicts:
+        H.add_edges_bulk(edge_dicts)
 
-    # hyperedges + slices
+    # hyperedges — bulk insert
+    hyper_dicts = []
+    hyper_weight_patch = {}
+    hyper_attrs_pending = {}
     for h in ext.get("hyperedges", []):
         eid = h.get("id")
         directed = bool(h.get("directed", True))
+        w = h.get("weight", 1.0)
+        attrs = {k: v for k, v in h.items()
+                 if k not in {"id", "directed", "head", "tail", "members", "weight"}}
         if directed:
             head = [_deserialize_endpoint(x) for x in list(h.get("head") or [])]
             tail = [_deserialize_endpoint(x) for x in list(h.get("tail") or [])]
-            H.add_edge(src=head, tgt=tail, edge_id=eid, directed=True)
-            # stash endpoint coeffs if provided (optional schema: __source_attr/__target_attr)
-            # If absent, default 1.0 will be implied by your exporter on the next round-trip.
+            entry = {"head": head, "tail": tail, "edge_id": eid,
+                     "edge_directed": True, "weight": w}
         else:
             members = [_deserialize_endpoint(x) for x in list(h.get("members") or [])]
-            H.add_edge(src=members, edge_id=eid, directed=False)
-        # weight + attrs
-        w = h.get("weight", 1.0)
-        try:
-            rec = H._edges.get(eid)
-            if rec is not None:
-                rec.weight = float(w)
-        except Exception:
-            pass
-        attrs = {
-            k: v
-            for k, v in h.items()
-            if k not in {"id", "directed", "head", "tail", "members", "weight"}
-        }
+            entry = {"members": members, "edge_id": eid,
+                     "edge_directed": False, "weight": w}
+        hyper_dicts.append(entry)
         if attrs:
-            H.set_edge_attrs(eid, **attrs)
+            hyper_attrs_pending[eid] = attrs
+    if hyper_dicts:
+        H.add_hyperedges_bulk(hyper_dicts)
+    if hyper_attrs_pending:
+        H.set_edge_attrs_bulk(hyper_attrs_pending)
 
-    # slices + edge_slices
+    # slices + edge_slices — bulk
+    known_slices = set(H.list_slices(include_default=True))
     for L in ext.get("slices", []):
         lid = L.get("slice_id")
         if lid is None:
             continue
-        try:
-            if lid not in set(H.list_slices(include_default=True)):
+        if lid not in known_slices:
+            try:
                 H.add_slice(lid)
-        except Exception:
-            pass
+                known_slices.add(lid)
+            except Exception:
+                pass
 
+    slice_edges: dict = {}
+    slice_weights: dict = {}
     for EL in ext.get("edge_slices", []):
         lid = EL.get("slice_id")
         eid = EL.get("edge_id")
         if lid is None or eid is None:
             continue
+        slice_edges.setdefault(lid, set()).add(eid)
+        if "weight" in EL:
+            slice_weights[(lid, eid)] = float(EL["weight"])
+    for lid, eids in slice_edges.items():
         try:
-            H.add_edge_to_slice(lid, eid)
+            H.add_edges_to_slice_bulk(lid, eids)
         except Exception:
             pass
-        if "weight" in EL:
-            try:
-                H.set_edge_slice_attrs(lid, eid, weight=float(EL["weight"]))
-            except Exception:
-                try:
-                    H.set_edge_slice_attr(lid, eid, "weight", float(EL["weight"]))
-                except Exception:
-                    pass
+    for (lid, eid), w in slice_weights.items():
+        try:
+            H.set_edge_slice_attrs(lid, eid, weight=w)
+        except Exception:
+            pass
 
     # multilayer / Kivela
     mm = ext.get("multilayer", {})

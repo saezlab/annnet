@@ -1051,16 +1051,24 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
     # Overlay Cytoscape edits: nodes + edges from CX2
 
+    # Track whether PATH A (manifest) was used — affects overlay attr handling
+    _manifest_mode = bool(manifest and hyperedges in ("manifest", "reified"))
+
     # Map CX numeric ids - AnnNet string ids
     cx2node = {}
     node_aspects = aspects.get("nodes", [])
 
     # --- build a row map of existing vertex attributes ---
-    vmap = {}
-    existing = _df_to_rows(getattr(G, "vertex_attributes", pl.DataFrame()))
-    for r in existing:
-        vid = str(r.get("vertex_id", r.get("id")))
-        vmap[vid] = dict(r)
+    # In manifest mode the full attr table is already set; skip reading it back (expensive).
+    # We only need vmap in PATH B where G starts empty.
+    if _manifest_mode:
+        vmap = {}
+    else:
+        vmap = {}
+        existing = _df_to_rows(getattr(G, "vertex_attributes", pl.DataFrame()))
+        for r in existing:
+            vid = str(r.get("vertex_id", r.get("id")))
+            vmap[vid] = dict(r)
 
     # --- update vertex attrs ---
     vertex_bulk_data = []
@@ -1087,27 +1095,38 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
         vertex_bulk_data.append(row)
 
-    # Single bulk vertex insert
+    # Single bulk vertex insert (registers entities; also upserts layout coords in manifest mode)
     if vertex_bulk_data:
         G.add_vertices_bulk(vertex_bulk_data)
 
-    # rebuild vertex table
-    if vertex_bulk_data:
-        G.vertex_attributes = _rows_to_df(_normalize_rows(vertex_bulk_data))
+    if _manifest_mode:
+        # Manifest already set the full vertex_attributes; add_vertices_bulk has upserted any
+        # new layout coords into it.  Just fix the column name if needed.
+        cols = set(G.vertex_attributes.columns)
+        if "vertex_id" not in cols and "id" in cols:
+            G.vertex_attributes = G.vertex_attributes.rename({"id": "vertex_id"})
     else:
-        G.vertex_attributes = _rows_to_df([])
+        # rebuild vertex table
+        if vertex_bulk_data:
+            G.vertex_attributes = _rows_to_df(_normalize_rows(vertex_bulk_data))
+        else:
+            G.vertex_attributes = _rows_to_df([])
 
-    # Normalise ID column name: prefer 'vertex_id' consistently
-    cols = set(G.vertex_attributes.columns)
-    if "vertex_id" not in cols and "id" in cols:
-        G.vertex_attributes = G.vertex_attributes.rename({"id": "vertex_id"})
+        # Normalise ID column name: prefer 'vertex_id' consistently
+        cols = set(G.vertex_attributes.columns)
+        if "vertex_id" not in cols and "id" in cols:
+            G.vertex_attributes = G.vertex_attributes.rename({"id": "vertex_id"})
 
     # --- edges ---
-    emap = {}
-    existing = _df_to_rows(getattr(G, "edge_attributes", pl.DataFrame()))
-    for r in existing:
-        eid = str(r.get("edge_id", r.get("id")))
-        emap[eid] = dict(r)
+    # In manifest mode: edge_attributes is already set from the manifest — skip reading it back.
+    if _manifest_mode:
+        emap = {}
+    else:
+        emap = {}
+        existing = _df_to_rows(getattr(G, "edge_attributes", pl.DataFrame()))
+        for r in existing:
+            eid = str(r.get("edge_id", r.get("id")))
+            emap[eid] = dict(r)
 
     edge_bulk_data = []
     for e in aspects.get("edges", []):
@@ -1132,6 +1151,8 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         extra_attrs = {k: v for k, v in attrs.items() if k not in ("interaction", "weight")}
         if extra_attrs:
             edge_dict["attributes"] = extra_attrs
+            if not _manifest_mode:
+                emap.setdefault(eid, {"edge_id": eid}).update(extra_attrs)
 
         edge_bulk_data.append(edge_dict)
 
@@ -1139,8 +1160,9 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
     if edge_bulk_data:
         G.add_edges_bulk(edge_bulk_data)
 
-    enorm = _normalize_rows(list(emap.values()))
-    G.edge_attributes = _rows_to_df(enorm)
+    if not _manifest_mode:
+        enorm = _normalize_rows(list(emap.values()))
+        G.edge_attributes = _rows_to_df(enorm)
 
     # Attach Cytoscape style blob if we captured any
     if style_aspects:

@@ -9,18 +9,20 @@ def _hyper_meta(rec):
 
 
 class Traversal:
+    """Local neighborhood traversal helpers over the incidence-backed graph."""
+
     def neighbors(self, entity_id):
-        """Neighbors of an entity (vertex or edge-entity).
+        """Return adjacent entities for a vertex or edge-entity.
 
         Parameters
-        --
+        ----------
         entity_id : str
+            Entity identifier.
 
         Returns
-        ---
+        -------
         list[str]
-            Adjacent entities. For hyperedges, uses head/tail orientation.
-
+            Neighbor identifiers reachable through incident edges.
         """
         ekey = self._resolve_entity_key(entity_id)
         if ekey not in self._entities:
@@ -56,16 +58,17 @@ class Traversal:
         return list(out)
 
     def out_neighbors(self, vertex_id):
-        """Out-neighbors of a vertex under directed semantics.
+        """Return outward neighbors of a vertex.
 
         Parameters
-        --
+        ----------
         vertex_id : str
+            Vertex identifier.
 
         Returns
-        ---
+        -------
         list[str]
-
+            Neighbor identifiers reachable via outgoing or undirected edges.
         """
         ekey = self._resolve_entity_key(vertex_id)
         if ekey not in self._entities:
@@ -98,30 +101,32 @@ class Traversal:
         return list(out)
 
     def successors(self, vertex_id):
-        """Successors of a vertex under directed semantics.
+        """Alias for :meth:`out_neighbors`.
 
         Parameters
-        --
+        ----------
         vertex_id : str
+            Vertex identifier.
 
         Returns
-        ---
+        -------
         list[str]
-
+            Successor identifiers.
         """
         return self.out_neighbors(vertex_id)
 
     def in_neighbors(self, vertex_id):
-        """In-neighbors of a vertex under directed semantics.
+        """Return inward neighbors of a vertex.
 
         Parameters
-        --
+        ----------
         vertex_id : str
+            Vertex identifier.
 
         Returns
-        ---
+        -------
         list[str]
-
+            Neighbor identifiers reachable via incoming or undirected edges.
         """
         ekey = self._resolve_entity_key(vertex_id)
         if ekey not in self._entities:
@@ -154,15 +159,16 @@ class Traversal:
         return list(inn)
 
     def predecessors(self, vertex_id):
-        """In-neighbors of a vertex under directed semantics.
+        """Alias for :meth:`in_neighbors`.
 
         Parameters
-        --
+        ----------
         vertex_id : str
+            Vertex identifier.
 
         Returns
-        ---
+        -------
         list[str]
-
+            Predecessor identifiers.
         """
         return self.in_neighbors(vertex_id)

@@ -336,11 +336,7 @@ def from_dataframes(
             if "vertex_id" not in nodes_nw.columns:
                 raise ValueError("nodes DataFrame must have 'vertex_id' column")
 
-            for row in _to_dicts(nodes_nw):
-                vid = row.pop("vertex_id")
-                G.add_vertex(vid)
-                if row:
-                    G.set_vertex_attrs(vid, **row)
+            G.add_vertices_bulk(_to_dicts(nodes_nw))
 
     # 2. Add binary edges
     if edges is not None:
