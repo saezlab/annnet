@@ -1,64 +1,161 @@
 # Package architecture
 
-annnet combines one graph object with several cooperating subsystems. The goal
-is to keep expressive graph structure, annotations, views, and conversion logic
-in one coherent model.
+AnnNet is not organized as a thin graph class plus a pile of utility modules.
+It is organized around one central object with a deliberately layered internal
+model:
 
-## The central object
+1. canonical structural state
+2. contextual overlays
+3. derived materializations
+4. compatibility and interoperability boundaries
 
-`AnnNet` is the main container. It holds:
+That split is the right mental model for reading the codebase. Once you have
+it, the rest of `annnet.core` becomes much easier to navigate.
 
-- graph structure
-- annotation tables
-- slice state
+## The center: one object, one structural truth
+
+`AnnNet` is the coordination point for the whole package. It owns:
+
+- the sparse incidence matrix
+- the canonical entity and edge registries
+- slice membership
 - multilayer state
-- caches and history
-- access points to adapters and optional backends
+- annotation tables
+- history and snapshots
+- caches
+- backend adapters and lazy proxies
 
-This is why annnet feels like more than a plain graph class with attribute
-maps: the object is the coordination point for several related concerns.
+The important point is that these concerns are not independent subsystems
+floating next to each other. They all describe different views of the same
+graph state.
 
-## Core package responsibilities
+The structural single source of truth is described in detail in
+[Internal representation](internal-representation.md).
 
-The `annnet.core` package defines the in-memory graph model.
+## The role of `annnet.core`
 
-- `graph`: the `AnnNet` object and core graph-facing API.
-- `_Index`: mappings between stable external IDs and internal matrix indices.
-- `_Annotation`: tabular attribute storage for vertices, edges, layers, and slices.
-- `_Slices`: named subgraph contexts and slice-specific memberships or overrides.
-- `_Layers`: multilayer and multi-aspect state.
-- `_Views`: read-only filtered views over the same underlying graph.
-- `_History`: mutation tracking, snapshots, and diffs.
-- `_Cache`: cached matrix forms and derived execution helpers.
-- `_BulkOps`: high-volume structural and annotation updates.
+The `annnet.core` package is where the in-memory model lives.
 
-## How the pieces fit together
+- `graph.py`
+  The `AnnNet` class itself. This is where the canonical stores are created
+  and where scalar graph mutation is defined.
+- `_helpers.py`
+  Shared low-level structures such as `EntityRecord` and `EdgeRecord`, plus
+  compatibility mappings that expose the old dict-style public API without
+  changing the canonical storage model.
+- `_BulkOps.py`
+  Batched structural mutation. These methods do not introduce a second graph
+  model; they are high-throughput paths for the same semantics as the scalar
+  API.
+- `_Annotation.py`
+  Attribute storage and upsert logic for graph-, vertex-, edge-, slice-, and
+  edge-slice-level metadata.
+- `_Layers.py`
+  Multi-aspect and multilayer semantics: aspect declarations, elementary
+  layers, supra-node presence, supra-matrices, and layer-derived operators.
+- `_Slices.py`
+  Named graph contexts over the same underlying structure.
+- `_Views.py`
+  Lazy filtered views that read from the same graph instead of materializing
+  copies.
+- `_Index.py`
+  Translation between external graph identifiers and incidence coordinates.
+- `_Cache.py`
+  Derived matrix representations and materialized subgraph/copy operations.
+- `_History.py`
+  Mutation logging, exported history, snapshots, and diffs.
 
-At the center is the sparse incidence representation. Around it, annnet keeps
-explicit ID maps, table-backed annotations, and optional state for slices,
-layers, and history.
+## Structural state versus overlays
 
-A typical flow looks like this:
+The most useful distinction in the architecture is this:
 
-1. topology is stored in incidence form;
-2. IDs are mapped to matrix indices through the indexing layer;
-3. annotations are stored in aligned tables;
-4. slices and layers add contextual structure without duplicating the graph;
-5. caches materialize algorithm-friendly representations when needed;
-6. adapters and IO modules expose the graph to external tools or files.
+- structural state says what the graph is
+- overlays say in which context that structure is being considered
 
-## Package-level module layout
+Structural state includes the incidence matrix, entities, edges, and the
+direct adjacency indices derived from them.
 
-Outside `annnet.core`, the rest of the package has a clearer operational split:
+Overlays include:
 
-- `annnet.algorithms`: algorithms that work directly with annnet structures.
-- `annnet.adapters`: in-memory conversion to external graph backends.
-- `annnet.io`: persistence and exchange formats.
-- `annnet.utils`: typing, validation, and plotting helpers.
+- slices
+- multilayer coordinates and aspect registries
+- annotation tables
+- history
 
-## Relationship to the conceptual pages
+These overlays are not fake or secondary. They are first-class parts of the
+object. But they are not independent graph stores. They enrich one structural
+graph rather than replacing it.
 
-This page explains where responsibilities live in the package. For the graph
-formalism itself, read [Incidence representation](math-incidence.md). For the
-layer model, read [Multilayer and multi-aspect graphs](math-multilayer.md). For
-multiple contexts over one graph, read [Slices and views](managers-and-views.md).
+## Derived materializations
+
+Several pieces of state are intentionally derived rather than canonical:
+
+- CSR and CSC matrix forms
+- adjacency matrices
+- graph views
+- subgraphs and reversed graphs
+- backend graphs for NetworkX, igraph, and graph-tool
+
+This matters for two reasons.
+
+First, the package avoids fragmenting topology across several competing stores.
+Second, it explains why cache invalidation and view logic are part of the core
+architecture rather than afterthoughts.
+
+The operational side of this is covered in
+[Mutation and derived state](mutation-and-derived-state.md).
+
+## Public namespaces follow the architecture
+
+The current manager-first public API mirrors the internal split:
+
+- `G.layers` for multilayer state
+- `G.slices` for slice state
+- `G.idx` for incidence-coordinate translation
+- `G.cache` for derived matrix materializations
+
+This is not just naming preference. It is an architectural statement about
+which concerns are canonical, which are overlays, and which are derived.
+
+## Compatibility is now a boundary, not an implementation model
+
+The codebase still exposes dict-like properties such as `entity_to_idx`,
+`edge_definitions`, `edge_weights`, and similar legacy names. Those should be
+understood as a public compatibility boundary, not as the internal storage
+model.
+
+Internally, the package is organized around the structured SSOT described in
+[Internal representation](internal-representation.md).
+
+That distinction is important when reading the code:
+
+- public compatibility exists for stability
+- internal code is expected to read the canonical stores directly
+
+## Outside `annnet.core`
+
+The rest of the package has a simpler split:
+
+- `annnet.algorithms`
+  Algorithms that operate against AnnNet's internal model.
+- `annnet.adapters`
+  Runtime conversion into external graph backends.
+- `annnet.io`
+  Persistence and exchange formats.
+- `annnet.utils`
+  Validation, plotting, typing, and smaller support utilities.
+
+Those packages sit around the core object. They do not redefine the graph
+model.
+
+## Reading order
+
+If you want the package to make technical sense as a system, this is the right
+order:
+
+1. [Internal representation](internal-representation.md)
+2. [Mutation and derived state](mutation-and-derived-state.md)
+3. [Incidence representation](math-incidence.md)
+4. [Multilayer and multi-aspect graphs](math-multilayer.md)
+5. [Slices and views](managers-and-views.md)
+6. [Storage and IO](io-annnet.md)

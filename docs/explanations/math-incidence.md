@@ -50,14 +50,18 @@ There is no need to reify hyperedges into auxiliary nodes unless you export to a
 
 ## Edge-entities
 
-annnet can represent vertex→edge and edge→edge relations because edges can themselves appear as entities.
+AnnNet can represent vertex→edge and edge→edge relations because edges can
+themselves appear in the entity row space.
 
 ```python
-G.add_edge_entity("e_meta", description="signal")
+G.add_edge(edge_id="e_meta", as_entity=True, description="signal")
 G.add_edge("e_meta", "C", edge_type="vertex_edge", edge_directed=True)
 ```
 
-Once an edge-entity has a row in the incidence matrix, it behaves like any other endpoint.
+An edge-entity may exist either as a structural edge that is also connectable,
+or as a placeholder edge-entity with a row but no incidence column yet. In
+both cases, once it has an entity row it can act as an endpoint like any other
+entity.
 
 ## Parallel edges and weights
 
