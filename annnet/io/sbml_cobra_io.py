@@ -6,7 +6,7 @@ Two entry points:
   - from_sbml(path, graph=None, slice="default", preserve_stoichiometry=True)
   - from_cobra_model(model, graph=None, slice="default", preserve_stoichiometry=True)
 
-If `AnnNet.set_hyperedge_coeffs(edge_id, coeffs: dict[str, float])` is not available,
+If `AnnNet.set_edge_coeffs(edge_id, coeffs: dict[str, float])` is not available,
 stoichiometric coefficients are stored under an edge attribute `stoich` (lossy but usable).
 """
 
@@ -25,21 +25,21 @@ from ..core.graph import AnnNet
 # ----------------------- utilities -----------------------
 
 
-def _monkeypatch_set_hyperedge_coeffs(G) -> bool:
-    """Add `set_hyperedge_coeffs(edge_id, coeffs)` to AnnNet instance if missing.
+def _monkeypatch_set_edge_coeffs(G) -> bool:
+    """Add `set_edge_coeffs(edge_id, coeffs)` to AnnNet instance if missing.
     Writes per-vertex coefficients into the incidence column (DOK [Dictionary Of Keys]).
     Returns True if patch was applied, False if already available.
     """
-    if hasattr(G, "set_hyperedge_coeffs"):
+    if hasattr(G, "set_edge_coeffs"):
         return False  # already there
 
-    def set_hyperedge_coeffs(self, edge_id: str, coeffs: dict[str, float]) -> None:
+    def set_edge_coeffs(self, edge_id: str, coeffs: dict[str, float]) -> None:
         col = self._edges[edge_id].col_idx
         for vid, coeff in coeffs.items():
             row = self._entities[self._resolve_entity_key(vid)].row_idx
             self._matrix[row, col] = float(coeff)
 
-    G.set_hyperedge_coeffs = types.MethodType(set_hyperedge_coeffs, G)  # type: ignore
+    G.set_edge_coeffs = types.MethodType(set_edge_coeffs, G)  # type: ignore
     return True
 
 
@@ -82,7 +82,7 @@ def _graph_from_stoich(
     assert n == len(reaction_ids)
 
     # Optional: enable per-vertex coefficients
-    if preserve_stoichiometry and not hasattr(G, "set_hyperedge_coeffs"):
+    if preserve_stoichiometry and not hasattr(G, "set_edge_coeffs"):
         # fallback = store stoich dict as attribute later
         pass
 
@@ -123,8 +123,8 @@ def _graph_from_stoich(
         )
 
         # write exact coefficients if supported; else stash as attribute
-        if preserve_stoichiometry and hasattr(G, "set_hyperedge_coeffs"):
-            G.set_hyperedge_coeffs(eid_added, coeffs)  # you said you added this
+        if preserve_stoichiometry and hasattr(G, "set_edge_coeffs"):
+            G.set_edge_coeffs(eid_added, coeffs)  # you said you added this
         else:
             G.set_edge_attrs(eid_added, stoich=coeffs)
 

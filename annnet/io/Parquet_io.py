@@ -92,7 +92,7 @@ def _is_directed_eid(graph, eid):
 
     # Check attribute
     try:
-        val = graph.get_edge_attribute(eid, "directed")
+        val = graph.get_attr_edge(eid, "directed")
         if val is not None:
             return bool(val)
     except Exception:
@@ -259,7 +259,7 @@ def to_parquet(graph: AnnNet, path):
     # edges
     e_attr_map = _build_attr_map(getattr(graph, "edge_attributes", None), "edge_id")
     e_rows = []
-    for eidx in range(graph.number_of_edges()):
+    for eidx in range(graph.ne):
         eid = graph._col_to_edge[eidx]
         rec = graph._edges[eid]
         is_hyper = rec.etype == "hyper"

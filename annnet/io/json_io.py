@@ -123,7 +123,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     # edges + hyperedges
     edges = []
     hyperedges = []
-    for eidx in range(graph.number_of_edges()):
+    for eidx in range(graph.ne):
         eid = graph._col_to_edge[eidx]
         rec = graph._edges[eid]
         S, T = _edge_endpoint_sets(rec)
@@ -461,7 +461,7 @@ def write_ndjson(graph: AnnNet, dir_path):
         open(f"{dir_path}/edges.ndjson", "w", encoding="utf-8") as fe,
         open(f"{dir_path}/hyperedges.ndjson", "w", encoding="utf-8") as fh,
     ):
-        for eidx in range(graph.number_of_edges()):
+        for eidx in range(graph.ne):
             eid = graph._col_to_edge[eidx]
             rec = graph._edges[eid]
             S, T = _edge_endpoint_sets(rec)

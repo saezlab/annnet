@@ -329,7 +329,7 @@ def _graph_from_sbml_model(
     # ── stoichiometry ─────────────────────────────────────────────────────────
     for rid, coeffs in coeffs_map.items():
         if preserve_stoichiometry:
-            G.set_hyperedge_coeffs(rid, coeffs)
+            G.set_edge_coeffs(rid, coeffs)
         else:
             G.set_edge_attrs(rid, stoich=coeffs)
 
@@ -389,7 +389,7 @@ def from_sbml(
         species will additionally appear in their compartment slice.
     preserve_stoichiometry:
         Write signed stoichiometric coefficients into the incidence matrix
-        via set_hyperedge_coeffs (reactants negative, products positive,
+        via set_edge_coeffs (reactants negative, products positive,
         modifiers -1). Default True.
     """
     model = _read_sbml_model(path)
