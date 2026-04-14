@@ -215,16 +215,16 @@ class TestGraphViewMaterialize(unittest.TestCase):
         G = _build_graph()
         view = GraphView(G)
         sub = view.materialize()
-        self.assertEqual(sub.number_of_vertices(), 3)
-        self.assertEqual(sub.number_of_edges(), 2)
+        self.assertEqual(sub.nv, 3)
+        self.assertEqual(sub.ne, 2)
 
     def test_materialize_vertex_filter(self):
         G = _build_graph()
         # Only A and B → only e1 survives (both endpoints present)
         view = GraphView(G, vertices=["A", "B"], edges=["e1"])
         sub = view.materialize()
-        self.assertEqual(sub.number_of_vertices(), 2)
-        self.assertEqual(sub.number_of_edges(), 1)
+        self.assertEqual(sub.nv, 2)
+        self.assertEqual(sub.ne, 1)
 
     def test_materialize_copies_vertex_attrs(self):
         G = _build_graph()
@@ -238,16 +238,16 @@ class TestGraphViewMaterialize(unittest.TestCase):
         G = _build_graph()
         view = GraphView(G)
         sub = view.materialize(copy_attributes=False)
-        self.assertEqual(sub.number_of_vertices(), 3)
+        self.assertEqual(sub.nv, 3)
 
     def test_materialize_with_hyperedges(self):
         G = _build_hyperedge_graph()
         view = GraphView(G)
         sub = view.materialize()
         # All 4 vertices must survive the round-trip
-        self.assertEqual(sub.number_of_vertices(), G.number_of_vertices())
+        self.assertEqual(sub.nv, G.nv)
         # At minimum the binary edge must survive
-        self.assertGreaterEqual(sub.number_of_edges(), 1)
+        self.assertGreaterEqual(sub.ne, 1)
 
 
 class TestGraphViewSubview(unittest.TestCase):

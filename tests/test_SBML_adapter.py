@@ -172,7 +172,7 @@ class DummyGraph:
                 return
         raise KeyError(f"Edge {edge_id!r} not found")
 
-    def set_hyperedge_coeffs(self, edge_id, coeffs: dict[str, float]) -> None:
+    def set_edge_coeffs(self, edge_id, coeffs: dict[str, float]) -> None:
         """Test-only implementation: just stash coeffs on the edge attrs."""
         for e in self.edges:
             if e["id"] == edge_id:

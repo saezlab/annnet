@@ -105,7 +105,7 @@ def assert_graphs_equal(G1, G2, check_slices=True, check_hyperedges=True):
     assert set(G1.vertices()) == set(G2.vertices()), "Vertex sets differ"
 
     # Edge count
-    assert G1.number_of_edges() == G2.number_of_edges(), "Edge counts differ"
+    assert G1.ne == G2.ne, "Edge counts differ"
 
     # Edge IDs
     assert set(G1.edge_to_idx.keys()) == set(G2.edge_to_idx.keys()), "Edge IDs differ"
@@ -220,5 +220,5 @@ def build_adapter_graph() -> AnnNet:
     g.set_edge_slice_attrs("Lw", e1, weight=5.0)
     g.add_slice("L0")
 
-    assert g.number_of_edges() >= 3
+    assert g.ne >= 3
     return g

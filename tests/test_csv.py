@@ -44,7 +44,7 @@ class TestCSVIO(unittest.TestCase):
     def setUp(self):
         # Build a small test graph entirely in memory
         self.G = AnnNet(directed=True)
-        self.G.add_vertices(["A", "B", "C"])
+        self.G.add_vertices_bulk(["A", "B", "C"])
         # Binary edges: A->B (directed), B--C (undirected)
         self.e_ab = self.G.add_edge("A", "B", directed=True, weight=1.0, slice="L1", color="red")
         self.e_bc = self.G.add_edge("B", "C", directed=False, weight=2.0, slice="L1", tag="x")

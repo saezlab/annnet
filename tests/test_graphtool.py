@@ -58,7 +58,7 @@ class TestGraphToolAdapter(unittest.TestCase):
 
         g2 = from_graphtool(gtG, manifest)
 
-        self.assertEqual(g2.number_of_vertices(), g.number_of_vertices())
+        self.assertEqual(g2.nv, g.nv)
 
         self.assertIn("A", g2.vertices())
         self.assertIn("B", g2.vertices())
@@ -185,8 +185,8 @@ class TestGraphToolAdapter(unittest.TestCase):
 
         g2 = from_graphtool(gtG, manifest=None)
 
-        self.assertEqual(g2.number_of_vertices(), 3)
-        self.assertLess(g2.number_of_edges(), g.number_of_edges())
+        self.assertEqual(g2.nv, 3)
+        self.assertLess(g2.ne, g.ne)
 
 
 if __name__ == "__main__":

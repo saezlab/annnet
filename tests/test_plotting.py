@@ -54,7 +54,7 @@ class TestPlottingWithRealGraph(unittest.TestCase):
 
         self.g = g
         # Sanity: plotting relies on these
-        self.assertGreaterEqual(self.g.number_of_edges(), 2)
+        self.assertGreaterEqual(self.g.ne, 2)
         self.assertTrue(hasattr(self.g, "idx_to_edge"))
         self.assertTrue(hasattr(self.g, "get_edge"))
 

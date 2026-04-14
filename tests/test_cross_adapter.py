@@ -44,7 +44,7 @@ class TestCrossAdapter:
         graphs = [G_json, G_parquet, G_sif, G_graphml]
         for i, G_test in enumerate(graphs):
             assert set(G.vertices()) == set(G_test.vertices()), f"Adapter {i} vertices differ"
-            assert G.number_of_edges() == G_test.number_of_edges(), (
+            assert G.ne == G_test.ne, (
                 f"Adapter {i} edge count differs"
             )
             assert set(G.hyperedge_definitions.keys()) == set(
@@ -77,5 +77,5 @@ class TestCrossAdapter:
 
         assert set(G.vertices()) == set(G_parquet.vertices())
         assert set(G.vertices()) == set(G_csv.vertices())
-        assert G.number_of_edges() == G_parquet.number_of_edges()
-        assert G.number_of_edges() == G_csv.number_of_edges()
+        assert G.ne == G_parquet.ne
+        assert G.ne == G_csv.ne

@@ -32,7 +32,7 @@ class TestPerformance:
         G2 = from_json(tmpdir_fixture / "perf.json")
         elapsed = time.perf_counter() - start
 
-        assert G2.number_of_edges() == G.number_of_edges()
+        assert G2.ne == G.ne
         assert elapsed < _THRESHOLD_COMPLEX, (
             f"JSON round-trip took {elapsed:.3f}s — exceeds {_THRESHOLD_COMPLEX}s threshold"
         )
@@ -45,7 +45,7 @@ class TestPerformance:
         G2 = from_parquet(tmpdir_fixture / "perf_dir")
         elapsed = time.perf_counter() - start
 
-        assert G2.number_of_edges() == G.number_of_edges()
+        assert G2.ne == G.ne
         assert elapsed < _THRESHOLD_COMPLEX, (
             f"Parquet round-trip took {elapsed:.3f}s — exceeds {_THRESHOLD_COMPLEX}s threshold"
         )
@@ -58,7 +58,7 @@ class TestPerformance:
         G2 = from_dataframes(**dfs)
         elapsed = time.perf_counter() - start
 
-        assert G2.number_of_edges() == G.number_of_edges()
+        assert G2.ne == G.ne
         assert elapsed < _THRESHOLD_COMPLEX, (
             f"DataFrame round-trip took {elapsed:.3f}s — exceeds {_THRESHOLD_COMPLEX}s threshold"
         )
@@ -116,8 +116,8 @@ class TestPerformance:
         G2 = from_parquet(tmpdir_fixture / "large_dir")
         elapsed = time.perf_counter() - start
 
-        assert G2.number_of_vertices() == n_v
-        assert G2.number_of_edges() == n_e
+        assert G2.nv == n_v
+        assert G2.ne == n_e
         assert elapsed < _THRESHOLD_LARGE, (
             f"Large Parquet round-trip took {elapsed:.3f}s — exceeds {_THRESHOLD_LARGE}s threshold"
         )

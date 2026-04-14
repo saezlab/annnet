@@ -89,7 +89,7 @@ def _build_graph() -> AnnNet:
     g.add_edge_to_slice("druggable", e3)
 
     # Basic sanity
-    assert g.number_of_edges() >= 4
+    assert g.ne >= 4
     assert len([eid for eid in g.hyperedge_definitions]) >= 1
 
     return g

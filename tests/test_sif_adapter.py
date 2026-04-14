@@ -16,7 +16,7 @@ class TestSIFAdapter:
         to_sif(G, tmpdir_fixture / "net.sif", lossless=False)
         G2 = from_sif(tmpdir_fixture / "net.sif")
         assert set(G2.vertices()) == set(G.vertices())
-        assert G2.number_of_edges() == G.number_of_edges()
+        assert G2.ne == G.ne
 
     def test_lossless_round_trip(self, complex_graph, tmpdir_fixture):
         G = complex_graph

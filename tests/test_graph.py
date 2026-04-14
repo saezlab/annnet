@@ -25,17 +25,17 @@ class TestGraphBasics(unittest.TestCase):
     def test_add_vertex_and_attributes(self):
         self.g.add_vertex("v1", color="red", value=3)
         self.g.add_vertex("v2")  # no attrs
-        self.assertEqual(self.g.number_of_vertices(), 2)
+        self.assertEqual(self.g.nv, 2)
         # row exists even if no attrs were passed
         self.assertIn("v2", self.g.vertex_attributes.select("vertex_id").to_series().to_list())
         # attribute accessible
         self.assertEqual(self.g.get_attr_vertex("v1", "color"), "red")
-        self.assertEqual(self.g.get_vertex_attribute("v1", "value"), 3)
+        self.assertEqual(self.g.get_attr_vertex("v1", "value"), 3)
 
     def test_add_edge_directed_default_and_matrix_signs(self):
         eid = self.g.add_edge("a", "b", weight=2.5, label="eab")
         self.assertTrue(self.g._is_directed_edge(eid))
-        self.assertIn(eid, self.g.get_directed_edges())
+        self.assertIn(eid, self.g.get_edges_by_direction(True))
         # get_edge canonical form
         S, T = self.g.get_edge(self.g.edge_to_idx[eid])
         self.assertEqual(S, frozenset({"a"}))
@@ -52,7 +52,7 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_add_edge_undirected_override(self):
         eid = self.g.add_edge("c", "d", weight=1.0, directed=False)
-        self.assertIn(eid, self.g.get_undirected_edges())
+        self.assertIn(eid, self.g.get_edges_by_direction(False))
         S, T = self.g.get_edge(self.g.edge_to_idx[eid])
         self.assertEqual(S, T)
         self.assertEqual(S, frozenset({"c", "d"}))
@@ -166,7 +166,7 @@ class TestGraphBasics(unittest.TestCase):
         # undirected also counts on both sides
         e3 = self.g.add_edge("i2", "i4", weight=1, directed=False)
         inc = self.g.incident_edges("i2")
-        ids = {self.g.idx_to_edge[j] for j in inc}
+        ids = {self.g.idx_to_edge[j] for j, _edge in inc}
         self.assertSetEqual(ids, {e1, e2, e3})
 
     def test_remove_edge_then_vertex(self):
@@ -205,7 +205,7 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_edges_views_and_counts(self):
         e = self.g.add_edge("x1", "x2", weight=7.0, directed=False)
-        self.assertEqual(self.g.number_of_edges(), len(self.g.edges()))
+        self.assertEqual(self.g.ne, len(self.g.edges()))
         elist = self.g.edge_list()
         found = [row for row in elist if row[2] == e]
         self.assertEqual(len(found), 1)
@@ -353,7 +353,7 @@ class TestErrorPaths(unittest.TestCase):
     def test_duplicate_vertex_is_upsert_not_error(self):
         self.g.add_vertex("A", score=1.0)
         self.g.add_vertex("A", score=2.0)  # should update, not raise
-        self.assertEqual(self.g.number_of_vertices(), 1)
+        self.assertEqual(self.g.nv, 1)
         self.assertEqual(self.g.get_attr_vertex("A", "score"), 2.0)
 
     # ------------------------------------------------------------------ #

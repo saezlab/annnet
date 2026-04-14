@@ -61,7 +61,7 @@ class TestGEXFAdapter(unittest.TestCase):
         p = self._path("simple.gexf")
         to_gexf(G, p)
         G2 = from_gexf(p)
-        self.assertEqual(G2.number_of_vertices(), G.number_of_vertices())
+        self.assertEqual(G2.nv, G.nv)
 
     def test_simple_round_trip_vertex_ids(self):
         G = _build_simple()
@@ -78,7 +78,7 @@ class TestGEXFAdapter(unittest.TestCase):
         to_gexf(G, p)
         G2 = from_gexf(p)
         # to_gexf uses default hyperedge_mode="reify"; binary edges pass through
-        self.assertGreaterEqual(G2.number_of_edges(), 2)
+        self.assertGreaterEqual(G2.ne, 2)
 
     def test_file_is_created(self):
         G = _build_simple()
@@ -99,7 +99,7 @@ class TestGEXFAdapter(unittest.TestCase):
         p = self._path("dir.gexf")
         to_gexf(G, p, directed=True)
         G2 = from_gexf(p)
-        self.assertEqual(G2.number_of_vertices(), 2)
+        self.assertEqual(G2.nv, 2)
 
     def test_undirected_graph(self):
         G = AnnNet(directed=False)
@@ -109,7 +109,7 @@ class TestGEXFAdapter(unittest.TestCase):
         p = self._path("undir.gexf")
         to_gexf(G, p, directed=False)
         G2 = from_gexf(p)
-        self.assertEqual(G2.number_of_vertices(), 2)
+        self.assertEqual(G2.nv, 2)
 
     # ------------------------------------------------------------------ #
     # Attributes                                                           #
@@ -146,14 +146,14 @@ class TestGEXFAdapter(unittest.TestCase):
         to_gexf(G, p, hyperedge_mode="reify")
         G2 = from_gexf(p, hyperedge="reified")
         # At minimum the 3 real vertices must survive
-        self.assertEqual(G2.number_of_vertices(), 3)
+        self.assertEqual(G2.nv, 3)
 
     def test_hyperedge_skip_mode(self):
         G = _build_with_hyperedges()
         p = self._path("hyper_skip.gexf")
         to_gexf(G, p, hyperedge_mode="skip")
         G2 = from_gexf(p, hyperedge="none")
-        self.assertGreaterEqual(G2.number_of_vertices(), 3)
+        self.assertGreaterEqual(G2.nv, 3)
 
     # ------------------------------------------------------------------ #
     # Multiple graphs independently                                        #
@@ -168,8 +168,8 @@ class TestGEXFAdapter(unittest.TestCase):
         to_gexf(G2, p2)
         R1 = from_gexf(p1)
         R2 = from_gexf(p2)
-        self.assertEqual(R1.number_of_vertices(), 3)
-        self.assertEqual(R2.number_of_vertices(), 2)
+        self.assertEqual(R1.nv, 3)
+        self.assertEqual(R2.nv, 2)
 
 
 if __name__ == "__main__":

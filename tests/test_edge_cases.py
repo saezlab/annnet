@@ -156,7 +156,7 @@ def test_parallel_edges(tmpdir_fixture):
     assert "e1" in G2.edge_to_idx
     assert "e2" in G2.edge_to_idx
     assert "e3" in G2.edge_to_idx
-    assert G2.number_of_edges() == 3
+    assert G2.ne == 3
 
 
 # ---------------------------------------------------------------------------
@@ -199,4 +199,4 @@ def test_very_large_graph(tmpdir_fixture):
     G2 = _roundtrip_parquet(G, tmpdir_fixture, "large")
 
     assert len(list(G2.vertices())) == n_vertices
-    assert G2.number_of_edges() == n_edges
+    assert G2.ne == n_edges
