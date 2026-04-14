@@ -73,7 +73,7 @@ def build_edge_labels(
 ) -> dict[int, str]:
     extra_keys = extra_keys or []
     labels: dict[int, str] = {}
-    for j in range(graph.number_of_edges()):
+    for j in range(graph.ne):
         eid = graph.idx_to_edge[j]
         parts: list[str] = []
         if use_weight:
@@ -107,7 +107,7 @@ def edge_style_from_weights(
     Parameters
     ----------
     graph : object
-        AnnNet-like object exposing `number_of_edges()`, `idx_to_edge`, and
+        AnnNet-like object exposing `ne`, `idx_to_edge`, and
         `get_effective_edge_weight(eid, layer)` methods.
     layer : str, optional
         Layer name for retrieving edge weights. Defaults to `None`, which uses global weights.
@@ -133,7 +133,7 @@ def edge_style_from_weights(
     - Normalization is performed across all edges in the graph.
 
     """
-    eidxs = list(range(graph.number_of_edges()))
+    eidxs = list(range(graph.ne))
     raw_vals: list[float] = []
     for j in eidxs:
         eid = graph.idx_to_edge[j]
@@ -221,7 +221,7 @@ def to_graphviz(
 
     # vertices to materialize (union of all endpoints)
     all_nodes: set[str] = set()
-    edges_iter = range(graph.number_of_edges()) if edge_indexes is None else edge_indexes
+    edges_iter = range(graph.ne) if edge_indexes is None else edge_indexes
 
     # First pass: collect nodes
     for j in edges_iter:
@@ -233,7 +233,7 @@ def to_graphviz(
     _add_nodes_graphviz(Gv, sorted(all_nodes), custom_vertex_attr)
 
     # Second pass: add edges
-    for j in range(graph.number_of_edges()):
+    for j in range(graph.ne):
         if edge_indexes is not None and j not in edge_indexes:
             continue
         S, T = graph.get_edge(j)
@@ -277,10 +277,7 @@ def to_graphviz(
 
     if suppress_warnings:
         _suppress_repr_warnings(Gv)
-    if (
-        any(_is_true_hyperedge(*graph.get_edge(j)) for j in range(graph.number_of_edges()))
-        and graph_attr is None
-    ):
+    if any(_is_true_hyperedge(*graph.get_edge(j)) for j in range(graph.ne)) and graph_attr is None:
         Gv.graph_attr["splines"] = "true"
     return Gv
 
@@ -306,7 +303,7 @@ def to_pydot(
         Gd.set_edge_defaults(**edge_attr)
 
     all_nodes: set[str] = set()
-    edges_iter = range(graph.number_of_edges()) if edge_indexes is None else edge_indexes
+    edges_iter = range(graph.ne) if edge_indexes is None else edge_indexes
     for j in edges_iter:
         S, T = graph.get_edge(j)
         if not orphan_edges and (len(S) == 0 or len(T) == 0):
@@ -315,7 +312,7 @@ def to_pydot(
 
     _add_nodes_pydot(Gd, sorted(all_nodes), custom_vertex_attr)
 
-    for j in range(graph.number_of_edges()):
+    for j in range(graph.ne):
         if edge_indexes is not None and j not in edge_indexes:
             continue
         S, T = graph.get_edge(j)
@@ -355,10 +352,7 @@ def to_pydot(
                 a.update(e_attr)
                 Gd.add_edge(pydot.Edge(str(u), str(v), **a))
 
-    if (
-        any(_is_true_hyperedge(*graph.get_edge(j)) for j in range(graph.number_of_edges()))
-        and graph_attr is None
-    ):
+    if any(_is_true_hyperedge(*graph.get_edge(j)) for j in range(graph.ne)) and graph_attr is None:
         Gd.set_splines("true")
     return Gd
 

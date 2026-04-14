@@ -80,8 +80,9 @@ def run(scale):
     # ------------------------------------------------------------
     # 3) Attribute mutation on edge-entities
     # ------------------------------------------------------------
-    attr_payload = {eid: {"weight": float(i % 5), "label": f"type_{i % 3}"}
-                    for i, eid in enumerate(ee_ids)}
+    attr_payload = {
+        eid: {"weight": float(i % 5), "label": f"type_{i % 3}"} for i, eid in enumerate(ee_ids)
+    }
 
     with measure() as m_attr:
         G.set_edge_attrs_bulk(attr_payload)

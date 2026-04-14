@@ -837,7 +837,9 @@ class AnnNet(
         if src is None and tgt is None:
             if as_entity:
                 if edge_id is None:
-                    raise ValueError("edge_id is required when creating an edge-entity without endpoints.")
+                    raise ValueError(
+                        "edge_id is required when creating an edge-entity without endpoints."
+                    )
                 return self._ensure_edge_entity_placeholder(edge_id, slice=slice, **attrs)
             raise ValueError("add_edge requires structural endpoints unless as_entity=True.")
 
@@ -2031,7 +2033,6 @@ class AnnNet(
             Edge identifiers.
         """
         return tuple(self.edges())
-
 
     # Lazy proxies
     ## Lazy NetworkX proxy
