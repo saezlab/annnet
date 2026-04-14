@@ -77,11 +77,14 @@ class BulkOps:
         for it in vertices:
             if isinstance(it, dict):
                 if it.get("vertex_id"):
-                    vid = it["vertex_id"]; _id_keys = {"vertex_id"}
+                    vid = it["vertex_id"]
+                    _id_keys = {"vertex_id"}
                 elif it.get("id"):
-                    vid = it["id"]; _id_keys = {"vertex_id", "id"}
+                    vid = it["id"]
+                    _id_keys = {"vertex_id", "id"}
                 elif it.get("name"):
-                    vid = it["name"]; _id_keys = {"vertex_id", "id", "name"}
+                    vid = it["name"]
+                    _id_keys = {"vertex_id", "id", "name"}
                 else:
                     vid = None
                 if vid is None:
@@ -286,11 +289,14 @@ class BulkOps:
         for it in vertices:
             if isinstance(it, dict):
                 if it.get("vertex_id"):
-                    vid = it["vertex_id"]; _id_keys = {"vertex_id"}
+                    vid = it["vertex_id"]
+                    _id_keys = {"vertex_id"}
                 elif it.get("id"):
-                    vid = it["id"]; _id_keys = {"vertex_id", "id"}
+                    vid = it["id"]
+                    _id_keys = {"vertex_id", "id"}
                 elif it.get("name"):
-                    vid = it["name"]; _id_keys = {"vertex_id", "id", "name"}
+                    vid = it["name"]
+                    _id_keys = {"vertex_id", "id", "name"}
                 else:
                     vid = None
                 if vid is None:

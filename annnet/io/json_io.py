@@ -328,8 +328,11 @@ def from_json(path) -> AnnNet:
             continue
         directed = bool(e.get("directed", True))
         w = e.get("weight", 1.0)
-        attrs = {k: val for k, val in e.items()
-                 if k not in {"id", "source", "target", "directed", "weight"}}
+        attrs = {
+            k: val
+            for k, val in e.items()
+            if k not in {"id", "source", "target", "directed", "weight"}
+        }
         if aspects:
             # supra-node endpoints: must use scalar add_edge
             H.add_edge(u, v, edge_id=eid, directed=directed, parallel="parallel")
@@ -339,8 +342,7 @@ def from_json(path) -> AnnNet:
             if attrs:
                 H.set_edge_attrs(eid, **attrs)
         else:
-            entry = {"source": u, "target": v, "edge_id": eid,
-                     "directed": directed, "weight": w}
+            entry = {"source": u, "target": v, "edge_id": eid, "directed": directed, "weight": w}
             if attrs:
                 entry["attributes"] = attrs
             edge_dicts.append(entry)
@@ -355,17 +357,18 @@ def from_json(path) -> AnnNet:
         eid = h.get("id")
         directed = bool(h.get("directed", True))
         w = h.get("weight", 1.0)
-        attrs = {k: v for k, v in h.items()
-                 if k not in {"id", "directed", "head", "tail", "members", "weight"}}
+        attrs = {
+            k: v
+            for k, v in h.items()
+            if k not in {"id", "directed", "head", "tail", "members", "weight"}
+        }
         if directed:
             head = [_deserialize_endpoint(x) for x in list(h.get("head") or [])]
             tail = [_deserialize_endpoint(x) for x in list(h.get("tail") or [])]
-            entry = {"head": head, "tail": tail, "edge_id": eid,
-                     "edge_directed": True, "weight": w}
+            entry = {"head": head, "tail": tail, "edge_id": eid, "edge_directed": True, "weight": w}
         else:
             members = [_deserialize_endpoint(x) for x in list(h.get("members") or [])]
-            entry = {"members": members, "edge_id": eid,
-                     "edge_directed": False, "weight": w}
+            entry = {"members": members, "edge_id": eid, "edge_directed": False, "weight": w}
         hyper_dicts.append(entry)
         if attrs:
             hyper_attrs_pending[eid] = attrs
