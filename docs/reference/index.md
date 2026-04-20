@@ -9,6 +9,6 @@ older grouped pages.
 - `annnet.core`: graph structure, indexing, attributes, views, slices, layers, history, and cache helpers.
 - `annnet.algorithms`: algorithmic helpers exposed by the package.
 - `annnet.io`: storage and exchange formats.
-- `annnet.adapters`: optional backend adapters and adapter loading.
+- `annnet.adapters`: optional backend conversion helpers and backend availability checks.
 - `annnet.utils`: typing, validation, and plotting helpers.
 

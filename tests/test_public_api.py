@@ -11,6 +11,7 @@ import annnet as an
 class TestPublicAPI:
     def test_top_level_exports_resolve(self):
         assert an.AnnNet is not None
+        assert an.Graph is an.AnnNet
         assert an.EdgeType is not None
         assert an.Traversal is not None
         assert an.__version__
@@ -74,6 +75,7 @@ class TestPublicAPI:
 
     def test_top_level_submodules_resolve(self):
         assert an.core.AnnNet is an.AnnNet
+        assert an.core.Graph is an.AnnNet
         assert an.algorithms.Traversal is an.Traversal
         assert an.io.write.__name__ == an.write.__name__
         assert an.io.to_json.__name__ == an.to_json.__name__
@@ -83,3 +85,27 @@ class TestPublicAPI:
         assert an.io.edges_to_csv.__name__ == an.edges_to_csv.__name__
         assert an.io.hyperedge_to_csv.__name__ == an.hyperedge_to_csv.__name__
         assert an.io.from_excel.__name__ == an.from_excel.__name__
+
+    def test_adapter_exports_do_not_import_backend_modules_on_attribute_resolution(self):
+        import annnet.adapters as adapters
+
+        for modname in [
+            "annnet.adapters.networkx_adapter",
+            "annnet.adapters.igraph_adapter",
+            "annnet.adapters.graphtool_adapter",
+            "annnet.adapters.pyg_adapter",
+        ]:
+            sys.modules.pop(modname, None)
+
+        assert callable(adapters.to_nx)
+        assert callable(adapters.from_nx)
+        assert callable(adapters.to_igraph)
+        assert callable(adapters.from_igraph)
+        assert callable(adapters.to_graphtool)
+        assert callable(adapters.from_graphtool)
+        assert callable(adapters.to_pyg)
+
+        assert "annnet.adapters.networkx_adapter" not in sys.modules
+        assert "annnet.adapters.igraph_adapter" not in sys.modules
+        assert "annnet.adapters.graphtool_adapter" not in sys.modules
+        assert "annnet.adapters.pyg_adapter" not in sys.modules

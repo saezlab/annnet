@@ -29,6 +29,7 @@ _lazy_submodules = {
 
 _lazy_objects: dict[str, tuple[str, str]] = {
     "AnnNet": ("annnet.core.graph", "AnnNet"),
+    "Graph": ("annnet.core.graph", "AnnNet"),
     "EdgeType": ("annnet.core.graph", "EdgeType"),
     "Traversal": ("annnet.algorithms.traversal", "Traversal"),
 }
