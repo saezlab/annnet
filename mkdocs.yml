@@ -91,7 +91,6 @@ nav:
         -   DataFrames: reference/io/dataframes.md
         -   OmniPath: reference/io/omnipath.md
     -   Adapters:
-        -   Adapter manager: reference/adapters/manager.md
         -   NetworkX adapter: reference/adapters/networkx.md
         -   igraph adapter: reference/adapters/igraph.md
         -   graph-tool adapter: reference/adapters/graphtool.md

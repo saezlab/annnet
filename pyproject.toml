@@ -228,10 +228,6 @@ include = [
 ]
 
 
-[project.scripts]
-an = "annnet:main"
-an-demo = "annnet.demo.demo:main"
-
 [project.urls]
 Documentation = "https://saezlab.github.io/annnet/reference/"
 Homepage = "https://saezlab.github.io/annnet/"
@@ -450,4 +446,4 @@ dev = { solve-group = "default" }
 [tool.pixi.tasks]
 _pytest = { cmd = "pytest" }
 test-all = { depends-on = [{ task = "_pytest", environment = "dev" }] }
-test-gt = { cmd = "pytest tests/test_graphtool.py tests/test_lazy_gt_proxy.py", environment = "dev" }
+test-gt = { cmd = "pytest tests/test_graphtool.py tests/test_gt_backend_accessor.py", environment = "dev" }

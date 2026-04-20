@@ -16,12 +16,6 @@ _public_symbols: dict[str, tuple[str, str]] = {
     "to_pyg": ("annnet.adapters.pyg_adapter", "to_pyg"),
 }
 
-# Internal loader registry for legacy/class-based adapter access.
-_adapter_classes: dict[str, tuple[str, str, str]] = {
-    "networkx": ("networkx", ".networkx_adapter", "NetworkXAdapter"),
-    "igraph": ("igraph", ".igraph_adapter", "IGraphAdapter"),
-}
-
 _backend_modules: dict[str, str] = {
     "networkx": "networkx",
     "igraph": "igraph",
@@ -39,20 +33,6 @@ def _is_installed(modname: str) -> bool:
 def available_backends() -> dict[str, bool]:
     """Report which optional notebook-facing adapter backends are installed."""
     return {name: _is_installed(modname) for name, modname in _backend_modules.items()}
-
-
-def load_adapter(name: str, *args, **kwargs):
-    """Internal legacy adapter loader kept for compatibility."""
-    if name not in _adapter_classes:
-        raise ValueError(f"Unknown adapter '{name}'")
-    modname, submod, cls = _adapter_classes[name]
-    if not _is_installed(modname):
-        raise ModuleNotFoundError(
-            f"Optional backend '{name}' is not installed. "
-            f"Install with `pip install annnet[{name}]`."
-        )
-    mod = import_module(__name__ + submod)
-    return getattr(mod, cls)(*args, **kwargs)
 
 
 def __getattr__(name: str) -> Any:

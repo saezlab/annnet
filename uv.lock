@@ -152,7 +152,7 @@ wheels = [
 
 [[package]]
 name = "annnet"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "narwhals" },
@@ -188,10 +188,6 @@ backends = [
     { name = "networkx", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "python-igraph" },
 ]
-bio = [
-    { name = "cobra" },
-    { name = "lxml" },
-]
 dev = [
     { name = "build" },
     { name = "mypy" },
@@ -203,14 +199,17 @@ dev = [
 excel = [
     { name = "openpyxl" },
 ]
+graphviz = [
+    { name = "graphviz" },
+]
 igraph = [
     { name = "python-igraph" },
 ]
 io = [
     { name = "lxml" },
-    { name = "narwhals" },
     { name = "numcodecs", version = "0.13.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numcodecs", version = "0.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "openpyxl" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "toml" },
@@ -219,6 +218,11 @@ io = [
 ]
 matplotlib = [
     { name = "matplotlib" },
+]
+metabo = [
+    { name = "cobra" },
+    { name = "graphviz" },
+    { name = "lxml" },
 ]
 networkx = [
     { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -237,6 +241,12 @@ plot = [
 ]
 polars = [
     { name = "polars" },
+]
+pyarrow = [
+    { name = "pyarrow" },
+]
+pydot = [
+    { name = "pydot" },
 ]
 pyg = [
     { name = "torch" },
@@ -267,6 +277,7 @@ dev = [
     { name = "distlib" },
     { name = "mypy" },
     { name = "pre-commit" },
+    { name = "ruff" },
     { name = "twine" },
 ]
 docs = [
@@ -303,12 +314,14 @@ tests = [
 requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2" },
     { name = "cobra", marker = "extra == 'all'", specifier = ">=0.26" },
-    { name = "cobra", marker = "extra == 'bio'", specifier = ">=0.26" },
+    { name = "cobra", marker = "extra == 'metabo'", specifier = ">=0.26" },
     { name = "graphviz", marker = "extra == 'all'" },
+    { name = "graphviz", marker = "extra == 'graphviz'" },
+    { name = "graphviz", marker = "extra == 'metabo'" },
     { name = "graphviz", marker = "extra == 'plot'" },
     { name = "lxml", marker = "extra == 'all'", specifier = ">=4.9" },
-    { name = "lxml", marker = "extra == 'bio'", specifier = ">=4.9" },
     { name = "lxml", marker = "extra == 'io'", specifier = ">=4.9" },
+    { name = "lxml", marker = "extra == 'metabo'", specifier = ">=4.9" },
     { name = "lxml", marker = "extra == 'sbml'", specifier = ">=4.9" },
     { name = "matplotlib", marker = "extra == 'all'", specifier = ">=3.5" },
     { name = "matplotlib", marker = "extra == 'matplotlib'", specifier = ">=3.5" },
@@ -316,7 +329,6 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "narwhals", specifier = ">=1.9" },
     { name = "narwhals", marker = "extra == 'all'", specifier = ">=1.9" },
-    { name = "narwhals", marker = "extra == 'io'", specifier = ">=1.9" },
     { name = "networkx", marker = "extra == 'all'", specifier = ">=3.3" },
     { name = "networkx", marker = "extra == 'backends'", specifier = ">=3.3" },
     { name = "networkx", marker = "extra == 'networkx'", specifier = ">=3.3" },
@@ -327,6 +339,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.24" },
     { name = "openpyxl", marker = "extra == 'all'", specifier = ">=3.1" },
     { name = "openpyxl", marker = "extra == 'excel'", specifier = ">=3.1" },
+    { name = "openpyxl", marker = "extra == 'io'", specifier = ">=3.1" },
     { name = "pandas", marker = "extra == 'all'", specifier = ">=1.5" },
     { name = "pandas", marker = "extra == 'io'", specifier = ">=2.0" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=1.5" },
@@ -336,9 +349,11 @@ requires-dist = [
     { name = "pyarrow", marker = "extra == 'all'", specifier = ">=10" },
     { name = "pyarrow", marker = "extra == 'io'", specifier = ">=10" },
     { name = "pyarrow", marker = "extra == 'parquet'", specifier = ">=10" },
+    { name = "pyarrow", marker = "extra == 'pyarrow'", specifier = ">=10" },
     { name = "pyarrow", marker = "extra == 'storage'", specifier = ">=10" },
     { name = "pydot", marker = "extra == 'all'" },
     { name = "pydot", marker = "extra == 'plot'" },
+    { name = "pydot", marker = "extra == 'pydot'" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "python-igraph", marker = "extra == 'all'", specifier = ">=0.11" },
@@ -356,7 +371,7 @@ requires-dist = [
     { name = "zarr", marker = "extra == 'storage'", specifier = ">=2.18" },
     { name = "zarr", marker = "extra == 'zarr-io'", specifier = ">=2.18" },
 ]
-provides-extras = ["polars", "networkx", "igraph", "pandas", "pyg", "excel", "sbml", "parquet", "zarr-io", "matplotlib", "io", "backends", "plot", "bio", "storage", "all", "dev"]
+provides-extras = ["polars", "pandas", "pyarrow", "networkx", "igraph", "pyg", "matplotlib", "pydot", "graphviz", "excel", "sbml", "parquet", "zarr-io", "backends", "plot", "io", "storage", "all", "dev", "metabo"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -365,6 +380,7 @@ dev = [
     { name = "distlib" },
     { name = "mypy", specifier = ">=1.0" },
     { name = "pre-commit", specifier = ">=2.17.0" },
+    { name = "ruff", specifier = ">=0.6" },
     { name = "twine" },
 ]
 docs = [
