@@ -25,7 +25,7 @@ def build_small():
     return G
 
 
-class TestLazyGTProxy(unittest.TestCase):
+class TestGTBackendAccessor(unittest.TestCase):
     def test_dir_exposes_namespaces_and_algorithms(self):
         G = build_small()
         names = dir(G.gt)

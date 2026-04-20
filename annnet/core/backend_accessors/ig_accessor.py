@@ -3,14 +3,14 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING
 
-from ._base import _LazyProxyBase
+from ._base import _BackendAccessorBase
 
 if TYPE_CHECKING:
     from ..graph import AnnNet
 
 
-class _LazyIGProxy(_LazyProxyBase):
-    """Lazy igraph proxy attached to an AnnNet instance."""
+class _IGBackendAccessor(_BackendAccessorBase):
+    """igraph backend accessor attached to an AnnNet instance."""
 
     VERTEX_KEYS = {
         "source",
@@ -91,7 +91,7 @@ class _LazyIGProxy(_LazyProxyBase):
                 import warnings
 
                 warnings.warn(
-                    "Lazy igraph proxy does not support hyperedge_mode='reify'; falling back to 'skip'.",
+                    "igraph backend accessor does not support hyperedge_mode='reify'; falling back to 'skip'.",
                     category=RuntimeWarning,
                     stacklevel=3,
                 )

@@ -1,12 +1,12 @@
-## Lazy graph-tool proxy
+## graph-tool backend accessor
 
-from ._base import _LazyProxyBase
+from ._base import _BackendAccessorBase
 
 
-class _LazyGTProxy(_LazyProxyBase):
-    """Lazy graph-tool proxy attached to an AnnNet instance.
+class _GTBackendAccessor(_BackendAccessorBase):
+    """graph-tool backend accessor attached to an AnnNet instance.
 
-    This proxy lets you call graph-tool algorithms via namespaces such as:
+    This accessor lets you call graph-tool algorithms via namespaces such as:
     `G.gt.topology.shortest_distance(...)`, `G.gt.centrality.betweenness(...)`,
     and `G.gt.flow.push_relabel_max_flow(...)`.
 

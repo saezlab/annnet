@@ -32,7 +32,7 @@ def build_parallel():
     return G
 
 
-class TestLazyIGProxy(unittest.TestCase):
+class TestIGBackendAccessor(unittest.TestCase):
     @unittest.skipUnless(HAS_IG, "python-igraph not installed")
     def test_backend_basic(self):
         G = build_small()

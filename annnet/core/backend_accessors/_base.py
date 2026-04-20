@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from ..graph import AnnNet
 
 
-class _LazyProxyBase:
+class _BackendAccessorBase:
     VERTEX_LABEL_FIELDS = ("name", "label", "title", "slug", "external_id", "string_id")
 
     _G: AnnNet

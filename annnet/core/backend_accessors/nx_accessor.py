@@ -3,14 +3,14 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING
 
-from ._base import _LazyProxyBase
+from ._base import _BackendAccessorBase
 
 if TYPE_CHECKING:
     from ..graph import AnnNet
 
 
-class _LazyNXProxy(_LazyProxyBase):
-    """Lazy NetworkX proxy attached to an AnnNet instance."""
+class _NXBackendAccessor(_BackendAccessorBase):
+    """NetworkX backend accessor attached to an AnnNet instance."""
 
     VERTEX_KEYS = {"source", "target", "u", "v", "vertex", "vertices", "nbunch", "center", "path"}
 

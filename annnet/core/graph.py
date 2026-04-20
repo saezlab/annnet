@@ -43,7 +43,7 @@ from ._Index import IndexManager, IndexMapping
 from ._Layers import LayerClass, LayerManager
 from ._Slices import SliceClass, SliceManager
 from ._Views import GraphView, ViewsClass
-from .lazy_proxies import _LazyGTProxy, _LazyIGProxy, _LazyNXProxy
+from .backend_accessors import _GTBackendAccessor, _IGBackendAccessor, _NXBackendAccessor
 
 # ===================================
 
@@ -238,7 +238,7 @@ class AnnNet(
         self._row_to_nl: list = []
 
         # Multilayer edge metadata — stored in EdgeRecord.ml_kind / ml_layers (canonical).
-        # edge_kind / edge_layers properties are thin compat proxies over EdgeRecord.
+        # edge_kind / edge_layers properties are thin compat accessors over EdgeRecord.
 
         # Aspect / layer / state attribute tables (Kivelä metadata)
         # _aspect_attrs : {aspect_name: {attr: val}}
@@ -2034,51 +2034,51 @@ class AnnNet(
         """
         return tuple(self.edges())
 
-    # Lazy proxies
-    ## Lazy NetworkX proxy
+    # Backend accessors
+    ## NetworkX backend accessor
 
     @property
     def nx(self):
-        """Lazy NetworkX proxy.
+        """NetworkX backend accessor.
 
         Returns
         -------
-        _LazyNXProxy
-            Proxy exposing NetworkX algorithms.
+        _NXBackendAccessor
+            Accessor exposing NetworkX algorithms.
         """
-        if not hasattr(self, "_nx_proxy"):
-            self._nx_proxy = _LazyNXProxy(self)
-        return self._nx_proxy
+        if not hasattr(self, "_nx_accessor"):
+            self._nx_accessor = _NXBackendAccessor(self)
+        return self._nx_accessor
 
-    ## Lazy iGraph proxy
+    ## igraph backend accessor
 
     @property
     def ig(self):
-        """Lazy igraph proxy.
+        """igraph backend accessor.
 
         Returns
         -------
-        _LazyIGProxy
-            Proxy exposing igraph algorithms.
+        _IGBackendAccessor
+            Accessor exposing igraph algorithms.
         """
-        if not hasattr(self, "_ig_proxy"):
-            self._ig_proxy = _LazyIGProxy(self)
-        return self._ig_proxy
+        if not hasattr(self, "_ig_accessor"):
+            self._ig_accessor = _IGBackendAccessor(self)
+        return self._ig_accessor
 
-    ## Lazy AnnNet-tool proxy
+    ## graph-tool backend accessor
 
     @property
     def gt(self):
-        """Lazy graph-tool proxy.
+        """graph-tool backend accessor.
 
         Returns
         -------
-        _LazyGTProxy
-            Proxy exposing graph-tool algorithms.
+        _GTBackendAccessor
+            Accessor exposing graph-tool algorithms.
         """
-        if not hasattr(self, "_gt_proxy"):
-            self._gt_proxy = _LazyGTProxy(self)
-        return self._gt_proxy
+        if not hasattr(self, "_gt_accessor"):
+            self._gt_accessor = _GTBackendAccessor(self)
+        return self._gt_accessor
 
     # AnnNet API
 

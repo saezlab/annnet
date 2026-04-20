@@ -40,7 +40,7 @@ def build_directed():
 # TEST SUITE
 
 
-class TestLazyNXProxy(unittest.TestCase):
+class TestNXBackendAccessor(unittest.TestCase):
     # ---- backend basics ----
 
     def test_backend_basic(self):
