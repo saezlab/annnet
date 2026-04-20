@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 import narwhals as nw
 
+from .._dataframe import dataframe_from_rows
+
 try:
     import polars as pl
 except Exception:
@@ -64,30 +66,19 @@ def build_dataframe_from_rows(rows):
     Returns
     -------
     DataFrame-like
-        Polars DataFrame if available, otherwise pandas DataFrame.
+        DataFrame using AnnNet's selected backend order: Polars, pandas, then
+        PyArrow.
 
     Raises
     ------
     RuntimeError
-        If neither polars nor pandas is available.
+        If no supported dataframe backend is available.
 
     Notes
     -----
-    Uses Polars when installed for performance; otherwise falls back to pandas.
+    Uses the centralized dataframe backend selector.
     """
-    try:
-        import polars as pl
-
-        return pl.DataFrame(rows)
-    except Exception:
-        try:
-            import pandas as pd
-
-            return pd.DataFrame.from_records(rows)
-        except Exception:
-            raise RuntimeError(
-                "No dataframe backend available. Install polars (recommended) or pandas."
-            )
+    return dataframe_from_rows(rows)
 
 
 def _df_filter_not_equal(df, col: str, value):

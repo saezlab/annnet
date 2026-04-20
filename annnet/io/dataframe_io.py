@@ -3,12 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 import narwhals as nw
-
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
-    pl = None
 from narwhals.typing import IntoDataFrame
+
+from .._dataframe import dataframe_from_rows, dataframe_height, dataframe_to_rows
 
 if __name__ == "__main__":
     import pathlib
@@ -38,8 +35,8 @@ def to_dataframes(
     include_hyperedges: bool = True,
     explode_hyperedges: bool = False,
     public_only: bool = True,
-) -> dict[str, pl.DataFrame]:
-    """Export graph to Polars DataFrames.
+) -> dict[str, Any]:
+    """Export graph to DataFrames using AnnNet's selected dataframe backend.
 
     Returns a dictionary of DataFrames representing different aspects of the graph:
     - 'nodes': Vertex IDs and attributes
@@ -47,9 +44,6 @@ def to_dataframes(
     - 'hyperedges': Hyperedges with head/tail sets (if include_hyperedges=True)
     - 'slices': slice membership (if include_slices=True)
     - 'slice_weights': Per-slice edge weights (if include_slices=True)
-
-    Note: Output is always Polars because hyperedges use List types which
-    aren't universally supported across dataframe libraries.
 
     Args:
         graph: AnnNet instance to export
@@ -59,26 +53,39 @@ def to_dataframes(
         public_only: If True, filter out attributes starting with '__'
 
     Returns:
-        Dictionary mapping table names to Polars DataFrames
+        Dictionary mapping table names to DataFrames.
 
     """
     result = {}
+    backend = getattr(graph, "_annotations_backend", "auto")
+    vertex_attrs = {
+        row.get("vertex_id"): row
+        for row in dataframe_to_rows(graph.vertex_attributes)
+        if row.get("vertex_id") is not None
+    }
+    edge_attrs = {
+        row.get("edge_id"): row
+        for row in dataframe_to_rows(graph.edge_attributes)
+        if row.get("edge_id") is not None
+    }
 
     # 1. Nodes table
     nodes_data = []
     for vid in graph.vertices():
         row = {"vertex_id": vid}
-        attrs = graph.vertex_attributes.filter(pl.col("vertex_id") == vid).to_dicts()
+        attrs = vertex_attrs.get(vid)
         if attrs:
-            attr_dict = dict(attrs[0])
+            attr_dict = dict(attrs)
             attr_dict.pop("vertex_id", None)
             if public_only:
                 attr_dict = {k: v for k, v in attr_dict.items() if not str(k).startswith("__")}
             row.update(attr_dict)
         nodes_data.append(row)
 
-    result["nodes"] = (
-        pl.DataFrame(nodes_data) if nodes_data else pl.DataFrame(schema={"vertex_id": pl.Utf8})
+    result["nodes"] = dataframe_from_rows(
+        nodes_data,
+        schema={"vertex_id": "text"},
+        backend=backend,
     )
 
     # 2. Binary edges table
@@ -96,9 +103,9 @@ def to_dataframes(
             "edge_type": rec.etype,
         }
 
-        attrs = graph.edge_attributes.filter(pl.col("edge_id") == eid).to_dicts()
+        attrs = edge_attrs.get(eid)
         if attrs:
-            attr_dict = dict(attrs[0])
+            attr_dict = dict(attrs)
             attr_dict.pop("edge_id", None)
             if public_only:
                 attr_dict = {k: v for k, v in attr_dict.items() if not str(k).startswith("__")}
@@ -106,19 +113,17 @@ def to_dataframes(
 
         edges_data.append(row)
 
-    result["edges"] = (
-        pl.DataFrame(edges_data)
-        if edges_data
-        else pl.DataFrame(
-            schema={
-                "edge_id": pl.Utf8,
-                "source": pl.Utf8,
-                "target": pl.Utf8,
-                "weight": pl.Float64,
-                "directed": pl.Boolean,
-                "edge_type": pl.Utf8,
-            }
-        )
+    result["edges"] = dataframe_from_rows(
+        edges_data,
+        schema={
+            "edge_id": "text",
+            "source": "text",
+            "target": "text",
+            "weight": "float",
+            "directed": "bool",
+            "edge_type": "text",
+        },
+        backend=backend,
     )
 
     # 3. Hyperedges table
@@ -132,10 +137,10 @@ def to_dataframes(
                 directed = rec.tgt is not None
                 weight = _edge_weight(rec)
 
-                attrs = graph.edge_attributes.filter(pl.col("edge_id") == eid).to_dicts()
+                attrs = edge_attrs.get(eid)
                 attr_dict = {}
                 if attrs:
-                    attr_dict = dict(attrs[0])
+                    attr_dict = dict(attrs)
                     attr_dict.pop("edge_id", None)
                     if public_only:
                         attr_dict = {
@@ -197,9 +202,9 @@ def to_dataframes(
                     row["tail"] = None
                     row["members"] = list(rec.src)
 
-                attrs = graph.edge_attributes.filter(pl.col("edge_id") == eid).to_dicts()
+                attrs = edge_attrs.get(eid)
                 if attrs:
-                    attr_dict = dict(attrs[0])
+                    attr_dict = dict(attrs)
                     attr_dict.pop("edge_id", None)
                     if public_only:
                         attr_dict = {
@@ -209,30 +214,31 @@ def to_dataframes(
 
                 hyperedges_data.append(row)
 
-        if hyperedges_data:
-            result["hyperedges"] = pl.DataFrame(hyperedges_data)
+        if explode_hyperedges:
+            result["hyperedges"] = dataframe_from_rows(
+                hyperedges_data,
+                schema={
+                    "edge_id": "text",
+                    "vertex_id": "text",
+                    "role": "text",
+                    "weight": "float",
+                    "directed": "bool",
+                },
+                backend=backend,
+            )
         else:
-            if explode_hyperedges:
-                result["hyperedges"] = pl.DataFrame(
-                    schema={
-                        "edge_id": pl.Utf8,
-                        "vertex_id": pl.Utf8,
-                        "role": pl.Utf8,
-                        "weight": pl.Float64,
-                        "directed": pl.Boolean,
-                    }
-                )
-            else:
-                result["hyperedges"] = pl.DataFrame(
-                    schema={
-                        "edge_id": pl.Utf8,
-                        "directed": pl.Boolean,
-                        "weight": pl.Float64,
-                        "head": pl.List(pl.Utf8),
-                        "tail": pl.List(pl.Utf8),
-                        "members": pl.List(pl.Utf8),
-                    }
-                )
+            result["hyperedges"] = dataframe_from_rows(
+                hyperedges_data,
+                schema={
+                    "edge_id": "text",
+                    "directed": "bool",
+                    "weight": "float",
+                    "head": "list_text",
+                    "tail": "list_text",
+                    "members": "list_text",
+                },
+                backend=backend,
+            )
 
     # 4. Slice membership
     if include_slices:
@@ -245,28 +251,31 @@ def to_dataframes(
         except Exception:
             pass
 
-        result["slices"] = (
-            pl.DataFrame(slices_data)
-            if slices_data
-            else pl.DataFrame(schema={"slice_id": pl.Utf8, "edge_id": pl.Utf8})
+        result["slices"] = dataframe_from_rows(
+            slices_data,
+            schema={"slice_id": "text", "edge_id": "text"},
+            backend=backend,
         )
 
         # 5. Per-slice weights
         slice_weights_data = []
         try:
-            df = graph.edge_slice_attributes
-            if isinstance(df, pl.DataFrame) and df.height > 0:
-                if {"slice_id", "edge_id", "weight"}.issubset(df.columns):
-                    slice_weights_data = df.select(["slice_id", "edge_id", "weight"]).to_dicts()
+            for row in dataframe_to_rows(graph.edge_slice_attributes):
+                if {"slice_id", "edge_id", "weight"}.issubset(row):
+                    slice_weights_data.append(
+                        {
+                            "slice_id": row["slice_id"],
+                            "edge_id": row["edge_id"],
+                            "weight": row["weight"],
+                        }
+                    )
         except Exception:
             pass
 
-        result["slice_weights"] = (
-            pl.DataFrame(slice_weights_data)
-            if slice_weights_data
-            else pl.DataFrame(
-                schema={"slice_id": pl.Utf8, "edge_id": pl.Utf8, "weight": pl.Float64}
-            )
+        result["slice_weights"] = dataframe_from_rows(
+            slice_weights_data,
+            schema={"slice_id": "text", "edge_id": "text", "weight": "float"},
+            backend=backend,
         )
 
     return result
@@ -274,12 +283,12 @@ def to_dataframes(
 
 def _to_dicts(df: nw.DataFrame[Any]) -> list[dict[str, Any]]:
     """Convert narwhals DataFrame to list of dicts."""
-    return [dict(zip(df.columns, row)) for row in df.rows()]
+    return dataframe_to_rows(nw.to_native(df))
 
 
 def _get_height(df: nw.DataFrame[Any]) -> int:
     """Get row count from narwhals DataFrame."""
-    return df.shape[0]
+    return dataframe_height(nw.to_native(df))
 
 
 def from_dataframes(

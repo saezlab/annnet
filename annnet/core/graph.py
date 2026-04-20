@@ -13,6 +13,7 @@ except Exception:  # ModuleNotFoundError, etc.
     pl = None
 import scipy.sparse as sp
 
+from .._dataframe import empty_dataframe, select_dataframe_backend
 from ..algorithms.traversal import Traversal
 from ._Annotation import AttributesClass
 from ._BulkOps import BulkOps
@@ -83,8 +84,9 @@ class AnnNet(
         Initial column capacity for the incidence matrix.
     annotations : dict | None, optional
         Pre-built annotation tables to use instead of creating empty tables.
-    annotations_backend : {"polars", "pandas"}, optional
-        Preferred backend for newly initialized annotation tables.
+    annotations_backend : {"auto", "polars", "pandas", "pyarrow"}, optional
+        Preferred backend for newly initialized annotation tables. ``"auto"``
+        prefers Polars, then pandas, then PyArrow.
     aspects : dict[str, list[str]] | None, optional
         Initial multilayer aspect declaration. If omitted, the graph starts
         flat with a single placeholder aspect ``"_"``.
@@ -113,7 +115,7 @@ class AnnNet(
         v: int = 0,
         e: int = 0,
         annotations=None,
-        annotations_backend="polars",
+        annotations_backend="auto",
         aspects: dict | None = None,
         **kwargs,
     ):
@@ -129,8 +131,9 @@ class AnnNet(
             Initial column capacity for the sparse incidence matrix.
         annotations : dict | None, optional
             Existing annotation tables keyed by table name.
-        annotations_backend : {"polars", "pandas"}, optional
+        annotations_backend : {"auto", "polars", "pandas", "pyarrow"}, optional
             Backend used when empty annotation tables need to be created.
+            ``"auto"`` prefers Polars, then pandas, then PyArrow.
         aspects : dict[str, list[str]] | None, optional
             Initial multilayer aspect registry.
         **kwargs
@@ -201,7 +204,7 @@ class AnnNet(
         self._grow_cols_to = _grow_cols_to
 
         # --- Attribute storage ---
-        self._annotations_backend = annotations_backend
+        self._annotations_backend = select_dataframe_backend(annotations_backend)
         self._init_annotation_tables(annotations)
         self.graph_attributes: dict = {}
         self.graph_attributes.update(kwargs)
@@ -258,38 +261,16 @@ class AnnNet(
             self.layer_attributes = annotations.get("layer_attributes")
             return
 
-        # 2) Otherwise, create empties.
-        if self._annotations_backend == "polars" and pl is not None:
-            self.vertex_attributes = pl.DataFrame(schema={"vertex_id": pl.Utf8})
-            self.edge_attributes = pl.DataFrame(schema={"edge_id": pl.Utf8})
-            self.slice_attributes = pl.DataFrame(schema={"slice_id": pl.Utf8})
-            self.edge_slice_attributes = pl.DataFrame(
-                schema={"slice_id": pl.Utf8, "edge_id": pl.Utf8, "weight": pl.Float64}
-            )
-            self.layer_attributes = pl.DataFrame(schema={"layer_id": pl.Utf8})
-            return
-
-        # 3) No polars: need a fallback engine, or force user to pass tables.
-        # Picked pandas fallback since it is common.
-        try:
-            import pandas as pd
-        except Exception:
-            raise RuntimeError(
-                "Polars is not installed, and no annotation tables were provided. "
-                "Install polars OR pass annotation tables (pandas/pyarrow/etc.) to AnnNet(..., annotations=...)."
-            )
-
-        self.vertex_attributes = pd.DataFrame({"vertex_id": pd.Series(dtype="string")})
-        self.edge_attributes = pd.DataFrame({"edge_id": pd.Series(dtype="string")})
-        self.slice_attributes = pd.DataFrame({"slice_id": pd.Series(dtype="string")})
-        self.edge_slice_attributes = pd.DataFrame(
-            {
-                "slice_id": pd.Series(dtype="string"),
-                "edge_id": pd.Series(dtype="string"),
-                "weight": pd.Series(dtype="float64"),
-            }
+        # 2) Otherwise, create empty tables with the centrally selected backend.
+        backend = self._annotations_backend
+        self.vertex_attributes = empty_dataframe({"vertex_id": "text"}, backend=backend)
+        self.edge_attributes = empty_dataframe({"edge_id": "text"}, backend=backend)
+        self.slice_attributes = empty_dataframe({"slice_id": "text"}, backend=backend)
+        self.edge_slice_attributes = empty_dataframe(
+            {"slice_id": "text", "edge_id": "text", "weight": "float"},
+            backend=backend,
         )
-        self.layer_attributes = pd.DataFrame({"layer_id": pd.Series(dtype="string")})
+        self.layer_attributes = empty_dataframe({"layer_id": "text"}, backend=backend)
 
     def _entity_row(self, vid) -> int:
         """Return incidence matrix row index for a vertex (resolves bare vid to supra-node key)."""

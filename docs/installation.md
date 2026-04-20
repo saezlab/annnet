@@ -43,8 +43,13 @@ pip install "annnet[pyarrow]"
 ```
 
 - `polars`: recommended default dataframe backend for annnet tables and annotations
-- `pandas`: pandas-native dataframe support and fallback backend
+- `pandas`: pandas-native dataframe support
 - `pyarrow`: Arrow table support and parquet-related tabular workflows
+
+When AnnNet needs to create new annotation tables and no backend is specified,
+`annotations_backend="auto"` selects the first installed backend in this order:
+Polars, pandas, then PyArrow. DataFrame input remains Narwhals-compatible, so
+tables from different supported eager backends can be imported together.
 
 ### Graph backends
 

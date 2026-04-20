@@ -4,11 +4,36 @@ import pandas as pd
 import polars as pl
 import pyarrow as pa
 
+from annnet._dataframe import (
+    available_dataframe_backends,
+    dataframe_to_rows,
+    select_dataframe_backend,
+)
 from annnet.io.dataframe_io import from_dataframes, to_dataframes
 
 
 class TestDataFrameAdapter(unittest.TestCase):
     """Test suite for Narwhals-based dataframe adapter."""
+
+    def test_auto_backend_prefers_polars(self):
+        backends = available_dataframe_backends()
+        if backends["polars"]:
+            self.assertEqual(select_dataframe_backend("auto"), "polars")
+
+    def test_to_dataframes_uses_selected_output_backend(self):
+        from annnet import AnnNet
+
+        G = AnnNet(directed=True, annotations_backend="pandas")
+        G.add_vertex("a", label="A")
+        G.add_vertex("b", label="B")
+        G.add_edge("a", "b", weight=2.0)
+
+        exported = to_dataframes(G)
+
+        self.assertIsInstance(exported["nodes"], pd.DataFrame)
+        self.assertIsInstance(exported["edges"], pd.DataFrame)
+        self.assertEqual(len(dataframe_to_rows(exported["nodes"])), 2)
+        self.assertEqual(len(dataframe_to_rows(exported["edges"])), 1)
 
     @classmethod
     def setUpClass(cls):
