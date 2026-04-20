@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 import numpy as np
 
+from .._plotting_backend import select_plot_backend
+
 # Small helpers
 
 
@@ -357,13 +359,137 @@ def to_pydot(
     return Gd
 
 
+def to_matplotlib(
+    graph,
+    *,
+    ax=None,
+    edge_indexes: list[int] | None = None,
+    orphan_edges: bool = True,
+    show_vertex_labels: bool = True,
+    vertex_label_key: str | None = None,
+    show_edge_labels: bool = False,
+    edge_label_keys: list[str] | None = None,
+    layer: str | None = None,
+    node_size: float = 900.0,
+    node_color: str = "#f5f5f5",
+    edge_color: str = "#333333",
+    hyperedge_color: str = "#777777",
+):
+    """Draw an AnnNet graph with matplotlib and return ``(figure, axes)``.
+
+    This minimal fallback renderer does not require Graphviz, pydot, or
+    NetworkX. It places vertices on a circle, draws binary directed edges as
+    arrows, undirected binary edges as plain segments, and hyperedges via a
+    small center marker connected to incident vertices.
+    """
+    import matplotlib.pyplot as plt
+
+    if ax is None:
+        fig, ax = plt.subplots()
+    else:
+        fig = ax.figure
+
+    edges = list(range(graph.ne)) if edge_indexes is None else list(edge_indexes)
+    vertices: set[str] = set(map(str, graph.vertices()))
+    for j in edges:
+        S, T = graph.get_edge(j)
+        if not orphan_edges and (len(S) == 0 or len(T) == 0):
+            continue
+        vertices.update(map(str, S | T))
+
+    ordered_vertices = sorted(vertices)
+    n = max(1, len(ordered_vertices))
+    positions = {
+        vertex: (math.cos(2.0 * math.pi * i / n), math.sin(2.0 * math.pi * i / n))
+        for i, vertex in enumerate(ordered_vertices)
+    }
+
+    if ordered_vertices:
+        xs = [positions[v][0] for v in ordered_vertices]
+        ys = [positions[v][1] for v in ordered_vertices]
+        ax.scatter(
+            xs,
+            ys,
+            s=node_size,
+            c=node_color,
+            edgecolors="#222222",
+            linewidths=1.0,
+            zorder=3,
+        )
+
+    if show_vertex_labels:
+        labels = build_vertex_labels(graph, key=vertex_label_key)
+        for vertex in ordered_vertices:
+            x, y = positions[vertex]
+            ax.text(x, y, str(labels.get(vertex, vertex)), ha="center", va="center", zorder=4)
+
+    edge_labels = (
+        build_edge_labels(graph, use_weight=True, extra_keys=edge_label_keys, layer=layer)
+        if show_edge_labels
+        else {}
+    )
+    for j in edges:
+        S, T = graph.get_edge(j)
+        if not orphan_edges and (len(S) == 0 or len(T) == 0):
+            continue
+
+        if _is_true_hyperedge(S, T):
+            center = (0.0, 0.0)
+            incident = sorted(map(str, S | T))
+            if incident:
+                center = (
+                    float(np.mean([positions[v][0] for v in incident])),
+                    float(np.mean([positions[v][1] for v in incident])),
+                )
+            ax.scatter([center[0]], [center[1]], s=80.0, c=hyperedge_color, marker="s", zorder=2)
+            for vertex in incident:
+                x, y = positions[vertex]
+                ax.plot([center[0], x], [center[1], y], color=hyperedge_color, linewidth=1.0)
+            if j in edge_labels:
+                ax.text(center[0], center[1], edge_labels[j], ha="left", va="bottom", fontsize=8)
+            continue
+
+        if S == T:
+            nodes = sorted(map(str, S))
+            if len(nodes) == 1:
+                u = v = nodes[0]
+            elif len(nodes) >= 2:
+                u, v = nodes[0], nodes[1]
+            else:
+                continue
+            x0, y0 = positions[u]
+            x1, y1 = positions[v]
+            ax.plot([x0, x1], [y0, y1], color=edge_color, linewidth=1.2, zorder=1)
+        else:
+            if not S or not T:
+                continue
+            u = str(next(iter(S)))
+            v = str(next(iter(T)))
+            x0, y0 = positions[u]
+            x1, y1 = positions[v]
+            ax.annotate(
+                "",
+                xy=(x1, y1),
+                xytext=(x0, y0),
+                arrowprops={"arrowstyle": "->", "color": edge_color, "lw": 1.2},
+                zorder=1,
+            )
+
+        if j in edge_labels:
+            ax.text((x0 + x1) / 2.0, (y0 + y1) / 2.0, edge_labels[j], fontsize=8)
+
+    ax.set_aspect("equal")
+    ax.axis("off")
+    return fig, ax
+
+
 # One-call plotting API
 
 
 def plot(
     graph,
     *,
-    backend: Literal["graphviz", "pydot"] = "graphviz",
+    backend: Literal["auto", "graphviz", "pydot", "matplotlib"] | None = None,
     layout: str = "dot",
     layer: str | None = None,
     show_edge_labels: bool = False,
@@ -375,14 +501,16 @@ def plot(
     suppress_warnings: bool = True,
     **kwargs,
 ):
-    """Build a fully styled graph object ready for rendering with Graphviz or Pydot.
+    """Build a fully styled graph object ready for rendering.
 
     Parameters
     ----------
     graph : object
         AnnNet-like object with `vertices()`, `get_edge()`, `get_attr_edge()`, etc.
-    backend : {'graphviz', 'pydot'}, optional
-        Visualization backend to use. Default is ``'graphviz'``.
+    backend : {'auto', 'graphviz', 'pydot', 'matplotlib'} or None, optional
+        Visualization backend to use. ``None`` uses AnnNet's configured
+        plotting default. ``'auto'`` prefers Graphviz, then pydot, then
+        matplotlib.
     layout : str, optional
         Layout engine (e.g. ``'dot'``, ``'neato'``). Default is ``'dot'``.
     layer : str, optional
@@ -406,8 +534,9 @@ def plot(
 
     Returns
     -------
-    graphviz.Digraph or pydot.Dot
-        A styled, backend-specific graph object suitable for rendering or exporting.
+    graphviz.Digraph, pydot.Dot, or tuple
+        A styled, backend-specific graph object. Matplotlib returns
+        ``(figure, axes)``.
 
     Raises
     ------
@@ -420,6 +549,8 @@ def plot(
     - If `show_edge_labels=True`, edges are regenerated with label overrides.
 
     """
+    backend = select_plot_backend(backend)
+
     # edge styles
     custom_edge_attr: dict[int, dict[str, str]] = {}
     if use_weight_style:
@@ -491,19 +622,36 @@ def plot(
                 G.add_edge(pydot.Edge(str(sv), str(tv), label=txt))
         return G
 
+    elif backend == "matplotlib":
+        return to_matplotlib(
+            graph,
+            ax=kwargs.get("ax"),
+            edge_indexes=kwargs.get("edge_indexes"),
+            orphan_edges=orphan_edges,
+            show_vertex_labels=show_vertex_labels,
+            vertex_label_key=vertex_label_key,
+            show_edge_labels=show_edge_labels,
+            edge_label_keys=edge_label_keys,
+            layer=layer,
+            node_size=kwargs.get("node_size", 900.0),
+            node_color=kwargs.get("node_color", "#f5f5f5"),
+            edge_color=kwargs.get("edge_color", "#333333"),
+            hyperedge_color=kwargs.get("hyperedge_color", "#777777"),
+        )
+
     else:
-        raise ValueError("backend must be 'graphviz' or 'pydot'")
+        raise ValueError("backend must be 'auto', 'graphviz', 'pydot', or 'matplotlib'")
 
 
 # Renderer
 
 
 def render(obj: Any, path: str, format: str = "svg") -> str:
-    """Render a Graphviz or Pydot graph object to disk and return the output path.
+    """Render a Graphviz, Pydot, or matplotlib graph object to disk.
 
     Parameters
     ----------
-    obj : graphviz.Digraph or pydot.Dot
+    obj : graphviz.Digraph, pydot.Dot, matplotlib Figure/Axes, or (Figure, Axes)
         The graph object returned by `plot()`.
     path : str
         Destination file path (without extension if `format` is specified).
@@ -524,11 +672,15 @@ def render(obj: Any, path: str, format: str = "svg") -> str:
     -----
     - Graphviz objects use the built-in `.render()` API.
     - Pydot objects write directly via `.write_svg()`, `.write_png()`, or `.write_raw()`.
+    - Matplotlib figures use `.savefig()`.
     - The file extension is appended automatically if not present.
 
     """
     kind = obj.__class__.__module__
     fmt = format.lower()
+    if isinstance(obj, tuple) and obj:
+        obj = obj[0]
+        kind = obj.__class__.__module__
     if "graphviz" in kind:
         return obj.render(path, format=fmt, cleanup=True)
     elif "pydot" in kind:
@@ -541,5 +693,12 @@ def render(obj: Any, path: str, format: str = "svg") -> str:
         else:
             obj.write_raw(path)
             return path
+    elif "matplotlib" in kind:
+        fig = obj.figure if hasattr(obj, "figure") and not hasattr(obj, "savefig") else obj
+        out = path if path.lower().endswith(f".{fmt}") else f"{path}.{fmt}"
+        fig.savefig(out, format=fmt, bbox_inches="tight")
+        return out
     else:
-        raise TypeError("Unknown graph object; expected graphviz.Digraph or pydot.Dot")
+        raise TypeError(
+            "Unknown graph object; expected graphviz.Digraph, pydot.Dot, or matplotlib Figure/Axes"
+        )

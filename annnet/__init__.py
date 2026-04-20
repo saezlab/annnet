@@ -36,6 +36,20 @@ _lazy_objects: dict[str, tuple[str, str]] = {
 
 _lazy_functions: dict[str, tuple[str, str]] = {
     "available_backends": ("annnet.adapters", "available_backends"),
+    "available_dataframe_backends": ("annnet._dataframe_backend", "available_dataframe_backends"),
+    "available_plot_backends": ("annnet._plotting_backend", "available_plot_backends"),
+    "get_default_dataframe_backend": (
+        "annnet._dataframe_backend",
+        "get_default_dataframe_backend",
+    ),
+    "get_default_plot_backend": ("annnet._plotting_backend", "get_default_plot_backend"),
+    "select_dataframe_backend": ("annnet._dataframe_backend", "select_dataframe_backend"),
+    "select_plot_backend": ("annnet._plotting_backend", "select_plot_backend"),
+    "set_default_dataframe_backend": (
+        "annnet._dataframe_backend",
+        "set_default_dataframe_backend",
+    ),
+    "set_default_plot_backend": ("annnet._plotting_backend", "set_default_plot_backend"),
     "to_nx": ("annnet.adapters.networkx_adapter", "to_nx"),
     "from_nx": ("annnet.adapters.networkx_adapter", "from_nx"),
     "to_igraph": ("annnet.adapters.igraph_adapter", "to_igraph"),

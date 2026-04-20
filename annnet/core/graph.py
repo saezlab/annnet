@@ -13,7 +13,7 @@ except Exception:  # ModuleNotFoundError, etc.
     pl = None
 import scipy.sparse as sp
 
-from .._dataframe import empty_dataframe, select_dataframe_backend
+from .._dataframe_backend import empty_dataframe, select_dataframe_backend
 from ..algorithms.traversal import Traversal
 from ._Annotation import AttributesClass
 from ._BulkOps import BulkOps
@@ -84,9 +84,10 @@ class AnnNet(
         Initial column capacity for the incidence matrix.
     annotations : dict | None, optional
         Pre-built annotation tables to use instead of creating empty tables.
-    annotations_backend : {"auto", "polars", "pandas", "pyarrow"}, optional
+    annotations_backend : {"auto", "polars", "pandas", "pyarrow"} | None, optional
         Preferred backend for newly initialized annotation tables. ``"auto"``
-        prefers Polars, then pandas, then PyArrow.
+        prefers Polars, then pandas, then PyArrow. ``None`` uses AnnNet's
+        configured dataframe default.
     aspects : dict[str, list[str]] | None, optional
         Initial multilayer aspect declaration. If omitted, the graph starts
         flat with a single placeholder aspect ``"_"``.
@@ -115,7 +116,7 @@ class AnnNet(
         v: int = 0,
         e: int = 0,
         annotations=None,
-        annotations_backend="auto",
+        annotations_backend=None,
         aspects: dict | None = None,
         **kwargs,
     ):
@@ -131,9 +132,10 @@ class AnnNet(
             Initial column capacity for the sparse incidence matrix.
         annotations : dict | None, optional
             Existing annotation tables keyed by table name.
-        annotations_backend : {"auto", "polars", "pandas", "pyarrow"}, optional
+        annotations_backend : {"auto", "polars", "pandas", "pyarrow"} | None, optional
             Backend used when empty annotation tables need to be created.
-            ``"auto"`` prefers Polars, then pandas, then PyArrow.
+            ``"auto"`` prefers Polars, then pandas, then PyArrow. ``None``
+            uses AnnNet's configured dataframe default.
         aspects : dict[str, list[str]] | None, optional
             Initial multilayer aspect registry.
         **kwargs

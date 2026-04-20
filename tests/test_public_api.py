@@ -6,6 +6,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import annnet as an
+from annnet._dataframe_backend import DATAFRAME_BACKEND_PRIORITY
+from annnet._optional_components import (
+    DATAFRAME_BACKENDS,
+    IO_MODULES,
+    PLOT_BACKENDS,
+    component_names,
+)
+from annnet._plotting_backend import PLOT_BACKEND_PRIORITY
 
 
 class TestPublicAPI:
@@ -22,6 +30,14 @@ class TestPublicAPI:
 
         for name in [
             "available_backends",
+            "available_dataframe_backends",
+            "available_plot_backends",
+            "get_default_dataframe_backend",
+            "get_default_plot_backend",
+            "select_dataframe_backend",
+            "select_plot_backend",
+            "set_default_dataframe_backend",
+            "set_default_plot_backend",
             "write",
             "read",
             "to_json",
@@ -67,6 +83,41 @@ class TestPublicAPI:
         assert meta["license"] == an.__license__
         assert isinstance(str(summary), str)
         assert "graph backends" in str(summary).lower()
+
+    def test_component_registries_drive_backend_order_and_info(self):
+        summary = an.info()
+
+        assert DATAFRAME_BACKEND_PRIORITY == component_names(DATAFRAME_BACKENDS)
+        assert PLOT_BACKEND_PRIORITY == component_names(PLOT_BACKENDS)
+        assert tuple(summary.tabular_backends) == component_names(DATAFRAME_BACKENDS)
+        assert tuple(summary.plot_backends) == component_names(PLOT_BACKENDS)
+        assert tuple(summary.io_modules) == component_names(IO_MODULES)
+
+    def test_public_backend_defaults_are_configurable(self):
+        original_dataframe_backend = an.get_default_dataframe_backend()
+        original_plot_backend = an.get_default_plot_backend()
+
+        try:
+            an.set_default_dataframe_backend("auto")
+            assert an.get_default_dataframe_backend() == "auto"
+            assert an.Graph()._annotations_backend == an.select_dataframe_backend(None)
+
+            dataframe_backends = an.available_dataframe_backends()
+            explicit_dataframe_backend = next(
+                (name for name, available in dataframe_backends.items() if available),
+                None,
+            )
+            if explicit_dataframe_backend is not None:
+                an.set_default_dataframe_backend(explicit_dataframe_backend)
+                assert an.get_default_dataframe_backend() == explicit_dataframe_backend
+                assert an.Graph()._annotations_backend == explicit_dataframe_backend
+
+            an.set_default_plot_backend("auto")
+            assert an.get_default_plot_backend() == "auto"
+            assert an.select_plot_backend(None) == an.select_plot_backend("auto")
+        finally:
+            an.set_default_dataframe_backend(original_dataframe_backend)
+            an.set_default_plot_backend(original_plot_backend)
 
     def test_get_latest_version_rejects_non_http_schemes(self):
         with patch("urllib.request.urlopen") as urlopen:

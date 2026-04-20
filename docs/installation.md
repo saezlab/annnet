@@ -51,6 +51,15 @@ When AnnNet needs to create new annotation tables and no backend is specified,
 Polars, pandas, then PyArrow. DataFrame input remains Narwhals-compatible, so
 tables from different supported eager backends can be imported together.
 
+You can inspect and configure the default dataframe backend from Python:
+
+```python
+import annnet as an
+
+an.available_dataframe_backends()
+an.set_default_dataframe_backend("pandas")
+```
+
 ### Graph backends
 
 Single extras:
@@ -94,6 +103,18 @@ pip install "annnet[plot]"
 - `pydot`: DOT export and pydot-based rendering
 - `graphviz`: Python Graphviz bindings
 - `plot`: installs all pip-installable plotting backends together
+
+When `plot(..., backend="auto")` is used, AnnNet selects the first installed
+backend in this order: Graphviz, pydot, then matplotlib.
+
+You can inspect and configure the default plotting backend from Python:
+
+```python
+import annnet as an
+
+an.available_plot_backends()
+an.set_default_plot_backend("matplotlib")
+```
 
 ### I/O extras
 

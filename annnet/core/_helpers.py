@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import narwhals as nw
 
-from .._dataframe import dataframe_from_rows
+from .._dataframe_backend import dataframe_from_rows
 
 try:
     import polars as pl

@@ -7,9 +7,17 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from html import escape
 from importlib import metadata as importlib_metadata
-from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
+
+from ._optional_components import (
+    DATAFRAME_BACKENDS,
+    GRAPH_BACKENDS,
+    IO_MODULES,
+    PLOT_BACKENDS,
+    component_names,
+    component_status,
+)
 
 try:  # Python 3.11+
     import tomllib
@@ -34,64 +42,15 @@ _FALLBACK_VERSION = "0.1.0"
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _PYPROJECT_PATH = _PROJECT_ROOT / "pyproject.toml"
 
-_GRAPH_BACKENDS = {
-    "networkx": ("networkx", "annnet[networkx]"),
-    "igraph": ("igraph", "annnet[igraph]"),
-    "graph-tool": ("graph_tool", "pixi / conda-forge / system package"),
-    "pyg": ("torch_geometric", "annnet[pyg]"),
-}
-
-_PLOT_BACKENDS = {
-    "matplotlib": ("matplotlib", "annnet[plot] or [matplotlib]"),
-    "graphviz": ("graphviz", "annnet[plot]"),
-    "pydot": ("pydot", "annnet[plot]"),
-}
-
-_TABULAR_BACKENDS = {
-    "polars": ("polars", "annnet[polars]"),
-    "pandas": ("pandas", "annnet[pandas]"),
-    "pyarrow": ("pyarrow", "annnet[parquet]"),
-}
-
-_IO_MODULES = {
-    "annnet": ("annnet.io.io_annnet", None),
-    "json/ndjson": ("annnet.io.json_io", None),
-    "dataframes": ("annnet.io.dataframe_io", None),
-    "csv": ("annnet.io.csv_io", None),
-    "excel": ("openpyxl", "annnet[excel]"),
-    "graphml/gexf": ("networkx", "annnet[networkx]"),
-    "sif": ("annnet.io.SIF_io", None),
-    "cx2": ("annnet.io.cx2_io", None),
-    "parquet": ("pyarrow", "annnet[parquet]"),
-    "zarr": ("zarr", "annnet[zarr_io]"),
-    "sbml": ("lxml", "annnet[sbml]"),
-    "omnipath": ("annnet.io.read_omnipath", None),
-}
-
-
-def _is_available(module_name: str) -> bool:
-    return find_spec(module_name) is not None
-
-
-def _capability_status(spec: dict[str, tuple[str, str | None]]) -> dict[str, dict[str, str]]:
-    return {
-        name: {
-            "available": "yes" if _is_available(module_name) else "no",
-            "install": install_hint or "built in",
-        }
-        for name, (module_name, install_hint) in spec.items()
-    }
-
-
 def _default_graph_backend(values: dict[str, dict[str, str]]) -> str:
-    for name in ("networkx", "igraph", "graph-tool", "pyg"):
+    for name in component_names(GRAPH_BACKENDS):
         if values.get(name, {}).get("available") == "yes":
             return name
     return "none"
 
 
 def _default_plot_backend(values: dict[str, dict[str, str]]) -> str:
-    for name in ("graphviz", "pydot", "matplotlib"):
+    for name in component_names(PLOT_BACKENDS):
         if values.get(name, {}).get("available") == "yes":
             return name
     return "none"
@@ -536,12 +495,12 @@ __license__ = metadata["license"]
 
 
 def info() -> AnnNetInfo:
-    """Return a human-readable package capability summary."""
+    """Return a human-readable package component summary."""
 
     return AnnNetInfo(
         metadata=get_metadata(),
-        graph_backends=_capability_status(_GRAPH_BACKENDS),
-        plot_backends=_capability_status(_PLOT_BACKENDS),
-        tabular_backends=_capability_status(_TABULAR_BACKENDS),
-        io_modules=_capability_status(_IO_MODULES),
+        graph_backends=component_status(GRAPH_BACKENDS),
+        plot_backends=component_status(PLOT_BACKENDS),
+        tabular_backends=component_status(DATAFRAME_BACKENDS),
+        io_modules=component_status(IO_MODULES),
     )

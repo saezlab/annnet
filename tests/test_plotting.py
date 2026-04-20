@@ -14,8 +14,10 @@ warnings.filterwarnings(
 )
 import os
 import sys
+import tempfile
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from annnet._plotting_backend import available_plot_backends, select_plot_backend
 from annnet.core.graph import AnnNet
 from annnet.utils import plotting
 
@@ -101,6 +103,12 @@ class TestBackends(unittest.TestCase):
             cls.HAS_PYDOT = True
         except Exception:
             cls.HAS_PYDOT = False
+        try:
+            import matplotlib  # noqa: F401
+
+            cls.HAS_MATPLOTLIB = True
+        except Exception:
+            cls.HAS_MATPLOTLIB = False
 
     def setUp(self):
         g = AnnNet()
@@ -128,6 +136,40 @@ class TestBackends(unittest.TestCase):
             self.skipTest("pydot package not installed")
         Gd = plotting.to_pydot(self.g, orphan_edges=True)
         self.assertGreaterEqual(len(Gd.get_edges()), 2)
+
+    def test_auto_backend_selects_first_available_plot_backend(self):
+        backends = available_plot_backends()
+        expected = next((name for name in ("graphviz", "pydot", "matplotlib") if backends[name]), None)
+        if expected is None:
+            self.skipTest("no plotting backend installed")
+        self.assertEqual(select_plot_backend("auto"), expected)
+
+    def test_to_matplotlib_builds_axes_when_available(self):
+        if not self.HAS_MATPLOTLIB:
+            self.skipTest("matplotlib package not installed")
+        fig, ax = plotting.to_matplotlib(self.g, show_edge_labels=True)
+        self.assertIs(fig, ax.figure)
+        self.assertGreaterEqual(len(ax.collections), 1)
+        self.assertGreaterEqual(len(ax.texts), 3)
+
+    def test_render_matplotlib_when_available(self):
+        if not self.HAS_MATPLOTLIB:
+            self.skipTest("matplotlib package not installed")
+        fig, _ax = plotting.to_matplotlib(self.g)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = plotting.render(fig, os.path.join(tmp, "graph"), format="png")
+            self.assertTrue(os.path.exists(out))
+
+    def test_plot_auto_uses_selected_backend(self):
+        backend = select_plot_backend("auto")
+        obj = plotting.plot(self.g, backend="auto")
+        if backend == "matplotlib":
+            self.assertIsInstance(obj, tuple)
+            self.assertEqual(len(obj), 2)
+        elif backend == "graphviz":
+            self.assertIn("graphviz", obj.__class__.__module__)
+        else:
+            self.assertIn("pydot", obj.__class__.__module__)
 
     def test_plot_graphviz_and_labels_when_available(self):
         if not self.HAS_GRAPHVIZ:

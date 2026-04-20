@@ -7,12 +7,19 @@ callers do not each implement their own fallback chain.
 
 from __future__ import annotations
 
-from importlib import util
 from typing import Any
 
 import narwhals as nw
 
-DATAFRAME_BACKEND_PRIORITY = ("polars", "pandas", "pyarrow")
+from ._optional_components import (
+    DATAFRAME_BACKENDS,
+    available_optional_components,
+    component_names,
+    select_component,
+)
+
+DATAFRAME_BACKEND_PRIORITY = component_names(DATAFRAME_BACKENDS)
+_DEFAULT_DATAFRAME_BACKEND = "auto"
 _TEXT = "text"
 _FLOAT = "float"
 _BOOL = "bool"
@@ -21,8 +28,7 @@ _LIST_TEXT = "list_text"
 
 def available_dataframe_backends() -> dict[str, bool]:
     """Return installed dataframe backends in AnnNet preference order."""
-    modules = {"polars": "polars", "pandas": "pandas", "pyarrow": "pyarrow"}
-    return {name: util.find_spec(module) is not None for name, module in modules.items()}
+    return available_optional_components(DATAFRAME_BACKENDS)
 
 
 def select_dataframe_backend(preferred: str | None = "auto") -> str:
@@ -31,25 +37,31 @@ def select_dataframe_backend(preferred: str | None = "auto") -> str:
     ``"auto"`` selects the first installed backend in this order: Polars,
     pandas, then PyArrow.
     """
-    requested = "auto" if preferred is None else str(preferred).lower()
-    available = available_dataframe_backends()
+    preferred = _DEFAULT_DATAFRAME_BACKEND if preferred is None else preferred
+    return select_component(
+        DATAFRAME_BACKENDS,
+        preferred,
+        kind="dataframe",
+        install_message="Install polars, pandas, or pyarrow",
+    )
 
-    if requested == "auto":
-        for backend in DATAFRAME_BACKEND_PRIORITY:
-            if available[backend]:
-                return backend
-        raise RuntimeError("No dataframe backend available. Install polars, pandas, or pyarrow.")
 
-    if requested not in DATAFRAME_BACKEND_PRIORITY:
-        allowed = ", ".join(("auto", *DATAFRAME_BACKEND_PRIORITY))
-        raise ValueError(f"Unknown dataframe backend {preferred!r}; expected one of: {allowed}.")
+def get_default_dataframe_backend() -> str:
+    """Return the configured default dataframe backend."""
+    return _DEFAULT_DATAFRAME_BACKEND
 
-    if not available[requested]:
-        raise RuntimeError(
-            f"Dataframe backend {requested!r} is not installed. "
-            "Install polars, pandas, or pyarrow, or use annotations_backend='auto'."
-        )
-    return requested
+
+def set_default_dataframe_backend(backend: str | None = "auto") -> str:
+    """Set the default dataframe backend for new AnnNet annotation tables."""
+    global _DEFAULT_DATAFRAME_BACKEND
+
+    requested = "auto" if backend is None else str(backend).lower()
+    if requested != "auto":
+        select_dataframe_backend(requested)
+    elif not any(available_dataframe_backends().values()):
+        select_dataframe_backend("auto")
+    _DEFAULT_DATAFRAME_BACKEND = requested
+    return _DEFAULT_DATAFRAME_BACKEND
 
 
 def dataframe_from_rows(

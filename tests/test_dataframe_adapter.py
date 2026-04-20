@@ -4,7 +4,7 @@ import pandas as pd
 import polars as pl
 import pyarrow as pa
 
-from annnet._dataframe import (
+from annnet._dataframe_backend import (
     available_dataframe_backends,
     dataframe_to_rows,
     select_dataframe_backend,
