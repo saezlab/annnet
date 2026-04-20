@@ -1,0 +1,27 @@
+name: annnet-anndata
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - python-igraph
+  - graph-tool
+  - pip:
+      - -e .
+      - anndata
+      - ipykernel
+      - ipywidgets
+      - jupyterlab
+      - matplotlib
+      - networkx
+      - notebook
+      - omnipath
+      - pandas
+      - pertpy
+      - polars
+      - scanpy
+      - scikit-learn
+      - scipy
+      - seaborn
+      - torch
+      - torch-geometric
