@@ -1,8 +1,8 @@
 # Quickstart
 
-This quickstart shows how to create a graph, work with slices and annotations, add hyperedges, and run an algorithm through a backend proxy.
+This quickstart shows how to create a graph, work with slices and annotations, add hyperedges, and run an algorithm through a backend interoperability accessor.
 
-Prerequisite: install annnet via the [Installation guide](installation.md) (add extras like `networkx` if you want backend proxies).
+Prerequisite: install annnet via the [Installation guide](installation.md) (add extras like `networkx` if you want backend algorithm interoperability).
 
 For exact APIs used below, see [AnnNet](reference/core/graph.md), [Slices](reference/core/slices.md), [NetworkX adapter](reference/adapters/networkx.md), and [Native .annnet format](reference/io/annnet-format.md).
 
@@ -32,6 +32,8 @@ G.add_hyperedge(head=["A", "B"], tail=["C", "D"], weight=1.0)
 # Requires networkx installed
 deg = G.nx.degree_centrality(G)
 ```
+
+`G.nx` is a lazy graph-owned accessor. It converts `G` to a NetworkX graph on demand, replaces the `G` argument with that backend graph for the algorithm call, and returns the NetworkX result. The same pattern exists for `G.ig` and `G.gt` when those optional backends are installed.
 
 You can fetch a concrete NetworkX graph with options:
 

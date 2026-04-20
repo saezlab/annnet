@@ -29,8 +29,8 @@ backend is not the same thing as writing a file format.
 
 ## Runtime backends
 
-Lazy proxies such as `G.nx`, `G.ig`, and `G.gt` expose the current annnet graph
-through external graph libraries only when needed.
+Graph-owned lazy accessors such as `G.nx`, `G.ig`, and `G.gt` expose the
+current annnet graph through external graph libraries only when needed.
 
 ```python
 # NetworkX
@@ -47,6 +47,25 @@ nxG = G.nx.backend(
 
 This is useful when annnet is your source of truth but another library provides
 a specific algorithm or workflow you need.
+
+Under the hood, these accessors are attached to the `AnnNet` instance and use
+the normal backend conversion functions. For a call like
+`G.nx.betweenness_centrality(G)`, annnet:
+
+- resolves `betweenness_centrality` from NetworkX
+- projects the AnnNet graph to a NetworkX graph using the selected options
+- replaces the AnnNet `G` argument with the projected backend graph
+- dispatches the call to NetworkX
+- returns the backend result, with vertex IDs mapped back where supported
+
+The projected backend graph is cached and invalidated when the AnnNet graph
+version changes. `G.nx.backend(...)`, `G.ig.backend(...)`, and `G.gt.backend()`
+return the concrete backend graph when you want to inspect it or pass it around
+yourself.
+
+The direct adapter functions remain available for explicit conversion:
+`to_nx`/`from_nx`, `to_igraph`/`from_igraph`, and
+`to_graphtool`/`from_graphtool`.
 
 ## Conversion is always a choice of projection
 

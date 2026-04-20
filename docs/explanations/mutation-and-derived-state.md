@@ -81,7 +81,7 @@ These are materializations rather than canonical state:
 
 - CSR and CSC matrices
 - adjacency matrices
-- backend graphs from lazy proxies
+- backend graphs from `G.nx`/`G.ig`/`G.gt` lazy accessors
 - certain layer-specific matrix views
 
 They are either cached behind version checks or rebuilt on demand.

@@ -11,7 +11,7 @@ Nothing else combines all of this at once:
 - Annotated tables everywhere: Polars‑backed tables for vertices, edges, layers, vertex‑layer couples, slices, and graph metadata.
 - anndata‑style feel: familiar patterns like obs/var/layers‑like concepts, caches, and indices.
 - Interoperability without friction: import/export with NetworkX, igraph, GraphML, GEXF, SIF, SBML, CX2 (Cytoscape), Excel/CSV/JSON, Parquet graph directories, and DataFrames (via Narwhals).
-- Algorithm proxies: seamless, lazy calls into NetworkX/igraph/graph‑tool via `G.nx`, `G.ig`, and `G.gt` proxies.
+- Algorithm interoperability: seamless, lazy calls into NetworkX/igraph/graph‑tool via the graph-owned `G.nx`, `G.ig`, and `G.gt` accessors.
 - Disk‑backed, lossless `.annnet` storage:
   - Zarr for sparse matrices
   - Parquet for annotated tables
@@ -50,14 +50,16 @@ annnet is under active development. Feedback is welcome via GitHub issues: https
 - JSON/NDJSON
 - DataFrames via Narwhals (Polars, pandas, and friends)
 
-### Backend‑specific integration (lazy proxies)
-If `networkx` is installed, you can call algorithms directly via a proxy:
+### Backend-specific integration
+If `networkx` is installed, you can call algorithms directly from the AnnNet graph:
 
 ```python
 centrality = G.nx.degree_centrality(G)
 ```
 
-Similarly, `G.ig` (igraph) and `G.gt` (graph‑tool) proxies are available if those libraries are present. Proxies convert the active slice (or requested slices) to the backend on demand for algorithm calls. You can control directionality, hyperedge handling, and multigraph collapsing when converting.
+Similarly, `G.ig` (igraph) and `G.gt` (graph-tool) are available if those libraries are present. On `G.nx.<function>(G, ...)`, AnnNet resolves the NetworkX callable, converts the AnnNet graph to a NetworkX graph with the requested projection options, replaces the `G` argument with that backend graph, dispatches the call, and returns the backend result. Backend graphs are cached and refreshed after AnnNet mutations.
+
+Use `G.nx.backend(...)`, `G.ig.backend(...)`, or `G.gt.backend()` when you want the concrete projected backend graph object. Use `G.nx.<function>(G, ...)`, `G.ig.<function>(G, ...)`, or `G.gt.<namespace>.<function>(G, ...)` when you want AnnNet to do the conversion and dispatch for an algorithm call. You can control directionality, hyperedge handling, slice selection, and multigraph collapsing where the backend supports those options.
 
 Examples:
 
@@ -73,7 +75,7 @@ nxG = G.nx.backend(
     simple=True,             # collapse Multi(Di)Graph -> (Di)Graph
 )
 
-# igraph proxy (if python-igraph installed)
+# igraph interoperability (if python-igraph installed)
 pagerank = G.ig.pagerank(G)
 ```
 
@@ -106,7 +108,7 @@ pip install "annnet[sbml]"      # SBML import (libxml2/lxml)
 pip install "annnet[all]"
 ```
 
-Note: graph‑tool is supported by adapters/proxies if installed, but it is not available on PyPI; install it via your OS/package manager and annnet will detect it.
+Note: graph-tool is supported by adapters and `G.gt` interoperability if installed, but it is not available on PyPI; install it via your OS/package manager and annnet will detect it.
 
 ### Dev/test setup with Pixi 
 
@@ -196,10 +198,10 @@ deg = G.nx.degree_centrality(G)
 High‑fidelity conversions aim to preserve IDs, attributes, and directionality. When a conversion is lossy (e.g., hyperedges to NetworkX), functions return a manifest you can pass back to restore structure where possible.
 
 Adapter types (what goes where):
-- Runtime backend adapters (interoperability): used by lazy proxies `G.nx`, `G.ig`, `G.gt` only. These power algorithm calls and in‑memory conversions to NetworkX, igraph, and graph‑tool.
+- Runtime backend adapters (interoperability): used by `G.nx`, `G.ig`, and `G.gt` for algorithm calls and by `to_nx`/`from_nx`, `to_igraph`/`from_igraph`, and `to_graphtool`/`from_graphtool` for explicit in-memory conversions.
 - Format/data adapters (I/O): used to read/write files and tabular data. Examples: GraphML, GEXF, SIF, SBML, CX2 (Cytoscape), Parquet GraphDir, JSON/NDJSON, Excel/CSV, and DataFrames via Narwhals.
 
-In short: proxies = nx/ig/gt at runtime; file formats = adapters under the hood.
+In short: `G.nx`/`G.ig`/`G.gt` are runtime algorithm interoperability accessors; file formats use IO adapters.
 
 NetworkX:
 
@@ -281,7 +283,7 @@ annnet adapts internal representation for performance and compatibility:
 - Attributes decoupled from structure (Polars tables)
 - Lazy conversion to external backends on demand
 - Copy‑on‑write graph views and structured change tracking
-- Optional caching for converted backend graphs within proxies
+- Optional caching for converted backend graphs within `G.nx`/`G.ig`/`G.gt`
 
 See the architecture overview in `architecture.md` for deeper details and examples.
 
@@ -302,8 +304,8 @@ The package is modular to separate core functionality, adapters for external lib
 
 ```
 annnet/
-├── core/         # Graph class, managers, lazy proxies (nx/ig/gt)
-├── adapters/     # Backend adapters: networkx/igraph/graph-tool (runtime proxies)
+├── core/         # Graph class, managers, lazy interoperability accessors (nx/ig/gt)
+├── adapters/     # Backend adapters: networkx/igraph/graph-tool conversions
 │                 # Format adapters: GraphML, GEXF, SIF, SBML, CX2, Parquet GraphDir, JSON, DataFrames
 ├── io/           # Lossless .annnet storage (read/write) + Excel/CSV helpers
 ├── algorithms/   # Pure-Python algorithms using core only

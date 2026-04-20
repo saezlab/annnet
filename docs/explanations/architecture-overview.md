@@ -23,7 +23,7 @@ it, the rest of `annnet.core` becomes much easier to navigate.
 - annotation tables
 - history and snapshots
 - caches
-- backend adapters and lazy proxies
+- backend adapters and lazy interoperability accessors
 
 The important point is that these concerns are not independent subsystems
 floating next to each other. They all describe different views of the same
