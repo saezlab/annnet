@@ -44,46 +44,6 @@ tests = [
     "cobra>=0.26",
 ]
 
-[lint.isort]
-balanced-wrapping = true
-case-sensitive = false
-combine-as-imports = true
-exclude = [
-    "docs/_build"
-]
-force-sort-within-sections = true
-force-wrap-aliases = true
-include-trailing-comma = true
-indent = "    "
-known-first-party = ["annnet"]
-known-third-party = ["numpy", "pandas"]
-length-sort = true
-lines-after-imports = 1
-multi-line-output = 3
-no-lines-before = ["LOCALFOLDER"]
-order-by-type = true
-sections = [
-    "FUTURE",
-    "STDLIB",
-    "THIRDPARTY",
-    "NUM",
-    "FIRSTPARTY",
-    "LOCALFOLDER"
-]
-use-parentheses = true
-
-[lint.per-file-ignores]
-"*/__init__.py" = ["D104", "F401"]
-"docs/*" = ["I"]
-"tests/*" = ["D"]
-"tests/conftest.py" = ["D101", "D102", "D103", "E402"]
-
-[lint.pydocstyle]
-convention = "numpy"
-
-[lint.quotes]
-inline-quotes = "single"
-
 [project]
 authors = [
     { name = "Youssef Zerta", email = "youssef.zerta@biomedtech.ueuromed.org" },
@@ -271,6 +231,7 @@ report_level = "INFO"
 
 [tool.ruff]
 extend-include = ["*.ipynb"]
+extend-exclude = ["tools/*.py"]
 line-length = 100
 target-version = "py312"
 unfixable = ["UP"]
@@ -298,7 +259,6 @@ ignore = [
     "E731",  # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
     "E741",  # allow I, O, l as variable names -> I is the identity matrix
 ]
-
 select = [
     "B",  # flake8-bugbear
     "BLE",  # flake8-blind-except
@@ -313,8 +273,41 @@ select = [
     "W",  # Warning detected by Pycodestyle
     "Q",  # Consistent quotes
     "S307",  # eval() detection
-    "ANN"  # flake8-annotations
+    "ANN",  # flake8-annotations
 ]
+
+[tool.ruff.lint.isort]
+case-sensitive = false
+combine-as-imports = true
+force-sort-within-sections = true
+force-wrap-aliases = true
+known-first-party = ["annnet"]
+known-third-party = ["numpy", "pandas"]
+length-sort = true
+lines-after-imports = 1
+no-lines-before = ["LOCALFOLDER"]
+order-by-type = true
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "NUM",
+    "first-party",
+    "local-folder",
+]
+
+
+[tool.ruff.lint.isort.sections]
+NUM = ["numpy", "pandas"]
+
+[tool.ruff.lint.per-file-ignores]
+"*/__init__.py" = ["D104", "F401"]
+"docs/*" = ["I"]
+"tests/*" = ["D", "ANN", "I", "BLE", "E402"]
+"tests/conftest.py" = ["D101", "D102", "D103", "E402"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
 
 [tool.tox]
 env_list = [
