@@ -11,16 +11,6 @@ from ._utils import _df_to_rows, _safe_df_to_rows
 if TYPE_CHECKING:
     from annnet.core.graph import AnnNet
 
-try:
-    import polars as pl
-except Exception:
-    pl = None
-
-try:
-    import pandas as pd
-except Exception:
-    pd = None
-
 
 def _rows_to_tensor(
     rows: list[dict],
@@ -77,7 +67,7 @@ def to_pyg(
     Direct AnnNet -> PyTorch Geometric adapter.
 
     - Respects AnnNet architecture (uses entity_types, edge_definitions)
-    - Narwhals-compatible (polars/pandas via _df_to_rows)
+    - Narwhals-compatible dataframe input via shared row conversion
     - Heterogeneous (vertex kinds)
     - Hypergraph-safe (reification)
     - Slice-aware (boolean masks)

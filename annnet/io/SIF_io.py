@@ -8,11 +8,7 @@ try:
 except Exception:
     from annnet.core.graph import AnnNet
 
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
-    pl = None
-
+from .._dataframe_backend import empty_dataframe
 from ..adapters._utils import (
     _deserialize_edge_layers,
     _deserialize_endpoint,
@@ -37,30 +33,21 @@ def _split_sif_line(line: str, delimiter: str | None) -> list[str]:
     return line.strip().split()
 
 
-def _safe_vertex_attr_table(graph: AnnNet):
+def _safe_vertex_attr_rows(graph: AnnNet):
     va = getattr(graph, "vertex_attributes", None)
     if va is None:
-        return None
-    return va if hasattr(va, "columns") and hasattr(va, "to_dicts") else None
+        return []
+    return _df_to_rows(va)
 
 
 def _get_all_edge_attrs(graph: AnnNet, edge_id: str):
     ea = getattr(graph, "edge_attributes", None)
-    if (
-        ea is not None
-        and hasattr(ea, "columns")
-        and hasattr(ea, "filter")
-        and hasattr(ea, "to_dicts")
-    ):
-        try:
-            if "edge_id" in ea.columns:
-                rows = ea.filter(ea["edge_id"] == edge_id).to_dicts()
-                if rows:
-                    attrs = dict(rows[0])
-                    attrs.pop("edge_id", None)
-                    return {k: v for k, v in attrs.items() if v is not None}
-        except Exception:
-            pass
+    if ea is not None:
+        for row in _df_to_rows(ea):
+            if row.get("edge_id") == edge_id:
+                attrs = dict(row)
+                attrs.pop("edge_id", None)
+                return {k: v for k, v in attrs.items() if v is not None}
     return {}
 
 
@@ -76,12 +63,10 @@ def _get_edge_weight(graph: AnnNet, edge_id: str, default=1.0):
 
 def _build_edge_attr_map(graph: AnnNet):
     ea = getattr(graph, "edge_attributes", None)
-    if ea is None or not hasattr(ea, "columns") or not hasattr(ea, "to_dicts"):
+    if ea is None:
         return None
     try:
-        if "edge_id" not in ea.columns:
-            return None
-        rows = ea.to_dicts()
+        rows = _df_to_rows(ea)
         if not rows:
             return None
         out = {}
@@ -157,7 +142,9 @@ def to_sif(
                 "layer_tuple_attrs": _serialize_layer_tuple_attrs(
                     getattr(graph, "_layer_attrs", {})
                 ),
-                "layer_attributes": _df_to_rows(getattr(graph, "layer_attributes", pl.DataFrame())),
+                "layer_attributes": _df_to_rows(
+                    getattr(graph, "layer_attributes", empty_dataframe({}))
+                ),
             },
         }
         if lossless
@@ -215,12 +202,12 @@ def to_sif(
             with open(sidecar, "w", encoding="utf-8") as nf:
                 nf.write("# nodes sidecar for SIF; format: <vertex_id>\tkey=value ...\n")
 
-                vtable = _safe_vertex_attr_table(graph)
+                vrows = _safe_vertex_attr_rows(graph)
                 vmap: dict[str, dict[str, object]] = {}
 
-                if vtable is not None:
+                if vrows:
                     try:
-                        for row in vtable.to_dicts():
+                        for row in vrows:
                             vid_raw = row.get("vertex_id", None)
                             if vid_raw is None:
                                 continue

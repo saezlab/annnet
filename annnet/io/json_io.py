@@ -6,11 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
-    pl = None
-
+from .._dataframe_backend import empty_dataframe
 from ..adapters._utils import (
     _deserialize_edge_layers,
     _deserialize_endpoint,
@@ -268,7 +264,9 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
                 "layer_tuple_attrs": _serialize_layer_tuple_attrs(
                     getattr(graph, "_layer_attrs", {})
                 ),
-                "layer_attributes": _df_to_rows(getattr(graph, "layer_attributes", pl.DataFrame())),
+                "layer_attributes": _df_to_rows(
+                    getattr(graph, "layer_attributes", empty_dataframe({}))
+                ),
             },
         },
     }

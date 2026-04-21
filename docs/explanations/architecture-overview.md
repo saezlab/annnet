@@ -148,6 +148,12 @@ The rest of the package has a simpler split:
 Those packages sit around the core object. They do not redefine the graph
 model.
 
+Adapters and IO modules should use the package's centralized dataframe helpers
+when reading annotation tables or creating new tables. They should not import a
+specific dataframe library just to normalize rows or create empty annotation
+tables. This keeps format adapters, backend adapters, and graph annotations
+aligned with the configured annotation backend.
+
 ## Reading order
 
 If you want the package to make technical sense as a system, this is the right
