@@ -15,7 +15,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from annnet.core.graph import AnnNet
 
 try:
-    import graph_tool.all as gt
 
     HAS_GT = True
 except Exception:

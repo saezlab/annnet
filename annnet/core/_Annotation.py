@@ -947,7 +947,7 @@ class AttributesClass:
                     key_cache = set(
                         zip(
                             nw_df.get_column('slice_id').to_list(),
-                            nw_df.get_column('edge_id').to_list(),
+                            nw_df.get_column('edge_id').to_list(), strict=False,
                         )
                     )
                 else:

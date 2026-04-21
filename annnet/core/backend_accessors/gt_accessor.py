@@ -2,7 +2,6 @@
 
 from ._base import _BackendAccessorBase
 
-
 class _GTBackendAccessor(_BackendAccessorBase):
     """graph-tool backend accessor attached to an AnnNet instance.
 

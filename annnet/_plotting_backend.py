@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from ._optional_components import (
     PLOT_BACKENDS,
-    available_optional_components,
     component_names,
     select_component,
+    available_optional_components,
 )
 
 PLOT_BACKEND_PRIORITY = component_names(PLOT_BACKENDS)

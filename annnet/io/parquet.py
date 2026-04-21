@@ -2,28 +2,27 @@ from __future__ import annotations
 
 import json
 import math
-from pathlib import Path
 from typing import TYPE_CHECKING
+from pathlib import Path
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
-from .._dataframe_backend import dataframe_from_rows
+from .annnet_format import _iter_rows, _read_parquet, _write_parquet_df
 from ..adapters._utils import (
-    _deserialize_edge_layers,
-    _deserialize_endpoint,
-    _deserialize_layer_tuple_attrs,
-    _deserialize_node_layer_attrs,
+    _serialize_VM,
     _deserialize_VM,
     _safe_df_to_rows,
-    _serialize_edge_layers,
     _serialize_endpoint,
-    _serialize_layer_tuple_attrs,
+    _deserialize_endpoint,
+    _serialize_edge_layers,
+    _deserialize_edge_layers,
     _serialize_node_layer_attrs,
-    _serialize_VM,
+    _serialize_layer_tuple_attrs,
+    _deserialize_node_layer_attrs,
+    _deserialize_layer_tuple_attrs,
 )
-from .annnet_format import _iter_rows, _read_parquet, _write_parquet_df
-
+from .._dataframe_backend import dataframe_from_rows
 
 def _build_dataframe_from_rows(rows):
     """Build a dataframe/table using AnnNet's configured backend selection."""
@@ -129,9 +128,9 @@ def _as_list_or_empty(val):
         return val
     if isinstance(val, tuple):
         return list(val)
-    if hasattr(val, 'to_list') and callable(getattr(val, 'to_list')):
+    if hasattr(val, 'to_list') and callable(val.to_list):
         return val.to_list()
-    if hasattr(val, 'tolist') and callable(getattr(val, 'tolist')):
+    if hasattr(val, 'tolist') and callable(val.tolist):
         return val.tolist()
 
     # scalar -> singleton
@@ -409,13 +408,13 @@ def from_parquet(path) -> AnnNet:
                 'edge_id': eid,
                 'edge_directed': bool(d),
             }
-            for u, v, eid, d in zip(src, dst, eids, directed)
+            for u, v, eid, d in zip(src, dst, eids, directed, strict=False)
             if u is not None and v is not None
         )
         H.add_edges_bulk(edge_rows)
 
         # Apply weights in batch
-        for eid, w in zip(eids, weights):
+        for eid, w in zip(eids, weights, strict=False):
             rec = H._edges.get(eid)
             if rec is not None:
                 rec.weight = float(w)
@@ -496,7 +495,7 @@ def from_parquet(path) -> AnnNet:
         )
 
         hyper_rows = []
-        for eid, d, h, t, m in zip(eids, directed, heads, tails, members):
+        for eid, d, h, t, m in zip(eids, directed, heads, tails, members, strict=False):
             d = bool(d)
             if d:
                 hh = _as_list_or_empty(h)
@@ -515,7 +514,7 @@ def from_parquet(path) -> AnnNet:
         if hyper_rows:
             H.add_hyperedges_bulk(hyper_rows)
 
-        for eid, w in zip(eids, weights):
+        for eid, w in zip(eids, weights, strict=False):
             rec = H._edges.get(eid)
             if rec is not None:
                 rec.weight = float(w)

@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import sys
+from html import escape
+from typing import Any
+from pathlib import Path
+from importlib import metadata as importlib_metadata
 from collections import OrderedDict
 from dataclasses import dataclass
-from html import escape
-from importlib import metadata as importlib_metadata
-from pathlib import Path
-from typing import Any
 
 from ._optional_components import (
-    DATAFRAME_BACKENDS,
-    GRAPH_BACKENDS,
     IO_MODULES,
     PLOT_BACKENDS,
+    GRAPH_BACKENDS,
+    DATAFRAME_BACKENDS,
     component_names,
     component_status,
 )
@@ -125,8 +125,8 @@ def get_latest_version(
     """Fetch the latest version declared on the default branch."""
 
     import re
-    import urllib.request
     from urllib.parse import urlparse
+    import urllib.request
 
     parsed = urlparse(url)
     if parsed.scheme not in {'http', 'https'}:

@@ -6,7 +6,6 @@ except Exception:
     pl = None
 import scipy.sparse as sp
 
-
 class GraphView:
     """Lazy view into a graph with deferred operations.
 
@@ -14,7 +13,7 @@ class GraphView:
     Views can be materialized into concrete subgraphs when needed.
 
     Parameters
-    --
+    ----------
     graph : AnnNet
         Parent graph instance
     vertices : list[str] | set[str] | callable | None
@@ -74,7 +73,6 @@ class GraphView:
         if pl is not None and isinstance(df, pl.DataFrame):
             return df.filter(pl.col('vertex_id').is_in(list(vertex_ids)))
 
-        import narwhals as nw
 
         return nw.to_native(nw.from_native(df).filter(nw.col('vertex_id').is_in(list(vertex_ids))))
 
@@ -103,7 +101,6 @@ class GraphView:
         if pl is not None and isinstance(df, pl.DataFrame):
             return df.filter(pl.col('edge_id').is_in(list(edge_ids)))
 
-        import narwhals as nw
 
         return nw.to_native(nw.from_native(df).filter(nw.col('edge_id').is_in(list(edge_ids))))
 

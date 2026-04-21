@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from importlib.util import find_spec
 from typing import NamedTuple
-
+from importlib.util import find_spec
+from collections.abc import Mapping
 
 class OptionalComponent(NamedTuple):
     module: str

@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from torch_geometric.data import HeteroData
 
-from ._utils import _df_to_rows, _safe_df_to_rows
+from ._utils import _safe_df_to_rows
 
 if TYPE_CHECKING:
     from annnet.core.graph import AnnNet
@@ -132,7 +132,7 @@ def to_pyg(
     for kind, vids in kind_to_vertices.items():
         n = len(vids)
 
-        idx_map = dict(zip(vids, range(n)))
+        idx_map = dict(zip(vids, range(n), strict=False))
         manifest['node_index'][kind] = idx_map
 
         if node_features and kind in node_features:

@@ -14,7 +14,6 @@ warnings.filterwarnings(
 
 # Make project importable when tests run from /tests
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from annnet.core.graph import AnnNet
 
 # --- Optional deps gates ------------------------------------------------------
 try:

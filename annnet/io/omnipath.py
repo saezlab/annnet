@@ -1,13 +1,10 @@
-import os
 import time
-from typing import Optional
 
-import narwhals as nw
 import numpy as np
+import narwhals as nw
 
-from .._dataframe_backend import dataframe_height, dataframe_to_rows, select_dataframe_backend
 from ..core.graph import AnnNet
-
+from .._dataframe_backend import dataframe_height, dataframe_to_rows, select_dataframe_backend
 
 def from_omnipath(
     df=None,
@@ -43,7 +40,7 @@ def from_omnipath(
     ``~/.cache/annnet/omnipath_annotations.tsv.gz`` for fast subsequent loads.
 
     Parameters
-    --
+    ----------
     df : DataFrame-like, optional
         If provided, skip the OmniPath network request and build from this table.
         Must contain at least source and target columns. Accepts Polars, pandas,
@@ -123,7 +120,7 @@ def from_omnipath(
         Additional keyword arguments forwarded to the ``AnnNet`` constructor.
 
     Returns
-    --
+    -------
     AnnNet
         Fully constructed graph with:
         - Vertices: one per unique gene symbol encountered as source or target.
@@ -135,7 +132,7 @@ def from_omnipath(
           per ``(source:label)`` annotation pair from the requested resources.
 
     Notes
-    -
+    -----
     - Edge and vertex attribute tables are populated via bulk operations —
       no per-row DataFrame allocations occur during loading.
     - History tracking is disabled during construction and re-enabled on return.
@@ -147,11 +144,11 @@ def from_omnipath(
       via ``edge_attr_cols`` if not needed.
 
     See Also
-    -
+    --------
     AnnNet, AnnNet.add_edges_bulk, AnnNet.add_vertices_bulk
 
     Examples
-    -
+    --------
     Minimal load (structure only, no annotations)::
 
         G = from_omnipath(load_vertex_annotations=False)
@@ -470,7 +467,7 @@ def from_omnipath(
                     )
                 else:
                     print(
-                        f'[vertex annotations] downloading from OmniPath archive (~114MB, one-time)...'
+                        '[vertex annotations] downloading from OmniPath archive (~114MB, one-time)...'
                     )
                     t_ann = time.perf_counter()
                     resp = _requests.get(

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import contextlib
 import io
 import math
-from collections.abc import Iterable
 from typing import Any, Literal
+import contextlib
+from collections.abc import Iterable
 
 import numpy as np
 
@@ -148,7 +148,7 @@ def edge_style_from_weights(
     if np.all(x == x[0]):
         x = np.full_like(x, 0.5)
     styles: dict[int, dict[str, str]] = {}
-    for j, xv in zip(eidxs, x):
+    for j, xv in zip(eidxs, x, strict=False):
         pen = min_width + float(xv) * (max_width - min_width)
         if color_mode == 'signed':
             eid = graph.idx_to_edge[j]

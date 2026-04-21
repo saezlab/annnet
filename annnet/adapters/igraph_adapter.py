@@ -2,26 +2,24 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .._dataframe_backend import empty_dataframe
 from ._utils import (
-    _attrs_to_dict,
-    _deserialize_edge_layers,
-    _deserialize_layer_tuple_attrs,
-    _deserialize_node_layer_attrs,
-    _deserialize_VM,
-    _df_to_rows,
-    _endpoint_coeff_map,
-    _is_directed_eid,
     _rows_like,
+    _df_to_rows,
     _rows_to_df,
-    _serialize_edge_layers,
-    _serialize_layer_tuple_attrs,
-    _serialize_node_layer_attrs,
-    _serialize_value,
     _serialize_VM,
-    load_manifest,
-    save_manifest,
+    _attrs_to_dict,
+    _deserialize_VM,
+    _is_directed_eid,
+    _serialize_value,
+    _endpoint_coeff_map,
+    _serialize_edge_layers,
+    _deserialize_edge_layers,
+    _serialize_node_layer_attrs,
+    _serialize_layer_tuple_attrs,
+    _deserialize_node_layer_attrs,
+    _deserialize_layer_tuple_attrs,
 )
+from .._dataframe_backend import empty_dataframe
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
@@ -695,7 +693,8 @@ def _ig_collect_reified(
 ):
     """Scan igG for reified hyperedges.
 
-    Returns:
+    Returns
+    -------
       - hyperdefs: list of (eid, directed:bool, head_map:dict, tail_map:dict, he_node_attrs:dict, he_vertex_index)
       - membership_edge_idx: set of edge indices that are membership edges (to skip for binary import)
 

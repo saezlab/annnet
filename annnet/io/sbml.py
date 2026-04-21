@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterable
 
 warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
 

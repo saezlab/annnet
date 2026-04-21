@@ -4,8 +4,6 @@ import copy
 import time
 from typing import TYPE_CHECKING
 
-import narwhals as nw
-
 from ._helpers import EntityRecord
 
 try:

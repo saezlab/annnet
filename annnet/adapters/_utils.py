@@ -1,9 +1,8 @@
 # ---- robust helpers (keep in sync across adapters) ----
 import ast as _ast
-import json as _json
 from enum import Enum
+import json as _json
 from typing import Any
-
 
 def _is_directed_eid(graph, eid):
     """Best-effort directedness probe; default True."""
@@ -116,7 +115,7 @@ def _rows_like(table):
     if hasattr(table, 'fetchall') and hasattr(table, 'columns'):
         try:
             cols = list(table.columns)
-            return [dict(zip(cols, row)) for row in table.fetchall()]
+            return [dict(zip(cols, row, strict=False)) for row in table.fetchall()]
         except Exception:
             pass
     if isinstance(table, dict):
@@ -161,10 +160,9 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
 
 # Serialization helpers moved from graphtool_adapter.py
 
-from typing import Any, Optional
+from typing import Any
 
-from .._dataframe_backend import dataframe_from_rows, dataframe_height, dataframe_to_rows
-
+from .._dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
 
 def _serialize_edge_layers(edge_layers: dict[str, Any]) -> dict[str, Any]:
     """

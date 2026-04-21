@@ -5,11 +5,11 @@ from typing import Any
 import narwhals as nw
 from narwhals.typing import IntoDataFrame
 
-from .._dataframe_backend import dataframe_from_rows, dataframe_height, dataframe_to_rows
+from .._dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
 
 if __name__ == '__main__':
-    import pathlib
     import sys
+    import pathlib
 
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
@@ -52,7 +52,8 @@ def to_dataframes(
         explode_hyperedges: If True, explode hyperedges to one row per endpoint
         public_only: If True, filter out attributes starting with '__'
 
-    Returns:
+    Returns
+    -------
         Dictionary mapping table names to DataFrames.
 
     """
@@ -332,7 +333,8 @@ def from_dataframes(
         directed: Default directedness (None = mixed graph)
         exploded_hyperedges: If True, hyperedges DataFrame is in exploded format
 
-    Returns:
+    Returns
+    -------
         AnnNet instance
 
     """
@@ -406,8 +408,8 @@ def from_dataframes(
                     weight = data['weights'][0] if data['weights'] else 1.0
 
                     if is_directed:
-                        head = [v for v, r in zip(data['vertices'], data['roles']) if r == 'head']
-                        tail = [v for v, r in zip(data['vertices'], data['roles']) if r == 'tail']
+                        head = [v for v, r in zip(data['vertices'], data['roles'], strict=False) if r == 'head']
+                        tail = [v for v, r in zip(data['vertices'], data['roles'], strict=False) if r == 'tail']
                         G.add_edge(src=head, tgt=tail, edge_id=eid, directed=True, weight=weight)
                     else:
                         G.add_edge(

@@ -36,7 +36,6 @@ except Exception:
     HAS_POLARS = False
 
 try:
-    import pandas as pd
 
     HAS_PANDAS = True
 except Exception:

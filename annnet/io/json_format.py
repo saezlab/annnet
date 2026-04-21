@@ -6,24 +6,23 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
-from .._dataframe_backend import empty_dataframe
 from ..adapters._utils import (
-    _deserialize_edge_layers,
-    _deserialize_endpoint,
-    _deserialize_layer_tuple_attrs,
-    _deserialize_node_layer_attrs,
-    _deserialize_VM,
     _df_to_rows,
-    _endpoint_coeff_map,
-    _is_directed_eid,
     _rows_to_df,
-    _serialize_edge_layers,
-    _serialize_endpoint,
-    _serialize_layer_tuple_attrs,
-    _serialize_node_layer_attrs,
     _serialize_VM,
+    _deserialize_VM,
+    _is_directed_eid,
+    _endpoint_coeff_map,
+    _serialize_endpoint,
+    _deserialize_endpoint,
+    _serialize_edge_layers,
+    _deserialize_edge_layers,
+    _serialize_node_layer_attrs,
+    _serialize_layer_tuple_attrs,
+    _deserialize_node_layer_attrs,
+    _deserialize_layer_tuple_attrs,
 )
-
+from .._dataframe_backend import empty_dataframe
 
 def _coerce_coeff_mapping(val):
     """Normalize various serialized forms into {vertex: {__value: float}|float}
@@ -457,8 +456,8 @@ def write_ndjson(graph: AnnNet, dir_path):
     """Write nodes.ndjson, edges.ndjson, hyperedges.ndjson, slices.ndjson, edge_slices.ndjson.
     Each line is one JSON object. Lossless wrt to_json schema.
     """
-    import json
     import os
+    import json
 
     os.makedirs(dir_path, exist_ok=True)
     vertex_attrs = _attrs_by_id(getattr(graph, 'vertex_attributes', None), 'vertex_id')

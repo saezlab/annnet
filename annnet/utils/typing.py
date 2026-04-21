@@ -11,7 +11,8 @@ Edge = tuple[frozenset[Any], frozenset[Any]]
 class Attr(StrEnum):
     """Enum class representing predefined attribute names used in the `Attributes` class.
 
-    Attributes:
+    Attributes
+    ----------
         VALUE: Represents the key for a value attribute.
         EDGE_TYPE: Represents the key for an edge type attribute.
         SOURCE_ATTR: Represents the key for a source attribute.
@@ -46,7 +47,8 @@ class Attributes(dict):
             __value (Any): The value to assign to the attribute. If the value is an instance
                            of `Attr`, its value is used.
 
-        Raises:
+        Raises
+        ------
             AttributeError: If trying to set a protected attribute.
 
         """
@@ -63,10 +65,12 @@ class Attributes(dict):
         Args:
             __name (str): The name of the attribute to retrieve.
 
-        Returns:
+        Returns
+        -------
             Any: The value of the requested attribute.
 
-        Raises:
+        Raises
+        ------
             AttributeError: If the attribute does not exist.
 
         """
@@ -93,7 +97,8 @@ class Attributes(dict):
             key (Attr): The key for the attribute, represented as an `Attr` enum.
             value (Optional[Any]): The optional value to check for.
 
-        Returns:
+        Returns
+        -------
             bool: `True` if the attribute exists and matches the value (if provided),
                   otherwise `False`.
 
@@ -111,7 +116,8 @@ class Attributes(dict):
             key (Attr): The key for the attribute, represented as an `Attr` enum.
             default (Any): The default value to return if the attribute does not exist.
 
-        Returns:
+        Returns
+        -------
             Any: The value of the attribute, or the default value if not found.
 
         """

@@ -3,7 +3,6 @@ from __future__ import annotations
 import pathlib
 import tempfile
 
-
 def from_excel(
     path: str | pathlib.Path,
     graph=None,

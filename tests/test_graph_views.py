@@ -124,7 +124,6 @@ class TestGraphViewObs(unittest.TestCase):
         view = GraphView(G)
         obs = view.obs
         try:
-            import polars as pl
 
             rows = obs.to_dicts()
         except Exception:
@@ -139,7 +138,6 @@ class TestGraphViewObs(unittest.TestCase):
         view = GraphView(G, vertices=['A'])
         obs = view.obs
         try:
-            import polars as pl
 
             rows = obs.to_dicts()
         except Exception:
@@ -157,7 +155,6 @@ class TestGraphViewVar(unittest.TestCase):
         view = GraphView(G)
         var = view.var
         try:
-            import polars as pl
 
             rows = var.to_dicts()
         except Exception:
@@ -171,7 +168,6 @@ class TestGraphViewVar(unittest.TestCase):
         view = GraphView(G, edges=['e1'])
         var = view.var
         try:
-            import polars as pl
 
             rows = var.to_dicts()
         except Exception:
@@ -300,7 +296,6 @@ class TestViewsClassEdgesView(unittest.TestCase):
         G = _build_graph()
         df = G.edges_view()
         try:
-            import polars as pl
 
             rows = df.to_dicts()
         except Exception:
@@ -337,7 +332,6 @@ class TestViewsClassEdgesView(unittest.TestCase):
         G = _build_hyperedge_graph()
         df = G.edges_view()
         try:
-            import polars as pl
 
             rows = {r['edge_id']: r for r in df.to_dicts()}
         except Exception:
@@ -356,7 +350,6 @@ class TestViewsClassVerticesView(unittest.TestCase):
         G = _build_graph()
         df = G.vertices_view()
         try:
-            import polars as pl
 
             rows = df.to_dicts()
         except Exception:

@@ -1,10 +1,8 @@
 import time
+from datetime import UTC, datetime
 import warnings
 from collections import defaultdict
-from datetime import UTC, datetime
-from typing import Optional, Union
 
-import narwhals as nw
 import numpy as np
 
 try:
@@ -13,38 +11,38 @@ except Exception:  # ModuleNotFoundError, etc.
     pl = None
 import scipy.sparse as sp
 
-from .._dataframe_backend import empty_dataframe, select_dataframe_backend
-from ..algorithms.traversal import Traversal
-from ._Annotation import AttributesClass
-from ._BulkOps import BulkOps
-from ._Cache import CacheManager, Operations
-from ._helpers import (
-    _EDGE_RESERVED,
-    EdgeDefinitionsCompat,
-    EdgeDirectedCompat,
-    EdgeDirectionPolicyCompat,
-    EdgeKindCompat,
-    EdgeLayersCompat,
-    EdgeRecord,
-    EdgeToIdxCompat,
-    EdgeType,
-    EdgeWeightsCompat,
-    EntityRecord,
-    EntityToIdxCompat,
-    EntityTypesCompat,
-    HyperedgeDefinitionsCompat,
-    IdxToEdgeCompat,
-    IdxToEntityCompat,
-    _df_filter_not_equal,
-    _slice_RESERVED,
-    _vertex_RESERVED,
-)
-from ._History import GraphDiff, History
+from ._Cache import Operations, CacheManager
 from ._Index import IndexManager, IndexMapping
+from ._Views import GraphView, ViewsClass
 from ._Layers import LayerClass, LayerManager
 from ._Slices import SliceClass, SliceManager
-from ._Views import GraphView, ViewsClass
+from ._BulkOps import BulkOps
+from ._helpers import (
+    _EDGE_RESERVED,
+    EdgeType,
+    EdgeRecord,
+    EntityRecord,
+    EdgeKindCompat,
+    EdgeToIdxCompat,
+    IdxToEdgeCompat,
+    EdgeLayersCompat,
+    EdgeWeightsCompat,
+    EntityToIdxCompat,
+    EntityTypesCompat,
+    IdxToEntityCompat,
+    EdgeDirectedCompat,
+    EdgeDefinitionsCompat,
+    EdgeDirectionPolicyCompat,
+    HyperedgeDefinitionsCompat,
+    _slice_RESERVED,
+    _vertex_RESERVED,
+    _df_filter_not_equal,
+)
+from ._History import History, GraphDiff
+from ._Annotation import AttributesClass
 from .backend_accessors import _GTBackendAccessor, _IGBackendAccessor, _NXBackendAccessor
+from .._dataframe_backend import empty_dataframe, select_dataframe_backend
+from ..algorithms.traversal import Traversal
 
 # ===================================
 
@@ -383,7 +381,7 @@ class AnnNet(
             raise ValueError(
                 f'Layer coord length {len(coord)} != number of aspects {len(self._aspects)}'
             )
-        for asp, val in zip(self._aspects, coord):
+        for asp, val in zip(self._aspects, coord, strict=False):
             if val not in self._layers[asp]:
                 raise ValueError(
                     f'Layer value {val!r} not declared for aspect {asp!r}. '
@@ -1105,7 +1103,7 @@ class AnnNet(
         """INTERNAL: Add an edge to all slices that already contain **both** endpoints.
 
         Parameters
-        --
+        ----------
         edge_id : str
         source : str
         target : str
@@ -1120,7 +1118,7 @@ class AnnNet(
         insert the missing endpoint into that slice.
 
         Parameters
-        --
+        ----------
         edge_id : str
         source : str
         target : str
@@ -1143,20 +1141,20 @@ class AnnNet(
         identifiers.
 
         Parameters
-        --
+        ----------
         vertices : str | Iterable[str] | None
             - A single vertex ID (string).
             - An iterable of vertex IDs (e.g., list, tuple, set).
             - `None` is allowed and will return an empty set.
 
         Returns
-        ---
+        -------
         set[str]
             A set of vertex identifiers. If `vertices` is `None`, returns an
             empty set. If a single vertex is provided, returns a one-element set.
 
         Notes
-        -
+        -----
         - Strings are treated as **single vertex IDs**, not iterables.
         - If the argument is neither iterable nor a string, it is wrapped in a set.
         - Used internally by API methods that accept flexible vertex arguments.
@@ -1586,11 +1584,11 @@ class AnnNet(
         """Check if an edge is directed (per-edge flag overrides graph default).
 
         Parameters
-        --
+        ----------
         edge_id : str
 
         Returns
-        ---
+        -------
         bool
 
         """
@@ -2037,7 +2035,7 @@ class AnnNet(
 
     @property
     def ig(self):
-        """igraph backend accessor.
+        """Igraph backend accessor.
 
         Returns
         -------

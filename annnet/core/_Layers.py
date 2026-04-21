@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import copy
-import itertools
-import warnings
 from typing import TYPE_CHECKING
+import warnings
+import itertools
 
-import narwhals as nw
 import numpy as np
+import narwhals as nw
 
 try:
     import polars as pl
@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from .graph import AnnNet
 
 from ._helpers import EdgeRecord, EntityRecord, build_dataframe_from_rows
-
 
 class LayerManager:
     """Namespace for multilayer operations.
@@ -693,8 +692,8 @@ class LayerManager:
             skipped list and excluded from the matrix — they do NOT silently corrupt
             the result.
 
-            Parameters
-            ----------
+        Parameters
+        ----------
             layers : list[str] | list[tuple[str, ...]] | None
                 Optional subset of layers. None = all layers in V_M.
                 Single-aspect string ids are accepted.
@@ -703,8 +702,8 @@ class LayerManager:
             include_coupling : bool
                 Include coupling edges in the output columns. Default True.
 
-            Returns
-            -------
+        Returns
+        -------
             B : scipy.sparse.csr_matrix
                 Shape (|V_M|, |E_selected|). Rows are vertex-layer pairs in the
                 order given by self._row_to_nl after ensure_vertex_layer_index.
@@ -715,8 +714,8 @@ class LayerManager:
                 Edge ids that were excluded because their layer assignment could
                 not be resolved. Inspect these if B looks sparse.
 
-            Notes
-            -----
+        Notes
+        -----
             The hypergraph random-walk diffusion operator follows directly::
 
                 B_csr = B  (this output)
@@ -724,8 +723,8 @@ class LayerManager:
                 D_e = diag(|B|.T @ ones)        # edge degree (sum of |entries| per col)
                 Theta = D_v_inv @ B @ D_e_inv @ B.T
 
-            Examples
-            --------
+        Examples
+        --------
         ```python
             B, eids, skipped = G.supra_incidence()
         ```
@@ -2645,8 +2644,8 @@ class LayerClass:
             skipped list and excluded from the matrix — they do NOT silently corrupt
             the result.
 
-            Parameters
-            ----------
+        Parameters
+        ----------
             layers : list[str] | list[tuple[str, ...]] | None
                 Optional subset of layers. None = all layers in V_M.
                 Single-aspect string ids are accepted.
@@ -2655,8 +2654,8 @@ class LayerClass:
             include_coupling : bool
                 Include coupling edges in the output columns. Default True.
 
-            Returns
-            -------
+        Returns
+        -------
             B : scipy.sparse.csr_matrix
                 Shape (|V_M|, |E_selected|). Rows are vertex-layer pairs in the
                 order given by self._row_to_nl after ensure_vertex_layer_index.
@@ -2667,8 +2666,8 @@ class LayerClass:
                 Edge ids that were excluded because their layer assignment could
                 not be resolved. Inspect these if B looks sparse.
 
-            Notes
-            -----
+        Notes
+        -----
             The hypergraph random-walk diffusion operator follows directly::
 
                 B_csr = B  (this output)
@@ -2676,8 +2675,8 @@ class LayerClass:
                 D_e = diag(|B|.T @ ones)        # edge degree (sum of |entries| per col)
                 Theta = D_v_inv @ B @ D_e_inv @ B.T
 
-            Examples
-            --------
+        Examples
+        --------
         ```python
             B, eids, skipped = G.supra_incidence()
         ```

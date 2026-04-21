@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import inspect
 from typing import TYPE_CHECKING
+import inspect
 
 from ._base import _BackendAccessorBase
 

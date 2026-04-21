@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from typing import Any
+from importlib import import_module
 
 from .._optional_components import GRAPH_BACKENDS, available_optional_components
 

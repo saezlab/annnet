@@ -1,8 +1,8 @@
-import hashlib
 import json
-from collections.abc import Callable, Iterable
-from itertools import filterfalse
 from typing import Any, TypeVar
+import hashlib
+from itertools import filterfalse
+from collections.abc import Callable, Iterable
 
 T = TypeVar('T')
 

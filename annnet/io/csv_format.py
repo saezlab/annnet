@@ -31,11 +31,11 @@ Both will create and return an AnnNet (or mutate the provided one).
 
 from __future__ import annotations
 
+import re
 import json
 import math
-import re
-from collections.abc import Iterable
 from typing import Any
+from collections.abc import Iterable
 
 import numpy as np
 
@@ -594,7 +594,7 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
                 'members',
                 [
                     '|'.join(sorted([p for p in (hval.split('|') + tval.split('|')) if p]))
-                    for hval, tval in zip(h.filter(mask).to_list(), t.filter(mask).to_list())
+                    for hval, tval in zip(h.filter(mask).to_list(), t.filter(mask).to_list(), strict=False)
                 ],
             )
             out = pl.DataFrame(

@@ -9,12 +9,11 @@ except Exception:
 import scipy.sparse as sp
 
 from ._helpers import (
-    EdgeRecord,
     EdgeType,
+    EdgeRecord,
     EntityRecord,
     _get_numeric_supertype,
 )
-
 
 def _sanitize(v):
     if isinstance(v, (list, tuple, dict)):
@@ -23,7 +22,6 @@ def _sanitize(v):
 
 
 def _to_polars_if_possible(df):
-    import narwhals as nw
 
     try:
         nwd = nw.from_native(df, eager_only=True)
@@ -167,7 +165,7 @@ class BulkOps:
 
         if keys:
             # _ensure_attr_columns returns a Narwhals DF; convert back to native Polars
-            df_tmp = self._ensure_attr_columns(df, {k: None for k in keys})
+            df_tmp = self._ensure_attr_columns(df, dict.fromkeys(keys))
             df, is_pl2 = _to_polars_if_possible(df_tmp)
             if not is_pl2:
                 # backend drifted away from Polars -> fallback to Narwhals behavior
@@ -384,7 +382,7 @@ class BulkOps:
         for vid, attrs in norm:
             if vid not in existing_ids:
                 cols = list(df.columns) if hasattr(df, 'columns') else []
-                row = {c: None for c in cols} if len(cols) > 0 else {'vertex_id': None}
+                row = dict.fromkeys(cols) if len(cols) > 0 else {'vertex_id': None}
                 row['vertex_id'] = vid
                 for k, v in attrs.items():
                     row[k] = _sanitize(v)

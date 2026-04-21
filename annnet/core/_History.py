@@ -1,9 +1,8 @@
-import inspect
 import time
+import inspect
 from datetime import UTC, datetime
 from functools import wraps
 
-import narwhals as nw
 import numpy as np
 
 try:
@@ -16,7 +15,7 @@ class GraphDiff:
     """Represents the difference between two graph states.
 
     Attributes
-    --
+    ----------
     vertices_added : set
         Vertices in b but not in a
     vertices_removed : set

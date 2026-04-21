@@ -1,22 +1,22 @@
 from __future__ import annotations
 
 import sys
-import tempfile
-from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
+from pathlib import Path
+from datetime import UTC, datetime
+import tempfile
 
 import numpy as np
 import scipy as scipy
 import scipy.sparse as sp
 
+from ._utils import _read_archive, _write_archive
 from .._dataframe_backend import (
-    dataframe_from_columns,
-    dataframe_from_rows,
     dataframe_to_rows,
+    dataframe_from_rows,
+    dataframe_from_columns,
     select_dataframe_backend,
 )
-from ._utils import _read_archive, _write_archive
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
@@ -380,7 +380,7 @@ def _write_multilayers(graph, path: Path, compression: str):
     if hasattr(graph, 'layer_attributes') and graph.layer_attributes is not None:
         # polars has is_empty(); pandas doesn't. handle both.
         try:
-            empty = bool(getattr(graph.layer_attributes, 'is_empty')())
+            empty = bool(graph.layer_attributes.is_empty())
         except Exception:
             try:
                 empty = len(graph.layer_attributes) == 0
@@ -462,7 +462,6 @@ def _write_slices(graph, path: Path, compression: str):
 def _write_audit(graph, path: Path, compression: str):
     """Write history, snapshots, provenance."""
     import json
-    import sys
 
     path.mkdir(parents=True, exist_ok=True)
 
@@ -491,8 +490,10 @@ def _write_audit(graph, path: Path, compression: str):
             elif isinstance(v, tuple):
                 v = list(v)
             try:
-                from datetime import date as _dt_date
-                from datetime import datetime as _dt_datetime
+                from datetime import (
+                    date as _dt_date,
+                    datetime as _dt_datetime,
+                )
 
                 if isinstance(v, (_dt_datetime, _dt_date)):
                     return v.isoformat()

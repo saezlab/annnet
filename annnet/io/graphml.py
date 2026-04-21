@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import json
-import math
 import os
 import re
+import json
+import math
 from typing import TYPE_CHECKING
 
 import networkx as nx
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
-from ..adapters.networkx_adapter import _from_nx_without_manifest, from_nx, to_nx
+from ..adapters.networkx_adapter import to_nx, from_nx, _from_nx_without_manifest
 
 _BOOL = {'true': True, 'false': False}
 _NUM_RE = re.compile(r'^[+-]?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$')

@@ -13,9 +13,9 @@ import narwhals as nw
 
 from ._optional_components import (
     DATAFRAME_BACKENDS,
-    available_optional_components,
     component_names,
     select_component,
+    available_optional_components,
 )
 
 DATAFRAME_BACKEND_PRIORITY = component_names(DATAFRAME_BACKENDS)
@@ -156,7 +156,7 @@ def dataframe_to_rows(df) -> list[dict[str, Any]]:
         return [dict(row) for row in df.to_pylist()]
 
     ndf = nw.from_native(df, eager_only=True)
-    return [dict(zip(ndf.columns, row)) for row in ndf.rows()]
+    return [dict(zip(ndf.columns, row, strict=False)) for row in ndf.rows()]
 
 
 def dataframe_height(df) -> int:
@@ -206,7 +206,6 @@ def rename_dataframe_columns(df, mapping: dict[str, str]):
 
 
 def _polars_schema(schema: dict[str, str]):
-    import polars as pl
 
     return {name: _polars_dtype(kind) for name, kind in schema.items()}
 

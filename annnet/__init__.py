@@ -2,23 +2,25 @@
 
 from __future__ import annotations
 
-from importlib import import_module
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _pkg_version
 from typing import Any
+from importlib import import_module
+from importlib.metadata import (
+    PackageNotFoundError,
+    version as _pkg_version,
+)
 
 from ._metadata import (
+    info,
+    metadata as __metadata__,
+    __title__,
     __author__,
     __authors__,
     __license__,
-    __maintainers__,
-    __title__,
     __version__,
-    get_latest_version,
     get_metadata,
-    info,
+    __maintainers__,
+    get_latest_version,
 )
-from ._metadata import metadata as __metadata__
 
 _lazy_submodules = {
     'adapters': 'annnet.adapters',

@@ -8,7 +8,7 @@ from annnet.core.graph import AnnNet
 
 HAS_IG = True
 try:
-    import igraph as ig  # noqa: F401
+    import igraph as ig
 except Exception:
     HAS_IG = False
 

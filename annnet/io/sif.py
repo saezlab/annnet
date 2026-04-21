@@ -8,22 +8,21 @@ try:
 except Exception:
     from annnet.core.graph import AnnNet
 
-from .._dataframe_backend import empty_dataframe
 from ..adapters._utils import (
-    _deserialize_edge_layers,
-    _deserialize_endpoint,
-    _deserialize_layer_tuple_attrs,
-    _deserialize_node_layer_attrs,
-    _deserialize_VM,
     _df_to_rows,
     _rows_to_df,
-    _serialize_edge_layers,
-    _serialize_endpoint,
-    _serialize_layer_tuple_attrs,
-    _serialize_node_layer_attrs,
     _serialize_VM,
+    _deserialize_VM,
+    _serialize_endpoint,
+    _deserialize_endpoint,
+    _serialize_edge_layers,
+    _deserialize_edge_layers,
+    _serialize_node_layer_attrs,
+    _serialize_layer_tuple_attrs,
+    _deserialize_node_layer_attrs,
+    _deserialize_layer_tuple_attrs,
 )
-
+from .._dataframe_backend import empty_dataframe
 
 def _split_sif_line(line: str, delimiter: str | None) -> list[str]:
     if delimiter is not None:
@@ -114,7 +113,8 @@ def to_sif(
         lossless: If True, return manifest with all non-SIF data
         manifest_path: If provided, write manifest to this path (only when lossless=True)
 
-    Returns:
+    Returns
+    -------
         None (standard mode) or (None, manifest_dict) (lossless mode)
 
     """
@@ -360,10 +360,12 @@ def from_sif(
         delimiter: Custom delimiter (default: auto-detect TAB or whitespace)
         comment_prefixes: Line prefixes to skip (default: # and !)
 
-    Returns:
+    Returns
+    -------
         AnnNet: Reconstructed graph object
 
-    Notes:
+    Notes
+    -----
         - SIF format only supports binary edges natively
         - For full graph reconstruction (hyperedges, slices, metadata), use manifest
         - Manifest files are created by to_sif(lossless=True)

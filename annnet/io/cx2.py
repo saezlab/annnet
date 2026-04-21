@@ -13,29 +13,24 @@ CX2 'networkAttributes'.
 
 from __future__ import annotations
 
-import base64
 import gzip
 import json
+import base64
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
-from .._dataframe_backend import dataframe_columns, dataframe_from_rows, rename_dataframe_columns
-from ..adapters._utils import (
-    _deserialize_edge_layers,
-    _deserialize_layer_tuple_attrs,
-    _deserialize_node_layer_attrs,
-    _deserialize_slices,
-    _deserialize_VM,
-    _df_to_rows,
-    _safe_df_to_rows,
-    _serialize_edge_layers,
-    _serialize_layer_tuple_attrs,
-    _serialize_node_layer_attrs,
-    _serialize_slices,
-    _serialize_VM,
-)
 from ..core._helpers import EntityRecord
+from ..adapters._utils import (
+    _df_to_rows,
+    _serialize_VM,
+    _safe_df_to_rows,
+    _serialize_slices,
+    _serialize_edge_layers,
+    _serialize_node_layer_attrs,
+    _serialize_layer_tuple_attrs,
+)
+from .._dataframe_backend import dataframe_columns, dataframe_from_rows, rename_dataframe_columns
 
 # --- Helpers ---
 CX_STYLE_KEY = '__cx_style__'
@@ -45,7 +40,8 @@ def _cx2_collect_reified(aspects):
     """
     Detect reified hyperedges from CX2 nodes + edges.
 
-    Returns:
+    Returns
+    -------
       hyperdefs: list of (eid, directed, head_map, tail_map, attrs, he_node_id)
       membership_edges: set of edge-ids in CX2 that belong to hyperedge membership structure.
     """
@@ -732,8 +728,8 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
 
     # Load file or JSON string
 
-    import json
     import os
+    import json
 
     if isinstance(cx2_data, str):
         if os.path.exists(cx2_data):
@@ -1181,11 +1177,11 @@ def show_cx2(
     """
     import json
     import socket
+    from pathlib import Path
     import tempfile
     import threading
     import webbrowser
     from http.server import HTTPServer, SimpleHTTPRequestHandler
-    from pathlib import Path
 
     def find_free_port():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

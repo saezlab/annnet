@@ -14,28 +14,28 @@ all attribute tables, etc.) is preserved in `manifest`.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 try:
     import graph_tool.all as gt
 except ImportError:
     gt = None
-from .._dataframe_backend import empty_dataframe
-from ..core.graph import AnnNet
 from ._utils import (
-    _deserialize_edge_layers,
-    _deserialize_layer_tuple_attrs,
-    _deserialize_node_layer_attrs,
-    _deserialize_slices,
-    _deserialize_VM,
     _df_to_rows,
     _rows_to_df,
-    _serialize_edge_layers,
-    _serialize_layer_tuple_attrs,
-    _serialize_node_layer_attrs,
-    _serialize_slices,
     _serialize_VM,
+    _deserialize_VM,
+    _serialize_slices,
+    _deserialize_slices,
+    _serialize_edge_layers,
+    _deserialize_edge_layers,
+    _serialize_node_layer_attrs,
+    _serialize_layer_tuple_attrs,
+    _deserialize_node_layer_attrs,
+    _deserialize_layer_tuple_attrs,
 )
+from ..core.graph import AnnNet
+from .._dataframe_backend import empty_dataframe
 
 # Core adapter: to_graphtool
 

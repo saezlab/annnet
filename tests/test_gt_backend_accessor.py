@@ -7,7 +7,7 @@ import polars as pl
 import pytest
 
 graph_tool = pytest.importorskip('graph_tool')
-from graph_tool import centrality, clustering, flow, generation, search, topology, util
+from graph_tool import search
 
 from annnet.core.graph import AnnNet
 

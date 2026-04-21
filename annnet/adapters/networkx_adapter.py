@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
 import time
+from typing import TYPE_CHECKING
 from contextlib import contextmanager
-from enum import Enum
-from typing import TYPE_CHECKING, Any
 
 try:
     import networkx as nx
@@ -18,25 +16,22 @@ if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
 from ._utils import (
-    _attrs_to_dict,
-    _deserialize_edge_layers,
-    _deserialize_layer_tuple_attrs,
-    _deserialize_node_layer_attrs,
-    _deserialize_VM,
-    _endpoint_coeff_map,
-    _is_directed_eid,
     _rows_like,
     _rows_to_df,
-    _safe_df_to_rows,
-    _serialize_edge_layers,
-    _serialize_layer_tuple_attrs,
-    _serialize_node_layer_attrs,
-    _serialize_value,
     _serialize_VM,
-    load_manifest,
-    save_manifest,
+    _attrs_to_dict,
+    _deserialize_VM,
+    _is_directed_eid,
+    _safe_df_to_rows,
+    _serialize_value,
+    _endpoint_coeff_map,
+    _serialize_edge_layers,
+    _deserialize_edge_layers,
+    _serialize_node_layer_attrs,
+    _serialize_layer_tuple_attrs,
+    _deserialize_node_layer_attrs,
+    _deserialize_layer_tuple_attrs,
 )
-
 
 @contextmanager
 def _time(label, timings):
