@@ -36,7 +36,6 @@ except Exception:
     HAS_POLARS = False
 
 try:
-
     HAS_PANDAS = True
 except Exception:
     HAS_PANDAS = False
@@ -63,12 +62,12 @@ def _build_graph() -> AnnNet:
 
     # Binary edges: directed and undirected
     e1 = g.add_edge('p1', 'g1', weight=2.0, interaction=+1, tag='regulates')
-    e2 = g.add_edge('p2', 'g2', weight=1.0, directed=False, interaction=-1, tag='inhibits')
+    g.add_edge('p2', 'g2', weight=1.0, directed=False, interaction=-1, tag='inhibits')
     e3 = g.add_edge('d1', 'p1', weight=0.5, interaction=+1, tag='targets')
     e4 = g.add_edge('p3', 'g1', weight=1.5, interaction=+1, tag='activates')
 
     # Hyperedge
-    e5 = g.add_edge(src=['g1', 'g2'], tgt=['p1'], weight=3.0, interaction=+1, edge_id='he1')
+    g.add_edge(src=['g1', 'g2'], tgt=['p1'], weight=3.0, interaction=+1, edge_id='he1')
 
     g.add_slice('active_only', region='high_expr')
     g.add_vertex_to_slice('active_only', 'p1')
@@ -89,7 +88,7 @@ def _build_graph() -> AnnNet:
 
     # Basic sanity
     assert g.ne >= 4
-    assert len([eid for eid in g.hyperedge_definitions]) >= 1
+    assert len(g.hyperedge_definitions) >= 1
 
     return g
 

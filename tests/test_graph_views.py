@@ -124,7 +124,6 @@ class TestGraphViewObs(unittest.TestCase):
         view = GraphView(G)
         obs = view.obs
         try:
-
             rows = obs.to_dicts()
         except Exception:
             rows = obs.to_dict(orient='records')
@@ -138,7 +137,6 @@ class TestGraphViewObs(unittest.TestCase):
         view = GraphView(G, vertices=['A'])
         obs = view.obs
         try:
-
             rows = obs.to_dicts()
         except Exception:
             rows = obs.to_dict(orient='records')
@@ -155,7 +153,6 @@ class TestGraphViewVar(unittest.TestCase):
         view = GraphView(G)
         var = view.var
         try:
-
             rows = var.to_dicts()
         except Exception:
             rows = var.to_dict(orient='records')
@@ -168,7 +165,6 @@ class TestGraphViewVar(unittest.TestCase):
         view = GraphView(G, edges=['e1'])
         var = view.var
         try:
-
             rows = var.to_dicts()
         except Exception:
             rows = var.to_dict(orient='records')
@@ -296,7 +292,6 @@ class TestViewsClassEdgesView(unittest.TestCase):
         G = _build_graph()
         df = G.edges_view()
         try:
-
             rows = df.to_dicts()
         except Exception:
             rows = df.to_dict(orient='records')
@@ -332,7 +327,6 @@ class TestViewsClassEdgesView(unittest.TestCase):
         G = _build_hyperedge_graph()
         df = G.edges_view()
         try:
-
             rows = {r['edge_id']: r for r in df.to_dicts()}
         except Exception:
             rows = {r['edge_id']: r for r in df.to_dict(orient='records')}
@@ -350,7 +344,6 @@ class TestViewsClassVerticesView(unittest.TestCase):
         G = _build_graph()
         df = G.vertices_view()
         try:
-
             rows = df.to_dicts()
         except Exception:
             rows = df.to_dict(orient='records')

@@ -2,9 +2,10 @@ import narwhals as nw
 
 try:
     import polars as pl
-except Exception:
+except Exception:  # noqa: BLE001
     pl = None
 import scipy.sparse as sp
+
 
 class GraphView:
     """Lazy view into a graph with deferred operations.
@@ -67,12 +68,11 @@ class GraphView:
         df = self._graph.vertex_attributes
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
 
         if pl is not None and isinstance(df, pl.DataFrame):
             return df.filter(pl.col('vertex_id').is_in(list(vertex_ids)))
-
 
         return nw.to_native(nw.from_native(df).filter(nw.col('vertex_id').is_in(list(vertex_ids))))
 
@@ -95,12 +95,11 @@ class GraphView:
         df = self._graph.edge_attributes
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
 
         if pl is not None and isinstance(df, pl.DataFrame):
             return df.filter(pl.col('edge_id').is_in(list(edge_ids)))
-
 
         return nw.to_native(nw.from_native(df).filter(nw.col('edge_id').is_in(list(edge_ids))))
 
@@ -225,7 +224,7 @@ class GraphView:
                     try:
                         if self._vertices_filter(vid):
                             filtered_vertices.add(vid)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
                 vertex_ids = filtered_vertices
             else:
@@ -247,7 +246,7 @@ class GraphView:
                     try:
                         if self._edges_filter(eid):
                             filtered_edges.add(eid)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
                 edge_ids = filtered_edges
             else:
@@ -264,7 +263,7 @@ class GraphView:
                 try:
                     if self._predicate(vid):
                         filtered_vertices.add(vid)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
             vertex_ids = filtered_vertices
 
@@ -319,7 +318,7 @@ class GraphView:
         if edge_ids is not None:
             try:
                 import polars as pl
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pl = None
 
             if pl is not None and isinstance(df, pl.DataFrame):
@@ -357,7 +356,7 @@ class GraphView:
         if vertex_ids is not None:
             try:
                 import polars as pl
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pl = None
 
             if pl is not None and isinstance(df, pl.DataFrame):
@@ -413,7 +412,7 @@ class GraphView:
                         .to_pandas()
                         .to_dict(orient='records')
                     )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 vertex_records = [{'vertex_id': vid} for vid in vset]
             subG.add_vertices_bulk(vertex_records)
         else:
@@ -441,7 +440,7 @@ class GraphView:
                         eid = row.pop('edge_id', None)
                         if eid is not None:
                             edge_attrs_map[eid] = row
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
         # ---- Determine which edges to copy ----
@@ -540,14 +539,11 @@ class GraphView:
         # Edges
         if edges is None:
             new_edges = base_edges
-            edge_pred = None
         elif callable(edges):
             new_edges = base_edges
-            edge_pred = edges
         else:
             to_set = set(edges)
             new_edges = (set(base_edges) & to_set) if base_edges is not None else to_set
-            edge_pred = None
 
         # slices
         new_slices = slices if slices is not None else (self._slices if self._slices else None)
@@ -558,17 +554,17 @@ class GraphView:
             if self._predicate:
                 try:
                     ok = ok and bool(self._predicate(v))
-                except Exception:
+                except Exception:  # noqa: BLE001
                     ok = False
             if predicate:
                 try:
                     ok = ok and bool(predicate(v))
-                except Exception:
+                except Exception:  # noqa: BLE001
                     ok = False
             if vertex_pred:
                 try:
                     ok = ok and bool(vertex_pred(v))
-                except Exception:
+                except Exception:  # noqa: BLE001
                     ok = False
             return ok
 
@@ -668,7 +664,7 @@ class ViewsClass:
                 import polars as pl
 
                 return pl.DataFrame(schema={'edge_id': pl.Utf8, 'kind': pl.Utf8})
-            except Exception:
+            except Exception:  # noqa: BLE001
                 import pandas as pd
 
                 return pd.DataFrame(
@@ -732,7 +728,7 @@ class ViewsClass:
 
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
 
         if pl is not None:
@@ -847,7 +843,7 @@ class ViewsClass:
         df = self.vertex_attributes
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
 
         if pl is not None and isinstance(df, pl.DataFrame):
@@ -880,7 +876,7 @@ class ViewsClass:
         df = self.slice_attributes
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
 
         if pl is not None and isinstance(df, pl.DataFrame):
@@ -917,7 +913,7 @@ class ViewsClass:
                 import polars as pl
 
                 return pl.DataFrame(schema={'aspect': pl.Utf8, 'elem_layers': pl.List(pl.Utf8)})
-            except Exception:
+            except Exception:  # noqa: BLE001
                 import pandas as pd
 
                 return pd.DataFrame(
@@ -940,7 +936,7 @@ class ViewsClass:
 
             df = pl.DataFrame(rows)
             return df.clone() if copy else df
-        except Exception:
+        except Exception:  # noqa: BLE001
             import pandas as pd
 
             df = pd.DataFrame.from_records(rows)
@@ -969,7 +965,7 @@ class ViewsClass:
                 import polars as pl
 
                 return pl.DataFrame(schema={'layer_tuple': pl.List(pl.Utf8), 'layer_id': pl.Utf8})
-            except Exception:
+            except Exception:  # noqa: BLE001
                 import pandas as pd
 
                 return pd.DataFrame(
@@ -990,7 +986,7 @@ class ViewsClass:
                         'layer_id': pl.Utf8,
                     }
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 import pandas as pd
 
                 return pd.DataFrame(
@@ -1033,7 +1029,7 @@ class ViewsClass:
 
             df = pl.DataFrame(rows)
             return df.clone() if copy else df
-        except Exception:
+        except Exception:  # noqa: BLE001
             import pandas as pd
 
             df = pd.DataFrame.from_records(rows)

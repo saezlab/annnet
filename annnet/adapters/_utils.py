@@ -4,23 +4,27 @@ from enum import Enum
 import json as _json
 from typing import Any
 
+from .._dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
+
+
 def _is_directed_eid(graph, eid):
     """Best-effort directedness probe; default True."""
     try:
         rec = getattr(graph, '_edges', {}).get(eid)
         if rec is not None and rec.directed is not None:
             return bool(rec.directed)
-    except Exception:
+    except (AttributeError, TypeError):
         pass
     try:
         v = graph.get_attr_edge(eid, 'directed')
         return bool(v) if v is not None else True
-    except Exception:
+    except (AttributeError, KeyError, TypeError, ValueError):
         return True
 
 
 def _coerce_coeff_mapping(val):
     """Normalize endpoint-coeff containers into {vertex: {__value: float}|float}.
+
     Accepts dict | list | list-of-dicts | list-of-pairs | JSON string.
     """
     if val is None:
@@ -28,7 +32,7 @@ def _coerce_coeff_mapping(val):
     if isinstance(val, str):
         try:
             return _coerce_coeff_mapping(_json.loads(val))
-        except Exception:
+        except _json.JSONDecodeError:
             return {}
     if isinstance(val, dict):
         return val
@@ -87,14 +91,14 @@ def _deserialize_endpoint(value: Any) -> Any:
     if isinstance(value, str):
         try:
             parsed = _json.loads(value)
-        except Exception:
+        except _json.JSONDecodeError:
             parsed = None
         if parsed is not None and parsed != value:
             return _deserialize_endpoint(parsed)
         if value.startswith('(') and value.endswith(')'):
             try:
                 parsed = _ast.literal_eval(value)
-            except Exception:
+            except (SyntaxError, ValueError):
                 parsed = None
             if (
                 isinstance(parsed, tuple)
@@ -110,13 +114,13 @@ def _rows_like(table):
         return []
     try:
         return dataframe_to_rows(table)
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         pass
     if hasattr(table, 'fetchall') and hasattr(table, 'columns'):
         try:
             cols = list(table.columns)
             return [dict(zip(cols, row, strict=False)) for row in table.fetchall()]
-        except Exception:
+        except (AttributeError, TypeError):
             pass
     if isinstance(table, dict):
         keys = list(table.keys())
@@ -140,6 +144,7 @@ def load_manifest(path: str) -> dict:
 
 def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
     """Return {vertex: float_coeff} for the given endpoint_set.
+
     Reads from edge_attrs[private_key], which may be serialized in multiple shapes.
     Missing endpoints default to 1.0.
     """
@@ -153,16 +158,13 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
             val = val.get('__value', 1.0)
         try:
             out[u] = float(val)
-        except Exception:
+        except (TypeError, ValueError):
             out[u] = 1.0
     return out
 
 
 # Serialization helpers moved from graphtool_adapter.py
 
-from typing import Any
-
-from .._dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
 
 def _serialize_edge_layers(edge_layers: dict[str, Any]) -> dict[str, Any]:
     """
@@ -257,7 +259,8 @@ def _deserialize_node_layer_attrs(data: list[dict]) -> dict[tuple[str, tuple[str
 
 
 def _serialize_slices(slices: dict[str, dict]) -> dict[str, dict]:
-    """
+    """Serialize slice records to JSON-safe dictionaries.
+
     _slices is {slice_id: {"vertices": set, "edges": set, "attributes": dict}}
     Convert sets to lists for JSON.
     """
@@ -302,7 +305,8 @@ def _rows_to_df(rows: list[dict]):
 
 
 def _serialize_layer_tuple_attrs(layer_attrs: dict[tuple[str, ...], dict]) -> list[dict]:
-    """
+    """Serialize layer-tuple attributes to JSON-safe records.
+
     _layer_attrs: {aa_tuple -> {attr_name: value}}
     -> JSON-safe: [{"layer": list(aa), "attrs": {...}}, ...]
     """

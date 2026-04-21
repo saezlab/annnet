@@ -47,8 +47,8 @@ class TestPlottingWithRealGraph(unittest.TestCase):
         g.add_vertex('C', label='gamma')
         # edges with attributes embedded (non-reserved keys persist)
         e1 = g.add_edge('A', 'B', weight=2.0, interaction=+1, type='activation')
-        e2 = g.add_edge('B', 'C', weight=-1.0, interaction=-1)
-        e3 = g.add_edge(src=['A', 'B'], tgt=['C'], weight=0.5, interaction=+1)
+        g.add_edge('B', 'C', weight=-1.0, interaction=-1)
+        g.add_edge(src=['A', 'B'], tgt=['C'], weight=0.5, interaction=+1)
 
         # Per-slice override for e1
         g.add_slice('Lw')

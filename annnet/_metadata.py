@@ -110,7 +110,7 @@ def supports_html() -> bool:
 
     try:
         from IPython.display import display
-    except Exception:  # pragma: no cover - import edge case
+    except Exception:  # pragma: no cover - import edge case  # noqa: BLE001
         return False
 
     inspector = DisplayInspector()
@@ -138,7 +138,7 @@ def get_latest_version(
         match = re.search(r'version\s*=\s*"(.*)"', content)
         if match:
             return match.group(1)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
     return None

@@ -7,7 +7,7 @@ import numpy as np
 
 try:
     import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
+except Exception:  # ModuleNotFoundError, etc.  # noqa: BLE001
     pl = None
 
 
@@ -205,15 +205,15 @@ class History:
                 import polars as pl
 
                 return pl.DataFrame(self._history)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 try:
                     import pandas as pd
 
                     return pd.DataFrame.from_records(self._history)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     raise RuntimeError(
                         'Cannot return history as DataFrame: install polars (recommended) or pandas.'
-                    )
+                    ) from None
         return list(self._history)
 
     def export_history(self, path: str):
@@ -245,15 +245,15 @@ class History:
             import polars as pl
 
             df = pl.DataFrame(self._history)
-        except Exception:
+        except Exception:  # noqa: BLE001
             try:
                 import pandas as pd
 
                 df = pd.DataFrame.from_records(self._history)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 raise RuntimeError(
                     'Cannot construct DataFrame from history: install polars (recommended) or pandas.'
-                )
+                ) from None
         p = path.lower()
         if p.endswith('.parquet'):
             df.write_parquet(path)

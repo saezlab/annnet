@@ -8,7 +8,7 @@ from ._helpers import EntityRecord
 
 try:
     import polars as pl
-except Exception:
+except Exception:  # noqa: BLE001
     pl = None
 if TYPE_CHECKING:
     from .graph import AnnNet
@@ -401,7 +401,7 @@ class Operations:
                         vid = row.pop('vertex_id', None)
                         if vid is not None:
                             va_lookup[vid] = row
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
         v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
 
@@ -629,7 +629,7 @@ class Operations:
                         vid = row.pop('vertex_id', None)
                         if vid is not None:
                             va_lookup[vid] = row
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
         v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
         g.add_vertices_bulk(v_rows, slice=slice_id)
@@ -640,7 +640,7 @@ class Operations:
         if ea is not None and hasattr(ea, 'columns') and 'edge_id' in ea.columns:
             try:
                 import polars as pl
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pl = None
 
             if pl is not None and isinstance(ea, pl.DataFrame) and ea.height:
@@ -683,7 +683,7 @@ class Operations:
             ):
                 try:
                     import polars as pl
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pl = None
 
                 if pl is not None and isinstance(df, pl.DataFrame) and df.height:
@@ -767,6 +767,7 @@ class Operations:
 
     def _row_attrs(self, df, key_col: str, key):
         """INTERNAL: return a dict of attributes for the row in `df` where `key_col == key`,
+
         excluding the key column itself. If not found or df empty, return {}.
         Caches per (id(df), key_col) for speed; cache auto-refreshes when the df object changes.
         """
@@ -777,7 +778,7 @@ class Operations:
 
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
 
         if pl is not None and isinstance(df, pl.DataFrame):
@@ -788,7 +789,7 @@ class Operations:
             try:
                 if len(df) == 0:
                     return {}
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
         # Cache setup
@@ -806,7 +807,7 @@ class Operations:
             # Latest write should win if duplicates exist (matches upsert semantics)
             try:
                 import polars as pl
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pl = None
 
             if pl is not None and isinstance(df, pl.DataFrame):
@@ -991,7 +992,7 @@ class Operations:
         if va is not None:
             try:
                 import polars as pl
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pl = None
 
             if pl is not None and isinstance(va, pl.DataFrame):
@@ -1000,7 +1001,7 @@ class Operations:
                 # best-effort fallback
                 try:
                     df_bytes += va.memory_usage(deep=True).sum()
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
         # Edge attributes
@@ -1008,7 +1009,7 @@ class Operations:
         if ea is not None:
             try:
                 import polars as pl
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pl = None
 
             if pl is not None and isinstance(ea, pl.DataFrame):
@@ -1016,7 +1017,7 @@ class Operations:
             else:
                 try:
                     df_bytes += ea.memory_usage(deep=True).sum()
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
         return matrix_bytes + dict_bytes + df_bytes
 

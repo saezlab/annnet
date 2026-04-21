@@ -12,7 +12,6 @@ from ..adapters._utils import (
     _serialize_VM,
     _deserialize_VM,
     _is_directed_eid,
-    _endpoint_coeff_map,
     _serialize_endpoint,
     _deserialize_endpoint,
     _serialize_edge_layers,
@@ -24,8 +23,10 @@ from ..adapters._utils import (
 )
 from .._dataframe_backend import empty_dataframe
 
+
 def _coerce_coeff_mapping(val):
     """Normalize various serialized forms into {vertex: {__value: float}|float}
+
     Accepts:
       - dict({v: x} or {v: {"__value": x}})
       - list of pairs [(v,x), ...]
@@ -38,7 +39,7 @@ def _coerce_coeff_mapping(val):
     if isinstance(val, str):
         try:
             return _coerce_coeff_mapping(json.loads(val))
-        except Exception:
+        except Exception:  # noqa: BLE001
             return {}
     # Already dict?
     if isinstance(val, dict):
@@ -67,6 +68,7 @@ def _coerce_coeff_mapping(val):
 
 def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
     """Return {vertex: float_coeff} for the given endpoint_set.
+
     Reads from edge_attrs[private_key] which may be serialized in multiple shapes.
     Missing endpoints default to 1.0.
     """
@@ -80,7 +82,7 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
             val = val.get('__value', 1.0)
         try:
             out[u] = float(val)
-        except Exception:
+        except Exception:  # noqa: BLE001
             out[u] = 1.0
     return out
 
@@ -109,6 +111,7 @@ def _attrs_by_id(table, id_col: str, *, public_only: bool = False) -> dict:
 
 def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     """Node-link JSON with x-extensions (slices, edge_slices, hyperedges).
+
     Lossless vs your core (IDs, attrs, parallel, hyperedges, slices).
     """
     vertex_attrs = _attrs_by_id(
@@ -140,11 +143,11 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
         # weight + directed
         try:
             w = float(1.0 if rec.weight is None else rec.weight)
-        except Exception:
+        except Exception:  # noqa: BLE001
             w = 1.0
         try:
             directed = bool(_is_directed_eid(graph, eid))
-        except Exception:
+        except Exception:  # noqa: BLE001
             directed = True
 
         if is_hyper:
@@ -191,7 +194,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     try:
         for lid in graph.list_slices(include_default=True):
             slices.append({'slice_id': lid})
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     edge_slices = []
@@ -203,17 +206,17 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
                     rec = {'slice_id': lid, 'edge_id': eid}
                     try:
                         w = graph.get_edge_slice_attr(lid, eid, 'weight', default=None)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         try:
                             w = graph.get_edge_slice_attr(lid, eid, 'weight')
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             w = None
                     if w is not None:
                         rec['weight'] = float(w)
                     edge_slices.append(rec)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 continue
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     doc = {
@@ -351,7 +354,6 @@ def from_json(path) -> AnnNet:
 
     # hyperedges — bulk insert
     hyper_dicts = []
-    hyper_weight_patch = {}
     hyper_attrs_pending = {}
     for h in ext.get('hyperedges', []):
         eid = h.get('id')
@@ -387,7 +389,7 @@ def from_json(path) -> AnnNet:
             try:
                 H.add_slice(lid)
                 known_slices.add(lid)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
     slice_edges: dict = {}
@@ -403,12 +405,12 @@ def from_json(path) -> AnnNet:
     for lid, eids in slice_edges.items():
         try:
             H.add_edges_to_slice_bulk(lid, eids)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
     for (lid, eid), w in slice_weights.items():
         try:
             H.set_edge_slice_attrs(lid, eid, weight=w)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     # multilayer / Kivela
@@ -454,6 +456,7 @@ def from_json(path) -> AnnNet:
 
 def write_ndjson(graph: AnnNet, dir_path):
     """Write nodes.ndjson, edges.ndjson, hyperedges.ndjson, slices.ndjson, edge_slices.ndjson.
+
     Each line is one JSON object. Lossless wrt to_json schema.
     """
     import os
@@ -483,11 +486,11 @@ def write_ndjson(graph: AnnNet, dir_path):
 
             try:
                 w = float(1.0 if rec.weight is None else rec.weight)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 w = 1.0
             try:
                 directed = bool(_is_directed_eid(graph, eid))
-            except Exception:
+            except Exception:  # noqa: BLE001
                 directed = True
 
             if is_hyper:
@@ -516,7 +519,7 @@ def write_ndjson(graph: AnnNet, dir_path):
         try:
             for lid in graph.list_slices(include_default=True):
                 fl.write(json.dumps({'slice_id': lid}, ensure_ascii=False) + '\n')
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     with open(f'{dir_path}/edge_slices.ndjson', 'w', encoding='utf-8') as fel:
@@ -526,13 +529,13 @@ def write_ndjson(graph: AnnNet, dir_path):
                     rec = {'slice_id': lid, 'edge_id': eid}
                     try:
                         w = graph.get_edge_slice_attr(lid, eid, 'weight', default=None)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         try:
                             w = graph.get_edge_slice_attr(lid, eid, 'weight')
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             w = None
                     if w is not None:
                         rec['weight'] = float(w)
                     fel.write(json.dumps(rec, ensure_ascii=False) + '\n')
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass

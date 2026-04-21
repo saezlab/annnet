@@ -6,6 +6,7 @@ import narwhals as nw
 from ..core.graph import AnnNet
 from .._dataframe_backend import dataframe_height, dataframe_to_rows, select_dataframe_backend
 
+
 def from_omnipath(
     df=None,
     *,
@@ -30,7 +31,7 @@ def from_omnipath(
     load_vertex_annotations: bool = True,
     **graph_kwargs,
 ):
-    """Build an AnnNet from OmniPath interaction data, with edge and vertex annotations.
+    r"""Build an AnnNet from OmniPath interaction data, with edge and vertex annotations.
 
     Fetches a signaling interaction dataset from the OmniPath web service (or accepts
     a pre-loaded DataFrame), builds the graph structure via bulk operations, and
@@ -211,7 +212,7 @@ def from_omnipath(
         try:
             if isinstance(x, (float, np.floating)):
                 return bool(np.isnan(x))
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         return False
 
@@ -433,14 +434,14 @@ def from_omnipath(
             try:
                 ann_raw = nw.from_native(vertex_annotations_df, eager_only=True)
                 ann_raw = nw.to_native(ann_raw)  # keep as native (polars or pandas)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(f'[warning] vertex_annotations_df could not be read: {e}')
 
         # 2) caller passed a local file path
         elif vertex_annotations_path is not None:
             try:
                 ann_raw = _read_tsv(vertex_annotations_path)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(f'[warning] vertex_annotations_path failed: {e}')
 
         # 3) check cache first, then download from OmniPath archive
@@ -483,7 +484,7 @@ def from_omnipath(
                     print(
                         f'[vertex annotations] downloaded + cached in {time.perf_counter() - t_ann:.1f}s  → {_cache_path}'
                     )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(f'[warning] vertex annotations download failed: {e}')
 
         if ann_raw is not None:
@@ -519,7 +520,7 @@ def from_omnipath(
                     ]
                 )
                 print(f'[vertex annotations] loaded  rows={len(grouped)}')
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(f'[warning] vertex annotation pivot/load failed: {e}')
 
     return G

@@ -2,6 +2,7 @@
 
 from ._base import _BackendAccessorBase
 
+
 class _GTBackendAccessor(_BackendAccessorBase):
     """graph-tool backend accessor attached to an AnnNet instance.
 
@@ -85,7 +86,7 @@ class _GTBackendAccessor(_BackendAccessorBase):
         for namespace in self._namespaces.values():
             try:
                 names.update(dir(namespace))
-            except Exception:
+            except Exception:  # noqa: BLE001
                 continue
         return sorted(names)
 
@@ -178,7 +179,9 @@ class _GTBackendAccessor(_BackendAccessorBase):
         if msgs:
             import warnings
 
-            warnings.warn('AnnNet → graph-tool conversion is lossy: ' + '; '.join(msgs))
+            warnings.warn(
+                'AnnNet → graph-tool conversion is lossy: ' + '; '.join(msgs), stacklevel=2
+            )
 
 
 class _GTNamespaceProxy:
@@ -208,7 +211,7 @@ class _GTNamespaceProxy:
                 continue
             try:
                 attr = getattr(mod, name)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 continue
             if callable(attr):
                 names.add(name)
@@ -228,7 +231,7 @@ class _GTNamespaceProxy:
                 import inspect
 
                 sig = inspect.signature(func)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 sig = None
 
             if has_owner:
@@ -261,7 +264,7 @@ class _GTNamespaceProxy:
             # bind signature
             try:
                 bound = sig.bind_partial(*args, **kwargs) if sig is not None else None
-            except Exception:
+            except Exception:  # noqa: BLE001
                 bound = None
 
             # vertex coercion

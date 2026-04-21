@@ -147,7 +147,7 @@ def to_pyg(
         if slice_id is not None:
             try:
                 members = set(graph.get_slice_vertices(slice_id))
-            except Exception:
+            except Exception:  # noqa: BLE001
                 members = set()
 
             mask = np.array([v in members for v in vids], dtype=bool)

@@ -32,7 +32,7 @@ class Traversal:
         default_dir = self.directed if self.directed is not None else True
         ekey_kind = self._entities[ekey].kind
 
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             if rec.col_idx < 0:
                 continue
             if rec.etype == 'hyper':
@@ -77,7 +77,7 @@ class Traversal:
         out = set()
         default_dir = self.directed if self.directed is not None else True
 
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             if rec.col_idx < 0:
                 continue
             if rec.etype == 'hyper':
@@ -135,7 +135,7 @@ class Traversal:
         inn = set()
         default_dir = self.directed if self.directed is not None else True
 
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             if rec.col_idx < 0:
                 continue
             if rec.etype == 'hyper':

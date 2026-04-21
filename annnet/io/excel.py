@@ -3,6 +3,7 @@ from __future__ import annotations
 import pathlib
 import tempfile
 
+
 def from_excel(
     path: str | pathlib.Path,
     graph=None,
@@ -90,6 +91,6 @@ def from_excel(
     )
     try:
         tmp_path.unlink(missing_ok=True)  # Python 3.8+: wrap in try/except if needed
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     return G

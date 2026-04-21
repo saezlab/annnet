@@ -33,6 +33,7 @@ from ._utils import (
     _deserialize_layer_tuple_attrs,
 )
 
+
 @contextmanager
 def _time(label, timings):
     t0 = time.perf_counter()
@@ -188,7 +189,7 @@ def _coeff_from_obj(obj) -> float:
             v = v.get('__value', 1)
         try:
             return float(v)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return 1.0
     return 1.0
 
@@ -203,6 +204,7 @@ def to_nx(
     reify_prefix='he::',
 ):
     """Export AnnNet → (networkx.AnnNet, manifest).
+
     Manifest preserves hyperedges with per-endpoint coefficients, slices,
     vertex/edge attrs, and stable edge IDs.
 
@@ -243,7 +245,7 @@ def to_nx(
             try:
                 for eid in graph.get_slice_edges(lid):
                     selected_eids.add(eid)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
     # Base NX graph (binary edges only)
@@ -322,7 +324,7 @@ def to_nx(
         weights_map = {
             eid: float(rec.weight) for eid, rec in graph._edges.items() if rec.weight is not None
         }
-    except Exception:
+    except Exception:  # noqa: BLE001
         weights_map = {}
 
     all_eids = list(manifest_edges.keys())
@@ -331,10 +333,10 @@ def to_nx(
     lids = set()
     try:
         lids.update(list(graph.list_slices(include_default=True)))
-    except Exception:
+    except Exception:  # noqa: BLE001
         try:
             lids.update(list(graph.list_slices()))
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     t = getattr(graph, 'edge_slice_attributes', None)
@@ -361,7 +363,7 @@ def to_nx(
     for lid in list(lids):
         try:
             eids = list(graph.get_slice_edges(lid))
-        except Exception:
+        except Exception:  # noqa: BLE001
             eids = []
         if eids:
             seen = set(slices_section[lid])
@@ -451,7 +453,7 @@ def to_nx(
         allowed = None
         if requested_lids:
             allowed = set()
-            for lid, eids in slices_section.items():
+            for _lid, eids in slices_section.items():
                 for eid in eids:
                     allowed.add(eid)
 
@@ -636,7 +638,7 @@ def from_nx(
                     if isinstance(v, str) and v.startswith(reify_prefix):
                         continue
                 add_vertex_once(v)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     # BULK INSERT VERTICES ONCE
@@ -715,7 +717,7 @@ def from_nx(
                     rec = H._edges.get(eid)
                     if rec is not None:
                         rec.weight = float(w)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
     # BATCH SLICES
@@ -725,7 +727,7 @@ def from_nx(
                 try:
                     H.add_slice(lid)
                     existing_slices.add(lid)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
             if eids:
                 H.add_edges_to_slice_bulk(lid, eids)
@@ -735,12 +737,12 @@ def from_nx(
                 try:
                     H.add_slice(lid)
                     existing_slices.add(lid)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
             for eid, w in per_edge.items():
                 try:
                     H.set_edge_slice_attrs(lid, eid, weight=float(w))
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
     with _time('multilayer', timings):
@@ -793,7 +795,7 @@ def from_nx(
                 if attrs:
                     try:
                         H.set_vertex_attrs(vid, **attrs)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
 
         if edge_attrs_cache:
@@ -801,7 +803,7 @@ def from_nx(
                 if attrs:
                     try:
                         H.set_edge_attrs(eid, **attrs)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
 
     if hyperedge == 'reified':
@@ -817,7 +819,7 @@ def from_nx(
 
             reified_hyperedges_bulk = []
 
-            for eid, directed, head_map, tail_map, he_attrs, he_node in hyperdefs:
+            for eid, directed, head_map, tail_map, he_attrs, _he_node in hyperdefs:
                 if eid in existing_eids:
                     continue
 
@@ -918,7 +920,7 @@ def _nx_collect_reified_optimized(
             coeff = d.get(coeff_attr, d.get('__value', 1.0))
             try:
                 coeff = float(coeff)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 coeff = 1.0
 
             if role == 'head':
@@ -949,6 +951,7 @@ def _from_nx_without_manifest(
     reify_prefix='he::',
 ):
     """Best-effort import from a bare NetworkX graph (no manifest).
+
     hyperedge: "none" (default) | "reified"
       When "reified", detect hyperedge nodes + membership edges and rebuild true hyperedges.
     """
@@ -966,12 +969,12 @@ def _from_nx_without_manifest(
                 continue
         try:
             H.add_vertex(v)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         if d:
             try:
                 H.set_vertex_attrs(v, **dict(d))
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
     # 2) Optionally collect reified hyperedges
@@ -985,16 +988,16 @@ def _from_nx_without_manifest(
             coeff_attr=coeff_attr,
             membership_attr=membership_attr,
         )
-        for eid, directed, head_map, tail_map, he_attrs, he_node in hyperdefs:
+        for eid, directed, head_map, tail_map, he_attrs, _he_node in hyperdefs:
             for x in set(head_map) | set(tail_map):
                 try:
                     H.add_vertex(x)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
             if directed:
                 try:
                     H.add_edge(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
                 H.set_edge_attrs(
                     eid,
@@ -1005,7 +1008,7 @@ def _from_nx_without_manifest(
                 members = list(set(head_map) | set(tail_map))
                 try:
                     H.add_edge(src=members, edge_id=eid, directed=False)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
                 H.set_edge_attrs(
                     eid,
@@ -1019,7 +1022,7 @@ def _from_nx_without_manifest(
             if clean_attrs:
                 try:
                     H.set_edge_attrs(eid, **clean_attrs)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
     # 3) Binary edges (skip membership edges if we consumed them above)
@@ -1052,27 +1055,27 @@ def _from_nx_without_manifest(
         try:
             H.add_vertex(u)
             H.add_vertex(v)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         try:
             H.add_edge(u, v, edge_id=eid, directed=e_directed)
-        except Exception:
+        except Exception:  # noqa: BLE001
             H.add_edge(u, v, edge_id=eid, directed=True)
 
         try:
             H.edge_weights[eid] = float(w)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         if isinstance(d, dict) and d:
             try:
                 H.set_edge_attrs(eid, **dict(d))
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
     try:
         H.edge_weights[eid] = float(w)
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     # Copy edge attributes but drop structural keys that shouldn't live in user attrs
@@ -1088,6 +1091,6 @@ def _from_nx_without_manifest(
                     clean.pop(k, None)
                 if clean:
                     H.set_edge_attrs(eid, **clean)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
     return H

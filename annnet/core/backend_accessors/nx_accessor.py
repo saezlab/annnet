@@ -107,7 +107,7 @@ class _NXBackendAccessor(_BackendAccessorBase):
             try:
                 sig = inspect.signature(nx_callable)
                 bound = sig.bind_partial(*args, **kwargs)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 bound = None
 
             try:
@@ -120,7 +120,7 @@ class _NXBackendAccessor(_BackendAccessorBase):
                     if nxG is not None:
                         self._coerce_vertices_in_kwargs(kwargs, nxG, label_field)
                     pargs, pkwargs = tuple(args), kwargs
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pargs, pkwargs = tuple(args), kwargs
 
             for key in list(pkwargs.keys()):
@@ -192,7 +192,7 @@ class _NXBackendAccessor(_BackendAccessorBase):
         needed = set()
         try:
             params = inspect.signature(target).parameters
-        except Exception:
+        except Exception:  # noqa: BLE001
             params = {}
         if 'weight' in params:
             weight_name = kwargs.get('weight', 'weight')

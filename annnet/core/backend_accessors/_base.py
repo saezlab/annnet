@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 try:
     import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
+except Exception:  # ModuleNotFoundError, etc.  # noqa: BLE001
     pl = None
 
 if TYPE_CHECKING:
@@ -47,7 +47,7 @@ class _BackendAccessorBase:
             if rec is None or rec.kind != 'vertex':
                 return None
             return ekey[0]
-        except Exception:
+        except Exception:  # noqa: BLE001
             return None
 
     def _infer_label_field(self) -> str | None:
@@ -59,7 +59,7 @@ class _BackendAccessorBase:
             for col in self.VERTEX_LABEL_FIELDS:
                 if col in cols:
                     return col
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         return None
 
@@ -70,7 +70,7 @@ class _BackendAccessorBase:
             for key in ('vertex_id', 'id', 'vid'):
                 if key in cols:
                     return key
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         return 'vertex_id'
 
@@ -86,13 +86,13 @@ class _BackendAccessorBase:
                     return None
                 try:
                     return matches.select(id_col).to_series().to_list()[0]
-                except Exception:
+                except Exception:  # noqa: BLE001
                     return matches.select(id_col).item(0, 0)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 for row in va.to_dicts():
                     if row.get(label_field) == value:
                         return row.get(id_col)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return None
         return None
 
@@ -121,10 +121,10 @@ class _BackendAccessorBase:
                         continue
                     try:
                         attr = getattr(obj, name)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         continue
                     if callable(attr):
                         names.add(name)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 continue
         return names

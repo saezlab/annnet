@@ -1,6 +1,7 @@
 from pathlib import Path
 import tarfile
 
+
 def _write_archive(src_dir: Path, outfile: Path):
     with tarfile.open(outfile, 'w:gz') as tar:
         tar.add(src_dir, arcname=src_dir.name)

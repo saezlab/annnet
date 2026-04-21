@@ -249,7 +249,7 @@ def to_dataframes(
                 slice_meta = graph._slices.get(lid, {})
                 for eid in slice_meta.get('edges', []):
                     slices_data.append({'slice_id': lid, 'edge_id': eid})
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         result['slices'] = dataframe_from_rows(
@@ -270,7 +270,7 @@ def to_dataframes(
                             'weight': row['weight'],
                         }
                     )
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         result['slice_weights'] = dataframe_from_rows(
@@ -408,8 +408,16 @@ def from_dataframes(
                     weight = data['weights'][0] if data['weights'] else 1.0
 
                     if is_directed:
-                        head = [v for v, r in zip(data['vertices'], data['roles'], strict=False) if r == 'head']
-                        tail = [v for v, r in zip(data['vertices'], data['roles'], strict=False) if r == 'tail']
+                        head = [
+                            v
+                            for v, r in zip(data['vertices'], data['roles'], strict=False)
+                            if r == 'head'
+                        ]
+                        tail = [
+                            v
+                            for v, r in zip(data['vertices'], data['roles'], strict=False)
+                            if r == 'tail'
+                        ]
                         G.add_edge(src=head, tgt=tail, edge_id=eid, directed=True, weight=weight)
                     else:
                         G.add_edge(
@@ -463,12 +471,12 @@ def from_dataframes(
                 try:
                     if lid not in set(G.list_slices(include_default=True)):
                         G.add_slice(lid)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     G.add_slice(lid)
 
                 try:
                     G.add_edge_to_slice(lid, eid)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
     # 5. Add per-slice weights
@@ -484,7 +492,7 @@ def from_dataframes(
 
                     try:
                         G.set_edge_slice_attrs(lid, eid, weight=weight)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
 
     return G

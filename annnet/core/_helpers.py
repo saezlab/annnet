@@ -10,7 +10,7 @@ from .._dataframe_backend import dataframe_from_rows
 
 try:
     import polars as pl
-except Exception:
+except Exception:  # noqa: BLE001
     pl = None
 
 

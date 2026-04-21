@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import warnings
 
-warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
-
 from ..core.graph import AnnNet
+
+warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
 
 try:
     import libsbml
@@ -68,6 +68,7 @@ def _read_sbml_model(path: str):
 
 def _register_compartments(G, model, default_slice: str) -> None:
     """Create one AnnNet slice per SBML compartment, carrying compartment metadata.
+
     No-ops gracefully if the graph or model does not support the required API.
     """
     get_compartments = getattr(model, 'getListOfCompartments', None)
@@ -111,6 +112,7 @@ def _register_compartments(G, model, default_slice: str) -> None:
 
 def _register_species(G, model, default_slice: str) -> dict[str, str]:
     """Add all species as vertices into their compartment slice.
+
     Returns a mapping sid -> compartment_id for later use by reactions.
     """
     sid_to_compartment: dict[str, str] = {}
@@ -352,14 +354,14 @@ def _graph_from_sbml_model(
         for cid, rids in by_slice.items():
             try:
                 add_edges_to_slice_bulk(cid, rids)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
     elif add_edge_to_slice is not None:
         for rid, rxn_slices in rxn_slices_map.items():
             for cid in rxn_slices:
                 try:
                     add_edge_to_slice(cid, rid)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
 
     return G

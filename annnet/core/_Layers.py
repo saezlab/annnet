@@ -10,7 +10,7 @@ import narwhals as nw
 
 try:
     import polars as pl
-except Exception:
+except Exception:  # noqa: BLE001
     pl = None
 import scipy.sparse as sp
 
@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from .graph import AnnNet
 
 from ._helpers import EdgeRecord, EntityRecord, build_dataframe_from_rows
+
 
 class LayerManager:
     """Namespace for multilayer operations.
@@ -1274,8 +1275,8 @@ class LayerClass:
         """
         try:
             return self._row_to_nl[row]
-        except Exception:
-            raise KeyError(f'row {row} not in vertex–layer index')
+        except Exception:  # noqa: BLE001
+            raise KeyError(f'row {row} not in vertex–layer index') from None
 
     ## Validation helpers
 
@@ -2546,7 +2547,7 @@ class LayerClass:
         A = sp.dok_matrix((n, n), dtype=float)
 
         # Fill diagonal blocks from intra-layer edges
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             kind = rec.ml_kind
             if kind != 'intra':
                 continue
@@ -2574,7 +2575,7 @@ class LayerClass:
             A[rv, ru] = A.get((rv, ru), 0.0) + w  # undirected; adapt if directed
 
         # Fill off-diagonal blocks from inter-layer/coupling edges
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             kind = rec.ml_kind
             if kind not in {'inter', 'coupling'}:
                 continue
@@ -2899,7 +2900,7 @@ class LayerClass:
 
         # Intra-layer edges (diagonal blocks)
         if 'intra' in include_kinds:
-            for eid, rec in self._edges.items():
+            for _eid, rec in self._edges.items():
                 kind = rec.ml_kind
                 if kind != 'intra':
                     continue
@@ -2924,7 +2925,7 @@ class LayerClass:
 
         # Inter/coupling edges (off-diagonal blocks)
         if include_kinds & {'inter', 'coupling'}:
-            for eid, rec in self._edges.items():
+            for _eid, rec in self._edges.items():
                 kind = rec.ml_kind
                 if kind not in include_kinds:
                     continue
@@ -3134,7 +3135,7 @@ class LayerClass:
             buckets.setdefault((u, other), {}).setdefault(aa[ai], aa)
         for grp in groups:
             gset = set(grp)
-            for (u, other), mapping in buckets.items():
+            for (u, _other), mapping in buckets.items():
                 # pick only those aa whose aspect element is in this group
                 layers = [mapping[e] for e in mapping.keys() if e in gset]
                 if len(layers) < 2:
@@ -3240,7 +3241,7 @@ class LayerClass:
         wv = []
 
         # Intra edges -> (u,aa)↔(v,aa)
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             kind = rec.ml_kind
             if kind != 'intra':
                 continue
@@ -3266,7 +3267,7 @@ class LayerClass:
             wv.extend((w, w))
 
         # Inter / coupling -> (u,aa)↔(v,bb)
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             kind = rec.ml_kind
             if kind not in {'inter', 'coupling'}:
                 continue
@@ -3645,7 +3646,7 @@ class LayerClass:
             else:
                 raise ValueError('Layer id must be an aspect tuple')
         rows = []
-        for i, (u, aa) in enumerate(self._row_to_nl):
+        for i, (_u, aa) in enumerate(self._row_to_nl):
             if aa == L:
                 rows.append(i)
         return rows
@@ -3714,7 +3715,7 @@ class LayerClass:
                 P[u] = 0.0
                 continue
             s = 0.0
-            for L, kL in per_vertex_by_layer[u].items():
+            for _L, kL in per_vertex_by_layer[u].items():
                 x = kL / k
                 s += x * x
             P[u] = 1.0 - s
@@ -3814,10 +3815,8 @@ class LayerClass:
         # Build expected term (configuration null model) per layer block
         B = A.tolil()
         layer_deg = self.layer_degree_vectors(layers_t)  # degrees from intra only
-        # map row -> layer to avoid repeated lookups
-        row_layer = [aa for (_, aa) in self._row_to_nl]
         # For each layer L: subtract gamma * (k_i^L k_j^L)/(2 m_L) within its block
-        for L, (rows, deg) in layer_deg.items():
+        for _L, (rows, deg) in layer_deg.items():
             mL2 = float(deg.sum())  # = 2 m_L
             if mL2 <= 0:
                 continue

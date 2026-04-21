@@ -21,9 +21,7 @@ from .._dataframe_backend import (
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
-try:
-    _write_cache  # type: ignore[name-defined]
-except NameError:
+if '_write_cache' not in globals():
 
     def _write_cache(*args, **kwargs):  # type: ignore[no-redef]
         raise NotImplementedError(
@@ -42,6 +40,7 @@ def _df_from_dict(data: dict):
 def _write_parquet_df(df, path, *, compression='zstd'):
     """
     Write a dataframe-like object to parquet:
+
     - polars DataFrame: df.write_parquet
     - pandas DataFrame: df.to_parquet(engine="pyarrow")
     - anything else: try narwhals -> pandas
@@ -181,6 +180,7 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
 
 
 def write(graph, path: str | Path, *, compression='zstd', overwrite=False):
+    """Write an AnnNet graph to a directory or `.annnet` archive."""
     path = Path(path)
 
     # FILE MODE (.annnet archive)
@@ -381,10 +381,10 @@ def _write_multilayers(graph, path: Path, compression: str):
         # polars has is_empty(); pandas doesn't. handle both.
         try:
             empty = bool(graph.layer_attributes.is_empty())
-        except Exception:
+        except Exception:  # noqa: BLE001
             try:
                 empty = len(graph.layer_attributes) == 0
-            except Exception:
+            except Exception:  # noqa: BLE001
                 empty = False
         if not empty:
             _write_parquet_df(
@@ -478,14 +478,14 @@ def _write_audit(graph, path: Path, compression: str):
             if hasattr(v, 'to_list') and callable(getattr(v, 'to_list', None)):
                 try:
                     v = v.to_list()
-                except Exception:
+                except Exception:  # noqa: BLE001
                     return str(v)
             if isinstance(v, np.ndarray):
                 v = v.tolist()
             if isinstance(v, set):
                 try:
                     v = sorted(v)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     v = list(v)
             elif isinstance(v, tuple):
                 v = list(v)
@@ -497,13 +497,13 @@ def _write_audit(graph, path: Path, compression: str):
 
                 if isinstance(v, (_dt_datetime, _dt_date)):
                     return v.isoformat()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
             if isinstance(v, (int, float, bool, str)):
                 return v
             try:
                 return json.dumps(v, default=str)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 return str(v)
 
         keys = sorted({k for r in rows for k in r.keys()})
@@ -517,7 +517,7 @@ def _write_audit(graph, path: Path, compression: str):
         from importlib import metadata as importlib_metadata
 
         polars_version = importlib_metadata.version('polars')
-    except Exception:
+    except Exception:  # noqa: BLE001
         polars_version = None
 
     provenance = {

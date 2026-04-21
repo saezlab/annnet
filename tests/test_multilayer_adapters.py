@@ -1,3 +1,4 @@
+import importlib.util
 import os
 import shutil
 import tempfile
@@ -12,19 +13,8 @@ from annnet.io.json_format import from_json, to_json
 from annnet.io.parquet import from_parquet, to_parquet
 from annnet.io.sif import from_sif, to_sif
 
-try:
-    import networkx as nx
-
-    HAS_NX = True
-except ImportError:
-    HAS_NX = False
-
-try:
-    import igraph as ig
-
-    HAS_IG = True
-except ImportError:
-    HAS_IG = False
+HAS_NX = importlib.util.find_spec('networkx') is not None
+HAS_IG = importlib.util.find_spec('igraph') is not None
 
 
 class TestMultilayerAdapters(unittest.TestCase):

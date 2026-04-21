@@ -123,7 +123,7 @@ class _IGBackendAccessor(_BackendAccessorBase):
             try:
                 sig = inspect.signature(target)
                 bound = sig.bind_partial(*args, **kwargs)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 bound = None
 
             try:
@@ -136,7 +136,7 @@ class _IGBackendAccessor(_BackendAccessorBase):
                 else:
                     self._coerce_vertices_in_kwargs(kwargs, igG, label_field)
                     pargs, pkwargs = list(args), dict(kwargs)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pargs, pkwargs = list(args), dict(kwargs)
 
             try:

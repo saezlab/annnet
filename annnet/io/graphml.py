@@ -29,7 +29,7 @@ def _sanitize_graphml_inplace(G):
                 continue
             try:
                 d[k] = json.dumps(v, ensure_ascii=False)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 d[k] = str(v)
 
     clean_dict(G.graph)
@@ -52,14 +52,14 @@ def _restore_types_graphml_inplace(G):
         if (t.startswith('{') and t.endswith('}')) or (t.startswith('[') and t.endswith(']')):
             try:
                 return json.loads(t)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 return t
         if _NUM_RE.match(t):
             try:
                 if '.' not in t and 'e' not in low:
                     return int(t)
                 return float(t)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 return t
         return t
 
@@ -76,6 +76,7 @@ def _restore_types_graphml_inplace(G):
 
 def to_graphml(graph, path, *, directed=True, hyperedge_mode='reify', public_only=False):
     """Export via NetworkX with reified hyperedges; sanitize attrs for GraphML.
+
     Also writes a sidecar manifest for lossless re-import.
     """
     G, manifest = to_nx(
@@ -91,6 +92,7 @@ def to_graphml(graph, path, *, directed=True, hyperedge_mode='reify', public_onl
 
 def from_graphml(path, *, hyperedge='reified'):
     """Import via NetworkX; if a sidecar manifest is present, use it as SSOT.
+
     Otherwise, fall back to a best-effort no-manifest import with type restoration.
     """
     G = nx.read_graphml(path)
@@ -106,10 +108,12 @@ def from_graphml(path, *, hyperedge='reified'):
 
 
 def to_gexf(graph: AnnNet, path, *, directed=True, hyperedge_mode='reify', public_only=False):
+    """Export an AnnNet graph to GEXF via NetworkX."""
     G, _m = to_nx(graph, directed=directed, hyperedge_mode=hyperedge_mode, public_only=public_only)
     nx.write_gexf(G, path)
 
 
 def from_gexf(path, *, hyperedge='reified') -> AnnNet:
+    """Import a GEXF graph through NetworkX."""
     G = nx.read_gexf(path)
     return _from_nx_without_manifest(G, hyperedge=('reified' if hyperedge == 'reified' else 'none'))

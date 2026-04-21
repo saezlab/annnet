@@ -57,6 +57,7 @@ def _suppress_repr_warnings(g: Any) -> None:
 
 
 def build_vertex_labels(graph, key: str | None = None) -> dict[str, str]:
+    """Build display labels for graph vertices."""
     labels: dict[str, str] = {}
     for vid in graph.vertices():
         if key is None:
@@ -73,6 +74,7 @@ def build_edge_labels(
     extra_keys: list[str] | None = None,
     layer: str | None = None,
 ) -> dict[int, str]:
+    """Build display labels for graph edges."""
     extra_keys = extra_keys or []
     labels: dict[int, str] = {}
     for j in range(graph.ne):
@@ -82,7 +84,7 @@ def build_edge_labels(
             try:
                 w = graph.get_effective_edge_weight(eid, slice=layer)
                 parts.append(f'w={w:.3g}')
-            except Exception:
+            except (AttributeError, KeyError, TypeError, ValueError):
                 pass
         for k in extra_keys:
             v = graph.get_attr_edge(eid, k, default=None)
@@ -141,7 +143,7 @@ def edge_style_from_weights(
         eid = graph.idx_to_edge[j]
         try:
             raw_vals.append(abs(float(graph.get_effective_edge_weight(eid, slice=layer))))
-        except Exception:
+        except (AttributeError, KeyError, TypeError, ValueError):
             raw_vals.append(1.0)
 
     x = _normalize(raw_vals)
@@ -154,7 +156,7 @@ def edge_style_from_weights(
             eid = graph.idx_to_edge[j]
             try:
                 w = float(graph.get_effective_edge_weight(eid, slice=layer))
-            except Exception:
+            except (AttributeError, KeyError, TypeError, ValueError):
                 w = 0.0
             color = 'firebrick4' if w > 0 else ('dodgerblue4' if w < 0 else 'black')
         else:
@@ -215,6 +217,7 @@ def to_graphviz(
     orphan_edges: bool = True,
     suppress_warnings: bool = True,
 ):
+    """Convert a graph to a Graphviz Digraph."""
     import graphviz
 
     Gv = graphviz.Digraph(
@@ -243,7 +246,7 @@ def to_graphviz(
             continue
 
         # pick styling overrides
-        e_attr = dict()
+        e_attr = {}
         if custom_edge_attr and j in custom_edge_attr:
             e_attr.update(custom_edge_attr[j])
 
@@ -296,6 +299,7 @@ def to_pydot(
     edge_indexes: list[int] | None = None,
     orphan_edges: bool = True,
 ):
+    """Convert a graph to a pydot Dot graph."""
     import pydot
 
     Gd = pydot.Dot(graph_type='digraph', **(graph_attr or {}))
@@ -321,7 +325,7 @@ def to_pydot(
         if not orphan_edges and (len(S) == 0 or len(T) == 0):
             continue
 
-        e_attr = dict()
+        e_attr = {}
         if custom_edge_attr and j in custom_edge_attr:
             e_attr.update(custom_edge_attr[j])
 
@@ -567,7 +571,7 @@ def plot(
             graph,
             layout=layout,
             graph_attr=kwargs.get('graph_attr'),
-            node_attr=kwargs.get('node_attr', dict(fixedsize='true')),
+            node_attr=kwargs.get('node_attr', {'fixedsize': 'true'}),
             edge_attr=kwargs.get('edge_attr'),
             custom_edge_attr=custom_edge_attr,
             custom_vertex_attr=custom_vertex_attr,
@@ -586,7 +590,7 @@ def plot(
                 graph,
                 layout=layout,
                 graph_attr=kwargs.get('graph_attr'),
-                node_attr=kwargs.get('node_attr', dict(fixedsize='true')),
+                node_attr=kwargs.get('node_attr', {'fixedsize': 'true'}),
                 edge_attr=kwargs.get('edge_attr'),
                 custom_edge_attr=custom_edge_attr,
                 custom_vertex_attr=custom_vertex_attr,

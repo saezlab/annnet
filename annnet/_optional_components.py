@@ -6,6 +6,7 @@ from typing import NamedTuple
 from importlib.util import find_spec
 from collections.abc import Mapping
 
+
 class OptionalComponent(NamedTuple):
     module: str
     install: str | None = None

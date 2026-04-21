@@ -165,7 +165,6 @@ class TestExcelIO(unittest.TestCase):
             G = from_excel(path, schema='auto')
             ev = G.edges_view()
             self.assertEqual(ev.shape[0], 1)
-            cols = _colmap(ev)
             self.assertIn('source', {c.lower() for c in ev.columns})
             self.assertIn('target', {c.lower() for c in ev.columns})
         finally:

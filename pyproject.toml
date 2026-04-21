@@ -242,6 +242,7 @@ quote-style = "single"
 [tool.ruff.lint]
 unfixable = ["UP"]
 ignore = [
+    "ANN",   # TODO: reintroduce when stable API, but for now too large annotation backlog
     "B008",  # Errors from function calls in argument defaults. These are fine when the result is immutable.
     "B024",
     "D100",  # Missing docstring in public module
@@ -260,33 +261,31 @@ ignore = [
     "E741",  # allow I, O, l as variable names -> I is the identity matrix
     "Q000",  # Incompatible with formatter quote-style = "single"
     "Q003",  # Incompatible with formatter quote-style = "single"
+    "TID252",# TODO: reintroduce when stable API, for now project uses relative imports
 ]
 select = [
-    "B",  # flake8-bugbear
-    "BLE",  # flake8-blind-except
-    "C4",  # flake8-comprehensions
-    "D",  # pydocstyle
-    "E",  # Error detected by Pycodestyle
-    "F",  # Errors detected by Pyflakes
-    "I",  # isort
-    "RUF100",  # Report unused noqa directives
-    "TID",  # flake8-tidy-imports
-    "UP",  # pyupgrade
-    "W",  # Warning detected by Pycodestyle
-    "Q",  # Consistent quotes
+    "B",     # flake8-bugbear
+    "BLE",   # flake8-blind-except
+    "C4",    # flake8-comprehensions
+    "D",     # pydocstyle
+    "E",     # Error detected by Pycodestyle
+    "F",     # Errors detected by Pyflakes
+    "I",     # isort
+    "Q",     # Consistent quotes
+    "RUF100",# Report unused noqa directives
     "S307",  # eval() detection
-    "ANN",  # flake8-annotations
+    "TID",   # flake8-tidy-imports
+    "UP",    # pyupgrade
+    "W",     # Warning detected by Pycodestyle
 ]
 
 [tool.ruff.lint.isort]
 case-sensitive = false
 combine-as-imports = true
 force-sort-within-sections = true
-force-wrap-aliases = true
 known-first-party = ["annnet"]
 known-third-party = ["numpy", "pandas"]
 length-sort = true
-lines-after-imports = 1
 order-by-type = true
 section-order = [
     "future",
@@ -298,9 +297,11 @@ section-order = [
 
 [tool.ruff.lint.per-file-ignores]
 "*/__init__.py" = ["D104", "F401"]
-"docs/*" = ["I"]
-"tests/*" = ["D", "ANN", "I", "BLE", "E402"]
+"docs/*" = ["ANN", "BLE", "D", "E402", "I"]
+"tests/*" = ["ANN", "BLE", "D", "E402", "I"]
 "tests/conftest.py" = ["D101", "D102", "D103", "E402"]
+"notebooks/*" = ["ANN", "BLE", "D", "E402", "I001"]
+"docs/tutorials/notebooks/*" = ["ANN", "BLE", "D", "E402", "I001"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

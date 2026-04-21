@@ -85,7 +85,7 @@ class TestGraphBasics(unittest.TestCase):
         # attributes stored as edge attrs
         self.assertEqual(self.g.get_attr_edge('edge_ghost', 'label'), 'meta')
         # can connect another edge TO this edge
-        e2 = self.g.add_edge('z', 'edge_ghost', edge_id='meta_link')
+        self.g.add_edge('z', 'edge_ghost', edge_id='meta_link')
         self.assertIn('meta_link', self.g.edge_to_idx)
 
     def test_hyperedge_undirected(self):
@@ -362,7 +362,7 @@ class TestErrorPaths(unittest.TestCase):
 
     def test_add_edge_auto_creates_missing_vertices(self):
         # Neither X nor Y exist yet
-        eid = self.g.add_edge('X', 'Y', edge_id='auto_e')
+        self.g.add_edge('X', 'Y', edge_id='auto_e')
         self.assertIn('X', self.g.entity_to_idx)
         self.assertIn('Y', self.g.entity_to_idx)
         self.assertIn('auto_e', self.g.edge_to_idx)

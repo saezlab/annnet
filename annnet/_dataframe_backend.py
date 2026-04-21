@@ -206,7 +206,6 @@ def rename_dataframe_columns(df, mapping: dict[str, str]):
 
 
 def _polars_schema(schema: dict[str, str]):
-
     return {name: _polars_dtype(kind) for name, kind in schema.items()}
 
 

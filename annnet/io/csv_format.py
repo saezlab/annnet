@@ -1,4 +1,4 @@
-"""This module purposefully avoids importing stdlib `csv` and uses Polars for IO.
+"""CSV ingestion and export helpers using Polars instead of stdlib `csv`.
 
 It ingests a CSV into AnnNet by auto-detecting common schemas:
 - Edge list (including DOK/COO triples and variations)
@@ -41,7 +41,7 @@ import numpy as np
 
 try:
     import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
+except Exception:  # ModuleNotFoundError, etc.  # noqa: BLE001
     pl = None
 
 from ..core.graph import AnnNet
@@ -128,7 +128,7 @@ def _split_slices(cell: Any) -> list[str]:
                     return [_norm(v) for v in val]
                 if isinstance(val, dict):
                     return list(val.keys())
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
         return [p.strip() for p in _slice_SEP.split(cell) if p.strip()]
     if isinstance(cell, (list, tuple, set)):
@@ -147,7 +147,7 @@ def _split_set(cell: Any) -> set[str]:
         if s.startswith('[') and s.endswith(']'):
             try:
                 return {_norm(v) for v in json.loads(s)}
-            except Exception:
+            except Exception:  # noqa: BLE001
                 return {p.strip() for p in _SET_SEP.split(s) if p.strip()}
         return {p.strip() for p in _SET_SEP.split(s) if p.strip()}
     if isinstance(cell, (list, tuple, set)):
@@ -421,7 +421,6 @@ def edges_to_csv(G, path, slice=None):
     df = df.filter(pl.col(src).is_not_null() & pl.col(dst).is_not_null())
 
     # Optional columns
-    dircol = cols.get('directed') or cols.get('edge_directed')
     # Prefer resolved/global weights if present
     wcol = (
         cols.get('effective_weight')
@@ -430,6 +429,7 @@ def edges_to_csv(G, path, slice=None):
         or cols.get('w')
     )
     slicecol = cols.get('slice')
+    dircol = cols.get('directed') or cols.get('edge_directed')
 
     n = df.height
 
@@ -497,7 +497,6 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
     members = cols.get('members')
     head = cols.get('head')
     tail = cols.get('tail')
-    dircol = cols.get('directed') or cols.get('edge_directed')
     # Prefer resolved/global weights if present
     wcol = (
         cols.get('effective_weight')
@@ -506,7 +505,6 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
         or cols.get('w')
     )
     slicecol = cols.get('slice')
-    n = df.height
 
     # Helper to coerce values/lists/tuples to pipe-joined strings; leaves strings as-is.
     def _to_pipe_joined(series: pl.Series, name: str) -> pl.Series:
@@ -525,7 +523,7 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
                         arr = json.loads(s)
                         out.append('|'.join(sorted(str(x) for x in arr)))
                         continue
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
                 # Split on common separators if present
                 parts = [p.strip() for p in _SET_SEP.split(s)] if _SET_SEP.search(s) else [s]
@@ -594,7 +592,9 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
                 'members',
                 [
                     '|'.join(sorted([p for p in (hval.split('|') + tval.split('|')) if p]))
-                    for hval, tval in zip(h.filter(mask).to_list(), t.filter(mask).to_list(), strict=False)
+                    for hval, tval in zip(
+                        h.filter(mask).to_list(), t.filter(mask).to_list(), strict=False
+                    )
                 ],
             )
             out = pl.DataFrame(
@@ -710,7 +710,7 @@ def _ingest_edge_list(
                         if suffix == L and row[c] is not None:
                             try:
                                 G.set_edge_slice_attrs(L, eid, weight=float(row[c]))  # type: ignore[arg-type]
-                            except Exception:
+                            except Exception:  # noqa: BLE001
                                 pass
         # explicit edge id mapping if present
         if ecol and eid is not None and row[ecol]:

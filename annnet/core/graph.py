@@ -7,7 +7,7 @@ import numpy as np
 
 try:
     import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
+except Exception:  # ModuleNotFoundError, etc.  # noqa: BLE001
     pl = None
 import scipy.sparse as sp
 
@@ -1109,12 +1109,13 @@ class AnnNet(
         target : str
 
         """
-        for slice_id, slice_data in self._slices.items():
+        for _slice_id, slice_data in self._slices.items():
             if source in slice_data['vertices'] and target in slice_data['vertices']:
                 slice_data['edges'].add(edge_id)
 
     def _propagate_to_all_slices(self, edge_id, source, target):
         """INTERNAL: Add an edge to any slice containing **either** endpoint and
+
         insert the missing endpoint into that slice.
 
         Parameters
@@ -1124,7 +1125,7 @@ class AnnNet(
         target : str
 
         """
-        for slice_id, slice_data in self._slices.items():
+        for _slice_id, slice_data in self._slices.items():
             if source in slice_data['vertices'] or target in slice_data['vertices']:
                 slice_data['edges'].add(edge_id)
                 # Only add missing endpoint if both vertices should be in slice
@@ -1217,11 +1218,11 @@ class AnnNet(
             rec.directed = False
             try:
                 self.set_edge_attrs(eid, edge_type=EdgeType.UNDIRECTED)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
         # 2) Hyperedges
-        for eid, rec in list(self._edges.items()):
+        for _eid, rec in list(self._edges.items()):
             if rec.etype != 'hyper':
                 continue
 
@@ -1567,7 +1568,7 @@ class AnnNet(
             try:
                 incident.extend(self._get_csr().getrow(ent.row_idx).indices.tolist())
                 return incident
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
         for j in range(len(self._col_to_edge)):
             eid = self._col_to_edge[j]
@@ -2232,11 +2233,11 @@ class AnnNet(
                 'slices': len(self._slices),
             },
             # Store minimal state for comparison (uses existing AnnNet attributes)
-            'vertex_ids': set(
+            'vertex_ids': {
                 eid[0] if isinstance(eid, tuple) else eid
                 for eid, r in self._entities.items()
                 if r.kind == 'vertex'
-            ),
+            },
             'edge_ids': set(self._col_to_edge.values()),
             'slice_ids': set(self._slices.keys()),
         }
@@ -2279,7 +2280,7 @@ class AnnNet(
             return {
                 'label': 'external',
                 'version': ref._version,
-                'vertex_ids': set(eid for eid, r in ref._entities.items() if r.kind == 'vertex'),
+                'vertex_ids': {eid for eid, r in ref._entities.items() if r.kind == 'vertex'},
                 'edge_ids': set(ref._col_to_edge.values()),
                 'slice_ids': set(ref._slices.keys()),
             }
@@ -2291,11 +2292,11 @@ class AnnNet(
         return {
             'label': 'current',
             'version': self._version,
-            'vertex_ids': set(
+            'vertex_ids': {
                 eid[0] if isinstance(eid, tuple) else eid
                 for eid, r in self._entities.items()
                 if r.kind == 'vertex'
-            ),
+            },
             'edge_ids': set(self._col_to_edge.values()),
             'slice_ids': set(self._slices.keys()),
         }

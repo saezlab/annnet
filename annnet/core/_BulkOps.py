@@ -4,7 +4,7 @@ import narwhals as nw
 
 try:
     import polars as pl
-except Exception:
+except Exception:  # noqa: BLE001
     pl = None
 import scipy.sparse as sp
 
@@ -15,6 +15,7 @@ from ._helpers import (
     _get_numeric_supertype,
 )
 
+
 def _sanitize(v):
     if isinstance(v, (list, tuple, dict)):
         return json.dumps(v, ensure_ascii=False)
@@ -22,12 +23,11 @@ def _sanitize(v):
 
 
 def _to_polars_if_possible(df):
-
     try:
         nwd = nw.from_native(df, eager_only=True)
         if nwd.implementation.is_polars():
             return nw.to_native(nwd), True
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     return df, False
 
@@ -107,7 +107,7 @@ class BulkOps:
             norm_vids = [_sys.intern(v) if isinstance(v, str) else v for v in norm_vids]
             if isinstance(slice, str):
                 slice = _sys.intern(slice)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         # Entity registration — compute layer coord ONCE for the whole batch
@@ -322,7 +322,7 @@ class BulkOps:
             ]
             if isinstance(slice, str):
                 slice = _sys.intern(slice)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         # ENTITY REGISTRATION — compute layer coord once for the whole batch
@@ -357,7 +357,7 @@ class BulkOps:
         # Build lookup of existing vertex_ids once
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
 
         existing_ids = set()
@@ -371,7 +371,7 @@ class BulkOps:
                 native = nw.to_native(nw.from_native(df).select('vertex_id'))
                 col = native['vertex_id']
                 existing_ids = set(col.to_list() if hasattr(col, 'to_list') else list(col))
-        except Exception:
+        except Exception:  # noqa: BLE001
             existing_ids = set()
 
         # Build new rows (for vertex_ids missing in DF)
@@ -399,7 +399,7 @@ class BulkOps:
         # Vectorized insert of new rows
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
 
         if new_rows_data:
@@ -441,7 +441,7 @@ class BulkOps:
         # VECTORIZED UPSERT OF EXISTING ATTRIBUTES
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
 
         update_pairs = [(vid, attrs) for vid, attrs in norm if vid in existing_ids and attrs]
@@ -598,9 +598,9 @@ class BulkOps:
                     d['edge_id'] = _sys.intern(eid)
                 try:
                     d['weight'] = float(d['weight'])
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         M = self._matrix
@@ -675,7 +675,6 @@ class BulkOps:
         for d in norm:
             s, t = d['source'], d['target']
             w = d['weight']
-            etype = d.get('edge_type', 'regular')
             prop = d.get('propagate', default_propagate)
             slice_local = d.get('slice', slice)
             slice_w = d.get('slice_weight', default_slice_weight)
@@ -700,12 +699,12 @@ class BulkOps:
                 old_s, old_t = rec.src, rec.tgt
                 try:
                     _M_zero_keys.append((self._entity_row(old_s), col))
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
                 if old_t is not None and old_t != old_s:
                     try:
                         _M_zero_keys.append((self._entity_row(old_t), col))
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
                 _M_writes[(s_idx, col)] = fw
                 if s != t:
@@ -903,9 +902,9 @@ class BulkOps:
                     d['edge_id'] = _sys.intern(eid)
                 try:
                     d['weight'] = float(d['weight'])
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         # Collect ALL unique vertices first
@@ -978,7 +977,7 @@ class BulkOps:
                                 _m_fast_set(r, col, 0)
                             else:
                                 M[r, col] = 0
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             pass
                 else:
                     for vid in (rec.src, rec.tgt):
@@ -990,7 +989,7 @@ class BulkOps:
                                 _m_fast_set(r, col, 0)
                             else:
                                 M[r, col] = 0
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             pass
             else:
                 col = len(self._col_to_edge)
@@ -1147,7 +1146,7 @@ class BulkOps:
             try:
                 if df is None or len(df) == 0:
                     return
-            except Exception:
+            except Exception:  # noqa: BLE001
                 return
 
         missing = [f for f in self._vertex_key_fields if f not in df.columns]
@@ -1169,7 +1168,7 @@ class BulkOps:
                         raise ValueError(f'Composite key conflict for {key}: {owner} vs {vid}')
                     self._vertex_key_index[key] = vid
                 return
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass  # fall through to generic
         # generic path
         try:
@@ -1188,16 +1187,18 @@ class BulkOps:
                     continue
                 owner = self._vertex_key_index.get(key)
                 if owner is not None and owner != vid:
-                    raise ValueError(f'Composite key conflict for {key}: {owner} vs {vid}')
+                    raise ValueError(
+                        f'Composite key conflict for {key}: {owner} vs {vid}'
+                    ) from None
                 self._vertex_key_index[key] = vid
-        except Exception:
+        except Exception:  # noqa: BLE001
             # last-resort fallback: per-vid lookups
             try:
                 vids = df.get_column('vertex_id').to_list()  # polars
-            except Exception:
+            except Exception:  # noqa: BLE001
                 try:
                     vids = list(df['vertex_id'])
-                except Exception:
+                except Exception:  # noqa: BLE001
                     vids = []
             for vid in vids:
                 cur = {f: self.get_attr_vertex(vid, f, None) for f in self._vertex_key_fields}
@@ -1206,7 +1207,9 @@ class BulkOps:
                     continue
                 owner = self._vertex_key_index.get(key)
                 if owner is not None and owner != vid:
-                    raise ValueError(f'Composite key conflict for {key}: {owner} vs {vid}')
+                    raise ValueError(
+                        f'Composite key conflict for {key}: {owner} vs {vid}'
+                    ) from None
                 self._vertex_key_index[key] = vid
 
     # Bulk remove / mutate down
@@ -1277,7 +1280,7 @@ class BulkOps:
 
         # Rebuild edge col mappings
         self._col_to_edge.clear()
-        for new_idx, (old_idx, eid) in enumerate(keep_pairs):
+        for new_idx, (_old_idx, eid) in enumerate(keep_pairs):
             self._col_to_edge[new_idx] = eid
             self._edges[eid].col_idx = new_idx
 
@@ -1385,9 +1388,6 @@ class BulkOps:
             old_rec = self._entities[ent]
             new_entities[ent] = EntityRecord(row_idx=new_i, kind=old_rec.kind)
             new_row_to_entity[new_i] = ent
-        # remove dropped entities
-        for vid in drop_vs:
-            pass  # they're not in new_entities, no action needed
         self._entities = new_entities
         self._row_to_entity = new_row_to_entity
         self._rebuild_entity_indexes()

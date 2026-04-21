@@ -138,7 +138,6 @@ class TestGTBackendAccessor(unittest.TestCase):
         g.add_vertex('b')
         g.add_edge('a', 'b')
 
-        gtg = g.gt.backend()
         lg, *_ = g.gt.generation.line_graph(g)
 
         # line graph of 1 edge has 1 vertex

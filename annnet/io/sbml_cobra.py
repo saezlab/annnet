@@ -1,4 +1,5 @@
 """SBML (Systems Biology Markup Language) → AnnNet adapter
+
 ------------------------------------------------------
 Targets the provided `AnnNet` API.
 
@@ -18,15 +19,16 @@ from collections.abc import Iterable, Sequence
 
 import numpy as np
 
-warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
-
 from ..core.graph import AnnNet
+
+warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
 
 # ----------------------- utilities -----------------------
 
 
 def _monkeypatch_set_edge_coeffs(G) -> bool:
     """Add `set_edge_coeffs(edge_id, coeffs)` to AnnNet instance if missing.
+
     Writes per-vertex coefficients into the incidence column (DOK [Dictionary Of Keys]).
     Returns True if patch was applied, False if already available.
     """
@@ -147,6 +149,7 @@ def from_cobra_model(
     preserve_stoichiometry: bool = True,
 ) -> AnnNet:
     """Convert a COBRApy model to AnnNet. Requires cobra.util.array.create_stoichiometric_matrix.
+
     Edge attributes added: name, default_lb, default_ub, gpr (Gene-Protein-Reaction rule [GPR]).
     """
     try:

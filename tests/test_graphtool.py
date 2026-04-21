@@ -13,17 +13,12 @@ warnings.filterwarnings(
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from annnet.core.graph import AnnNet
-
-try:
-
-    HAS_GT = True
-except Exception:
-    HAS_GT = False
-
+from annnet.adapters import graphtool_adapter
 from annnet.adapters.graphtool_adapter import from_graphtool, to_graphtool
 
 from .conftest import build_adapter_graph as _build_graph
 
+HAS_GT = graphtool_adapter.gt is not None
 _BUILD_GRAPH = _build_graph
 
 

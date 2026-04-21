@@ -8,9 +8,7 @@ T = TypeVar('T')
 
 
 def canonicalize(obj):
-    """Recursively convert an object into a JSON-serializable structure
-    that is independent of internal ordering.
-    """
+    """Convert an object into an order-independent JSON-serializable structure."""
     if isinstance(obj, dict):
         # Convert dictionary keys to strings and sort the keys
         return {
@@ -37,6 +35,7 @@ def canonicalize(obj):
 
 
 def obj_canonicalized_hash(obj) -> str:
+    """Return a stable SHA256 hash for a canonicalized object."""
     # First canonicalize the object
     canonical_obj = canonicalize(obj)
     # Serialize the canonical object to a JSON string.
@@ -52,6 +51,7 @@ def obj_canonicalized_hash(obj) -> str:
 
 
 def unique_iter(iterable: Iterable[T], key: Callable[[T], Any] | None = None) -> Iterable[T]:
+    """Yield unique items from an iterable while preserving order."""
     # Based on https://iteration-utilities.readthedocs.io/en/latest/generated/unique_everseen.html
     seen: set[Any] = set()
     seen_add = seen.add

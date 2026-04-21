@@ -5,7 +5,7 @@ from collections.abc import Iterable
 
 try:
     from ..core.graph import AnnNet
-except Exception:
+except Exception:  # noqa: BLE001
     from annnet.core.graph import AnnNet
 
 from ..adapters._utils import (
@@ -23,6 +23,7 @@ from ..adapters._utils import (
     _deserialize_layer_tuple_attrs,
 )
 from .._dataframe_backend import empty_dataframe
+
 
 def _split_sif_line(line: str, delimiter: str | None) -> list[str]:
     if delimiter is not None:
@@ -55,7 +56,7 @@ def _get_edge_weight(graph: AnnNet, edge_id: str, default=1.0):
         rec = getattr(graph, '_edges', {}).get(edge_id)
         if rec is not None and rec.weight is not None:
             return float(rec.weight)
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     return default
 
@@ -77,7 +78,7 @@ def _build_edge_attr_map(graph: AnnNet):
             if attrs:
                 out[eid] = attrs
         return out if out else None
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -218,7 +219,7 @@ def to_sif(
                                 k: v for k, v in row.items() if k != 'vertex_id' and v is not None
                             }
                             vmap[vid] = attrs
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         vmap = {}
 
                 if not vmap:
@@ -233,7 +234,7 @@ def to_sif(
                                     continue
                                 attrs = getter(vid) or {}
                                 vmap[svid] = {k: v for k, v in attrs.items() if v is not None}
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             pass
 
                 for vid in graph.vertices():
@@ -289,13 +290,13 @@ def to_sif(
                             w = graph.get_edge_slice_attr(lid, eid, 'weight', default=None)
                             if w is not None:
                                 slice_info['weights'][eid] = float(w)
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             pass
 
                     manifest['slices'][str(lid)] = slice_info
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         if manifest_path:
@@ -409,7 +410,7 @@ def from_sif(
             return k, v
         try:
             return k, float(v)
-        except:
+        except:  # noqa: E722
             return k, v
 
     # ===== NODES SIDECAR WITH PRE-DETECT DELIMITER =====
@@ -499,7 +500,7 @@ def from_sif(
 
     # ===== BULK ADD VERTICES =====
     if vertex_data:
-        vertices_bulk = [(vid, attrs) for vid, attrs in vertex_data.items()]
+        vertices_bulk = list(vertex_data.items())
         H.add_vertices_bulk(vertices_bulk)
 
     # ===== BULK ADD EDGES WITH FAST HASHING + DELAYED EXPANSION =====
@@ -639,7 +640,7 @@ def from_sif(
             layer_attr_rows = mm.get('layer_attributes', [])
             if layer_attr_rows:
                 H.layer_attributes = _rows_to_df(layer_attr_rows)
-        except:
+        except:  # noqa: E722
             pass
 
     return H

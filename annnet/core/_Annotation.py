@@ -7,7 +7,7 @@ try:
     import polars as pl  # optional
 
     is_polars = True
-except Exception:  # ModuleNotFoundError, etc.
+except Exception:  # ModuleNotFoundError, etc.  # noqa: BLE001
     pl = None
     is_polars = False
 from ._helpers import _get_numeric_supertype
@@ -241,7 +241,7 @@ class AttributesClass:
                 if hasattr(col, 'iloc')
                 else (col.to_list()[0] if hasattr(col, 'to_list') else list(col)[0])
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             # fallback via first row dict
             r0 = (
                 rows.to_dicts()[0]
@@ -348,7 +348,7 @@ class AttributesClass:
                 if hasattr(col, 'iloc')
                 else (col.to_list()[0] if hasattr(col, 'to_list') else list(col)[0])
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             r0 = (
                 rows.to_dict(orient='records')[0]
                 if hasattr(rows, 'to_dict')
@@ -414,7 +414,7 @@ class AttributesClass:
                 if hasattr(col, 'iloc')
                 else (col.to_list()[0] if hasattr(col, 'to_list') else list(col)[0])
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             r0 = (
                 rows.to_dict(orient='records')[0]
                 if hasattr(rows, 'to_dict')
@@ -451,13 +451,13 @@ class AttributesClass:
                 slice_id = _sys.intern(slice_id)
             if isinstance(edge_id, str):
                 edge_id = _sys.intern(edge_id)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         if 'weight' in clean:
             try:
                 # cast once to float to reduce dtype mismatch churn inside _upsert_row
                 clean['weight'] = float(clean['weight'])
-            except Exception:
+            except Exception:  # noqa: BLE001
                 # leave as-is if not coercible; behavior stays identical
                 pass
 
@@ -525,7 +525,7 @@ class AttributesClass:
                 if hasattr(col, 'iloc')
                 else (col.to_list()[0] if hasattr(col, 'to_list') else list(col)[0])
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             r0 = (
                 rows.to_dict(orient='records')[0]
                 if hasattr(rows, 'to_dict')
@@ -611,7 +611,7 @@ class AttributesClass:
                                 if hasattr(col, 'iloc')
                                 else (col.to_list()[0] if hasattr(col, 'to_list') else list(col)[0])
                             )
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             r0 = (
                                 rows.to_dict(orient='records')[0]
                                 if hasattr(rows, 'to_dict')
@@ -652,7 +652,7 @@ class AttributesClass:
         if na is not None and hasattr(na, 'columns') and 'vertex_id' in na.columns:
             try:
                 import polars as pl
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pl = None
 
             if pl is not None and isinstance(na, pl.DataFrame) and na.height > 0:
@@ -664,7 +664,7 @@ class AttributesClass:
                 try:
                     s = tmp['vertex_id']
                     vertex_attr_ids = set(s.to_list() if hasattr(s, 'to_list') else list(s))
-                except Exception:
+                except Exception:  # noqa: BLE001
                     vertex_attr_ids = set()
         else:
             vertex_attr_ids = set()
@@ -672,7 +672,7 @@ class AttributesClass:
         if ea is not None and hasattr(ea, 'columns') and 'edge_id' in ea.columns:
             try:
                 import polars as pl
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pl = None
 
             if pl is not None and isinstance(ea, pl.DataFrame) and ea.height > 0:
@@ -684,7 +684,7 @@ class AttributesClass:
                 try:
                     s = tmp['edge_id']
                     edge_attr_ids = set(s.to_list() if hasattr(s, 'to_list') else list(s))
-                except Exception:
+                except Exception:  # noqa: BLE001
                     edge_attr_ids = set()
         else:
             edge_attr_ids = set()
@@ -702,7 +702,7 @@ class AttributesClass:
         ):
             try:
                 import polars as pl
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pl = None
 
             if pl is not None and isinstance(ela, pl.DataFrame) and ela.height > 0:
@@ -740,7 +740,7 @@ class AttributesClass:
 
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
         import narwhals as nw
 
@@ -842,7 +842,7 @@ class AttributesClass:
                 else:
                     try:
                         nw_df = nw_df.with_columns(nw.lit(None).cast(target).alias(col))
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         nw_df = nw_df.with_columns(nw.lit(None).alias(col))
             else:
                 # Upgrade logic: ONLY cast if the existing column is a Null/Unknown type
@@ -850,7 +850,7 @@ class AttributesClass:
                 if self._is_null_dtype(cur) and not self._is_null_dtype(target):
                     try:
                         nw_df = nw_df.with_columns(nw.col(col).cast(target))
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
                 # DELETED: The 'elif cur != target' block that forced String fallback.
                 # Type conflicts are now managed lazily during the actual upsert/concat.
@@ -883,7 +883,7 @@ class AttributesClass:
             if not isinstance(target_dtype, (nw.dtypes.DType, type(nw.Int64))):
                 return column_expr.cast(nw.String)
             return column_expr.cast(target_dtype)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return column_expr.cast(nw.String)
 
     def _upsert_row(self, df: 'object', idx: Any, attrs: dict) -> 'object':
@@ -928,7 +928,7 @@ class AttributesClass:
                             sup = _get_numeric_supertype(existing_dt, v_dt)
                             if sup and sup != existing_dt:
                                 upcasts.append(nw.col(c).cast(sup).alias(c))
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             pass
         if upcasts:
             nw_df = nw_df.with_columns(upcasts)
@@ -947,7 +947,8 @@ class AttributesClass:
                     key_cache = set(
                         zip(
                             nw_df.get_column('slice_id').to_list(),
-                            nw_df.get_column('edge_id').to_list(), strict=False,
+                            nw_df.get_column('edge_id').to_list(),
+                            strict=False,
                         )
                     )
                 else:
@@ -956,7 +957,7 @@ class AttributesClass:
                 setattr(self, df_id_name, current_df_id)
             cache_key = idx
             exists = cache_key in key_cache
-        except Exception:
+        except Exception:  # noqa: BLE001
             exists = nw_df.filter(cond).shape[0] > 0
             key_cache = None
 
@@ -1041,7 +1042,7 @@ class AttributesClass:
                             df_up.append(self._safe_nw_cast(nw.col(c), sup).alias(c))
                             app_up.append(self._safe_nw_cast(nw.col(c), sup).alias(c))
                             continue
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass  # Fall through to string if supertype fails
 
                 # 3. Final Fallback (Incompatible types only)
@@ -1085,7 +1086,7 @@ class AttributesClass:
         except AttributeError:
             try:
                 existing_rows = native.to_dict(orient='records')
-            except Exception:
+            except Exception:  # noqa: BLE001
                 existing_rows = []
 
         def _key(row):
@@ -1243,12 +1244,12 @@ class AttributesClass:
                 else native.to_dict(orient='records')
             )
             return rows[0] if rows else {}
-        except Exception:
+        except Exception:  # noqa: BLE001
             # Fallback if df is pandas or dict-like
             try:
                 row = df[df['edge_id'] == eid].to_dict(orient='records')
                 return row[0] if row else {}
-            except Exception:
+            except Exception:  # noqa: BLE001
                 return {}
 
     def get_vertex_attrs(self, vertex) -> dict:
@@ -1283,11 +1284,11 @@ class AttributesClass:
                 else native.to_dict(orient='records')
             )
             return rows[0] if rows else {}
-        except Exception:
+        except Exception:  # noqa: BLE001
             try:
                 row = df[df['vertex_id'] == vertex].to_dict(orient='records')
                 return row[0] if row else {}
-            except Exception:
+            except Exception:  # noqa: BLE001
                 return {}
 
     ## Bulk attributes
@@ -1332,7 +1333,7 @@ class AttributesClass:
                 else native.to_dict(orient='records')
             )
             return {r.get('edge_id'): dict(r) for r in rows if r.get('edge_id') is not None}
-        except Exception:
+        except Exception:  # noqa: BLE001
             return {}
 
     def get_attr_vertices(self, vertices=None) -> dict:
@@ -1352,7 +1353,7 @@ class AttributesClass:
 
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
 
         if vertices is not None:
@@ -1380,7 +1381,7 @@ class AttributesClass:
                 else native.to_dict(orient='records')
             )
             return {r.get('vertex_id'): dict(r) for r in rows if r.get('vertex_id') is not None}
-        except Exception:
+        except Exception:  # noqa: BLE001
             return {}
 
     def get_attr_from_edges(self, key: str, default=None) -> dict:
@@ -1496,7 +1497,7 @@ class AttributesClass:
             if 'weight' in r:
                 try:
                     r['weight'] = float(r['weight'])
-                except Exception:
+                except Exception:  # noqa: BLE001
                     pass
             rows.append(r)
         if not rows:
@@ -1506,7 +1507,7 @@ class AttributesClass:
         df = self.edge_slice_attributes
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
 
         if pl is not None:
@@ -1519,7 +1520,7 @@ class AttributesClass:
         # ensure required key cols exist/correct dtype on existing df
         try:
             import polars as pl
-        except Exception:
+        except Exception:  # noqa: BLE001
             pl = None
 
         is_polars = pl is not None and isinstance(df, pl.DataFrame)
@@ -1527,7 +1528,7 @@ class AttributesClass:
         is_empty = False
         try:
             is_empty = df.is_empty() if is_polars else (len(df) == 0)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         if (not is_polars) or is_empty:
@@ -1603,7 +1604,7 @@ class AttributesClass:
             self.slice_edge_weights.setdefault(slice_id, {})
             try:
                 import polars as pl
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pl = None
 
             if pl is not None and isinstance(add_df, pl.DataFrame):

@@ -24,6 +24,7 @@ from ..adapters._utils import (
 )
 from .._dataframe_backend import dataframe_from_rows
 
+
 def _build_dataframe_from_rows(rows):
     """Build a dataframe/table using AnnNet's configured backend selection."""
     return dataframe_from_rows(rows)
@@ -54,7 +55,7 @@ def _is_directed_eid(graph, eid):
         val = graph.get_attr_edge(eid, 'directed')
         if val is not None:
             return bool(val)
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
     # For hyperedges, check if S and T are identical (undirected)
@@ -65,7 +66,7 @@ def _is_directed_eid(graph, eid):
             # If S == T, it's undirected (same member set in both)
             if S == T:
                 return False
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     # Default: True for binary, False for hyper
@@ -74,6 +75,7 @@ def _is_directed_eid(graph, eid):
 
 def _coerce_coeff_mapping(val):
     """Normalize various serialized forms into {vertex: {__value: float}|float}.
+
     Accepts dict | list | list-of-dicts | list-of-pairs | JSON string.
     """
     if val is None:
@@ -81,7 +83,7 @@ def _coerce_coeff_mapping(val):
     if isinstance(val, str):
         try:
             return _coerce_coeff_mapping(json.loads(val))
-        except Exception:
+        except Exception:  # noqa: BLE001
             return {}
     if isinstance(val, dict):
         return val
@@ -107,14 +109,14 @@ def _is_nullish(val) -> bool:
     try:
         if isinstance(val, float) and math.isnan(val):
             return True
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     try:
         # Covers numpy scalar NaN without importing a concrete dataframe backend.
         maybe_nan = val != val
         if isinstance(maybe_nan, bool) and maybe_nan:
             return True
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     return False
 
@@ -139,6 +141,7 @@ def _as_list_or_empty(val):
 
 def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
     """Return {vertex: float_coeff} for the given endpoint_set.
+
     Reads from edge_attrs[private_key] which may be serialized in multiple shapes.
     Missing endpoints default to 1.0.
     """
@@ -152,7 +155,7 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
             val = val.get('__value', 1.0)
         try:
             out[u] = float(val)
-        except Exception:
+        except Exception:  # noqa: BLE001
             out[u] = 1.0
     return out
 
@@ -164,7 +167,7 @@ def _build_attr_map(df, key_col: str) -> dict:
         if not isinstance(rec, dict):
             try:
                 rec = dict(rec)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 continue
         if key_col not in rec:
             continue
@@ -180,6 +183,7 @@ def _build_attr_map(df, key_col: str) -> dict:
 
 def to_parquet(graph: AnnNet, path):
     """Write lossless GraphDir:
+
       vertices.parquet, edges.parquet, slices.parquet, edge_slices.parquet, manifest.json
     Wide tables (attrs as columns). Hyperedges stored with 'kind' and head/tail/members lists.
     """
@@ -288,7 +292,7 @@ def to_parquet(graph: AnnNet, path):
     try:
         for lid in graph.list_slices(include_default=True):
             L.append({'slice_id': lid})
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     _write_parquet_df(
         _build_dataframe_from_rows(L),
@@ -304,15 +308,15 @@ def to_parquet(graph: AnnNet, path):
                 rec = {'slice_id': lid, 'edge_id': eid}
                 try:
                     w = graph.get_edge_slice_attr(lid, eid, 'weight', default=None)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     try:
                         w = graph.get_edge_slice_attr(lid, eid, 'weight')
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         w = None
                 if w is not None:
                     rec['weight'] = float(w)
                 EL.append(rec)
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     _write_parquet_df(
         _build_dataframe_from_rows(EL),
@@ -376,7 +380,7 @@ def from_parquet(path) -> AnnNet:
         binary = E.filter(E['kind'] == 'binary')
         hyper = E.filter(E['kind'] == 'hyper')
         is_polars_like = True
-    except Exception:
+    except Exception:  # noqa: BLE001
         # Fallback: materialize rows and split
         rows = list(_iter_rows(E))
         binary = [r for r in rows if r.get('kind') == 'binary']
@@ -588,7 +592,7 @@ def from_parquet(path) -> AnnNet:
             try:
                 if lid not in set(H.list_slices(include_default=True)):
                     H.add_slice(lid)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
     # -------------------------
@@ -609,21 +613,21 @@ def from_parquet(path) -> AnnNet:
         for lid, eids in by_slice.items():
             try:
                 H.add_edges_to_slice_bulk(lid, eids)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 for eid in eids:
                     try:
                         H.add_edge_to_slice(lid, eid)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
 
         for lid, mp in slice_weights.items():
             for eid, w in mp.items():
                 try:
                     H.set_edge_slice_attrs(lid, eid, weight=w)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     try:
                         H.set_edge_slice_attr(lid, eid, 'weight', w)
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
 
     # -------------------------
@@ -677,7 +681,7 @@ def from_parquet(path) -> AnnNet:
             if layer_attr_rows:
                 H.layer_attributes = _build_dataframe_from_rows(layer_attr_rows)
 
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     return H

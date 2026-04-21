@@ -67,7 +67,6 @@ def _cx2_collect_reified(aspects):
     for he_id, (eid, attrs) in he_nodes.items():
         head_map = {}
         tail_map = {}
-        members_map = {}
 
         for e in edges:
             u = e['s']
@@ -710,6 +709,7 @@ def to_cx2(
 def from_cx2(cx2_data, *, hyperedges='manifest'):
     """
     Fully robust CX2 - AnnNet importer.
+
     Supports:
       - manifest reconstruction (full fidelity)
       - reified hyperedges
@@ -738,8 +738,8 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
         else:
             try:
                 cx2_data = json.loads(cx2_data)
-            except Exception:
-                raise ValueError('Invalid CX2 string or file')
+            except Exception:  # noqa: BLE001
+                raise ValueError('Invalid CX2 string or file') from None
 
     # Parse aspects into a dict
 
@@ -767,9 +767,9 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
             # Support both compressed (gzip+base64) and legacy plain-JSON manifests
             try:
                 manifest = json.loads(gzip.decompress(base64.b64decode(manifest_str)).decode())
-            except Exception:
+            except Exception:  # noqa: BLE001
                 manifest = json.loads(manifest_str)
-        except Exception:
+        except Exception:  # noqa: BLE001
             manifest = None
     visual_props = aspects.get('visualProperties', [])
 
@@ -818,7 +818,7 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
             for vid, kind in vmeta['types'].items():
                 try:
                     ekey = G._resolve_entity_key(vid)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     continue
                 if ekey in G._entities:
                     G._entities[ekey].kind = kind
@@ -1214,12 +1214,12 @@ def show_cx2(
         <style>
             body {{ margin: 0; padding: 0; font-family: sans-serif; }}
             #cy {{ width: 100vw; height: 100vh; }}
-            #info {{ 
-                position: absolute; 
-                top: 10px; 
-                left: 10px; 
-                background: rgba(255,255,255,0.9); 
-                padding: 10px; 
+            #info {{
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                background: rgba(255,255,255,0.9);
+                padding: 10px;
                 border-radius: 5px;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             }}
@@ -1282,7 +1282,7 @@ def show_cx2(
                     numIter: 1000
                 }}
             }});
-            
+
             document.getElementById('nodeCount').textContent = cy.nodes().length;
             document.getElementById('edgeCount').textContent = cy.edges().length;
         </script>
