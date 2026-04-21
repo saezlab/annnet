@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from importlib import import_module, util
+from importlib import import_module
 from typing import Any
+
+from .._optional_components import GRAPH_BACKENDS, available_optional_components
 
 _lazy_functions: dict[str, tuple[str, str]] = {
     "to_nx": ("annnet.adapters.networkx_adapter", "to_nx"),
@@ -15,23 +17,12 @@ _lazy_functions: dict[str, tuple[str, str]] = {
     "to_pyg": ("annnet.adapters.pyg_adapter", "to_pyg"),
 }
 
-_backend_modules: dict[str, str] = {
-    "networkx": "networkx",
-    "igraph": "igraph",
-    "graphtool": "graph_tool",
-    "pyg": "torch_geometric",
-}
-
 __all__ = sorted(set(_lazy_functions) | {"available_backends"})
-
-
-def _is_installed(modname: str) -> bool:
-    return util.find_spec(modname) is not None
 
 
 def available_backends() -> dict[str, bool]:
     """Report which optional notebook-facing adapter backends are installed."""
-    return {name: _is_installed(modname) for name, modname in _backend_modules.items()}
+    return available_optional_components(GRAPH_BACKENDS)
 
 
 def _make_lazy_function(module_name: str, attr_name: str):

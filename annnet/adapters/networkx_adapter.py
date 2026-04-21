@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import json
+import time
+from contextlib import contextmanager
+from enum import Enum
+from typing import TYPE_CHECKING, Any
+
 try:
     import networkx as nx
 except ModuleNotFoundError as e:
@@ -8,22 +14,8 @@ except ModuleNotFoundError as e:
         "Install with: pip install annnet[networkx]"
     ) from e
 
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
-import json
-from enum import Enum
-from typing import Any
-
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
-    pl = None
-
-# ---------------
-import time
-from contextlib import contextmanager
 
 from ._utils import (
     _attrs_to_dict,
@@ -56,8 +48,7 @@ def _time(label, timings):
 
 # ---------------
 
-
-def _export_legacy(
+def _export_binary_graph(
     graph: AnnNet,
     *,
     directed: bool = True,
@@ -260,7 +251,7 @@ def to_nx(
                 pass
 
     # Base NX graph (binary edges only)
-    nxG = _export_legacy(
+    nxG = _export_binary_graph(
         graph,
         directed=directed,
         skip_hyperedges=(hyperedge_mode in ("skip", "reify")),
@@ -949,41 +940,7 @@ def _nx_collect_reified_optimized(
 
     return hyperdefs, membership_edges
 
-
-def to_backend(graph, **kwargs):
-    """Export AnnNet to NetworkX without manifest (legacy compatibility).
-
-    Parameters
-    ----------
-    graph : AnnNet
-        Source AnnNet instance to export.
-    **kwargs
-        Forwarded to _export_legacy(). Supported:
-        - directed : bool, default True
-            Export as MultiDiGraph (True) or MultiGraph (False).
-        - skip_hyperedges : bool, default True
-            If True, drop hyperedges. If False, expand them
-            (cartesian product for directed, clique for undirected).
-        - public_only : bool, default False
-            Strip attributes starting with "__" if True.
-
-    Returns
-    -------
-    networkx.MultiGraph | networkx.MultiDiGraph
-        NetworkX graph containing binary edges only. Hyperedges are
-        either dropped or expanded. No manifest is returned, so
-        round-tripping will lose hyperedge structure, slices, and
-        precise edge IDs.
-
-    Notes
-    -----
-    This is a lossy export. Use to_nx() with manifest for full fidelity.
-
-    """
-    return _export_legacy(graph, **kwargs)
-
-
-def from_nx_only(
+def _from_nx_without_manifest(
     nxG,
     *,
     hyperedge="none",
@@ -1138,7 +1095,3 @@ def from_nx_only(
             pass
     return H
 
-
-class NetworkXAdapter:
-    def export(self, graph, **kwargs):
-        return _export_legacy(graph, **kwargs)

@@ -176,10 +176,7 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
 
 from typing import Any, Optional
 
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
-    pl = None
+from .._dataframe_backend import dataframe_from_rows, dataframe_height, dataframe_to_rows
 
 
 def _serialize_edge_layers(edge_layers: dict[str, Any]) -> dict[str, Any]:
@@ -303,22 +300,20 @@ def _deserialize_slices(data: dict[str, dict]) -> dict[str, dict]:
     return out
 
 
-def _df_to_rows(df: pl.DataFrame) -> list[dict]:
+def _df_to_rows(df) -> list[dict]:
     """
-    Convert a Polars DataFrame to list-of-dicts in a stable way.
+    Convert a dataframe-like table to list-of-dicts in a stable way.
     """
-    if df is None or df.height == 0:
+    if df is None or dataframe_height(df) == 0:
         return []
-    return df.to_dicts()
+    return dataframe_to_rows(df)
 
 
-def _rows_to_df(rows: list[dict]) -> pl.DataFrame:
+def _rows_to_df(rows: list[dict]):
     """
-    Build a Polars DataFrame from list-of-dicts. Empty -> empty DF.
+    Build a dataframe from list-of-dicts with the configured backend.
     """
-    if not rows:
-        return pl.DataFrame()
-    return pl.DataFrame(rows)
+    return dataframe_from_rows(rows)
 
 
 def _serialize_layer_tuple_attrs(layer_attrs: dict[tuple[str, ...], dict]) -> list[dict]:
@@ -344,33 +339,8 @@ def _deserialize_layer_tuple_attrs(data: list[dict]) -> dict[tuple[str, ...], di
 
 
 def _safe_df_to_rows(df):
-    """Return list[dict] rows from polars/pandas/narwhals; return [] on None/empty/unknown."""
+    """Return list[dict] rows from dataframe-like input; return [] on None."""
     if df is None:
         return []
-    # Prefer the project-wide helper if it works
-    try:
-        return _df_to_rows(df)
-    except Exception:
-        pass
+    return _df_to_rows(df)
 
-    # Fallbacks
-    if hasattr(df, "to_dicts"):  # polars
-        try:
-            return df.to_dicts()
-        except Exception:
-            return []
-    if hasattr(df, "to_dict"):  # pandas
-        try:
-            return df.to_dict(orient="records")
-        except Exception:
-            return []
-
-    return []
-
-
-def _validate_numeric(df: pl.DataFrame, cols: list[str], ctx: str):
-    for c in cols:
-        if c not in df.columns:
-            raise KeyError(f"{ctx}: column '{c}' not found")
-        if not pl.datatypes.is_numeric(df[c].dtype):
-            raise ValueError(f"{ctx}: column '{c}' is non-numeric ({df[c].dtype})")

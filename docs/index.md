@@ -158,8 +158,8 @@ hypergraph structure, and layers.
     or the tutorial if you want a complete worked example with annotations and graph structure.
   </p>
   <div class="annnet-actions">
-    <a class="md-button md-button--primary" href="installation">Installation</a>
-    <a class="md-button" href="quickstart">Quickstart</a>
-    <a class="md-button" href="tutorials">Tutorial</a>
+    <a class="md-button md-button--primary" href="installation/">Installation</a>
+    <a class="md-button" href="quickstart/">Quickstart</a>
+    <a class="md-button" href="tutorials/">Tutorial</a>
   </div>
 </div>

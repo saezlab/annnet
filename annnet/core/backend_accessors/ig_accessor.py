@@ -182,13 +182,13 @@ class _IGBackendAccessor(_BackendAccessorBase):
     ):
         from ...adapters import igraph_adapter as _gg_ig
 
-        to_backend = getattr(_gg_ig, "to_backend", None) or getattr(_gg_ig, "_export_legacy", None)
-        if to_backend is None:
-            raise RuntimeError("igraph adapter missing")
-
-        skip_hyperedges = str(hyperedge_mode).lower() != "expand"
-        igG = to_backend(
-            self._G, directed=directed, skip_hyperedges=skip_hyperedges, public_only=True
+        igG, _manifest = _gg_ig.to_igraph(
+            self._G,
+            directed=directed,
+            hyperedge_mode="expand" if str(hyperedge_mode).lower() == "expand" else "skip",
+            slice=slice,
+            slices=slices,
+            public_only=True,
         )
         self._prune_edge_attributes(igG, needed_attrs)
         if simple:

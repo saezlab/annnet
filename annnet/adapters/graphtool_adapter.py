@@ -17,14 +17,10 @@ from __future__ import annotations
 from typing import Any, Optional
 
 try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
-    pl = None
-
-try:
     import graph_tool.all as gt
 except ImportError:
     gt = None
+from .._dataframe_backend import empty_dataframe
 from ..core.graph import AnnNet
 from ._utils import (
     _deserialize_edge_layers,
@@ -157,11 +153,11 @@ def to_graphtool(
 
     # 4) attribute tables as rows (DF [DataFrame] -> list[dict])
 
-    vert_rows = _df_to_rows(getattr(G, "vertex_attributes", pl.DataFrame()))
-    edge_rows = _df_to_rows(getattr(G, "edge_attributes", pl.DataFrame()))
-    slice_rows = _df_to_rows(getattr(G, "slice_attributes", pl.DataFrame()))
-    edge_slice_rows = _df_to_rows(getattr(G, "edge_slice_attributes", pl.DataFrame()))
-    layer_attr_rows = _df_to_rows(getattr(G, "layer_attributes", pl.DataFrame()))
+    vert_rows = _df_to_rows(getattr(G, "vertex_attributes", empty_dataframe({})))
+    edge_rows = _df_to_rows(getattr(G, "edge_attributes", empty_dataframe({})))
+    slice_rows = _df_to_rows(getattr(G, "slice_attributes", empty_dataframe({})))
+    edge_slice_rows = _df_to_rows(getattr(G, "edge_slice_attributes", empty_dataframe({})))
+    layer_attr_rows = _df_to_rows(getattr(G, "layer_attributes", empty_dataframe({})))
 
     # 5) slices internal structure (vertex/edge sets + attributes)
     slices_data = _serialize_slices(getattr(G, "_slices", {}))

@@ -10,7 +10,7 @@ import networkx as nx
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
-from ..adapters.networkx_adapter import from_nx, from_nx_only, to_nx
+from ..adapters.networkx_adapter import _from_nx_without_manifest, from_nx, to_nx
 
 _BOOL = {"true": True, "false": False}
 _NUM_RE = re.compile(r"^[+-]?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$")
@@ -91,7 +91,7 @@ def to_graphml(graph, path, *, directed=True, hyperedge_mode="reify", public_onl
 
 def from_graphml(path, *, hyperedge="reified"):
     """Import via NetworkX; if a sidecar manifest is present, use it as SSOT.
-    Otherwise, fall back to from_nx_only with type restoration.
+    Otherwise, fall back to a best-effort no-manifest import with type restoration.
     """
     G = nx.read_graphml(path)
     _restore_types_graphml_inplace(G)
@@ -102,7 +102,7 @@ def from_graphml(path, *, hyperedge="reified"):
         # Rebuild exactly from the manifest (lossless), ignoring GraphML-added noise
         return from_nx(G, manifest, hyperedge=("reified" if hyperedge == "reified" else "none"))
     # Fallback (no manifest available)
-    return from_nx_only(G, hyperedge=("reified" if hyperedge == "reified" else "none"))
+    return _from_nx_without_manifest(G, hyperedge=("reified" if hyperedge == "reified" else "none"))
 
 
 def to_gexf(graph: AnnNet, path, *, directed=True, hyperedge_mode="reify", public_only=False):
@@ -112,4 +112,6 @@ def to_gexf(graph: AnnNet, path, *, directed=True, hyperedge_mode="reify", publi
 
 def from_gexf(path, *, hyperedge="reified") -> AnnNet:
     G = nx.read_gexf(path)
-    return from_nx_only(G, hyperedge=("reified" if hyperedge == "reified" else "none"))
+    return _from_nx_without_manifest(
+        G, hyperedge=("reified" if hyperedge == "reified" else "none")
+    )

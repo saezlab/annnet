@@ -114,7 +114,9 @@ class TestPublicAPI:
 
             an.set_default_plot_backend("auto")
             assert an.get_default_plot_backend() == "auto"
-            assert an.select_plot_backend(None) == an.select_plot_backend("auto")
+            plot_backends = an.available_plot_backends()
+            if any(plot_backends.values()):
+                assert an.select_plot_backend(None) == an.select_plot_backend("auto")
         finally:
             an.set_default_dataframe_backend(original_dataframe_backend)
             an.set_default_plot_backend(original_plot_backend)

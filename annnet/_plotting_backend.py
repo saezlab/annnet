@@ -45,7 +45,5 @@ def set_default_plot_backend(backend: str | None = "auto") -> str:
     requested = "auto" if backend is None else str(backend).lower()
     if requested != "auto":
         select_plot_backend(requested)
-    elif not any(available_plot_backends().values()):
-        select_plot_backend("auto")
     _DEFAULT_PLOT_BACKEND = requested
     return _DEFAULT_PLOT_BACKEND

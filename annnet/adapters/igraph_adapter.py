@@ -2,12 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
-    pl = None
-
-
+from .._dataframe_backend import empty_dataframe
 from ._utils import (
     _attrs_to_dict,
     _deserialize_edge_layers,
@@ -165,7 +160,7 @@ def _safe_df_to_rows(df):
         return _rows_like(df)
 
 
-def _export_legacy(
+def _export_binary_graph(
     graph: AnnNet,
     *,
     directed: bool = True,
@@ -411,7 +406,7 @@ def to_igraph(
     """
     # -------------- base igraph build (binary edges only) --------------
     # For "reify" we start with hyperedges skipped, then add them as nodes+membership edges.
-    igG = _export_legacy(
+    igG = _export_binary_graph(
         graph,
         directed=directed,
         skip_hyperedges=(hyperedge_mode in ("skip", "reify")),
@@ -692,8 +687,8 @@ def to_igraph(
     aspect_attrs = dict(getattr(graph, "_aspect_attrs", {}))
     layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(getattr(graph, "_layer_attrs", {}))
     layer_df = getattr(graph, "layer_attributes", None)
-    if layer_df is None and pl is not None:
-        layer_df = pl.DataFrame()
+    if layer_df is None:
+        layer_df = empty_dataframe({})
     layer_attr_rows = _safe_df_to_rows(layer_df)
 
     # -------------- manifest (unchanged semantics) --------------
@@ -1139,43 +1134,7 @@ def from_igraph(
     return H
 
 
-def to_backend(graph, **kwargs):
-    """Export AnnNet to igraph without manifest (legacy compatibility).
-
-    Parameters
-    ----------
-    graph : AnnNet
-        Source AnnNet instance to export.
-    **kwargs
-        Forwarded to _export_legacy(). Supported:
-        - directed : bool, default True
-            Export as directed igraph.AnnNet (True) or undirected (False).
-        - skip_hyperedges : bool, default True
-            If True, drop hyperedges. If False, expand them
-            (cartesian product for directed, clique for undirected).
-        - public_only : bool, default False
-            Strip attributes starting with "__" if True.
-
-    Returns
-    -------
-    igraph.AnnNet
-        igraph.AnnNet with integer vertex indices. External vertex IDs
-        are stored in vertex attribute 'name'. Edge IDs stored in edge
-        attribute 'eid'. Hyperedges are either dropped or expanded into
-        multiple binary edges. No manifest is returned, so round-tripping
-        will lose hyperedge structure, slices, and precise edge IDs.
-
-    Notes
-    -----
-    This is a lossy export. Use to_igraph() with manifest for full fidelity.
-    igraph requires integer vertex indices internally; the 'name' attribute
-    preserves your original string IDs.
-
-    """
-    return _export_legacy(graph, **kwargs)
-
-
-def from_ig_only(
+def _from_ig_without_manifest(
     igG,
     *,
     hyperedge="none",
@@ -1302,29 +1261,3 @@ def from_ig_only(
 
     return H
 
-
-class IGraphAdapter:
-    """Legacy adapter class for backward compatibility.
-
-    Methods
-    -------
-    export(graph, **kwargs)
-        Export AnnNet to igraph.AnnNet without manifest (lossy).
-
-    """
-
-    def export(self, graph, **kwargs):
-        """Export AnnNet to igraph.AnnNet without manifest.
-
-        Parameters
-        ----------
-        graph : AnnNet
-        **kwargs
-            See to_backend() for supported parameters.
-
-        Returns
-        -------
-        igraph.AnnNet
-
-        """
-        return _export_legacy(graph, **kwargs)
