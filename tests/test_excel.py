@@ -20,7 +20,7 @@ if _PANDAS_AVAILABLE:
 # Utilities for robust assertions
 import polars as pl
 
-from annnet.io.excel import load_excel_to_graph
+from annnet.io.excel import from_excel
 
 
 def _colmap(df: pl.DataFrame):
@@ -94,7 +94,7 @@ class TestExcelIO(unittest.TestCase):
         path = self._write_excel_temp({"Edges": df})
 
         try:
-            G = load_excel_to_graph(path, schema="edge_list")
+            G = from_excel(path, schema="edge_list")
             ev = G.edges_view()
             self.assertEqual(ev.shape[0], 2)
             cols = _colmap(ev)
@@ -128,7 +128,7 @@ class TestExcelIO(unittest.TestCase):
         path = self._write_excel_temp({"Hyper": df})
 
         try:
-            G = load_excel_to_graph(path, schema="hyperedge")
+            G = from_excel(path, schema="hyperedge")
             ev = G.edges_view()
             self.assertGreaterEqual(ev.shape[0], 1)
             cols = _colmap(ev)
@@ -162,7 +162,7 @@ class TestExcelIO(unittest.TestCase):
         df = pd.DataFrame({"source": ["U"], "target": ["V"]})
         path = self._write_excel_temp({"Sheet1": df})
         try:
-            G = load_excel_to_graph(path, schema="auto")
+            G = from_excel(path, schema="auto")
             ev = G.edges_view()
             self.assertEqual(ev.shape[0], 1)
             cols = _colmap(ev)
@@ -177,7 +177,7 @@ class TestExcelIO(unittest.TestCase):
         df2 = pd.DataFrame({"source": ["P"], "target": ["Q"]})
         path = self._write_excel_temp({"First": df1, "Second": df2})
         try:
-            G = load_excel_to_graph(path, schema="edge_list", sheet="Second")
+            G = from_excel(path, schema="edge_list", sheet="Second")
             ev = G.edges_view()
             self.assertEqual(ev.shape[0], 1)
             cols = _colmap(ev)

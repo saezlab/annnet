@@ -2161,9 +2161,9 @@ class AnnNet(
         path : str | pathlib.Path
             Output file path.
         **kwargs
-            Passed to `annnet.io.io_annnet.write`.
+            Passed to `annnet.io.annnet_format.write`.
         """
-        from ..io.io_annnet import write
+        from ..io.annnet_format import write
 
         write(self, path, **kwargs)
 
@@ -2176,13 +2176,13 @@ class AnnNet(
         path : str | pathlib.Path
             Input file path.
         **kwargs
-            Passed to `annnet.io.io_annnet.read`.
+            Passed to `annnet.io.annnet_format.read`.
 
         Returns
         -------
         AnnNet
         """
-        from ..io.io_annnet import read
+        from ..io.annnet_format import read
 
         return read(path, **kwargs)
 

@@ -1118,7 +1118,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 # -------------------------------------------------- Browser visualzaion Cytoscape.js
 
 
-def show(
+def show_cx2(
     G: AnnNet,
     *,
     export_name="annnet export",
@@ -1177,9 +1177,9 @@ def show(
 
     Examples
     --------
-    >>> G.show()  # Show entire graph (all layers flattened)
-    >>> G.show(layer=("social", "2020"))  # Clean single layer view
-    >>> G.show(layer=("social", "2020"), include_coupling=True)  # With self-loops
+    >>> show_cx2(G)  # Show entire graph (all layers flattened)
+    >>> show_cx2(G, layer=("social", "2020"))  # Clean single layer view
+    >>> show_cx2(G, layer=("social", "2020"), include_coupling=True)  # With self-loops
     """
     import json
     import socket

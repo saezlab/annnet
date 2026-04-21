@@ -66,12 +66,12 @@ class TestPublicAPI:
             "from_csv",
             "from_dataframe",
             "edges_to_csv",
-            "hyperedge_to_csv",
+            "hyperedges_to_csv",
             "from_excel",
             "from_sbml",
             "from_cobra_model",
             "from_sbml_cobra",
-            "read_omnipath",
+            "from_omnipath",
         ]:
             assert callable(getattr(an, name))
 
@@ -136,8 +136,10 @@ class TestPublicAPI:
         assert an.io.from_sbml.__name__ == an.from_sbml.__name__
         assert an.io.from_csv.__name__ == an.from_csv.__name__
         assert an.io.edges_to_csv.__name__ == an.edges_to_csv.__name__
-        assert an.io.hyperedge_to_csv.__name__ == an.hyperedge_to_csv.__name__
+        assert an.io.hyperedges_to_csv.__name__ == an.hyperedges_to_csv.__name__
         assert an.io.from_excel.__name__ == an.from_excel.__name__
+        assert an.io.from_omnipath.__name__ == an.from_omnipath.__name__
+        assert an.io.show_cx2.__name__ == an.show_cx2.__name__
 
     def test_adapter_exports_do_not_import_backend_modules_on_attribute_resolution(self):
         import annnet.adapters as adapters

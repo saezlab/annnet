@@ -1,4 +1,4 @@
-"""Unit tests for annnet/io/GraphML_io.py — to_gexf / from_gexf."""
+"""Unit tests for annnet/io/graphml.py — to_gexf / from_gexf."""
 
 import os
 import shutil
@@ -9,7 +9,7 @@ import unittest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from annnet.core.graph import AnnNet
-from annnet.io.GraphML_io import from_gexf, to_gexf
+from annnet.io.graphml import from_gexf, to_gexf
 
 
 def _build_simple():

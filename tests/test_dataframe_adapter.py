@@ -9,7 +9,7 @@ from annnet._dataframe_backend import (
     dataframe_to_rows,
     select_dataframe_backend,
 )
-from annnet.io.dataframe_io import from_dataframes, to_dataframes
+from annnet.io.dataframes import from_dataframes, to_dataframes
 
 
 class TestDataFrameAdapter(unittest.TestCase):

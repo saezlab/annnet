@@ -3,7 +3,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
-from annnet.io.Parquet_io import (
+from annnet.io.parquet import (
     from_parquet,
     to_parquet,
 )  # Parquet (columnar storage)

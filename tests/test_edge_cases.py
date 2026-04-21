@@ -7,12 +7,12 @@ sys.path.insert(0, str(ROOT))
 import pytest
 
 from annnet.core.graph import AnnNet
-from annnet.io.json_io import from_json, to_json  # JSON (JavaScript Object Notation)
-from annnet.io.Parquet_io import (
+from annnet.io.json_format import from_json, to_json  # JSON (JavaScript Object Notation)
+from annnet.io.parquet import (
     from_parquet,
     to_parquet,
 )  # Parquet (columnar storage)
-from annnet.io.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
+from annnet.io.sif import from_sif, to_sif  # SIF (Simple Interaction Format)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -52,7 +52,7 @@ def test_empty_graph(adapter, tmpdir_fixture):
     elif adapter == "parquet":
         G2 = _roundtrip_parquet(G, tmpdir_fixture, "empty")
     else:
-        from annnet.io.dataframe_io import from_dataframes, to_dataframes
+        from annnet.io.dataframes import from_dataframes, to_dataframes
 
         dfs = to_dataframes(G)
         G2 = from_dataframes(**dfs)

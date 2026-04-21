@@ -9,7 +9,7 @@ from .._dataframe_backend import dataframe_height, dataframe_to_rows, select_dat
 from ..core.graph import AnnNet
 
 
-def read_omnipath(
+def from_omnipath(
     df=None,
     *,
     dataset: str = "omnipath",
@@ -145,11 +145,11 @@ def read_omnipath(
     -
     Minimal load (structure only, no annotations)::
 
-        G = read_omnipath(load_vertex_annotations=False)
+        G = from_omnipath(load_vertex_annotations=False)
 
     Full load with curated vertex annotation sources::
 
-        G = read_omnipath(
+        G = from_omnipath(
             dataset="omnipath",
             query={"organism": "human", "genesymbols": True},
             source_col="source_genesymbol",
@@ -167,7 +167,7 @@ def read_omnipath(
     Pass a pre-loaded annotation table to avoid repeated downloads::
 
         ann = pl.read_csv("~/.cache/annnet/omnipath_annotations.tsv.gz", separator="\\t")
-        G = read_omnipath(vertex_annotations_df=ann)
+        G = from_omnipath(vertex_annotations_df=ann)
 
     Build from a custom DataFrame instead of fetching from OmniPath::
 
@@ -177,7 +177,7 @@ def read_omnipath(
             "target": ["STAT3", "MDM2"],
             "is_directed": [True, True],
         })
-        G = read_omnipath(df=df, load_vertex_annotations=False)
+        G = from_omnipath(df=df, load_vertex_annotations=False)
 
     """
 

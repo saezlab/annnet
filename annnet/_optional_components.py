@@ -32,18 +32,18 @@ DATAFRAME_BACKENDS: dict[str, OptionalComponent] = {
 }
 
 IO_MODULES: dict[str, OptionalComponent] = {
-    "annnet": OptionalComponent("annnet.io.io_annnet"),
-    "json/ndjson": OptionalComponent("annnet.io.json_io"),
-    "dataframes": OptionalComponent("annnet.io.dataframe_io"),
-    "csv": OptionalComponent("annnet.io.csv_io"),
+    "annnet": OptionalComponent("annnet.io.annnet_format"),
+    "json/ndjson": OptionalComponent("annnet.io.json_format"),
+    "dataframes": OptionalComponent("annnet.io.dataframes"),
+    "csv": OptionalComponent("annnet.io.csv_format"),
     "excel": OptionalComponent("openpyxl", "annnet[excel]"),
     "graphml/gexf": OptionalComponent("networkx", "annnet[networkx]"),
-    "sif": OptionalComponent("annnet.io.SIF_io"),
-    "cx2": OptionalComponent("annnet.io.cx2_io"),
+    "sif": OptionalComponent("annnet.io.sif"),
+    "cx2": OptionalComponent("annnet.io.cx2"),
     "parquet": OptionalComponent("pyarrow", "annnet[parquet]"),
     "zarr": OptionalComponent("zarr", "annnet[zarr_io]"),
     "sbml": OptionalComponent("lxml", "annnet[sbml]"),
-    "omnipath": OptionalComponent("annnet.io.read_omnipath"),
+    "omnipath": OptionalComponent("annnet.io.omnipath"),
 }
 
 

@@ -4,7 +4,7 @@ import pathlib
 import tempfile
 
 
-def load_excel_to_graph(
+def from_excel(
     path: str | pathlib.Path,
     graph=None,
     schema: str = "auto",
@@ -44,7 +44,7 @@ def load_excel_to_graph(
     -----
     - This function **does not require `fastexcel` or `openpyxl`**.
     - The Excel is read once into memory and written to a temporary CSV, then processed with the CSV loader.
-    - Supported formats and schemas are identical to `load_csv_to_graph`.
+    - Supported formats and schemas are identical to `from_csv`.
 
     """
     path = pathlib.Path(path)
@@ -78,9 +78,9 @@ def load_excel_to_graph(
         df.to_csv(tmp_path, index=False)
 
     # Pass the temporary CSV into the existing loader
-    from .csv_io import load_csv_to_graph
+    from .csv_format import from_csv
 
-    G = load_csv_to_graph(
+    G = from_csv(
         tmp_path,
         graph=graph,
         schema=schema,

@@ -8,9 +8,9 @@ import polars as pl
 from annnet.adapters.igraph_adapter import from_igraph, to_igraph
 from annnet.adapters.networkx_adapter import from_nx, to_nx
 from annnet.core.graph import AnnNet
-from annnet.io.json_io import from_json, to_json
-from annnet.io.Parquet_io import from_parquet, to_parquet
-from annnet.io.SIF_io import from_sif, to_sif
+from annnet.io.json_format import from_json, to_json
+from annnet.io.parquet import from_parquet, to_parquet
+from annnet.io.sif import from_sif, to_sif
 
 try:
     import networkx as nx

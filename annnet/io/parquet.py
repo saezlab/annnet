@@ -22,7 +22,7 @@ from ..adapters._utils import (
     _serialize_node_layer_attrs,
     _serialize_VM,
 )
-from .io_annnet import _iter_rows, _read_parquet, _write_parquet_df
+from .annnet_format import _iter_rows, _read_parquet, _write_parquet_df
 
 
 def _build_dataframe_from_rows(rows):

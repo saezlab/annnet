@@ -132,10 +132,10 @@ pydot = ["pydot"]
 graphviz = ["graphviz"]
 
 # IO modules
-excel    = ["openpyxl>=3.1"]          # used by annnet/io/excel.py
-sbml     = ["lxml>=4.9"]              # used by sbml_adapter.py
-parquet  = ["pyarrow>=10"]            # used by GraphDir_Parquet_adapter.py
-zarr_io  = ["zarr>=2.18", "numcodecs>=0.12"]  # used by io_annnet.py
+excel    = ["openpyxl>=3.1"]          # used by excel.py
+sbml     = ["lxml>=4.9"]              # used by sbml.py
+parquet  = ["pyarrow>=10"]            # used by parquet.py
+zarr_io  = ["zarr>=2.18", "numcodecs>=0.12"]  # used by annnet_format.py
 
 # Bundles
 backends = [
@@ -152,13 +152,13 @@ plot = [
 ]
 
 io = [
-  "pandas>=2.0",    # excel loader needs it
+  "pandas>=2.0",    # for Excel loader
   "openpyxl>=3.1",
-  "pyarrow>=10",    # parquet adapter
+  "pyarrow>=10",    # for Parquet adapter
   "zarr>=2.18",
   "numcodecs>=0.12",
-  "lxml>=4.9",      # SBML adapter
-  "toml>=0.10",     # metadata loading
+  "lxml>=4.9",      # for SBML adapter
+  "toml>=0.10",     # for metadata loading
 ]
 
 storage = [

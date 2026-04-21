@@ -7,16 +7,16 @@ sys.path.insert(0, str(ROOT))
 
 import polars as pl  # PL (Polars)
 
-from annnet.io.GraphML_io import (
+from annnet.io.graphml import (
     from_graphml,
     to_graphml,
 )  # GraphML (AnnNet Markup Language)
-from annnet.io.json_io import from_json, to_json
-from annnet.io.Parquet_io import (
+from annnet.io.json_format import from_json, to_json
+from annnet.io.parquet import (
     from_parquet,
     to_parquet,
 )
-from annnet.io.SIF_io import from_sif, to_sif  # SIF (Simple Interaction Format)
+from annnet.io.sif import from_sif, to_sif  # SIF (Simple Interaction Format)
 
 
 class TestCrossAdapter:
@@ -50,7 +50,7 @@ class TestCrossAdapter:
             ), f"Adapter {i} hyperedges differ"
 
     def test_dataframe_to_all_formats(self, complex_graph, tmpdir_fixture):
-        from annnet.io.dataframe_io import from_dataframes, to_dataframes
+        from annnet.io.dataframes import from_dataframes, to_dataframes
 
         G = complex_graph
         dfs = to_dataframes(G, include_slices=True, include_hyperedges=True)

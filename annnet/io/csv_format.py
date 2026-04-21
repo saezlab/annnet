@@ -23,7 +23,7 @@ Design notes:
   schema="edge_list" / "hyperedge" / "incidence" / "adjacency" / "lil".
 
 Public entry points:
-- load_csv_to_graph(path, graph=None, schema="auto", **options) -> AnnNet
+- from_csv(path, graph=None, schema="auto", **options) -> AnnNet
 - from_dataframe(df, graph=None, schema="auto", **options) -> AnnNet
 
 Both will create and return an AnnNet (or mutate the provided one).
@@ -237,7 +237,7 @@ def _detect_schema(df: pl.DataFrame) -> str:
 # ---------------------------
 
 
-def load_csv_to_graph(
+def from_csv(
     path: str,
     *,
     graph: AnnNet | None = None,
@@ -370,7 +370,7 @@ def from_dataframe(
     return G
 
 
-def export_edge_list_csv(G, path, slice=None):
+def edges_to_csv(G, path, slice=None):
     """Export the binary edge subgraph to a CSV [Comma-Separated Values] file.
 
     Parameters
@@ -394,7 +394,7 @@ def export_edge_list_csv(G, path, slice=None):
     - Output columns include: 'source', 'target', 'weight', 'directed', and 'slice'.
     - If a weight column does not exist, a default weight of 1.0 is written.
     - If a directedness column is absent, it will be written as ``None``.
-    - This format is compatible with ``load_csv_to_graph(schema="edge_list")``.
+    - This format is compatible with ``from_csv(schema="edge_list")``.
 
     """
     df = G.edges_view(slice=slice) if slice is not None else G.edges_view()
@@ -414,7 +414,7 @@ def export_edge_list_csv(G, path, slice=None):
     dst = next((cols[k] for k in ("target", "dst", "v", "to") if k in cols), None)
     if not (src and dst):
         raise ValueError(
-            "No binary endpoints in edges_view; likely hyperedge-only. Use export_hyperedge_csv."
+            "No binary endpoints in edges_view; likely hyperedge-only. Use hyperedges_to_csv."
         )
 
     # Filter out rows lacking endpoints (safety if view is mixed)
@@ -450,7 +450,7 @@ def export_edge_list_csv(G, path, slice=None):
     out.write_csv(path)
 
 
-def export_hyperedge_csv(G, path, slice=None, directed=None):
+def hyperedges_to_csv(G, path, slice=None, directed=None):
     """Export hyperedges from the graph to a CSV [Comma-Separated Values] file.
 
     Parameters
@@ -479,7 +479,7 @@ def export_hyperedge_csv(G, path, slice=None, directed=None):
       into a 'members' column.
     - A 'weight' column is included if available; otherwise, all weights default to 1.0.
     - A 'slice' column is included if present or if ``slice`` is specified.
-    - This format is compatible with ``load_csv_to_graph(schema="hyperedge")``.
+    - This format is compatible with ``from_csv(schema="hyperedge")``.
     - If the graph does not expose hyperedge columns, a ``ValueError`` is raised.
 
     """

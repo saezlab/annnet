@@ -15,8 +15,8 @@ import zarr
 
 from annnet.core.graph import AnnNet
 from annnet.io._utils import _read_archive
-from annnet.io.io_annnet import read as annnet_read
-from annnet.io.io_annnet import write as annnet_write
+from annnet.io.annnet_format import read as annnet_read
+from annnet.io.annnet_format import write as annnet_write
 
 
 class TestAnnNetIO(unittest.TestCase):

@@ -8,9 +8,9 @@ import time
 
 import pytest
 
-from annnet.io.dataframe_io import from_dataframes, to_dataframes  # DF (DataFrame)
-from annnet.io.json_io import from_json, to_json  # JSON (JavaScript Object Notation)
-from annnet.io.Parquet_io import (
+from annnet.io.dataframes import from_dataframes, to_dataframes  # DF (DataFrame)
+from annnet.io.json_format import from_json, to_json  # JSON (JavaScript Object Notation)
+from annnet.io.parquet import (
     from_parquet,
     to_parquet,
 )  # Parquet (columnar storage)
