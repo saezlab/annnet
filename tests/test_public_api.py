@@ -29,49 +29,49 @@ class TestPublicAPI:
         assert callable(an.info)
 
         for name in [
-            "available_backends",
-            "available_dataframe_backends",
-            "available_plot_backends",
-            "get_default_dataframe_backend",
-            "get_default_plot_backend",
-            "select_dataframe_backend",
-            "select_plot_backend",
-            "set_default_dataframe_backend",
-            "set_default_plot_backend",
-            "write",
-            "read",
-            "to_json",
-            "from_json",
-            "write_ndjson",
-            "to_graphml",
-            "from_graphml",
-            "to_gexf",
-            "from_gexf",
-            "to_sif",
-            "from_sif",
-            "to_cx2",
-            "from_cx2",
-            "show_cx2",
-            "to_parquet",
-            "from_parquet",
-            "to_dataframes",
-            "from_dataframes",
-            "to_nx",
-            "from_nx",
-            "to_igraph",
-            "from_igraph",
-            "to_graphtool",
-            "from_graphtool",
-            "to_pyg",
-            "from_csv",
-            "from_dataframe",
-            "edges_to_csv",
-            "hyperedges_to_csv",
-            "from_excel",
-            "from_sbml",
-            "from_cobra_model",
-            "from_sbml_cobra",
-            "from_omnipath",
+            'available_backends',
+            'available_dataframe_backends',
+            'available_plot_backends',
+            'get_default_dataframe_backend',
+            'get_default_plot_backend',
+            'select_dataframe_backend',
+            'select_plot_backend',
+            'set_default_dataframe_backend',
+            'set_default_plot_backend',
+            'write',
+            'read',
+            'to_json',
+            'from_json',
+            'write_ndjson',
+            'to_graphml',
+            'from_graphml',
+            'to_gexf',
+            'from_gexf',
+            'to_sif',
+            'from_sif',
+            'to_cx2',
+            'from_cx2',
+            'show_cx2',
+            'to_parquet',
+            'from_parquet',
+            'to_dataframes',
+            'from_dataframes',
+            'to_nx',
+            'from_nx',
+            'to_igraph',
+            'from_igraph',
+            'to_graphtool',
+            'from_graphtool',
+            'to_pyg',
+            'from_csv',
+            'from_dataframe',
+            'edges_to_csv',
+            'hyperedges_to_csv',
+            'from_excel',
+            'from_sbml',
+            'from_cobra_model',
+            'from_sbml_cobra',
+            'from_omnipath',
         ]:
             assert callable(getattr(an, name))
 
@@ -79,10 +79,10 @@ class TestPublicAPI:
         meta = an.get_metadata()
         summary = an.info()
 
-        assert meta["version"] == an.__version__
-        assert meta["license"] == an.__license__
+        assert meta['version'] == an.__version__
+        assert meta['license'] == an.__license__
         assert isinstance(str(summary), str)
-        assert "graph backends" in str(summary).lower()
+        assert 'graph backends' in str(summary).lower()
 
     def test_component_registries_drive_backend_order_and_info(self):
         summary = an.info()
@@ -98,8 +98,8 @@ class TestPublicAPI:
         original_plot_backend = an.get_default_plot_backend()
 
         try:
-            an.set_default_dataframe_backend("auto")
-            assert an.get_default_dataframe_backend() == "auto"
+            an.set_default_dataframe_backend('auto')
+            assert an.get_default_dataframe_backend() == 'auto'
             assert an.Graph()._annotations_backend == an.select_dataframe_backend(None)
 
             dataframe_backends = an.available_dataframe_backends()
@@ -112,18 +112,18 @@ class TestPublicAPI:
                 assert an.get_default_dataframe_backend() == explicit_dataframe_backend
                 assert an.Graph()._annotations_backend == explicit_dataframe_backend
 
-            an.set_default_plot_backend("auto")
-            assert an.get_default_plot_backend() == "auto"
+            an.set_default_plot_backend('auto')
+            assert an.get_default_plot_backend() == 'auto'
             plot_backends = an.available_plot_backends()
             if any(plot_backends.values()):
-                assert an.select_plot_backend(None) == an.select_plot_backend("auto")
+                assert an.select_plot_backend(None) == an.select_plot_backend('auto')
         finally:
             an.set_default_dataframe_backend(original_dataframe_backend)
             an.set_default_plot_backend(original_plot_backend)
 
     def test_get_latest_version_rejects_non_http_schemes(self):
-        with patch("urllib.request.urlopen") as urlopen:
-            assert an.get_latest_version("file:///tmp/pyproject.toml") is None
+        with patch('urllib.request.urlopen') as urlopen:
+            assert an.get_latest_version('file:///tmp/pyproject.toml') is None
             urlopen.assert_not_called()
 
     def test_top_level_submodules_resolve(self):
@@ -145,10 +145,10 @@ class TestPublicAPI:
         import annnet.adapters as adapters
 
         for modname in [
-            "annnet.adapters.networkx_adapter",
-            "annnet.adapters.igraph_adapter",
-            "annnet.adapters.graphtool_adapter",
-            "annnet.adapters.pyg_adapter",
+            'annnet.adapters.networkx_adapter',
+            'annnet.adapters.igraph_adapter',
+            'annnet.adapters.graphtool_adapter',
+            'annnet.adapters.pyg_adapter',
         ]:
             sys.modules.pop(modname, None)
 
@@ -160,7 +160,7 @@ class TestPublicAPI:
         assert callable(adapters.from_graphtool)
         assert callable(adapters.to_pyg)
 
-        assert "annnet.adapters.networkx_adapter" not in sys.modules
-        assert "annnet.adapters.igraph_adapter" not in sys.modules
-        assert "annnet.adapters.graphtool_adapter" not in sys.modules
-        assert "annnet.adapters.pyg_adapter" not in sys.modules
+        assert 'annnet.adapters.networkx_adapter' not in sys.modules
+        assert 'annnet.adapters.igraph_adapter' not in sys.modules
+        assert 'annnet.adapters.graphtool_adapter' not in sys.modules
+        assert 'annnet.adapters.pyg_adapter' not in sys.modules

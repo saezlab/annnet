@@ -28,26 +28,26 @@ class TestPerformance:
     def test_json_round_trip_speed(self, complex_graph, tmpdir_fixture):
         G = complex_graph
         start = time.perf_counter()
-        to_json(G, tmpdir_fixture / "perf.json")
-        G2 = from_json(tmpdir_fixture / "perf.json")
+        to_json(G, tmpdir_fixture / 'perf.json')
+        G2 = from_json(tmpdir_fixture / 'perf.json')
         elapsed = time.perf_counter() - start
 
         assert G2.ne == G.ne
         assert elapsed < _THRESHOLD_COMPLEX, (
-            f"JSON round-trip took {elapsed:.3f}s — exceeds {_THRESHOLD_COMPLEX}s threshold"
+            f'JSON round-trip took {elapsed:.3f}s — exceeds {_THRESHOLD_COMPLEX}s threshold'
         )
 
     @pytest.mark.slow
     def test_parquet_round_trip_speed(self, complex_graph, tmpdir_fixture):
         G = complex_graph
         start = time.perf_counter()
-        to_parquet(G, tmpdir_fixture / "perf_dir")
-        G2 = from_parquet(tmpdir_fixture / "perf_dir")
+        to_parquet(G, tmpdir_fixture / 'perf_dir')
+        G2 = from_parquet(tmpdir_fixture / 'perf_dir')
         elapsed = time.perf_counter() - start
 
         assert G2.ne == G.ne
         assert elapsed < _THRESHOLD_COMPLEX, (
-            f"Parquet round-trip took {elapsed:.3f}s — exceeds {_THRESHOLD_COMPLEX}s threshold"
+            f'Parquet round-trip took {elapsed:.3f}s — exceeds {_THRESHOLD_COMPLEX}s threshold'
         )
 
     @pytest.mark.slow
@@ -60,7 +60,7 @@ class TestPerformance:
 
         assert G2.ne == G.ne
         assert elapsed < _THRESHOLD_COMPLEX, (
-            f"DataFrame round-trip took {elapsed:.3f}s — exceeds {_THRESHOLD_COMPLEX}s threshold"
+            f'DataFrame round-trip took {elapsed:.3f}s — exceeds {_THRESHOLD_COMPLEX}s threshold'
         )
 
     @pytest.mark.slow
@@ -70,28 +70,28 @@ class TestPerformance:
         results = {}
 
         start = time.perf_counter()
-        to_json(G, tmpdir_fixture / "cmp.json")
-        from_json(tmpdir_fixture / "cmp.json")
-        results["JSON"] = time.perf_counter() - start
+        to_json(G, tmpdir_fixture / 'cmp.json')
+        from_json(tmpdir_fixture / 'cmp.json')
+        results['JSON'] = time.perf_counter() - start
 
         start = time.perf_counter()
-        to_parquet(G, tmpdir_fixture / "cmp_dir")
-        from_parquet(tmpdir_fixture / "cmp_dir")
-        results["Parquet"] = time.perf_counter() - start
+        to_parquet(G, tmpdir_fixture / 'cmp_dir')
+        from_parquet(tmpdir_fixture / 'cmp_dir')
+        results['Parquet'] = time.perf_counter() - start
 
         start = time.perf_counter()
         dfs = to_dataframes(G)
         from_dataframes(**dfs)
-        results["DataFrame"] = time.perf_counter() - start
+        results['DataFrame'] = time.perf_counter() - start
 
-        print("\nAdapter Performance (seconds):")
+        print('\nAdapter Performance (seconds):')
         for adapter, elapsed in sorted(results.items(), key=lambda x: x[1]):
-            print(f"  {adapter}: {elapsed:.4f}s")
+            print(f'  {adapter}: {elapsed:.4f}s')
 
         # All adapters must complete within threshold
         for adapter, elapsed in results.items():
             assert elapsed < _THRESHOLD_COMPLEX, (
-                f"{adapter} took {elapsed:.3f}s — exceeds {_THRESHOLD_COMPLEX}s threshold"
+                f'{adapter} took {elapsed:.3f}s — exceeds {_THRESHOLD_COMPLEX}s threshold'
             )
 
     @pytest.mark.slow
@@ -104,20 +104,20 @@ class TestPerformance:
         G = AnnNet()
         n_v, n_e = 5_000, 10_000
         for i in range(n_v):
-            G.add_vertex(f"v{i}")
+            G.add_vertex(f'v{i}')
         random.seed(0)
         for i in range(n_e):
-            u = f"v{random.randint(0, n_v - 1)}"  # nosec B311
-            v = f"v{random.randint(0, n_v - 1)}"  # nosec B311
-            G.add_edge(u, v, edge_id=f"e{i}")
+            u = f'v{random.randint(0, n_v - 1)}'  # nosec B311
+            v = f'v{random.randint(0, n_v - 1)}'  # nosec B311
+            G.add_edge(u, v, edge_id=f'e{i}')
 
         start = time.perf_counter()
-        to_parquet(G, tmpdir_fixture / "large_dir")
-        G2 = from_parquet(tmpdir_fixture / "large_dir")
+        to_parquet(G, tmpdir_fixture / 'large_dir')
+        G2 = from_parquet(tmpdir_fixture / 'large_dir')
         elapsed = time.perf_counter() - start
 
         assert G2.nv == n_v
         assert G2.ne == n_e
         assert elapsed < _THRESHOLD_LARGE, (
-            f"Large Parquet round-trip took {elapsed:.3f}s — exceeds {_THRESHOLD_LARGE}s threshold"
+            f'Large Parquet round-trip took {elapsed:.3f}s — exceeds {_THRESHOLD_LARGE}s threshold'
         )

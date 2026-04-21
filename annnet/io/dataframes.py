@@ -7,7 +7,7 @@ from narwhals.typing import IntoDataFrame
 
 from .._dataframe_backend import dataframe_from_rows, dataframe_height, dataframe_to_rows
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import pathlib
     import sys
 
@@ -57,71 +57,71 @@ def to_dataframes(
 
     """
     result = {}
-    backend = getattr(graph, "_annotations_backend", "auto")
+    backend = getattr(graph, '_annotations_backend', 'auto')
     vertex_attrs = {
-        row.get("vertex_id"): row
+        row.get('vertex_id'): row
         for row in dataframe_to_rows(graph.vertex_attributes)
-        if row.get("vertex_id") is not None
+        if row.get('vertex_id') is not None
     }
     edge_attrs = {
-        row.get("edge_id"): row
+        row.get('edge_id'): row
         for row in dataframe_to_rows(graph.edge_attributes)
-        if row.get("edge_id") is not None
+        if row.get('edge_id') is not None
     }
 
     # 1. Nodes table
     nodes_data = []
     for vid in graph.vertices():
-        row = {"vertex_id": vid}
+        row = {'vertex_id': vid}
         attrs = vertex_attrs.get(vid)
         if attrs:
             attr_dict = dict(attrs)
-            attr_dict.pop("vertex_id", None)
+            attr_dict.pop('vertex_id', None)
             if public_only:
-                attr_dict = {k: v for k, v in attr_dict.items() if not str(k).startswith("__")}
+                attr_dict = {k: v for k, v in attr_dict.items() if not str(k).startswith('__')}
             row.update(attr_dict)
         nodes_data.append(row)
 
-    result["nodes"] = dataframe_from_rows(
+    result['nodes'] = dataframe_from_rows(
         nodes_data,
-        schema={"vertex_id": "text"},
+        schema={'vertex_id': 'text'},
         backend=backend,
     )
 
     # 2. Binary edges table
     edges_data = []
     for eid, rec in graph._edges.items():
-        if rec.col_idx < 0 or rec.etype == "hyper":
+        if rec.col_idx < 0 or rec.etype == 'hyper':
             continue
 
         row = {
-            "edge_id": eid,
-            "source": rec.src,
-            "target": rec.tgt,
-            "weight": _edge_weight(rec),
-            "directed": _edge_directed(graph, rec),
-            "edge_type": rec.etype,
+            'edge_id': eid,
+            'source': rec.src,
+            'target': rec.tgt,
+            'weight': _edge_weight(rec),
+            'directed': _edge_directed(graph, rec),
+            'edge_type': rec.etype,
         }
 
         attrs = edge_attrs.get(eid)
         if attrs:
             attr_dict = dict(attrs)
-            attr_dict.pop("edge_id", None)
+            attr_dict.pop('edge_id', None)
             if public_only:
-                attr_dict = {k: v for k, v in attr_dict.items() if not str(k).startswith("__")}
+                attr_dict = {k: v for k, v in attr_dict.items() if not str(k).startswith('__')}
             row.update(attr_dict)
 
         edges_data.append(row)
 
-    result["edges"] = dataframe_from_rows(
+    result['edges'] = dataframe_from_rows(
         edges_data,
         schema={
-            "edge_id": "text",
-            "source": "text",
-            "target": "text",
-            "weight": "float",
-            "directed": "bool",
-            "edge_type": "text",
+            'edge_id': 'text',
+            'source': 'text',
+            'target': 'text',
+            'weight': 'float',
+            'directed': 'bool',
+            'edge_type': 'text',
         },
         backend=backend,
     )
@@ -132,7 +132,7 @@ def to_dataframes(
 
         if explode_hyperedges:
             for eid, rec in graph._edges.items():
-                if rec.col_idx < 0 or rec.etype != "hyper":
+                if rec.col_idx < 0 or rec.etype != 'hyper':
                     continue
                 directed = rec.tgt is not None
                 weight = _edge_weight(rec)
@@ -141,101 +141,101 @@ def to_dataframes(
                 attr_dict = {}
                 if attrs:
                     attr_dict = dict(attrs)
-                    attr_dict.pop("edge_id", None)
+                    attr_dict.pop('edge_id', None)
                     if public_only:
                         attr_dict = {
-                            k: v for k, v in attr_dict.items() if not str(k).startswith("__")
+                            k: v for k, v in attr_dict.items() if not str(k).startswith('__')
                         }
 
                 if directed:
                     for v in rec.src:
                         row = {
-                            "edge_id": eid,
-                            "vertex_id": v,
-                            "role": "head",
-                            "weight": weight,
-                            "directed": True,
+                            'edge_id': eid,
+                            'vertex_id': v,
+                            'role': 'head',
+                            'weight': weight,
+                            'directed': True,
                         }
                         row.update(attr_dict)
                         hyperedges_data.append(row)
 
                     for v in rec.tgt:
                         row = {
-                            "edge_id": eid,
-                            "vertex_id": v,
-                            "role": "tail",
-                            "weight": weight,
-                            "directed": True,
+                            'edge_id': eid,
+                            'vertex_id': v,
+                            'role': 'tail',
+                            'weight': weight,
+                            'directed': True,
                         }
                         row.update(attr_dict)
                         hyperedges_data.append(row)
                 else:
                     for v in rec.src:
                         row = {
-                            "edge_id": eid,
-                            "vertex_id": v,
-                            "role": "member",
-                            "weight": weight,
-                            "directed": False,
+                            'edge_id': eid,
+                            'vertex_id': v,
+                            'role': 'member',
+                            'weight': weight,
+                            'directed': False,
                         }
                         row.update(attr_dict)
                         hyperedges_data.append(row)
         else:
             for eid, rec in graph._edges.items():
-                if rec.col_idx < 0 or rec.etype != "hyper":
+                if rec.col_idx < 0 or rec.etype != 'hyper':
                     continue
                 directed = rec.tgt is not None
                 weight = _edge_weight(rec)
 
                 row = {
-                    "edge_id": eid,
-                    "directed": directed,
-                    "weight": weight,
+                    'edge_id': eid,
+                    'directed': directed,
+                    'weight': weight,
                 }
 
                 if directed:
-                    row["head"] = list(rec.src)
-                    row["tail"] = list(rec.tgt)
-                    row["members"] = None
+                    row['head'] = list(rec.src)
+                    row['tail'] = list(rec.tgt)
+                    row['members'] = None
                 else:
-                    row["head"] = None
-                    row["tail"] = None
-                    row["members"] = list(rec.src)
+                    row['head'] = None
+                    row['tail'] = None
+                    row['members'] = list(rec.src)
 
                 attrs = edge_attrs.get(eid)
                 if attrs:
                     attr_dict = dict(attrs)
-                    attr_dict.pop("edge_id", None)
+                    attr_dict.pop('edge_id', None)
                     if public_only:
                         attr_dict = {
-                            k: v for k, v in attr_dict.items() if not str(k).startswith("__")
+                            k: v for k, v in attr_dict.items() if not str(k).startswith('__')
                         }
                     row.update(attr_dict)
 
                 hyperedges_data.append(row)
 
         if explode_hyperedges:
-            result["hyperedges"] = dataframe_from_rows(
+            result['hyperedges'] = dataframe_from_rows(
                 hyperedges_data,
                 schema={
-                    "edge_id": "text",
-                    "vertex_id": "text",
-                    "role": "text",
-                    "weight": "float",
-                    "directed": "bool",
+                    'edge_id': 'text',
+                    'vertex_id': 'text',
+                    'role': 'text',
+                    'weight': 'float',
+                    'directed': 'bool',
                 },
                 backend=backend,
             )
         else:
-            result["hyperedges"] = dataframe_from_rows(
+            result['hyperedges'] = dataframe_from_rows(
                 hyperedges_data,
                 schema={
-                    "edge_id": "text",
-                    "directed": "bool",
-                    "weight": "float",
-                    "head": "list_text",
-                    "tail": "list_text",
-                    "members": "list_text",
+                    'edge_id': 'text',
+                    'directed': 'bool',
+                    'weight': 'float',
+                    'head': 'list_text',
+                    'tail': 'list_text',
+                    'members': 'list_text',
                 },
                 backend=backend,
             )
@@ -246,14 +246,14 @@ def to_dataframes(
         try:
             for lid in graph.list_slices(include_default=True):
                 slice_meta = graph._slices.get(lid, {})
-                for eid in slice_meta.get("edges", []):
-                    slices_data.append({"slice_id": lid, "edge_id": eid})
+                for eid in slice_meta.get('edges', []):
+                    slices_data.append({'slice_id': lid, 'edge_id': eid})
         except Exception:
             pass
 
-        result["slices"] = dataframe_from_rows(
+        result['slices'] = dataframe_from_rows(
             slices_data,
-            schema={"slice_id": "text", "edge_id": "text"},
+            schema={'slice_id': 'text', 'edge_id': 'text'},
             backend=backend,
         )
 
@@ -261,20 +261,20 @@ def to_dataframes(
         slice_weights_data = []
         try:
             for row in dataframe_to_rows(graph.edge_slice_attributes):
-                if {"slice_id", "edge_id", "weight"}.issubset(row):
+                if {'slice_id', 'edge_id', 'weight'}.issubset(row):
                     slice_weights_data.append(
                         {
-                            "slice_id": row["slice_id"],
-                            "edge_id": row["edge_id"],
-                            "weight": row["weight"],
+                            'slice_id': row['slice_id'],
+                            'edge_id': row['edge_id'],
+                            'weight': row['weight'],
                         }
                     )
         except Exception:
             pass
 
-        result["slice_weights"] = dataframe_from_rows(
+        result['slice_weights'] = dataframe_from_rows(
             slice_weights_data,
-            schema={"slice_id": "text", "edge_id": "text", "weight": "float"},
+            schema={'slice_id': 'text', 'edge_id': 'text', 'weight': 'float'},
             backend=backend,
         )
 
@@ -342,7 +342,7 @@ def from_dataframes(
     if nodes is not None:
         nodes_nw = nw.from_native(nodes, eager_only=True)
         if _get_height(nodes_nw) > 0:
-            if "vertex_id" not in nodes_nw.columns:
+            if 'vertex_id' not in nodes_nw.columns:
                 raise ValueError("nodes DataFrame must have 'vertex_id' column")
 
             G.add_vertices_bulk(_to_dicts(nodes_nw))
@@ -351,27 +351,27 @@ def from_dataframes(
     if edges is not None:
         edges_nw = nw.from_native(edges, eager_only=True)
         if _get_height(edges_nw) > 0:
-            if "source" not in edges_nw.columns or "target" not in edges_nw.columns:
+            if 'source' not in edges_nw.columns or 'target' not in edges_nw.columns:
                 raise ValueError("edges DataFrame must have 'source' and 'target' columns")
 
             edge_rows = []
             for row in _to_dicts(edges_nw):
-                src = row.pop("source")
-                tgt = row.pop("target")
-                eid = row.pop("edge_id", None)
-                weight = row.pop("weight", 1.0)
-                edge_directed = row.pop("directed", directed)
-                etype = row.pop("edge_type", "regular")
+                src = row.pop('source')
+                tgt = row.pop('target')
+                eid = row.pop('edge_id', None)
+                weight = row.pop('weight', 1.0)
+                edge_directed = row.pop('directed', directed)
+                etype = row.pop('edge_type', 'regular')
 
                 edge_rows.append(
                     {
-                        "source": src,
-                        "target": tgt,
-                        "edge_id": eid,
-                        "weight": weight,
-                        "edge_directed": edge_directed,
-                        "edge_type": etype,
-                        "attributes": row,
+                        'source': src,
+                        'target': tgt,
+                        'edge_id': eid,
+                        'weight': weight,
+                        'edge_directed': edge_directed,
+                        'edge_type': etype,
+                        'attributes': row,
                     }
                 )
 
@@ -383,8 +383,8 @@ def from_dataframes(
         if _get_height(hyperedges_nw) > 0:
             if exploded_hyperedges:
                 if (
-                    "edge_id" not in hyperedges_nw.columns
-                    or "vertex_id" not in hyperedges_nw.columns
+                    'edge_id' not in hyperedges_nw.columns
+                    or 'vertex_id' not in hyperedges_nw.columns
                 ):
                     raise ValueError(
                         "Exploded hyperedges must have 'edge_id' and 'vertex_id' columns"
@@ -393,40 +393,40 @@ def from_dataframes(
                 # Group by edge_id - need to collect all rows first
                 grouped: dict[str, dict[str, list[Any]]] = {}
                 for row in _to_dicts(hyperedges_nw):
-                    eid = row["edge_id"]
+                    eid = row['edge_id']
                     if eid not in grouped:
-                        grouped[eid] = {"vertices": [], "roles": [], "directed": [], "weights": []}
-                    grouped[eid]["vertices"].append(row["vertex_id"])
-                    grouped[eid]["roles"].append(row.get("role", "member"))
-                    grouped[eid]["directed"].append(row.get("directed", False))
-                    grouped[eid]["weights"].append(row.get("weight", 1.0))
+                        grouped[eid] = {'vertices': [], 'roles': [], 'directed': [], 'weights': []}
+                    grouped[eid]['vertices'].append(row['vertex_id'])
+                    grouped[eid]['roles'].append(row.get('role', 'member'))
+                    grouped[eid]['directed'].append(row.get('directed', False))
+                    grouped[eid]['weights'].append(row.get('weight', 1.0))
 
                 for eid, data in grouped.items():
-                    is_directed = data["directed"][0] if data["directed"] else False
-                    weight = data["weights"][0] if data["weights"] else 1.0
+                    is_directed = data['directed'][0] if data['directed'] else False
+                    weight = data['weights'][0] if data['weights'] else 1.0
 
                     if is_directed:
-                        head = [v for v, r in zip(data["vertices"], data["roles"]) if r == "head"]
-                        tail = [v for v, r in zip(data["vertices"], data["roles"]) if r == "tail"]
+                        head = [v for v, r in zip(data['vertices'], data['roles']) if r == 'head']
+                        tail = [v for v, r in zip(data['vertices'], data['roles']) if r == 'tail']
                         G.add_edge(src=head, tgt=tail, edge_id=eid, directed=True, weight=weight)
                     else:
                         G.add_edge(
-                            src=data["vertices"],
+                            src=data['vertices'],
                             edge_id=eid,
                             directed=False,
                             weight=weight,
                         )
             else:
-                if "edge_id" not in hyperedges_nw.columns:
+                if 'edge_id' not in hyperedges_nw.columns:
                     raise ValueError("hyperedges DataFrame must have 'edge_id' column")
 
                 for row in _to_dicts(hyperedges_nw):
-                    eid = row.pop("edge_id")
-                    directed_he = row.pop("directed", False)
-                    weight = row.pop("weight", 1.0)
-                    head = row.pop("head", None)
-                    tail = row.pop("tail", None)
-                    members = row.pop("members", None)
+                    eid = row.pop('edge_id')
+                    directed_he = row.pop('directed', False)
+                    weight = row.pop('weight', 1.0)
+                    head = row.pop('head', None)
+                    tail = row.pop('tail', None)
+                    members = row.pop('members', None)
 
                     if directed_he:
                         G.add_edge(
@@ -451,12 +451,12 @@ def from_dataframes(
     if slices is not None:
         slices_nw = nw.from_native(slices, eager_only=True)
         if _get_height(slices_nw) > 0:
-            if "slice_id" not in slices_nw.columns or "edge_id" not in slices_nw.columns:
+            if 'slice_id' not in slices_nw.columns or 'edge_id' not in slices_nw.columns:
                 raise ValueError("slices DataFrame must have 'slice_id' and 'edge_id' columns")
 
             for row in _to_dicts(slices_nw):
-                lid = row["slice_id"]
-                eid = row["edge_id"]
+                lid = row['slice_id']
+                eid = row['edge_id']
 
                 try:
                     if lid not in set(G.list_slices(include_default=True)):
@@ -474,11 +474,11 @@ def from_dataframes(
         slice_weights_nw = nw.from_native(slice_weights, eager_only=True)
         if _get_height(slice_weights_nw) > 0:
             cols = set(slice_weights_nw.columns)
-            if {"slice_id", "edge_id", "weight"}.issubset(cols):
+            if {'slice_id', 'edge_id', 'weight'}.issubset(cols):
                 for row in _to_dicts(slice_weights_nw):
-                    lid = row["slice_id"]
-                    eid = row["edge_id"]
-                    weight = row["weight"]
+                    lid = row['slice_id']
+                    eid = row['edge_id']
+                    weight = row['weight']
 
                     try:
                         G.set_edge_slice_attrs(lid, eid, weight=weight)

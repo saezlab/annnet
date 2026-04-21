@@ -153,14 +153,14 @@ class AnnNet(
 
         # --- Aspect/layer registry (immutable aspect count after init) ---
         if aspects is None:
-            self._aspects: tuple[str, ...] = ("_",)
-            self._layers: dict[str, set[str]] = {"_": {"_"}}
+            self._aspects: tuple[str, ...] = ('_',)
+            self._layers: dict[str, set[str]] = {'_': {'_'}}
         else:
             if not aspects:
-                raise ValueError("aspects dict must not be empty")
+                raise ValueError('aspects dict must not be empty')
             for asp, vals in aspects.items():
                 if not vals:
-                    raise ValueError(f"Aspect {asp!r} must have at least one layer value")
+                    raise ValueError(f'Aspect {asp!r} must have at least one layer value')
             self._aspects = tuple(aspects.keys())
             self._layers = {k: set(v) for k, v in aspects.items()}
 
@@ -217,9 +217,9 @@ class AnnNet(
         # --- Slice state ---
         self._slices: dict = {}  # slice_id -> {"vertices": set, "edges": set, "attributes": dict}
         self._current_slice: str | None = None
-        self._default_slice: str = "default"
+        self._default_slice: str = 'default'
         self.slice_edge_weights: defaultdict = defaultdict(dict)  # slice_id -> {edge_id: weight}
-        self._slices[self._default_slice] = {"vertices": set(), "edges": set(), "attributes": {}}
+        self._slices[self._default_slice] = {'vertices': set(), 'edges': set(), 'attributes': {}}
         self._current_slice = self._default_slice
 
         # --- History ---
@@ -256,23 +256,23 @@ class AnnNet(
     def _init_annotation_tables(self, annotations):
         # 1) If user provided tables, keep them (we’ll wrap with Narwhals in ops)
         if annotations is not None:
-            self.vertex_attributes = annotations.get("vertex_attributes")
-            self.edge_attributes = annotations.get("edge_attributes")
-            self.slice_attributes = annotations.get("slice_attributes")
-            self.edge_slice_attributes = annotations.get("edge_slice_attributes")
-            self.layer_attributes = annotations.get("layer_attributes")
+            self.vertex_attributes = annotations.get('vertex_attributes')
+            self.edge_attributes = annotations.get('edge_attributes')
+            self.slice_attributes = annotations.get('slice_attributes')
+            self.edge_slice_attributes = annotations.get('edge_slice_attributes')
+            self.layer_attributes = annotations.get('layer_attributes')
             return
 
         # 2) Otherwise, create empty tables with the centrally selected backend.
         backend = self._annotations_backend
-        self.vertex_attributes = empty_dataframe({"vertex_id": "text"}, backend=backend)
-        self.edge_attributes = empty_dataframe({"edge_id": "text"}, backend=backend)
-        self.slice_attributes = empty_dataframe({"slice_id": "text"}, backend=backend)
+        self.vertex_attributes = empty_dataframe({'vertex_id': 'text'}, backend=backend)
+        self.edge_attributes = empty_dataframe({'edge_id': 'text'}, backend=backend)
+        self.slice_attributes = empty_dataframe({'slice_id': 'text'}, backend=backend)
         self.edge_slice_attributes = empty_dataframe(
-            {"slice_id": "text", "edge_id": "text", "weight": "float"},
+            {'slice_id': 'text', 'edge_id': 'text', 'weight': 'float'},
             backend=backend,
         )
-        self.layer_attributes = empty_dataframe({"layer_id": "text"}, backend=backend)
+        self.layer_attributes = empty_dataframe({'layer_id': 'text'}, backend=backend)
 
     def _entity_row(self, vid) -> int:
         """Return incidence matrix row index for a vertex (resolves bare vid to supra-node key)."""
@@ -280,18 +280,18 @@ class AnnNet(
 
     def _placeholder_layer_coord(self) -> tuple:
         """Canonical placeholder coordinate for the current aspect rank."""
-        if self._aspects == ("_",):
-            return ("_",)
-        return tuple("_" for _ in self._aspects)
+        if self._aspects == ('_',):
+            return ('_',)
+        return tuple('_' for _ in self._aspects)
 
     def _ensure_placeholder_layers_declared(self) -> tuple:
         """Ensure the placeholder value '_' exists for every declared aspect."""
         coord = self._placeholder_layer_coord()
-        if self._aspects == ("_",):
-            self._layers.setdefault("_", {"_"})
+        if self._aspects == ('_',):
+            self._layers.setdefault('_', {'_'})
             return coord
         for aspect in self._aspects:
-            self._layers.setdefault(aspect, set()).add("_")
+            self._layers.setdefault(aspect, set()).add('_')
         self._rebuild_all_layers_cache()
         return coord
 
@@ -300,8 +300,8 @@ class AnnNet(
         coord = self._placeholder_layer_coord()
         if isinstance(vertex_ids, str):
             warnings.warn(
-                f"{context}: vertex {vertex_ids!r} was assigned to placeholder layer "
-                f"{coord!r}. Pass layer= to place it explicitly.",
+                f'{context}: vertex {vertex_ids!r} was assigned to placeholder layer '
+                f'{coord!r}. Pass layer= to place it explicitly.',
                 UserWarning,
                 stacklevel=3,
             )
@@ -310,23 +310,23 @@ class AnnNet(
         vids = list(vertex_ids)
         if not vids:
             return
-        sample = ", ".join(repr(v) for v in vids[:3])
-        suffix = "" if len(vids) <= 3 else ", ..."
+        sample = ', '.join(repr(v) for v in vids[:3])
+        suffix = '' if len(vids) <= 3 else ', ...'
         warnings.warn(
-            f"{context}: {len(vids)} vertices were assigned to placeholder layer "
-            f"{coord!r} ({sample}{suffix}). Pass layer= to place them explicitly.",
+            f'{context}: {len(vids)} vertices were assigned to placeholder layer '
+            f'{coord!r} ({sample}{suffix}). Pass layer= to place them explicitly.',
             UserWarning,
             stacklevel=3,
         )
 
     def _resolve_vertex_insert_coord(
-        self, layer_spec, *, vertex_ids=None, context="add_vertex"
+        self, layer_spec, *, vertex_ids=None, context='add_vertex'
     ) -> tuple:
         """Resolve layer placement for vertex insertion, using placeholder fallback when needed."""
         if layer_spec is not None:
             return self._make_layer_coord(layer_spec)
-        if self._aspects == ("_",):
-            return ("_",)
+        if self._aspects == ('_',):
+            return ('_',)
         coord = self._ensure_placeholder_layers_declared()
         if vertex_ids is not None:
             self._warn_placeholder_vertex_assignment(vertex_ids, context=context)
@@ -344,21 +344,21 @@ class AnnNet(
 
         Raises ValueError if a layer value is not declared for its aspect.
         """
-        is_flat = self._aspects == ("_",)
+        is_flat = self._aspects == ('_',)
 
         if layer_spec is None:
             if is_flat:
-                return ("_",)
+                return ('_',)
             raise ValueError(
-                f"layer= must be specified for multilayer graphs with aspects {self._aspects}. "
-                "Pass a dict {aspect: value}, a tuple of values, or a bare string (single-aspect)."
+                f'layer= must be specified for multilayer graphs with aspects {self._aspects}. '
+                'Pass a dict {aspect: value}, a tuple of values, or a bare string (single-aspect).'
             )
 
         if isinstance(layer_spec, str):
             if len(self._aspects) != 1:
                 raise ValueError(
-                    f"String layer spec {layer_spec!r} is only valid for single-aspect graphs. "
-                    f"Got aspects {self._aspects}. Pass a dict or tuple."
+                    f'String layer spec {layer_spec!r} is only valid for single-aspect graphs. '
+                    f'Got aspects {self._aspects}. Pass a dict or tuple.'
                 )
             coord = (layer_spec,)
 
@@ -366,7 +366,7 @@ class AnnNet(
             missing = [asp for asp in self._aspects if asp not in layer_spec]
             if missing:
                 raise ValueError(
-                    f"Missing aspects {missing} in layer spec. Required: {list(self._aspects)}"
+                    f'Missing aspects {missing} in layer spec. Required: {list(self._aspects)}'
                 )
             coord = tuple(layer_spec[asp] for asp in self._aspects)
 
@@ -375,19 +375,19 @@ class AnnNet(
 
         else:
             raise TypeError(
-                f"layer_spec must be None, str, dict, or tuple; got {type(layer_spec).__name__!r}"
+                f'layer_spec must be None, str, dict, or tuple; got {type(layer_spec).__name__!r}'
             )
 
         # Validate all values against declared layer sets
         if len(coord) != len(self._aspects):
             raise ValueError(
-                f"Layer coord length {len(coord)} != number of aspects {len(self._aspects)}"
+                f'Layer coord length {len(coord)} != number of aspects {len(self._aspects)}'
             )
         for asp, val in zip(self._aspects, coord):
             if val not in self._layers[asp]:
                 raise ValueError(
-                    f"Layer value {val!r} not declared for aspect {asp!r}. "
-                    f"Valid: {sorted(self._layers[asp])}"
+                    f'Layer value {val!r} not declared for aspect {asp!r}. '
+                    f'Valid: {sorted(self._layers[asp])}'
                 )
         return coord
 
@@ -405,9 +405,9 @@ class AnnNet(
             ("alice", ("t1",))    -> ("alice", ("t1",))  [validated]
         """
         if isinstance(vid_or_key, str):
-            is_flat = self._aspects == ("_",)
+            is_flat = self._aspects == ('_',)
             if is_flat:
-                return (vid_or_key, ("_",))
+                return (vid_or_key, ('_',))
             # Multilayer: find any existing supra-node for this bare vid (stable: lowest row_idx)
             best = None
             for ekey in self._vid_to_ekeys.get(vid_or_key, ()):
@@ -424,12 +424,12 @@ class AnnNet(
             vid, layer_coord = vid_or_key
             if not isinstance(layer_coord, tuple):
                 raise TypeError(
-                    f"Layer coordinate must be a tuple, got {type(layer_coord).__name__!r}"
+                    f'Layer coordinate must be a tuple, got {type(layer_coord).__name__!r}'
                 )
             coord = self._make_layer_coord(layer_coord)  # validates values
             return (vid, coord)
         raise TypeError(
-            f"vertex_id must be str or (str, tuple[str,...]), got {type(vid_or_key).__name__!r}"
+            f'vertex_id must be str or (str, tuple[str,...]), got {type(vid_or_key).__name__!r}'
         )
 
     def _index_entity_key(self, ekey) -> None:
@@ -483,7 +483,7 @@ class AnnNet(
     @property
     def is_multilayer(self) -> bool:
         """True iff the graph has named aspects (is not a flat graph)."""
-        return self._aspects != ("_",)
+        return self._aspects != ('_',)
 
     def list_layers(self, aspect: str | None = None):
         """Return declared layer values for one or all aspects.
@@ -500,7 +500,7 @@ class AnnNet(
         if aspect is None:
             return {asp: sorted(vals) for asp, vals in self._layers.items()}
         if aspect not in self._aspects:
-            raise ValueError(f"Unknown aspect {aspect!r}. Valid: {self._aspects}")
+            raise ValueError(f'Unknown aspect {aspect!r}. Valid: {self._aspects}')
         return sorted(self._layers[aspect])
 
     # Build graph
@@ -543,7 +543,7 @@ class AnnNet(
         coord = self._resolve_vertex_insert_coord(
             layer,
             vertex_ids=vertex_id,
-            context="add_vertex",
+            context='add_vertex',
         )
         key = (vertex_id, coord)
         vid = vertex_id
@@ -553,19 +553,19 @@ class AnnNet(
         # Register entity if new
         if key not in _ent:
             idx = len(_ent)
-            self._register_entity_record(key, EntityRecord(row_idx=idx, kind="vertex"))
+            self._register_entity_record(key, EntityRecord(row_idx=idx, kind='vertex'))
             self._grow_rows_to(len(_ent))
 
         # Maintain _V (pure vertex id cache) and _VM (supra-node cache) for _Layers.py compat
-        if _ent[key].kind == "vertex":
+        if _ent[key].kind == 'vertex':
             self._V.add(vid)
             self._VM.add(key)
 
         # Add to slice (slice tracks bare vid for backward compat with _Slices.py)
         slices = self._slices
         if slice not in slices:
-            slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
-        slices[slice]["vertices"].add(vid)
+            slices[slice] = {'vertices': set(), 'edges': set(), 'attributes': {}}
+        slices[slice]['vertices'].add(vid)
 
         self._ensure_vertex_table()
         self._ensure_vertex_row(vid)
@@ -585,7 +585,7 @@ class AnnNet(
                 tgt=None,
                 weight=1.0,
                 directed=False,
-                etype="vertex_edge",
+                etype='vertex_edge',
                 col_idx=-1,
                 ml_kind=None,
                 ml_layers=None,
@@ -595,8 +595,8 @@ class AnnNet(
         slice = slice or self._current_slice
         if slice is not None:
             if slice not in self._slices:
-                self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
-            self._slices[slice]["edges"].add(edge_id)
+                self._slices[slice] = {'vertices': set(), 'edges': set(), 'attributes': {}}
+            self._slices[slice]['edges'].add(edge_id)
         if attributes:
             self.set_edge_attrs(edge_id, **attributes)
         return edge_id
@@ -607,7 +607,7 @@ class AnnNet(
         if ekey in self._entities:
             return
         idx = len(self._entities)
-        self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind="edge_entity"))
+        self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='edge_entity'))
         self._grow_rows_to(len(self._entities))
 
     # ── Edge input helpers ────────────────────────────────────────────────────
@@ -625,10 +625,10 @@ class AnnNet(
                 # single dict: negative values → source side, positive → target side
                 src_nodes = frozenset(k for k, v in src.items() if v <= 0)
                 tgt_nodes = frozenset(k for k, v in src.items() if v > 0)
-                return src_nodes, tgt_nodes, dict(src), "stoich"
+                return src_nodes, tgt_nodes, dict(src), 'stoich'
             if isinstance(tgt, dict):
-                return frozenset(src), frozenset(tgt), {**src, **tgt}, "stoich"
-            raise TypeError(f"If src is dict, tgt must be dict or None, got {type(tgt).__name__!r}")
+                return frozenset(src), frozenset(tgt), {**src, **tgt}, 'stoich'
+            raise TypeError(f'If src is dict, tgt must be dict or None, got {type(tgt).__name__!r}')
 
         # Supra-node binary edge: (vid, layer_coord) tuples
         if (
@@ -640,29 +640,29 @@ class AnnNet(
             and len(tgt) == 2
             and isinstance(tgt[1], tuple)
         ):
-            return frozenset({src}), frozenset({tgt}), None, "binary"
+            return frozenset({src}), frozenset({tgt}), None, 'binary'
 
         # Plain string binary edge
         if isinstance(src, str):
             if tgt is None:
-                raise ValueError("Binary edge requires tgt when src is a string.")
+                raise ValueError('Binary edge requires tgt when src is a string.')
             if not isinstance(tgt, str):
-                raise TypeError(f"tgt must be str for binary edge, got {type(tgt).__name__!r}")
-            return frozenset({src}), frozenset({tgt}), None, "binary"
+                raise TypeError(f'tgt must be str for binary edge, got {type(tgt).__name__!r}')
+            return frozenset({src}), frozenset({tgt}), None, 'binary'
 
         # List/set forms
         if isinstance(src, (list, set, frozenset)):
             src_seq = list(src)
             if tgt is None:
-                return frozenset(src_seq), frozenset(), None, "hyper"
+                return frozenset(src_seq), frozenset(), None, 'hyper'
             if isinstance(tgt, (list, set, frozenset)):
-                return frozenset(src_seq), frozenset(tgt), None, "hyper"
+                return frozenset(src_seq), frozenset(tgt), None, 'hyper'
             raise TypeError(
-                f"If src is list/set, tgt must be list/set or None, got {type(tgt).__name__!r}"
+                f'If src is list/set, tgt must be list/set or None, got {type(tgt).__name__!r}'
             )
 
         raise TypeError(
-            f"src must be str, tuple (supra-node), list, set, or dict; got {type(src).__name__!r}"
+            f'src must be str, tuple (supra-node), list, set, or dict; got {type(src).__name__!r}'
         )
 
     @staticmethod
@@ -671,14 +671,14 @@ class AnnNet(
         vid_s, lay_s = src_key
         vid_t, lay_t = tgt_key
         if vid_s == vid_t:
-            return "coupling"
+            return 'coupling'
         if lay_s == lay_t:
-            return "intra"
-        return "inter"
+            return 'intra'
+        return 'inter'
 
     def _find_parallel_edges(self, endpoint_set, etype):
         """Return edge_ids with the same endpoint set (any direction)."""
-        if etype == "binary":
+        if etype == 'binary':
             nodes = list(endpoint_set)
             a, b = (nodes[0], nodes[0]) if len(nodes) == 1 else (nodes[0], nodes[1])
             result = list(self._adj.get((a, b), []))
@@ -689,7 +689,7 @@ class AnnNet(
         all_members = endpoint_set
         result = []
         for eid, rec in self._edges.items():
-            if rec.etype != "hyper" or rec.col_idx < 0:
+            if rec.etype != 'hyper' or rec.col_idx < 0:
                 continue
             members = set()
             if isinstance(rec.src, frozenset):
@@ -707,7 +707,7 @@ class AnnNet(
     def _zero_edge_column(self, rec, col_idx):
         """Zero out all matrix entries for an existing edge column."""
         M = self._matrix
-        _fast = getattr(M, "_set_intXint", None)
+        _fast = getattr(M, '_set_intXint', None)
 
         def _z(node):
             try:
@@ -719,7 +719,7 @@ class AnnNet(
             except (KeyError, ValueError, TypeError):
                 pass
 
-        if rec.etype == "hyper":
+        if rec.etype == 'hyper':
             for side in (rec.src, rec.tgt):
                 if isinstance(side, frozenset):
                     for n in side:
@@ -742,10 +742,10 @@ class AnnNet(
         weight=1.0,
         edge_id=None,
         directed=None,
-        parallel="update",
+        parallel='update',
         slice=None,
         as_entity=False,
-        propagate="none",
+        propagate='none',
         flexible=None,
         **attrs,
     ):
@@ -802,14 +802,14 @@ class AnnNet(
         ValueError
             If the argument combination is invalid or structurally ambiguous.
         """
-        if parallel not in {"update", "error", "parallel"}:
+        if parallel not in {'update', 'error', 'parallel'}:
             raise ValueError(f"parallel must be 'update'|'error'|'parallel', got {parallel!r}")
-        if propagate not in {"none", "shared", "all"}:
+        if propagate not in {'none', 'shared', 'all'}:
             raise ValueError(f"propagate must be 'none'|'shared'|'all', got {propagate!r}")
         if not isinstance(weight, (int, float)):
-            raise TypeError(f"weight must be numeric, got {type(weight).__name__!r}")
+            raise TypeError(f'weight must be numeric, got {type(weight).__name__!r}')
         if flexible is not None and (
-            not isinstance(flexible, dict) or "var" not in flexible or "threshold" not in flexible
+            not isinstance(flexible, dict) or 'var' not in flexible or 'threshold' not in flexible
         ):
             raise ValueError(
                 "flexible must be a dict with keys {'var','threshold'[,'scope','above','tie']}"
@@ -821,10 +821,10 @@ class AnnNet(
             if as_entity:
                 if edge_id is None:
                     raise ValueError(
-                        "edge_id is required when creating an edge-entity without endpoints."
+                        'edge_id is required when creating an edge-entity without endpoints.'
                     )
                 return self._ensure_edge_entity_placeholder(edge_id, slice=slice, **attrs)
-            raise ValueError("add_edge requires structural endpoints unless as_entity=True.")
+            raise ValueError('add_edge requires structural endpoints unless as_entity=True.')
 
         # ── 1. Parse inputs ────────────────────────────────────────────────
         src_nodes, tgt_nodes, col_entries_literal, etype = self._parse_edge_inputs(src, tgt, weight)
@@ -836,17 +836,17 @@ class AnnNet(
                 if not (isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple))
             ]
             if non_supra:
-                sample = ", ".join(repr(node) for node in non_supra[:3])
-                suffix = "" if len(non_supra) <= 3 else ", ..."
+                sample = ', '.join(repr(node) for node in non_supra[:3])
+                suffix = '' if len(non_supra) <= 3 else ', ...'
                 raise ValueError(
-                    "Multilayer structural edges require explicit supra-node endpoints "
-                    f"(vertex_id, layer_coord); got bare endpoints: {sample}{suffix}"
+                    'Multilayer structural edges require explicit supra-node endpoints '
+                    f'(vertex_id, layer_coord); got bare endpoints: {sample}{suffix}'
                 )
 
         # ── 2. Resolve direction ───────────────────────────────────────────
         if directed is not None:
             is_dir = bool(directed)
-        elif etype == "hyper":
+        elif etype == 'hyper':
             # For hyperedges, direction is topological: has explicit tail → directed
             is_dir = bool(tgt_nodes)
         elif self.directed is not None:
@@ -878,23 +878,23 @@ class AnnNet(
             pass
         elif explicit_id:
             # new named edge: create regardless of parallel edges between same endpoints
-            if parallel == "error":
+            if parallel == 'error':
                 existing = self._find_parallel_edges(endpoint_set, etype)
                 if existing:
                     raise ValueError(
-                        f"Edge already exists between {endpoint_set}. "
+                        f'Edge already exists between {endpoint_set}. '
                         "Use parallel='parallel' to allow parallel edges."
                     )
         else:
             # auto-generated id: apply parallel policy
             existing = self._find_parallel_edges(endpoint_set, etype)
             if existing:
-                if parallel == "error":
+                if parallel == 'error':
                     raise ValueError(
-                        f"Edge already exists between {endpoint_set}. "
+                        f'Edge already exists between {endpoint_set}. '
                         "Use parallel='parallel' to allow parallel edges."
                     )
-                if parallel == "update":
+                if parallel == 'update':
                     edge_id = existing[-1]
             if edge_id is None:
                 edge_id = self._get_next_edge_id()
@@ -924,7 +924,7 @@ class AnnNet(
 
         # ── 7. Write matrix column ─────────────────────────────────────────
         M = self._matrix
-        _fast = getattr(M, "_set_intXint", None)
+        _fast = getattr(M, '_set_intXint', None)
         _dt = M.dtype.type
         for node, coeff in col_entries.items():
             r = self._entity_row(node)
@@ -934,20 +934,20 @@ class AnnNet(
                 M[r, col_idx] = coeff
 
         # ── 8. Compute src_store / tgt_store for EdgeRecord ────────────────
-        if etype == "binary":
+        if etype == 'binary':
             src_store = next(iter(src_nodes))
             tgt_store = next(iter(tgt_nodes)) if tgt_nodes else None
-            rec_etype = "vertex_edge" if as_entity else "binary"
+            rec_etype = 'vertex_edge' if as_entity else 'binary'
         else:
             src_store = frozenset(src_nodes) if src_nodes else None
             tgt_store = frozenset(tgt_nodes) if tgt_nodes else None
-            rec_etype = "hyper"
+            rec_etype = 'hyper'
 
         # ── 9. Infer ml_kind for supra-node edges ──────────────────────────
         ml_kind = None
         ml_layers = None
         if (
-            etype == "binary"
+            etype == 'binary'
             and isinstance(src, tuple)
             and len(src) == 2
             and isinstance(src[1], tuple)
@@ -1023,16 +1023,16 @@ class AnnNet(
         if slice is not None:
             slices = self._slices
             if slice not in slices:
-                slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
-            slices[slice]["edges"].add(edge_id)
+                slices[slice] = {'vertices': set(), 'edges': set(), 'attributes': {}}
+            slices[slice]['edges'].add(edge_id)
             # Slice tracks bare vids
             for n in endpoint_set:
-                slices[slice]["vertices"].add(n[0] if isinstance(n, tuple) else n)
+                slices[slice]['vertices'].add(n[0] if isinstance(n, tuple) else n)
 
         # ── 13. Propagate ──────────────────────────────────────────────────
-        if propagate == "shared":
+        if propagate == 'shared':
             self._propagate_to_shared_slices(edge_id, src_store, tgt_store)
-        elif propagate == "all":
+        elif propagate == 'all':
             self._propagate_to_all_slices(edge_id, src_store, tgt_store)
 
         # ── 14. Flexible direction ─────────────────────────────────────────
@@ -1082,7 +1082,7 @@ class AnnNet(
             If the slice does not exist.
         """
         if lid not in self._slices:
-            raise KeyError(f"slice {lid} does not exist")
+            raise KeyError(f'slice {lid} does not exist')
 
         if eid not in self._edges:
             if eid not in self._entities:
@@ -1092,14 +1092,14 @@ class AnnNet(
                 tgt=None,
                 weight=1.0,
                 directed=False,
-                etype="vertex_edge",
+                etype='vertex_edge',
                 col_idx=-1,
                 ml_kind=None,
                 ml_layers=None,
                 direction_policy=None,
             )
 
-        self._slices[lid]["edges"].add(eid)
+        self._slices[lid]['edges'].add(eid)
 
     def _propagate_to_shared_slices(self, edge_id, source, target):
         """INTERNAL: Add an edge to all slices that already contain **both** endpoints.
@@ -1112,8 +1112,8 @@ class AnnNet(
 
         """
         for slice_id, slice_data in self._slices.items():
-            if source in slice_data["vertices"] and target in slice_data["vertices"]:
-                slice_data["edges"].add(edge_id)
+            if source in slice_data['vertices'] and target in slice_data['vertices']:
+                slice_data['edges'].add(edge_id)
 
     def _propagate_to_all_slices(self, edge_id, source, target):
         """INTERNAL: Add an edge to any slice containing **either** endpoint and
@@ -1127,13 +1127,13 @@ class AnnNet(
 
         """
         for slice_id, slice_data in self._slices.items():
-            if source in slice_data["vertices"] or target in slice_data["vertices"]:
-                slice_data["edges"].add(edge_id)
+            if source in slice_data['vertices'] or target in slice_data['vertices']:
+                slice_data['edges'].add(edge_id)
                 # Only add missing endpoint if both vertices should be in slice
-                if source in slice_data["vertices"]:
-                    slice_data["vertices"].add(target)
-                if target in slice_data["vertices"]:
-                    slice_data["vertices"].add(source)
+                if source in slice_data['vertices']:
+                    slice_data['vertices'].add(target)
+                if target in slice_data['vertices']:
+                    slice_data['vertices'].add(source)
 
     def _normalize_vertices_arg(self, vertices):
         """Normalize a single vertex or an iterable of vertices into a set.
@@ -1191,7 +1191,7 @@ class AnnNet(
 
         # 1) Binary / vertex-edge edges
         for eid, rec in list(self._edges.items()):
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 continue  # handled below
             if rec.src is None or rec.tgt is None:
                 continue
@@ -1224,7 +1224,7 @@ class AnnNet(
 
         # 2) Hyperedges
         for eid, rec in list(self._edges.items()):
-            if rec.etype != "hyper":
+            if rec.etype != 'hyper':
                 continue
 
             col = rec.col_idx
@@ -1289,7 +1289,7 @@ class AnnNet(
         edge attributes and slice memberships.
         """
         if edge_id not in self._edges:
-            raise KeyError(f"Edge {edge_id} not found")
+            raise KeyError(f'Edge {edge_id} not found')
 
         rec = self._edges[edge_id]
         col_idx = rec.col_idx
@@ -1344,25 +1344,25 @@ class AnnNet(
 
         # Remove from edge attributes DataFrame
         ea = self.edge_attributes
-        if ea is not None and hasattr(ea, "columns"):
-            is_empty = (getattr(ea, "height", None) == 0) or (
-                hasattr(ea, "__len__") and len(ea) == 0
+        if ea is not None and hasattr(ea, 'columns'):
+            is_empty = (getattr(ea, 'height', None) == 0) or (
+                hasattr(ea, '__len__') and len(ea) == 0
             )
-            if (not is_empty) and ("edge_id" in list(ea.columns)):
-                self.edge_attributes = _df_filter_not_equal(ea, "edge_id", edge_id)
+            if (not is_empty) and ('edge_id' in list(ea.columns)):
+                self.edge_attributes = _df_filter_not_equal(ea, 'edge_id', edge_id)
 
         # Remove from per-slice membership
         for slice_data in self._slices.values():
-            slice_data["edges"].discard(edge_id)
+            slice_data['edges'].discard(edge_id)
 
         # Remove from edge-slice attributes
         esa = self.edge_slice_attributes
-        if esa is not None and hasattr(esa, "columns"):
-            is_empty = (getattr(esa, "height", None) == 0) or (
-                hasattr(esa, "__len__") and len(esa) == 0
+        if esa is not None and hasattr(esa, 'columns'):
+            is_empty = (getattr(esa, 'height', None) == 0) or (
+                hasattr(esa, '__len__') and len(esa) == 0
             )
-            if (not is_empty) and ("edge_id" in list(esa.columns)):
-                self.edge_slice_attributes = _df_filter_not_equal(esa, "edge_id", edge_id)
+            if (not is_empty) and ('edge_id' in list(esa.columns)):
+                self.edge_slice_attributes = _df_filter_not_equal(esa, 'edge_id', edge_id)
 
         # Legacy slice-edge weight dicts
         for d in self.slice_edge_weights.values():
@@ -1387,14 +1387,14 @@ class AnnNet(
         """
         ekey = self._resolve_entity_key(vertex_id)
         if ekey not in self._entities:
-            raise KeyError(f"vertex {vertex_id!r} not found")
+            raise KeyError(f'vertex {vertex_id!r} not found')
 
         entity_idx = self._entities[ekey].row_idx
 
         # Collect all incident edges in one pass over _edges
         edges_to_remove = set()
         for eid, rec in list(self._edges.items()):
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 # src is frozenset(head or members), tgt is frozenset(tail) or None
                 if vertex_id in rec.src or (rec.tgt is not None and vertex_id in rec.tgt):
                     edges_to_remove.add(eid)
@@ -1434,16 +1434,16 @@ class AnnNet(
 
         # Remove from vertex attributes DataFrame
         va = self.vertex_attributes
-        if va is not None and hasattr(va, "columns"):
-            is_empty = (getattr(va, "height", None) == 0) or (
-                hasattr(va, "__len__") and len(va) == 0
+        if va is not None and hasattr(va, 'columns'):
+            is_empty = (getattr(va, 'height', None) == 0) or (
+                hasattr(va, '__len__') and len(va) == 0
             )
-            if (not is_empty) and ("vertex_id" in list(va.columns)):
-                self.vertex_attributes = _df_filter_not_equal(va, "vertex_id", vertex_id)
+            if (not is_empty) and ('vertex_id' in list(va.columns)):
+                self.vertex_attributes = _df_filter_not_equal(va, 'vertex_id', vertex_id)
 
         # Remove from per-slice membership
         for slice_data in self._slices.values():
-            slice_data["vertices"].discard(vertex_id)
+            slice_data['vertices'].discard(vertex_id)
 
     def remove_slice(self, slice_id):
         """Remove a non-default slice and its per-slice attributes.
@@ -1465,22 +1465,22 @@ class AnnNet(
         Does not delete vertices or edges globally; only membership and metadata.
         """
         if slice_id == self._default_slice:
-            raise ValueError("Cannot remove default slice")
+            raise ValueError('Cannot remove default slice')
         if slice_id not in self._slices:
-            raise KeyError(f"slice {slice_id} not found")
+            raise KeyError(f'slice {slice_id} not found')
 
         # Purge per-slice attributes
-        ela = getattr(self, "edge_slice_attributes", None)
-        if ela is not None and hasattr(ela, "columns"):
+        ela = getattr(self, 'edge_slice_attributes', None)
+        if ela is not None and hasattr(ela, 'columns'):
             cols = list(ela.columns)
-            is_empty = (getattr(ela, "height", None) == 0) or (
-                hasattr(ela, "__len__") and len(ela) == 0
+            is_empty = (getattr(ela, 'height', None) == 0) or (
+                hasattr(ela, '__len__') and len(ela) == 0
             )
-            if (not is_empty) and ("slice_id" in cols):
-                self.edge_slice_attributes = _df_filter_not_equal(ela, "slice_id", slice_id)
+            if (not is_empty) and ('slice_id' in cols):
+                self.edge_slice_attributes = _df_filter_not_equal(ela, 'slice_id', slice_id)
 
         # Drop legacy dict slice if present
-        if isinstance(getattr(self, "slice_edge_weights", None), dict):
+        if isinstance(getattr(self, 'slice_edge_weights', None), dict):
             self.slice_edge_weights.pop(slice_id, None)
 
         # Remove the slice and reset current if needed
@@ -1494,7 +1494,7 @@ class AnnNet(
         orphans = []
         for idx in range(len(self._entities)):
             ent = self._row_to_entity[idx]
-            if self._entities[ent].kind == "vertex":
+            if self._entities[ent].kind == 'vertex':
                 if csr.indptr[idx + 1] - csr.indptr[idx] == 0:
                     orphans.append(ent)
         if orphans:
@@ -1535,13 +1535,13 @@ class AnnNet(
         if isinstance(index, str):
             eid = index
             if eid not in self._edges:
-                raise KeyError(f"Unknown edge id: {eid}") from None
+                raise KeyError(f'Unknown edge id: {eid}') from None
         else:
             eid = self._col_to_edge[index]
 
         rec = self._edges[eid]
 
-        if rec.etype == "hyper":
+        if rec.etype == 'hyper':
             # src = frozenset(head or members), tgt = frozenset(tail) or None
             if rec.tgt is not None:
                 return (frozenset(rec.src), frozenset(rec.tgt))
@@ -1574,7 +1574,7 @@ class AnnNet(
         for j in range(len(self._col_to_edge)):
             eid = self._col_to_edge[j]
             rec = self._edges[eid]
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 if vertex_id in rec.src or (rec.tgt is not None and vertex_id in rec.tgt):
                     incident.append(j)
             else:
@@ -1648,8 +1648,8 @@ class AnnNet(
 
         # ---- Anything else is ambiguous / invalid ----
         raise ValueError(
-            "Invalid argument combination: use either "
-            "(edge_id), (source,target), or (source,target,edge_id)."
+            'Invalid argument combination: use either '
+            '(edge_id), (source,target), or (source,target,edge_id).'
         )
 
     def has_vertex(self, vertex_id: str) -> bool:
@@ -1666,7 +1666,7 @@ class AnnNet(
             True if the vertex exists.
         """
         ent = self._entities.get(vertex_id)
-        return ent is not None and ent.kind == "vertex"
+        return ent is not None and ent.kind == 'vertex'
 
     def get_edge_ids(self, source, target):
         """List all edge IDs between two endpoints.
@@ -1722,7 +1722,7 @@ class AnnNet(
         return [
             eid[0] if isinstance(eid, tuple) else eid
             for eid, rec in self._entities.items()
-            if rec.kind == "vertex"
+            if rec.kind == 'vertex'
         ]
 
     def edges(self):
@@ -1745,7 +1745,7 @@ class AnnNet(
         """
         edges = []
         for edge_id, rec in self._edges.items():
-            if rec.etype == "hyper" or rec.src is None or rec.tgt is None:
+            if rec.etype == 'hyper' or rec.src is None or rec.tgt is None:
                 continue
             edges.append((rec.src, rec.tgt, edge_id, rec.weight))
         return edges
@@ -1784,14 +1784,14 @@ class AnnNet(
         int
             Number of unique members observed across all slices.
         """
-        if kind not in {"vertices", "edges", "entities"}:
+        if kind not in {'vertices', 'edges', 'entities'}:
             raise ValueError("kind must be one of {'vertices', 'edges', 'entities'}")
         members = set()
         for slice_data in self._slices.values():
-            if kind in {"vertices", "entities"}:
-                members.update(slice_data["vertices"])
-            if kind in {"edges", "entities"}:
-                members.update(slice_data["edges"])
+            if kind in {'vertices', 'entities'}:
+                members.update(slice_data['vertices'])
+            if kind in {'edges', 'entities'}:
+                members.update(slice_data['edges'])
         return len(members)
 
     # ── Backward-compat thin wrappers ─────────────────────────────────────────
@@ -1806,23 +1806,23 @@ class AnnNet(
 
     def global_vertex_count(self) -> int:
         """Unique vertices across all slices. Prefer ``global_count('vertices')``."""
-        return self.global_count("vertices")
+        return self.global_count('vertices')
 
     def global_entity_count(self) -> int:
         """Unique entities across all slices. Prefer ``global_count('entities')``."""
-        return self.global_count("entities")
+        return self.global_count('entities')
 
     def global_edge_count(self) -> int:
         """Unique edges across all slices. Prefer ``global_count('edges')``."""
-        return self.global_count("edges")
+        return self.global_count('edges')
 
     def in_edges(self, vertices):
         """Incoming edges. Prefer ``incident_edges(direction='in')``."""
-        return self.incident_edges(vertices, direction="in")
+        return self.incident_edges(vertices, direction='in')
 
     def out_edges(self, vertices):
         """Outgoing edges. Prefer ``incident_edges(direction='out')``."""
-        return self.incident_edges(vertices, direction="out")
+        return self.incident_edges(vertices, direction='out')
 
     def get_directed_edges(self) -> list[str]:
         """Directed edge IDs. Prefer ``get_edges_by_direction(True)``."""
@@ -1834,7 +1834,7 @@ class AnnNet(
 
     # ── Traversal ────────────────────────────────────────────────────────────
 
-    def incident_edges(self, vertices, direction: str = "both"):
+    def incident_edges(self, vertices, direction: str = 'both'):
         """Iterate over edges incident to one or more vertices.
 
         Parameters
@@ -1851,30 +1851,30 @@ class AnnNet(
             Pairs of ``(column_index, edge_tuple)`` as returned by
             :meth:`get_edge`.
         """
-        if direction not in {"in", "out", "both"}:
+        if direction not in {'in', 'out', 'both'}:
             raise ValueError("direction must be 'in', 'out', or 'both'")
         V = self._normalize_vertices_arg(vertices)
         if not V:
             return
         seen = set()
         for v in V:
-            if direction in {"in", "both"}:
+            if direction in {'in', 'both'}:
                 for eid in self._tgt_to_edges.get(v, []):
                     if eid not in seen:
                         seen.add(eid)
                         rec = self._edges.get(eid)
                         if rec is not None and rec.col_idx >= 0:
                             yield rec.col_idx, self.get_edge(rec.col_idx)
-            if direction in {"out", "both"}:
+            if direction in {'out', 'both'}:
                 for eid in self._src_to_edges.get(v, []):
                     if eid not in seen:
                         seen.add(eid)
                         rec = self._edges.get(eid)
                         if rec is not None and rec.col_idx >= 0:
                             yield rec.col_idx, self.get_edge(rec.col_idx)
-            if direction == "in":
+            if direction == 'in':
                 secondary = self._src_to_edges.get(v, [])
-            elif direction == "out":
+            elif direction == 'out':
                 secondary = self._tgt_to_edges.get(v, [])
             else:
                 secondary = []
@@ -1888,7 +1888,7 @@ class AnnNet(
     @property
     def nv(self):
         """Total number of vertices in the graph."""
-        return sum(1 for r in self._entities.values() if r.kind == "vertex")
+        return sum(1 for r in self._entities.values() if r.kind == 'vertex')
 
     @property
     def ne(self):
@@ -1938,13 +1938,13 @@ class AnnNet(
         """
         if not self._vertex_key_fields:
             raise RuntimeError(
-                "Call set_vertex_key(...) before using get_or_create_vertex_by_attrs"
+                'Call set_vertex_key(...) before using get_or_create_vertex_by_attrs'
             )
 
         key = self._build_key_from_attrs(attrs)
         if key is None:
             missing = [f for f in self._vertex_key_fields if f not in attrs or attrs[f] is None]
-            raise ValueError(f"Missing composite key fields: {missing}")
+            raise ValueError(f'Missing composite key fields: {missing}')
 
         # Existing?
         owner = self._vertex_key_index.get(key)
@@ -1969,14 +1969,14 @@ class AnnNet(
         """
         from urllib.parse import quote
 
-        base = "cid:" + "|".join(quote(str(part), safe="") for part in key)
+        base = 'cid:' + '|'.join(quote(str(part), safe='') for part in key)
         vid = base
         i = 1
         while self.has_vertex(vid):
             current = self._current_key_of_vertex(vid)
             if current == key:
                 return vid
-            vid = f"{base}::{i}"
+            vid = f'{base}::{i}'
             i += 1
         return vid
 
@@ -2029,7 +2029,7 @@ class AnnNet(
         _NXBackendAccessor
             Accessor exposing NetworkX algorithms.
         """
-        if not hasattr(self, "_nx_accessor"):
+        if not hasattr(self, '_nx_accessor'):
             self._nx_accessor = _NXBackendAccessor(self)
         return self._nx_accessor
 
@@ -2044,7 +2044,7 @@ class AnnNet(
         _IGBackendAccessor
             Accessor exposing igraph algorithms.
         """
-        if not hasattr(self, "_ig_accessor"):
+        if not hasattr(self, '_ig_accessor'):
             self._ig_accessor = _IGBackendAccessor(self)
         return self._ig_accessor
 
@@ -2059,7 +2059,7 @@ class AnnNet(
         _GTBackendAccessor
             Accessor exposing graph-tool algorithms.
         """
-        if not hasattr(self, "_gt_accessor"):
+        if not hasattr(self, '_gt_accessor'):
             self._gt_accessor = _GTBackendAccessor(self)
         return self._gt_accessor
 
@@ -2112,7 +2112,7 @@ class AnnNet(
         -------
         SliceManager
         """
-        if not hasattr(self, "_slice_manager"):
+        if not hasattr(self, '_slice_manager'):
             self._slice_manager = SliceManager(self)
         return self._slice_manager
 
@@ -2124,7 +2124,7 @@ class AnnNet(
         -------
         LayerManager
         """
-        if not hasattr(self, "_layer_manager"):
+        if not hasattr(self, '_layer_manager'):
             self._layer_manager = LayerManager(self)
         return self._layer_manager
 
@@ -2136,7 +2136,7 @@ class AnnNet(
         -------
         IndexManager
         """
-        if not hasattr(self, "_index_manager"):
+        if not hasattr(self, '_index_manager'):
             self._index_manager = IndexManager(self)
         return self._index_manager
 
@@ -2148,7 +2148,7 @@ class AnnNet(
         -------
         CacheManager
         """
-        if not hasattr(self, "_cache_manager"):
+        if not hasattr(self, '_cache_manager'):
             self._cache_manager = CacheManager(self)
         return self._cache_manager
 
@@ -2222,25 +2222,25 @@ class AnnNet(
             Snapshot metadata record.
         """
         if label is None:
-            label = f"snapshot_{len(self._snapshots)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            label = f'snapshot_{len(self._snapshots)}_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
 
         snapshot = {
-            "label": label,
-            "version": self._version,
-            "timestamp": datetime.now(UTC).isoformat(),
-            "counts": {
-                "vertices": self.nv,
-                "edges": self.ne,
-                "slices": len(self._slices),
+            'label': label,
+            'version': self._version,
+            'timestamp': datetime.now(UTC).isoformat(),
+            'counts': {
+                'vertices': self.nv,
+                'edges': self.ne,
+                'slices': len(self._slices),
             },
             # Store minimal state for comparison (uses existing AnnNet attributes)
-            "vertex_ids": set(
+            'vertex_ids': set(
                 eid[0] if isinstance(eid, tuple) else eid
                 for eid, r in self._entities.items()
-                if r.kind == "vertex"
+                if r.kind == 'vertex'
             ),
-            "edge_ids": set(self._col_to_edge.values()),
-            "slice_ids": set(self._slices.keys()),
+            'edge_ids': set(self._col_to_edge.values()),
+            'slice_ids': set(self._slices.keys()),
         }
 
         self._snapshots.append(snapshot)
@@ -2273,33 +2273,33 @@ class AnnNet(
         elif isinstance(ref, str):
             # Find by label
             for snap in self._snapshots:
-                if snap["label"] == ref:
+                if snap['label'] == ref:
                     return snap
             raise ValueError(f"Snapshot '{ref}' not found")
         elif isinstance(ref, AnnNet):
             # Create snapshot from another graph (uses AnnNet attributes)
             return {
-                "label": "external",
-                "version": ref._version,
-                "vertex_ids": set(eid for eid, r in ref._entities.items() if r.kind == "vertex"),
-                "edge_ids": set(ref._col_to_edge.values()),
-                "slice_ids": set(ref._slices.keys()),
+                'label': 'external',
+                'version': ref._version,
+                'vertex_ids': set(eid for eid, r in ref._entities.items() if r.kind == 'vertex'),
+                'edge_ids': set(ref._col_to_edge.values()),
+                'slice_ids': set(ref._slices.keys()),
             }
         else:
-            raise TypeError(f"Invalid snapshot reference: {type(ref)}")
+            raise TypeError(f'Invalid snapshot reference: {type(ref)}')
 
     def _current_snapshot(self):
         """Create snapshot of current state (uses AnnNet attributes)."""
         return {
-            "label": "current",
-            "version": self._version,
-            "vertex_ids": set(
+            'label': 'current',
+            'version': self._version,
+            'vertex_ids': set(
                 eid[0] if isinstance(eid, tuple) else eid
                 for eid, r in self._entities.items()
-                if r.kind == "vertex"
+                if r.kind == 'vertex'
             ),
-            "edge_ids": set(self._col_to_edge.values()),
-            "slice_ids": set(self._slices.keys()),
+            'edge_ids': set(self._col_to_edge.values()),
+            'slice_ids': set(self._slices.keys()),
         }
 
     def list_snapshots(self):
@@ -2312,10 +2312,10 @@ class AnnNet(
         """
         return [
             {
-                "label": snap["label"],
-                "timestamp": snap["timestamp"],
-                "version": snap["version"],
-                "counts": snap["counts"],
+                'label': snap['label'],
+                'timestamp': snap['timestamp'],
+                'version': snap['version'],
+                'counts': snap['counts'],
             }
             for snap in self._snapshots
         ]
@@ -2327,16 +2327,16 @@ class AnnNet(
     @property
     def aspects(self) -> list[str]:
         """Aspect names for this multilayer graph (empty list for flat graphs)."""
-        if self._aspects == ("_",):
+        if self._aspects == ('_',):
             return []
         return list(self._aspects)
 
     @aspects.setter
     def aspects(self, val: list[str]):
         if not val:
-            self._aspects = ("_",)
-            if "_" not in self._layers:
-                self._layers = {"_": {"_"}}
+            self._aspects = ('_',)
+            if '_' not in self._layers:
+                self._layers = {'_': {'_'}}
         else:
             self._aspects = tuple(val)
             for a in self._aspects:
@@ -2346,14 +2346,14 @@ class AnnNet(
     @property
     def elem_layers(self) -> dict[str, list[str]]:
         """Elementary layer labels per aspect (empty dict for flat graphs)."""
-        if self._aspects == ("_",):
+        if self._aspects == ('_',):
             return {}
-        return {k: sorted(v) for k, v in self._layers.items() if k != "_"}
+        return {k: sorted(v) for k, v in self._layers.items() if k != '_'}
 
     @elem_layers.setter
     def elem_layers(self, val: dict[str, list[str]]):
         if not val:
-            self._layers = {"_": {"_"}}
+            self._layers = {'_': {'_'}}
         else:
             self._layers = {k: set(v) for k, v in val.items()}
 
@@ -2364,7 +2364,7 @@ class AnnNet(
     @property
     def edge_layers(self) -> dict:
         """edge_id -> layer_tuple mapping (backed by EdgeRecord.ml_layers)."""
-        proxy = getattr(self, "_compat_edge_layers", None)
+        proxy = getattr(self, '_compat_edge_layers', None)
         if proxy is None:
             proxy = EdgeLayersCompat(self)
             self._compat_edge_layers = proxy
@@ -2385,7 +2385,7 @@ class AnnNet(
     @property
     def entity_to_idx(self) -> dict:
         """entity_id -> row_idx compatibility mapping."""
-        proxy = getattr(self, "_compat_entity_to_idx", None)
+        proxy = getattr(self, '_compat_entity_to_idx', None)
         if proxy is None:
             proxy = EntityToIdxCompat(self)
             self._compat_entity_to_idx = proxy
@@ -2398,13 +2398,13 @@ class AnnNet(
         self._vid_to_ekeys.clear()
         for entity_id, row_idx in dict(mapping).items():
             self._register_entity_record(
-                entity_id, EntityRecord(row_idx=int(row_idx), kind="vertex")
+                entity_id, EntityRecord(row_idx=int(row_idx), kind='vertex')
             )
 
     @property
     def idx_to_entity(self) -> dict:
         """row_idx -> entity_id compatibility mapping."""
-        proxy = getattr(self, "_compat_idx_to_entity", None)
+        proxy = getattr(self, '_compat_idx_to_entity', None)
         if proxy is None:
             proxy = IdxToEntityCompat(self)
             self._compat_idx_to_entity = proxy
@@ -2415,14 +2415,14 @@ class AnnNet(
         self._row_to_entity = {int(k): v for k, v in dict(mapping).items()}
         for row_idx, entity_id in self._row_to_entity.items():
             rec = self._entities.get(entity_id)
-            kind = rec.kind if rec is not None else "vertex"
+            kind = rec.kind if rec is not None else 'vertex'
             self._entities[entity_id] = EntityRecord(row_idx=row_idx, kind=kind)
         self._rebuild_entity_indexes()
 
     @property
     def entity_types(self) -> dict:
         """entity_id -> kind compatibility mapping."""
-        proxy = getattr(self, "_compat_entity_types", None)
+        proxy = getattr(self, '_compat_entity_types', None)
         if proxy is None:
             proxy = EntityTypesCompat(self)
             self._compat_entity_types = proxy
@@ -2436,7 +2436,7 @@ class AnnNet(
     @property
     def edge_to_idx(self) -> dict:
         """edge_id -> col_idx compatibility mapping."""
-        proxy = getattr(self, "_compat_edge_to_idx", None)
+        proxy = getattr(self, '_compat_edge_to_idx', None)
         if proxy is None:
             proxy = EdgeToIdxCompat(self)
             self._compat_edge_to_idx = proxy
@@ -2451,7 +2451,7 @@ class AnnNet(
     @property
     def idx_to_edge(self) -> dict:
         """col_idx -> edge_id compatibility mapping."""
-        proxy = getattr(self, "_compat_idx_to_edge", None)
+        proxy = getattr(self, '_compat_idx_to_edge', None)
         if proxy is None:
             proxy = IdxToEdgeCompat(self)
             self._compat_idx_to_edge = proxy
@@ -2466,7 +2466,7 @@ class AnnNet(
     @property
     def edge_weights(self) -> dict:
         """edge_id -> weight compatibility mapping."""
-        proxy = getattr(self, "_compat_edge_weights", None)
+        proxy = getattr(self, '_compat_edge_weights', None)
         if proxy is None:
             proxy = EdgeWeightsCompat(self)
             self._compat_edge_weights = proxy
@@ -2480,7 +2480,7 @@ class AnnNet(
     @property
     def edge_directed(self) -> dict:
         """edge_id -> directed compatibility mapping."""
-        proxy = getattr(self, "_compat_edge_directed", None)
+        proxy = getattr(self, '_compat_edge_directed', None)
         if proxy is None:
             proxy = EdgeDirectedCompat(self)
             self._compat_edge_directed = proxy
@@ -2494,7 +2494,7 @@ class AnnNet(
     @property
     def edge_definitions(self) -> dict:
         """edge_id -> (src, tgt, etype) compatibility mapping."""
-        proxy = getattr(self, "_compat_edge_definitions", None)
+        proxy = getattr(self, '_compat_edge_definitions', None)
         if proxy is None:
             proxy = EdgeDefinitionsCompat(self)
             self._compat_edge_definitions = proxy
@@ -2508,7 +2508,7 @@ class AnnNet(
     @property
     def hyperedge_definitions(self) -> dict:
         """edge_id -> hyper metadata compatibility mapping."""
-        proxy = getattr(self, "_compat_hyperedge_definitions", None)
+        proxy = getattr(self, '_compat_hyperedge_definitions', None)
         if proxy is None:
             proxy = HyperedgeDefinitionsCompat(self)
             self._compat_hyperedge_definitions = proxy
@@ -2541,7 +2541,7 @@ class AnnNet(
     @property
     def edge_direction_policy(self) -> dict:
         """edge_id -> direction policy compatibility mapping."""
-        proxy = getattr(self, "_compat_edge_direction_policy", None)
+        proxy = getattr(self, '_compat_edge_direction_policy', None)
         if proxy is None:
             proxy = EdgeDirectionPolicyCompat(self)
             self._compat_edge_direction_policy = proxy
@@ -2555,7 +2555,7 @@ class AnnNet(
     @property
     def edge_kind(self) -> dict:
         """Compatibility mapping combining structural hyperedges and ML edge kinds."""
-        proxy = getattr(self, "_compat_edge_kind", None)
+        proxy = getattr(self, '_compat_edge_kind', None)
         if proxy is None:
             proxy = EdgeKindCompat(self)
             self._compat_edge_kind = proxy

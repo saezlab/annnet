@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 class _NXBackendAccessor(_BackendAccessorBase):
     """NetworkX backend accessor attached to an AnnNet instance."""
 
-    VERTEX_KEYS = {"source", "target", "u", "v", "vertex", "vertices", "nbunch", "center", "path"}
+    VERTEX_KEYS = {'source', 'target', 'u', 'v', 'vertex', 'vertices', 'nbunch', 'center', 'path'}
 
     def __init__(self, owner: AnnNet):
         self._G = owner
@@ -25,7 +25,7 @@ class _NXBackendAccessor(_BackendAccessorBase):
     def peek_vertices(self, k: int = 10):
         nxG = self._get_or_make_nx(
             directed=True,
-            hyperedge_mode="expand",
+            hyperedge_mode='expand',
             slice=None,
             slices=None,
             needed_attrs=set(),
@@ -45,7 +45,7 @@ class _NXBackendAccessor(_BackendAccessorBase):
         self,
         *,
         directed: bool = True,
-        hyperedge_mode: str = "expand",
+        hyperedge_mode: str = 'expand',
         slice=None,
         slices=None,
         needed_attrs=None,
@@ -68,16 +68,16 @@ class _NXBackendAccessor(_BackendAccessorBase):
         def wrapper(*args, **kwargs):
             import networkx as _nx
 
-            directed = bool(kwargs.pop("_nx_directed", getattr(self, "default_directed", True)))
+            directed = bool(kwargs.pop('_nx_directed', getattr(self, 'default_directed', True)))
             hyperedge_mode = kwargs.pop(
-                "_nx_hyperedge", getattr(self, "default_hyperedge_mode", "expand")
+                '_nx_hyperedge', getattr(self, 'default_hyperedge_mode', 'expand')
             )
-            slice = kwargs.pop("_nx_slice", None)
-            slices = kwargs.pop("_nx_slices", None)
-            label_field = kwargs.pop("_nx_label_field", None)
-            guess_labels = kwargs.pop("_nx_guess_labels", True)
-            simple = bool(kwargs.pop("_nx_simple", getattr(self, "default_simple", False)))
-            edge_aggs = kwargs.pop("_nx_edge_aggs", None)
+            slice = kwargs.pop('_nx_slice', None)
+            slices = kwargs.pop('_nx_slices', None)
+            label_field = kwargs.pop('_nx_label_field', None)
+            guess_labels = kwargs.pop('_nx_guess_labels', True)
+            simple = bool(kwargs.pop('_nx_simple', getattr(self, 'default_simple', False)))
+            edge_aggs = kwargs.pop('_nx_edge_aggs', None)
 
             needed_edge_attrs = self._needed_edge_attrs(nx_callable, kwargs)
 
@@ -124,7 +124,7 @@ class _NXBackendAccessor(_BackendAccessorBase):
                 pargs, pkwargs = tuple(args), kwargs
 
             for key in list(pkwargs.keys()):
-                if isinstance(key, str) and key.startswith("_nx_"):
+                if isinstance(key, str) and key.startswith('_nx_'):
                     pkwargs.pop(key, None)
 
             try:
@@ -134,11 +134,11 @@ class _NXBackendAccessor(_BackendAccessorBase):
                 sample = self.peek_vertices(5)
                 tip = (
                     f"{exc}. vertices must be graph's vertex IDs.\n"
-                    f"- If you passed labels, specify _nx_label_field=<vertex label column> "
-                    f"or rely on auto-guess.\n"
+                    f'- If you passed labels, specify _nx_label_field=<vertex label column> '
+                    f'or rely on auto-guess.\n'
                     f"- Example: G.nx.shortest_path_length(G, source='a', target='z', "
                     f"weight='weight', _nx_label_field='name')\n"
-                    f"- A few vertex IDs NX sees: {sample}"
+                    f'- A few vertex IDs NX sees: {sample}'
                 )
                 raise _nx.NodeNotFound(tip) from exc
 
@@ -149,18 +149,18 @@ class _NXBackendAccessor(_BackendAccessorBase):
 
         candidates = [
             _nx,
-            getattr(_nx, "algorithms", None),
-            getattr(_nx.algorithms, "community", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "approximation", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "centrality", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "shortest_paths", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "flow", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "components", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "traversal", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "bipartite", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "link_analysis", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx, "classes", None),
-            getattr(_nx.classes, "function", None) if hasattr(_nx, "classes") else None,
+            getattr(_nx, 'algorithms', None),
+            getattr(_nx.algorithms, 'community', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'approximation', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'centrality', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'shortest_paths', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'flow', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'components', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'traversal', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'bipartite', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'link_analysis', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx, 'classes', None),
+            getattr(_nx.classes, 'function', None) if hasattr(_nx, 'classes') else None,
         ]
         return sorted(set(super().__dir__()) | self._callable_names(*candidates))
 
@@ -169,18 +169,18 @@ class _NXBackendAccessor(_BackendAccessorBase):
 
         candidates = [
             _nx,
-            getattr(_nx, "algorithms", None),
-            getattr(_nx.algorithms, "community", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "approximation", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "centrality", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "shortest_paths", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "flow", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "components", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "traversal", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "bipartite", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx.algorithms, "link_analysis", None) if hasattr(_nx, "algorithms") else None,
-            getattr(_nx, "classes", None),
-            getattr(_nx.classes, "function", None) if hasattr(_nx, "classes") else None,
+            getattr(_nx, 'algorithms', None),
+            getattr(_nx.algorithms, 'community', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'approximation', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'centrality', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'shortest_paths', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'flow', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'components', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'traversal', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'bipartite', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx.algorithms, 'link_analysis', None) if hasattr(_nx, 'algorithms') else None,
+            getattr(_nx, 'classes', None),
+            getattr(_nx.classes, 'function', None) if hasattr(_nx, 'classes') else None,
         ]
         for mod in (candidate for candidate in candidates if candidate is not None):
             attr = getattr(mod, name, None)
@@ -194,18 +194,18 @@ class _NXBackendAccessor(_BackendAccessorBase):
             params = inspect.signature(target).parameters
         except Exception:
             params = {}
-        if "weight" in params:
-            weight_name = kwargs.get("weight", "weight")
+        if 'weight' in params:
+            weight_name = kwargs.get('weight', 'weight')
             if weight_name is not None:
                 needed.add(str(weight_name))
-        elif "weight" in kwargs and kwargs["weight"] is not None:
-            needed.add(str(kwargs["weight"]))
-        if "capacity" in params:
-            capacity_name = kwargs.get("capacity", "capacity")
+        elif 'weight' in kwargs and kwargs['weight'] is not None:
+            needed.add(str(kwargs['weight']))
+        if 'capacity' in params:
+            capacity_name = kwargs.get('capacity', 'capacity')
             if capacity_name is not None:
                 needed.add(str(capacity_name))
-        elif "capacity" in kwargs and kwargs["capacity"] is not None:
-            needed.add(str(kwargs["capacity"]))
+        elif 'capacity' in kwargs and kwargs['capacity'] is not None:
+            needed.add(str(kwargs['capacity']))
         return needed
 
     def _convert_to_nx(
@@ -237,7 +237,7 @@ class _NXBackendAccessor(_BackendAccessorBase):
         elif simple:
             for _, _, _, data in nxG.edges(keys=True, data=True):
                 for key in list(data.keys()):
-                    if key not in ("weight", "capacity"):
+                    if key not in ('weight', 'capacity'):
                         data.pop(key, None)
         else:
             for _, _, _, data in nxG.edges(keys=True, data=True):
@@ -273,12 +273,12 @@ class _NXBackendAccessor(_BackendAccessorBase):
             bool(simple),
             self._freeze_cache_value(edge_aggs),
         )
-        version = getattr(self._G, "_version", None)
+        version = getattr(self._G, '_version', None)
         entry = self._cache.get(key)
         if (
             (not self.cache_enabled)
             or (entry is None)
-            or (version is not None and entry.get("version") != version)
+            or (version is not None and entry.get('version') != version)
         ):
             nxG = self._convert_to_nx(
                 directed=directed,
@@ -290,31 +290,31 @@ class _NXBackendAccessor(_BackendAccessorBase):
                 edge_aggs=edge_aggs,
             )
             if self.cache_enabled:
-                self._cache[key] = {"nxG": nxG, "version": version}
+                self._cache[key] = {'nxG': nxG, 'version': version}
             return nxG
-        return entry["nxG"]
+        return entry['nxG']
 
     def _warn_on_loss(self, *, hyperedge_mode, slice, slices, manifest):
         import warnings
 
         msgs = []
         if (
-            any(rec.etype == "hyper" for rec in self._G._edges.values())
-            and hyperedge_mode != "expand"
+            any(rec.etype == 'hyper' for rec in self._G._edges.values())
+            and hyperedge_mode != 'expand'
         ):
             msgs.append("hyperedges dropped (hyperedge_mode='skip')")
-        slices_dict = getattr(self._G, "_slices", None)
+        slices_dict = getattr(self._G, '_slices', None)
         if (
             isinstance(slices_dict, dict)
             and len(slices_dict) > 1
             and (slice is None and not slices)
         ):
-            msgs.append("multiple slices flattened into single NX graph")
+            msgs.append('multiple slices flattened into single NX graph')
         if manifest is None:
-            msgs.append("no manifest provided; round-trip fidelity not guaranteed")
+            msgs.append('no manifest provided; round-trip fidelity not guaranteed')
         if msgs:
             warnings.warn(
-                "AnnNet-NX conversion is lossy: " + "; ".join(msgs) + ".",
+                'AnnNet-NX conversion is lossy: ' + '; '.join(msgs) + '.',
                 category=RuntimeWarning,
                 stacklevel=3,
             )
@@ -376,15 +376,15 @@ class _NXBackendAccessor(_BackendAccessorBase):
             agg = aggregations.get(key)
             if callable(agg):
                 return agg
-            if agg == "sum":
+            if agg == 'sum':
                 return sum
-            if agg == "min":
+            if agg == 'min':
                 return min
-            if agg == "max":
+            if agg == 'max':
                 return max
-            if key == "capacity":
+            if key == 'capacity':
                 return sum
-            if key == "weight":
+            if key == 'weight':
                 return min
             return lambda values: next(iter(values))
 

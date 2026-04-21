@@ -2,4 +2,4 @@ from .graph import AnnNet, EdgeType
 
 Graph = AnnNet
 
-__all__ = ["AnnNet", "Graph", "EdgeType"]
+__all__ = ['AnnNet', 'Graph', 'EdgeType']

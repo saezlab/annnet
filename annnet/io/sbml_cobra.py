@@ -18,7 +18,7 @@ from collections.abc import Iterable, Sequence
 
 import numpy as np
 
-warnings.filterwarnings("ignore", message="Signature .*numpy.longdouble.*")
+warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
 
 from ..core.graph import AnnNet
 
@@ -30,7 +30,7 @@ def _monkeypatch_set_edge_coeffs(G) -> bool:
     Writes per-vertex coefficients into the incidence column (DOK [Dictionary Of Keys]).
     Returns True if patch was applied, False if already available.
     """
-    if hasattr(G, "set_edge_coeffs"):
+    if hasattr(G, 'set_edge_coeffs'):
         return False  # already there
 
     def set_edge_coeffs(self, edge_id: str, coeffs: dict[str, float]) -> None:
@@ -48,8 +48,8 @@ def _ensure_vertices(G, vertices: Iterable[str], slice: str | None) -> None:
     G.add_vertices_bulk(list(vertices), slice=slice)
 
 
-BOUNDARY_SOURCE = "__BOUNDARY_SOURCE__"
-BOUNDARY_SINK = "__BOUNDARY_SINK__"
+BOUNDARY_SOURCE = '__BOUNDARY_SOURCE__'
+BOUNDARY_SINK = '__BOUNDARY_SINK__'
 
 
 def _ensure_boundary_vertices(G, slice: str):
@@ -63,12 +63,12 @@ def _graph_from_stoich(
     reaction_ids: Sequence[str],
     graph: AnnNet | None = None,
     *,
-    slice: str = "default",
+    slice: str = 'default',
     preserve_stoichiometry: bool = True,
 ) -> AnnNet:
     if graph is None:
         if AnnNet is None:
-            raise RuntimeError("AnnNet class not importable; pass `graph=` explicitly.")
+            raise RuntimeError('AnnNet class not importable; pass `graph=` explicitly.')
         G = AnnNet(directed=True)
     else:
         G = graph
@@ -82,7 +82,7 @@ def _graph_from_stoich(
     assert n == len(reaction_ids)
 
     # Optional: enable per-vertex coefficients
-    if preserve_stoichiometry and not hasattr(G, "set_edge_coeffs"):
+    if preserve_stoichiometry and not hasattr(G, 'set_edge_coeffs'):
         # fallback = store stoich dict as attribute later
         pass
 
@@ -101,7 +101,7 @@ def _graph_from_stoich(
         if not head:
             # sink: products empty → route to SINK on head side
             head = [BOUNDARY_SINK]
-            boundary = ("sink", BOUNDARY_SINK)
+            boundary = ('sink', BOUNDARY_SINK)
             # keep column balanced if we write per-vertex coefficients
             sink_coeff = float(sum(-v for v in col if v < 0))  # sum of absolute reactants
             coeffs[BOUNDARY_SINK] = sink_coeff
@@ -109,7 +109,7 @@ def _graph_from_stoich(
         elif not tail:
             # source: reactants empty → route from SOURCE on tail side
             tail = [BOUNDARY_SOURCE]
-            boundary = ("source", BOUNDARY_SOURCE)
+            boundary = ('source', BOUNDARY_SOURCE)
             source_coeff = float(-sum(v for v in col if v > 0))  # negative sum of products
             coeffs[BOUNDARY_SOURCE] = source_coeff
 
@@ -123,7 +123,7 @@ def _graph_from_stoich(
         )
 
         # write exact coefficients if supported; else stash as attribute
-        if preserve_stoichiometry and hasattr(G, "set_edge_coeffs"):
+        if preserve_stoichiometry and hasattr(G, 'set_edge_coeffs'):
             G.set_edge_coeffs(eid_added, coeffs)  # you said you added this
         else:
             G.set_edge_attrs(eid_added, stoich=coeffs)
@@ -143,7 +143,7 @@ def from_cobra_model(
     model,
     graph: AnnNet | None = None,
     *,
-    slice: str = "default",
+    slice: str = 'default',
     preserve_stoichiometry: bool = True,
 ) -> AnnNet:
     """Convert a COBRApy model to AnnNet. Requires cobra.util.array.create_stoichiometric_matrix.
@@ -152,7 +152,7 @@ def from_cobra_model(
     try:
         from cobra.util.array import create_stoichiometric_matrix  # type: ignore
     except Exception as e:  # pragma: no cover
-        raise ImportError("COBRApy not installed (needed for stoichiometric matrix).") from e
+        raise ImportError('COBRApy not installed (needed for stoichiometric matrix).') from e
 
     S = create_stoichiometric_matrix(model)
     rxn_ids = [rxn.id for rxn in model.reactions]
@@ -166,10 +166,10 @@ def from_cobra_model(
     for rxn in model.reactions:
         eid = rxn.id
         attrs = {
-            "name": getattr(rxn, "name", None),
-            "default_lb": getattr(rxn, "lower_bound", None),
-            "default_ub": getattr(rxn, "upper_bound", None),
-            "gpr": getattr(rxn, "gene_reaction_rule", None),
+            'name': getattr(rxn, 'name', None),
+            'default_lb': getattr(rxn, 'lower_bound', None),
+            'default_ub': getattr(rxn, 'upper_bound', None),
+            'gpr': getattr(rxn, 'gene_reaction_rule', None),
         }
         # drop Nones
         clean = {k: v for k, v in attrs.items() if v is not None}
@@ -183,7 +183,7 @@ def from_sbml(
     path: str,
     graph: AnnNet | None = None,
     *,
-    slice: str = "default",
+    slice: str = 'default',
     preserve_stoichiometry: bool = True,
     quiet: bool = True,
 ) -> AnnNet:
@@ -191,7 +191,7 @@ def from_sbml(
     try:
         from cobra.io import read_sbml_model  # type: ignore
     except Exception as e:  # pragma: no cover
-        raise ImportError("COBRApy not installed; install cobra to read SBML.") from e
+        raise ImportError('COBRApy not installed; install cobra to read SBML.') from e
 
     model = read_sbml_model(path)
     return from_cobra_model(

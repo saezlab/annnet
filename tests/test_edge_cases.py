@@ -19,21 +19,21 @@ from annnet.io.sif import from_sif, to_sif  # SIF (Simple Interaction Format)
 # ---------------------------------------------------------------------------
 
 
-def _roundtrip_json(G, tmpdir, name="g"):
-    p = tmpdir / f"{name}.json"
+def _roundtrip_json(G, tmpdir, name='g'):
+    p = tmpdir / f'{name}.json'
     to_json(G, p)
     return from_json(p)
 
 
-def _roundtrip_parquet(G, tmpdir, name="g"):
-    p = tmpdir / f"{name}_dir"
+def _roundtrip_parquet(G, tmpdir, name='g'):
+    p = tmpdir / f'{name}_dir'
     to_parquet(G, p)
     return from_parquet(p)
 
 
-def _roundtrip_sif(G, tmpdir, name="g"):
-    sif_p = tmpdir / f"{name}.sif"
-    man_p = tmpdir / f"{name}.manifest.json"
+def _roundtrip_sif(G, tmpdir, name='g'):
+    sif_p = tmpdir / f'{name}.sif'
+    man_p = tmpdir / f'{name}.manifest.json'
     to_sif(G, sif_p, lossless=True, manifest_path=man_p)
     return from_sif(sif_p, manifest=man_p)
 
@@ -43,14 +43,14 @@ def _roundtrip_sif(G, tmpdir, name="g"):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("adapter", ["json", "parquet", "dataframe"])
+@pytest.mark.parametrize('adapter', ['json', 'parquet', 'dataframe'])
 def test_empty_graph(adapter, tmpdir_fixture):
     G = AnnNet()
 
-    if adapter == "json":
-        G2 = _roundtrip_json(G, tmpdir_fixture, "empty")
-    elif adapter == "parquet":
-        G2 = _roundtrip_parquet(G, tmpdir_fixture, "empty")
+    if adapter == 'json':
+        G2 = _roundtrip_json(G, tmpdir_fixture, 'empty')
+    elif adapter == 'parquet':
+        G2 = _roundtrip_parquet(G, tmpdir_fixture, 'empty')
     else:
         from annnet.io.dataframes import from_dataframes, to_dataframes
 
@@ -65,14 +65,14 @@ def test_empty_graph(adapter, tmpdir_fixture):
 # ---------------------------------------------------------------------------
 
 SPECIAL_IDS = [
-    "node with spaces",
-    "node-with-dashes",
-    "node_with_underscores",
-    "node.with.dots",
-    "α",
-    "β",
-    "γ",
-    "node\twith\ttabs",
+    'node with spaces',
+    'node-with-dashes',
+    'node_with_underscores',
+    'node.with.dots',
+    'α',
+    'β',
+    'γ',
+    'node\twith\ttabs',
 ]
 
 
@@ -80,19 +80,19 @@ def _build_special_graph():
     G = AnnNet()
     for vid in SPECIAL_IDS:
         G.add_vertex(vid)
-    G.add_edge(SPECIAL_IDS[0], SPECIAL_IDS[1], edge_id="e1")
-    G.add_edge("α", "β", edge_id="e2")
+    G.add_edge(SPECIAL_IDS[0], SPECIAL_IDS[1], edge_id='e1')
+    G.add_edge('α', 'β', edge_id='e2')
     return G
 
 
-@pytest.mark.parametrize("adapter", ["json", "parquet"])
+@pytest.mark.parametrize('adapter', ['json', 'parquet'])
 def test_special_characters_in_ids(adapter, tmpdir_fixture):
     G = _build_special_graph()
 
-    if adapter == "json":
-        G2 = _roundtrip_json(G, tmpdir_fixture, "special")
+    if adapter == 'json':
+        G2 = _roundtrip_json(G, tmpdir_fixture, 'special')
     else:
-        G2 = _roundtrip_parquet(G, tmpdir_fixture, "special")
+        G2 = _roundtrip_parquet(G, tmpdir_fixture, 'special')
 
     assert set(G.vertices()) == set(G2.vertices())
 
@@ -104,17 +104,17 @@ def test_special_characters_in_ids(adapter, tmpdir_fixture):
 
 def test_large_weights_and_extreme_values(tmpdir_fixture):
     G = AnnNet()
-    G.add_vertex("A")
-    G.add_vertex("B")
-    G.add_edge("A", "B", edge_id="e1", weight=1e10)
-    G.add_edge("A", "B", edge_id="e2", weight=1e-10, parallel="parallel")
-    G.add_edge("A", "B", edge_id="e3", weight=0.0, parallel="parallel")
+    G.add_vertex('A')
+    G.add_vertex('B')
+    G.add_edge('A', 'B', edge_id='e1', weight=1e10)
+    G.add_edge('A', 'B', edge_id='e2', weight=1e-10, parallel='parallel')
+    G.add_edge('A', 'B', edge_id='e3', weight=0.0, parallel='parallel')
 
-    G2 = _roundtrip_json(G, tmpdir_fixture, "extreme")
+    G2 = _roundtrip_json(G, tmpdir_fixture, 'extreme')
 
-    assert abs(G2.edge_weights.get("e1", 0) - 1e10) < 1e-6
-    assert abs(G2.edge_weights.get("e2", 0) - 1e-10) < 1e-15
-    assert abs(G2.edge_weights.get("e3", 1) - 0.0) < 1e-10
+    assert abs(G2.edge_weights.get('e1', 0) - 1e10) < 1e-6
+    assert abs(G2.edge_weights.get('e2', 0) - 1e-10) < 1e-15
+    assert abs(G2.edge_weights.get('e3', 1) - 0.0) < 1e-10
 
 
 # ---------------------------------------------------------------------------
@@ -122,20 +122,20 @@ def test_large_weights_and_extreme_values(tmpdir_fixture):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("adapter", ["json", "parquet", "sif"])
+@pytest.mark.parametrize('adapter', ['json', 'parquet', 'sif'])
 def test_self_loops(adapter, tmpdir_fixture):
     G = AnnNet()
-    G.add_vertex("A")
-    G.add_edge("A", "A", edge_id="loop", weight=2.5)
+    G.add_vertex('A')
+    G.add_edge('A', 'A', edge_id='loop', weight=2.5)
 
-    if adapter == "json":
-        G2 = _roundtrip_json(G, tmpdir_fixture, "loop")
-    elif adapter == "parquet":
-        G2 = _roundtrip_parquet(G, tmpdir_fixture, "loop")
+    if adapter == 'json':
+        G2 = _roundtrip_json(G, tmpdir_fixture, 'loop')
+    elif adapter == 'parquet':
+        G2 = _roundtrip_parquet(G, tmpdir_fixture, 'loop')
     else:
-        G2 = _roundtrip_sif(G, tmpdir_fixture, "loop")
+        G2 = _roundtrip_sif(G, tmpdir_fixture, 'loop')
 
-    assert "loop" in G2.edge_to_idx
+    assert 'loop' in G2.edge_to_idx
 
 
 # ---------------------------------------------------------------------------
@@ -145,17 +145,17 @@ def test_self_loops(adapter, tmpdir_fixture):
 
 def test_parallel_edges(tmpdir_fixture):
     G = AnnNet()
-    G.add_vertex("A")
-    G.add_vertex("B")
-    G.add_edge("A", "B", edge_id="e1", weight=1.0)
-    G.add_edge("A", "B", edge_id="e2", weight=2.0, parallel="parallel")
-    G.add_edge("A", "B", edge_id="e3", weight=3.0, parallel="parallel")
+    G.add_vertex('A')
+    G.add_vertex('B')
+    G.add_edge('A', 'B', edge_id='e1', weight=1.0)
+    G.add_edge('A', 'B', edge_id='e2', weight=2.0, parallel='parallel')
+    G.add_edge('A', 'B', edge_id='e3', weight=3.0, parallel='parallel')
 
-    G2 = _roundtrip_json(G, tmpdir_fixture, "parallel")
+    G2 = _roundtrip_json(G, tmpdir_fixture, 'parallel')
 
-    assert "e1" in G2.edge_to_idx
-    assert "e2" in G2.edge_to_idx
-    assert "e3" in G2.edge_to_idx
+    assert 'e1' in G2.edge_to_idx
+    assert 'e2' in G2.edge_to_idx
+    assert 'e3' in G2.edge_to_idx
     assert G2.ne == 3
 
 
@@ -166,15 +166,15 @@ def test_parallel_edges(tmpdir_fixture):
 
 def test_null_and_none_handling(tmpdir_fixture):
     G = AnnNet()
-    G.add_vertex("A")
-    G.set_vertex_attrs("A", present="value", missing=None, zero=0, empty_string="")
+    G.add_vertex('A')
+    G.set_vertex_attrs('A', present='value', missing=None, zero=0, empty_string='')
 
-    G2 = _roundtrip_json(G, tmpdir_fixture, "nulls")
+    G2 = _roundtrip_json(G, tmpdir_fixture, 'nulls')
 
-    attrs = G2.get_vertex_attrs("A") or {}
-    assert attrs.get("present") == "value"
-    assert attrs.get("zero") == 0
-    assert "missing" not in attrs or attrs.get("missing") is None
+    attrs = G2.get_vertex_attrs('A') or {}
+    assert attrs.get('present') == 'value'
+    assert attrs.get('zero') == 0
+    assert 'missing' not in attrs or attrs.get('missing') is None
 
 
 # ---------------------------------------------------------------------------
@@ -189,14 +189,14 @@ def test_very_large_graph(tmpdir_fixture):
     n_vertices = 1000
     n_edges = 2000
     for i in range(n_vertices):
-        G.add_vertex(f"v{i}")
+        G.add_vertex(f'v{i}')
     random.seed(42)
     for i in range(n_edges):
-        u = f"v{random.randint(0, n_vertices - 1)}"  # nosec B311
-        v = f"v{random.randint(0, n_vertices - 1)}"  # nosec B311
-        G.add_edge(u, v, edge_id=f"e{i}", weight=random.random(), parallel="parallel")  # nosec B311
+        u = f'v{random.randint(0, n_vertices - 1)}'  # nosec B311
+        v = f'v{random.randint(0, n_vertices - 1)}'  # nosec B311
+        G.add_edge(u, v, edge_id=f'e{i}', weight=random.random(), parallel='parallel')  # nosec B311
 
-    G2 = _roundtrip_parquet(G, tmpdir_fixture, "large")
+    G2 = _roundtrip_parquet(G, tmpdir_fixture, 'large')
 
     assert len(list(G2.vertices())) == n_vertices
     assert G2.ne == n_edges

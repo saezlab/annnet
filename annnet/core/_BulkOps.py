@@ -76,15 +76,15 @@ class BulkOps:
         norm_attrs = []
         for it in vertices:
             if isinstance(it, dict):
-                if it.get("vertex_id"):
-                    vid = it["vertex_id"]
-                    _id_keys = {"vertex_id"}
-                elif it.get("id"):
-                    vid = it["id"]
-                    _id_keys = {"vertex_id", "id"}
-                elif it.get("name"):
-                    vid = it["name"]
-                    _id_keys = {"vertex_id", "id", "name"}
+                if it.get('vertex_id'):
+                    vid = it['vertex_id']
+                    _id_keys = {'vertex_id'}
+                elif it.get('id'):
+                    vid = it['id']
+                    _id_keys = {'vertex_id', 'id'}
+                elif it.get('name'):
+                    vid = it['name']
+                    _id_keys = {'vertex_id', 'id', 'name'}
                 else:
                     vid = None
                 if vid is None:
@@ -116,7 +116,7 @@ class BulkOps:
         coord = self._resolve_vertex_insert_coord(
             layer,
             vertex_ids=norm_vids,
-            context="add_vertices_bulk",
+            context='add_vertices_bulk',
         )
 
         new_rows = 0
@@ -124,7 +124,7 @@ class BulkOps:
             ekey = (vid, coord)
             if ekey not in self._entities:
                 idx = len(self._entities)
-                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind="vertex"))
+                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
                 new_rows += 1
             # Maintain _V / _VM caches for _Layers.py compat
             self._V.add(vid)
@@ -135,8 +135,8 @@ class BulkOps:
         # Slice membership (slice tracks bare vids for _Slices.py compat)
 
         if slice not in self._slices:
-            self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
-        self._slices[slice]["vertices"].update(norm_vids)
+            self._slices[slice] = {'vertices': set(), 'edges': set(), 'attributes': {}}
+        self._slices[slice]['vertices'].update(norm_vids)
 
         # Ensure attribute table exists
 
@@ -155,7 +155,7 @@ class BulkOps:
         for a in norm_attrs:
             keys.update(a.keys())
 
-        cols = {"vertex_id": norm_vids}
+        cols = {'vertex_id': norm_vids}
         # build columns with a single pass per key
         for k in keys:
             col = [a.get(k, None) for a in norm_attrs]
@@ -175,7 +175,7 @@ class BulkOps:
 
         # Split inserts vs updates
         nrows = len(df)
-        id_df = df.select("vertex_id") if ("vertex_id" in df.columns and nrows > 0) else None
+        id_df = df.select('vertex_id') if ('vertex_id' in df.columns and nrows > 0) else None
 
         if id_df is None:
             # df empty: everything is insert
@@ -183,8 +183,8 @@ class BulkOps:
             to_update = None
         else:
             # anti-join = new rows, semi-join = existing rows
-            to_insert = incoming.join(id_df, on="vertex_id", how="anti")
-            to_update = incoming.join(id_df, on="vertex_id", how="semi")
+            to_insert = incoming.join(id_df, on='vertex_id', how='anti')
+            to_update = incoming.join(id_df, on='vertex_id', how='semi')
 
         # Schema alignment helper
 
@@ -223,14 +223,14 @@ class BulkOps:
 
         if to_insert is not None and len(to_insert) > 0:
             df, to_insert = _align_numeric_and_string(df, to_insert)
-            df = pl.concat([df, to_insert], how="vertical", rechunk=False)
+            df = pl.concat([df, to_insert], how='vertical', rechunk=False)
 
         # Updates: one join + one coalesce pass
 
         if to_update is not None and len(to_update) > 0 and keys:
             df, to_update = _align_numeric_and_string(df, to_update)
 
-            suffix = "__new"
+            suffix = '__new'
 
             left_dupes = [c for c in df.columns if c.endswith(suffix)]
             if left_dupes:
@@ -241,13 +241,13 @@ class BulkOps:
                 to_update = to_update.drop(right_dupes)
 
             # Join once; suffix new columns
-            df2 = df.join(to_update, on="vertex_id", how="left", suffix=suffix)
+            df2 = df.join(to_update, on='vertex_id', how='left', suffix=suffix)
 
             # Build expressions once and update only the provided keys
             exprs = []
             drops = []
             for k in keys:
-                nk = k + "__new"
+                nk = k + '__new'
                 if k in df2.columns and nk in df2.columns:
                     exprs.append(pl.coalesce([pl.col(nk), pl.col(k)]).alias(k))
                     drops.append(nk)
@@ -288,15 +288,15 @@ class BulkOps:
         norm = []
         for it in vertices:
             if isinstance(it, dict):
-                if it.get("vertex_id"):
-                    vid = it["vertex_id"]
-                    _id_keys = {"vertex_id"}
-                elif it.get("id"):
-                    vid = it["id"]
-                    _id_keys = {"vertex_id", "id"}
-                elif it.get("name"):
-                    vid = it["name"]
-                    _id_keys = {"vertex_id", "id", "name"}
+                if it.get('vertex_id'):
+                    vid = it['vertex_id']
+                    _id_keys = {'vertex_id'}
+                elif it.get('id'):
+                    vid = it['id']
+                    _id_keys = {'vertex_id', 'id'}
+                elif it.get('name'):
+                    vid = it['name']
+                    _id_keys = {'vertex_id', 'id', 'name'}
                 else:
                     vid = None
                 if vid is None:
@@ -331,7 +331,7 @@ class BulkOps:
         coord = self._resolve_vertex_insert_coord(
             layer,
             vertex_ids=[vid for vid, _ in norm],
-            context="add_vertices_bulk",
+            context='add_vertices_bulk',
         )
 
         new_rows = 0
@@ -339,7 +339,7 @@ class BulkOps:
             ekey = (vid, coord)
             if ekey not in self._entities:
                 idx = len(self._entities)
-                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind="vertex"))
+                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
                 self._V.add(vid)
                 self._VM.add(ekey)
                 new_rows += 1
@@ -349,8 +349,8 @@ class BulkOps:
 
         # SLICE MEMBERSHIP
         if slice not in self._slices:
-            self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
-        self._slices[slice]["vertices"].update(v for v, _ in norm)
+            self._slices[slice] = {'vertices': set(), 'edges': set(), 'attributes': {}}
+        self._slices[slice]['vertices'].update(v for v, _ in norm)
 
         # ATTRIBUTE TABLE PREP
         self._ensure_vertex_table()
@@ -365,14 +365,14 @@ class BulkOps:
         existing_ids = set()
         try:
             if pl is not None and isinstance(df, pl.DataFrame):
-                if df.height > 0 and "vertex_id" in df.columns:
-                    existing_ids = set(df.get_column("vertex_id").to_list())
+                if df.height > 0 and 'vertex_id' in df.columns:
+                    existing_ids = set(df.get_column('vertex_id').to_list())
             else:
                 import narwhals as nw
 
-                native = nw.to_native(nw.from_native(df).select("vertex_id"))
-                col = native["vertex_id"]
-                existing_ids = set(col.to_list() if hasattr(col, "to_list") else list(col))
+                native = nw.to_native(nw.from_native(df).select('vertex_id'))
+                col = native['vertex_id']
+                existing_ids = set(col.to_list() if hasattr(col, 'to_list') else list(col))
         except Exception:
             existing_ids = set()
 
@@ -383,9 +383,9 @@ class BulkOps:
 
         for vid, attrs in norm:
             if vid not in existing_ids:
-                cols = list(df.columns) if hasattr(df, "columns") else []
-                row = {c: None for c in cols} if len(cols) > 0 else {"vertex_id": None}
-                row["vertex_id"] = vid
+                cols = list(df.columns) if hasattr(df, 'columns') else []
+                row = {c: None for c in cols} if len(cols) > 0 else {'vertex_id': None}
+                row['vertex_id'] = vid
                 for k, v in attrs.items():
                     row[k] = _sanitize(v)
                     new_attr_keys.add(k)
@@ -434,9 +434,9 @@ class BulkOps:
             # Non-Polars fallback: do row-wise upserts (correct, slower)
             else:
                 for row in new_rows_data:
-                    vid = row.get("vertex_id")
+                    vid = row.get('vertex_id')
                     attrs_only = {
-                        k: v for k, v in row.items() if k != "vertex_id" and v is not None
+                        k: v for k, v in row.items() if k != 'vertex_id' and v is not None
                     }
                     df = self._upsert_row(df, vid, attrs_only)
 
@@ -452,7 +452,7 @@ class BulkOps:
             if pl is not None and isinstance(df, pl.DataFrame):
                 update_df = pl.DataFrame(
                     {
-                        "vertex_id": [vid for vid, _ in update_pairs],
+                        'vertex_id': [vid for vid, _ in update_pairs],
                         **{
                             k: [_sanitize(attrs.get(k, None)) for _, attrs in update_pairs]
                             for k in new_attr_keys
@@ -478,7 +478,7 @@ class BulkOps:
                         else:
                             df = df.with_columns(pl.col(c).cast(pl.Utf8))
                             update_df = update_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
-                suffix = "_new"
+                suffix = '_new'
                 df_dupes = [c for c in df.columns if c.endswith(suffix)]
                 if df_dupes:
                     df = df.drop(df_dupes)
@@ -486,12 +486,12 @@ class BulkOps:
                 ud_dupes = [c for c in update_df.columns if c.endswith(suffix)]
                 if ud_dupes:
                     update_df = update_df.drop(ud_dupes)
-                df = df.join(update_df, on="vertex_id", how="left", suffix="_new")
+                df = df.join(update_df, on='vertex_id', how='left', suffix='_new')
                 for c in new_attr_keys:
-                    if c in df.columns and c + "_new" in df.columns:
+                    if c in df.columns and c + '_new' in df.columns:
                         df = df.with_columns(
-                            pl.coalesce([pl.col(c + "_new"), pl.col(c)]).alias(c)
-                        ).drop(c + "_new")
+                            pl.coalesce([pl.col(c + '_new'), pl.col(c)]).alias(c)
+                        ).drop(c + '_new')
 
             else:
                 # Non-Polars fallback: row-wise updates
@@ -507,8 +507,8 @@ class BulkOps:
         slice=None,
         as_entity=False,
         default_weight=1.0,
-        default_edge_type="regular",
-        default_propagate="none",
+        default_edge_type='regular',
+        default_propagate='none',
         default_slice_weight=None,
         default_edge_directed=None,
     ):
@@ -556,27 +556,27 @@ class BulkOps:
             if isinstance(it, dict):
                 d = dict(it)
                 # Accept src/tgt aliases for source/target
-                if "src" in d and "source" not in d:
-                    d["source"] = d.pop("src")
-                if "tgt" in d and "target" not in d:
-                    d["target"] = d.pop("tgt")
+                if 'src' in d and 'source' not in d:
+                    d['source'] = d.pop('src')
+                if 'tgt' in d and 'target' not in d:
+                    d['target'] = d.pop('tgt')
                 # Accept directed alias for edge_directed
-                if "directed" in d and "edge_directed" not in d:
-                    d["edge_directed"] = d.pop("directed")
+                if 'directed' in d and 'edge_directed' not in d:
+                    d['edge_directed'] = d.pop('directed')
             elif isinstance(it, (tuple, list)):
                 if len(it) == 2:
-                    d = {"source": it[0], "target": it[1], "weight": default_weight}
+                    d = {'source': it[0], 'target': it[1], 'weight': default_weight}
                 else:
-                    d = {"source": it[0], "target": it[1], "weight": it[2]}
+                    d = {'source': it[0], 'target': it[1], 'weight': it[2]}
             else:
                 continue
-            d.setdefault("weight", default_weight)
-            d.setdefault("edge_type", default_edge_type)
-            d.setdefault("propagate", default_propagate)
-            if "slice" not in d:
-                d["slice"] = slice
-            if "edge_directed" not in d:
-                d["edge_directed"] = default_edge_directed
+            d.setdefault('weight', default_weight)
+            d.setdefault('edge_type', default_edge_type)
+            d.setdefault('propagate', default_propagate)
+            if 'slice' not in d:
+                d['slice'] = slice
+            if 'edge_directed' not in d:
+                d['edge_directed'] = default_edge_directed
             norm.append(d)
 
         if not norm:
@@ -587,19 +587,19 @@ class BulkOps:
             import sys as _sys
 
             for d in norm:
-                s, t = d["source"], d["target"]
+                s, t = d['source'], d['target']
                 if isinstance(s, str):
-                    d["source"] = _sys.intern(s)
+                    d['source'] = _sys.intern(s)
                 if isinstance(t, str):
-                    d["target"] = _sys.intern(t)
-                lid = d.get("slice")
+                    d['target'] = _sys.intern(t)
+                lid = d.get('slice')
                 if isinstance(lid, str):
-                    d["slice"] = _sys.intern(lid)
-                eid = d.get("edge_id")
+                    d['slice'] = _sys.intern(lid)
+                eid = d.get('edge_id')
                 if isinstance(eid, str):
-                    d["edge_id"] = _sys.intern(eid)
+                    d['edge_id'] = _sys.intern(eid)
                 try:
-                    d["weight"] = float(d["weight"])
+                    d['weight'] = float(d['weight'])
                 except Exception:
                     pass
         except Exception:
@@ -609,15 +609,15 @@ class BulkOps:
         # Bypass scipy DOK __setitem__ validation chain (isintlike + ndim + asarray per write).
         # _set_intXint skips validation and writes directly to the backing store.
         # Falls back to plain __setitem__ on very old scipy that lacks this private method.
-        _m_fast_set = getattr(M, "_set_intXint", None)
+        _m_fast_set = getattr(M, '_set_intXint', None)
         _m_dtype = M.dtype.type  # e.g. np.float32
 
         # 1) Ensure endpoints exist — collect unique vids first, resolve coord once,
         #    then build endpoint_cache: {vid: row_idx} for O(1) lookup in inner loop.
         unique_vids: dict[str, str] = {}  # vid -> edge_type (for vertex_edge check)
         for d in norm:
-            s, t = d["source"], d["target"]
-            et = d.get("edge_type", "regular")
+            s, t = d['source'], d['target']
+            et = d.get('edge_type', 'regular')
             unique_vids[s] = et
             unique_vids[t] = et
 
@@ -628,11 +628,11 @@ class BulkOps:
         for vid, et in unique_vids.items():
             ekey = (vid, coord)
             if ekey not in self._entities:
-                if et == "vertex_edge" and isinstance(vid, str) and vid.startswith("edge_"):
+                if et == 'vertex_edge' and isinstance(vid, str) and vid.startswith('edge_'):
                     self._ensure_edge_entity_placeholder(vid)
                 else:
                     idx = len(self._entities)
-                    self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind="vertex"))
+                    self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
                     self._V.add(vid)
                     self._VM.add(ekey)
             endpoint_cache[vid] = self._entities[ekey].row_idx
@@ -645,7 +645,7 @@ class BulkOps:
         new_count = 0
         _need_auto_id = []  # indices into norm that need auto edge_id
         for _i, d in enumerate(norm):
-            eid = d.get("edge_id")
+            eid = d.get('edge_id')
             if eid not in _edges_store or _edges_store[eid].col_idx < 0:
                 new_count += 1
             if eid is None:
@@ -660,7 +660,7 @@ class BulkOps:
             self._next_edge_id += len(_need_auto_id)
             _auto_ids = iter(range(_base_id, _base_id + len(_need_auto_id)))
             for _i in _need_auto_id:
-                norm[_i]["edge_id"] = f"edge_{next(_auto_ids)}"
+                norm[_i]['edge_id'] = f'edge_{next(_auto_ids)}'
 
         # 3) Create/update columns
         out_ids = []
@@ -675,14 +675,14 @@ class BulkOps:
         _slice_weights: list = []  # (slice_id, edge_id, weight) for per-slice weights
 
         for d in norm:
-            s, t = d["source"], d["target"]
-            w = d["weight"]
-            etype = d.get("edge_type", "regular")
-            prop = d.get("propagate", default_propagate)
-            slice_local = d.get("slice", slice)
-            slice_w = d.get("slice_weight", default_slice_weight)
-            e_dir = d.get("edge_directed", default_edge_directed)
-            edge_id = d.get("edge_id")
+            s, t = d['source'], d['target']
+            w = d['weight']
+            etype = d.get('edge_type', 'regular')
+            prop = d.get('propagate', default_propagate)
+            slice_local = d.get('slice', slice)
+            slice_w = d.get('slice_weight', default_slice_weight)
+            e_dir = d.get('edge_directed', default_edge_directed)
+            edge_id = d.get('edge_id')
 
             if e_dir is not None:
                 is_dir = bool(e_dir)
@@ -740,7 +740,7 @@ class BulkOps:
                                 if not _lst:
                                     del _index[_old]
                             _index.setdefault(_new, []).append(edge_id)
-                pending_attrs.setdefault(edge_id, {})["edge_type"] = (
+                pending_attrs.setdefault(edge_id, {})['edge_type'] = (
                     EdgeType.DIRECTED if is_dir else EdgeType.UNDIRECTED
                 )
             else:
@@ -752,7 +752,7 @@ class BulkOps:
                     rec.tgt = t
                     rec.weight = w
                     rec.directed = is_dir
-                    rec.etype = "binary"
+                    rec.etype = 'binary'
                     rec.col_idx = col
                 else:
                     self._edges[edge_id] = EdgeRecord(
@@ -760,7 +760,7 @@ class BulkOps:
                         tgt=t,
                         weight=w,
                         directed=is_dir,
-                        etype="binary",
+                        etype='binary',
                         col_idx=col,
                         ml_kind=None,
                         ml_layers=None,
@@ -786,12 +786,12 @@ class BulkOps:
                     _slice_weights.append((slice_local, edge_id, float(slice_w)))
 
             # propagation
-            if prop == "shared":
+            if prop == 'shared':
                 self._propagate_to_shared_slices(edge_id, s, t)
-            elif prop == "all":
+            elif prop == 'all':
                 self._propagate_to_all_slices(edge_id, s, t)
 
-            attrs = d.get("attributes") or d.get("attrs") or {}
+            attrs = d.get('attributes') or d.get('attrs') or {}
             if attrs:
                 pending_attrs.setdefault(edge_id, {}).update(attrs)
 
@@ -807,10 +807,10 @@ class BulkOps:
         # Flush batched slice membership (one set.update per slice instead of E individual adds)
         for sid, eids in _slice_eids.items():
             if sid not in self._slices:
-                self._slices[sid] = {"vertices": set(), "edges": set(), "attributes": {}}
-            self._slices[sid]["edges"].update(eids)
+                self._slices[sid] = {'vertices': set(), 'edges': set(), 'attributes': {}}
+            self._slices[sid]['edges'].update(eids)
         for sid, vids in _slice_vids.items():
-            self._slices[sid]["vertices"].update(vids)
+            self._slices[sid]['vertices'].update(vids)
         for sid, eid, sw in _slice_weights:
             self.set_edge_slice_attrs(sid, eid, weight=sw)
             self.slice_edge_weights.setdefault(sid, {})[eid] = sw
@@ -824,8 +824,8 @@ class BulkOps:
             for eid in out_ids:
                 self._register_edge_as_entity(eid)
                 rec = self._edges[eid]
-                if rec.etype == "binary":
-                    rec.etype = "vertex_edge"
+                if rec.etype == 'binary':
+                    rec.etype = 'vertex_edge'
 
         return out_ids
 
@@ -869,13 +869,13 @@ class BulkOps:
                 continue
             d = dict(it)
             # Accept directed alias for edge_directed
-            if "directed" in d and "edge_directed" not in d:
-                d["edge_directed"] = d.pop("directed")
-            d.setdefault("weight", default_weight)
-            if "slice" not in d:
-                d["slice"] = slice
-            if "edge_directed" not in d:
-                d["edge_directed"] = default_edge_directed
+            if 'directed' in d and 'edge_directed' not in d:
+                d['edge_directed'] = d.pop('directed')
+            d.setdefault('weight', default_weight)
+            if 'slice' not in d:
+                d['slice'] = slice
+            if 'edge_directed' not in d:
+                d['edge_directed'] = default_edge_directed
             items.append(d)
 
         if not items:
@@ -886,25 +886,25 @@ class BulkOps:
             import sys as _sys
 
             for d in items:
-                if "members" in d and d["members"] is not None:
-                    d["members"] = [
-                        _sys.intern(x) if isinstance(x, str) else x for x in d["members"]
+                if 'members' in d and d['members'] is not None:
+                    d['members'] = [
+                        _sys.intern(x) if isinstance(x, str) else x for x in d['members']
                     ]
                 else:
-                    d["head"] = [
-                        _sys.intern(x) if isinstance(x, str) else x for x in d.get("head", [])
+                    d['head'] = [
+                        _sys.intern(x) if isinstance(x, str) else x for x in d.get('head', [])
                     ]
-                    d["tail"] = [
-                        _sys.intern(x) if isinstance(x, str) else x for x in d.get("tail", [])
+                    d['tail'] = [
+                        _sys.intern(x) if isinstance(x, str) else x for x in d.get('tail', [])
                     ]
-                lid = d.get("slice")
+                lid = d.get('slice')
                 if isinstance(lid, str):
-                    d["slice"] = _sys.intern(lid)
-                eid = d.get("edge_id")
+                    d['slice'] = _sys.intern(lid)
+                eid = d.get('edge_id')
                 if isinstance(eid, str):
-                    d["edge_id"] = _sys.intern(eid)
+                    d['edge_id'] = _sys.intern(eid)
                 try:
-                    d["weight"] = float(d["weight"])
+                    d['weight'] = float(d['weight'])
                 except Exception:
                     pass
         except Exception:
@@ -913,11 +913,11 @@ class BulkOps:
         # Collect ALL unique vertices first
         all_verts = set()
         for d in items:
-            if "members" in d and d["members"] is not None:
-                all_verts.update(d["members"])
+            if 'members' in d and d['members'] is not None:
+                all_verts.update(d['members'])
             else:
-                all_verts.update(d.get("head", []))
-                all_verts.update(d.get("tail", []))
+                all_verts.update(d.get('head', []))
+                all_verts.update(d.get('tail', []))
 
         # Single pass vertex creation — compute coord once for the flat/default layer
         coord = self._make_layer_coord(None)
@@ -925,14 +925,14 @@ class BulkOps:
             ekey = (u, coord)
             if ekey not in self._entities:
                 idx = len(self._entities)
-                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind="vertex"))
+                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
                 self._V.add(u)
                 self._VM.add(ekey)
 
         self._grow_rows_to(len(self._entities))
 
         # Pre-size columns
-        new_count = sum(1 for d in items if d.get("edge_id") not in self._edges)
+        new_count = sum(1 for d in items if d.get('edge_id') not in self._edges)
         if new_count:
             self._grow_cols_to(len(self._col_to_edge) + new_count)
 
@@ -942,7 +942,7 @@ class BulkOps:
         # Bypass scipy DOK __setitem__ validation chain (isintlike + ndim + asarray per write).
         # _set_intXint skips validation and writes directly to the backing store (~0.65µs vs ~18µs).
         # Falls back to plain __setitem__ on very old scipy that lacks this private method.
-        _m_fast_set = getattr(M, "_set_intXint", None)
+        _m_fast_set = getattr(M, '_set_intXint', None)
         _m_dtype = M.dtype.type  # e.g. np.float32
 
         out_ids = []
@@ -951,15 +951,15 @@ class BulkOps:
         attrs_batch = {}
 
         for d in items:
-            members = d.get("members")
-            head = d.get("head")
-            tail = d.get("tail")
-            slice_local = d.get("slice", slice)
-            w = float(d.get("weight", default_weight))
-            e_id = d.get("edge_id")
+            members = d.get('members')
+            head = d.get('head')
+            tail = d.get('tail')
+            slice_local = d.get('slice', slice)
+            w = float(d.get('weight', default_weight))
+            e_id = d.get('edge_id')
 
             # Decide directedness from form unless forced
-            directed = d.get("edge_directed")
+            directed = d.get('edge_directed')
             if directed is None:
                 directed = members is None
 
@@ -971,7 +971,7 @@ class BulkOps:
                 rec = self._edges[e_id]
                 col = rec.col_idx
                 # clear old cells
-                if rec.etype == "hyper":
+                if rec.etype == 'hyper':
                     old_verts = rec.src if rec.tgt is None else (rec.src | rec.tgt)
                     for vid in old_verts:
                         try:
@@ -1002,7 +1002,7 @@ class BulkOps:
                     tgt=None,
                     weight=1.0,
                     directed=False,
-                    etype="hyper",
+                    etype='hyper',
                     col_idx=col,
                     ml_kind=None,
                     ml_layers=None,
@@ -1040,25 +1040,25 @@ class BulkOps:
                 rec.directed = True
 
             rec.weight = w
-            rec.etype = "hyper"
+            rec.etype = 'hyper'
 
             # slice membership
             if slice_local is not None:
                 if slice_local not in slices:
                     slices[slice_local] = {
-                        "vertices": set(),
-                        "edges": set(),
-                        "attributes": {},
+                        'vertices': set(),
+                        'edges': set(),
+                        'attributes': {},
                     }
-                slices[slice_local]["edges"].add(e_id)
+                slices[slice_local]['edges'].add(e_id)
                 if members is not None:
-                    slices[slice_local]["vertices"].update(members)
+                    slices[slice_local]['vertices'].update(members)
                 else:
-                    slices[slice_local]["vertices"].update(head)
-                    slices[slice_local]["vertices"].update(tail)
+                    slices[slice_local]['vertices'].update(head)
+                    slices[slice_local]['vertices'].update(tail)
 
             # Collect attributes for batch write
-            attrs = d.get("attributes") or d.get("attrs") or {}
+            attrs = d.get('attributes') or d.get('attrs') or {}
             if attrs:
                 attrs_batch[e_id] = attrs
 
@@ -1092,7 +1092,7 @@ class BulkOps:
         """
         slice = slice_id if slice_id is not None else self._current_slice
         if slice not in self._slices:
-            self._slices[slice] = {"vertices": set(), "edges": set(), "attributes": {}}
+            self._slices[slice] = {'vertices': set(), 'edges': set(), 'attributes': {}}
         L = self._slices[slice]
 
         add_edges = {
@@ -1101,12 +1101,12 @@ class BulkOps:
         if not add_edges:
             return
 
-        L["edges"].update(add_edges)
+        L['edges'].update(add_edges)
 
         verts = set()
         for eid in add_edges:
             rec = self._edges[eid]
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 verts.update(rec.src)
                 if rec.tgt is not None:
                     verts.update(rec.tgt)
@@ -1116,7 +1116,7 @@ class BulkOps:
                 if rec.tgt is not None:
                     verts.add(rec.tgt)
 
-        L["vertices"].update(verts)
+        L['vertices'].update(verts)
 
     def set_vertex_key(self, *fields: str):
         """Declare composite key fields and rebuild the uniqueness index.
@@ -1136,7 +1136,7 @@ class BulkOps:
         Vertices missing some key fields are skipped during indexing.
         """
         if not fields:
-            raise ValueError("set_vertex_key requires at least one field")
+            raise ValueError('set_vertex_key requires at least one field')
         self._vertex_key_fields = tuple(str(f) for f in fields)
         self._vertex_key_index.clear()
 
@@ -1162,13 +1162,13 @@ class BulkOps:
         if pl is not None and isinstance(df, pl.DataFrame):
             try:
                 for row in df.iter_rows(named=True):
-                    vid = row.get("vertex_id")
+                    vid = row.get('vertex_id')
                     key = tuple(row.get(f) for f in self._vertex_key_fields)
                     if any(v is None for v in key):
                         continue
                     owner = self._vertex_key_index.get(key)
                     if owner is not None and owner != vid:
-                        raise ValueError(f"Composite key conflict for {key}: {owner} vs {vid}")
+                        raise ValueError(f'Composite key conflict for {key}: {owner} vs {vid}')
                     self._vertex_key_index[key] = vid
                 return
             except Exception:
@@ -1180,25 +1180,25 @@ class BulkOps:
             native = nw.to_native(nw.from_native(df))
             rows = (
                 native.to_dicts()
-                if hasattr(native, "to_dicts")
-                else native.to_dict(orient="records")
+                if hasattr(native, 'to_dicts')
+                else native.to_dict(orient='records')
             )
             for row in rows:
-                vid = row.get("vertex_id")
+                vid = row.get('vertex_id')
                 key = tuple(row.get(f) for f in self._vertex_key_fields)
                 if any(v is None for v in key):
                     continue
                 owner = self._vertex_key_index.get(key)
                 if owner is not None and owner != vid:
-                    raise ValueError(f"Composite key conflict for {key}: {owner} vs {vid}")
+                    raise ValueError(f'Composite key conflict for {key}: {owner} vs {vid}')
                 self._vertex_key_index[key] = vid
         except Exception:
             # last-resort fallback: per-vid lookups
             try:
-                vids = df.get_column("vertex_id").to_list()  # polars
+                vids = df.get_column('vertex_id').to_list()  # polars
             except Exception:
                 try:
-                    vids = list(df["vertex_id"])
+                    vids = list(df['vertex_id'])
                 except Exception:
                     vids = []
             for vid in vids:
@@ -1208,7 +1208,7 @@ class BulkOps:
                     continue
                 owner = self._vertex_key_index.get(key)
                 if owner is not None and owner != vid:
-                    raise ValueError(f"Composite key conflict for {key}: {owner} vs {vid}")
+                    raise ValueError(f'Composite key conflict for {key}: {owner} vs {vid}')
                 self._vertex_key_index[key] = vid
 
     # Bulk remove / mutate down
@@ -1288,7 +1288,7 @@ class BulkOps:
             rec = self._edges.pop(eid, None)
             if (
                 rec is not None
-                and rec.etype != "hyper"
+                and rec.etype != 'hyper'
                 and rec.src is not None
                 and rec.tgt is not None
             ):
@@ -1316,31 +1316,31 @@ class BulkOps:
                 rec2.ml_kind = None
             self.edge_layers.pop(eid, None)
         for slice_data in self._slices.values():
-            slice_data["edges"].difference_update(drop)
+            slice_data['edges'].difference_update(drop)
         for d in self.slice_edge_weights.values():
             for eid in drop:
                 d.pop(eid, None)
 
         # DataFrames
         ea = self.edge_attributes
-        if ea is not None and hasattr(ea, "columns") and "edge_id" in ea.columns:
+        if ea is not None and hasattr(ea, 'columns') and 'edge_id' in ea.columns:
             if pl is not None and isinstance(ea, pl.DataFrame) and ea.height:
-                self.edge_attributes = ea.filter(~pl.col("edge_id").is_in(list(drop)))
+                self.edge_attributes = ea.filter(~pl.col('edge_id').is_in(list(drop)))
             else:
                 import narwhals as nw
 
                 self.edge_attributes = nw.to_native(
-                    nw.from_native(ea).filter(~nw.col("edge_id").is_in(list(drop)))
+                    nw.from_native(ea).filter(~nw.col('edge_id').is_in(list(drop)))
                 )
         ela = self.edge_slice_attributes
-        if ela is not None and hasattr(ela, "columns") and "edge_id" in ela.columns:
+        if ela is not None and hasattr(ela, 'columns') and 'edge_id' in ela.columns:
             if pl is not None and isinstance(ela, pl.DataFrame) and ela.height:
-                self.edge_slice_attributes = ela.filter(~pl.col("edge_id").is_in(list(drop)))
+                self.edge_slice_attributes = ela.filter(~pl.col('edge_id').is_in(list(drop)))
             else:
                 import narwhals as nw
 
                 self.edge_slice_attributes = nw.to_native(
-                    nw.from_native(ela).filter(~nw.col("edge_id").is_in(list(drop)))
+                    nw.from_native(ela).filter(~nw.col('edge_id').is_in(list(drop)))
                 )
 
     def _remove_vertices_bulk(self, vertex_ids):
@@ -1351,7 +1351,7 @@ class BulkOps:
         # 1) Collect incident edges (binary + hyper) in one pass
         drop_es = set()
         for eid, rec in list(self._edges.items()):
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 if drop_vs & set(rec.src):
                     drop_es.add(eid)
                 elif rec.tgt is not None and (drop_vs & set(rec.tgt)):
@@ -1399,20 +1399,20 @@ class BulkOps:
             ent[0] if isinstance(ent, tuple) and len(ent) == 2 else ent for ent in drop_vs
         }
         va = self.vertex_attributes
-        if va is not None and hasattr(va, "columns") and "vertex_id" in va.columns:
+        if va is not None and hasattr(va, 'columns') and 'vertex_id' in va.columns:
             if pl is not None and isinstance(va, pl.DataFrame) and va.height:
                 self.vertex_attributes = va.filter(
-                    ~pl.col("vertex_id").is_in(list(drop_vertex_ids))
+                    ~pl.col('vertex_id').is_in(list(drop_vertex_ids))
                 )
             else:
                 import narwhals as nw
 
                 self.vertex_attributes = nw.to_native(
-                    nw.from_native(va).filter(~nw.col("vertex_id").is_in(list(drop_vertex_ids)))
+                    nw.from_native(va).filter(~nw.col('vertex_id').is_in(list(drop_vertex_ids)))
                 )
 
         for slice_data in self._slices.values():
-            slice_data["vertices"].difference_update(drop_vertex_ids)
+            slice_data['vertices'].difference_update(drop_vertex_ids)
 
         self._V.difference_update(drop_vertex_ids)
         self._VM.difference_update(drop_vs)

@@ -38,7 +38,7 @@ from ..adapters._utils import (
 from ..core._helpers import EntityRecord
 
 # --- Helpers ---
-CX_STYLE_KEY = "__cx_style__"
+CX_STYLE_KEY = '__cx_style__'
 
 
 def _cx2_collect_reified(aspects):
@@ -49,17 +49,17 @@ def _cx2_collect_reified(aspects):
       hyperdefs: list of (eid, directed, head_map, tail_map, attrs, he_node_id)
       membership_edges: set of edge-ids in CX2 that belong to hyperedge membership structure.
     """
-    nodes = aspects.get("nodes", [])
-    edges = aspects.get("edges", [])
+    nodes = aspects.get('nodes', [])
+    edges = aspects.get('edges', [])
 
     he_nodes = {}
     for n in nodes:
-        v = n.get("v", {})
-        if v.get("is_hyperedge", False):
-            eid = v.get("eid")
+        v = n.get('v', {})
+        if v.get('is_hyperedge', False):
+            eid = v.get('eid')
             if eid is None:
                 continue
-            he_nodes[n["id"]] = (eid, v)
+            he_nodes[n['id']] = (eid, v)
 
     if not he_nodes:
         return [], set()
@@ -74,22 +74,22 @@ def _cx2_collect_reified(aspects):
         members_map = {}
 
         for e in edges:
-            u = e["s"]
-            v = e["t"]
-            vid = e["id"]
-            ev = e.get("v", {})
+            u = e['s']
+            v = e['t']
+            vid = e['id']
+            ev = e.get('v', {})
 
             if u != he_id and v != he_id:
                 continue
 
             membership_edges.add(vid)
             other = v if u == he_id else u
-            role = ev.get("role", None)
-            coeff = float(ev.get("weight", ev.get("coeff", 1.0)))
+            role = ev.get('role', None)
+            coeff = float(ev.get('weight', ev.get('coeff', 1.0)))
 
-            if role == "head":
+            if role == 'head':
                 head_map[other] = coeff
-            elif role == "tail":
+            elif role == 'tail':
                 tail_map[other] = coeff
             else:
                 # undirected membership
@@ -99,7 +99,7 @@ def _cx2_collect_reified(aspects):
         # Determine directedness
         if any(k for k in (head_map or {})) or any(k for k in (tail_map or {})):
             directed = (
-                True if any(ev.get("role") in ("head", "tail") for ev in attrs.values()) else False
+                True if any(ev.get('role') in ('head', 'tail') for ev in attrs.values()) else False
             )
         else:
             directed = False
@@ -120,27 +120,25 @@ def _infer_cx2_type(values: list[Any]) -> str:
     """Infer a CX2 attribute data type string from Python row values."""
     nonnull = [value for value in values if value is not None]
     if not nonnull:
-        return "string"
+        return 'string'
     first = nonnull[0]
     if isinstance(first, bool):
-        return "boolean"
+        return 'boolean'
     if isinstance(first, int) and not isinstance(first, bool):
-        return "long"
+        return 'long'
     if isinstance(first, float):
-        return "double"
+        return 'double'
     if isinstance(first, (list, tuple)):
-        flattened = [item for value in nonnull if isinstance(value, (list, tuple)) for item in value]
-        return f"list_of_{_infer_cx2_type(flattened)}"
-    return "string"
+        flattened = [
+            item for value in nonnull if isinstance(value, (list, tuple)) for item in value
+        ]
+        return f'list_of_{_infer_cx2_type(flattened)}'
+    return 'string'
 
 
 def _infer_cx2_types(rows: list[dict[str, Any]], *, id_col: str | None = None) -> dict[str, str]:
     keys = sorted({key for row in rows for key in row})
-    return {
-        key: _infer_cx2_type([row.get(key) for row in rows])
-        for key in keys
-        if key != id_col
-    }
+    return {key: _infer_cx2_type([row.get(key) for row in rows]) for key in keys if key != id_col}
 
 
 def _jsonify(obj):
@@ -160,11 +158,11 @@ def _jsonify(obj):
 def to_cx2(
     G: AnnNet,
     *,
-    export_name="annnet export",
+    export_name='annnet export',
     layer=None,
     include_inter=False,
     include_coupling=False,
-    hyperedges="skip",
+    hyperedges='skip',
 ) -> list[dict[str, Any]]:
     """
     Convert an AnnNet graph to CX2 compliant JSON format.
@@ -209,91 +207,91 @@ def to_cx2(
 
     if layer is not None:
         if not isinstance(layer, tuple):
-            raise TypeError(f"layer must be a tuple, got {type(layer).__name__}")
+            raise TypeError(f'layer must be a tuple, got {type(layer).__name__}')
         G = G.subgraph_from_layer_tuple(
             layer, include_coupling=include_coupling, include_inter=include_inter
         )
 
     # 1. Prepare Manifest (Lossless storage of complex features)
-    vert_rows = _safe_df_to_rows(getattr(G, "vertex_attributes", None))
-    edge_rows = _safe_df_to_rows(getattr(G, "edge_attributes", None))
-    slice_rows = _safe_df_to_rows(getattr(G, "slice_attributes", None))
-    edge_slice_rows = _safe_df_to_rows(getattr(G, "edge_slice_attributes", None))
-    layer_attr_rows = _safe_df_to_rows(getattr(G, "layer_attributes", None))
+    vert_rows = _safe_df_to_rows(getattr(G, 'vertex_attributes', None))
+    edge_rows = _safe_df_to_rows(getattr(G, 'edge_attributes', None))
+    slice_rows = _safe_df_to_rows(getattr(G, 'slice_attributes', None))
+    edge_slice_rows = _safe_df_to_rows(getattr(G, 'edge_slice_attributes', None))
+    layer_attr_rows = _safe_df_to_rows(getattr(G, 'layer_attributes', None))
 
     # strip CX-specific style from what we embed into the manifest
-    g_attrs = dict(getattr(G, "graph_attributes", {}))
+    g_attrs = dict(getattr(G, 'graph_attributes', {}))
     g_attrs.pop(CX_STYLE_KEY, None)
 
     manifest = {
-        "version": 1,
-        "graph": {
-            "directed": bool(G.directed) if G.directed is not None else True,
-            "attributes": g_attrs,
+        'version': 1,
+        'graph': {
+            'directed': bool(G.directed) if G.directed is not None else True,
+            'attributes': g_attrs,
         },
-        "vertices": {
-            "types": {ekey[0]: ent.kind for ekey, ent in G._entities.items()},
-            "attributes": vert_rows,
+        'vertices': {
+            'types': {ekey[0]: ent.kind for ekey, ent in G._entities.items()},
+            'attributes': vert_rows,
         },
-        "edges": {
-            "definitions": {
+        'edges': {
+            'definitions': {
                 eid: (rec.src, rec.tgt, rec.etype)
                 for eid, rec in G._edges.items()
-                if rec.etype != "hyper"
+                if rec.etype != 'hyper'
             },
-            "weights": {eid: rec.weight for eid, rec in G._edges.items() if rec.weight is not None},
-            "directed": {
+            'weights': {eid: rec.weight for eid, rec in G._edges.items() if rec.weight is not None},
+            'directed': {
                 eid: bool(rec.directed) for eid, rec in G._edges.items() if rec.directed is not None
             },
-            "direction_policy": dict(getattr(G, "edge_direction_policy", {})),
-            "hyperedges": {
+            'direction_policy': dict(getattr(G, 'edge_direction_policy', {})),
+            'hyperedges': {
                 eid: (
-                    {"directed": True, "head": list(rec.src or []), "tail": list(rec.tgt or [])}
+                    {'directed': True, 'head': list(rec.src or []), 'tail': list(rec.tgt or [])}
                     if rec.tgt is not None
-                    else {"directed": False, "members": list(rec.src or [])}
+                    else {'directed': False, 'members': list(rec.src or [])}
                 )
                 for eid, rec in G._edges.items()
-                if rec.etype == "hyper"
+                if rec.etype == 'hyper'
             },
-            "attributes": edge_rows,
-            "kivela": {
-                "edge_kind": {
-                    eid: ("hyper" if rec.etype == "hyper" else rec.ml_kind)
+            'attributes': edge_rows,
+            'kivela': {
+                'edge_kind': {
+                    eid: ('hyper' if rec.etype == 'hyper' else rec.ml_kind)
                     for eid, rec in G._edges.items()
-                    if rec.etype == "hyper" or rec.ml_kind is not None
+                    if rec.etype == 'hyper' or rec.ml_kind is not None
                 },
-                "edge_layers": _serialize_edge_layers(getattr(G, "edge_layers", {})),
+                'edge_layers': _serialize_edge_layers(getattr(G, 'edge_layers', {})),
             },
         },
-        "slices": {
-            "data": _serialize_slices(getattr(G, "_slices", {})),
-            "slice_attributes": slice_rows,
-            "edge_slice_attributes": edge_slice_rows,
+        'slices': {
+            'data': _serialize_slices(getattr(G, '_slices', {})),
+            'slice_attributes': slice_rows,
+            'edge_slice_attributes': edge_slice_rows,
         },
-        "multilayer": {
-            "aspects": list(getattr(G, "aspects", [])),
-            "aspect_attrs": dict(getattr(G, "_aspect_attrs", {})),
-            "elem_layers": dict(getattr(G, "elem_layers", {})),
-            "VM": _serialize_VM(getattr(G, "_VM", set())),
-            "edge_kind": {
-                eid: ("hyper" if rec.etype == "hyper" else rec.ml_kind)
+        'multilayer': {
+            'aspects': list(getattr(G, 'aspects', [])),
+            'aspect_attrs': dict(getattr(G, '_aspect_attrs', {})),
+            'elem_layers': dict(getattr(G, 'elem_layers', {})),
+            'VM': _serialize_VM(getattr(G, '_VM', set())),
+            'edge_kind': {
+                eid: ('hyper' if rec.etype == 'hyper' else rec.ml_kind)
                 for eid, rec in G._edges.items()
-                if rec.etype == "hyper" or rec.ml_kind is not None
+                if rec.etype == 'hyper' or rec.ml_kind is not None
             },
-            "edge_layers": _serialize_edge_layers(getattr(G, "edge_layers", {})),
-            "node_layer_attrs": _serialize_node_layer_attrs(getattr(G, "_state_attrs", {})),
-            "layer_tuple_attrs": _serialize_layer_tuple_attrs(getattr(G, "_layer_attrs", {})),
-            "layer_attributes": layer_attr_rows,
+            'edge_layers': _serialize_edge_layers(getattr(G, 'edge_layers', {})),
+            'node_layer_attrs': _serialize_node_layer_attrs(getattr(G, '_state_attrs', {})),
+            'layer_tuple_attrs': _serialize_layer_tuple_attrs(getattr(G, '_layer_attrs', {})),
+            'layer_attributes': layer_attr_rows,
         },
-        "tables": {
-            "vertex_attributes": vert_rows,
-            "edge_attributes": edge_rows,
-            "slice_attributes": slice_rows,
-            "edge_slice_attributes": edge_slice_rows,
-            "layer_attributes": layer_attr_rows,
+        'tables': {
+            'vertex_attributes': vert_rows,
+            'edge_attributes': edge_rows,
+            'slice_attributes': slice_rows,
+            'edge_slice_attributes': edge_slice_rows,
+            'layer_attributes': layer_attr_rows,
         },
     }
-    manifest["edges"]["expanded"] = {}
+    manifest['edges']['expanded'] = {}
 
     # 2. Build Core CX2 Aspects
 
@@ -312,7 +310,7 @@ def to_cx2(
         for k, v in attrs.items():
             if v is None:
                 if k in string_cols:
-                    out[k] = ""
+                    out[k] = ''
                 elif k in list_cols:
                     out[k] = []
                 # else: drop null entirely (CX2 doesn't accept null)
@@ -334,20 +332,20 @@ def to_cx2(
     current_node_id = 0
 
     # Pre-fetch attribute data for fast lookup
-    v_attrs_df = getattr(G, "vertex_attributes", None)
+    v_attrs_df = getattr(G, 'vertex_attributes', None)
 
     # Identify which vertex columns are string vs numeric (for cleaning None)
-    v_inferred_types = _infer_cx2_types(vert_rows, id_col="vertex_id")
-    v_string_cols = {col for col, dtype in v_inferred_types.items() if dtype == "string"}
+    v_inferred_types = _infer_cx2_types(vert_rows, id_col='vertex_id')
+    v_string_cols = {col for col, dtype in v_inferred_types.items() if dtype == 'string'}
     v_numeric_cols = {
-        col for col, dtype in v_inferred_types.items() if dtype in {"integer", "long", "double"}
+        col for col, dtype in v_inferred_types.items() if dtype in {'integer', 'long', 'double'}
     }
 
     # Build map: vertex_id -> attribute row dict
     v_attrs_map: dict[str, dict[str, Any]] = {}
     if v_attrs_df is not None and vert_rows:
         row_keys = set(vert_rows[0])
-        id_col = "vertex_id" if "vertex_id" in row_keys else "id"
+        id_col = 'vertex_id' if 'vertex_id' in row_keys else 'id'
         for r in vert_rows:  # vert_rows is _df_to_rows(vertex_attributes)
             key = r.get(id_col)
             if key is not None:
@@ -359,7 +357,7 @@ def to_cx2(
         for k, v in attrs.items():
             if v is None:
                 if k in v_string_cols:
-                    out[k] = ""  # string: None -> ""
+                    out[k] = ''  # string: None -> ""
                 elif k in v_numeric_cols:
                     # numeric: drop the key entirely (no null numbers in CX2)
                     continue
@@ -371,7 +369,7 @@ def to_cx2(
         return out
 
     for uid, utype in G.entity_types.items():
-        if utype != "vertex":
+        if utype != 'vertex':
             continue
 
         cx_id = current_node_id
@@ -380,8 +378,8 @@ def to_cx2(
 
         # base node object
         n_obj: dict[str, Any] = {
-            "id": cx_id,
-            "v": {"name": str(uid)},  # 'name' is standard in Cytoscape
+            'id': cx_id,
+            'v': {'name': str(uid)},  # 'name' is standard in Cytoscape
         }
 
         coords: dict[str, float] = {}
@@ -391,11 +389,11 @@ def to_cx2(
         if row is not None:
             attrs = dict(row)  # copy
             # get rid of id column from attributes
-            attrs.pop("id", None)
-            attrs.pop("vertex_id", None)
+            attrs.pop('id', None)
+            attrs.pop('vertex_id', None)
 
             # pull layout_* into x/y/z for Cytoscape layout
-            for src, dst in (("layout_x", "x"), ("layout_y", "y"), ("layout_z", "z")):
+            for src, dst in (('layout_x', 'x'), ('layout_y', 'y'), ('layout_z', 'z')):
                 val = attrs.get(src)
                 if val is not None:
                     try:
@@ -407,7 +405,7 @@ def to_cx2(
 
             # clean None values: "" for strings, drop for numeric/others
             attrs = _clean_vertex_attrs(attrs)
-            n_obj["v"].update(attrs)
+            n_obj['v'].update(attrs)
 
         # put node coordinates at top-level (where Cytoscape expects them)
         if coords:
@@ -418,27 +416,27 @@ def to_cx2(
     # -- Edges --
     # Only binary edges between mapped vertices
     current_edge_id = 0
-    e_attrs_df = getattr(G, "edge_attributes", None)
+    e_attrs_df = getattr(G, 'edge_attributes', None)
 
     # string columns in edge_attributes (for None -> "")
-    e_inferred_types = _infer_cx2_types(edge_rows, id_col="edge_id")
-    e_string_cols = {col for col, dtype in e_inferred_types.items() if dtype == "string"}
+    e_inferred_types = _infer_cx2_types(edge_rows, id_col='edge_id')
+    e_string_cols = {col for col, dtype in e_inferred_types.items() if dtype == 'string'}
 
     # Create lookup for edge attributes (handle both 'edge_id' and 'id')
     e_attrs_map = {}
     if e_attrs_df is not None and edge_rows:
         row_keys = set(edge_rows[0])
-        id_col = "edge_id" if "edge_id" in row_keys else "id"
+        id_col = 'edge_id' if 'edge_id' in row_keys else 'id'
         for r in edge_rows:
             if id_col in r:
                 e_attrs_map[str(r[id_col])] = r
 
     for eid, rec in G._edges.items():
-        is_hyper = rec.etype == "hyper"
+        is_hyper = rec.etype == 'hyper'
 
         # --- Hyperedge handling ---
         if is_hyper:
-            if hyperedges == "skip":
+            if hyperedges == 'skip':
                 continue
 
             directed = rec.tgt is not None
@@ -450,32 +448,32 @@ def to_cx2(
                 S = members
                 T = members
 
-            if hyperedges == "expand":
+            if hyperedges == 'expand':
                 exp_entry = {
-                    "mode": "directed" if directed else "undirected",
-                    "tail": list(T) if directed else None,
-                    "head": list(S) if directed else None,
-                    "members": list(S | T) if not directed else None,
-                    "expanded_edges": [],
+                    'mode': 'directed' if directed else 'undirected',
+                    'tail': list(T) if directed else None,
+                    'head': list(S) if directed else None,
+                    'members': list(S | T) if not directed else None,
+                    'expanded_edges': [],
                 }
                 members = S | T
                 if directed:
                     # tail -> head cartesian
                     for u in T:
                         for v in S:
-                            exp_entry["expanded_edges"].append([u, v])
+                            exp_entry['expanded_edges'].append([u, v])
                             cx_eid = current_edge_id
                             current_edge_id += 1
                             raw_attrs = e_attrs_map.get(str(eid), {})
                             clean_attrs = _clean_cx2_attrs(raw_attrs, e_string_cols)
                             cx_edges.append(
                                 {
-                                    "id": cx_eid,
-                                    "s": node_map[u],
-                                    "t": node_map[v],
-                                    "v": {
-                                        "interaction": str(eid),
-                                        "weight": float(1.0 if rec.weight is None else rec.weight),
+                                    'id': cx_eid,
+                                    's': node_map[u],
+                                    't': node_map[v],
+                                    'v': {
+                                        'interaction': str(eid),
+                                        'weight': float(1.0 if rec.weight is None else rec.weight),
                                         **clean_attrs,
                                     },
                                 }
@@ -487,42 +485,42 @@ def to_cx2(
                     for i in range(len(mem)):
                         for j in range(i + 1, len(mem)):
                             u, v = mem[i], mem[j]
-                            exp_entry["expanded_edges"].append([u, v])
+                            exp_entry['expanded_edges'].append([u, v])
                             cx_eid = current_edge_id
                             current_edge_id += 1
                             raw_attrs = e_attrs_map.get(str(eid), {})
                             clean_attrs = _clean_cx2_attrs(raw_attrs, e_string_cols)
                             cx_edges.append(
                                 {
-                                    "id": cx_eid,
-                                    "s": node_map[u],
-                                    "t": node_map[v],
-                                    "v": {
-                                        "interaction": str(eid),
-                                        "weight": float(1.0 if rec.weight is None else rec.weight),
+                                    'id': cx_eid,
+                                    's': node_map[u],
+                                    't': node_map[v],
+                                    'v': {
+                                        'interaction': str(eid),
+                                        'weight': float(1.0 if rec.weight is None else rec.weight),
                                         **clean_attrs,
                                     },
                                 }
                             )
-                manifest["edges"]["expanded"][str(eid)] = exp_entry
+                manifest['edges']['expanded'][str(eid)] = exp_entry
                 continue
 
-            if hyperedges == "reify":
+            if hyperedges == 'reify':
                 he_cx_id = current_node_id
                 current_node_id += 1
 
                 # filter edge attrs so we don't leak edge_id/id onto the node
                 he_attrs = e_attrs_map.get(str(eid), {}).copy()
-                he_attrs.pop("edge_id", None)
-                he_attrs.pop("id", None)
+                he_attrs.pop('edge_id', None)
+                he_attrs.pop('id', None)
                 he_attrs = _clean_cx2_attrs(he_attrs, e_string_cols)
 
                 he_node = {
-                    "id": he_cx_id,
-                    "v": {
-                        "name": f"hyperedge::{eid}",
-                        "is_hyperedge": True,
-                        "eid": str(eid),
+                    'id': he_cx_id,
+                    'v': {
+                        'name': f'hyperedge::{eid}',
+                        'is_hyperedge': True,
+                        'eid': str(eid),
                         **he_attrs,
                     },
                 }
@@ -537,13 +535,13 @@ def to_cx2(
                         current_edge_id += 1
                         cx_edges.append(
                             {
-                                "id": cx_eid,
-                                "s": node_map[u],
-                                "t": he_cx_id,
-                                "v": {
-                                    "interaction": f"{eid}::tail",
-                                    "role": "tail",
-                                    "weight": weight,
+                                'id': cx_eid,
+                                's': node_map[u],
+                                't': he_cx_id,
+                                'v': {
+                                    'interaction': f'{eid}::tail',
+                                    'role': 'tail',
+                                    'weight': weight,
                                 },
                             }
                         )
@@ -553,13 +551,13 @@ def to_cx2(
                         current_edge_id += 1
                         cx_edges.append(
                             {
-                                "id": cx_eid,
-                                "s": he_cx_id,
-                                "t": node_map[v],
-                                "v": {
-                                    "interaction": f"{eid}::head",
-                                    "role": "head",
-                                    "weight": weight,
+                                'id': cx_eid,
+                                's': he_cx_id,
+                                't': node_map[v],
+                                'v': {
+                                    'interaction': f'{eid}::head',
+                                    'role': 'head',
+                                    'weight': weight,
                                 },
                             }
                         )
@@ -572,13 +570,13 @@ def to_cx2(
                         current_edge_id += 1
                         cx_edges.append(
                             {
-                                "id": cx_eid,
-                                "s": node_map[u],
-                                "t": he_cx_id,
-                                "v": {
-                                    "interaction": f"{eid}::member",
-                                    "role": "member",
-                                    "weight": weight,
+                                'id': cx_eid,
+                                's': node_map[u],
+                                't': he_cx_id,
+                                'v': {
+                                    'interaction': f'{eid}::member',
+                                    'role': 'member',
+                                    'weight': weight,
                                 },
                             }
                         )
@@ -598,12 +596,12 @@ def to_cx2(
         current_edge_id += 1
 
         e_obj = {
-            "id": cx_eid,
-            "s": cx_u,
-            "t": cx_v,
-            "v": {
-                "interaction": str(eid),
-                "weight": float(1.0 if rec.weight is None else rec.weight),
+            'id': cx_eid,
+            's': cx_u,
+            't': cx_v,
+            'v': {
+                'interaction': str(eid),
+                'weight': float(1.0 if rec.weight is None else rec.weight),
             },
         }
 
@@ -611,99 +609,99 @@ def to_cx2(
         if str(eid) in e_attrs_map:
             attrs = e_attrs_map[str(eid)].copy()
             # Remove redundant keys
-            attrs.pop("edge_id", None)
-            attrs.pop("id", None)
+            attrs.pop('edge_id', None)
+            attrs.pop('id', None)
             attrs = _clean_cx2_attrs(attrs, e_string_cols)
-            e_obj["v"].update(attrs)
+            e_obj['v'].update(attrs)
 
         cx_edges.append(e_obj)
 
     # 3. Attribute Declarations
-    attr_decls = {"nodes": {}, "edges": {}, "networkAttributes": {}}
+    attr_decls = {'nodes': {}, 'edges': {}, 'networkAttributes': {}}
 
     # Define Node Attributes
     for col, dtype in v_inferred_types.items():
-        if col == "id":
+        if col == 'id':
             continue
-        attr_decls["nodes"][col] = {"d": dtype}
+        attr_decls['nodes'][col] = {'d': dtype}
 
-    attr_decls["nodes"]["name"] = {"d": "string"}  # Always added
-    attr_decls["nodes"]["is_hyperedge"] = {"d": "boolean"}
-    attr_decls["nodes"]["eid"] = {"d": "string"}
-    attr_decls["nodes"]["tag"] = {"d": "string"}
-    attr_decls["nodes"]["reaction"] = {"d": "string"}
+    attr_decls['nodes']['name'] = {'d': 'string'}  # Always added
+    attr_decls['nodes']['is_hyperedge'] = {'d': 'boolean'}
+    attr_decls['nodes']['eid'] = {'d': 'string'}
+    attr_decls['nodes']['tag'] = {'d': 'string'}
+    attr_decls['nodes']['reaction'] = {'d': 'string'}
 
     # Define Edge Attributes
-    id_col = "edge_id" if edge_rows and "edge_id" in edge_rows[0] else "id"
+    id_col = 'edge_id' if edge_rows and 'edge_id' in edge_rows[0] else 'id'
     for col, dtype in e_inferred_types.items():
         if col == id_col:
             continue
-        attr_decls["edges"][col] = {"d": dtype}
-    attr_decls["edges"]["interaction"] = {"d": "string"}
-    attr_decls["edges"]["weight"] = {"d": "double"}
-    attr_decls["edges"]["edge_id"] = {"d": "string"}
-    attr_decls["edges"]["role"] = {"d": "string"}
+        attr_decls['edges'][col] = {'d': dtype}
+    attr_decls['edges']['interaction'] = {'d': 'string'}
+    attr_decls['edges']['weight'] = {'d': 'double'}
+    attr_decls['edges']['edge_id'] = {'d': 'string'}
+    attr_decls['edges']['role'] = {'d': 'string'}
 
     # Define Network Attributes
     # We store the manifest as a JSON string to ensure compatibility
-    attr_decls["networkAttributes"]["__AnnNet_Manifest__"] = {"d": "string"}
-    attr_decls["networkAttributes"]["name"] = {"d": "string"}
-    attr_decls["networkAttributes"]["directed"] = {"d": "boolean"}
+    attr_decls['networkAttributes']['__AnnNet_Manifest__'] = {'d': 'string'}
+    attr_decls['networkAttributes']['name'] = {'d': 'string'}
+    attr_decls['networkAttributes']['directed'] = {'d': 'boolean'}
 
     # 4. Construct Final CX2 List
 
     # Start with basic metadata
     meta = [
-        {"name": "attributeDeclarations", "elementCount": 1},
-        {"name": "networkAttributes", "elementCount": 1},
-        {"name": "nodes", "elementCount": len(cx_nodes)},
-        {"name": "edges", "elementCount": len(cx_edges)},
+        {'name': 'attributeDeclarations', 'elementCount': 1},
+        {'name': 'networkAttributes', 'elementCount': 1},
+        {'name': 'nodes', 'elementCount': len(cx_nodes)},
+        {'name': 'edges', 'elementCount': len(cx_edges)},
     ]
 
     cx2: list[dict[str, Any]] = [
-        {"CXVersion": "2.0", "hasFragments": False},
-        {"metaData": meta},
-        {"attributeDeclarations": [attr_decls]},
+        {'CXVersion': '2.0', 'hasFragments': False},
+        {'metaData': meta},
+        {'attributeDeclarations': [attr_decls]},
         {
-            "networkAttributes": [
+            'networkAttributes': [
                 {
-                    "name": export_name,
-                    "directed": bool(G.directed) if G.directed is not None else True,
-                    "__AnnNet_Manifest__": base64.b64encode(
+                    'name': export_name,
+                    'directed': bool(G.directed) if G.directed is not None else True,
+                    '__AnnNet_Manifest__': base64.b64encode(
                         gzip.compress(json.dumps(_jsonify(manifest)).encode())
                     ).decode(),
                 }
             ]
         },
-        {"nodes": cx_nodes},
-        {"edges": cx_edges},
+        {'nodes': cx_nodes},
+        {'edges': cx_edges},
     ]
 
     # Re-emit Cytoscape visual style if we have it
-    style = dict(getattr(G, "graph_attributes", {})).get(CX_STYLE_KEY, {}) or {}
+    style = dict(getattr(G, 'graph_attributes', {})).get(CX_STYLE_KEY, {}) or {}
 
-    vp = style.get("visualProperties")
+    vp = style.get('visualProperties')
     if vp:
-        meta.append({"name": "visualProperties", "elementCount": 1})
-        cx2.append({"visualProperties": [vp]})
+        meta.append({'name': 'visualProperties', 'elementCount': 1})
+        cx2.append({'visualProperties': [vp]})
 
-    nb = style.get("nodeBypasses")
+    nb = style.get('nodeBypasses')
     if nb:
-        meta.append({"name": "nodeBypasses", "elementCount": len(nb)})
-        cx2.append({"nodeBypasses": nb})
+        meta.append({'name': 'nodeBypasses', 'elementCount': len(nb)})
+        cx2.append({'nodeBypasses': nb})
 
-    eb = style.get("edgeBypasses")
+    eb = style.get('edgeBypasses')
     if eb:
-        meta.append({"name": "edgeBypasses", "elementCount": len(eb)})
-        cx2.append({"edgeBypasses": eb})
+        meta.append({'name': 'edgeBypasses', 'elementCount': len(eb)})
+        cx2.append({'edgeBypasses': eb})
 
-    vep = style.get("visualEditorProperties")
+    vep = style.get('visualEditorProperties')
     if vep:
-        meta.append({"name": "visualEditorProperties", "elementCount": 1})
-        cx2.append({"visualEditorProperties": [vep]})
+        meta.append({'name': 'visualEditorProperties', 'elementCount': 1})
+        cx2.append({'visualEditorProperties': [vep]})
 
     # Status goes last
-    cx2.append({"status": [{"success": True}]})
+    cx2.append({'status': [{'success': True}]})
 
     return cx2
 
@@ -713,7 +711,7 @@ def to_cx2(
 # --- Core Adapter: from_cx2 ---
 
 
-def from_cx2(cx2_data, *, hyperedges="manifest"):
+def from_cx2(cx2_data, *, hyperedges='manifest'):
     """
     Fully robust CX2 - AnnNet importer.
     Supports:
@@ -745,7 +743,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
             try:
                 cx2_data = json.loads(cx2_data)
             except Exception:
-                raise ValueError("Invalid CX2 string or file")
+                raise ValueError('Invalid CX2 string or file')
 
     # Parse aspects into a dict
 
@@ -755,7 +753,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
             continue
         key = list(item.keys())[0]
 
-        if key in ("CXVersion", "metaData", "status"):
+        if key in ('CXVersion', 'metaData', 'status'):
             aspects[key] = item[key]
         else:
             aspects.setdefault(key, []).extend(item[key])
@@ -763,10 +761,10 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
     # Extract networkAttributes + manifest JSON
 
     net_attrs = {}
-    for na in aspects.get("networkAttributes", []):
+    for na in aspects.get('networkAttributes', []):
         net_attrs.update(na)
 
-    manifest_str = net_attrs.get("__AnnNet_Manifest__")
+    manifest_str = net_attrs.get('__AnnNet_Manifest__')
     manifest = None
     if manifest_str:
         try:
@@ -777,26 +775,26 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
                 manifest = json.loads(manifest_str)
         except Exception:
             manifest = None
-    visual_props = aspects.get("visualProperties", [])
+    visual_props = aspects.get('visualProperties', [])
 
     # Extract Cytoscape visual style aspects (kept opaque but preserved)
     style_aspects: dict[str, Any] = {}
 
-    vp = aspects.get("visualProperties")
+    vp = aspects.get('visualProperties')
     if vp:
-        style_aspects["visualProperties"] = vp[0] if isinstance(vp, list) else vp
+        style_aspects['visualProperties'] = vp[0] if isinstance(vp, list) else vp
 
-    nb = aspects.get("nodeBypasses")
+    nb = aspects.get('nodeBypasses')
     if nb:
-        style_aspects["nodeBypasses"] = nb
+        style_aspects['nodeBypasses'] = nb
 
-    eb = aspects.get("edgeBypasses")
+    eb = aspects.get('edgeBypasses')
     if eb:
-        style_aspects["edgeBypasses"] = eb
+        style_aspects['edgeBypasses'] = eb
 
-    vep = aspects.get("visualEditorProperties")
+    vep = aspects.get('visualEditorProperties')
     if vep:
-        style_aspects["visualEditorProperties"] = vep[0] if isinstance(vep, list) else vep
+        style_aspects['visualEditorProperties'] = vep[0] if isinstance(vep, list) else vep
 
     # Construct AnnNet
 
@@ -806,22 +804,22 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
     # PATH A: MANIFEST RECONSTRUCTION
 
-    if manifest and hyperedges in ("manifest", "reified"):
+    if manifest and hyperedges in ('manifest', 'reified'):
         # --- Base graph attrs ---
-        gmeta = manifest.get("graph", {})
-        G.directed = gmeta.get("directed", True)
-        G.graph_attributes = dict(gmeta.get("attributes", {}))
+        gmeta = manifest.get('graph', {})
+        G.directed = gmeta.get('directed', True)
+        G.graph_attributes = dict(gmeta.get('attributes', {}))
 
         if visual_props:
-            G.graph_attributes["__cx_visualProperties__"] = visual_props
+            G.graph_attributes['__cx_visualProperties__'] = visual_props
 
         # --- Vertices ---
-        vmeta = manifest.get("vertices", {})
-        v_rows = _normalize_rows(vmeta.get("attributes", []))
+        vmeta = manifest.get('vertices', {})
+        v_rows = _normalize_rows(vmeta.get('attributes', []))
         if v_rows:
             G.vertex_attributes = _rows_to_df(v_rows)
-        if vmeta.get("types"):
-            for vid, kind in vmeta["types"].items():
+        if vmeta.get('types'):
+            for vid, kind in vmeta['types'].items():
                 try:
                     ekey = G._resolve_entity_key(vid)
                 except Exception:
@@ -833,94 +831,94 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
                     G._register_entity_record(ekey, EntityRecord(row_idx=row_idx, kind=kind))
 
         # --- Edges + hyperedges ---
-        emeta = manifest.get("edges", {})
+        emeta = manifest.get('edges', {})
 
         # edge_attributes
-        e_rows = _normalize_rows(emeta.get("attributes", []))
+        e_rows = _normalize_rows(emeta.get('attributes', []))
         if e_rows:
             G.edge_attributes = _rows_to_df(e_rows)
 
         # weights, directed flags, definitions
-        if emeta.get("weights"):
-            for eid, w in emeta["weights"].items():
+        if emeta.get('weights'):
+            for eid, w in emeta['weights'].items():
                 rec = G._edges.get(eid)
                 if rec is not None:
                     rec.weight = float(w)
-        if emeta.get("directed"):
-            for eid, val in emeta["directed"].items():
+        if emeta.get('directed'):
+            for eid, val in emeta['directed'].items():
                 rec = G._edges.get(eid)
                 if rec is not None:
                     rec.directed = bool(val)
-        if emeta.get("definitions"):
-            for eid, defn in emeta["definitions"].items():
+        if emeta.get('definitions'):
+            for eid, defn in emeta['definitions'].items():
                 rec = G._edges.get(eid)
                 if rec is None:
                     continue
                 rec.src, rec.tgt, rec.etype = defn
-        if emeta.get("direction_policy"):
-            G.edge_direction_policy.update(emeta["direction_policy"])
+        if emeta.get('direction_policy'):
+            G.edge_direction_policy.update(emeta['direction_policy'])
 
         # hyperedge definitions
-        if emeta.get("hyperedges"):
+        if emeta.get('hyperedges'):
             fixed = {}
-            for eid, info in emeta["hyperedges"].items():
+            for eid, info in emeta['hyperedges'].items():
                 # Older / simple manifests store hyperedges as a plain list of members
                 # e.g. "he1": ["n1", "n2", "n3"]
                 if isinstance(info, list):
                     fixed[eid] = {
-                        "directed": False,
-                        "members": set(info),
+                        'directed': False,
+                        'members': set(info),
                     }
                     continue
 
                 # Newer manifests: dict form with keys like "directed", "members" or "head"/"tail"
-                directed = bool(info.get("directed", False))
+                directed = bool(info.get('directed', False))
                 if directed:
                     fixed[eid] = {
-                        "directed": True,
-                        "head": set(info.get("head", [])),
-                        "tail": set(info.get("tail", [])),
+                        'directed': True,
+                        'head': set(info.get('head', [])),
+                        'tail': set(info.get('tail', [])),
                     }
                 else:
                     fixed[eid] = {
-                        "directed": False,
-                        "members": set(info.get("members", [])),
+                        'directed': False,
+                        'members': set(info.get('members', [])),
                     }
             for eid, info in fixed.items():
                 rec = G._edges.get(eid)
                 if rec is None:
                     continue
-                rec.etype = "hyper"
-                if info["directed"]:
-                    rec.src = list(info.get("head", []))
-                    rec.tgt = list(info.get("tail", []))
+                rec.etype = 'hyper'
+                if info['directed']:
+                    rec.src = list(info.get('head', []))
+                    rec.tgt = list(info.get('tail', []))
                     rec.directed = True
                 else:
-                    rec.src = list(info.get("members", []))
+                    rec.src = list(info.get('members', []))
                     rec.tgt = None
                     rec.directed = False
 
         # --- Expanded hyperedges (if present) ---
-        exp = emeta.get("expanded", {})
+        exp = emeta.get('expanded', {})
         if exp:
             hyperedge_bulk_data = []
             for eid, info in exp.items():
-                directed = info.get("mode") == "directed"
+                directed = info.get('mode') == 'directed'
                 if directed:
                     hyperedge_bulk_data.append(
                         {
-                            "head": info.get("head", []),
-                            "tail": info.get("tail", []),
-                            "edge_id": eid,
-                            "edge_directed": True,
+                            'head': info.get('head', []),
+                            'tail': info.get('tail', []),
+                            'edge_id': eid,
+                            'edge_directed': True,
                         }
                     )
                 else:
                     hyperedge_bulk_data.append(
                         {
-                            "members": info.get("members", []),
-                            "edge_id": eid,
-                            "edge_directed": False,
+                            'members': info.get('members', []),
+                            'edge_id': eid,
+                            'edge_directed': False,
                         }
                     )
 
@@ -928,77 +926,77 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
                 G.add_hyperedges_bulk(hyperedge_bulk_data)
 
         # --- Layers (Kivela)---
-        kiv = emeta.get("kivela", {})
-        if kiv.get("edge_kind"):
-            for eid, kind in kiv["edge_kind"].items():
+        kiv = emeta.get('kivela', {})
+        if kiv.get('edge_kind'):
+            for eid, kind in kiv['edge_kind'].items():
                 rec = G._edges.get(eid)
                 if rec is None:
                     continue
-                if kind == "hyper":
-                    rec.etype = "hyper"
+                if kind == 'hyper':
+                    rec.etype = 'hyper'
                 else:
                     rec.ml_kind = kind
-        if kiv.get("edge_layers"):
-            G.edge_layers.update(kiv["edge_layers"])
+        if kiv.get('edge_layers'):
+            G.edge_layers.update(kiv['edge_layers'])
 
         # --- Slices ---
-        smeta = manifest.get("slices", {})
-        if smeta.get("data"):
-            for sname, sdata in smeta["data"].items():
-                verts = set(sdata.get("vertices", []))
-                edgs = set(sdata.get("edges", []))
-                attrs = dict(sdata.get("attributes", {}))
+        smeta = manifest.get('slices', {})
+        if smeta.get('data'):
+            for sname, sdata in smeta['data'].items():
+                verts = set(sdata.get('vertices', []))
+                edgs = set(sdata.get('edges', []))
+                attrs = dict(sdata.get('attributes', {}))
 
                 G._slices[sname] = {
-                    "vertices": verts,
-                    "edges": edgs,
-                    "attributes": attrs,
+                    'vertices': verts,
+                    'edges': edgs,
+                    'attributes': attrs,
                 }
-        if smeta.get("slice_attributes"):
-            G.slice_attributes = _rows_to_df(_normalize_rows(smeta["slice_attributes"]))
-        if smeta.get("edge_slice_attributes"):
-            G.edge_slice_attributes = _rows_to_df(_normalize_rows(smeta["edge_slice_attributes"]))
+        if smeta.get('slice_attributes'):
+            G.slice_attributes = _rows_to_df(_normalize_rows(smeta['slice_attributes']))
+        if smeta.get('edge_slice_attributes'):
+            G.edge_slice_attributes = _rows_to_df(_normalize_rows(smeta['edge_slice_attributes']))
 
         # --- Multilayer ---
-        mm = manifest.get("multilayer", {})
-        if mm.get("aspects"):
-            G.aspects = mm["aspects"]
-        if mm.get("elem_layers"):
-            G.elem_layers = dict(mm["elem_layers"])
-        if mm.get("aspect_attrs"):
-            G._aspect_attrs = mm["aspect_attrs"]
-        if mm.get("node_layer_attrs"):
-            G._state_attrs = mm["node_layer_attrs"]
-        if mm.get("layer_tuple_attrs"):
-            G._layer_attrs = mm["layer_tuple_attrs"]
-        if mm.get("layer_attributes"):
-            G.layer_attributes = _rows_to_df(_normalize_rows(mm["layer_attributes"]))
+        mm = manifest.get('multilayer', {})
+        if mm.get('aspects'):
+            G.aspects = mm['aspects']
+        if mm.get('elem_layers'):
+            G.elem_layers = dict(mm['elem_layers'])
+        if mm.get('aspect_attrs'):
+            G._aspect_attrs = mm['aspect_attrs']
+        if mm.get('node_layer_attrs'):
+            G._state_attrs = mm['node_layer_attrs']
+        if mm.get('layer_tuple_attrs'):
+            G._layer_attrs = mm['layer_tuple_attrs']
+        if mm.get('layer_attributes'):
+            G.layer_attributes = _rows_to_df(_normalize_rows(mm['layer_attributes']))
 
         # --- OPTIONAL: overlay reified hyperedges ---
-        if hyperedges == "reified":
+        if hyperedges == 'reified':
             _cx2_collect_reified(aspects, G)
 
     # PATH B: NO MANIFEST
 
     else:
-        directed = net_attrs.get("directed", True)
+        directed = net_attrs.get('directed', True)
         G = AnnNet(directed=directed)
 
         G.entity_types = {}
         if visual_props:
             # make sure we have a dict
-            if not hasattr(G, "graph_attributes") or G.graph_attributes is None:
+            if not hasattr(G, 'graph_attributes') or G.graph_attributes is None:
                 G.graph_attributes = {}
-            G.graph_attributes["__cx_visualProperties__"] = visual_props
+            G.graph_attributes['__cx_visualProperties__'] = visual_props
 
     # Overlay Cytoscape edits: nodes + edges from CX2
 
     # Track whether PATH A (manifest) was used — affects overlay attr handling
-    _manifest_mode = bool(manifest and hyperedges in ("manifest", "reified"))
+    _manifest_mode = bool(manifest and hyperedges in ('manifest', 'reified'))
 
     # Map CX numeric ids - AnnNet string ids
     cx2node = {}
-    node_aspects = aspects.get("nodes", [])
+    node_aspects = aspects.get('nodes', [])
 
     # --- build a row map of existing vertex attributes ---
     # In manifest mode the full attr table is already set; skip reading it back (expensive).
@@ -1007,33 +1005,33 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         vmap = {}
     else:
         vmap = {}
-        existing = _df_to_rows(getattr(G, "vertex_attributes", None))
+        existing = _df_to_rows(getattr(G, 'vertex_attributes', None))
         for r in existing:
-            vid = str(r.get("vertex_id", r.get("id")))
+            vid = str(r.get('vertex_id', r.get('id')))
             vmap[vid] = dict(r)
 
     # --- update vertex attrs ---
     vertex_bulk_data = []
     for n in node_aspects:
-        cx_id = n["id"]
-        attrs = dict(n.get("v", {}))
-        ann_id = str(attrs.get("name", cx_id))
+        cx_id = n['id']
+        attrs = dict(n.get('v', {}))
+        ann_id = str(attrs.get('name', cx_id))
         cx2node[cx_id] = ann_id
 
-        row = vmap.get(ann_id, {"vertex_id": ann_id})
+        row = vmap.get(ann_id, {'vertex_id': ann_id})
 
         # Merge attributes from Cytoscape (except display name)
         for k, v in attrs.items():
-            if k != "name":
+            if k != 'name':
                 row[k] = v
 
         # Layout coordinates live on the node, not in v
-        if "x" in n and n["x"] is not None:
-            row["layout_x"] = float(n["x"])
-        if "y" in n and n["y"] is not None:
-            row["layout_y"] = float(n["y"])
-        if "z" in n and n["z"] is not None:
-            row["layout_z"] = float(n["z"])
+        if 'x' in n and n['x'] is not None:
+            row['layout_x'] = float(n['x'])
+        if 'y' in n and n['y'] is not None:
+            row['layout_y'] = float(n['y'])
+        if 'z' in n and n['z'] is not None:
+            row['layout_z'] = float(n['z'])
 
         vertex_bulk_data.append(row)
 
@@ -1045,8 +1043,8 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         # Manifest already set the full vertex_attributes; add_vertices_bulk has upserted any
         # new layout coords into it.  Just fix the column name if needed.
         cols = set(dataframe_columns(G.vertex_attributes))
-        if "vertex_id" not in cols and "id" in cols:
-            G.vertex_attributes = rename_dataframe_columns(G.vertex_attributes, {"id": "vertex_id"})
+        if 'vertex_id' not in cols and 'id' in cols:
+            G.vertex_attributes = rename_dataframe_columns(G.vertex_attributes, {'id': 'vertex_id'})
     else:
         # rebuild vertex table
         if vertex_bulk_data:
@@ -1056,8 +1054,8 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
         # Normalise ID column name: prefer 'vertex_id' consistently
         cols = set(dataframe_columns(G.vertex_attributes))
-        if "vertex_id" not in cols and "id" in cols:
-            G.vertex_attributes = rename_dataframe_columns(G.vertex_attributes, {"id": "vertex_id"})
+        if 'vertex_id' not in cols and 'id' in cols:
+            G.vertex_attributes = rename_dataframe_columns(G.vertex_attributes, {'id': 'vertex_id'})
 
     # --- edges ---
     # In manifest mode: edge_attributes is already set from the manifest — skip reading it back.
@@ -1065,36 +1063,36 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         emap = {}
     else:
         emap = {}
-        existing = _df_to_rows(getattr(G, "edge_attributes", None))
+        existing = _df_to_rows(getattr(G, 'edge_attributes', None))
         for r in existing:
-            eid = str(r.get("edge_id", r.get("id")))
+            eid = str(r.get('edge_id', r.get('id')))
             emap[eid] = dict(r)
 
     edge_bulk_data = []
-    for e in aspects.get("edges", []):
-        s = cx2node.get(e["s"])
-        t = cx2node.get(e["t"])
+    for e in aspects.get('edges', []):
+        s = cx2node.get(e['s'])
+        t = cx2node.get(e['t'])
         if not s or not t:
             continue
 
-        attrs = e.get("v", {})
-        eid = str(attrs.get("edge_id", attrs.get("interaction", e["id"])))
-        w = float(attrs.get("weight", 1.0))
+        attrs = e.get('v', {})
+        eid = str(attrs.get('edge_id', attrs.get('interaction', e['id'])))
+        w = float(attrs.get('weight', 1.0))
 
         # Collect edge data for bulk insert
         edge_dict = {
-            "source": s,
-            "target": t,
-            "edge_id": eid,
-            "weight": w,
+            'source': s,
+            'target': t,
+            'edge_id': eid,
+            'weight': w,
         }
 
         # Collect additional attributes (excluding interaction and weight)
-        extra_attrs = {k: v for k, v in attrs.items() if k not in ("interaction", "weight")}
+        extra_attrs = {k: v for k, v in attrs.items() if k not in ('interaction', 'weight')}
         if extra_attrs:
-            edge_dict["attributes"] = extra_attrs
+            edge_dict['attributes'] = extra_attrs
             if not _manifest_mode:
-                emap.setdefault(eid, {"edge_id": eid}).update(extra_attrs)
+                emap.setdefault(eid, {'edge_id': eid}).update(extra_attrs)
 
         edge_bulk_data.append(edge_dict)
 
@@ -1109,7 +1107,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
     # Attach Cytoscape style blob if we captured any
     if style_aspects:
         # make sure graph_attributes exists and is a dict
-        G.graph_attributes = dict(getattr(G, "graph_attributes", {}))
+        G.graph_attributes = dict(getattr(G, 'graph_attributes', {}))
         G.graph_attributes[CX_STYLE_KEY] = style_aspects
 
     return G
@@ -1121,11 +1119,11 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 def show_cx2(
     G: AnnNet,
     *,
-    export_name="annnet export",
+    export_name='annnet export',
     layer=None,
     include_inter=False,
     include_coupling=False,
-    hyperedges="skip",
+    hyperedges='skip',
     port=None,
     auto_open=True,
 ) -> str:
@@ -1178,8 +1176,8 @@ def show_cx2(
     Examples
     --------
     >>> show_cx2(G)  # Show entire graph (all layers flattened)
-    >>> show_cx2(G, layer=("social", "2020"))  # Clean single layer view
-    >>> show_cx2(G, layer=("social", "2020"), include_coupling=True)  # With self-loops
+    >>> show_cx2(G, layer=('social', '2020'))  # Clean single layer view
+    >>> show_cx2(G, layer=('social', '2020'), include_coupling=True)  # With self-loops
     """
     import json
     import socket
@@ -1191,7 +1189,7 @@ def show_cx2(
 
     def find_free_port():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("", 0))
+            s.bind(('', 0))
             s.listen(1)
             port = s.getsockname()[1]
         return port
@@ -1297,7 +1295,7 @@ def show_cx2(
     """
 
     temp_dir = tempfile.mkdtemp()
-    html_path = Path(temp_dir) / "index.html"
+    html_path = Path(temp_dir) / 'index.html'
     html_path.write_text(html_content)
 
     class Handler(SimpleHTTPRequestHandler):
@@ -1308,19 +1306,19 @@ def show_cx2(
             pass
 
     try:
-        server = HTTPServer(("localhost", port), Handler)
+        server = HTTPServer(('localhost', port), Handler)
     except OSError as e:
         if e.errno == 98:
             port = find_free_port()
-            server = HTTPServer(("localhost", port), Handler)
+            server = HTTPServer(('localhost', port), Handler)
         else:
             raise
 
-    url = f"http://localhost:{port}"
+    url = f'http://localhost:{port}'
 
     def run_server():
-        print(f"Serving visualization at {url}")
-        print("Press Ctrl+C to stop")
+        print(f'Serving visualization at {url}')
+        print('Press Ctrl+C to stop')
         server.serve_forever()
 
     thread = threading.Thread(target=run_server, daemon=True)
@@ -1340,26 +1338,26 @@ def _cx2_to_cytoscapejs(cx2_data: list[dict]) -> dict:
     node_map = {}
 
     for aspect in cx2_data:
-        if "nodes" in aspect:
-            for node in aspect["nodes"]:
-                node_id = str(node["id"])
-                node_map[node["id"]] = node_id
-                label = node.get("v", {}).get("name", node_id)
-                nodes.append({"data": {"id": node_id, "label": label, **node.get("v", {})}})
+        if 'nodes' in aspect:
+            for node in aspect['nodes']:
+                node_id = str(node['id'])
+                node_map[node['id']] = node_id
+                label = node.get('v', {}).get('name', node_id)
+                nodes.append({'data': {'id': node_id, 'label': label, **node.get('v', {})}})
 
-        if "edges" in aspect:
-            for edge in aspect["edges"]:
-                source = str(edge["s"])
-                target = str(edge["t"])
+        if 'edges' in aspect:
+            for edge in aspect['edges']:
+                source = str(edge['s'])
+                target = str(edge['t'])
                 edges.append(
                     {
-                        "data": {
-                            "id": str(edge["id"]),
-                            "source": source,
-                            "target": target,
-                            **edge.get("v", {}),
+                        'data': {
+                            'id': str(edge['id']),
+                            'source': source,
+                            'target': target,
+                            **edge.get('v', {}),
                         }
                     }
                 )
 
-    return {"nodes": nodes, "edges": edges}
+    return {'nodes': nodes, 'edges': edges}

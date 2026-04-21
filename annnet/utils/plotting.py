@@ -34,12 +34,12 @@ def _normalize(
 def _greyscale(v: float) -> str:
     v = float(np.clip(v, 0.0, 1.0))
     c = int(round(v * 255))
-    return f"#{c:02x}{c:02x}{c:02x}"
+    return f'#{c:02x}{c:02x}{c:02x}'
 
 
 def _suppress_repr_warnings(g: Any) -> None:
     """Monkey-patch _repr_* methods to hide stderr noise from visualization libs."""
-    repr_methods = [m for m in dir(g) if m.startswith("_repr_") and callable(getattr(g, m))]
+    repr_methods = [m for m in dir(g) if m.startswith('_repr_') and callable(getattr(g, m))]
     for method_name in repr_methods:
         original = getattr(g, method_name)
 
@@ -81,15 +81,15 @@ def build_edge_labels(
         if use_weight:
             try:
                 w = graph.get_effective_edge_weight(eid, slice=layer)
-                parts.append(f"w={w:.3g}")
+                parts.append(f'w={w:.3g}')
             except Exception:
                 pass
         for k in extra_keys:
             v = graph.get_attr_edge(eid, k, default=None)
             if v is not None and not (isinstance(v, float) and math.isnan(v)):
-                parts.append(f"{k}={v}")
+                parts.append(f'{k}={v}')
         if parts:
-            labels[j] = "\\n".join(parts)
+            labels[j] = '\\n'.join(parts)
     return labels
 
 
@@ -102,7 +102,7 @@ def edge_style_from_weights(
     layer: str | None = None,
     min_width: float = 0.5,
     max_width: float = 5.0,
-    color_mode: Literal["greys", "signed"] = "greys",
+    color_mode: Literal['greys', 'signed'] = 'greys',
 ) -> dict[int, dict[str, str]]:
     """Compute visual edge styles (pen width and color) from effective weights.
 
@@ -150,16 +150,16 @@ def edge_style_from_weights(
     styles: dict[int, dict[str, str]] = {}
     for j, xv in zip(eidxs, x):
         pen = min_width + float(xv) * (max_width - min_width)
-        if color_mode == "signed":
+        if color_mode == 'signed':
             eid = graph.idx_to_edge[j]
             try:
                 w = float(graph.get_effective_edge_weight(eid, slice=layer))
             except Exception:
                 w = 0.0
-            color = "firebrick4" if w > 0 else ("dodgerblue4" if w < 0 else "black")
+            color = 'firebrick4' if w > 0 else ('dodgerblue4' if w < 0 else 'black')
         else:
             color = _greyscale(1.0 - float(xv))  # heavier => darker
-        styles[j] = {"penwidth": f"{pen:.3f}", "color": color}
+        styles[j] = {'penwidth': f'{pen:.3f}', 'color': color}
     return styles
 
 
@@ -171,7 +171,7 @@ def _add_nodes_graphviz(
 ):
     custom_vertex_attr = custom_vertex_attr or {}
     for v in node_names:
-        attrs = {"shape": "circle"}
+        attrs = {'shape': 'circle'}
         attrs.update(custom_vertex_attr.get(v, {}))
         Gv.node(v, **attrs)
 
@@ -183,7 +183,7 @@ def _add_nodes_pydot(
 
     custom_vertex_attr = custom_vertex_attr or {}
     for v in node_names:
-        attrs = {"shape": "circle"}
+        attrs = {'shape': 'circle'}
         attrs.update(custom_vertex_attr.get(v, {}))
         Gd.add_node(pydot.Node(v, **attrs))
 
@@ -205,7 +205,7 @@ def _is_true_hyperedge(S: frozenset, T: frozenset) -> bool:
 def to_graphviz(
     graph,
     *,
-    layout: str = "dot",
+    layout: str = 'dot',
     graph_attr: dict[str, str] | None = None,
     node_attr: dict[str, str] | None = None,
     edge_attr: dict[str, str] | None = None,
@@ -248,10 +248,10 @@ def to_graphviz(
             e_attr.update(custom_edge_attr[j])
 
         if _is_true_hyperedge(S, T):
-            center = f"e_{j}_center"
-            Gv.node(center, shape="square", width="0.1", height="0.1", label="")
+            center = f'e_{j}_center'
+            Gv.node(center, shape='square', width='0.1', height='0.1', label='')
             for u in S:
-                a = {"arrowtail": "none", "arrowhead": "none", "dir": "both"}
+                a = {'arrowtail': 'none', 'arrowhead': 'none', 'dir': 'both'}
                 a.update(e_attr)
                 Gv.edge(str(u), center, **a)
             for v in T:
@@ -262,32 +262,32 @@ def to_graphviz(
                 # undirected: S == T; extract the two distinct endpoints (or self-loop)
                 nodes = list(S)
                 uu, vv = (nodes[0], nodes[1]) if len(nodes) == 2 else (nodes[0], nodes[0])
-                a = {"arrowhead": "none", "dir": "none"}
+                a = {'arrowhead': 'none', 'dir': 'none'}
                 a.update(e_attr)
                 Gv.edge(str(uu), str(vv), **a)
             else:
                 # directed binary edge
                 u = next(iter(S))
                 v = next(iter(T))
-                head = "normal"
-                inter = graph.get_attr_edge(graph.idx_to_edge[j], "interaction", default=None)
+                head = 'normal'
+                inter = graph.get_attr_edge(graph.idx_to_edge[j], 'interaction', default=None)
                 if isinstance(inter, (int, float)) and inter < 0:
-                    head = "tee"
-                a = {"arrowhead": head}
+                    head = 'tee'
+                a = {'arrowhead': head}
                 a.update(e_attr)
                 Gv.edge(str(u), str(v), **a)
 
     if suppress_warnings:
         _suppress_repr_warnings(Gv)
     if any(_is_true_hyperedge(*graph.get_edge(j)) for j in range(graph.ne)) and graph_attr is None:
-        Gv.graph_attr["splines"] = "true"
+        Gv.graph_attr['splines'] = 'true'
     return Gv
 
 
 def to_pydot(
     graph,
     *,
-    layout: str = "dot",  # kept for API parity; pydot doesn't use engine here
+    layout: str = 'dot',  # kept for API parity; pydot doesn't use engine here
     graph_attr: dict[str, str] | None = None,
     node_attr: dict[str, str] | None = None,
     edge_attr: dict[str, str] | None = None,
@@ -298,7 +298,7 @@ def to_pydot(
 ):
     import pydot
 
-    Gd = pydot.Dot(graph_type="digraph", **(graph_attr or {}))
+    Gd = pydot.Dot(graph_type='digraph', **(graph_attr or {}))
     if node_attr:
         Gd.set_node_defaults(**node_attr)
     if edge_attr:
@@ -326,10 +326,10 @@ def to_pydot(
             e_attr.update(custom_edge_attr[j])
 
         if _is_true_hyperedge(S, T):
-            center = f"e_{j}_center"
-            Gd.add_node(pydot.Node(center, shape="square", width="0.1", height="0.1", label=""))
+            center = f'e_{j}_center'
+            Gd.add_node(pydot.Node(center, shape='square', width='0.1', height='0.1', label=''))
             for u in S:
-                a = {"arrowtail": "none", "arrowhead": "none", "dir": "both"}
+                a = {'arrowtail': 'none', 'arrowhead': 'none', 'dir': 'both'}
                 a.update(e_attr)
                 Gd.add_edge(pydot.Edge(str(u), center, **a))
             for v in T:
@@ -340,22 +340,22 @@ def to_pydot(
                 # undirected: extract the two distinct endpoints (or self-loop)
                 nodes = list(S)
                 uu, vv = (nodes[0], nodes[1]) if len(nodes) == 2 else (nodes[0], nodes[0])
-                a = {"arrowhead": "none", "dir": "none"}
+                a = {'arrowhead': 'none', 'dir': 'none'}
                 a.update(e_attr)
                 Gd.add_edge(pydot.Edge(str(uu), str(vv), **a))
             else:
                 u = next(iter(S))
                 v = next(iter(T))
-                head = "normal"
-                inter = graph.get_attr_edge(graph.idx_to_edge[j], "interaction", default=None)
+                head = 'normal'
+                inter = graph.get_attr_edge(graph.idx_to_edge[j], 'interaction', default=None)
                 if isinstance(inter, (int, float)) and inter < 0:
-                    head = "tee"
-                a = {"arrowhead": head}
+                    head = 'tee'
+                a = {'arrowhead': head}
                 a.update(e_attr)
                 Gd.add_edge(pydot.Edge(str(u), str(v), **a))
 
     if any(_is_true_hyperedge(*graph.get_edge(j)) for j in range(graph.ne)) and graph_attr is None:
-        Gd.set_splines("true")
+        Gd.set_splines('true')
     return Gd
 
 
@@ -371,9 +371,9 @@ def to_matplotlib(
     edge_label_keys: list[str] | None = None,
     layer: str | None = None,
     node_size: float = 900.0,
-    node_color: str = "#f5f5f5",
-    edge_color: str = "#333333",
-    hyperedge_color: str = "#777777",
+    node_color: str = '#f5f5f5',
+    edge_color: str = '#333333',
+    hyperedge_color: str = '#777777',
 ):
     """Draw an AnnNet graph with matplotlib and return ``(figure, axes)``.
 
@@ -412,7 +412,7 @@ def to_matplotlib(
             ys,
             s=node_size,
             c=node_color,
-            edgecolors="#222222",
+            edgecolors='#222222',
             linewidths=1.0,
             zorder=3,
         )
@@ -421,7 +421,7 @@ def to_matplotlib(
         labels = build_vertex_labels(graph, key=vertex_label_key)
         for vertex in ordered_vertices:
             x, y = positions[vertex]
-            ax.text(x, y, str(labels.get(vertex, vertex)), ha="center", va="center", zorder=4)
+            ax.text(x, y, str(labels.get(vertex, vertex)), ha='center', va='center', zorder=4)
 
     edge_labels = (
         build_edge_labels(graph, use_weight=True, extra_keys=edge_label_keys, layer=layer)
@@ -441,12 +441,12 @@ def to_matplotlib(
                     float(np.mean([positions[v][0] for v in incident])),
                     float(np.mean([positions[v][1] for v in incident])),
                 )
-            ax.scatter([center[0]], [center[1]], s=80.0, c=hyperedge_color, marker="s", zorder=2)
+            ax.scatter([center[0]], [center[1]], s=80.0, c=hyperedge_color, marker='s', zorder=2)
             for vertex in incident:
                 x, y = positions[vertex]
                 ax.plot([center[0], x], [center[1], y], color=hyperedge_color, linewidth=1.0)
             if j in edge_labels:
-                ax.text(center[0], center[1], edge_labels[j], ha="left", va="bottom", fontsize=8)
+                ax.text(center[0], center[1], edge_labels[j], ha='left', va='bottom', fontsize=8)
             continue
 
         if S == T:
@@ -468,18 +468,18 @@ def to_matplotlib(
             x0, y0 = positions[u]
             x1, y1 = positions[v]
             ax.annotate(
-                "",
+                '',
                 xy=(x1, y1),
                 xytext=(x0, y0),
-                arrowprops={"arrowstyle": "->", "color": edge_color, "lw": 1.2},
+                arrowprops={'arrowstyle': '->', 'color': edge_color, 'lw': 1.2},
                 zorder=1,
             )
 
         if j in edge_labels:
             ax.text((x0 + x1) / 2.0, (y0 + y1) / 2.0, edge_labels[j], fontsize=8)
 
-    ax.set_aspect("equal")
-    ax.axis("off")
+    ax.set_aspect('equal')
+    ax.axis('off')
     return fig, ax
 
 
@@ -489,8 +489,8 @@ def to_matplotlib(
 def plot(
     graph,
     *,
-    backend: Literal["auto", "graphviz", "pydot", "matplotlib"] | None = None,
-    layout: str = "dot",
+    backend: Literal['auto', 'graphviz', 'pydot', 'matplotlib'] | None = None,
+    layout: str = 'dot',
     layer: str | None = None,
     show_edge_labels: bool = False,
     edge_label_keys: list[str] | None = None,
@@ -560,18 +560,18 @@ def plot(
     custom_vertex_attr: dict[str, dict[str, str]] | None = None
     if show_vertex_labels:
         vlabels = build_vertex_labels(graph, key=vertex_label_key)
-        custom_vertex_attr = {k: {"label": v} for k, v in vlabels.items()}
+        custom_vertex_attr = {k: {'label': v} for k, v in vlabels.items()}
 
-    if backend == "graphviz":
+    if backend == 'graphviz':
         G = to_graphviz(
             graph,
             layout=layout,
-            graph_attr=kwargs.get("graph_attr"),
-            node_attr=kwargs.get("node_attr", dict(fixedsize="true")),
-            edge_attr=kwargs.get("edge_attr"),
+            graph_attr=kwargs.get('graph_attr'),
+            node_attr=kwargs.get('node_attr', dict(fixedsize='true')),
+            edge_attr=kwargs.get('edge_attr'),
             custom_edge_attr=custom_edge_attr,
             custom_vertex_attr=custom_vertex_attr,
-            edge_indexes=kwargs.get("edge_indexes"),
+            edge_indexes=kwargs.get('edge_indexes'),
             orphan_edges=orphan_edges,
             suppress_warnings=suppress_warnings,
         )
@@ -581,31 +581,31 @@ def plot(
             )
             # reapply labels by regenerating with label overrides
             for j, txt in elabels.items():
-                custom_edge_attr.setdefault(j, {})["label"] = txt
+                custom_edge_attr.setdefault(j, {})['label'] = txt
             G = to_graphviz(
                 graph,
                 layout=layout,
-                graph_attr=kwargs.get("graph_attr"),
-                node_attr=kwargs.get("node_attr", dict(fixedsize="true")),
-                edge_attr=kwargs.get("edge_attr"),
+                graph_attr=kwargs.get('graph_attr'),
+                node_attr=kwargs.get('node_attr', dict(fixedsize='true')),
+                edge_attr=kwargs.get('edge_attr'),
                 custom_edge_attr=custom_edge_attr,
                 custom_vertex_attr=custom_vertex_attr,
-                edge_indexes=kwargs.get("edge_indexes"),
+                edge_indexes=kwargs.get('edge_indexes'),
                 orphan_edges=orphan_edges,
                 suppress_warnings=suppress_warnings,
             )
         return G
 
-    elif backend == "pydot":
+    elif backend == 'pydot':
         G = to_pydot(
             graph,
             layout=layout,
-            graph_attr=kwargs.get("graph_attr"),
-            node_attr=kwargs.get("node_attr"),
-            edge_attr=kwargs.get("edge_attr"),
+            graph_attr=kwargs.get('graph_attr'),
+            node_attr=kwargs.get('node_attr'),
+            edge_attr=kwargs.get('edge_attr'),
             custom_edge_attr=custom_edge_attr,
             custom_vertex_attr=custom_vertex_attr,
-            edge_indexes=kwargs.get("edge_indexes"),
+            edge_indexes=kwargs.get('edge_indexes'),
             orphan_edges=orphan_edges,
         )
         if show_edge_labels:
@@ -617,26 +617,26 @@ def plot(
             )
             for j, txt in elabels.items():
                 S, T = graph.get_edge(j)
-                sv = next(iter(S)) if len(S) else f"e_{j}_source"
-                tv = next(iter(T)) if len(T) else f"e_{j}_target"
+                sv = next(iter(S)) if len(S) else f'e_{j}_source'
+                tv = next(iter(T)) if len(T) else f'e_{j}_target'
                 G.add_edge(pydot.Edge(str(sv), str(tv), label=txt))
         return G
 
-    elif backend == "matplotlib":
+    elif backend == 'matplotlib':
         return to_matplotlib(
             graph,
-            ax=kwargs.get("ax"),
-            edge_indexes=kwargs.get("edge_indexes"),
+            ax=kwargs.get('ax'),
+            edge_indexes=kwargs.get('edge_indexes'),
             orphan_edges=orphan_edges,
             show_vertex_labels=show_vertex_labels,
             vertex_label_key=vertex_label_key,
             show_edge_labels=show_edge_labels,
             edge_label_keys=edge_label_keys,
             layer=layer,
-            node_size=kwargs.get("node_size", 900.0),
-            node_color=kwargs.get("node_color", "#f5f5f5"),
-            edge_color=kwargs.get("edge_color", "#333333"),
-            hyperedge_color=kwargs.get("hyperedge_color", "#777777"),
+            node_size=kwargs.get('node_size', 900.0),
+            node_color=kwargs.get('node_color', '#f5f5f5'),
+            edge_color=kwargs.get('edge_color', '#333333'),
+            hyperedge_color=kwargs.get('hyperedge_color', '#777777'),
         )
 
     else:
@@ -646,7 +646,7 @@ def plot(
 # Renderer
 
 
-def render(obj: Any, path: str, format: str = "svg") -> str:
+def render(obj: Any, path: str, format: str = 'svg') -> str:
     """Render a Graphviz, Pydot, or matplotlib graph object to disk.
 
     Parameters
@@ -681,24 +681,24 @@ def render(obj: Any, path: str, format: str = "svg") -> str:
     if isinstance(obj, tuple) and obj:
         obj = obj[0]
         kind = obj.__class__.__module__
-    if "graphviz" in kind:
+    if 'graphviz' in kind:
         return obj.render(path, format=fmt, cleanup=True)
-    elif "pydot" in kind:
-        if fmt == "png":
-            obj.write_png(path if path.lower().endswith(".png") else f"{path}.png")
-            return path if path.lower().endswith(".png") else f"{path}.png"
-        elif fmt in ("svg",):
-            obj.write_svg(path if path.lower().endswith(".svg") else f"{path}.svg")
-            return path if path.lower().endswith(".svg") else f"{path}.svg"
+    elif 'pydot' in kind:
+        if fmt == 'png':
+            obj.write_png(path if path.lower().endswith('.png') else f'{path}.png')
+            return path if path.lower().endswith('.png') else f'{path}.png'
+        elif fmt in ('svg',):
+            obj.write_svg(path if path.lower().endswith('.svg') else f'{path}.svg')
+            return path if path.lower().endswith('.svg') else f'{path}.svg'
         else:
             obj.write_raw(path)
             return path
-    elif "matplotlib" in kind:
-        fig = obj.figure if hasattr(obj, "figure") and not hasattr(obj, "savefig") else obj
-        out = path if path.lower().endswith(f".{fmt}") else f"{path}.{fmt}"
-        fig.savefig(out, format=fmt, bbox_inches="tight")
+    elif 'matplotlib' in kind:
+        fig = obj.figure if hasattr(obj, 'figure') and not hasattr(obj, 'savefig') else obj
+        out = path if path.lower().endswith(f'.{fmt}') else f'{path}.{fmt}'
+        fig.savefig(out, format=fmt, bbox_inches='tight')
         return out
     else:
         raise TypeError(
-            "Unknown graph object; expected graphviz.Digraph, pydot.Dot, or matplotlib Figure/Axes"
+            'Unknown graph object; expected graphviz.Digraph, pydot.Dot, or matplotlib Figure/Axes'
         )

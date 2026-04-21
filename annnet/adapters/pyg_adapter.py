@@ -60,8 +60,8 @@ def to_pyg(
     node_features: dict[str, list[str]] | None = None,
     edge_features: dict[tuple[str, str, str], list[str]] | None = None,
     slice_id: str | None = None,
-    hyperedge_mode: Literal["skip", "reify", "expand"] = "reify",
-    device: str = "cpu",
+    hyperedge_mode: Literal['skip', 'reify', 'expand'] = 'reify',
+    device: str = 'cpu',
 ) -> HeteroData:
     """
     Direct AnnNet -> PyTorch Geometric adapter.
@@ -78,22 +78,22 @@ def to_pyg(
 
     data = HeteroData()
     manifest = {
-        "node_index": {},
-        "edge_index": {},
+        'node_index': {},
+        'edge_index': {},
     }
 
     # Build attribute lookup maps
-    vert_rows = _safe_df_to_rows(getattr(graph, "vertex_attributes", None))
-    edge_rows = _safe_df_to_rows(getattr(graph, "edge_attributes", None))
+    vert_rows = _safe_df_to_rows(getattr(graph, 'vertex_attributes', None))
+    edge_rows = _safe_df_to_rows(getattr(graph, 'edge_attributes', None))
 
     v_attrs_map: dict[str, dict] = {}
     if vert_rows:
         id_col = None
         if vert_rows[0]:
-            if "vertex_id" in vert_rows[0]:
-                id_col = "vertex_id"
-            elif "id" in vert_rows[0]:
-                id_col = "id"
+            if 'vertex_id' in vert_rows[0]:
+                id_col = 'vertex_id'
+            elif 'id' in vert_rows[0]:
+                id_col = 'id'
 
         if id_col:
             for r in vert_rows:
@@ -104,10 +104,10 @@ def to_pyg(
     if edge_rows:
         id_col = None
         if edge_rows[0]:
-            if "edge_id" in edge_rows[0]:
-                id_col = "edge_id"
-            elif "id" in edge_rows[0]:
-                id_col = "id"
+            if 'edge_id' in edge_rows[0]:
+                id_col = 'edge_id'
+            elif 'id' in edge_rows[0]:
+                id_col = 'id'
 
         if id_col:
             for r in edge_rows:
@@ -117,12 +117,12 @@ def to_pyg(
     # Group vertices by kind
     kind_to_vertices: dict[str, list[str]] = {}
     for ekey, ent_rec in graph._entities.items():
-        if ent_rec.kind != "vertex":
+        if ent_rec.kind != 'vertex':
             continue
         uid = ekey[0]
 
         row = v_attrs_map.get(str(uid), {})
-        kind = row.get("kind", "default")
+        kind = row.get('kind', 'default')
 
         if kind not in kind_to_vertices:
             kind_to_vertices[kind] = []
@@ -133,12 +133,12 @@ def to_pyg(
         n = len(vids)
 
         idx_map = dict(zip(vids, range(n)))
-        manifest["node_index"][kind] = idx_map
+        manifest['node_index'][kind] = idx_map
 
         if node_features and kind in node_features:
             cols = node_features[kind]
             kind_rows = [v_attrs_map.get(vid, {}) for vid in vids]
-            _validate_numeric(kind_rows, cols, f"node[{kind}]")
+            _validate_numeric(kind_rows, cols, f'node[{kind}]')
             data[kind].x = _rows_to_tensor(kind_rows, cols, device=device)
         else:
             data[kind].num_nodes = n
@@ -151,11 +151,11 @@ def to_pyg(
                 members = set()
 
             mask = np.array([v in members for v in vids], dtype=bool)
-            data[kind][f"{slice_id}_mask"] = torch.from_numpy(mask).to(device)
+            data[kind][f'{slice_id}_mask'] = torch.from_numpy(mask).to(device)
 
     # Process binary edges
     for eid, rec in graph._edges.items():
-        if rec.col_idx < 0 or rec.etype == "hyper":
+        if rec.col_idx < 0 or rec.etype == 'hyper':
             continue
 
         u_str = str(rec.src)
@@ -164,19 +164,19 @@ def to_pyg(
         u_row = v_attrs_map.get(u_str, {})
         v_row = v_attrs_map.get(v_str, {})
 
-        uk = u_row.get("kind", "default")
-        vk = v_row.get("kind", "default")
+        uk = u_row.get('kind', 'default')
+        vk = v_row.get('kind', 'default')
 
-        if uk not in manifest["node_index"] or vk not in manifest["node_index"]:
+        if uk not in manifest['node_index'] or vk not in manifest['node_index']:
             continue
 
-        ui = manifest["node_index"][uk].get(u_str)
-        vi = manifest["node_index"][vk].get(v_str)
+        ui = manifest['node_index'][uk].get(u_str)
+        vi = manifest['node_index'][vk].get(v_str)
 
         if ui is None or vi is None:
             continue
 
-        etype = (uk, "edge", vk)
+        etype = (uk, 'edge', vk)
 
         if etype not in data.edge_types:
             data[etype].edge_index = torch.empty((2, 0), dtype=torch.long, device=device)
@@ -187,23 +187,23 @@ def to_pyg(
 
         w = float(1.0 if rec.weight is None else rec.weight)
 
-        src_map = graph.get_attr_edge(eid, "__source_attr") or {}
-        tgt_map = graph.get_attr_edge(eid, "__target_attr") or {}
+        src_map = graph.get_attr_edge(eid, '__source_attr') or {}
+        tgt_map = graph.get_attr_edge(eid, '__target_attr') or {}
 
-        w *= src_map.get(rec.src, {}).get("__value", 1.0)
-        w *= tgt_map.get(rec.tgt, {}).get("__value", 1.0)
+        w *= src_map.get(rec.src, {}).get('__value', 1.0)
+        w *= tgt_map.get(rec.tgt, {}).get('__value', 1.0)
 
         ew = torch.tensor([w], dtype=torch.float32, device=device)
         data[etype].edge_weight = torch.cat([data[etype].edge_weight, ew])
 
     # Process hyperedges separately; they are no longer exposed via edge_definitions.
-    if hyperedge_mode != "skip":
+    if hyperedge_mode != 'skip':
         for eid, rec in graph._edges.items():
-            if rec.col_idx < 0 or rec.etype != "hyper":
+            if rec.col_idx < 0 or rec.etype != 'hyper':
                 continue
-            if hyperedge_mode == "reify":
+            if hyperedge_mode == 'reify':
                 _process_hyperedge_reify(graph, eid, data, manifest, device, v_attrs_map)
-            elif hyperedge_mode == "expand":
+            elif hyperedge_mode == 'expand':
                 _process_hyperedge_expand(
                     graph, eid, data, manifest, device, v_attrs_map, e_attrs_map
                 )
@@ -214,7 +214,7 @@ def to_pyg(
             if etype not in data.edge_types:
                 continue
 
-            _validate_numeric(list(e_attrs_map.values()), cols, f"edge{etype}")
+            _validate_numeric(list(e_attrs_map.values()), cols, f'edge{etype}')
 
             feat_rows = list(e_attrs_map.values())
             if feat_rows:
@@ -234,11 +234,11 @@ def _process_hyperedge_reify(
     v_attrs_map: dict,
 ):
     """Reify hyperedge as virtual hypernode."""
-    if "hypernode" not in data.node_types:
-        data["hypernode"].num_nodes = 0
+    if 'hypernode' not in data.node_types:
+        data['hypernode'].num_nodes = 0
 
-    he_idx = data["hypernode"].num_nodes
-    data["hypernode"].num_nodes += 1
+    he_idx = data['hypernode'].num_nodes
+    data['hypernode'].num_nodes += 1
 
     rec = graph._edges[eid]
     directed = rec.tgt is not None
@@ -253,16 +253,16 @@ def _process_hyperedge_reify(
     for u in members:
         u_str = str(u)
         u_row = v_attrs_map.get(u_str, {})
-        uk = u_row.get("kind", "default")
+        uk = u_row.get('kind', 'default')
 
-        if uk not in manifest["node_index"]:
+        if uk not in manifest['node_index']:
             continue
 
-        ui = manifest["node_index"][uk].get(u_str)
+        ui = manifest['node_index'][uk].get(u_str)
         if ui is None:
             continue
 
-        etype = (uk, "member_of", "hypernode")
+        etype = (uk, 'member_of', 'hypernode')
 
         if etype not in data.edge_types:
             data[etype].edge_index = torch.empty((2, 0), dtype=torch.long, device=device)
@@ -325,19 +325,19 @@ def _add_expanded_edge(
     u_row = v_attrs_map.get(u_str, {})
     v_row = v_attrs_map.get(v_str, {})
 
-    uk = u_row.get("kind", "default")
-    vk = v_row.get("kind", "default")
+    uk = u_row.get('kind', 'default')
+    vk = v_row.get('kind', 'default')
 
-    if uk not in manifest["node_index"] or vk not in manifest["node_index"]:
+    if uk not in manifest['node_index'] or vk not in manifest['node_index']:
         return
 
-    ui = manifest["node_index"][uk].get(u_str)
-    vi = manifest["node_index"][vk].get(v_str)
+    ui = manifest['node_index'][uk].get(u_str)
+    vi = manifest['node_index'][vk].get(v_str)
 
     if ui is None or vi is None:
         return
 
-    etype = (uk, "edge", vk)
+    etype = (uk, 'edge', vk)
 
     if etype not in data.edge_types:
         data[etype].edge_index = torch.empty((2, 0), dtype=torch.long, device=device)

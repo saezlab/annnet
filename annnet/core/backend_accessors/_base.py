@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 class _BackendAccessorBase:
-    VERTEX_LABEL_FIELDS = ("name", "label", "title", "slug", "external_id", "string_id")
+    VERTEX_LABEL_FIELDS = ('name', 'label', 'title', 'slug', 'external_id', 'string_id')
 
     _G: AnnNet
 
@@ -31,7 +31,7 @@ class _BackendAccessorBase:
         id_to_row = {}
         row_to_id = {}
         for ekey, rec in self._G._entities.items():
-            if rec.kind != "vertex":
+            if rec.kind != 'vertex':
                 continue
             vid = ekey[0]
             id_to_row[vid] = rec.row_idx
@@ -44,7 +44,7 @@ class _BackendAccessorBase:
             if ekey is None:
                 return None
             rec = self._G._entities.get(ekey)
-            if rec is None or rec.kind != "vertex":
+            if rec is None or rec.kind != 'vertex':
                 return None
             return ekey[0]
         except Exception:
@@ -52,10 +52,10 @@ class _BackendAccessorBase:
 
     def _infer_label_field(self) -> str | None:
         try:
-            if getattr(self._G, "default_label_field", None):
+            if getattr(self._G, 'default_label_field', None):
                 return self._G.default_label_field
-            va = getattr(self._G, "vertex_attributes", None)
-            cols = list(va.columns) if va is not None and hasattr(va, "columns") else []
+            va = getattr(self._G, 'vertex_attributes', None)
+            cols = list(va.columns) if va is not None and hasattr(va, 'columns') else []
             for col in self.VERTEX_LABEL_FIELDS:
                 if col in cols:
                     return col
@@ -67,17 +67,17 @@ class _BackendAccessorBase:
         try:
             va = self._G.vertex_attributes
             cols = list(va.columns)
-            for key in ("vertex_id", "id", "vid"):
+            for key in ('vertex_id', 'id', 'vid'):
                 if key in cols:
                     return key
         except Exception:
             pass
-        return "vertex_id"
+        return 'vertex_id'
 
     def _lookup_vertex_id_by_label(self, label_field: str, value):
         try:
             va = self._G.vertex_attributes
-            if va is None or not hasattr(va, "columns") or label_field not in va.columns:
+            if va is None or not hasattr(va, 'columns') or label_field not in va.columns:
                 return None
             id_col = self._vertex_id_col()
             try:
@@ -117,7 +117,7 @@ class _BackendAccessorBase:
                 continue
             try:
                 for name in dir(obj):
-                    if name.startswith("_"):
+                    if name.startswith('_'):
                         continue
                     try:
                         attr = getattr(obj, name)

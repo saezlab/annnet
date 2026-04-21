@@ -12,8 +12,8 @@ if TYPE_CHECKING:
     from ..core.graph import AnnNet
 from ..adapters.networkx_adapter import _from_nx_without_manifest, from_nx, to_nx
 
-_BOOL = {"true": True, "false": False}
-_NUM_RE = re.compile(r"^[+-]?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$")
+_BOOL = {'true': True, 'false': False}
+_NUM_RE = re.compile(r'^[+-]?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$')
 
 
 def _sanitize_graphml_inplace(G):
@@ -49,14 +49,14 @@ def _restore_types_graphml_inplace(G):
         low = t.lower()
         if low in _BOOL:
             return _BOOL[low]
-        if (t.startswith("{") and t.endswith("}")) or (t.startswith("[") and t.endswith("]")):
+        if (t.startswith('{') and t.endswith('}')) or (t.startswith('[') and t.endswith(']')):
             try:
                 return json.loads(t)
             except Exception:
                 return t
         if _NUM_RE.match(t):
             try:
-                if "." not in t and "e" not in low:
+                if '.' not in t and 'e' not in low:
                     return int(t)
                 return float(t)
             except Exception:
@@ -74,7 +74,7 @@ def _restore_types_graphml_inplace(G):
         fix_dict(data)
 
 
-def to_graphml(graph, path, *, directed=True, hyperedge_mode="reify", public_only=False):
+def to_graphml(graph, path, *, directed=True, hyperedge_mode='reify', public_only=False):
     """Export via NetworkX with reified hyperedges; sanitize attrs for GraphML.
     Also writes a sidecar manifest for lossless re-import.
     """
@@ -84,34 +84,32 @@ def to_graphml(graph, path, *, directed=True, hyperedge_mode="reify", public_onl
     _sanitize_graphml_inplace(G)
     nx.write_graphml(G, path)
     # sidecar manifest
-    mpath = str(path) + ".manifest.json"
-    with open(mpath, "w", encoding="utf-8") as f:
+    mpath = str(path) + '.manifest.json'
+    with open(mpath, 'w', encoding='utf-8') as f:
         json.dump(manifest, f, ensure_ascii=False)
 
 
-def from_graphml(path, *, hyperedge="reified"):
+def from_graphml(path, *, hyperedge='reified'):
     """Import via NetworkX; if a sidecar manifest is present, use it as SSOT.
     Otherwise, fall back to a best-effort no-manifest import with type restoration.
     """
     G = nx.read_graphml(path)
     _restore_types_graphml_inplace(G)
-    mpath = str(path) + ".manifest.json"
+    mpath = str(path) + '.manifest.json'
     if os.path.exists(mpath):
-        with open(mpath, encoding="utf-8") as f:
+        with open(mpath, encoding='utf-8') as f:
             manifest = json.load(f)
         # Rebuild exactly from the manifest (lossless), ignoring GraphML-added noise
-        return from_nx(G, manifest, hyperedge=("reified" if hyperedge == "reified" else "none"))
+        return from_nx(G, manifest, hyperedge=('reified' if hyperedge == 'reified' else 'none'))
     # Fallback (no manifest available)
-    return _from_nx_without_manifest(G, hyperedge=("reified" if hyperedge == "reified" else "none"))
+    return _from_nx_without_manifest(G, hyperedge=('reified' if hyperedge == 'reified' else 'none'))
 
 
-def to_gexf(graph: AnnNet, path, *, directed=True, hyperedge_mode="reify", public_only=False):
+def to_gexf(graph: AnnNet, path, *, directed=True, hyperedge_mode='reify', public_only=False):
     G, _m = to_nx(graph, directed=directed, hyperedge_mode=hyperedge_mode, public_only=public_only)
     nx.write_gexf(G, path)
 
 
-def from_gexf(path, *, hyperedge="reified") -> AnnNet:
+def from_gexf(path, *, hyperedge='reified') -> AnnNet:
     G = nx.read_gexf(path)
-    return _from_nx_without_manifest(
-        G, hyperedge=("reified" if hyperedge == "reified" else "none")
-    )
+    return _from_nx_without_manifest(G, hyperedge=('reified' if hyperedge == 'reified' else 'none'))

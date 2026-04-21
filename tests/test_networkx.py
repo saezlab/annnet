@@ -6,14 +6,14 @@ import warnings
 
 # Silence noisy NumPy longdouble warning seen on some builds
 warnings.filterwarnings(
-    "ignore",
-    message=r"Signature .*numpy\.longdouble.*",
+    'ignore',
+    message=r'Signature .*numpy\.longdouble.*',
     category=UserWarning,
-    module=r"numpy\._core\.getlimits",
+    module=r'numpy\._core\.getlimits',
 )
 
 # Make project importable when tests run from /tests
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from annnet.core.graph import AnnNet
 
 # --- Optional deps gates ------------------------------------------------------
@@ -33,13 +33,13 @@ from .conftest import build_adapter_graph as _build_graph
 _BUILD_GRAPH = _build_graph
 
 
-@unittest.skipUnless(HAS_NX, "networkx adapter or dependency not available")
+@unittest.skipUnless(HAS_NX, 'networkx adapter or dependency not available')
 class TestNetworkXAdapter(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if _BUILD_GRAPH is None:
             raise unittest.SkipTest(
-                "No _build_graph() found (import tests.test_igraph._build_graph). "
+                'No _build_graph() found (import tests.test_igraph._build_graph). '
             )
 
     def test_to_nx_export_and_roundtrip(self):
@@ -50,56 +50,56 @@ class TestNetworkXAdapter(unittest.TestCase):
         """
         g = _BUILD_GRAPH()
 
-        nxG, manifest = to_nx(g, directed=True, hyperedge_mode="skip", public_only=True)
+        nxG, manifest = to_nx(g, directed=True, hyperedge_mode='skip', public_only=True)
 
         # --- Export checks
         # AnnNet object created
         self.assertIsNotNone(nxG)
         # Manifest basics
-        self.assertIn("edges", manifest)
-        self.assertIn("weights", manifest)
-        self.assertIn("slices", manifest)
-        self.assertIn("slice_weights", manifest)
+        self.assertIn('edges', manifest)
+        self.assertIn('weights', manifest)
+        self.assertIn('slices', manifest)
+        self.assertIn('slice_weights', manifest)
 
         # Vertex names likely stored as node labels in nx – just sanity check
         # (We don't assert exact count since hyperedge handling can vary.)
-        self.assertTrue(any(n in {"A", "B", "C"} for n in nxG.nodes))
+        self.assertTrue(any(n in {'A', 'B', 'C'} for n in nxG.nodes))
 
         # The key fix: ensure robust slice discovery captured 'Lw'
-        self.assertIn("Lw", manifest["slices"])
-        self.assertGreater(len(manifest["slices"]["Lw"]), 0)
+        self.assertIn('Lw', manifest['slices'])
+        self.assertGreater(len(manifest['slices']['Lw']), 0)
 
         # --- Roundtrip back to AnnNet
         g2 = from_nx(nxG, manifest)
 
         # Ensure we can pull an edge id from Lw and read its effective weight
-        eid = list(manifest["slices"]["Lw"])[0]
-        w_eff = g2.get_effective_edge_weight(eid, slice="Lw")
+        eid = list(manifest['slices']['Lw'])[0]
+        w_eff = g2.get_effective_edge_weight(eid, slice='Lw')
         self.assertEqual(w_eff, 5.0)
 
     def test_slice_filters_single(self):
         """Export only a single slice ('Lw'); manifest should only include that slice."""
         g = _BUILD_GRAPH()
 
-        nxG, manifest = to_nx(g, directed=True, hyperedge_mode="skip", slice="Lw", public_only=True)
-        self.assertIn("slices", manifest)
-        self.assertEqual(set(manifest["slices"].keys()), {"Lw"})
-        self.assertGreater(len(manifest["slices"]["Lw"]), 0)
+        nxG, manifest = to_nx(g, directed=True, hyperedge_mode='skip', slice='Lw', public_only=True)
+        self.assertIn('slices', manifest)
+        self.assertEqual(set(manifest['slices'].keys()), {'Lw'})
+        self.assertGreater(len(manifest['slices']['Lw']), 0)
 
         # Per-slice weights should be limited to Lw as well
-        self.assertTrue(set(manifest.get("slice_weights", {}).keys()) <= {"Lw"})
+        self.assertTrue(set(manifest.get('slice_weights', {}).keys()) <= {'Lw'})
 
     def test_slice_filters_multi(self):
         """Export a union of slices, e.g., ['default', 'Lw']."""
         g = _BUILD_GRAPH()
 
         nxG, manifest = to_nx(
-            g, directed=True, hyperedge_mode="skip", slices=["default", "Lw"], public_only=True
+            g, directed=True, hyperedge_mode='skip', slices=['default', 'Lw'], public_only=True
         )
-        self.assertIn("slices", manifest)
-        self.assertTrue({"default", "Lw"} <= set(manifest["slices"].keys()))
-        self.assertGreater(len(manifest["slices"]["default"]), 0)
-        self.assertGreater(len(manifest["slices"]["Lw"]), 0)
+        self.assertIn('slices', manifest)
+        self.assertTrue({'default', 'Lw'} <= set(manifest['slices'].keys()))
+        self.assertGreater(len(manifest['slices']['default']), 0)
+        self.assertGreater(len(manifest['slices']['Lw']), 0)
 
     def test_hyperedge_skip_vs_expand(self):
         """If the builder creates at least one hyperedge, then:
@@ -110,22 +110,22 @@ class TestNetworkXAdapter(unittest.TestCase):
         g = _BUILD_GRAPH()
 
         # Detect whether test graph includes a hyperedge by inspecting manifest
-        nxG_skip, manifest_skip = to_nx(g, directed=True, hyperedge_mode="skip", public_only=True)
+        nxG_skip, manifest_skip = to_nx(g, directed=True, hyperedge_mode='skip', public_only=True)
         # try with expand
         try:
             nxG_expand, manifest_expand = to_nx(
-                g, directed=True, hyperedge_mode="expand", public_only=True
+                g, directed=True, hyperedge_mode='expand', public_only=True
             )
         except Exception:
-            self.skipTest("Adapter does not support hyperedge expand mode")
+            self.skipTest('Adapter does not support hyperedge expand mode')
 
         # If edges manifest includes any 'hyper' kind, then expand should add more edges
         has_hyper = any(
-            k == "hyper" for (_, _, k) in (manifest_skip.get("edges", {}) or {}).values()
-        ) or any(k == "hyper" for (_, _, k) in (manifest_expand.get("edges", {}) or {}).values())
+            k == 'hyper' for (_, _, k) in (manifest_skip.get('edges', {}) or {}).values()
+        ) or any(k == 'hyper' for (_, _, k) in (manifest_expand.get('edges', {}) or {}).values())
 
         if not has_hyper:
-            self.skipTest("No hyperedges in builder graph")
+            self.skipTest('No hyperedges in builder graph')
 
         # NetworkX graph edge counts (expand should be >= skip)
         self.assertGreaterEqual(nxG_expand.number_of_edges(), nxG_skip.number_of_edges())
@@ -138,38 +138,38 @@ class TestNetworkXAdapter(unittest.TestCase):
         # We try best-effort – if the API doesn't allow, just proceed; export should not crash
         try:
             # Vertex private attr
-            if hasattr(g, "set_vertex_attr"):
-                g.set_vertex_attr("A", "__secret_tag", 42)
+            if hasattr(g, 'set_vertex_attr'):
+                g.set_vertex_attr('A', '__secret_tag', 42)
             # Edge private attr on an arbitrary default-slice edge
             any_eid = next(iter(manifest_eid for manifest_eid in g.edge_weights.keys()))
-            if hasattr(g, "set_edge_attr"):
-                g.set_edge_attr(any_eid, "__hidden_note", "shh")
+            if hasattr(g, 'set_edge_attr'):
+                g.set_edge_attr(any_eid, '__hidden_note', 'shh')
         except Exception:
             pass
 
-        nxG, manifest = to_nx(g, directed=True, hyperedge_mode="skip", public_only=True)
+        nxG, manifest = to_nx(g, directed=True, hyperedge_mode='skip', public_only=True)
 
         # Scan manifest attrs for private keys
         def _has_private(d):
-            return any(str(k).startswith("__") for k in (d or {}).keys())
+            return any(str(k).startswith('__') for k in (d or {}).keys())
 
         # Vertex attrs
-        vattrs = manifest.get("vertex_attrs", {})
+        vattrs = manifest.get('vertex_attrs', {})
         self.assertFalse(any(_has_private(vattrs.get(v, {})) for v in vattrs))
 
         # Edge attrs
-        eattrs = manifest.get("edge_attrs", {})
+        eattrs = manifest.get('edge_attrs', {})
         self.assertFalse(any(_has_private(eattrs.get(e, {})) for e in eattrs))
 
     def test_graph_type_matches_directed_flag(self):
         """Sanity check: directed=True should yield a directed MultiGraph; directed=False an undirected MultiGraph."""
         g = _BUILD_GRAPH()
-        nxG_dir, _ = to_nx(g, directed=True, hyperedge_mode="skip", public_only=True)
-        self.assertTrue(getattr(nxG_dir, "is_directed", lambda: True)())
+        nxG_dir, _ = to_nx(g, directed=True, hyperedge_mode='skip', public_only=True)
+        self.assertTrue(getattr(nxG_dir, 'is_directed', lambda: True)())
 
-        nxG_undir, _ = to_nx(g, directed=False, hyperedge_mode="skip", public_only=True)
-        self.assertFalse(getattr(nxG_undir, "is_directed", lambda: False)())
+        nxG_undir, _ = to_nx(g, directed=False, hyperedge_mode='skip', public_only=True)
+        self.assertFalse(getattr(nxG_undir, 'is_directed', lambda: False)())
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

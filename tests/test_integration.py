@@ -18,53 +18,53 @@ class TestIntegration:
         from annnet.core.graph import AnnNet
 
         G = AnnNet(directed=False)
-        proteins = ["TP53", "MDM2", "ATM", "CHEK2", "p21"]
+        proteins = ['TP53', 'MDM2', 'ATM', 'CHEK2', 'p21']
         for p in proteins:
             G.add_vertex(p)
-            G.set_vertex_attrs(p, type="protein", organism="human")
+            G.set_vertex_attrs(p, type='protein', organism='human')
         interactions = [
-            ("TP53", "MDM2", "inhibition"),
-            ("MDM2", "TP53", "ubiquitination"),
-            ("ATM", "TP53", "phosphorylation"),
-            ("TP53", "p21", "activation"),
-            ("CHEK2", "TP53", "phosphorylation"),
+            ('TP53', 'MDM2', 'inhibition'),
+            ('MDM2', 'TP53', 'ubiquitination'),
+            ('ATM', 'TP53', 'phosphorylation'),
+            ('TP53', 'p21', 'activation'),
+            ('CHEK2', 'TP53', 'phosphorylation'),
         ]
         for i, (src, tgt, interaction_type) in enumerate(interactions):
-            G.add_edge(src, tgt, edge_id=f"int_{i}", directed=True)
-            G.set_edge_attrs(f"int_{i}", interaction_type=interaction_type, confidence=0.9)
-        to_sif(G, tmpdir_fixture / "network.sif", relation_attr="interaction_type")
+            G.add_edge(src, tgt, edge_id=f'int_{i}', directed=True)
+            G.set_edge_attrs(f'int_{i}', interaction_type=interaction_type, confidence=0.9)
+        to_sif(G, tmpdir_fixture / 'network.sif', relation_attr='interaction_type')
         dfs = to_dataframes(G)
-        dfs["edges"].write_csv(tmpdir_fixture / "interactions.csv")
-        to_parquet(G, tmpdir_fixture / "network_archive")
-        assert (tmpdir_fixture / "network.sif").exists()
-        assert (tmpdir_fixture / "interactions.csv").exists()
-        assert (tmpdir_fixture / "network_archive").exists()
-        G_sif = from_sif(tmpdir_fixture / "network.sif")
+        dfs['edges'].write_csv(tmpdir_fixture / 'interactions.csv')
+        to_parquet(G, tmpdir_fixture / 'network_archive')
+        assert (tmpdir_fixture / 'network.sif').exists()
+        assert (tmpdir_fixture / 'interactions.csv').exists()
+        assert (tmpdir_fixture / 'network_archive').exists()
+        G_sif = from_sif(tmpdir_fixture / 'network.sif')
         assert len(list(G_sif.vertices())) == len(proteins)
 
     def test_multi_slice_network(self, tmpdir_fixture):
         from annnet.core.graph import AnnNet
 
         G = AnnNet(directed=True)
-        users = ["Alice", "Bob", "Charlie", "David"]
+        users = ['Alice', 'Bob', 'Charlie', 'David']
         for u in users:
             G.add_vertex(u)
-        G.add_slice("friendship")
-        G.add_slice("collaboration")
-        G.add_slice("mentorship")
-        G.add_edge("Alice", "Bob", edge_id="f1")
-        G.add_edge_to_slice("friendship", "f1")
-        G.add_edge("Bob", "Charlie", edge_id="f2")
-        G.add_edge_to_slice("friendship", "f2")
-        G.add_edge("Alice", "Charlie", edge_id="c1")
-        G.add_edge_to_slice("collaboration", "c1")
-        G.add_edge("Alice", "David", edge_id="m1")
-        G.add_edge_to_slice("mentorship", "m1")
+        G.add_slice('friendship')
+        G.add_slice('collaboration')
+        G.add_slice('mentorship')
+        G.add_edge('Alice', 'Bob', edge_id='f1')
+        G.add_edge_to_slice('friendship', 'f1')
+        G.add_edge('Bob', 'Charlie', edge_id='f2')
+        G.add_edge_to_slice('friendship', 'f2')
+        G.add_edge('Alice', 'Charlie', edge_id='c1')
+        G.add_edge_to_slice('collaboration', 'c1')
+        G.add_edge('Alice', 'David', edge_id='m1')
+        G.add_edge_to_slice('mentorship', 'm1')
         from annnet.io.json_format import from_json, to_json
 
-        to_json(G, tmpdir_fixture / "multislice.json")
-        G2 = from_json(tmpdir_fixture / "multislice.json")
+        to_json(G, tmpdir_fixture / 'multislice.json')
+        G2 = from_json(tmpdir_fixture / 'multislice.json')
         slices = set(G2.list_slices(include_default=False))
-        assert slices == {"friendship", "collaboration", "mentorship"}
-        friendship_edges = set(G2.get_slice_edges("friendship"))
-        assert "f1" in friendship_edges and "f2" in friendship_edges
+        assert slices == {'friendship', 'collaboration', 'mentorship'}
+        friendship_edges = set(G2.get_slice_edges('friendship'))
+        assert 'f1' in friendship_edges and 'f2' in friendship_edges

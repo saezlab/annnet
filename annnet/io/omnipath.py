@@ -12,7 +12,7 @@ from ..core.graph import AnnNet
 def from_omnipath(
     df=None,
     *,
-    dataset: str = "omnipath",
+    dataset: str = 'omnipath',
     include=None,
     exclude=None,
     query: dict | None = None,
@@ -103,9 +103,18 @@ def from_omnipath(
         If omitted, all resources in the annotation table are loaded (254 columns).
         Recommended subset for signaling graphs::
 
-            ["HGNC", "CancerGeneCensus", "SignaLink_function", "SignaLink_pathway",
-             "UniProt_location", "HPA_subcellular", "PROGENy", "IntOGen",
-             "Phosphatome", "kinase.com"]
+            [
+                'HGNC',
+                'CancerGeneCensus',
+                'SignaLink_function',
+                'SignaLink_pathway',
+                'UniProt_location',
+                'HPA_subcellular',
+                'PROGENy',
+                'IntOGen',
+                'Phosphatome',
+                'kinase.com',
+            ]
 
     load_vertex_annotations : bool, optional
         Whether to load vertex annotations at all. Set to ``False`` to skip
@@ -150,33 +159,45 @@ def from_omnipath(
     Full load with curated vertex annotation sources::
 
         G = from_omnipath(
-            dataset="omnipath",
-            query={"organism": "human", "genesymbols": True},
-            source_col="source_genesymbol",
-            target_col="target_genesymbol",
+            dataset='omnipath',
+            query={'organism': 'human', 'genesymbols': True},
+            source_col='source_genesymbol',
+            target_col='target_genesymbol',
             edge_attr_cols=[
-                "is_stimulation", "is_inhibition", "consensus_direction",
-                "n_sources", "n_references", "sources", "references_stripped",
+                'is_stimulation',
+                'is_inhibition',
+                'consensus_direction',
+                'n_sources',
+                'n_references',
+                'sources',
+                'references_stripped',
             ],
             vertex_annotation_sources=[
-                "HGNC", "CancerGeneCensus", "SignaLink_function",
-                "UniProt_location", "HPA_subcellular", "IntOGen",
+                'HGNC',
+                'CancerGeneCensus',
+                'SignaLink_function',
+                'UniProt_location',
+                'HPA_subcellular',
+                'IntOGen',
             ],
         )
 
     Pass a pre-loaded annotation table to avoid repeated downloads::
 
-        ann = pl.read_csv("~/.cache/annnet/omnipath_annotations.tsv.gz", separator="\\t")
+        ann = pl.read_csv('~/.cache/annnet/omnipath_annotations.tsv.gz', separator='\\t')
         G = from_omnipath(vertex_annotations_df=ann)
 
     Build from a custom DataFrame instead of fetching from OmniPath::
 
         import pandas as pd
-        df = pd.DataFrame({
-            "source": ["EGFR", "TP53"],
-            "target": ["STAT3", "MDM2"],
-            "is_directed": [True, True],
-        })
+
+        df = pd.DataFrame(
+            {
+                'source': ['EGFR', 'TP53'],
+                'target': ['STAT3', 'MDM2'],
+                'is_directed': [True, True],
+            }
+        )
         G = from_omnipath(df=df, load_vertex_annotations=False)
 
     """
@@ -206,26 +227,26 @@ def from_omnipath(
             return bool(x)
         if isinstance(x, str):
             v = x.strip().lower()
-            if v in {"1", "true", "t", "yes", "y", "directed", "dir"}:
+            if v in {'1', 'true', 't', 'yes', 'y', 'directed', 'dir'}:
                 return True
-            if v in {"0", "false", "f", "no", "n", "undirected", "undir", "u"}:
+            if v in {'0', 'false', 'f', 'no', 'n', 'undirected', 'undir', 'u'}:
                 return False
         return default
 
     def _read_tsv(source):
         backend = select_dataframe_backend(annotations_backend)
-        if backend == "polars":
+        if backend == 'polars':
             import polars as pl
 
-            return pl.read_csv(source, separator="\t")
-        if backend == "pandas":
+            return pl.read_csv(source, separator='\t')
+        if backend == 'pandas':
             import pandas as pd
 
-            return pd.read_csv(source, sep="\t")
+            return pd.read_csv(source, sep='\t')
 
         import pyarrow.csv as pacsv
 
-        return pacsv.read_csv(source, parse_options=pacsv.ParseOptions(delimiter="\t"))
+        return pacsv.read_csv(source, parse_options=pacsv.ParseOptions(delimiter='\t'))
 
     # fetch
     t_fetch0 = time.perf_counter()
@@ -235,97 +256,97 @@ def from_omnipath(
             from omnipath import interactions as opi
         except Exception as exc:
             raise ImportError(
-                "omnipath package is required to fetch from the OmniPath web service. "
-                "Install with `pip install omnipath` or pass a dataframe as `df=`."
+                'omnipath package is required to fetch from the OmniPath web service. '
+                'Install with `pip install omnipath` or pass a dataframe as `df=`.'
             ) from exc
 
         def _norm(s):
-            return s.lower().replace("-", "").replace("_", "")
+            return s.lower().replace('-', '').replace('_', '')
 
         dataset_key = _norm(dataset)
         classes = {
-            "omnipath": opi.OmniPath,
-            "all": opi.AllInteractions,
-            "posttranslational": opi.PostTranslational,
-            "pathwayextra": opi.PathwayExtra,
-            "kinaseextra": opi.KinaseExtra,
-            "ligrecextra": opi.LigRecExtra,
-            "dorothea": opi.Dorothea,
-            "tftarget": opi.TFtarget,
-            "transcriptional": opi.Transcriptional,
-            "tfmirna": opi.TFmiRNA,
-            "mirna": opi.miRNA,
-            "lncrnamrna": opi.lncRNAmRNA,
-            "collectri": opi.CollecTRI,
+            'omnipath': opi.OmniPath,
+            'all': opi.AllInteractions,
+            'posttranslational': opi.PostTranslational,
+            'pathwayextra': opi.PathwayExtra,
+            'kinaseextra': opi.KinaseExtra,
+            'ligrecextra': opi.LigRecExtra,
+            'dorothea': opi.Dorothea,
+            'tftarget': opi.TFtarget,
+            'transcriptional': opi.Transcriptional,
+            'tfmirna': opi.TFmiRNA,
+            'mirna': opi.miRNA,
+            'lncrnamrna': opi.lncRNAmRNA,
+            'collectri': opi.CollecTRI,
         }
 
         if dataset_key not in classes:
-            raise ValueError(f"Unknown dataset {dataset!r}. Try one of: {sorted(classes.keys())}")
+            raise ValueError(f'Unknown dataset {dataset!r}. Try one of: {sorted(classes.keys())}')
 
         query = query or {}
         cls = classes[dataset_key]
-        if dataset_key == "all":
+        if dataset_key == 'all':
             df = cls.get(include=include, exclude=exclude, **query)
-        elif dataset_key == "posttranslational":
+        elif dataset_key == 'posttranslational':
             df = cls.get(exclude=exclude, **query)
         else:
             df = cls.get(**query)
 
-    print(f"[timing] fetch/receive df:     {time.perf_counter() - t_fetch0:.3f}s")
+    print(f'[timing] fetch/receive df:     {time.perf_counter() - t_fetch0:.3f}s')
 
     # column resolution
     t_cols0 = time.perf_counter()
 
     ndf = nw.from_native(df, eager_only=True)
     native = nw.to_native(ndf)
-    cols = list(getattr(native, "columns", ndf.columns))
+    cols = list(getattr(native, 'columns', ndf.columns))
 
     if source_col is None:
         source_col = _pick_col(
             cols,
             [
-                "source",
-                "source_genesymbol",
-                "source_gene_symbol",
-                "source_gene",
-                "source_uniprot",
-                "source_id",
+                'source',
+                'source_genesymbol',
+                'source_gene_symbol',
+                'source_gene',
+                'source_uniprot',
+                'source_id',
             ],
         )
     if target_col is None:
         target_col = _pick_col(
             cols,
             [
-                "target",
-                "target_genesymbol",
-                "target_gene_symbol",
-                "target_gene",
-                "target_uniprot",
-                "target_id",
+                'target',
+                'target_genesymbol',
+                'target_gene_symbol',
+                'target_gene',
+                'target_uniprot',
+                'target_id',
             ],
         )
 
     if source_col is None or target_col is None:
         raise ValueError(
-            "Could not infer source/target columns. Pass source_col and target_col explicitly."
+            'Could not infer source/target columns. Pass source_col and target_col explicitly.'
         )
 
     if directed_col is None:
-        directed_col = _pick_col(cols, ["is_directed", "directed", "consensus_direction"])
+        directed_col = _pick_col(cols, ['is_directed', 'directed', 'consensus_direction'])
     if weight_col is None:
-        weight_col = _pick_col(cols, ["weight", "consensus_weight", "score"])
+        weight_col = _pick_col(cols, ['weight', 'consensus_weight', 'score'])
     if edge_id_col is None:
-        edge_id_col = _pick_col(cols, ["edge_id", "interaction_id", "id"])
+        edge_id_col = _pick_col(cols, ['edge_id', 'interaction_id', 'id'])
     if slice_col is None:
-        slice_col = _pick_col(cols, ["slice", "slice_id"])
+        slice_col = _pick_col(cols, ['slice', 'slice_id'])
 
     if edge_attr_cols is None:
         structural = {source_col, target_col, directed_col, weight_col, edge_id_col, slice_col}
         edge_attr_cols = [c for c in cols if c not in structural]
 
-    print(f"[timing] column resolution:    {time.perf_counter() - t_cols0:.4f}s")
-    print(f"         source={source_col!r}  target={target_col!r}  directed={directed_col!r}")
-    print(f"         edge_attr_cols ({len(edge_attr_cols)}): {edge_attr_cols}")
+    print(f'[timing] column resolution:    {time.perf_counter() - t_cols0:.4f}s')
+    print(f'         source={source_col!r}  target={target_col!r}  directed={directed_col!r}')
+    print(f'         edge_attr_cols ({len(edge_attr_cols)}): {edge_attr_cols}')
 
     # AnnNet init
     t_init0 = time.perf_counter()
@@ -338,14 +359,14 @@ def from_omnipath(
     )
     G._history_enabled = False
     print(
-        f"[timing] AnnNet init:          {time.perf_counter() - t_init0:.3f}s  (pre-sized n={len(ndf)} e={len(ndf)})"
+        f'[timing] AnnNet init:          {time.perf_counter() - t_init0:.3f}s  (pre-sized n={len(ndf)} e={len(ndf)})'
     )
 
     # _to_dicts
     t_dicts0 = time.perf_counter()
     rows = dataframe_to_rows(native)
     print(
-        f"[timing] _to_dicts:            {time.perf_counter() - t_dicts0:.3f}s  ({len(rows)} rows)"
+        f'[timing] _to_dicts:            {time.perf_counter() - t_dicts0:.3f}s  ({len(rows)} rows)'
     )
 
     # bulk list build
@@ -357,7 +378,7 @@ def from_omnipath(
         if dropna and (_is_null(s) or _is_null(t)):
             continue
         if _is_null(s) or _is_null(t):
-            raise ValueError("Found null source/target with dropna=False.")
+            raise ValueError('Found null source/target with dropna=False.')
 
         edge_dir = (
             _coerce_bool(row.get(directed_col), default_directed)
@@ -379,31 +400,31 @@ def from_omnipath(
 
         bulk.append(
             {
-                "source": str(s),
-                "target": str(t),
-                "weight": w,
-                "edge_id": eid,
-                "edge_directed": edge_dir,
-                "slice": edge_slice,
-                "attributes": {c: row.get(c) for c in edge_attr_cols if c in row},
+                'source': str(s),
+                'target': str(t),
+                'weight': w,
+                'edge_id': eid,
+                'edge_directed': edge_dir,
+                'slice': edge_slice,
+                'attributes': {c: row.get(c) for c in edge_attr_cols if c in row},
             }
         )
 
     print(
-        f"[timing] bulk list build:      {time.perf_counter() - t_bulk0:.3f}s  ({len(bulk)} edges)"
+        f'[timing] bulk list build:      {time.perf_counter() - t_bulk0:.3f}s  ({len(bulk)} edges)'
     )
 
     # add_edges_bulk
     t_aeb0 = time.perf_counter()
     G.add_edges_bulk(bulk)
-    print(f"[timing] add_edges_bulk:       {time.perf_counter() - t_aeb0:.3f}s")
+    print(f'[timing] add_edges_bulk:       {time.perf_counter() - t_aeb0:.3f}s')
 
     G._history_enabled = True
 
-    print(f"         vertices={G._num_entities}  edges={G._num_edges}")
+    print(f'         vertices={G._num_entities}  edges={G._num_edges}')
 
     # vertex table: register all vertices
-    all_vids = [vid for vid, t in G.entity_types.items() if t == "vertex"]
+    all_vids = [vid for vid, t in G.entity_types.items() if t == 'vertex']
     G.add_vertices_bulk(all_vids)
 
     # vertex annotations
@@ -416,14 +437,14 @@ def from_omnipath(
                 ann_raw = nw.from_native(vertex_annotations_df, eager_only=True)
                 ann_raw = nw.to_native(ann_raw)  # keep as native (polars or pandas)
             except Exception as e:
-                print(f"[warning] vertex_annotations_df could not be read: {e}")
+                print(f'[warning] vertex_annotations_df could not be read: {e}')
 
         # 2) caller passed a local file path
         elif vertex_annotations_path is not None:
             try:
                 ann_raw = _read_tsv(vertex_annotations_path)
             except Exception as e:
-                print(f"[warning] vertex_annotations_path failed: {e}")
+                print(f'[warning] vertex_annotations_path failed: {e}')
 
         # 3) check cache first, then download from OmniPath archive
         else:
@@ -434,22 +455,22 @@ def from_omnipath(
                 import requests as _requests
 
                 _ANN_URL = (
-                    "https://archive.omnipathdb.org/omnipath_webservice_annotations__latest.tsv.gz"
+                    'https://archive.omnipathdb.org/omnipath_webservice_annotations__latest.tsv.gz'
                 )
                 _cache_path = os.path.join(
-                    os.path.expanduser("~"), ".cache", "annnet", "omnipath_annotations.tsv.gz"
+                    os.path.expanduser('~'), '.cache', 'annnet', 'omnipath_annotations.tsv.gz'
                 )
 
                 if os.path.exists(_cache_path):
-                    print(f"[vertex annotations] loading from cache: {_cache_path}")
+                    print(f'[vertex annotations] loading from cache: {_cache_path}')
                     t_ann = time.perf_counter()
                     ann_raw = _read_tsv(_cache_path)
                     print(
-                        f"[vertex annotations] loaded in {time.perf_counter() - t_ann:.1f}s  rows={dataframe_height(ann_raw)}"
+                        f'[vertex annotations] loaded in {time.perf_counter() - t_ann:.1f}s  rows={dataframe_height(ann_raw)}'
                     )
                 else:
                     print(
-                        f"[vertex annotations] downloading from OmniPath archive (~114MB, one-time)..."
+                        f'[vertex annotations] downloading from OmniPath archive (~114MB, one-time)...'
                     )
                     t_ann = time.perf_counter()
                     resp = _requests.get(
@@ -459,14 +480,14 @@ def from_omnipath(
                     )
                     resp.raise_for_status()
                     os.makedirs(os.path.dirname(_cache_path), exist_ok=True)
-                    with open(_cache_path, "wb") as _f:
+                    with open(_cache_path, 'wb') as _f:
                         _f.write(resp.content)
                     ann_raw = _read_tsv(io.BytesIO(resp.content))
                     print(
-                        f"[vertex annotations] downloaded + cached in {time.perf_counter() - t_ann:.1f}s  → {_cache_path}"
+                        f'[vertex annotations] downloaded + cached in {time.perf_counter() - t_ann:.1f}s  → {_cache_path}'
                     )
             except Exception as e:
-                print(f"[warning] vertex annotations download failed: {e}")
+                print(f'[warning] vertex annotations download failed: {e}')
 
         if ann_raw is not None:
             try:
@@ -480,28 +501,28 @@ def from_omnipath(
                 # Pivot in Python rows: one row per gene, one column per source:label.
                 grouped: dict[str, dict[str, set[str]]] = {}
                 for row in dataframe_to_rows(ann_raw):
-                    gene = row.get("genesymbol")
-                    source = row.get("source")
-                    label = row.get("label")
-                    value = row.get("value")
+                    gene = row.get('genesymbol')
+                    source = row.get('source')
+                    label = row.get('label')
+                    value = row.get('value')
                     if gene not in vids_set:
                         continue
                     if source_filter is not None and source not in source_filter:
                         continue
                     if source is None or label is None or value is None:
                         continue
-                    attr_key = f"{source}:{label}"
+                    attr_key = f'{source}:{label}'
                     grouped.setdefault(gene, {}).setdefault(attr_key, set()).add(str(value))
 
                 G.add_vertices_bulk(
                     [
-                        (gene, {key: ";".join(sorted(values)) for key, values in attrs.items()})
+                        (gene, {key: ';'.join(sorted(values)) for key, values in attrs.items()})
                         for gene, attrs in grouped.items()
                         if G._resolve_entity_key(gene) in G._entities
                     ]
                 )
-                print(f"[vertex annotations] loaded  rows={len(grouped)}")
+                print(f'[vertex annotations] loaded  rows={len(grouped)}')
             except Exception as e:
-                print(f"[warning] vertex annotation pivot/load failed: {e}")
+                print(f'[warning] vertex annotation pivot/load failed: {e}')
 
     return G

@@ -19,13 +19,13 @@ if TYPE_CHECKING:
 def _hyper_def(rec):
     """Build hyperedge metadata dict from an EdgeRecord (no compat proxy)."""
     if rec.tgt is not None:
-        return {"directed": True, "head": set(rec.src), "tail": set(rec.tgt)}
-    return {"directed": False, "members": set(rec.src)}
+        return {'directed': True, 'head': set(rec.src), 'tail': set(rec.tgt)}
+    return {'directed': False, 'members': set(rec.src)}
 
 
 def _is_hyper(graph, eid):
     rec = graph._edges.get(eid)
-    return rec is not None and rec.etype == "hyper"
+    return rec is not None and rec.etype == 'hyper'
 
 
 class CacheManager:
@@ -169,16 +169,16 @@ class CacheManager:
         None
         """
         if formats is None:
-            formats = ["csr", "csc", "adjacency"]
+            formats = ['csr', 'csc', 'adjacency']
 
         for fmt in formats:
-            if fmt == "csr":
+            if fmt == 'csr':
                 self._csr = None
                 self._csr_version = None
-            elif fmt == "csc":
+            elif fmt == 'csc':
                 self._csc = None
                 self._csc_version = None
-            elif fmt == "adjacency":
+            elif fmt == 'adjacency':
                 self._adjacency = None
                 self._adjacency_version = None
 
@@ -196,14 +196,14 @@ class CacheManager:
         None
         """
         if formats is None:
-            formats = ["csr", "csc", "adjacency"]
+            formats = ['csr', 'csc', 'adjacency']
 
         for fmt in formats:
-            if fmt == "csr":
+            if fmt == 'csr':
                 _ = self.csr
-            elif fmt == "csc":
+            elif fmt == 'csc':
                 _ = self.csc
-            elif fmt == "adjacency":
+            elif fmt == 'adjacency':
                 _ = self.adjacency
 
     def clear(self):
@@ -226,29 +226,29 @@ class CacheManager:
 
         def _format_info(matrix, version):
             if matrix is None:
-                return {"cached": False}
+                return {'cached': False}
 
             # Calculate size
             size_bytes = 0
-            if hasattr(matrix, "data"):
+            if hasattr(matrix, 'data'):
                 size_bytes += matrix.data.nbytes
-            if hasattr(matrix, "indices"):
+            if hasattr(matrix, 'indices'):
                 size_bytes += matrix.indices.nbytes
-            if hasattr(matrix, "indptr"):
+            if hasattr(matrix, 'indptr'):
                 size_bytes += matrix.indptr.nbytes
 
             return {
-                "cached": True,
-                "version": version,
-                "size_mb": size_bytes / (1024**2),
-                "nnz": matrix.nnz if hasattr(matrix, "nnz") else 0,
-                "shape": matrix.shape,
+                'cached': True,
+                'version': version,
+                'size_mb': size_bytes / (1024**2),
+                'nnz': matrix.nnz if hasattr(matrix, 'nnz') else 0,
+                'shape': matrix.shape,
             }
 
         return {
-            "csr": _format_info(self._csr, self._csr_version),
-            "csc": _format_info(self._csc, self._csc_version),
-            "adjacency": _format_info(self._adjacency, self._adjacency_version),
+            'csr': _format_info(self._csr, self._csr_version),
+            'csc': _format_info(self._csc, self._csc_version),
+            'adjacency': _format_info(self._adjacency, self._adjacency_version),
         }
 
 
@@ -287,26 +287,26 @@ class Operations:
             rec = self._edges.get(eid)
             if rec is None or rec.col_idx < 0:
                 continue
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 h = _hyper_def(rec)
-                if h.get("members"):
-                    V.update(h["members"])
+                if h.get('members'):
+                    V.update(h['members'])
                     hyper_payload.append(
                         {
-                            "members": list(h["members"]),
-                            "edge_id": eid,
-                            "weight": rec.weight,
+                            'members': list(h['members']),
+                            'edge_id': eid,
+                            'weight': rec.weight,
                         }
                     )
                 else:
-                    V.update(h.get("head", ()))
-                    V.update(h.get("tail", ()))
+                    V.update(h.get('head', ()))
+                    V.update(h.get('tail', ()))
                     hyper_payload.append(
                         {
-                            "head": list(h.get("head", ())),
-                            "tail": list(h.get("tail", ())),
-                            "edge_id": eid,
-                            "weight": rec.weight,
+                            'head': list(h.get('head', ())),
+                            'tail': list(h.get('tail', ())),
+                            'edge_id': eid,
+                            'weight': rec.weight,
                         }
                     )
             else:
@@ -317,12 +317,12 @@ class Operations:
                 V.add(t)
                 bin_payload.append(
                     {
-                        "source": s,
-                        "target": t,
-                        "edge_id": eid,
-                        "edge_type": etype,
-                        "edge_directed": rec.directed if rec.directed is not None else default_dir,
-                        "weight": rec.weight,
+                        'source': s,
+                        'target': t,
+                        'edge_id': eid,
+                        'edge_type': etype,
+                        'edge_directed': rec.directed if rec.directed is not None else default_dir,
+                        'weight': rec.weight,
                     }
                 )
 
@@ -331,7 +331,7 @@ class Operations:
         g = G(directed=self.directed, n=len(V), e=len(E))
         # vertices with attrs
         v_rows = [
-            {"vertex_id": v, **(self._row_attrs(self.vertex_attributes, "vertex_id", v) or {})}
+            {'vertex_id': v, **(self._row_attrs(self.vertex_attributes, 'vertex_id', v) or {})}
             for v in V
         ]
         g.add_vertices_bulk(v_rows, slice=g._default_slice)
@@ -344,8 +344,8 @@ class Operations:
 
         # copy slice memberships for retained edges & incident vertices
         for lid, meta in self._slices.items():
-            g.add_slice(lid, **meta["attributes"])
-            kept_edges = set(meta["edges"]) & E
+            g.add_slice(lid, **meta['attributes'])
+            kept_edges = set(meta['edges']) & E
             if kept_edges:
                 g.add_edges_to_slice_bulk(lid, kept_edges)
 
@@ -375,13 +375,13 @@ class Operations:
         for eid, rec in self._edges.items():
             if rec.col_idx < 0 or rec.src is None:
                 continue
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 h = _hyper_def(rec)
-                if h.get("members"):
-                    if set(h["members"]).issubset(V):
+                if h.get('members'):
+                    if set(h['members']).issubset(V):
                         E_hyper_members.append(eid)
                 else:
-                    if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(V):
+                    if set(h.get('head', ())).issubset(V) and set(h.get('tail', ())).issubset(V):
                         E_hyper_dir.append(eid)
             else:
                 s, t = rec.src, rec.tgt
@@ -391,21 +391,21 @@ class Operations:
         # payloads
         va = self.vertex_attributes
         va_lookup: dict = {}
-        if va is not None and hasattr(va, "columns") and "vertex_id" in va.columns:
+        if va is not None and hasattr(va, 'columns') and 'vertex_id' in va.columns:
             try:
                 for row in va.to_dicts():
-                    vid = row.pop("vertex_id", None)
+                    vid = row.pop('vertex_id', None)
                     if vid is not None:
                         va_lookup[vid] = row
             except AttributeError:
                 try:
-                    for row in va.to_dict(orient="records"):
-                        vid = row.pop("vertex_id", None)
+                    for row in va.to_dict(orient='records'):
+                        vid = row.pop('vertex_id', None)
                         if vid is not None:
                             va_lookup[vid] = row
                 except Exception:
                     pass
-        v_rows = [{"vertex_id": v, **va_lookup.get(v, {})} for v in V]
+        v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
 
         default_dir = True if self.directed is None else self.directed
 
@@ -414,12 +414,12 @@ class Operations:
             rec = self._edges[eid]
             bin_payload.append(
                 {
-                    "source": rec.src,
-                    "target": rec.tgt,
-                    "edge_id": eid,
-                    "edge_type": rec.etype,
-                    "edge_directed": rec.directed if rec.directed is not None else default_dir,
-                    "weight": rec.weight,
+                    'source': rec.src,
+                    'target': rec.tgt,
+                    'edge_id': eid,
+                    'edge_type': rec.etype,
+                    'edge_directed': rec.directed if rec.directed is not None else default_dir,
+                    'weight': rec.weight,
                 }
             )
 
@@ -428,17 +428,17 @@ class Operations:
             rec = self._edges[eid]
             h = _hyper_def(rec)
             hyper_payload.append(
-                {"members": list(h["members"]), "edge_id": eid, "weight": rec.weight}
+                {'members': list(h['members']), 'edge_id': eid, 'weight': rec.weight}
             )
         for eid in E_hyper_dir:
             rec = self._edges[eid]
             h = _hyper_def(rec)
             hyper_payload.append(
                 {
-                    "head": list(h.get("head", ())),
-                    "tail": list(h.get("tail", ())),
-                    "edge_id": eid,
-                    "weight": rec.weight,
+                    'head': list(h.get('head', ())),
+                    'tail': list(h.get('tail', ())),
+                    'edge_id': eid,
+                    'weight': rec.weight,
                 }
             )
 
@@ -455,19 +455,19 @@ class Operations:
 
         # slice memberships restricted to V
         for lid, meta in self._slices.items():
-            g.add_slice(lid, **meta["attributes"])
+            g.add_slice(lid, **meta['attributes'])
             keep = set()
-            for eid in meta["edges"]:
+            for eid in meta['edges']:
                 rec = self._edges.get(eid)
                 if rec is None or rec.col_idx < 0:
                     continue
-                if rec.etype == "hyper":
+                if rec.etype == 'hyper':
                     h = _hyper_def(rec)
-                    if h.get("members"):
-                        if set(h["members"]).issubset(V):
+                    if h.get('members'):
+                        if set(h['members']).issubset(V):
                             keep.add(eid)
                     else:
-                        if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(
+                        if set(h.get('head', ())).issubset(V) and set(h.get('tail', ())).issubset(
                             V
                         ):
                             keep.add(eid)
@@ -526,13 +526,13 @@ class Operations:
             rec = self._edges.get(eid)
             if rec is None or rec.col_idx < 0:
                 continue
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 h = _hyper_def(rec)
-                if h.get("members"):
-                    if set(h["members"]).issubset(V):
+                if h.get('members'):
+                    if set(h['members']).issubset(V):
                         kept_edges.add(eid)
                 else:
-                    if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(V):
+                    if set(h.get('head', ())).issubset(V) and set(h.get('tail', ())).issubset(V):
                         kept_edges.add(eid)
             else:
                 s, t = rec.src, rec.tgt
@@ -570,7 +570,7 @@ class Operations:
         for rec in g._edges.values():
             if rec.col_idx < 0:
                 continue
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 if rec.tgt is not None:
                     rec.src, rec.tgt = rec.tgt, rec.src
                 continue
@@ -605,72 +605,72 @@ class Operations:
             If the slice does not exist.
         """
         if slice_id not in self._slices:
-            raise KeyError(f"slice {slice_id} not found")
+            raise KeyError(f'slice {slice_id} not found')
 
         slice_meta = self._slices[slice_id]
-        V = set(slice_meta["vertices"])
-        E = set(slice_meta["edges"])
+        V = set(slice_meta['vertices'])
+        E = set(slice_meta['edges'])
 
         G = self.__class__
         g = G(directed=self.directed, n=len(V), e=len(E))
-        g.add_slice(slice_id, **slice_meta["attributes"])
+        g.add_slice(slice_id, **slice_meta['attributes'])
         g.set_active_slice(slice_id)
 
         # vertices with attrs (edge-entities share same table)
         va = self.vertex_attributes
         va_lookup: dict = {}
-        if va is not None and hasattr(va, "columns") and "vertex_id" in va.columns:
+        if va is not None and hasattr(va, 'columns') and 'vertex_id' in va.columns:
             try:
                 for row in va.to_dicts():
-                    vid = row.pop("vertex_id", None)
+                    vid = row.pop('vertex_id', None)
                     if vid is not None:
                         va_lookup[vid] = row
             except AttributeError:
                 try:
-                    for row in va.to_dict(orient="records"):
-                        vid = row.pop("vertex_id", None)
+                    for row in va.to_dict(orient='records'):
+                        vid = row.pop('vertex_id', None)
                         if vid is not None:
                             va_lookup[vid] = row
                 except Exception:
                     pass
-        v_rows = [{"vertex_id": v, **va_lookup.get(v, {})} for v in V]
+        v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
         g.add_vertices_bulk(v_rows, slice=slice_id)
 
         # edge attrs
         e_attrs = {}
         ea = self.edge_attributes
-        if ea is not None and hasattr(ea, "columns") and "edge_id" in ea.columns:
+        if ea is not None and hasattr(ea, 'columns') and 'edge_id' in ea.columns:
             try:
                 import polars as pl
             except Exception:
                 pl = None
 
             if pl is not None and isinstance(ea, pl.DataFrame) and ea.height:
-                for row in ea.filter(pl.col("edge_id").is_in(list(E))).to_dicts():
+                for row in ea.filter(pl.col('edge_id').is_in(list(E))).to_dicts():
                     d = dict(row)
-                    eid = d.pop("edge_id", None)
+                    eid = d.pop('edge_id', None)
                     if eid is not None:
                         e_attrs[eid] = d
             else:
                 import narwhals as nw
 
                 ndf = nw.from_native(ea, pass_through=True)
-                native = nw.to_native(ndf.filter(nw.col("edge_id").is_in(list(E))))
+                native = nw.to_native(ndf.filter(nw.col('edge_id').is_in(list(E))))
 
                 # Polars: to_dicts(); Pandas: to_dict(orient="records")
-                to_dicts_fn = getattr(type(native), "to_dicts", None)
+                to_dicts_fn = getattr(type(native), 'to_dicts', None)
 
                 if callable(to_dicts_fn):
                     rows = to_dicts_fn(native)
                 else:
                     try:
-                        rows = native.to_dict(orient="records")
+                        rows = native.to_dict(orient='records')
                     except TypeError:
                         rows = native.to_dict()
 
                 for row in rows:
                     d = dict(row)
-                    eid = d.pop("edge_id", None)
+                    eid = d.pop('edge_id', None)
                     if eid is not None:
                         e_attrs[eid] = d
 
@@ -680,8 +680,8 @@ class Operations:
             df = self.edge_slice_attributes
             if (
                 df is not None
-                and hasattr(df, "columns")
-                and {"slice_id", "edge_id", "weight"}.issubset(df.columns)
+                and hasattr(df, 'columns')
+                and {'slice_id', 'edge_id', 'weight'}.issubset(df.columns)
             ):
                 try:
                     import polars as pl
@@ -690,31 +690,31 @@ class Operations:
 
                 if pl is not None and isinstance(df, pl.DataFrame) and df.height:
                     for r in df.filter(
-                        (pl.col("slice_id") == slice_id) & (pl.col("edge_id").is_in(list(E)))
+                        (pl.col('slice_id') == slice_id) & (pl.col('edge_id').is_in(list(E)))
                     ).iter_rows(named=True):
-                        if r.get("weight") is not None:
-                            eff_w[r["edge_id"]] = float(r["weight"])
+                        if r.get('weight') is not None:
+                            eff_w[r['edge_id']] = float(r['weight'])
                 else:
                     import narwhals as nw
 
                     ndf = nw.from_native(df, pass_through=True).filter(
-                        (nw.col("slice_id") == slice_id) & (nw.col("edge_id").is_in(list(E)))
+                        (nw.col('slice_id') == slice_id) & (nw.col('edge_id').is_in(list(E)))
                     )
                     native = nw.to_native(ndf)
                     # iterate rows as dicts (works across backends via narwhals -> native)
-                    to_dicts_fn = getattr(type(native), "to_dicts", None)
+                    to_dicts_fn = getattr(type(native), 'to_dicts', None)
 
                     if callable(to_dicts_fn):
                         rows = to_dicts_fn(native)
                     else:
                         try:
-                            rows = native.to_dict(orient="records")
+                            rows = native.to_dict(orient='records')
                         except TypeError:
                             rows = native.to_dict()
                     for r in rows:
-                        w = r.get("weight")
+                        w = r.get('weight')
                         if w is not None:
-                            eff_w[r["edge_id"]] = float(w)
+                            eff_w[r['edge_id']] = float(w)
 
         # partition edges
         bin_payload, hyper_payload = [], []
@@ -725,38 +725,38 @@ class Operations:
             base_weight = rec.weight if rec.weight is not None else 1.0
             w = eff_w.get(eid, base_weight) if resolve_slice_weights else base_weight
             attrs = e_attrs.get(eid, {})
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 if rec.tgt is None:
                     hyper_payload.append(
                         {
-                            "members": list(rec.src),
-                            "edge_id": eid,
-                            "weight": w,
-                            "attributes": attrs,
+                            'members': list(rec.src),
+                            'edge_id': eid,
+                            'weight': w,
+                            'attributes': attrs,
                         }
                     )
                 else:
                     hyper_payload.append(
                         {
-                            "head": list(rec.src),
-                            "tail": list(rec.tgt),
-                            "edge_id": eid,
-                            "weight": w,
-                            "attributes": attrs,
+                            'head': list(rec.src),
+                            'tail': list(rec.tgt),
+                            'edge_id': eid,
+                            'weight': w,
+                            'attributes': attrs,
                         }
                     )
             else:
                 bin_payload.append(
                     {
-                        "source": rec.src,
-                        "target": rec.tgt,
-                        "edge_id": eid,
-                        "edge_type": rec.etype,
-                        "edge_directed": rec.directed
+                        'source': rec.src,
+                        'target': rec.tgt,
+                        'edge_id': eid,
+                        'edge_type': rec.etype,
+                        'edge_directed': rec.directed
                         if rec.directed is not None
                         else (True if self.directed is None else self.directed),
-                        "weight": w,
-                        "attributes": attrs,
+                        'weight': w,
+                        'attributes': attrs,
                     }
                 )
 
@@ -774,7 +774,7 @@ class Operations:
         """
 
         # Basic guards
-        if df is None or not hasattr(df, "columns") or key_col not in df.columns:
+        if df is None or not hasattr(df, 'columns') or key_col not in df.columns:
             return {}
 
         try:
@@ -794,7 +794,7 @@ class Operations:
                 pass
 
         # Cache setup
-        cache = getattr(self, "_row_attr_cache", None)
+        cache = getattr(self, '_row_attr_cache', None)
         if cache is None:
             cache = {}
             self._row_attr_cache = cache
@@ -824,13 +824,13 @@ class Operations:
 
                 native = nw.to_native(nw.from_native(df, pass_through=True))
                 # rows as dicts across backends
-                to_dicts_fn = getattr(type(native), "to_dicts", None)
+                to_dicts_fn = getattr(type(native), 'to_dicts', None)
 
                 if callable(to_dicts_fn):
                     rows = to_dicts_fn(native)
                 else:
                     try:
-                        rows = native.to_dict(orient="records")
+                        rows = native.to_dict(orient='records')
                     except TypeError:
                         rows = native.to_dict()
                 for row in rows:
@@ -904,9 +904,9 @@ class Operations:
         new._slices = {}
         for lid, meta in self._slices.items():
             new._slices[lid] = {
-                "vertices": meta["vertices"].copy(),
-                "edges": meta["edges"].copy(),
-                "attributes": meta["attributes"].copy(),
+                'vertices': meta['vertices'].copy(),
+                'edges': meta['edges'].copy(),
+                'attributes': meta['attributes'].copy(),
             }
 
         new._default_slice = self._default_slice
@@ -1107,9 +1107,9 @@ class Operations:
             estimated_gb = rows * cols * 4 / 1024**3
             if estimated_gb > 2.0:
                 raise MemoryError(
-                    f"Dense conversion would require ~{estimated_gb:.1f} GB "
-                    f"({rows:,} × {cols:,} float32). "
-                    "Use sparse=True instead, or call .toarray() explicitly if you are certain."
+                    f'Dense conversion would require ~{estimated_gb:.1f} GB '
+                    f'({rows:,} × {cols:,} float32). '
+                    'Use sparse=True instead, or call .toarray() explicitly if you are certain.'
                 )
             return M.toarray()
 
@@ -1156,7 +1156,7 @@ class Operations:
         # Include high-level metadata if available
         graph_meta = (
             tuple(sorted(self.graph_attributes.items()))
-            if hasattr(self, "graph_attributes")
+            if hasattr(self, 'graph_attributes')
             else ()
         )
 

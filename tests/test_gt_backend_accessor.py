@@ -2,11 +2,11 @@ import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import polars as pl
 import pytest
 
-graph_tool = pytest.importorskip("graph_tool")
+graph_tool = pytest.importorskip('graph_tool')
 from graph_tool import centrality, clustering, flow, generation, search, topology, util
 
 from annnet.core.graph import AnnNet
@@ -19,9 +19,9 @@ def gt_backend(G):
 # ---- Simple graph builder ----
 def build_small():
     G = AnnNet()
-    G.add_vertex("a")
-    G.add_vertex("b")
-    G.add_edge("a", "b", weight=3.0)
+    G.add_vertex('a')
+    G.add_vertex('b')
+    G.add_edge('a', 'b', weight=3.0)
     return G
 
 
@@ -29,23 +29,23 @@ class TestGTBackendAccessor(unittest.TestCase):
     def test_dir_exposes_namespaces_and_algorithms(self):
         G = build_small()
         names = dir(G.gt)
-        self.assertIn("topology", names)
-        self.assertIn("shortest_distance", names)
+        self.assertIn('topology', names)
+        self.assertIn('shortest_distance', names)
 
     # --- topology: shortest distance ---
 
     def test_shortest_distance_basic(self):
         G = build_small()
-        d = G.gt.topology.shortest_distance(G, source="a", target="b", weights="weight")
+        d = G.gt.topology.shortest_distance(G, source='a', target='b', weights='weight')
         self.assertAlmostEqual(float(d), 3.0)
 
     # --- topology: label_components ---
 
     def test_label_components(self):
         G = AnnNet()
-        G.add_vertex("x")
-        G.add_vertex("y")
-        G.add_edge("x", "y")
+        G.add_vertex('x')
+        G.add_vertex('y')
+        G.add_edge('x', 'y')
 
         # directed=False ensures we look for Weakly Connected Components (1 component)
         comp, hist = G.gt.topology.label_components(G, directed=False)
@@ -63,9 +63,9 @@ class TestGTBackendAccessor(unittest.TestCase):
 
     def test_direct_unique_algorithm_without_explicit_graph_arg(self):
         G = AnnNet()
-        G.add_vertex("x")
-        G.add_vertex("y")
-        G.add_edge("x", "y")
+        G.add_vertex('x')
+        G.add_vertex('y')
+        G.add_edge('x', 'y')
 
         # label_largest_component returns a VertexPropertyMap (bool per vertex).
         # directed=False → weakly-connected components; both vertices are in the same WCC.
@@ -76,10 +76,10 @@ class TestGTBackendAccessor(unittest.TestCase):
 
     def test_betweenness(self):
         G = AnnNet()
-        for v in ["a", "b", "c"]:
+        for v in ['a', 'b', 'c']:
             G.add_vertex(v)
-        G.add_edge("a", "b")
-        G.add_edge("b", "c")
+        G.add_edge('a', 'b')
+        G.add_edge('b', 'c')
 
         vc, ec = G.gt.centrality.betweenness(G)
         gtg = G.gt.backend()
@@ -96,11 +96,11 @@ class TestGTBackendAccessor(unittest.TestCase):
 
     def test_clustering(self):
         G = AnnNet()
-        for v in ["a", "b", "c"]:
+        for v in ['a', 'b', 'c']:
             G.add_vertex(v)
-        G.add_edge("a", "b")
-        G.add_edge("b", "c")
-        G.add_edge("c", "a")  # triangle → clustering = 1.0
+        G.add_edge('a', 'b')
+        G.add_edge('b', 'c')
+        G.add_edge('c', 'a')  # triangle → clustering = 1.0
 
         cc = G.gt.clustering.local_clustering(G)
         gtg = G.gt.backend()
@@ -112,19 +112,19 @@ class TestGTBackendAccessor(unittest.TestCase):
 
     def test_max_flow(self):
         G = AnnNet()
-        G.add_vertex("s")
-        G.add_vertex("t")
-        eid = G.add_edge("s", "t")
+        G.add_vertex('s')
+        G.add_vertex('t')
+        eid = G.add_edge('s', 't')
 
         # Add capacity as edge attribute
-        G.edge_attributes = pl.DataFrame({"edge_id": [eid], "capacity": [5.0]})
+        G.edge_attributes = pl.DataFrame({'edge_id': [eid], 'capacity': [5.0]})
 
         g = G.gt.backend()
-        cap = g.ep["capacity"]
+        cap = g.ep['capacity']
 
         # push_relabel_max_flow returns residual capacity
         # flow = capacity - residual
-        res = G.gt.flow.push_relabel_max_flow(G, "s", "t", cap)
+        res = G.gt.flow.push_relabel_max_flow(G, 's', 't', cap)
 
         # Calculate actual flow on each edge
         flow_sum = sum(cap[e] - res[e] for e in g.edges())
@@ -134,9 +134,9 @@ class TestGTBackendAccessor(unittest.TestCase):
 
     def test_generation_line_graph(self):
         g = AnnNet()
-        g.add_vertex("a")
-        g.add_vertex("b")
-        g.add_edge("a", "b")
+        g.add_vertex('a')
+        g.add_vertex('b')
+        g.add_edge('a', 'b')
 
         gtg = g.gt.backend()
         lg, *_ = g.gt.generation.line_graph(g)
@@ -168,5 +168,5 @@ class TestGTBackendAccessor(unittest.TestCase):
         self.assertEqual(gtg.num_vertices(), 2)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -10,7 +10,7 @@ from ._optional_components import (
 )
 
 PLOT_BACKEND_PRIORITY = component_names(PLOT_BACKENDS)
-_DEFAULT_PLOT_BACKEND = "auto"
+_DEFAULT_PLOT_BACKEND = 'auto'
 
 
 def available_plot_backends() -> dict[str, bool]:
@@ -18,7 +18,7 @@ def available_plot_backends() -> dict[str, bool]:
     return available_optional_components(PLOT_BACKENDS)
 
 
-def select_plot_backend(preferred: str | None = "auto") -> str:
+def select_plot_backend(preferred: str | None = 'auto') -> str:
     """Resolve a plotting backend name.
 
     ``"auto"`` selects the first installed backend in this order: Graphviz,
@@ -28,8 +28,8 @@ def select_plot_backend(preferred: str | None = "auto") -> str:
     return select_component(
         PLOT_BACKENDS,
         preferred,
-        kind="plotting",
-        install_message="Install graphviz, pydot, or matplotlib",
+        kind='plotting',
+        install_message='Install graphviz, pydot, or matplotlib',
     )
 
 
@@ -38,12 +38,12 @@ def get_default_plot_backend() -> str:
     return _DEFAULT_PLOT_BACKEND
 
 
-def set_default_plot_backend(backend: str | None = "auto") -> str:
+def set_default_plot_backend(backend: str | None = 'auto') -> str:
     """Set the default backend used by ``plot(..., backend=None)``."""
     global _DEFAULT_PLOT_BACKEND
 
-    requested = "auto" if backend is None else str(backend).lower()
-    if requested != "auto":
+    requested = 'auto' if backend is None else str(backend).lower()
+    if requested != 'auto':
         select_plot_backend(requested)
     _DEFAULT_PLOT_BACKEND = requested
     return _DEFAULT_PLOT_BACKEND

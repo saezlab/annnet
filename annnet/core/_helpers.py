@@ -23,8 +23,8 @@ def _get_numeric_supertype(left, right):
     For mixed signed/unsigned, promotes to Float64 for safety.
     """
 
-    left_cls = left.base_type() if hasattr(left, "base_type") else left
-    right_cls = right.base_type() if hasattr(right, "base_type") else right
+    left_cls = left.base_type() if hasattr(left, 'base_type') else left
+    right_cls = right.base_type() if hasattr(right, 'base_type') else right
 
     # If either is float, result is float (wider float wins)
     if left_cls.is_float() or right_cls.is_float():
@@ -91,8 +91,8 @@ def _df_filter_not_equal(df, col: str, value):
 
 
 class EdgeType(Enum):
-    DIRECTED = "DIRECTED"
-    UNDIRECTED = "UNDIRECTED"
+    DIRECTED = 'DIRECTED'
+    UNDIRECTED = 'UNDIRECTED'
 
 
 @dataclass(slots=True)
@@ -135,11 +135,11 @@ class EdgeRecord:
 
 
 def _external_entity_kind(kind: str) -> str:
-    return "edge" if kind == "edge_entity" else kind
+    return 'edge' if kind == 'edge_entity' else kind
 
 
 def _internal_entity_kind(kind: str) -> str:
-    return "edge_entity" if kind == "edge" else kind
+    return 'edge_entity' if kind == 'edge' else kind
 
 
 class _CompatMapping(MutableMapping):
@@ -168,7 +168,7 @@ class EntityToIdxCompat(_CompatMapping):
         ekey = self._G._resolve_entity_key(key)
         row_idx = int(value)
         rec = self._G._entities.get(ekey)
-        kind = rec.kind if rec is not None else "vertex"
+        kind = rec.kind if rec is not None else 'vertex'
         self._G._register_entity_record(ekey, EntityRecord(row_idx=row_idx, kind=kind))
 
     def __delitem__(self, key):
@@ -195,7 +195,7 @@ class IdxToEntityCompat(_CompatMapping):
                 old_ekey, EntityRecord(row_idx=old_rec.row_idx, kind=old_rec.kind)
             )
         rec = self._G._entities.get(ekey)
-        kind = rec.kind if rec is not None else "vertex"
+        kind = rec.kind if rec is not None else 'vertex'
         self._G._register_entity_record(ekey, EntityRecord(row_idx=row_idx, kind=kind))
 
     def __delitem__(self, key):
@@ -234,7 +234,7 @@ def _ensure_edge_record(graph, edge_id: str) -> EdgeRecord:
             tgt=None,
             weight=1.0,
             directed=None,
-            etype="binary",
+            etype='binary',
             col_idx=-1,
             ml_kind=None,
             ml_layers=None,
@@ -328,12 +328,12 @@ class EdgeDefinitionsCompat(_CompatMapping):
         return [
             eid
             for eid, rec in self._G._edges.items()
-            if rec.etype != "hyper" and rec.src is not None
+            if rec.etype != 'hyper' and rec.src is not None
         ]
 
     def __getitem__(self, key):
         rec = self._G._edges[key]
-        if rec.etype == "hyper" or rec.src is None:
+        if rec.etype == 'hyper' or rec.src is None:
             raise KeyError(key)
         return (rec.src, rec.tgt, rec.etype)
 
@@ -342,7 +342,7 @@ class EdgeDefinitionsCompat(_CompatMapping):
         rec = _ensure_edge_record(self._G, key)
         rec.src = src
         rec.tgt = tgt
-        rec.etype = etype if etype != "hyper" else "binary"
+        rec.etype = etype if etype != 'hyper' else 'binary'
 
     def __delitem__(self, key):
         rec = self._G._edges[key]
@@ -352,37 +352,37 @@ class EdgeDefinitionsCompat(_CompatMapping):
 
 class HyperedgeDefinitionsCompat(_CompatMapping):
     def keys(self):
-        return [eid for eid, rec in self._G._edges.items() if rec.etype == "hyper"]
+        return [eid for eid, rec in self._G._edges.items() if rec.etype == 'hyper']
 
     def __getitem__(self, key):
         rec = self._G._edges[key]
-        if rec.etype != "hyper":
+        if rec.etype != 'hyper':
             raise KeyError(key)
         if rec.tgt is not None:
-            return {"directed": True, "head": set(rec.src), "tail": set(rec.tgt)}
-        return {"directed": False, "members": set(rec.src)}
+            return {'directed': True, 'head': set(rec.src), 'tail': set(rec.tgt)}
+        return {'directed': False, 'members': set(rec.src)}
 
     def __setitem__(self, key, value):
         rec = _ensure_edge_record(self._G, key)
-        rec.etype = "hyper"
+        rec.etype = 'hyper'
         if isinstance(value, list):
             rec.src = frozenset(value)
             rec.tgt = None
             rec.directed = False
             return
-        directed = bool(value.get("directed", False))
+        directed = bool(value.get('directed', False))
         if directed:
-            rec.src = frozenset(value.get("head", []))
-            rec.tgt = frozenset(value.get("tail", []))
+            rec.src = frozenset(value.get('head', []))
+            rec.tgt = frozenset(value.get('tail', []))
             rec.directed = True
         else:
-            rec.src = frozenset(value.get("members", []))
+            rec.src = frozenset(value.get('members', []))
             rec.tgt = None
             rec.directed = False
 
     def __delitem__(self, key):
         rec = self._G._edges[key]
-        rec.etype = "binary"
+        rec.etype = 'binary'
         rec.src = None
         rec.tgt = None
 
@@ -409,21 +409,21 @@ class EdgeKindCompat(_CompatMapping):
         return {
             eid
             for eid, rec in self._G._edges.items()
-            if rec.etype == "hyper" or rec.ml_kind is not None
+            if rec.etype == 'hyper' or rec.ml_kind is not None
         }
 
     def __getitem__(self, key):
         rec = self._G._edges.get(key)
-        if rec is not None and rec.etype == "hyper":
-            return "hyper"
+        if rec is not None and rec.etype == 'hyper':
+            return 'hyper'
         if rec is None or rec.ml_kind is None:
             raise KeyError(key)
         return rec.ml_kind
 
     def __setitem__(self, key, value):
         rec = _ensure_edge_record(self._G, key)
-        if value == "hyper":
-            rec.etype = "hyper"
+        if value == 'hyper':
+            rec.etype = 'hyper'
             return
         rec.ml_kind = value
 
@@ -431,8 +431,8 @@ class EdgeKindCompat(_CompatMapping):
         rec = self._G._edges.get(key)
         if rec is None:
             raise KeyError(key)
-        if rec.etype == "hyper":
-            rec.etype = "binary"
+        if rec.etype == 'hyper':
+            rec.etype = 'binary'
         else:
             rec.ml_kind = None
 
@@ -456,20 +456,20 @@ class EdgeLayersCompat(_CompatMapping):
         _ensure_edge_record(self._G, key).ml_layers = None
 
 
-_vertex_RESERVED = {"vertex_id"}  # nothing structural for vertices
+_vertex_RESERVED = {'vertex_id'}  # nothing structural for vertices
 _EDGE_RESERVED = {
-    "edge_id",
-    "source",
-    "target",
-    "weight",
-    "edge_type",
-    "directed",
-    "slice",
-    "slice_weight",
-    "kind",
-    "members",
-    "head",
-    "tail",
-    "flexible",
+    'edge_id',
+    'source',
+    'target',
+    'weight',
+    'edge_type',
+    'directed',
+    'slice',
+    'slice_weight',
+    'kind',
+    'members',
+    'head',
+    'tail',
+    'flexible',
 }
-_slice_RESERVED = {"slice_id"}
+_slice_RESERVED = {'slice_id'}

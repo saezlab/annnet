@@ -36,34 +36,34 @@ class TestMultilayerAdapters(unittest.TestCase):
 
     def _build_multilayer_graph(self):
         # Use the constructor to set aspects — this is the proper API.
-        G = AnnNet(aspects={"time": ["t1", "t2"], "transport": ["bus", "train"]})
+        G = AnnNet(aspects={'time': ['t1', 't2'], 'transport': ['bus', 'train']})
         G._rebuild_all_layers_cache()
 
         # 2. Vertices in their respective layers
         # u is present in (t1, bus) and (t2, train); v is present in (t1, bus)
-        G.add_vertex("u", layer=("t1", "bus"))
-        G.add_vertex("u", layer=("t2", "train"))
-        G.add_vertex("v", layer=("t1", "bus"))
+        G.add_vertex('u', layer=('t1', 'bus'))
+        G.add_vertex('u', layer=('t2', 'train'))
+        G.add_vertex('v', layer=('t1', 'bus'))
 
         # 3. Multilayer edges use explicit supra-node endpoints
         # e1: u(t1,bus) -> v(t1,bus)  => inferred intra edge
-        G.add_edge(("u", ("t1", "bus")), ("v", ("t1", "bus")))
+        G.add_edge(('u', ('t1', 'bus')), ('v', ('t1', 'bus')))
 
         # e2: u(t1,bus) -> u(t2,train) => inferred coupling edge
-        G.add_edge(("u", ("t1", "bus")), ("u", ("t2", "train")))
+        G.add_edge(('u', ('t1', 'bus')), ('u', ('t2', 'train')))
 
         # 4. Attributes
         # Node-layer attribute
-        G._state_attrs[("u", ("t1", "bus"))] = {"cost": 10.0}
+        G._state_attrs[('u', ('t1', 'bus'))] = {'cost': 10.0}
 
         # Layer-tuple attribute
-        G._layer_attrs[("t1", "bus")] = {"freq": "high"}
+        G._layer_attrs[('t1', 'bus')] = {'freq': 'high'}
 
         # Layer attribute table (elementary layers)
         G.layer_attributes = pl.DataFrame(
             {
-                "layer": ["t1", "t2", "bus", "train"],
-                "desc": ["Morning", "Evening", "Bus Line", "Train Line"],
+                'layer': ['t1', 't2', 'bus', 'train'],
+                'desc': ['Morning', 'Evening', 'Bus Line', 'Train Line'],
             }
         )
 
@@ -99,19 +99,19 @@ class TestMultilayerAdapters(unittest.TestCase):
 
         # Layer attributes table
         # Sort by layer to ensure comparison works
-        df1 = G1.layer_attributes.sort("layer")
-        df2 = G2.layer_attributes.sort("layer")
+        df1 = G1.layer_attributes.sort('layer')
+        df2 = G2.layer_attributes.sort('layer')
         # Polars equality
         self.assertTrue(df1.equals(df2))
 
-    @unittest.skipUnless(HAS_NX, "networkx not installed")
+    @unittest.skipUnless(HAS_NX, 'networkx not installed')
     def test_networkx_roundtrip(self):
         G = self._build_multilayer_graph()
         nxG, manifest = to_nx(G)
         G2 = from_nx(nxG, manifest)
         self._assert_multilayer_equal(G, G2)
 
-    @unittest.skipUnless(HAS_IG, "igraph not installed")
+    @unittest.skipUnless(HAS_IG, 'igraph not installed')
     def test_igraph_roundtrip(self):
         G = self._build_multilayer_graph()
         igG, manifest = to_igraph(G)
@@ -120,21 +120,21 @@ class TestMultilayerAdapters(unittest.TestCase):
 
     def test_json_roundtrip(self):
         G = self._build_multilayer_graph()
-        path = os.path.join(self.test_dir, "graph.json")
+        path = os.path.join(self.test_dir, 'graph.json')
         to_json(G, path)
         G2 = from_json(path)
         self._assert_multilayer_equal(G, G2)
 
     def test_graphdir_roundtrip(self):
         G = self._build_multilayer_graph()
-        path = os.path.join(self.test_dir, "graph_dir")
+        path = os.path.join(self.test_dir, 'graph_dir')
         to_parquet(G, path)
         G2 = from_parquet(path)
         self._assert_multilayer_equal(G, G2)
 
     def test_sif_roundtrip(self):
         G = self._build_multilayer_graph()
-        path = os.path.join(self.test_dir, "graph.sif")
+        path = os.path.join(self.test_dir, 'graph.sif')
         # SIF requires lossless=True to generate manifest
         _, manifest = to_sif(G, path, lossless=True)
         # from_sif needs the manifest to restore multilayer attributes
@@ -142,5 +142,5 @@ class TestMultilayerAdapters(unittest.TestCase):
         self._assert_multilayer_equal(G, G2)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

@@ -50,25 +50,25 @@ from ..core.graph import AnnNet
 # Helpers / parsing utilities
 # ---------------------------
 
-_STR_TRUE = {"1", "true", "t", "yes", "y", "on"}
-_STR_FALSE = {"0", "false", "f", "no", "n", "off"}
-_slice_SEP = re.compile(r"[|;,]")
-_SET_SEP = re.compile(r"[|;,]\s*")
+_STR_TRUE = {'1', 'true', 't', 'yes', 'y', 'on'}
+_STR_FALSE = {'0', 'false', 'f', 'no', 'n', 'off'}
+_slice_SEP = re.compile(r'[|;,]')
+_SET_SEP = re.compile(r'[|;,]\s*')
 
-SRC_COLS = ["source", "src", "from", "u"]
-DST_COLS = ["target", "dst", "to", "v"]
-WGT_COLS = ["weight", "w"]
-DIR_COLS = ["directed", "is_directed", "dir", "orientation"]
-slice_COLS = ["slice", "slices"]
-EDGE_ID_COLS = ["edge", "edge_id", "id"]
-vertex_ID_COLS = ["vertex", "vertex_id", "id", "name", "label"]
-NEIGH_COLS = ["neighbors", "nbrs", "adj", "adjacency", "neighbors_out", "neighbors_in"]
-MEMBERS_COLS = ["members", "verts", "participants"]
-HEAD_COLS = ["head", "heads"]
-TAIL_COLS = ["tail", "tails"]
-ROW_COLS = ["row", "i", "r"]
-COL_COLS = ["col", "column", "j", "c"]
-VAL_COLS = ["val", "value", "w", "weight"]
+SRC_COLS = ['source', 'src', 'from', 'u']
+DST_COLS = ['target', 'dst', 'to', 'v']
+WGT_COLS = ['weight', 'w']
+DIR_COLS = ['directed', 'is_directed', 'dir', 'orientation']
+slice_COLS = ['slice', 'slices']
+EDGE_ID_COLS = ['edge', 'edge_id', 'id']
+vertex_ID_COLS = ['vertex', 'vertex_id', 'id', 'name', 'label']
+NEIGH_COLS = ['neighbors', 'nbrs', 'adj', 'adjacency', 'neighbors_out', 'neighbors_in']
+MEMBERS_COLS = ['members', 'verts', 'participants']
+HEAD_COLS = ['head', 'heads']
+TAIL_COLS = ['tail', 'tails']
+ROW_COLS = ['row', 'i', 'r']
+COL_COLS = ['col', 'column', 'j', 'c']
+VAL_COLS = ['val', 'value', 'w', 'weight']
 
 RESERVED = set(
     SRC_COLS
@@ -90,7 +90,7 @@ RESERVED = set(
 
 def _norm(s: Any) -> str:
     if s is None:
-        return ""
+        return ''
     if isinstance(s, (int, float)) and not isinstance(s, bool):
         return str(s)
     return str(s).strip()
@@ -119,8 +119,8 @@ def _split_slices(cell: Any) -> list[str]:
         if not cell:
             return []
         # Try JSON array first
-        if (cell.startswith("[") and cell.endswith("]")) or (
-            cell.startswith("{") and cell.endswith("}")
+        if (cell.startswith('[') and cell.endswith(']')) or (
+            cell.startswith('{') and cell.endswith('}')
         ):
             try:
                 val = json.loads(cell)
@@ -144,7 +144,7 @@ def _split_set(cell: Any) -> set[str]:
         if not s:
             return set()
         # JSON array
-        if s.startswith("[") and s.endswith("]"):
+        if s.startswith('[') and s.endswith(']'):
             try:
                 return {_norm(v) for v in json.loads(s)}
             except Exception:
@@ -195,11 +195,11 @@ def _detect_schema(df: pl.DataFrame) -> str:
     if any(c in cols for c in MEMBERS_COLS) or (
         any(c in cols for c in HEAD_COLS) and any(c in cols for c in TAIL_COLS)
     ):
-        return "hyperedge"
+        return 'hyperedge'
 
     # LIL: neighbors column
     if any(c in cols for c in NEIGH_COLS):
-        return "lil"
+        return 'lil'
 
     # COO/DOK triple variants
     if (
@@ -207,11 +207,11 @@ def _detect_schema(df: pl.DataFrame) -> str:
         and any(c in cols for c in COL_COLS)
         and any(c in cols for c in VAL_COLS)
     ):
-        return "edge_list"
+        return 'edge_list'
 
     # Classic edge list (src/dst present)
     if any(c in cols for c in SRC_COLS) and any(c in cols for c in DST_COLS):
-        return "edge_list"
+        return 'edge_list'
 
     # Heuristic: if first column is a vertex id and remaining many numeric -> incidence
     if df.width >= 3:
@@ -221,15 +221,15 @@ def _detect_schema(df: pl.DataFrame) -> str:
             # Could be incidence OR adjacency with labels on rows
             # If square shape (n rows == n numeric columns) -> adjacency
             if df.height == (df.width - 1):
-                return "adjacency"
-            return "incidence"
+                return 'adjacency'
+            return 'incidence'
 
     # Square, mostly numeric -> adjacency (no explicit row label)
     if df.height == df.width and all(_is_numeric_series(df.get_column(c)) for c in df.columns):
-        return "adjacency"
+        return 'adjacency'
 
     # Fallback
-    return "edge_list"
+    return 'edge_list'
 
 
 # ---------------------------
@@ -241,7 +241,7 @@ def from_csv(
     path: str,
     *,
     graph: AnnNet | None = None,
-    schema: str = "auto",
+    schema: str = 'auto',
     default_slice: str | None = None,
     default_directed: bool | None = None,
     default_weight: float = 1.0,
@@ -314,7 +314,7 @@ def from_dataframe(
     df: pl.DataFrame,
     *,
     graph: AnnNet | None = None,
-    schema: str = "auto",
+    schema: str = 'auto',
     default_slice: str | None = None,
     default_directed: bool | None = None,
     default_weight: float = 1.0,
@@ -347,25 +347,25 @@ def from_dataframe(
     G = graph
     if G is None:
         if AnnNet is None:
-            raise RuntimeError("AnnNet class not importable; pass an instance via `graph=`.")
+            raise RuntimeError('AnnNet class not importable; pass an instance via `graph=`.')
         G = AnnNet(**kwargs)  # type: ignore
 
     mode = schema.lower().strip()
-    if mode == "auto":
+    if mode == 'auto':
         mode = _detect_schema(df)
 
-    if mode == "edge_list":
+    if mode == 'edge_list':
         _ingest_edge_list(df, G, default_slice, default_directed, default_weight)
-    elif mode == "hyperedge":
+    elif mode == 'hyperedge':
         _ingest_hyperedge(df, G, default_slice, default_weight)
-    elif mode == "incidence":
+    elif mode == 'incidence':
         _ingest_incidence(df, G, default_slice, default_weight)
-    elif mode == "adjacency":
+    elif mode == 'adjacency':
         _ingest_adjacency(df, G, default_slice, default_directed, default_weight)
-    elif mode == "lil":
+    elif mode == 'lil':
         _ingest_lil(df, G, default_slice, default_directed, default_weight)
     else:
-        raise ValueError(f"Unknown schema: {schema}")
+        raise ValueError(f'Unknown schema: {schema}')
 
     return G
 
@@ -405,44 +405,44 @@ def edges_to_csv(G, path, slice=None):
     cols = {c.lower(): c for c in df.columns}
 
     # If a 'kind' column exists, drop hyper rows so we only export binary edges.
-    kindcol = cols.get("kind")
+    kindcol = cols.get('kind')
     if kindcol:
-        df = df.filter(pl.col(kindcol).cast(str).str.to_lowercase() != "hyper")
+        df = df.filter(pl.col(kindcol).cast(str).str.to_lowercase() != 'hyper')
 
     # Find mandatory source/target columns
-    src = next((cols[k] for k in ("source", "src", "u", "from") if k in cols), None)
-    dst = next((cols[k] for k in ("target", "dst", "v", "to") if k in cols), None)
+    src = next((cols[k] for k in ('source', 'src', 'u', 'from') if k in cols), None)
+    dst = next((cols[k] for k in ('target', 'dst', 'v', 'to') if k in cols), None)
     if not (src and dst):
         raise ValueError(
-            "No binary endpoints in edges_view; likely hyperedge-only. Use hyperedges_to_csv."
+            'No binary endpoints in edges_view; likely hyperedge-only. Use hyperedges_to_csv.'
         )
 
     # Filter out rows lacking endpoints (safety if view is mixed)
     df = df.filter(pl.col(src).is_not_null() & pl.col(dst).is_not_null())
 
     # Optional columns
-    dircol = cols.get("directed") or cols.get("edge_directed")
+    dircol = cols.get('directed') or cols.get('edge_directed')
     # Prefer resolved/global weights if present
     wcol = (
-        cols.get("effective_weight")
-        or cols.get("global_weight")
-        or cols.get("weight")
-        or cols.get("w")
+        cols.get('effective_weight')
+        or cols.get('global_weight')
+        or cols.get('weight')
+        or cols.get('w')
     )
-    slicecol = cols.get("slice")
+    slicecol = cols.get('slice')
 
     n = df.height
 
     out = pl.DataFrame(
         {
-            "source": df[src],
-            "target": df[dst],
-            "weight": (df[wcol] if wcol else pl.Series("weight", [1.0] * n)),
-            "directed": (df[dircol] if dircol else pl.Series("directed", [None] * n)),
-            "slice": (
-                pl.Series("slice", [slice] * n)
+            'source': df[src],
+            'target': df[dst],
+            'weight': (df[wcol] if wcol else pl.Series('weight', [1.0] * n)),
+            'directed': (df[dircol] if dircol else pl.Series('directed', [None] * n)),
+            'slice': (
+                pl.Series('slice', [slice] * n)
                 if slice is not None
-                else (df[slicecol] if slicecol else pl.Series("slice", [None] * n))
+                else (df[slicecol] if slicecol else pl.Series('slice', [None] * n))
             ),
         }
     )
@@ -490,22 +490,22 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
     cols = {c.lower(): c for c in df.columns}
 
     # Keep only hyperedges if 'kind' is available.
-    kindcol = cols.get("kind")
+    kindcol = cols.get('kind')
     if kindcol:
-        df = df.filter(pl.col(kindcol).cast(str).str.to_lowercase() == "hyper")
+        df = df.filter(pl.col(kindcol).cast(str).str.to_lowercase() == 'hyper')
 
-    members = cols.get("members")
-    head = cols.get("head")
-    tail = cols.get("tail")
-    dircol = cols.get("directed") or cols.get("edge_directed")
+    members = cols.get('members')
+    head = cols.get('head')
+    tail = cols.get('tail')
+    dircol = cols.get('directed') or cols.get('edge_directed')
     # Prefer resolved/global weights if present
     wcol = (
-        cols.get("effective_weight")
-        or cols.get("global_weight")
-        or cols.get("weight")
-        or cols.get("w")
+        cols.get('effective_weight')
+        or cols.get('global_weight')
+        or cols.get('weight')
+        or cols.get('w')
     )
-    slicecol = cols.get("slice")
+    slicecol = cols.get('slice')
     n = df.height
 
     # Helper to coerce values/lists/tuples to pipe-joined strings; leaves strings as-is.
@@ -516,39 +516,39 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
             if v is None:
                 out.append(None)
             elif isinstance(v, (list, tuple, set)):
-                out.append("|".join(sorted(str(x) for x in v)))
+                out.append('|'.join(sorted(str(x) for x in v)))
             else:
                 s = str(v).strip()
                 # Fast path: JSON array like ["a","b"]
-                if s.startswith("[") and s.endswith("]"):
+                if s.startswith('[') and s.endswith(']'):
                     try:
                         arr = json.loads(s)
-                        out.append("|".join(sorted(str(x) for x in arr)))
+                        out.append('|'.join(sorted(str(x) for x in arr)))
                         continue
                     except Exception:
                         pass
                 # Split on common separators if present
                 parts = [p.strip() for p in _SET_SEP.split(s)] if _SET_SEP.search(s) else [s]
-                out.append("|".join(sorted(p for p in parts if p)))
+                out.append('|'.join(sorted(p for p in parts if p)))
         return pl.Series(name, out)
 
     if members:
-        m = _to_pipe_joined(df[members], "members")
+        m = _to_pipe_joined(df[members], 'members')
         # drop null/empty rows (mixed views might include non-hyper rows)
         mask = m.is_not_null() & (m.str.len_chars() > 0)
         out = pl.DataFrame(
             {
-                "members": m.filter(mask),
-                "weight": (
-                    df[wcol].filter(mask) if wcol else pl.Series("weight", [1.0] * int(mask.sum()))
+                'members': m.filter(mask),
+                'weight': (
+                    df[wcol].filter(mask) if wcol else pl.Series('weight', [1.0] * int(mask.sum()))
                 ),
-                "slice": (
-                    pl.Series("slice", [slice] * int(mask.sum()))
+                'slice': (
+                    pl.Series('slice', [slice] * int(mask.sum()))
                     if slice is not None
                     else (
                         df[slicecol].filter(mask)
                         if slicecol
-                        else pl.Series("slice", [None] * int(mask.sum()))
+                        else pl.Series('slice', [None] * int(mask.sum()))
                     )
                 ),
             }
@@ -562,28 +562,28 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
             # If head/tail columns exist, default to directed unless explicitly overridden
             is_dir = True
 
-        h = _to_pipe_joined(df[head], "head")
-        t = _to_pipe_joined(df[tail], "tail")
+        h = _to_pipe_joined(df[head], 'head')
+        t = _to_pipe_joined(df[tail], 'tail')
         # drop rows where either side is missing
         mask = h.is_not_null() & (h.str.len_chars() > 0) & t.is_not_null() & (t.str.len_chars() > 0)
 
         if is_dir:
             out = pl.DataFrame(
                 {
-                    "head": h.filter(mask),
-                    "tail": t.filter(mask),
-                    "weight": (
+                    'head': h.filter(mask),
+                    'tail': t.filter(mask),
+                    'weight': (
                         df[wcol].filter(mask)
                         if wcol
-                        else pl.Series("weight", [1.0] * int(mask.sum()))
+                        else pl.Series('weight', [1.0] * int(mask.sum()))
                     ),
-                    "slice": (
-                        pl.Series("slice", [slice] * int(mask.sum()))
+                    'slice': (
+                        pl.Series('slice', [slice] * int(mask.sum()))
                         if slice is not None
                         else (
                             df[slicecol].filter(mask)
                             if slicecol
-                            else pl.Series("slice", [None] * int(mask.sum()))
+                            else pl.Series('slice', [None] * int(mask.sum()))
                         )
                     ),
                 }
@@ -591,27 +591,27 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
         else:
             # Merge head/tail into undirected 'members'
             merged = pl.Series(
-                "members",
+                'members',
                 [
-                    "|".join(sorted([p for p in (hval.split("|") + tval.split("|")) if p]))
+                    '|'.join(sorted([p for p in (hval.split('|') + tval.split('|')) if p]))
                     for hval, tval in zip(h.filter(mask).to_list(), t.filter(mask).to_list())
                 ],
             )
             out = pl.DataFrame(
                 {
-                    "members": merged,
-                    "weight": (
+                    'members': merged,
+                    'weight': (
                         df[wcol].filter(mask)
                         if wcol
-                        else pl.Series("weight", [1.0] * int(mask.sum()))
+                        else pl.Series('weight', [1.0] * int(mask.sum()))
                     ),
-                    "slice": (
-                        pl.Series("slice", [slice] * int(mask.sum()))
+                    'slice': (
+                        pl.Series('slice', [slice] * int(mask.sum()))
                         if slice is not None
                         else (
                             df[slicecol].filter(mask)
                             if slicecol
-                            else pl.Series("slice", [None] * int(mask.sum()))
+                            else pl.Series('slice', [None] * int(mask.sum()))
                         )
                     ),
                 }
@@ -620,7 +620,7 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
         return
 
     raise ValueError(
-        "edges_view does not expose hyperedge columns; export via incidence or adjust edges_view."
+        'edges_view does not expose hyperedge columns; export via incidence or adjust edges_view.'
     )
 
 
@@ -650,7 +650,7 @@ def _ingest_edge_list(
             # if weight exists, use it; else default
             wcol = vcol
         else:
-            raise ValueError("Edge list ingest: could not find source/target columns.")
+            raise ValueError('Edge list ingest: could not find source/target columns.')
     else:
         wcol = _pick_first(df, WGT_COLS)
 
@@ -672,7 +672,7 @@ def _ingest_edge_list(
             directed = default_directed
         w = (
             float(row[wcol])
-            if (wcol and row[wcol] is not None and str(row[wcol]).strip() != "")
+            if (wcol and row[wcol] is not None and str(row[wcol]).strip() != '')
             else default_weight
         )
         slices = (
@@ -694,19 +694,19 @@ def _ingest_edge_list(
                 directed=directed,
                 weight=w,
                 slice=default_slice,
-                propagate="none",
+                propagate='none',
                 **pure_attrs,
             )
         else:
             eid = None
             for L in slices:
                 eid = G.add_edge(
-                    u, v, directed=directed, weight=w, slice=L, propagate="none", **pure_attrs
+                    u, v, directed=directed, weight=w, slice=L, propagate='none', **pure_attrs
                 )
                 # per-slice override columns like weight:slice
                 for c in df.columns:
-                    if c.lower().startswith("weight:"):
-                        _, _, suffix = c.partition(":")
+                    if c.lower().startswith('weight:'):
+                        _, _, suffix = c.partition(':')
                         if suffix == L and row[c] is not None:
                             try:
                                 G.set_edge_slice_attrs(L, eid, weight=float(row[c]))  # type: ignore[arg-type]
@@ -734,7 +734,7 @@ def _ingest_hyperedge(
     if not mcol and not hcol:
         raise ValueError(
             "Hyperedge schema requires a 'members' column (undirected) or 'head'/'tail' columns "
-            f"(directed). Available columns: {list(df.columns)}"
+            f'(directed). Available columns: {list(df.columns)}'
         )
 
     attrs_cols = _attr_columns(df, [c for c in [mcol, hcol, tcol, wcol, lcol] if c])
@@ -742,7 +742,7 @@ def _ingest_hyperedge(
     for row in df.iter_rows(named=True):
         weight = (
             float(row[wcol])
-            if (wcol and row[wcol] is not None and str(row[wcol]).strip() != "")
+            if (wcol and row[wcol] is not None and str(row[wcol]).strip() != '')
             else default_weight
         )
         slice = (
@@ -864,12 +864,12 @@ def _ingest_adjacency(
         G.add_vertex(nid)
     for c in mat_cols:
         if not _is_numeric_series(df.get_column(c)):
-            raise ValueError("Adjacency ingest: non-numeric column detected in matrix region.")
+            raise ValueError('Adjacency ingest: non-numeric column detected in matrix region.')
 
     # Directedness inference: if symmetric within tolerance and default_directed is None -> undirected
     A = np.asarray(df.select(mat_cols).to_numpy(), dtype=float)
     if len(row_labels) != len(mat_cols):
-        raise ValueError("Adjacency ingest: number of rows must equal number of columns.")
+        raise ValueError('Adjacency ingest: number of rows must equal number of columns.')
 
     # Map col index -> vertex id
     col_ids = [_norm(c) for c in mat_cols]
@@ -915,7 +915,7 @@ def _ingest_lil(
     lcol = _pick_first(df, slice_COLS)
 
     if not ncol:
-        raise ValueError("LIL ingest: no neighbors column found.")
+        raise ValueError('LIL ingest: no neighbors column found.')
 
     attrs_cols = _attr_columns(df, [idcol, ncol, wcol, dcol, lcol])
 
@@ -927,7 +927,7 @@ def _ingest_lil(
         nbrs = _split_set(row[ncol])
         w_default = (
             float(row[wcol])
-            if (wcol and row[wcol] is not None and str(row[wcol]).strip() != "")
+            if (wcol and row[wcol] is not None and str(row[wcol]).strip() != '')
             else default_weight
         )
         directed = _truthy(row[dcol]) if dcol else default_directed

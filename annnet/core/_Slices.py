@@ -318,7 +318,7 @@ class SliceManager:
         return self._G.create_slice_from_operation(name, result, **attributes)
 
     def aggregate(
-        self, source_slice_ids, target_slice_id, method="union", weight_func=None, **attributes
+        self, source_slice_ids, target_slice_id, method='union', weight_func=None, **attributes
     ):
         """Create aggregated slice from multiple sources.
 
@@ -492,7 +492,7 @@ class SliceManager:
         """
         return self._G.slice_specific_edges(slice_id)
 
-    def temporal_dynamics(self, ordered_slices, metric="edge_change"):
+    def temporal_dynamics(self, ordered_slices, metric='edge_change'):
         """Analyze temporal changes across slices.
 
         Parameters
@@ -524,16 +524,16 @@ class SliceManager:
             Formatted summary.
         """
         stats = self.stats(include_default=True)
-        lines = [f"slices: {len(stats)}"]
+        lines = [f'slices: {len(stats)}']
 
         for i, (slice_id, info) in enumerate(stats.items()):
-            prefix = "├─" if i < len(stats) - 1 else "└─"
-            lines.append(f"{prefix} {slice_id}: {info['vertices']} vertices, {info['edges']} edges")
+            prefix = '├─' if i < len(stats) - 1 else '└─'
+            lines.append(f'{prefix} {slice_id}: {info["vertices"]} vertices, {info["edges"]} edges')
 
-        return "\n".join(lines)
+        return '\n'.join(lines)
 
     def __repr__(self):
-        return f"SliceManager({self.count()} slices)"
+        return f'SliceManager({self.count()} slices)'
 
 
 class SliceClass:
@@ -559,10 +559,10 @@ class SliceClass:
         ValueError
             If the slice already exists.
         """
-        if slice_id in self._slices and slice_id != "default":
-            raise ValueError(f"slice {slice_id} already exists")
+        if slice_id in self._slices and slice_id != 'default':
+            raise ValueError(f'slice {slice_id} already exists')
 
-        self._slices[slice_id] = {"vertices": set(), "edges": set(), "attributes": attributes}
+        self._slices[slice_id] = {'vertices': set(), 'edges': set(), 'attributes': attributes}
         # Persist slice metadata to DF (pure attributes, upsert)
         if attributes:
             self.set_slice_attrs(slice_id, **attributes)
@@ -588,7 +588,7 @@ class SliceClass:
             If the slice does not exist.
         """
         if slice_id not in self._slices:
-            raise KeyError(f"slice {slice_id} not found")
+            raise KeyError(f'slice {slice_id} not found')
         self._current_slice = slice_id
 
     def get_active_slice(self):
@@ -675,7 +675,7 @@ class SliceClass:
             If the slice does not exist.
         """
         if slice_id not in self._slices:
-            raise KeyError(f"slice {slice_id} not found")
+            raise KeyError(f'slice {slice_id} not found')
         return self._slices[slice_id].copy()
 
     # slice set-ops & cross-slice analytics
@@ -692,7 +692,7 @@ class SliceClass:
         -------
         set[str]
         """
-        return self._slices[slice_id]["vertices"].copy()
+        return self._slices[slice_id]['vertices'].copy()
 
     def get_slice_edges(self, slice_id):
         """Edges in a slice.
@@ -706,7 +706,7 @@ class SliceClass:
         -------
         set[str]
         """
-        return self._slices[slice_id]["edges"].copy()
+        return self._slices[slice_id]['edges'].copy()
 
     def slice_union(self, slice_ids):
         """Union of multiple slices.
@@ -721,17 +721,17 @@ class SliceClass:
             `{"vertices": set[str], "edges": set[str]}`.
         """
         if not slice_ids:
-            return {"vertices": set(), "edges": set()}
+            return {'vertices': set(), 'edges': set()}
 
         union_vertices = set()
         union_edges = set()
 
         for slice_id in slice_ids:
             if slice_id in self._slices:
-                union_vertices.update(self._slices[slice_id]["vertices"])
-                union_edges.update(self._slices[slice_id]["edges"])
+                union_vertices.update(self._slices[slice_id]['vertices'])
+                union_edges.update(self._slices[slice_id]['edges'])
 
-        return {"vertices": union_vertices, "edges": union_edges}
+        return {'vertices': union_vertices, 'edges': union_edges}
 
     def slice_intersection(self, slice_ids):
         """Intersection of multiple slices.
@@ -746,27 +746,27 @@ class SliceClass:
             `{"vertices": set[str], "edges": set[str]}`.
         """
         if not slice_ids:
-            return {"vertices": set(), "edges": set()}
+            return {'vertices': set(), 'edges': set()}
 
         if len(slice_ids) == 1:
             sid = slice_ids[0]
-            data = self._slices.get(sid, {"vertices": set(), "edges": set()})
-            return {"vertices": data["vertices"].copy(), "edges": data["edges"].copy()}
+            data = self._slices.get(sid, {'vertices': set(), 'edges': set()})
+            return {'vertices': data['vertices'].copy(), 'edges': data['edges'].copy()}
 
         # Start with first slice
-        common_vertices = self._slices[slice_ids[0]]["vertices"].copy()
-        common_edges = self._slices[slice_ids[0]]["edges"].copy()
+        common_vertices = self._slices[slice_ids[0]]['vertices'].copy()
+        common_edges = self._slices[slice_ids[0]]['edges'].copy()
 
         # Intersect with remaining slices
         for slice_id in slice_ids[1:]:
             if slice_id in self._slices:
-                common_vertices &= self._slices[slice_id]["vertices"]
-                common_edges &= self._slices[slice_id]["edges"]
+                common_vertices &= self._slices[slice_id]['vertices']
+                common_edges &= self._slices[slice_id]['edges']
             else:
                 # slice doesn't exist, intersection is empty
-                return {"vertices": set(), "edges": set()}
+                return {'vertices': set(), 'edges': set()}
 
-        return {"vertices": common_vertices, "edges": common_edges}
+        return {'vertices': common_vertices, 'edges': common_edges}
 
     def slice_difference(self, slice1_id, slice2_id):
         """Set difference: elements in ``slice1_id`` not in ``slice2_id``.
@@ -787,14 +787,14 @@ class SliceClass:
             If either slice is missing.
         """
         if slice1_id not in self._slices or slice2_id not in self._slices:
-            raise KeyError("One or both slices not found")
+            raise KeyError('One or both slices not found')
 
         slice1 = self._slices[slice1_id]
         slice2 = self._slices[slice2_id]
 
         return {
-            "vertices": slice1["vertices"] - slice2["vertices"],
-            "edges": slice1["edges"] - slice2["edges"],
+            'vertices': slice1['vertices'] - slice2['vertices'],
+            'edges': slice1['edges'] - slice2['edges'],
         }
 
     def create_slice_from_operation(self, result_slice_id, operation_result, **attributes):
@@ -820,12 +820,12 @@ class SliceClass:
             If the target slice already exists.
         """
         if result_slice_id in self._slices:
-            raise ValueError(f"slice {result_slice_id} already exists")
+            raise ValueError(f'slice {result_slice_id} already exists')
 
         self._slices[result_slice_id] = {
-            "vertices": operation_result["vertices"].copy(),
-            "edges": operation_result["edges"].copy(),
-            "attributes": attributes,
+            'vertices': operation_result['vertices'].copy(),
+            'edges': operation_result['edges'].copy(),
+            'attributes': attributes,
         }
 
         return result_slice_id
@@ -846,8 +846,8 @@ class SliceClass:
             If the slice does not exist.
         """
         if lid not in self._slices:
-            raise KeyError(f"slice {lid} does not exist")
-        self._slices[lid]["vertices"].add(vid)
+            raise KeyError(f'slice {lid} does not exist')
+        self._slices[lid]['vertices'].add(vid)
 
     def edge_presence_across_slices(
         self,
@@ -886,12 +886,12 @@ class SliceClass:
         has_id = edge_id is not None
         has_pair = (source is not None) and (target is not None)
         if has_id == has_pair:
-            raise ValueError("Provide either edge_id OR (source and target), but not both.")
+            raise ValueError('Provide either edge_id OR (source and target), but not both.')
 
         slices_view = self.get_slices_dict(include_default=include_default)
 
         if has_id:
-            return [lid for lid, ldata in slices_view.items() if edge_id in ldata["edges"]]
+            return [lid for lid, ldata in slices_view.items() if edge_id in ldata['edges']]
 
         if undirected_match is None:
             undirected_match = False
@@ -900,9 +900,9 @@ class SliceClass:
         default_dir = True if self.directed is None else self.directed
         for lid, ldata in slices_view.items():
             matches = []
-            for eid in ldata["edges"]:
+            for eid in ldata['edges']:
                 rec = self._edges.get(eid)
-                if rec is None or rec.col_idx < 0 or rec.etype == "hyper":
+                if rec is None or rec.col_idx < 0 or rec.etype == 'hyper':
                     continue
                 s, t = rec.src, rec.tgt
                 edge_is_directed = rec.directed if rec.directed is not None else default_dir
@@ -946,30 +946,30 @@ class SliceClass:
         """
         undirected = members is not None
         if undirected and (head is not None or tail is not None):
-            raise ValueError("Use either members OR head+tail, not both.")
+            raise ValueError('Use either members OR head+tail, not both.')
         if not undirected and (head is None or tail is None):
-            raise ValueError("Directed hyperedge query requires both head and tail.")
+            raise ValueError('Directed hyperedge query requires both head and tail.')
 
         if undirected:
             members = set(members)
             if not members:
-                raise ValueError("members must be non-empty.")
+                raise ValueError('members must be non-empty.')
         else:
             head = set(head)
             tail = set(tail)
             if not head or not tail:
-                raise ValueError("head and tail must be non-empty.")
+                raise ValueError('head and tail must be non-empty.')
             if head & tail:
-                raise ValueError("head and tail must be disjoint.")
+                raise ValueError('head and tail must be disjoint.')
 
         slices_view = self.get_slices_dict(include_default=include_default)
         out: dict[str, list[str]] = {}
 
         for lid, ldata in slices_view.items():
             matches = []
-            for eid in ldata["edges"]:
+            for eid in ldata['edges']:
                 rec = self._edges.get(eid)
-                if rec is None or rec.col_idx < 0 or rec.etype != "hyper":
+                if rec is None or rec.col_idx < 0 or rec.etype != 'hyper':
                     continue
                 if undirected and rec.tgt is None:
                     if set(rec.src) == members:
@@ -995,7 +995,7 @@ class SliceClass:
         """
         slices_with_vertex = []
         for slice_id, slice_data in self.get_slices_dict(include_default=include_default).items():
-            if vertex_id in slice_data["vertices"]:
+            if vertex_id in slice_data['vertices']:
                 slices_with_vertex.append(slice_id)
         return slices_with_vertex
 
@@ -1017,7 +1017,7 @@ class SliceClass:
         )  # hides 'default' by default
         edge_counts = {}
         for _, slice_data in slices_to_check.items():
-            for eid in slice_data["edges"]:
+            for eid in slice_data['edges']:
                 edge_counts[eid] = edge_counts.get(eid, 0) + 1
         return {eid: c for eid, c in edge_counts.items() if c >= min_slices}
 
@@ -1038,20 +1038,20 @@ class SliceClass:
             If the slice does not exist.
         """
         if slice_id not in self._slices:
-            raise KeyError(f"slice {slice_id} not found")
+            raise KeyError(f'slice {slice_id} not found')
 
-        target_edges = self._slices[slice_id]["edges"]
+        target_edges = self._slices[slice_id]['edges']
         specific_edges = set()
 
         for edge_id in target_edges:
             # Count how many slices contain this edge
-            count = sum(1 for slice_data in self._slices.values() if edge_id in slice_data["edges"])
+            count = sum(1 for slice_data in self._slices.values() if edge_id in slice_data['edges'])
             if count == 1:  # Only in target slice
                 specific_edges.add(edge_id)
 
         return specific_edges
 
-    def temporal_dynamics(self, ordered_slices, metric="edge_change"):
+    def temporal_dynamics(self, ordered_slices, metric='edge_change'):
         """Compute changes between consecutive slices in a temporal sequence.
 
         Parameters
@@ -1073,7 +1073,7 @@ class SliceClass:
             If a referenced slice does not exist.
         """
         if len(ordered_slices) < 2:
-            raise ValueError("Need at least 2 slices for temporal analysis")
+            raise ValueError('Need at least 2 slices for temporal analysis')
 
         changes = []
 
@@ -1082,25 +1082,25 @@ class SliceClass:
             next_id = ordered_slices[i + 1]
 
             if current_id not in self._slices or next_id not in self._slices:
-                raise KeyError("One or more slices not found")
+                raise KeyError('One or more slices not found')
 
             current_data = self._slices[current_id]
             next_data = self._slices[next_id]
 
-            if metric == "edge_change":
-                added = len(next_data["edges"] - current_data["edges"])
-                removed = len(current_data["edges"] - next_data["edges"])
-                changes.append({"added": added, "removed": removed, "net_change": added - removed})
+            if metric == 'edge_change':
+                added = len(next_data['edges'] - current_data['edges'])
+                removed = len(current_data['edges'] - next_data['edges'])
+                changes.append({'added': added, 'removed': removed, 'net_change': added - removed})
 
-            elif metric == "vertex_change":
-                added = len(next_data["vertices"] - current_data["vertices"])
-                removed = len(current_data["vertices"] - next_data["vertices"])
-                changes.append({"added": added, "removed": removed, "net_change": added - removed})
+            elif metric == 'vertex_change':
+                added = len(next_data['vertices'] - current_data['vertices'])
+                removed = len(current_data['vertices'] - next_data['vertices'])
+                changes.append({'added': added, 'removed': removed, 'net_change': added - removed})
 
         return changes
 
     def create_aggregated_slice(
-        self, source_slice_ids, target_slice_id, method="union", weight_func=None, **attributes
+        self, source_slice_ids, target_slice_id, method='union', weight_func=None, **attributes
     ):
         """Create a new slice by aggregating multiple source slices.
 
@@ -1125,17 +1125,17 @@ class SliceClass:
             For unknown methods or missing source slices, or if target exists.
         """
         if not source_slice_ids:
-            raise ValueError("Must specify at least one source slice")
+            raise ValueError('Must specify at least one source slice')
 
         if target_slice_id in self._slices:
-            raise ValueError(f"Target slice {target_slice_id} already exists")
+            raise ValueError(f'Target slice {target_slice_id} already exists')
 
-        if method == "union":
+        if method == 'union':
             result = self.slice_union(source_slice_ids)
-        elif method == "intersection":
+        elif method == 'intersection':
             result = self.slice_intersection(source_slice_ids)
         else:
-            raise ValueError(f"Unknown aggregation method: {method}")
+            raise ValueError(f'Unknown aggregation method: {method}')
 
         return self.create_slice_from_operation(target_slice_id, result, **attributes)
 
@@ -1154,8 +1154,8 @@ class SliceClass:
         stats = {}
         for slice_id, slice_data in self.get_slices_dict(include_default=include_default).items():
             stats[slice_id] = {
-                "vertices": len(slice_data["vertices"]),
-                "edges": len(slice_data["edges"]),
-                "attributes": slice_data["attributes"],
+                'vertices': len(slice_data['vertices']),
+                'edges': len(slice_data['edges']),
+                'attributes': slice_data['attributes'],
             }
         return stats

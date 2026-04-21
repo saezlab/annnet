@@ -7,7 +7,7 @@ import tempfile
 def from_excel(
     path: str | pathlib.Path,
     graph=None,
-    schema: str = "auto",
+    schema: str = 'auto',
     sheet: str | None = None,
     default_slice=None,
     default_directed=None,
@@ -55,8 +55,8 @@ def from_excel(
         import pandas as pd
     except ImportError as e:
         raise ImportError(
-            "Excel support requires `pandas` at runtime for conversion. "
-            "Install it or convert the file to CSV manually."
+            'Excel support requires `pandas` at runtime for conversion. '
+            'Install it or convert the file to CSV manually.'
         ) from e
 
     # Read sheet (default first)
@@ -73,7 +73,7 @@ def from_excel(
         df = data
 
     # Now convert to CSV
-    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix='.csv', delete=False) as tmp:
         tmp_path = pathlib.Path(tmp.name)
         df.to_csv(tmp_path, index=False)
 

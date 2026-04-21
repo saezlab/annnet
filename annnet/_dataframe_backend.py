@@ -19,11 +19,11 @@ from ._optional_components import (
 )
 
 DATAFRAME_BACKEND_PRIORITY = component_names(DATAFRAME_BACKENDS)
-_DEFAULT_DATAFRAME_BACKEND = "auto"
-_TEXT = "text"
-_FLOAT = "float"
-_BOOL = "bool"
-_LIST_TEXT = "list_text"
+_DEFAULT_DATAFRAME_BACKEND = 'auto'
+_TEXT = 'text'
+_FLOAT = 'float'
+_BOOL = 'bool'
+_LIST_TEXT = 'list_text'
 
 
 def available_dataframe_backends() -> dict[str, bool]:
@@ -31,7 +31,7 @@ def available_dataframe_backends() -> dict[str, bool]:
     return available_optional_components(DATAFRAME_BACKENDS)
 
 
-def select_dataframe_backend(preferred: str | None = "auto") -> str:
+def select_dataframe_backend(preferred: str | None = 'auto') -> str:
     """Resolve a dataframe backend name.
 
     ``"auto"`` selects the first installed backend in this order: Polars,
@@ -41,8 +41,8 @@ def select_dataframe_backend(preferred: str | None = "auto") -> str:
     return select_component(
         DATAFRAME_BACKENDS,
         preferred,
-        kind="dataframe",
-        install_message="Install polars, pandas, or pyarrow",
+        kind='dataframe',
+        install_message='Install polars, pandas, or pyarrow',
     )
 
 
@@ -51,15 +51,15 @@ def get_default_dataframe_backend() -> str:
     return _DEFAULT_DATAFRAME_BACKEND
 
 
-def set_default_dataframe_backend(backend: str | None = "auto") -> str:
+def set_default_dataframe_backend(backend: str | None = 'auto') -> str:
     """Set the default dataframe backend for new AnnNet annotation tables."""
     global _DEFAULT_DATAFRAME_BACKEND
 
-    requested = "auto" if backend is None else str(backend).lower()
-    if requested != "auto":
+    requested = 'auto' if backend is None else str(backend).lower()
+    if requested != 'auto':
         select_dataframe_backend(requested)
     elif not any(available_dataframe_backends().values()):
-        select_dataframe_backend("auto")
+        select_dataframe_backend('auto')
     _DEFAULT_DATAFRAME_BACKEND = requested
     return _DEFAULT_DATAFRAME_BACKEND
 
@@ -68,20 +68,20 @@ def dataframe_from_rows(
     rows: list[dict[str, Any]] | list[Any],
     *,
     schema: dict[str, str] | None = None,
-    backend: str | None = "auto",
+    backend: str | None = 'auto',
 ):
     """Build an eager dataframe/table using the selected backend."""
     resolved = select_dataframe_backend(backend)
     rows = list(rows or [])
 
-    if resolved == "polars":
+    if resolved == 'polars':
         import polars as pl
 
         if rows:
             return pl.DataFrame(rows)
         return pl.DataFrame(schema=_polars_schema(schema or {}))
 
-    if resolved == "pandas":
+    if resolved == 'pandas':
         import pandas as pd
 
         if rows:
@@ -104,20 +104,20 @@ def dataframe_from_columns(
     columns: dict[str, list[Any]],
     *,
     schema: dict[str, str] | None = None,
-    backend: str | None = "auto",
+    backend: str | None = 'auto',
 ):
     """Build an eager dataframe/table from column-oriented data."""
     resolved = select_dataframe_backend(backend)
     columns = {name: list(values) for name, values in (columns or {}).items()}
 
-    if resolved == "polars":
+    if resolved == 'polars':
         import polars as pl
 
         if schema:
             return pl.DataFrame(columns, schema=_polars_schema(schema))
         return pl.DataFrame(columns)
 
-    if resolved == "pandas":
+    if resolved == 'pandas':
         import pandas as pd
 
         if columns:
@@ -136,7 +136,7 @@ def dataframe_from_columns(
     )
 
 
-def empty_dataframe(schema: dict[str, str], *, backend: str | None = "auto"):
+def empty_dataframe(schema: dict[str, str], *, backend: str | None = 'auto'):
     """Build an empty dataframe/table with a generic schema."""
     return dataframe_from_rows([], schema=schema, backend=backend)
 
@@ -145,14 +145,14 @@ def dataframe_to_rows(df) -> list[dict[str, Any]]:
     """Return rows from a Narwhals-compatible eager dataframe/table."""
     if df is None:
         return []
-    if hasattr(df, "to_dicts"):
+    if hasattr(df, 'to_dicts'):
         return [dict(row) for row in df.to_dicts()]
-    if hasattr(df, "to_dict"):
+    if hasattr(df, 'to_dict'):
         try:
-            return [dict(row) for row in df.to_dict(orient="records")]
+            return [dict(row) for row in df.to_dict(orient='records')]
         except TypeError:
             pass
-    if hasattr(df, "to_pylist"):
+    if hasattr(df, 'to_pylist'):
         return [dict(row) for row in df.to_pylist()]
 
     ndf = nw.from_native(df, eager_only=True)
@@ -163,11 +163,11 @@ def dataframe_height(df) -> int:
     """Return the row count for a dataframe-like object."""
     if df is None:
         return 0
-    if hasattr(df, "height"):
+    if hasattr(df, 'height'):
         return int(df.height)
-    if hasattr(df, "num_rows"):
+    if hasattr(df, 'num_rows'):
         return int(df.num_rows)
-    if hasattr(df, "shape"):
+    if hasattr(df, 'shape'):
         return int(df.shape[0])
     return len(dataframe_to_rows(df))
 
@@ -176,9 +176,9 @@ def dataframe_columns(df) -> list[str]:
     """Return column names for a dataframe-like object."""
     if df is None:
         return []
-    if hasattr(df, "columns"):
+    if hasattr(df, 'columns'):
         return list(df.columns)
-    if hasattr(df, "column_names"):
+    if hasattr(df, 'column_names'):
         return list(df.column_names)
     return list(dataframe_to_rows(df)[0]) if dataframe_height(df) else []
 
@@ -187,7 +187,7 @@ def rename_dataframe_columns(df, mapping: dict[str, str]):
     """Rename dataframe columns across supported backends."""
     if not mapping:
         return df
-    if hasattr(df, "rename"):
+    if hasattr(df, 'rename'):
         try:
             return df.rename(columns=mapping)
         except TypeError:
@@ -196,7 +196,7 @@ def rename_dataframe_columns(df, mapping: dict[str, str]):
             return df.rename(mapping)
         except TypeError:
             pass
-    if hasattr(df, "rename_columns"):
+    if hasattr(df, 'rename_columns'):
         names = [mapping.get(name, name) for name in dataframe_columns(df)]
         return df.rename_columns(names)
     rows = []
@@ -225,12 +225,12 @@ def _polars_dtype(kind: str):
 
 def _pandas_dtype(kind: str) -> str:
     if kind == _FLOAT:
-        return "float64"
+        return 'float64'
     if kind == _BOOL:
-        return "bool"
+        return 'bool'
     if kind == _LIST_TEXT:
-        return "object"
-    return "string"
+        return 'object'
+    return 'string'
 
 
 def _pyarrow_type(kind: str):

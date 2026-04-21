@@ -8,16 +8,16 @@ from typing import Any
 from .._optional_components import GRAPH_BACKENDS, available_optional_components
 
 _lazy_functions: dict[str, tuple[str, str]] = {
-    "to_nx": ("annnet.adapters.networkx_adapter", "to_nx"),
-    "from_nx": ("annnet.adapters.networkx_adapter", "from_nx"),
-    "to_igraph": ("annnet.adapters.igraph_adapter", "to_igraph"),
-    "from_igraph": ("annnet.adapters.igraph_adapter", "from_igraph"),
-    "to_graphtool": ("annnet.adapters.graphtool_adapter", "to_graphtool"),
-    "from_graphtool": ("annnet.adapters.graphtool_adapter", "from_graphtool"),
-    "to_pyg": ("annnet.adapters.pyg_adapter", "to_pyg"),
+    'to_nx': ('annnet.adapters.networkx_adapter', 'to_nx'),
+    'from_nx': ('annnet.adapters.networkx_adapter', 'from_nx'),
+    'to_igraph': ('annnet.adapters.igraph_adapter', 'to_igraph'),
+    'from_igraph': ('annnet.adapters.igraph_adapter', 'from_igraph'),
+    'to_graphtool': ('annnet.adapters.graphtool_adapter', 'to_graphtool'),
+    'from_graphtool': ('annnet.adapters.graphtool_adapter', 'from_graphtool'),
+    'to_pyg': ('annnet.adapters.pyg_adapter', 'to_pyg'),
 }
 
-__all__ = sorted(set(_lazy_functions) | {"available_backends"})
+__all__ = sorted(set(_lazy_functions) | {'available_backends'})
 
 
 def available_backends() -> dict[str, bool]:

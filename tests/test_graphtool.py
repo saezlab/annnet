@@ -5,13 +5,13 @@ import unittest
 import warnings
 
 warnings.filterwarnings(
-    "ignore",
-    message=r"Signature .*numpy\.longdouble.*",
+    'ignore',
+    message=r'Signature .*numpy\.longdouble.*',
     category=UserWarning,
-    module=r"numpy\._core\.getlimits",
+    module=r'numpy\._core\.getlimits',
 )
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from annnet.core.graph import AnnNet
 
 try:
@@ -28,12 +28,12 @@ from .conftest import build_adapter_graph as _build_graph
 _BUILD_GRAPH = _build_graph
 
 
-@unittest.skipUnless(HAS_GT, "graph-tool adapter or dependency not available")
+@unittest.skipUnless(HAS_GT, 'graph-tool adapter or dependency not available')
 class TestGraphToolAdapter(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if _BUILD_GRAPH is None:
-            raise unittest.SkipTest("No _build_graph() found")
+            raise unittest.SkipTest('No _build_graph() found')
 
     def test_to_gt_export_basic(self):
         g = _BUILD_GRAPH()
@@ -42,12 +42,12 @@ class TestGraphToolAdapter(unittest.TestCase):
         self.assertIsNotNone(gtG)
         self.assertIsInstance(manifest, dict)
 
-        self.assertIn("version", manifest)
-        self.assertIn("graph", manifest)
-        self.assertIn("vertices", manifest)
-        self.assertIn("edges", manifest)
-        self.assertIn("slices", manifest)
-        self.assertIn("multilayer", manifest)
+        self.assertIn('version', manifest)
+        self.assertIn('graph', manifest)
+        self.assertIn('vertices', manifest)
+        self.assertIn('edges', manifest)
+        self.assertIn('slices', manifest)
+        self.assertIn('multilayer', manifest)
 
         self.assertEqual(gtG.num_vertices(), 3)
         self.assertGreaterEqual(gtG.num_edges(), 2)
@@ -60,27 +60,27 @@ class TestGraphToolAdapter(unittest.TestCase):
 
         self.assertEqual(g2.nv, g.nv)
 
-        self.assertIn("A", g2.vertices())
-        self.assertIn("B", g2.vertices())
-        self.assertIn("C", g2.vertices())
+        self.assertIn('A', g2.vertices())
+        self.assertIn('B', g2.vertices())
+        self.assertIn('C', g2.vertices())
 
     def test_manifest_preserves_slices(self):
         g = _BUILD_GRAPH()
         gtG, manifest = to_graphtool(g)
 
-        slices_data = manifest.get("slices", {})
-        self.assertIn("data", slices_data)
+        slices_data = manifest.get('slices', {})
+        self.assertIn('data', slices_data)
 
-        slice_names = list(slices_data.get("data", {}).keys())
-        self.assertIn("Lw", slice_names)
-        self.assertIn("L0", slice_names)
+        slice_names = list(slices_data.get('data', {}).keys())
+        self.assertIn('Lw', slice_names)
+        self.assertIn('L0', slice_names)
 
     def test_manifest_preserves_hyperedges(self):
         g = _BUILD_GRAPH()
         gtG, manifest = to_graphtool(g)
 
-        edges_meta = manifest.get("edges", {})
-        hyperedges = edges_meta.get("hyperedges", {})
+        edges_meta = manifest.get('edges', {})
+        hyperedges = edges_meta.get('hyperedges', {})
 
         self.assertGreater(len(hyperedges), 0)
 
@@ -107,75 +107,75 @@ class TestGraphToolAdapter(unittest.TestCase):
         g2 = from_graphtool(gtG, manifest)
 
         slices = list(g2.list_slices(include_default=True))
-        self.assertIn("Lw", slices)
+        self.assertIn('Lw', slices)
 
-        edges_in_lw = list(g2.get_slice_edges("Lw"))
+        edges_in_lw = list(g2.get_slice_edges('Lw'))
         self.assertGreater(len(edges_in_lw), 0)
 
         eid = edges_in_lw[0]
-        w_eff = g2.get_effective_edge_weight(eid, slice="Lw")
+        w_eff = g2.get_effective_edge_weight(eid, slice='Lw')
         self.assertEqual(w_eff, 5.0)
 
     def test_vertex_properties_in_graph(self):
         g = _BUILD_GRAPH()
         gtG, manifest = to_graphtool(g)
 
-        self.assertIn("id", gtG.vp)
+        self.assertIn('id', gtG.vp)
 
-        vertex_ids = [gtG.vp["id"][v] for v in gtG.vertices()]
-        self.assertIn("A", vertex_ids)
-        self.assertIn("B", vertex_ids)
-        self.assertIn("C", vertex_ids)
+        vertex_ids = [gtG.vp['id'][v] for v in gtG.vertices()]
+        self.assertIn('A', vertex_ids)
+        self.assertIn('B', vertex_ids)
+        self.assertIn('C', vertex_ids)
 
     def test_edge_properties_in_graph(self):
         g = _BUILD_GRAPH()
         gtG, manifest = to_graphtool(g)
 
-        self.assertIn("id", gtG.ep)
-        self.assertIn("weight", gtG.ep)
+        self.assertIn('id', gtG.ep)
+        self.assertIn('weight', gtG.ep)
 
         for e in gtG.edges():
-            weight = gtG.ep["weight"][e]
+            weight = gtG.ep['weight'][e]
             self.assertIsInstance(weight, float)
             self.assertGreater(weight, 0)
 
     def test_directed_flag_preserved(self):
         g_dir = AnnNet(directed=True)
-        g_dir.add_vertex("X")
-        g_dir.add_vertex("Y")
-        g_dir.add_edge("X", "Y")
+        g_dir.add_vertex('X')
+        g_dir.add_vertex('Y')
+        g_dir.add_edge('X', 'Y')
 
         gtG_dir, manifest_dir = to_graphtool(g_dir)
         self.assertTrue(gtG_dir.is_directed())
-        self.assertTrue(manifest_dir["graph"]["directed"])
+        self.assertTrue(manifest_dir['graph']['directed'])
 
         g_undir = AnnNet(directed=False)
-        g_undir.add_vertex("X")
-        g_undir.add_vertex("Y")
-        g_undir.add_edge("X", "Y")
+        g_undir.add_vertex('X')
+        g_undir.add_vertex('Y')
+        g_undir.add_edge('X', 'Y')
 
         gtG_undir, manifest_undir = to_graphtool(g_undir)
         self.assertFalse(gtG_undir.is_directed())
-        self.assertFalse(manifest_undir["graph"]["directed"])
+        self.assertFalse(manifest_undir['graph']['directed'])
 
     def test_vertex_attributes_roundtrip(self):
         g = _BUILD_GRAPH()
         gtG, manifest = to_graphtool(g)
         g2 = from_graphtool(gtG, manifest)
 
-        if hasattr(g2, "vertex_attributes") and g2.vertex_attributes is not None:
+        if hasattr(g2, 'vertex_attributes') and g2.vertex_attributes is not None:
             v_attrs = g2.vertex_attributes
-            if hasattr(v_attrs, "to_dicts"):
+            if hasattr(v_attrs, 'to_dicts'):
                 rows = list(v_attrs.to_dicts())
-                vertex_ids = [r.get("vertex_id") for r in rows]
-                self.assertIn("A", vertex_ids)
+                vertex_ids = [r.get('vertex_id') for r in rows]
+                self.assertIn('A', vertex_ids)
 
     def test_edge_attributes_roundtrip(self):
         g = _BUILD_GRAPH()
         gtG, manifest = to_graphtool(g)
         g2 = from_graphtool(gtG, manifest)
 
-        if hasattr(g2, "edge_attributes") and g2.edge_attributes is not None:
+        if hasattr(g2, 'edge_attributes') and g2.edge_attributes is not None:
             e_attrs = g2.edge_attributes
             self.assertGreater(len(e_attrs), 0)
 
@@ -189,5 +189,5 @@ class TestGraphToolAdapter(unittest.TestCase):
         self.assertLess(g2.ne, g.ne)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

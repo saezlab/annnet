@@ -233,14 +233,14 @@ report_level = "INFO"
 extend-include = ["*.ipynb"]
 extend-exclude = ["tools/*.py"]
 line-length = 100
-target-version = "py312"
-unfixable = ["UP"]
+target-version = "py313"
 
 [tool.ruff.format]
 docstring-code-format = true
 quote-style = "single"
 
 [tool.ruff.lint]
+unfixable = ["UP"]
 ignore = [
     "B008",  # Errors from function calls in argument defaults. These are fine when the result is immutable.
     "B024",
@@ -258,6 +258,8 @@ ignore = [
     "E501",  # line too long -> we accept long comment lines; formatter gets rid of long code lines
     "E731",  # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
     "E741",  # allow I, O, l as variable names -> I is the identity matrix
+    "Q000",  # Incompatible with formatter quote-style = "single"
+    "Q003",  # Incompatible with formatter quote-style = "single"
 ]
 select = [
     "B",  # flake8-bugbear
@@ -285,20 +287,14 @@ known-first-party = ["annnet"]
 known-third-party = ["numpy", "pandas"]
 length-sort = true
 lines-after-imports = 1
-no-lines-before = ["LOCALFOLDER"]
 order-by-type = true
 section-order = [
     "future",
     "standard-library",
     "third-party",
-    "NUM",
     "first-party",
     "local-folder",
 ]
-
-
-[tool.ruff.lint.isort.sections]
-NUM = ["numpy", "pandas"]
 
 [tool.ruff.lint.per-file-ignores]
 "*/__init__.py" = ["D104", "F401"]

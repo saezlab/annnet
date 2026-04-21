@@ -71,7 +71,7 @@ class LayerManager:
         aa = tuple(aa)
         if len(self._G.aspects) == 1:
             return aa[0]
-        return "×".join(aa)
+        return '×'.join(aa)
 
     # ==================== Presence utilities ====================
 
@@ -379,7 +379,7 @@ class LayerManager:
         Examples
         --------
         ```python
-        G.layers.to_slice(("t1", "F"), slice_id="t1_F")
+        G.layers.to_slice(('t1', 'F'), slice_id='t1_F')
         ```
         """
         aa = tuple(aa)
@@ -599,7 +599,7 @@ class LayerManager:
         return {
             eid
             for eid, rec in self._G._edges.items()
-            if rec.ml_kind == "intra" and rec.ml_layers == aa
+            if rec.ml_kind == 'intra' and rec.ml_layers == aa
         }
 
     def inter_edges_between(self, aa, bb):
@@ -621,7 +621,7 @@ class LayerManager:
         return {
             eid
             for eid, rec in self._G._edges.items()
-            if rec.ml_kind == "inter" and rec.ml_layers == (aa, bb)
+            if rec.ml_kind == 'inter' and rec.ml_layers == (aa, bb)
         }
 
     def coupling_edges_between(self, aa, bb):
@@ -643,7 +643,7 @@ class LayerManager:
         return {
             eid
             for eid, rec in self._G._edges.items()
-            if rec.ml_kind == "coupling" and rec.ml_layers == (aa, bb)
+            if rec.ml_kind == 'coupling' and rec.ml_layers == (aa, bb)
         }
 
     # ==================== Supra / blocks ====================
@@ -746,9 +746,9 @@ class LayerManager:
             ``{"intra": A_intra, "inter": A_inter, "coupling": A_coupling}``.
         """
         return {
-            "intra": self._G.build_intra_block(layers),
-            "inter": self._G.build_inter_block(layers),
-            "coupling": self._G.build_coupling_block(layers),
+            'intra': self._G.build_intra_block(layers),
+            'inter': self._G.build_inter_block(layers),
+            'coupling': self._G.build_coupling_block(layers),
         }
 
     def flatten(self):
@@ -787,16 +787,16 @@ class LayerClass:
         return False
 
     def _drop_unused_placeholder_layers(self) -> None:
-        if self._aspects == ("_",):
+        if self._aspects == ('_',):
             return
         if self._placeholder_layer_referenced():
             return
         if not all(
-            any(val != "_" for val in self._layers.get(aspect, set())) for aspect in self._aspects
+            any(val != '_' for val in self._layers.get(aspect, set())) for aspect in self._aspects
         ):
             return
         for aspect in self._aspects:
-            self._layers.get(aspect, set()).discard("_")
+            self._layers.get(aspect, set()).discard('_')
         self._rebuild_all_layers_cache()
 
     def set_aspects(self, aspects, elem_layers: dict[str, list[str]] | None = None):
@@ -821,32 +821,32 @@ class LayerClass:
         Examples
         --------
         ```python
-        G.set_aspects(["time", "relation"], {"time": ["t1", "t2"], "relation": ["F", "A"]})
+        G.set_aspects(['time', 'relation'], {'time': ['t1', 't2'], 'relation': ['F', 'A']})
         ```
         """
         if isinstance(aspects, dict):
             if elem_layers is not None:
                 raise ValueError(
-                    "Pass either aspects=list[...] or aspects={aspect: layers}, not both."
+                    'Pass either aspects=list[...] or aspects={aspect: layers}, not both.'
                 )
             elem_layers = aspects
             aspects = list(aspects.keys())
 
         if not aspects:
-            raise ValueError("aspects must be a non-empty list")
+            raise ValueError('aspects must be a non-empty list')
         aspects = list(aspects)
         elem_layers = elem_layers or {}
-        old_aspects = tuple(getattr(self, "_aspects", ("_",)))
-        old_placeholder = ("_",) if old_aspects == ("_",) else tuple("_" for _ in old_aspects)
-        new_placeholder = tuple("_" for _ in aspects)
+        old_aspects = tuple(getattr(self, '_aspects', ('_',)))
+        old_placeholder = ('_',) if old_aspects == ('_',) else tuple('_' for _ in old_aspects)
+        new_placeholder = tuple('_' for _ in aspects)
 
-        had_existing_flat_entities = bool(self._entities) and old_aspects == ("_",)
+        had_existing_flat_entities = bool(self._entities) and old_aspects == ('_',)
 
         self._aspects = tuple(aspects)
         self._layers = {}
         for aspect in aspects:
             values = set(elem_layers.get(aspect, []))
-            values.add("_")
+            values.add('_')
             self._layers[aspect] = values
 
         if had_existing_flat_entities:
@@ -872,8 +872,8 @@ class LayerClass:
             ]
             self._rebuild_entity_indexes()
             warnings.warn(
-                f"Declared aspects {tuple(aspects)!r}; existing flat vertices were reassigned "
-                f"to placeholder layer {new_placeholder!r}. Set explicit layer coordinates if needed.",
+                f'Declared aspects {tuple(aspects)!r}; existing flat vertices were reassigned '
+                f'to placeholder layer {new_placeholder!r}. Set explicit layer coordinates if needed.',
                 UserWarning,
                 stacklevel=2,
             )
@@ -885,15 +885,15 @@ class LayerClass:
 
     def set_elementary_layers(self, layers_by_aspect: dict[str, list[str]]):
         """Declare concrete elementary layer values for existing aspects."""
-        if self._aspects == ("_",):
-            raise ValueError("No aspects are configured; call layers.set_aspects(...) first.")
+        if self._aspects == ('_',):
+            raise ValueError('No aspects are configured; call layers.set_aspects(...) first.')
         for aspect, values in layers_by_aspect.items():
             if aspect not in self._aspects:
-                raise KeyError(f"Unknown aspect {aspect!r}. Valid: {list(self._aspects)!r}")
+                raise KeyError(f'Unknown aspect {aspect!r}. Valid: {list(self._aspects)!r}')
             labels = {str(v) for v in values}
             if not labels:
                 raise ValueError(
-                    f"Aspect {aspect!r} must receive at least one elementary layer value."
+                    f'Aspect {aspect!r} must receive at least one elementary layer value.'
                 )
             self._layers.setdefault(aspect, set()).update(labels)
         self._rebuild_all_layers_cache()
@@ -923,15 +923,15 @@ class LayerClass:
         ``vertex_id`` strings and drops multilayer-only metadata such as aspects,
         layer registries, supra-node attributes, and multilayer edge roles.
         """
-        if self._aspects == ("_",):
+        if self._aspects == ('_',):
             return self
 
         def _clone_table(df):
             if df is None:
                 return None
-            if hasattr(df, "clone"):
+            if hasattr(df, 'clone'):
                 return df.clone()
-            if hasattr(df, "copy"):
+            if hasattr(df, 'copy'):
                 return df.copy()
             return df
 
@@ -947,12 +947,12 @@ class LayerClass:
                 return sorted({_project_node(m) for m in members})
             return _project_node(members)
 
-        history_flag = getattr(self, "_history_enabled", True)
+        history_flag = getattr(self, '_history_enabled', True)
         self._history_enabled = False
         try:
             flat = self.__class__(
                 directed=self.directed,
-                annotations_backend=getattr(self, "_annotations_backend", "polars"),
+                annotations_backend=getattr(self, '_annotations_backend', 'polars'),
             )
             flat._history_enabled = False
 
@@ -966,22 +966,22 @@ class LayerClass:
 
             for slice_id, meta in self._slices.items():
                 flat._slices[slice_id] = {
-                    "vertices": {
+                    'vertices': {
                         v[0] if isinstance(v, tuple) and len(v) == 2 else v
-                        for v in meta["vertices"]
+                        for v in meta['vertices']
                     },
-                    "edges": set(meta["edges"]),
-                    "attributes": dict(meta["attributes"]),
+                    'edges': set(meta['edges']),
+                    'attributes': dict(meta['attributes']),
                 }
 
             vertex_ids = sorted(
-                {ekey[0] for ekey, rec in self._entities.items() if rec.kind == "vertex"}
+                {ekey[0] for ekey, rec in self._entities.items() if rec.kind == 'vertex'}
             )
             for vid in vertex_ids:
                 flat.add_vertex(vid)
 
             edge_entity_ids = sorted(
-                {ekey[0] for ekey, rec in self._entities.items() if rec.kind == "edge_entity"}
+                {ekey[0] for ekey, rec in self._entities.items() if rec.kind == 'edge_entity'}
             )
             edge_entity_id_set = set(edge_entity_ids)
             for eid in edge_entity_ids:
@@ -1002,7 +1002,7 @@ class LayerClass:
                         flat.add_edge(edge_id=eid, as_entity=True)
                     continue
 
-                if rec.etype == "hyper":
+                if rec.etype == 'hyper':
                     src = _project_members(rec.src) or []
                     tgt = _project_members(rec.tgt) if rec.tgt is not None else None
                     flat.add_edge(
@@ -1094,7 +1094,7 @@ class LayerClass:
         None
         """
         if aspect not in self._aspects:
-            raise KeyError(f"Unknown aspect {aspect!r}")
+            raise KeyError(f'Unknown aspect {aspect!r}')
 
         if label in self._layers[aspect]:
             return  # already exists
@@ -1129,7 +1129,7 @@ class LayerClass:
         self._validate_layer_tuple(layer_tuple)
         ekey = self._resolve_entity_key(u)
         rec = self._entities.get(ekey)
-        if rec is None or rec.kind != "vertex":
+        if rec is None or rec.kind != 'vertex':
             raise KeyError(f"'{u}' is not a vertex")
         self._V.add(u)
         self._VM.add((u, tuple(layer_tuple)))
@@ -1253,7 +1253,7 @@ class LayerClass:
         """
         key = (u, tuple(layer_tuple))
         if key not in self._nl_to_row:
-            raise KeyError(f"vertex–layer {key!r} not indexed; call ensure_vertex_layer_index()")
+            raise KeyError(f'vertex–layer {key!r} not indexed; call ensure_vertex_layer_index()')
         return self._nl_to_row[key]
 
     def row_to_nl(self, row: int) -> tuple[str, tuple[str, ...]]:
@@ -1276,21 +1276,21 @@ class LayerClass:
         try:
             return self._row_to_nl[row]
         except Exception:
-            raise KeyError(f"row {row} not in vertex–layer index")
+            raise KeyError(f'row {row} not in vertex–layer index')
 
     ## Validation helpers
 
     def _validate_layer_tuple(self, aa: tuple[str, ...]):
-        if self._aspects == ("_",):
-            raise ValueError("no aspects are configured; call set_aspects(...) first")
+        if self._aspects == ('_',):
+            raise ValueError('no aspects are configured; call set_aspects(...) first')
         if len(aa) != len(self._aspects):
             raise ValueError(
-                f"layer tuple rank mismatch: expected {len(self._aspects)}, got {len(aa)}"
+                f'layer tuple rank mismatch: expected {len(self._aspects)}, got {len(aa)}'
             )
         for i, a in enumerate(self._aspects):
             allowed = self._layers.get(a, set())
             if aa[i] not in allowed:
-                raise KeyError(f"unknown elementary layer {aa[i]!r} for aspect {a!r}")
+                raise KeyError(f'unknown elementary layer {aa[i]!r} for aspect {a!r}')
 
     def layer_id_to_tuple(self, layer_id: str) -> tuple[str, ...]:
         """Map legacy string layer id to aspect tuple.
@@ -1310,11 +1310,11 @@ class LayerClass:
             If not in single-aspect mode.
         """
         if len(self._aspects) != 1:
-            raise ValueError("layer_id_to_tuple is only valid when exactly 1 aspect is configured")
+            raise ValueError('layer_id_to_tuple is only valid when exactly 1 aspect is configured')
         return (layer_id,)
 
     def _layer_id_to_tuple_cached(self, layer: str):
-        if not hasattr(self, "_layer_tuple_cache"):
+        if not hasattr(self, '_layer_tuple_cache'):
             self._layer_tuple_cache = {}
         if layer not in self._layer_tuple_cache:
             self._layer_tuple_cache[layer] = self.layer_id_to_tuple(layer)
@@ -1336,7 +1336,7 @@ class LayerClass:
         aa = tuple(aa)
         if len(self._aspects) == 1:
             return aa[0]
-        return "×".join(aa)
+        return '×'.join(aa)
 
     ## Aspect / layer / vertex–layer attributes
 
@@ -1348,13 +1348,13 @@ class LayerClass:
             layer_id = "{aspect}_{label}"
         """
         if aspect not in self._aspects:
-            raise KeyError(f"unknown aspect {aspect!r}; known: {list(self._aspects)!r}")
+            raise KeyError(f'unknown aspect {aspect!r}; known: {list(self._aspects)!r}')
         allowed = self._layers.get(aspect, set())
         if label not in allowed:
             raise KeyError(
-                f"unknown elementary layer {label!r} for aspect {aspect!r}; known: {sorted(allowed)!r}"
+                f'unknown elementary layer {label!r} for aspect {aspect!r}; known: {sorted(allowed)!r}'
             )
-        return f"{aspect}_{label}"
+        return f'{aspect}_{label}'
 
     def _upsert_layer_attribute_row(self, layer_id: str, attrs: dict):
         """
@@ -1377,14 +1377,14 @@ class LayerClass:
         existing = None
         new_rows = []
         for r in rows:
-            if r.get("layer_id") == layer_id:
+            if r.get('layer_id') == layer_id:
                 existing = r
                 # don't append the old version
             else:
                 new_rows.append(r)
 
         if existing is None:
-            base = {"layer_id": layer_id}
+            base = {'layer_id': layer_id}
         else:
             base = dict(existing)  # copy
 
@@ -1433,22 +1433,22 @@ class LayerClass:
         """
         lid = self._elem_layer_id(aspect, label)
         df = self.layer_attributes
-        if df.height == 0 or "layer_id" not in df.columns:
+        if df.height == 0 or 'layer_id' not in df.columns:
             return {}
 
         if pl is not None and isinstance(df, pl.DataFrame):
-            rows = df.filter(pl.col("layer_id") == lid)
+            rows = df.filter(pl.col('layer_id') == lid)
             if rows.height == 0:
                 return {}
         else:
-            rows = nw.to_native(nw.from_native(df).filter(nw.col("layer_id") == lid))
-            if (hasattr(rows, "__len__") and len(rows) == 0) or (
-                getattr(rows, "height", None) == 0
+            rows = nw.to_native(nw.from_native(df).filter(nw.col('layer_id') == lid))
+            if (hasattr(rows, '__len__') and len(rows) == 0) or (
+                getattr(rows, 'height', None) == 0
             ):
                 return {}
 
         # single row: drop 'layer_id' and convert to dict
-        row = rows.drop("layer_id").to_dicts()[0]
+        row = rows.drop('layer_id').to_dicts()[0]
         return row
 
     def set_aspect_attrs(self, aspect: str, **attrs):
@@ -1466,7 +1466,7 @@ class LayerClass:
         None
         """
         if aspect not in self._aspects:
-            raise KeyError(f"unknown aspect {aspect!r}; known: {list(self._aspects)!r}")
+            raise KeyError(f'unknown aspect {aspect!r}; known: {list(self._aspects)!r}')
         d = self._aspect_attrs.setdefault(aspect, {})
         d.update(attrs)
 
@@ -1483,7 +1483,7 @@ class LayerClass:
         dict
         """
         if aspect not in self._aspects:
-            raise KeyError(f"unknown aspect {aspect!r}")
+            raise KeyError(f'unknown aspect {aspect!r}')
         return dict(self._aspect_attrs.get(aspect, {}))
 
     def set_layer_attrs(self, layer_tuple: tuple[str, ...], **attrs):
@@ -1571,10 +1571,10 @@ class LayerClass:
     ## explicit vertex–layer edge APIs
 
     def _layer_tuple_to_lid(self, aa: tuple[str, ...]) -> str:
-        if not hasattr(self, "_lid_cache"):
+        if not hasattr(self, '_lid_cache'):
             self._lid_cache = {}
         if aa not in self._lid_cache:
-            self._lid_cache[aa] = aa[0] if len(self.aspects) == 1 else "×".join(aa)
+            self._lid_cache[aa] = aa[0] if len(self.aspects) == 1 else '×'.join(aa)
         return self._lid_cache[aa]
 
     def set_edge_kivela_role(self, eid: str, role: str, layers):
@@ -1601,8 +1601,8 @@ class LayerClass:
             If ``role`` is invalid.
         """
         warnings.warn(
-            "set_edge_kivela_role() is deprecated; multilayer role should be inferred from "
-            "explicit supra-node endpoints in add_edge().",
+            'set_edge_kivela_role() is deprecated; multilayer role should be inferred from '
+            'explicit supra-node endpoints in add_edge().',
             DeprecationWarning,
             stacklevel=2,
         )
@@ -1610,19 +1610,19 @@ class LayerClass:
         rec = self._edges.get(eid)
         if rec is None:
             raise KeyError(
-                f"Kivela annotation for unknown edge {eid!r}; "
-                "create the edge via add_edge/add_hyperedge first."
+                f'Kivela annotation for unknown edge {eid!r}; '
+                'create the edge via add_edge/add_hyperedge first.'
             )
 
         role = str(role)
-        if role == "intra":
+        if role == 'intra':
             aa = tuple(layers)
             self._validate_layer_tuple(aa)
             # preserve "hyper" kind — hyperedges tagged as intra keep their topology
-            if rec.etype != "hyper":
-                rec.ml_kind = "intra"
+            if rec.etype != 'hyper':
+                rec.ml_kind = 'intra'
             rec.ml_layers = aa
-        elif role in {"inter", "coupling"}:
+        elif role in {'inter', 'coupling'}:
             La, Lb = layers
             La = tuple(La)
             Lb = tuple(Lb)
@@ -1631,7 +1631,7 @@ class LayerClass:
             rec.ml_kind = role
             rec.ml_layers = (La, Lb)
         else:
-            raise ValueError(f"unknown Kivela role {role!r}")
+            raise ValueError(f'unknown Kivela role {role!r}')
 
     def add_intra_edge(
         self, u: str, v: str, layer: str, *, weight: float = 1.0, eid: str | None = None
@@ -1656,18 +1656,18 @@ class LayerClass:
         str
             Edge id.
         """
-        if len(getattr(self, "aspects", [])) == 1 and getattr(
-            self, "_legacy_single_aspect_enabled", True
+        if len(getattr(self, 'aspects', [])) == 1 and getattr(
+            self, '_legacy_single_aspect_enabled', True
         ):
             aa = self._layer_id_to_tuple_cached(layer)
             return self.add_intra_edge_nl(u, v, aa, weight=weight, eid=eid)
         # Fallback when multi-aspect is not configured: let add_edge handle bookkeeping.
-        eid = eid or f"{u}--{v}@{layer}"
+        eid = eid or f'{u}--{v}@{layer}'
         self.add_edge(u, v, layer=layer, weight=weight, edge_id=eid)
         # In legacy single-layer mode we don't have a full aspect tuple; store as ("layer",)
         if self.aspects:
             aa = self._layer_id_to_tuple_cached(layer) if len(self.aspects) == 1 else (layer,)
-            self.set_edge_kivela_role(eid, "intra", aa)
+            self.set_edge_kivela_role(eid, 'intra', aa)
         else:
             # no aspects configured -> treat as plain edge; leave edge_kind/edge_layers unset
             pass
@@ -1712,25 +1712,25 @@ class LayerClass:
         Examples
         --------
         ```python
-        G.add_intra_edge_nl("u1", "u2", ("t1", "F"))
+        G.add_intra_edge_nl('u1', 'u2', ('t1', 'F'))
         ```
         """
         warnings.warn(
-            "add_intra_edge_nl() is deprecated; prefer add_edge((u, layer), (v, layer), ...).",
+            'add_intra_edge_nl() is deprecated; prefer add_edge((u, layer), (v, layer), ...).',
             DeprecationWarning,
             stacklevel=2,
         )
         aa = layer_tuple if isinstance(layer_tuple, tuple) else tuple(layer_tuple)
-        if not getattr(self, "_fast_mode", False):
+        if not getattr(self, '_fast_mode', False):
             self._validate_layer_tuple(aa)
             self._assert_presence(u, aa)
             self._assert_presence(v, aa)
         Lid = self._layer_tuple_to_lid(aa)
-        eid = eid or f"{u}>{v}@{Lid}"
+        eid = eid or f'{u}>{v}@{Lid}'
         # Use a synthetic layer id for intra edges so existing slice bookkeeping runs.
         self.add_edge(u, v, layer=Lid, weight=weight, edge_id=eid)
         # Pure Kivela annotation:
-        self.set_edge_kivela_role(eid, "intra", aa)
+        self.set_edge_kivela_role(eid, 'intra', aa)
         return eid
 
     def add_intra_edges_bulk(self, edges, layer_tuple, weight=1.0, fast_mode=True):
@@ -1779,8 +1779,8 @@ class LayerClass:
                 u, v = e[0], e[1]
                 w = float(e[2]) if len(e) > 2 else float(weight)
             else:
-                u, v = e["u"], e["v"]
-                w = float(e.get("weight", weight))
+                u, v = e['u'], e['v']
+                w = float(e.get('weight', weight))
             if isinstance(u, str):
                 u = _sys.intern(u)
             if isinstance(v, str):
@@ -1794,7 +1794,7 @@ class LayerClass:
             ekey = (vid, coord)
             if ekey not in _ents:
                 idx = len(_ents)
-                _ents[ekey] = EntityRecord(row_idx=idx, kind="vertex")
+                _ents[ekey] = EntityRecord(row_idx=idx, kind='vertex')
                 self._row_to_entity[idx] = ekey
                 self._V.add(vid)
                 self._VM.add(ekey)
@@ -1814,17 +1814,17 @@ class LayerClass:
         is_dir = bool(self.directed) if self.directed is not None else False
 
         # scipy fast-set bypass
-        _m_fast_set = getattr(M, "_set_intXint", None)
+        _m_fast_set = getattr(M, '_set_intXint', None)
 
         edge_ids: list[str] = []
         col_idx = start_col
 
         for u, v, w in edge_data:
-            base_eid = f"{u}>{v}@{Lid}"
+            base_eid = f'{u}>{v}@{Lid}'
             eid = base_eid
             k = 1
             while eid in _edges:
-                eid = f"{base_eid}#{k}"
+                eid = f'{base_eid}#{k}'
                 k += 1
 
             if eid in _edges:
@@ -1840,9 +1840,9 @@ class LayerClass:
                     tgt=v,
                     weight=w,
                     directed=is_dir,
-                    etype="binary",
+                    etype='binary',
                     col_idx=c,
-                    ml_kind="intra",
+                    ml_kind='intra',
                     ml_layers=aa,
                     direction_policy=None,
                 )
@@ -1869,9 +1869,9 @@ class LayerClass:
 
         # Batch slice registration
         if Lid not in slices:
-            slices[Lid] = {"vertices": set(), "edges": set(), "attributes": {}}
-        slices[Lid]["edges"].update(edge_ids)
-        slices[Lid]["vertices"].update(all_vertices)
+            slices[Lid] = {'vertices': set(), 'edges': set(), 'attributes': {}}
+        slices[Lid]['edges'].update(edge_ids)
+        slices[Lid]['vertices'].update(all_vertices)
 
         return edge_ids
 
@@ -1917,25 +1917,25 @@ class LayerClass:
         Examples
         --------
         ```python
-        G.add_inter_edge_nl("u1", ("t1",), "u2", ("t2",))
+        G.add_inter_edge_nl('u1', ('t1',), 'u2', ('t2',))
         ```
         """
         warnings.warn(
-            "add_inter_edge_nl() is deprecated; prefer add_edge((u, layer_a), (v, layer_b), ...).",
+            'add_inter_edge_nl() is deprecated; prefer add_edge((u, layer_a), (v, layer_b), ...).',
             DeprecationWarning,
             stacklevel=2,
         )
         aa = layer_a if isinstance(layer_a, tuple) else tuple(layer_a)
         bb = layer_b if isinstance(layer_b, tuple) else tuple(layer_b)
-        if not getattr(self, "_fast_mode", False):
+        if not getattr(self, '_fast_mode', False):
             self._validate_layer_tuple(aa)
             self._validate_layer_tuple(bb)
             self._assert_presence(u, aa)
             self._assert_presence(v, bb)
-        eid = eid or f"{u}>{v}@{self._layer_tuple_to_lid(aa)}~{self._layer_tuple_to_lid(bb)}"
+        eid = eid or f'{u}>{v}@{self._layer_tuple_to_lid(aa)}~{self._layer_tuple_to_lid(bb)}'
         # No single slice applies; just register the edge structurally.
         self.add_edge(u, v, weight=weight, edge_id=eid)
-        self.set_edge_kivela_role(eid, "inter", (aa, bb))
+        self.set_edge_kivela_role(eid, 'inter', (aa, bb))
         return eid
 
     def add_coupling_edge_nl(
@@ -1968,7 +1968,7 @@ class LayerClass:
             Edge id.
         """
         warnings.warn(
-            "add_coupling_edge_nl() is deprecated; prefer add_edge((u, layer_a), (u, layer_b), ...).",
+            'add_coupling_edge_nl() is deprecated; prefer add_edge((u, layer_a), (u, layer_b), ...).',
             DeprecationWarning,
             stacklevel=2,
         )
@@ -1976,7 +1976,7 @@ class LayerClass:
         # Re-label as coupling so supra_adjacency treats it as off-diagonal coupling
         aa = tuple(layer_a)
         bb = tuple(layer_b)
-        self.set_edge_kivela_role(eid2, "coupling", (aa, bb))
+        self.set_edge_kivela_role(eid2, 'coupling', (aa, bb))
         return eid2
 
     def layer_vertex_set(self, layer_tuple):
@@ -2019,19 +2019,19 @@ class LayerClass:
         aa = tuple(layer_tuple)
         E = set()
         for eid, rec in self._edges.items():
-            kind = "hyper" if rec.etype == "hyper" else rec.ml_kind
+            kind = 'hyper' if rec.etype == 'hyper' else rec.ml_kind
             layers = rec.ml_layers
 
-            if kind in {"intra", "hyper"}:
+            if kind in {'intra', 'hyper'}:
                 if layers == aa:
                     E.add(eid)
 
-            elif kind == "inter" and include_inter:
+            elif kind == 'inter' and include_inter:
                 # layers expected to be (La, Lb)
                 if isinstance(layers, tuple) and len(layers) == 2 and aa in layers:
                     E.add(eid)
 
-            elif kind == "coupling" and include_coupling:
+            elif kind == 'coupling' and include_coupling:
                 if isinstance(layers, tuple) and len(layers) == 2 and aa in layers:
                     E.add(eid)
 
@@ -2071,16 +2071,16 @@ class LayerClass:
         str
             Edge id.
         """
-        if len(getattr(self, "aspects", [])) == 1 and getattr(
-            self, "_legacy_single_aspect_enabled", True
+        if len(getattr(self, 'aspects', [])) == 1 and getattr(
+            self, '_legacy_single_aspect_enabled', True
         ):
             aa, bb = self.layer_id_to_tuple(layer_a), self.layer_id_to_tuple(layer_b)
             return self.add_inter_edge_nl(u, aa, v, bb, weight=weight, eid=eid)
         # Fallback in non-multi-aspect mode
-        eid = eid or f"{u}--{v}=={layer_a}~{layer_b}"
+        eid = eid or f'{u}--{v}=={layer_a}~{layer_b}'
         self.add_edge(u, v, weight=weight, edge_id=eid)
         rec = self._edges[eid]
-        rec.ml_kind = "inter"
+        rec.ml_kind = 'inter'
         rec.ml_layers = (layer_a, layer_b)
         return eid
 
@@ -2121,10 +2121,10 @@ class LayerClass:
                 )
             )
         if not Vs:
-            return {"vertices": set(), "edges": set()}
+            return {'vertices': set(), 'edges': set()}
         V = set().union(*Vs)
         E = set().union(*Es)
-        return {"vertices": V, "edges": E}
+        return {'vertices': V, 'edges': E}
 
     def layer_intersection(
         self,
@@ -2151,7 +2151,7 @@ class LayerClass:
         """
         layer_tuples = list(layer_tuples)
         if not layer_tuples:
-            return {"vertices": set(), "edges": set()}
+            return {'vertices': set(), 'edges': set()}
 
         # start with first layer
         V = self.layer_vertex_set(layer_tuples[0])
@@ -2169,7 +2169,7 @@ class LayerClass:
                 include_coupling=include_coupling,
             )
 
-        return {"vertices": V, "edges": E}
+        return {'vertices': V, 'edges': E}
 
     def layer_difference(
         self,
@@ -2210,8 +2210,8 @@ class LayerClass:
             include_coupling=include_coupling,
         )
         return {
-            "vertices": Va - Vb,
-            "edges": Ea - Eb,
+            'vertices': Va - Vb,
+            'edges': Ea - Eb,
         }
 
     ## Layer X Slice
@@ -2248,7 +2248,7 @@ class LayerClass:
         Examples
         --------
         ```python
-        G.create_slice_from_layer("t1_F", ("t1", "F"))
+        G.create_slice_from_layer('t1_F', ('t1', 'F'))
         ```
         """
         result = self.layer_union(
@@ -2256,8 +2256,8 @@ class LayerClass:
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
-        attributes.setdefault("source", "kivela_layer")
-        attributes.setdefault("layer_tuple", tuple(layer_tuple))
+        attributes.setdefault('source', 'kivela_layer')
+        attributes.setdefault('layer_tuple', tuple(layer_tuple))
         return self.create_slice_from_operation(slice_id, result, **attributes)
 
     def create_slice_from_layer_union(
@@ -2294,8 +2294,8 @@ class LayerClass:
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
-        attributes.setdefault("source", "kivela_layer_union")
-        attributes.setdefault("layers", [tuple(a) for a in layer_tuples])
+        attributes.setdefault('source', 'kivela_layer_union')
+        attributes.setdefault('layers', [tuple(a) for a in layer_tuples])
         return self.create_slice_from_operation(slice_id, result, **attributes)
 
     def create_slice_from_layer_intersection(
@@ -2332,8 +2332,8 @@ class LayerClass:
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
-        attributes.setdefault("source", "kivela_layer_intersection")
-        attributes.setdefault("layers", [tuple(a) for a in layer_tuples])
+        attributes.setdefault('source', 'kivela_layer_intersection')
+        attributes.setdefault('layers', [tuple(a) for a in layer_tuples])
         return self.create_slice_from_operation(slice_id, result, **attributes)
 
     def create_slice_from_layer_difference(
@@ -2374,9 +2374,9 @@ class LayerClass:
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
-        attributes.setdefault("source", "kivela_layer_difference")
-        attributes.setdefault("layer_a", tuple(layer_a))
-        attributes.setdefault("layer_b", tuple(layer_b))
+        attributes.setdefault('source', 'kivela_layer_difference')
+        attributes.setdefault('layer_a', tuple(layer_a))
+        attributes.setdefault('layer_b', tuple(layer_b))
         return self.create_slice_from_operation(slice_id, result, **attributes)
 
     ## Subgraph
@@ -2439,7 +2439,7 @@ class LayerClass:
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
-        return self.extract_subgraph(vertices=res["vertices"], edges=res["edges"])
+        return self.extract_subgraph(vertices=res['vertices'], edges=res['edges'])
 
     def subgraph_from_layer_intersection(
         self,
@@ -2468,7 +2468,7 @@ class LayerClass:
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
-        return self.extract_subgraph(vertices=res["vertices"], edges=res["edges"])
+        return self.extract_subgraph(vertices=res['vertices'], edges=res['edges'])
 
     def subgraph_from_layer_difference(
         self,
@@ -2501,14 +2501,14 @@ class LayerClass:
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
-        return self.extract_subgraph(vertices=res["vertices"], edges=res["edges"])
+        return self.extract_subgraph(vertices=res['vertices'], edges=res['edges'])
 
     ## helper
 
     def _assert_presence(self, u: str, aa: tuple[str, ...]):
         if (u, aa) not in self._VM:
             raise KeyError(
-                f"presence missing: {(u, aa)} not in V_M; call add_presence(u, aa) first"
+                f'presence missing: {(u, aa)} not in V_M; call add_presence(u, aa) first'
             )
 
     ## Supra_Adjacency
@@ -2535,8 +2535,8 @@ class LayerClass:
         # Map optional legacy 'layers' (strings) to aspect tuples if needed
         if (
             layers is not None
-            and len(getattr(self, "aspects", [])) == 1
-            and getattr(self, "_legacy_single_aspect_enabled", True)
+            and len(getattr(self, 'aspects', [])) == 1
+            and getattr(self, '_legacy_single_aspect_enabled', True)
         ):
             layers_t = [self.layer_id_to_tuple(L) for L in layers]
         else:
@@ -2549,18 +2549,18 @@ class LayerClass:
         # Fill diagonal blocks from intra-layer edges
         for eid, rec in self._edges.items():
             kind = rec.ml_kind
-            if kind != "intra":
+            if kind != 'intra':
                 continue
             L = rec.ml_layers
             # normalize L to tuple
             if not isinstance(L, tuple):
-                if len(getattr(self, "aspects", [])) == 1 and getattr(
-                    self, "_legacy_single_aspect_enabled", True
+                if len(getattr(self, 'aspects', [])) == 1 and getattr(
+                    self, '_legacy_single_aspect_enabled', True
                 ):
                     L = self.layer_id_to_tuple(L)
                 else:
                     raise ValueError(
-                        "intra edge layer is not a tuple; configure aspects or use add_intra_edge_nl"
+                        'intra edge layer is not a tuple; configure aspects or use add_intra_edge_nl'
                     )
             if layers_t is not None and L not in layers_t:
                 continue
@@ -2577,27 +2577,27 @@ class LayerClass:
         # Fill off-diagonal blocks from inter-layer/coupling edges
         for eid, rec in self._edges.items():
             kind = rec.ml_kind
-            if kind not in {"inter", "coupling"}:
+            if kind not in {'inter', 'coupling'}:
                 continue
             La, Lb = rec.ml_layers
             # normalize La/Lb to tuples
             if not isinstance(La, tuple):
-                if len(getattr(self, "aspects", [])) == 1 and getattr(
-                    self, "_legacy_single_aspect_enabled", True
+                if len(getattr(self, 'aspects', [])) == 1 and getattr(
+                    self, '_legacy_single_aspect_enabled', True
                 ):
                     La = self.layer_id_to_tuple(La)
                 else:
                     raise ValueError(
-                        "inter edge layer_a is not a tuple; configure aspects or use add_inter_edge_nl"
+                        'inter edge layer_a is not a tuple; configure aspects or use add_inter_edge_nl'
                     )
             if not isinstance(Lb, tuple):
-                if len(getattr(self, "aspects", [])) == 1 and getattr(
-                    self, "_legacy_single_aspect_enabled", True
+                if len(getattr(self, 'aspects', [])) == 1 and getattr(
+                    self, '_legacy_single_aspect_enabled', True
                 ):
                     Lb = self.layer_id_to_tuple(Lb)
                 else:
                     raise ValueError(
-                        "inter edge layer_b is not a tuple; configure aspects or use add_inter_edge_nl"
+                        'inter edge layer_b is not a tuple; configure aspects or use add_inter_edge_nl'
                     )
             if layers_t is not None and (La not in layers_t or Lb not in layers_t):
                 continue
@@ -2686,8 +2686,8 @@ class LayerClass:
 
         if (
             layers is not None
-            and len(getattr(self, "aspects", [])) == 1
-            and getattr(self, "_legacy_single_aspect_enabled", True)
+            and len(getattr(self, 'aspects', [])) == 1
+            and getattr(self, '_legacy_single_aspect_enabled', True)
         ):
             layers_t = [self.layer_id_to_tuple(L) for L in layers]
         else:
@@ -2704,8 +2704,8 @@ class LayerClass:
         def _to_tuple(L):
             if isinstance(L, tuple):
                 return L
-            if len(getattr(self, "aspects", [])) == 1 and getattr(
-                self, "_legacy_single_aspect_enabled", True
+            if len(getattr(self, 'aspects', [])) == 1 and getattr(
+                self, '_legacy_single_aspect_enabled', True
             ):
                 return self.layer_id_to_tuple(L)
             return None  # unresolvable
@@ -2718,10 +2718,10 @@ class LayerClass:
 
         default_dir = True if self.directed is None else self.directed
         for eid, rec in self._edges.items():
-            kind = "hyper" if rec.etype == "hyper" else rec.ml_kind
+            kind = 'hyper' if rec.etype == 'hyper' else rec.ml_kind
             # 3a. INTRA binary edge
 
-            if kind == "intra":
+            if kind == 'intra':
                 raw_L = rec.ml_layers
                 if raw_L is None:
                     skipped.append(eid)
@@ -2759,7 +2759,7 @@ class LayerClass:
 
             # 3b. HYPER edge — read stoichiometry directly from _matrix
 
-            elif kind == "hyper":
+            elif kind == 'hyper':
                 raw_L = rec.ml_layers
                 if raw_L is None:
                     # No layer assignment — skip and report
@@ -2806,10 +2806,10 @@ class LayerClass:
 
             # 3c. INTER / COUPLING edges
 
-            elif kind in {"inter", "coupling"}:
-                if kind == "inter" and not include_inter:
+            elif kind in {'inter', 'coupling'}:
+                if kind == 'inter' and not include_inter:
                     continue
-                if kind == "coupling" and not include_coupling:
+                if kind == 'coupling' and not include_coupling:
                     continue
 
                 raw_layers = rec.ml_layers
@@ -2884,8 +2884,8 @@ class LayerClass:
         """Normalize ``layers`` argument to aspect tuples or None."""
         if layers is None:
             return None
-        if len(getattr(self, "aspects", [])) == 1 and getattr(
-            self, "_legacy_single_aspect_enabled", True
+        if len(getattr(self, 'aspects', [])) == 1 and getattr(
+            self, '_legacy_single_aspect_enabled', True
         ):
             return [self.layer_id_to_tuple(L) for L in layers]
         return [tuple(L) for L in layers]
@@ -2899,15 +2899,15 @@ class LayerClass:
         A = sp.dok_matrix((n, n), dtype=float)
 
         # Intra-layer edges (diagonal blocks)
-        if "intra" in include_kinds:
+        if 'intra' in include_kinds:
             for eid, rec in self._edges.items():
                 kind = rec.ml_kind
-                if kind != "intra":
+                if kind != 'intra':
                     continue
                 L = rec.ml_layers
                 if not isinstance(L, tuple):
-                    if len(getattr(self, "aspects", [])) == 1 and getattr(
-                        self, "_legacy_single_aspect_enabled", True
+                    if len(getattr(self, 'aspects', [])) == 1 and getattr(
+                        self, '_legacy_single_aspect_enabled', True
                     ):
                         L = self.layer_id_to_tuple(L)
                     else:
@@ -2924,22 +2924,22 @@ class LayerClass:
                 A[rv, ru] = A.get((rv, ru), 0.0) + w
 
         # Inter/coupling edges (off-diagonal blocks)
-        if include_kinds & {"inter", "coupling"}:
+        if include_kinds & {'inter', 'coupling'}:
             for eid, rec in self._edges.items():
                 kind = rec.ml_kind
                 if kind not in include_kinds:
                     continue
                 La, Lb = rec.ml_layers
                 if not isinstance(La, tuple):
-                    if len(getattr(self, "aspects", [])) == 1 and getattr(
-                        self, "_legacy_single_aspect_enabled", True
+                    if len(getattr(self, 'aspects', [])) == 1 and getattr(
+                        self, '_legacy_single_aspect_enabled', True
                     ):
                         La = self.layer_id_to_tuple(La)
                     else:
                         continue
                 if not isinstance(Lb, tuple):
-                    if len(getattr(self, "aspects", [])) == 1 and getattr(
-                        self, "_legacy_single_aspect_enabled", True
+                    if len(getattr(self, 'aspects', [])) == 1 and getattr(
+                        self, '_legacy_single_aspect_enabled', True
                     ):
                         Lb = self.layer_id_to_tuple(Lb)
                     else:
@@ -2969,7 +2969,7 @@ class LayerClass:
         -------
         scipy.sparse.csr_matrix
         """
-        return self._build_block({"intra"}, layers)
+        return self._build_block({'intra'}, layers)
 
     def build_inter_block(self, layers: list[str] | list[tuple] | None = None):
         """Supra matrix containing only inter-layer (non-diagonal) edges.
@@ -2983,7 +2983,7 @@ class LayerClass:
         -------
         scipy.sparse.csr_matrix
         """
-        return self._build_block({"inter"}, layers)
+        return self._build_block({'inter'}, layers)
 
     def build_coupling_block(self, layers: list[str] | list[tuple] | None = None):
         """Supra matrix containing only coupling edges.
@@ -2997,7 +2997,7 @@ class LayerClass:
         -------
         scipy.sparse.csr_matrix
         """
-        return self._build_block({"coupling"}, layers)
+        return self._build_block({'coupling'}, layers)
 
     def supra_degree(self, layers: list[str] | list[tuple] | None = None):
         """Degree vector over the supra-graph.
@@ -3017,7 +3017,7 @@ class LayerClass:
         deg = np.asarray(A.sum(axis=1)).ravel()
         return deg
 
-    def supra_laplacian(self, kind: str = "comb", layers: list[str] | list[tuple] | None = None):
+    def supra_laplacian(self, kind: str = 'comb', layers: list[str] | list[tuple] | None = None):
         """Build supra-Laplacian.
 
         Parameters
@@ -3036,16 +3036,16 @@ class LayerClass:
         A = self.supra_adjacency(layers)
         n = A.shape[0]
         deg = self.supra_degree(layers)
-        if kind == "comb":
-            D = sp.diags(deg, format="csr")
+        if kind == 'comb':
+            D = sp.diags(deg, format='csr')
             return D - A
-        elif kind == "norm":
+        elif kind == 'norm':
             # D^{-1/2}; zero where deg==0
             invsqrt = np.zeros_like(deg, dtype=float)
             nz = deg > 0
             invsqrt[nz] = 1.0 / np.sqrt(deg[nz])
-            Dm12 = sp.diags(invsqrt, format="csr")
-            I = sp.eye(n, format="csr")
+            Dm12 = sp.diags(invsqrt, format='csr')
+            I = sp.eye(n, format='csr')
             return I - (Dm12 @ A @ Dm12)
         else:
             raise ValueError("kind must be 'comb' or 'norm'")
@@ -3054,7 +3054,7 @@ class LayerClass:
 
     def _aspect_index(self, aspect: str) -> int:
         if aspect not in self.aspects:
-            raise KeyError(f"unknown aspect {aspect!r}; known: {self.aspects!r}")
+            raise KeyError(f'unknown aspect {aspect!r}; known: {self.aspects!r}')
         return self.aspects.index(aspect)
 
     def _layer_matches_filter(self, aa: tuple[str, ...], layer_filter: dict[str, set]) -> bool:
@@ -3243,12 +3243,12 @@ class LayerClass:
         # Intra edges -> (u,aa)↔(v,aa)
         for eid, rec in self._edges.items():
             kind = rec.ml_kind
-            if kind != "intra":
+            if kind != 'intra':
                 continue
             L = rec.ml_layers
             if not isinstance(L, tuple):
-                if len(getattr(self, "aspects", [])) == 1 and getattr(
-                    self, "_legacy_single_aspect_enabled", True
+                if len(getattr(self, 'aspects', [])) == 1 and getattr(
+                    self, '_legacy_single_aspect_enabled', True
                 ):
                     L = self.layer_id_to_tuple(L)
                 else:
@@ -3269,19 +3269,19 @@ class LayerClass:
         # Inter / coupling -> (u,aa)↔(v,bb)
         for eid, rec in self._edges.items():
             kind = rec.ml_kind
-            if kind not in {"inter", "coupling"}:
+            if kind not in {'inter', 'coupling'}:
                 continue
             La, Lb = rec.ml_layers
             if not isinstance(La, tuple):
-                if len(getattr(self, "aspects", [])) == 1 and getattr(
-                    self, "_legacy_single_aspect_enabled", True
+                if len(getattr(self, 'aspects', [])) == 1 and getattr(
+                    self, '_legacy_single_aspect_enabled', True
                 ):
                     La = self.layer_id_to_tuple(La)
                 else:
                     continue
             if not isinstance(Lb, tuple):
-                if len(getattr(self, "aspects", [])) == 1 and getattr(
-                    self, "_legacy_single_aspect_enabled", True
+                if len(getattr(self, 'aspects', [])) == 1 and getattr(
+                    self, '_legacy_single_aspect_enabled', True
                 ):
                     Lb = self.layer_id_to_tuple(Lb)
                 else:
@@ -3301,15 +3301,15 @@ class LayerClass:
             wv.extend((w, w))
 
         return {
-            "vertices": vertices,
-            "layers": layers_t,
-            "vertex_to_i": vertex_to_i,
-            "layer_to_i": layer_to_i,
-            "ui": np.asarray(ui, dtype=int),
-            "ai": np.asarray(ai, dtype=int),
-            "vi": np.asarray(vi, dtype=int),
-            "bi": np.asarray(bi, dtype=int),
-            "w": np.asarray(wv, dtype=float),
+            'vertices': vertices,
+            'layers': layers_t,
+            'vertex_to_i': vertex_to_i,
+            'layer_to_i': layer_to_i,
+            'ui': np.asarray(ui, dtype=int),
+            'ai': np.asarray(ai, dtype=int),
+            'vi': np.asarray(vi, dtype=int),
+            'bi': np.asarray(bi, dtype=int),
+            'w': np.asarray(wv, dtype=float),
         }
 
     def flatten_to_supra(self, tensor_view: dict):
@@ -3326,18 +3326,18 @@ class LayerClass:
         """
 
         # Ensure index reflects current layers subset (tensor_view["layers"])
-        layers_t = tensor_view["layers"] if tensor_view.get("layers", None) else None
+        layers_t = tensor_view['layers'] if tensor_view.get('layers', None) else None
         self.ensure_vertex_layer_index(layers_t)
         n = len(self._row_to_nl)
         A = sp.dok_matrix((n, n), dtype=float)
-        vertices = tensor_view["vertices"]
-        layers = tensor_view["layers"]
+        vertices = tensor_view['vertices']
+        layers = tensor_view['layers']
         ui, ai, vi, bi, w = (
-            tensor_view["ui"],
-            tensor_view["ai"],
-            tensor_view["vi"],
-            tensor_view["bi"],
-            tensor_view["w"],
+            tensor_view['ui'],
+            tensor_view['ai'],
+            tensor_view['vi'],
+            tensor_view['bi'],
+            tensor_view['w'],
         )
         # Map back from indices to (u,aa) rows using current _nl_to_row
         for k in range(len(w)):
@@ -3384,15 +3384,15 @@ class LayerClass:
             ai[k] = layer_to_i[aa]
             bi[k] = layer_to_i[bb]
         return {
-            "vertices": vertices,
-            "layers": layers_t,
-            "vertex_to_i": vertex_to_i,
-            "layer_to_i": layer_to_i,
-            "ui": ui,
-            "ai": ai,
-            "vi": vi,
-            "bi": bi,
-            "w": data.astype(float, copy=False),
+            'vertices': vertices,
+            'layers': layers_t,
+            'vertex_to_i': vertex_to_i,
+            'layer_to_i': layer_to_i,
+            'ui': ui,
+            'ai': ai,
+            'vi': vi,
+            'bi': bi,
+            'w': data.astype(float, copy=False),
         }
 
     ##  Dynamics & spectral probes
@@ -3450,7 +3450,7 @@ class LayerClass:
         invdeg = np.zeros_like(deg, dtype=float)
         nz = deg > 0
         invdeg[nz] = 1.0 / deg[nz]
-        Dinv = sp.diags(invdeg, format="csr")
+        Dinv = sp.diags(invdeg, format='csr')
         return Dinv @ A
 
     def random_walk_step(self, p, layers: list[str] | list[tuple] | None = None):
@@ -3471,11 +3471,11 @@ class LayerClass:
         P = self.transition_matrix(layers)
         p = np.asarray(p, dtype=float).reshape(1, -1)
         if p.shape[1] != P.shape[0]:
-            raise ValueError(f"p has length {p.shape[1]} but supra has size {P.shape[0]}")
+            raise ValueError(f'p has length {p.shape[1]} but supra has size {P.shape[0]}')
         return (p @ P).ravel()
 
     def diffusion_step(
-        self, x, tau: float = 1.0, kind: str = "comb", layers: list[str] | list[tuple] | None = None
+        self, x, tau: float = 1.0, kind: str = 'comb', layers: list[str] | list[tuple] | None = None
     ):
         """One explicit Euler step of diffusion on the supra-graph.
 
@@ -3498,7 +3498,7 @@ class LayerClass:
         L = self.supra_laplacian(kind=kind, layers=layers)
         x = np.asarray(x, dtype=float).reshape(-1)
         if x.shape[0] != L.shape[0]:
-            raise ValueError(f"x has length {x.shape[0]} but supra has size {L.shape[0]}")
+            raise ValueError(f'x has length {x.shape[0]} but supra has size {L.shape[0]}')
         return x - tau * (L @ x)
 
     def algebraic_connectivity(self, layers: list[str] | list[tuple] | None = None):
@@ -3517,12 +3517,12 @@ class LayerClass:
 
         from scipy.sparse.linalg import eigsh
 
-        L = self.supra_laplacian(kind="comb", layers=layers).astype(float)
+        L = self.supra_laplacian(kind='comb', layers=layers).astype(float)
         n = L.shape[0]
         if n < 2:
             return 0.0, None
         # Compute k=2 smallest eigenvalues of symmetric PSD L
-        vals, vecs = eigsh(L, k=2, which="SM", return_eigenvectors=True)
+        vals, vecs = eigsh(L, k=2, which='SM', return_eigenvectors=True)
         # Sort just in case
         order = np.argsort(vals)
         vals = vals[order]
@@ -3531,7 +3531,7 @@ class LayerClass:
         return float(vals[1]), vecs[:, 1]
 
     def k_smallest_laplacian_eigs(
-        self, k: int = 6, kind: str = "comb", layers: list[str] | list[tuple] | None = None
+        self, k: int = 6, kind: str = 'comb', layers: list[str] | list[tuple] | None = None
     ):
         """Return k smallest eigenvalues/eigenvectors of the supra-Laplacian.
 
@@ -3553,10 +3553,10 @@ class LayerClass:
         from scipy.sparse.linalg import eigsh
 
         if k < 1:
-            raise ValueError("k must be >= 1")
+            raise ValueError('k must be >= 1')
         L = self.supra_laplacian(kind=kind, layers=layers).astype(float)
         k = min(k, max(1, L.shape[0] - 1))
-        vals, vecs = eigsh(L, k=k, which="SM", return_eigenvectors=True)
+        vals, vecs = eigsh(L, k=k, which='SM', return_eigenvectors=True)
         order = np.argsort(vals)
         return vals[order], vecs[:, order]
 
@@ -3582,11 +3582,11 @@ class LayerClass:
             return 0.0, None
         # Symmetrize for stable eigensolve; still informative about spectral radius.
         S = (P + P.T) * 0.5
-        vals, vecs = eigsh(S, k=1, which="LA")
+        vals, vecs = eigsh(S, k=1, which='LA')
         return float(vals[0]), vecs[:, 0]
 
     def sweep_coupling_regime(
-        self, scales, metric="algebraic_connectivity", layers: list[str] | list[tuple] | None = None
+        self, scales, metric='algebraic_connectivity', layers: list[str] | list[tuple] | None = None
     ):
         """Scan coupling scales and evaluate a metric.
 
@@ -3611,7 +3611,7 @@ class LayerClass:
             Aω = self.supra_adjacency_scaled(
                 coupling_scale=float(ω), include_inter=True, layers=layers
             )
-            if metric == "algebraic_connectivity":
+            if metric == 'algebraic_connectivity':
                 # Compute λ2 of L = D - Aω
 
                 from scipy.sparse import diags
@@ -3623,7 +3623,7 @@ class LayerClass:
                 if L.shape[0] < 2:
                     results.append(0.0)
                     continue
-                vals, _ = eigsh(L.astype(float), k=2, which="SM")
+                vals, _ = eigsh(L.astype(float), k=2, which='SM')
                 vals.sort()
                 results.append(float(vals[1]))
             elif callable(metric):
@@ -3639,12 +3639,12 @@ class LayerClass:
     def _rows_for_layer(self, L):
         """Return row indices in the supra index that belong to aspect-tuple layer L."""
         if not isinstance(L, tuple):
-            if len(getattr(self, "aspects", [])) == 1 and getattr(
-                self, "_legacy_single_aspect_enabled", True
+            if len(getattr(self, 'aspects', [])) == 1 and getattr(
+                self, '_legacy_single_aspect_enabled', True
             ):
                 L = self.layer_id_to_tuple(L)
             else:
-                raise ValueError("Layer id must be an aspect tuple")
+                raise ValueError('Layer id must be an aspect tuple')
         rows = []
         for i, (u, aa) in enumerate(self._row_to_nl):
             if aa == L:
@@ -3741,7 +3741,7 @@ class LayerClass:
         if n == 0:
             return {}
         # largest eigenpair of symmetric A
-        vals, vecs = eigsh(A, k=1, which="LA")
+        vals, vecs = eigsh(A, k=1, which='LA')
         v = vecs[:, 0]
         per_vertex = {}
         for i, (u, _) in enumerate(self._row_to_nl):
@@ -3797,7 +3797,7 @@ class LayerClass:
         n = len(self._row_to_nl)
         part = np.asarray(partition)
         if part.shape[0] != n:
-            raise ValueError(f"partition length {part.shape[0]} != |V_M| {n}")
+            raise ValueError(f'partition length {part.shape[0]} != |V_M| {n}')
         # Build A = A_intra + (include_inter ? A_inter : 0) + omega * (binary coupling structure)
         A_intra = self.build_intra_block(layers_t).tocsr()
         A_coup = self.build_coupling_block(layers_t).tocsr()

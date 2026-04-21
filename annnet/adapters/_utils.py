@@ -8,13 +8,13 @@ from typing import Any
 def _is_directed_eid(graph, eid):
     """Best-effort directedness probe; default True."""
     try:
-        rec = getattr(graph, "_edges", {}).get(eid)
+        rec = getattr(graph, '_edges', {}).get(eid)
         if rec is not None and rec.directed is not None:
             return bool(rec.directed)
     except Exception:
         pass
     try:
-        v = graph.get_attr_edge(eid, "directed")
+        v = graph.get_attr_edge(eid, 'directed')
         return bool(v) if v is not None else True
     except Exception:
         return True
@@ -37,8 +37,8 @@ def _coerce_coeff_mapping(val):
         out = {}
         for item in val:
             if isinstance(item, dict):
-                if "vertex" in item and "__value" in item:
-                    out[item["vertex"]] = {"__value": item["__value"]}
+                if 'vertex' in item and '__value' in item:
+                    out[item['vertex']] = {'__value': item['__value']}
                 else:
                     for k, v in item.items():
                         out[k] = v
@@ -52,7 +52,7 @@ def _coerce_coeff_mapping(val):
 def _serialize_value(val: Any) -> Any:
     if isinstance(val, Enum):
         return val.name
-    if hasattr(val, "items"):
+    if hasattr(val, 'items'):
         return dict(val)
     return val
 
@@ -62,7 +62,7 @@ def _attrs_to_dict(attrs_dict: dict) -> dict:
     for key, val in attrs_dict.items():
         if isinstance(val, Enum):
             out[key] = val.name
-        elif hasattr(val, "items"):
+        elif hasattr(val, 'items'):
             out[key] = {
                 inner_key: (inner_val.name if isinstance(inner_val, Enum) else inner_val)
                 for inner_key, inner_val in dict(val).items()
@@ -75,14 +75,14 @@ def _attrs_to_dict(attrs_dict: dict) -> dict:
 def _serialize_endpoint(endpoint: Any) -> Any:
     """Convert an endpoint into a JSON-safe representation."""
     if isinstance(endpoint, tuple) and len(endpoint) == 2 and isinstance(endpoint[1], tuple):
-        return {"kind": "supra", "vertex": endpoint[0], "layer": list(endpoint[1])}
+        return {'kind': 'supra', 'vertex': endpoint[0], 'layer': list(endpoint[1])}
     return endpoint
 
 
 def _deserialize_endpoint(value: Any) -> Any:
     """Restore a structural endpoint from JSON-safe or legacy serialized forms."""
-    if isinstance(value, dict) and value.get("kind") == "supra":
-        return (value.get("vertex"), tuple(value.get("layer") or []))
+    if isinstance(value, dict) and value.get('kind') == 'supra':
+        return (value.get('vertex'), tuple(value.get('layer') or []))
     if isinstance(value, list) and len(value) == 2 and isinstance(value[1], list):
         return (value[0], tuple(value[1]))
     if isinstance(value, str):
@@ -92,7 +92,7 @@ def _deserialize_endpoint(value: Any) -> Any:
             parsed = None
         if parsed is not None and parsed != value:
             return _deserialize_endpoint(parsed)
-        if value.startswith("(") and value.endswith(")"):
+        if value.startswith('(') and value.endswith(')'):
             try:
                 parsed = _ast.literal_eval(value)
             except Exception:
@@ -113,7 +113,7 @@ def _rows_like(table):
         return dataframe_to_rows(table)
     except Exception:
         pass
-    if hasattr(table, "fetchall") and hasattr(table, "columns"):
+    if hasattr(table, 'fetchall') and hasattr(table, 'columns'):
         try:
             cols = list(table.columns)
             return [dict(zip(cols, row)) for row in table.fetchall()]
@@ -130,7 +130,7 @@ def _rows_like(table):
 
 
 def save_manifest(manifest: dict, path: str):
-    with open(path, "w") as f:
+    with open(path, 'w') as f:
         _json.dump(manifest, f, indent=2)
 
 
@@ -151,7 +151,7 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
     for u in endpoints:
         val = mapping.get(u, 1.0)
         if isinstance(val, dict):
-            val = val.get("__value", 1.0)
+            val = val.get('__value', 1.0)
         try:
             out[u] = float(val)
         except Exception:
@@ -179,7 +179,7 @@ def _serialize_edge_layers(edge_layers: dict[str, Any]) -> dict[str, Any]:
             continue
         # e.g. intra: L == aa (tuple[str,...])
         if isinstance(L, tuple) and (len(L) == 0 or isinstance(L[0], str)):
-            out[eid] = {"kind": "single", "layers": [list(L)]}
+            out[eid] = {'kind': 'single', 'layers': [list(L)]}
         # inter/coupling: L == (aa, bb)
         elif (
             isinstance(L, tuple)
@@ -187,10 +187,10 @@ def _serialize_edge_layers(edge_layers: dict[str, Any]) -> dict[str, Any]:
             and isinstance(L[0], tuple)
             and isinstance(L[1], tuple)
         ):
-            out[eid] = {"kind": "pair", "layers": [list(L[0]), list(L[1])]}
+            out[eid] = {'kind': 'pair', 'layers': [list(L[0]), list(L[1])]}
         else:
             # fallback: just repr it
-            out[eid] = {"kind": "raw", "value": repr(L)}
+            out[eid] = {'kind': 'raw', 'value': repr(L)}
     return out
 
 
@@ -202,13 +202,13 @@ def _deserialize_edge_layers(data: dict[str, Any]) -> dict[str, Any]:
     """
     out = {}
     for eid, rec in data.items():
-        kind = rec.get("kind")
-        if kind == "single":
-            aa = tuple(rec["layers"][0])
+        kind = rec.get('kind')
+        if kind == 'single':
+            aa = tuple(rec['layers'][0])
             out[eid] = aa
-        elif kind == "pair":
-            La = tuple(rec["layers"][0])
-            Lb = tuple(rec["layers"][1])
+        elif kind == 'pair':
+            La = tuple(rec['layers'][0])
+            Lb = tuple(rec['layers'][1])
             out[eid] = (La, Lb)
         else:
             # unknown / raw -> ignore or store as is
@@ -221,14 +221,14 @@ def _serialize_VM(VM: set[tuple[str, tuple[str, ...]]]) -> list[dict]:
     """
     Serialize V_M = {(u, aa)} to JSON-safe list of dicts.
     """
-    return [{"node": u, "layer": list(aa)} for (u, aa) in VM]
+    return [{'node': u, 'layer': list(aa)} for (u, aa) in VM]
 
 
 def _deserialize_VM(data: list[dict]) -> set[tuple[str, tuple[str, ...]]]:
     """
     Inverse of _serialize_VM.
     """
-    return {(rec["node"], tuple(rec["layer"])) for rec in data}
+    return {(rec['node'], tuple(rec['layer'])) for rec in data}
 
 
 def _serialize_node_layer_attrs(nl_attrs: dict[tuple[str, tuple[str, ...]], dict]) -> list[dict]:
@@ -239,9 +239,9 @@ def _serialize_node_layer_attrs(nl_attrs: dict[tuple[str, tuple[str, ...]], dict
     for (u, aa), attrs in nl_attrs.items():
         out.append(
             {
-                "node": u,
-                "layer": list(aa),
-                "attrs": dict(attrs),
+                'node': u,
+                'layer': list(aa),
+                'attrs': dict(attrs),
             }
         )
     return out
@@ -253,8 +253,8 @@ def _deserialize_node_layer_attrs(data: list[dict]) -> dict[tuple[str, tuple[str
     """
     out: dict[tuple[str, tuple[str, ...]], dict] = {}
     for rec in data:
-        key = (rec["node"], tuple(rec["layer"]))
-        out[key] = dict(rec.get("attrs", {}))
+        key = (rec['node'], tuple(rec['layer']))
+        out[key] = dict(rec.get('attrs', {}))
     return out
 
 
@@ -266,9 +266,9 @@ def _serialize_slices(slices: dict[str, dict]) -> dict[str, dict]:
     out = {}
     for sid, rec in slices.items():
         out[sid] = {
-            "vertices": list(rec.get("vertices", [])),
-            "edges": list(rec.get("edges", [])),
-            "attributes": dict(rec.get("attributes", {})),
+            'vertices': list(rec.get('vertices', [])),
+            'edges': list(rec.get('edges', [])),
+            'attributes': dict(rec.get('attributes', {})),
         }
     return out
 
@@ -280,9 +280,9 @@ def _deserialize_slices(data: dict[str, dict]) -> dict[str, dict]:
     out = {}
     for sid, rec in data.items():
         out[sid] = {
-            "vertices": set(rec.get("vertices", [])),
-            "edges": set(rec.get("edges", [])),
-            "attributes": dict(rec.get("attributes", {})),
+            'vertices': set(rec.get('vertices', [])),
+            'edges': set(rec.get('edges', [])),
+            'attributes': dict(rec.get('attributes', {})),
         }
     return out
 
@@ -310,7 +310,7 @@ def _serialize_layer_tuple_attrs(layer_attrs: dict[tuple[str, ...], dict]) -> li
     """
     out = []
     for aa, attrs in layer_attrs.items():
-        out.append({"layer": list(aa), "attrs": dict(attrs)})
+        out.append({'layer': list(aa), 'attrs': dict(attrs)})
     return out
 
 
@@ -320,8 +320,8 @@ def _deserialize_layer_tuple_attrs(data: list[dict]) -> dict[tuple[str, ...], di
     """
     out: dict[tuple[str, ...], dict] = {}
     for rec in data:
-        aa = tuple(rec["layer"])
-        out[aa] = dict(rec.get("attrs", {}))
+        aa = tuple(rec['layer'])
+        out[aa] = dict(rec.get('attrs', {}))
     return out
 
 
@@ -330,4 +330,3 @@ def _safe_df_to_rows(df):
     if df is None:
         return []
     return _df_to_rows(df)
-

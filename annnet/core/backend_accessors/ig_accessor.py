@@ -13,21 +13,21 @@ class _IGBackendAccessor(_BackendAccessorBase):
     """igraph backend accessor attached to an AnnNet instance."""
 
     VERTEX_KEYS = {
-        "source",
-        "target",
-        "u",
-        "v",
-        "vertex",
-        "vertices",
-        "vs",
-        "to",
-        "fr",
-        "root",
-        "roots",
-        "neighbors",
-        "nbunch",
-        "path",
-        "cut",
+        'source',
+        'target',
+        'u',
+        'v',
+        'vertex',
+        'vertices',
+        'vs',
+        'to',
+        'fr',
+        'root',
+        'roots',
+        'neighbors',
+        'nbunch',
+        'path',
+        'cut',
     }
 
     def __init__(self, owner: AnnNet):
@@ -41,21 +41,21 @@ class _IGBackendAccessor(_BackendAccessorBase):
     def peek_vertices(self, k: int = 10):
         igG = self._get_or_make_ig(
             directed=True,
-            hyperedge_mode="skip",
+            hyperedge_mode='skip',
             slice=None,
             slices=None,
             needed_attrs=set(),
             simple=True,
             edge_aggs=None,
         )
-        names = igG.vs["name"] if "name" in igG.vs.attributes() else None
+        names = igG.vs['name'] if 'name' in igG.vs.attributes() else None
         return [names[i] if names else i for i in range(min(max(0, int(k)), igG.vcount()))]
 
     def backend(
         self,
         *,
         directed: bool = True,
-        hyperedge_mode: str = "skip",
+        hyperedge_mode: str = 'skip',
         slice=None,
         slices=None,
         needed_attrs=None,
@@ -76,18 +76,18 @@ class _IGBackendAccessor(_BackendAccessorBase):
         def wrapper(*args, **kwargs):
             import igraph as _ig
 
-            directed = bool(kwargs.pop("_ig_directed", True))
-            hyperedge_mode = kwargs.pop("_ig_hyperedge", "skip")
-            slice = kwargs.pop("_ig_slice", None)
-            slices = kwargs.pop("_ig_slices", None)
-            label_field = kwargs.pop("_ig_label_field", None)
-            guess_labels = kwargs.pop("_ig_guess_labels", True)
-            simple = bool(kwargs.pop("_ig_simple", False))
-            edge_aggs = kwargs.pop("_ig_edge_aggs", None)
+            directed = bool(kwargs.pop('_ig_directed', True))
+            hyperedge_mode = kwargs.pop('_ig_hyperedge', 'skip')
+            slice = kwargs.pop('_ig_slice', None)
+            slices = kwargs.pop('_ig_slices', None)
+            label_field = kwargs.pop('_ig_label_field', None)
+            guess_labels = kwargs.pop('_ig_guess_labels', True)
+            simple = bool(kwargs.pop('_ig_simple', False))
+            edge_aggs = kwargs.pop('_ig_edge_aggs', None)
 
             needed_edge_attrs = self._needed_edge_attrs_for_ig(name, kwargs)
 
-            if str(hyperedge_mode).lower() == "reify":
+            if str(hyperedge_mode).lower() == 'reify':
                 import warnings
 
                 warnings.warn(
@@ -146,9 +146,9 @@ class _IGBackendAccessor(_BackendAccessorBase):
                 sample = self.peek_vertices(5)
                 tip = (
                     f"{exc}. Vertices must match this graph's vertex IDs.\n"
-                    f"- If you passed labels, set _ig_label_field=<vertex label column>.\n"
+                    f'- If you passed labels, set _ig_label_field=<vertex label column>.\n'
                     f"- Example: G.ig.distances(source='a', target='z', weights='weight', _ig_label_field='name')\n"
-                    f"- A few vertex IDs igraph sees: {sample}"
+                    f'- A few vertex IDs igraph sees: {sample}'
                 )
                 raise type(exc)(tip) from exc
 
@@ -157,16 +157,16 @@ class _IGBackendAccessor(_BackendAccessorBase):
     def __dir__(self):
         import igraph as _ig
 
-        graph_obj = getattr(_ig, "Graph", None)
+        graph_obj = getattr(_ig, 'Graph', None)
         return sorted(set(super().__dir__()) | self._callable_names(_ig, graph_obj))
 
     def _needed_edge_attrs_for_ig(self, func_name: str, kwargs: dict) -> set:
         needed = set()
-        weight_name = kwargs.get("weights", kwargs.get("weight", None))
+        weight_name = kwargs.get('weights', kwargs.get('weight', None))
         if weight_name is not None:
             needed.add(str(weight_name))
-        if "capacity" in kwargs and kwargs["capacity"] is not None:
-            needed.add(str(kwargs["capacity"]))
+        if 'capacity' in kwargs and kwargs['capacity'] is not None:
+            needed.add(str(kwargs['capacity']))
         return needed
 
     def _convert_to_ig(
@@ -185,7 +185,7 @@ class _IGBackendAccessor(_BackendAccessorBase):
         igG, _manifest = _gg_ig.to_igraph(
             self._G,
             directed=directed,
-            hyperedge_mode="expand" if str(hyperedge_mode).lower() == "expand" else "skip",
+            hyperedge_mode='expand' if str(hyperedge_mode).lower() == 'expand' else 'skip',
             slice=slice,
             slices=slices,
             public_only=True,
@@ -217,12 +217,12 @@ class _IGBackendAccessor(_BackendAccessorBase):
             bool(simple),
             self._freeze_cache_value(edge_aggs),
         )
-        version = getattr(self._G, "_version", None)
+        version = getattr(self._G, '_version', None)
         entry = self._cache.get(key)
         if (
             (not self.cache_enabled)
             or (entry is None)
-            or (version is not None and entry.get("version") != version)
+            or (version is not None and entry.get('version') != version)
         ):
             igG = self._convert_to_ig(
                 directed=directed,
@@ -234,37 +234,37 @@ class _IGBackendAccessor(_BackendAccessorBase):
                 edge_aggs=edge_aggs,
             )
             if self.cache_enabled:
-                self._cache[key] = {"igG": igG, "version": version}
+                self._cache[key] = {'igG': igG, 'version': version}
             return igG
-        return entry["igG"]
+        return entry['igG']
 
     def _warn_on_loss(self, *, hyperedge_mode, slice, slices, manifest):
         import warnings
 
         msgs = []
         if (
-            any(rec.etype == "hyper" for rec in self._G._edges.values())
-            and hyperedge_mode != "expand"
+            any(rec.etype == 'hyper' for rec in self._G._edges.values())
+            and hyperedge_mode != 'expand'
         ):
             msgs.append("hyperedges dropped (hyperedge_mode='skip')")
-        slices_dict = getattr(self._G, "_slices", None)
+        slices_dict = getattr(self._G, '_slices', None)
         if (
             isinstance(slices_dict, dict)
             and len(slices_dict) > 1
             and (slice is None and not slices)
         ):
-            msgs.append("multiple slices flattened into single igraph graph")
+            msgs.append('multiple slices flattened into single igraph graph')
         if manifest is None:
-            msgs.append("no manifest provided; round-trip fidelity not guaranteed")
+            msgs.append('no manifest provided; round-trip fidelity not guaranteed')
         if msgs:
             warnings.warn(
-                "AnnNet-igraph conversion is lossy: " + "; ".join(msgs) + ".",
+                'AnnNet-igraph conversion is lossy: ' + '; '.join(msgs) + '.',
                 category=RuntimeWarning,
                 stacklevel=3,
             )
 
     def _name_to_index_map(self, igG):
-        names = igG.vs["name"] if "name" in igG.vs.attributes() else None
+        names = igG.vs['name'] if 'name' in igG.vs.attributes() else None
         return {name: idx for idx, name in enumerate(names)} if names is not None else {}
 
     def _coerce_vertex(self, value, igG, label_field: str | None):
@@ -306,8 +306,8 @@ class _IGBackendAccessor(_BackendAccessorBase):
 
         H = _ig.Graph(directed=directed)
         H.add_vertices(igG.vcount())
-        if "name" in igG.vs.attributes():
-            H.vs["name"] = igG.vs["name"]
+        if 'name' in igG.vs.attributes():
+            H.vs['name'] = igG.vs['name']
 
         aggregations = aggregations or {}
 
@@ -315,17 +315,17 @@ class _IGBackendAccessor(_BackendAccessorBase):
             agg = aggregations.get(key)
             if callable(agg):
                 return agg
-            if agg == "sum":
+            if agg == 'sum':
                 return sum
-            if agg == "min":
+            if agg == 'min':
                 return min
-            if agg == "max":
+            if agg == 'max':
                 return max
-            if agg == "mean":
+            if agg == 'mean':
                 return lambda values: (sum(values) / len(values)) if values else None
-            if key == "capacity":
+            if key == 'capacity':
                 return sum
-            if key == "weight":
+            if key == 'weight':
                 return min
             return lambda values: next(iter(values)) if values else None
 

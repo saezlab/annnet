@@ -6,7 +6,7 @@ from importlib import import_module
 from typing import Any
 
 _lazy_symbols: dict[str, tuple[str, str]] = {
-    "Traversal": ("annnet.algorithms.traversal", "Traversal"),
+    'Traversal': ('annnet.algorithms.traversal', 'Traversal'),
 }
 
 __all__ = sorted(_lazy_symbols)

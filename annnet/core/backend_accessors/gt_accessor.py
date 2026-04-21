@@ -29,9 +29,9 @@ class _GTBackendAccessor(_BackendAccessorBase):
     def _load_gt_module(name):
         from importlib import import_module
 
-        return import_module(f"graph_tool.{name}")
+        return import_module(f'graph_tool.{name}')
 
-    VERTEX_KEYS = {"source", "target", "vertex", "root", "u", "v"}
+    VERTEX_KEYS = {'source', 'target', 'vertex', 'root', 'u', 'v'}
 
     def __init__(self, owner):
         self._G = owner
@@ -42,14 +42,14 @@ class _GTBackendAccessor(_BackendAccessorBase):
         self._GT_MODULES = {
             name: (lambda n=name: self._load_gt_module(n))
             for name in [
-                "topology",
-                "centrality",
-                "clustering",
-                "flow",
-                "inference",
-                "generation",
-                "search",
-                "util",
+                'topology',
+                'centrality',
+                'clustering',
+                'flow',
+                'inference',
+                'generation',
+                'search',
+                'util',
             ]
         }
 
@@ -93,28 +93,28 @@ class _GTBackendAccessor(_BackendAccessorBase):
     # Conversion
 
     def _get_or_make_gt(self):
-        key = ("gt",)
-        version = getattr(self._G, "_version", None)
+        key = ('gt',)
+        version = getattr(self._G, '_version', None)
         entry = self._cache.get(key)
 
-        if not self.cache_enabled or entry is None or entry["version"] != version:
+        if not self.cache_enabled or entry is None or entry['version'] != version:
             from ...adapters.graphtool_adapter import to_graphtool
 
             gtG, manifest = to_graphtool(self._G)
             self._warn_on_loss(manifest)
-            self._cache[key] = {"gtG": gtG, "version": version}
-        return self._cache[key]["gtG"]
+            self._cache[key] = {'gtG': gtG, 'version': version}
+        return self._cache[key]['gtG']
 
     # Vertex coercion
 
     def _coerce_vertices(self, bound, kwargs, gtG):
         label_field = self._infer_label_field()
         id_map = self._build_id_map(gtG)
-        vertex_ids = {ekey[0] for ekey, rec in self._G._entities.items() if rec.kind == "vertex"}
+        vertex_ids = {ekey[0] for ekey, rec in self._G._entities.items() if rec.kind == 'vertex'}
 
         def map_one(x):
             # AnnNet internal id?
-            if hasattr(x, "__class__") and x.__class__.__module__.startswith("graph_tool."):
+            if hasattr(x, '__class__') and x.__class__.__module__.startswith('graph_tool.'):
                 return x
             if isinstance(x, tuple) and len(x) == 2 and isinstance(x[1], tuple):
                 vid = x[0]
@@ -149,9 +149,9 @@ class _GTBackendAccessor(_BackendAccessorBase):
                     kwargs[k] = map_obj(kwargs[k])
 
     def _build_id_map(self, gtG):
-        if "id" not in gtG.vp:
+        if 'id' not in gtG.vp:
             raise RuntimeError("graph-tool backend missing vertex ID property 'id'")
-        vp = gtG.vp["id"]
+        vp = gtG.vp['id']
         out = {}
         for v in gtG.vertices():
             out[str(vp[v])] = int(v)
@@ -172,14 +172,14 @@ class _GTBackendAccessor(_BackendAccessorBase):
     def _warn_on_loss(self, manifest):
         msgs = []
         if manifest:
-            if manifest["edges"]["hyperedges"]:
-                msgs.append("hyperedges dropped")
-            if len(manifest["slices"]["data"]) > 1:
-                msgs.append("multiple slices collapsed")
+            if manifest['edges']['hyperedges']:
+                msgs.append('hyperedges dropped')
+            if len(manifest['slices']['data']) > 1:
+                msgs.append('multiple slices collapsed')
         if msgs:
             import warnings
 
-            warnings.warn("AnnNet → graph-tool conversion is lossy: " + "; ".join(msgs))
+            warnings.warn('AnnNet → graph-tool conversion is lossy: ' + '; '.join(msgs))
 
 
 class _GTNamespaceProxy:
@@ -205,7 +205,7 @@ class _GTNamespaceProxy:
         mod = self._load()
         names = set(super().__dir__())
         for name in dir(mod):
-            if name.startswith("_"):
+            if name.startswith('_'):
                 continue
             try:
                 attr = getattr(mod, name)
@@ -251,7 +251,7 @@ class _GTNamespaceProxy:
                             first.POSITIONAL_OR_KEYWORD,
                         )
                         and first.default is inspect._empty
-                        and first.name in {"g", "graph", "G"}
+                        and first.name in {'g', 'graph', 'G'}
                         and len(args) == 0
                         and first.name not in kwargs
                     )
@@ -271,9 +271,9 @@ class _GTNamespaceProxy:
 
             # weight property mapping
             if bound:
-                if "weights" in bound.arguments and isinstance(bound.arguments["weights"], str):
-                    pname = bound.arguments["weights"]
-                    bound.arguments["weights"] = gtG.ep[pname]
+                if 'weights' in bound.arguments and isinstance(bound.arguments['weights'], str):
+                    pname = bound.arguments['weights']
+                    bound.arguments['weights'] = gtG.ep[pname]
                 return func(*bound.args, **bound.kwargs)
 
             return func(*args, **kwargs)

@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterable
 from itertools import filterfalse
 from typing import Any, TypeVar
 
-T = TypeVar("T")
+T = TypeVar('T')
 
 
 def canonicalize(obj):
@@ -29,7 +29,7 @@ def canonicalize(obj):
         return obj
     else:
         # For non-standard objects, try using the __dict__ attribute if available
-        if hasattr(obj, "__dict__"):
+        if hasattr(obj, '__dict__'):
             return canonicalize(obj.__dict__)
         else:
             # Fall back to a string representation
@@ -42,8 +42,8 @@ def obj_canonicalized_hash(obj) -> str:
     # Serialize the canonical object to a JSON string.
     # 'sort_keys=True' ensures consistent key order,
     # and separators remove unnecessary whitespace.
-    obj_serialized = json.dumps(canonical_obj, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
+    obj_serialized = json.dumps(canonical_obj, sort_keys=True, separators=(',', ':')).encode(
+        'utf-8'
     )
     # Compute the SHA256 hash of the serialized bytes
     hash_obj = hashlib.sha256()

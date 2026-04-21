@@ -20,11 +20,11 @@ class Attr(StrEnum):
 
     """
 
-    VALUE = "__value"
-    EDGE_TYPE = "__edge_type"
-    SOURCE_ATTR = "__source_attr"
-    TARGET_ATTR = "__target_attr"
-    CUSTOM_ATTR = "__custom_attr"
+    VALUE = '__value'
+    EDGE_TYPE = '__edge_type'
+    SOURCE_ATTR = '__source_attr'
+    TARGET_ATTR = '__target_attr'
+    CUSTOM_ATTR = '__custom_attr'
 
 
 class Attributes(dict):
@@ -72,7 +72,7 @@ class Attributes(dict):
         """
         if __name in self:
             return self.__getitem__(__name)
-        raise AttributeError(f"{__name} does not exist")
+        raise AttributeError(f'{__name} does not exist')
 
     def set_attr(self, key: Attr, value: Any) -> None:
         """Set an attribute in the dictionary using an `Attr` key.
