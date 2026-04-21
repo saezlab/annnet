@@ -5,12 +5,8 @@ from typing import Optional
 import narwhals as nw
 import numpy as np
 
+from .._dataframe_backend import dataframe_height, dataframe_to_rows, select_dataframe_backend
 from ..core.graph import AnnNet
-
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
-    pl = None
 
 
 def read_omnipath(
@@ -30,7 +26,7 @@ def read_omnipath(
     default_directed: bool = True,
     edge_attr_cols: list[str] | None = None,
     dropna: bool = True,
-    annotations_backend: str = "polars",
+    annotations_backend: str | None = None,
     vertex_annotations_df=None,
     vertex_annotations_path: str | None = None,
     vertex_annotation_sources: list[str] | None = None,
@@ -92,7 +88,8 @@ def read_omnipath(
         If ``True`` (default), silently drop rows with null source or target.
         If ``False``, raise ``ValueError`` on first null endpoint.
     annotations_backend : str, optional
-        Backend for AnnNet attribute tables. Default ``"polars"``.
+        Backend for AnnNet attribute tables. ``None`` uses AnnNet's configured
+        dataframe backend default.
     vertex_annotations_df : DataFrame-like, optional
         Pre-loaded annotation table in OmniPath long format
         ``(genesymbol, source, label, value)``. Skips all file I/O.
@@ -215,17 +212,20 @@ def read_omnipath(
                 return False
         return default
 
-    def _to_dicts(native, ndf):
-        if pl is not None and isinstance(native, pl.DataFrame):
-            return native.to_dicts()
-        if hasattr(native, "to_dict"):
-            try:
-                return native.to_dict(orient="records")
-            except Exception:
-                pass
-        if hasattr(ndf, "to_dicts"):
-            return ndf.to_dicts()
-        raise TypeError("Unsupported dataframe type for OmniPath import")
+    def _read_tsv(source):
+        backend = select_dataframe_backend(annotations_backend)
+        if backend == "polars":
+            import polars as pl
+
+            return pl.read_csv(source, separator="\t")
+        if backend == "pandas":
+            import pandas as pd
+
+            return pd.read_csv(source, sep="\t")
+
+        import pyarrow.csv as pacsv
+
+        return pacsv.read_csv(source, parse_options=pacsv.ParseOptions(delimiter="\t"))
 
     # fetch
     t_fetch0 = time.perf_counter()
@@ -343,7 +343,7 @@ def read_omnipath(
 
     # _to_dicts
     t_dicts0 = time.perf_counter()
-    rows = _to_dicts(native, ndf)
+    rows = dataframe_to_rows(native)
     print(
         f"[timing] _to_dicts:            {time.perf_counter() - t_dicts0:.3f}s  ({len(rows)} rows)"
     )
@@ -421,7 +421,7 @@ def read_omnipath(
         # 2) caller passed a local file path
         elif vertex_annotations_path is not None:
             try:
-                ann_raw = pl.read_csv(vertex_annotations_path, separator="\t")
+                ann_raw = _read_tsv(vertex_annotations_path)
             except Exception as e:
                 print(f"[warning] vertex_annotations_path failed: {e}")
 
@@ -443,9 +443,9 @@ def read_omnipath(
                 if os.path.exists(_cache_path):
                     print(f"[vertex annotations] loading from cache: {_cache_path}")
                     t_ann = time.perf_counter()
-                    ann_raw = pl.read_csv(_cache_path, separator="\t")
+                    ann_raw = _read_tsv(_cache_path)
                     print(
-                        f"[vertex annotations] loaded in {time.perf_counter() - t_ann:.1f}s  shape={ann_raw.shape}"
+                        f"[vertex annotations] loaded in {time.perf_counter() - t_ann:.1f}s  rows={dataframe_height(ann_raw)}"
                     )
                 else:
                     print(
@@ -461,7 +461,7 @@ def read_omnipath(
                     os.makedirs(os.path.dirname(_cache_path), exist_ok=True)
                     with open(_cache_path, "wb") as _f:
                         _f.write(resp.content)
-                    ann_raw = pl.read_csv(io.BytesIO(resp.content), separator="\t")
+                    ann_raw = _read_tsv(io.BytesIO(resp.content))
                     print(
                         f"[vertex annotations] downloaded + cached in {time.perf_counter() - t_ann:.1f}s  → {_cache_path}"
                     )
@@ -470,41 +470,37 @@ def read_omnipath(
 
         if ann_raw is not None:
             try:
-                if not isinstance(ann_raw, pl.DataFrame):
-                    ann_raw = pl.from_pandas(ann_raw)
-
                 vids_set = set(all_vids)
-
-                # filter to graph vertices + requested sources
-                mask = pl.col("genesymbol").is_in(vids_set)
-                if vertex_annotation_sources is not None:
-                    mask = mask & pl.col("source").is_in(vertex_annotation_sources)
-                ann = ann_raw.filter(mask)
-
-                # pivot: one row per protein, one col per source:label
-                flat = (
-                    ann.with_columns(
-                        pl.concat_str([pl.col("source"), pl.col("label")], separator=":").alias(
-                            "attr_key"
-                        )
-                    )
-                    .group_by(["genesymbol", "attr_key"])
-                    .agg(pl.col("value").cast(pl.Utf8).drop_nulls().unique().sort().str.join(";"))
-                    .pivot(on="attr_key", index="genesymbol", values="value")
-                    .rename({"genesymbol": "vertex_id"})
+                source_filter = (
+                    set(vertex_annotation_sources)
+                    if vertex_annotation_sources is not None
+                    else None
                 )
+
+                # Pivot in Python rows: one row per gene, one column per source:label.
+                grouped: dict[str, dict[str, set[str]]] = {}
+                for row in dataframe_to_rows(ann_raw):
+                    gene = row.get("genesymbol")
+                    source = row.get("source")
+                    label = row.get("label")
+                    value = row.get("value")
+                    if gene not in vids_set:
+                        continue
+                    if source_filter is not None and source not in source_filter:
+                        continue
+                    if source is None or label is None or value is None:
+                        continue
+                    attr_key = f"{source}:{label}"
+                    grouped.setdefault(gene, {}).setdefault(attr_key, set()).add(str(value))
 
                 G.add_vertices_bulk(
                     [
-                        (
-                            row["vertex_id"],
-                            {k: v for k, v in row.items() if k != "vertex_id" and v is not None},
-                        )
-                        for row in flat.to_dicts()
-                        if G._resolve_entity_key(row["vertex_id"]) in G._entities
+                        (gene, {key: ";".join(sorted(values)) for key, values in attrs.items()})
+                        for gene, attrs in grouped.items()
+                        if G._resolve_entity_key(gene) in G._entities
                     ]
                 )
-                print(f"[vertex annotations] loaded  shape={G.vertex_attributes.shape}")
+                print(f"[vertex annotations] loaded  rows={len(grouped)}")
             except Exception as e:
                 print(f"[warning] vertex annotation pivot/load failed: {e}")
 

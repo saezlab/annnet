@@ -109,23 +109,10 @@ def _deserialize_endpoint(value: Any) -> Any:
 def _rows_like(table):
     if table is None:
         return []
-    if hasattr(table, "to_dicts"):
-        try:
-            return list(table.to_dicts())
-        except Exception:
-            pass
-    if hasattr(table, "to_dict"):
-        try:
-            recs = table.to_dict(orient="records")
-            if isinstance(recs, list):
-                return recs
-        except Exception:
-            pass
-    if hasattr(table, "to_pylist"):
-        try:
-            return list(table.to_pylist())
-        except Exception:
-            pass
+    try:
+        return dataframe_to_rows(table)
+    except Exception:
+        pass
     if hasattr(table, "fetchall") and hasattr(table, "columns"):
         try:
             cols = list(table.columns)

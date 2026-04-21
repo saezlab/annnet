@@ -31,43 +31,17 @@ def _collect_slices_and_weights(graph) -> tuple[dict, dict]:
     """Returns:
       slices_section: {slice_id: [edge_id, ...]}
       slice_weights:  {slice_id: {edge_id: weight}}
-    Backends supported: Polars-like, .to_dicts()-like, dict.
+    Backends supported: Narwhals-compatible dataframe-like tables and dicts.
 
     """
     slices_section: dict = {}
     slice_weights: dict = {}
 
-    # --- Source A: edge_slice_attributes table (Polars-like)
+    # --- Source A: edge_slice_attributes table
     t = getattr(graph, "edge_slice_attributes", None)
-    if t is not None and hasattr(t, "filter"):
+    if t is not None:
         try:
-            # Attempt Polars path without hard dependency
-
-            # Get all rows then group by slice in Python (keeps us backend-agnostic)
-            if hasattr(t, "to_dicts"):
-                rows = t.to_dicts()
-            else:
-                # last-ditch: try turning the entire table into a list of dicts
-                # many DataFrame-likes support .rows(named=True)
-                rows = getattr(t, "rows", lambda named=False: [])(named=True)  # type: ignore
-            for r in rows:
-                lid = r.get("slice")
-                if lid is None:
-                    continue
-                eid = r.get("edge_id", r.get("edge"))
-                if eid is None:
-                    continue
-                slices_section.setdefault(lid, []).append(eid)
-                w = r.get("weight")
-                if w is not None:
-                    slice_weights.setdefault(lid, {})[eid] = float(w)
-        except Exception:
-            pass  # fall through to other sources
-
-    # --- Source B: edge_slice_attributes with .to_dicts() but no Polars
-    if not slices_section and t is not None and hasattr(t, "to_dicts"):
-        try:
-            for r in t.to_dicts():
+            for r in _rows_like(t):
                 lid = r.get("slice")
                 if lid is None:
                     continue
@@ -227,18 +201,12 @@ def _export_binary_graph(
     G.vs["name"] = vertices
 
     # Attach vertex attributes (works for both vertices and edge-entities)
-    # Polars-safe extraction; ignore if table missing/empty.
     vtab = getattr(graph, "vertex_attributes", None)
     # Pre-scan to a dict for O(1) lookup
     vattr_map = {}
     try:
-        if (
-            vtab is not None
-            and hasattr(vtab, "to_dicts")
-            and vtab.height > 0
-            and "vertex_id" in vtab.columns
-        ):
-            for row in vtab.to_dicts():
+        if vtab is not None:
+            for row in _safe_df_to_rows(vtab):
                 d = dict(row)
                 vid = d.pop("vertex_id", None)
                 if vid is not None:

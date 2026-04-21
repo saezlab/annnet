@@ -94,26 +94,36 @@ def _edge_endpoint_sets(rec):
     return src, tgt
 
 
+def _attrs_by_id(table, id_col: str, *, public_only: bool = False) -> dict:
+    out = {}
+    for row in _df_to_rows(table):
+        item_id = row.get(id_col)
+        if item_id is None:
+            continue
+        attrs = dict(row)
+        attrs.pop(id_col, None)
+        if public_only:
+            attrs = {k: val for k, val in attrs.items() if not str(k).startswith("__")}
+        out[item_id] = attrs
+    return out
+
+
 def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     """Node-link JSON with x-extensions (slices, edge_slices, hyperedges).
     Lossless vs your core (IDs, attrs, parallel, hyperedges, slices).
     """
+    vertex_attrs = _attrs_by_id(
+        getattr(graph, "vertex_attributes", None), "vertex_id", public_only=public_only
+    )
+    edge_attrs = _attrs_by_id(
+        getattr(graph, "edge_attributes", None), "edge_id", public_only=public_only
+    )
+
     # nodes
     nodes = []
     for v in graph.vertices():
         row = {"id": v}
-        try:
-            attrs = graph.vertex_attributes.filter(
-                graph.vertex_attributes["vertex_id"] == v
-            ).to_dicts()
-            if attrs:
-                d = dict(attrs[0])
-                d.pop("vertex_id", None)
-                if public_only:
-                    d = {k: val for k, val in d.items() if not str(k).startswith("__")}
-                row.update(d)
-        except Exception:
-            pass
+        row.update(vertex_attrs.get(v, {}))
         nodes.append(row)
 
     # edges + hyperedges
@@ -126,14 +136,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
         is_hyper = rec.etype == "hyper"
 
         # attrs
-        try:
-            ea = graph.edge_attributes.filter(graph.edge_attributes["edge_id"] == eid).to_dicts()
-            d = dict(ea[0]) if ea else {}
-            d.pop("edge_id", None)
-            if public_only:
-                d = {k: val for k, val in d.items() if not str(k).startswith("__")}
-        except Exception:
-            d = {}
+        d = dict(edge_attrs.get(eid, {}))
 
         # weight + directed
         try:
@@ -458,20 +461,13 @@ def write_ndjson(graph: AnnNet, dir_path):
     import os
 
     os.makedirs(dir_path, exist_ok=True)
+    vertex_attrs = _attrs_by_id(getattr(graph, "vertex_attributes", None), "vertex_id")
+    edge_attrs = _attrs_by_id(getattr(graph, "edge_attributes", None), "edge_id")
 
     with open(f"{dir_path}/nodes.ndjson", "w", encoding="utf-8") as f:
         for v in graph.vertices():
             obj = {"id": v}
-            try:
-                attrs = graph.vertex_attributes.filter(
-                    graph.vertex_attributes["vertex_id"] == v
-                ).to_dicts()
-                if attrs:
-                    d = dict(attrs[0])
-                    d.pop("vertex_id", None)
-                    obj.update(d)
-            except Exception:
-                pass
+            obj.update(vertex_attrs.get(v, {}))
             f.write(json.dumps(obj, ensure_ascii=False) + "\n")
 
     with (
@@ -484,14 +480,7 @@ def write_ndjson(graph: AnnNet, dir_path):
             S, T = _edge_endpoint_sets(rec)
             is_hyper = rec.etype == "hyper"
 
-            try:
-                ea = graph.edge_attributes.filter(
-                    graph.edge_attributes["edge_id"] == eid
-                ).to_dicts()
-            except Exception:
-                ea = []
-            d = dict(ea[0]) if ea else {}
-            d.pop("edge_id", None)
+            d = dict(edge_attrs.get(eid, {}))
 
             try:
                 w = float(1.0 if rec.weight is None else rec.weight)

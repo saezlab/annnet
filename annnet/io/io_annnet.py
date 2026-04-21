@@ -10,6 +10,12 @@ import numpy as np
 import scipy as scipy
 import scipy.sparse as sp
 
+from .._dataframe_backend import (
+    dataframe_from_columns,
+    dataframe_from_rows,
+    dataframe_to_rows,
+    select_dataframe_backend,
+)
 from ._utils import _read_archive, _write_archive
 
 if TYPE_CHECKING:
@@ -26,28 +32,11 @@ except NameError:
         )
 
 
-def _have_polars():
-    try:
-        import polars as pl  # noqa
-
-        return True
-    except Exception:
-        return False
-
-
 def _df_from_dict(data: dict):
-    """
-    Create a DataFrame from dict-of-columns using:
-    - polars if available
-    - else pandas
-    """
-    if _have_polars():
-        import polars as pl
-
-        return pl.DataFrame(data)
-    import pandas as pd
-
-    return pd.DataFrame(data)
+    """Create a dataframe/table using AnnNet's configured backend."""
+    if isinstance(data, list):
+        return dataframe_from_rows(data)
+    return dataframe_from_columns(data)
 
 
 def _write_parquet_df(df, path, *, compression="zstd"):
@@ -69,6 +58,12 @@ def _write_parquet_df(df, path, *, compression="zstd"):
             # older pandas/pyarrow combos: compression may differ
             return df.to_parquet(path, engine="pyarrow", index=False)
 
+    # PyArrow path
+    if hasattr(df, "schema") and hasattr(df, "num_rows"):
+        import pyarrow.parquet as pq
+
+        return pq.write_table(df, path, compression=compression)
+
     # Last resort: narwhals -> pandas
     import narwhals as nw
 
@@ -83,50 +78,25 @@ def _write_parquet_df(df, path, *, compression="zstd"):
 
 
 def _read_parquet(path):
-    """
-    Read parquet into:
-    - polars DataFrame if available
-    - else pandas DataFrame
-    """
-    if _have_polars():
+    """Read parquet into the configured dataframe backend."""
+    backend = select_dataframe_backend(None)
+    if backend == "polars":
         import polars as pl
 
         return pl.read_parquet(path)
-    import pandas as pd
+    if backend == "pandas":
+        import pandas as pd
 
-    return pd.read_parquet(path, engine="pyarrow")
+        return pd.read_parquet(path, engine="pyarrow")
+
+    import pyarrow.parquet as pq
+
+    return pq.read_table(path)
 
 
 def _iter_rows(df):
-    """
-    Return rows as list[dict] for both:
-      - polars DataFrame: .to_dicts()
-      - pandas DataFrame: .to_dict(orient="records")
-    """
-    if df is None:
-        return []
-    # Polars
-    if hasattr(df, "to_dicts") and callable(getattr(df, "to_dicts")):
-        return df.to_dicts()
-    # Pandas
-    if hasattr(df, "to_dict") and callable(getattr(df, "to_dict")):
-        try:
-            return df.to_dict(orient="records")
-        except TypeError:
-            # very old pandas fallback
-            return [dict(zip(df.columns, r)) for r in df.itertuples(index=False, name=None)]
-    # Last resort: try narwhals -> pandas/polars native
-    try:
-        import narwhals as nw
-
-        native = nw.to_native(nw.from_native(df, pass_through=True))
-        if hasattr(native, "to_dicts") and callable(getattr(native, "to_dicts")):
-            return native.to_dicts()
-        if hasattr(native, "to_dict") and callable(getattr(native, "to_dict")):
-            return native.to_dict(orient="records")
-    except Exception:
-        pass
-    raise TypeError(f"Unsupported dataframe type for row iteration: {type(df)!r}")
+    """Return rows as list[dict] for Narwhals-compatible dataframe/table inputs."""
+    return dataframe_to_rows(df)
 
 
 ANNNET_EXT = "graph.annnet"
@@ -262,10 +232,6 @@ def _write_structure(graph, path: Path, compression: str):
 
     # Write all index mappings as Parquet
     def dict_to_parquet(d: dict, filepath: Path, id_name: str, val_name: str):
-        try:
-            import polars as pl  # optional
-        except Exception:  # ModuleNotFoundError, etc.
-            pl = None
         df = _df_from_dict({id_name: list(d.keys()), val_name: list(d.values())})
         _write_parquet_df(df, filepath, compression=compression)
 
@@ -336,22 +302,10 @@ def _write_structure(graph, path: Path, compression: str):
                 tails.append(None)
                 mems.append(sorted(map(str, rec.src)))
 
-        if _have_polars():
-            import polars as pl
-
-            hyper_df = pl.DataFrame({"edge_id": eids, "directed": dirs}).with_columns(
-                pl.Series("members", mems, dtype=pl.List(pl.Utf8)),
-                pl.Series("head", heads, dtype=pl.List(pl.Utf8)),
-                pl.Series("tail", tails, dtype=pl.List(pl.Utf8)),
-            )
-            hyper_df.write_parquet(path / "hyperedge_definitions.parquet", compression=compression)
-        else:
-            hyper_df = _df_from_dict(
-                {"edge_id": eids, "directed": dirs, "members": mems, "head": heads, "tail": tails}
-            )
-            _write_parquet_df(
-                hyper_df, path / "hyperedge_definitions.parquet", compression=compression
-            )
+        hyper_df = _df_from_dict(
+            {"edge_id": eids, "directed": dirs, "members": mems, "head": heads, "tail": tails}
+        )
+        _write_parquet_df(hyper_df, path / "hyperedge_definitions.parquet", compression=compression)
 
 
 def _write_tables(graph, path: Path, compression: str):
@@ -392,31 +346,8 @@ def _write_multilayers(graph, path: Path, compression: str):
     # Store "layer" as list[str] (works in polars; works in pandas+pyarrow as list column)
     vm_data = [{"vertex_id": u, "layer": list(aa)} for u, aa in graph._VM]
 
-    if _have_polars():
-        import polars as pl
-
-        if not vm_data:
-            vm_df = pl.DataFrame(
-                {
-                    "vertex_id": pl.Series([], dtype=pl.Utf8),
-                    "layer": pl.Series([], dtype=pl.List(pl.Utf8)),
-                }
-            )
-        else:
-            vm_df = pl.DataFrame(vm_data)
-        vm_df.write_parquet(path / "vertex_presence.parquet", compression=compression)
-    else:
-        # pandas fallback: keep schema stable even when empty
-        if not vm_data:
-            vm_df = _df_from_dict({"vertex_id": [], "layer": []})
-        else:
-            vm_df = _df_from_dict(
-                {
-                    "vertex_id": [r["vertex_id"] for r in vm_data],
-                    "layer": [r["layer"] for r in vm_data],
-                }
-            )
-        _write_parquet_df(vm_df, path / "vertex_presence.parquet", compression=compression)
+    vm_df = _df_from_dict(vm_data if vm_data else {"vertex_id": [], "layer": []})
+    _write_parquet_df(vm_df, path / "vertex_presence.parquet", compression=compression)
 
     # 3. Edge Layers
     # Logic: Intra edges have 1 layer tuple. Inter/Coupling have 2.
@@ -532,22 +463,6 @@ def _write_audit(graph, path: Path, compression: str):
     """Write history, snapshots, provenance."""
     import json
     import sys
-    from datetime import datetime
-
-    try:
-        from datetime import UTC  # Py3.11+
-    except Exception:  # fallback for <3.11
-        from datetime import timezone as _tz
-
-        UTC = UTC
-
-    import numpy as np
-
-    try:
-        import polars as pl  # optional
-    except Exception:  # ModuleNotFoundError, etc.
-        pl = None
-    import scipy
 
     path.mkdir(parents=True, exist_ok=True)
 
@@ -593,99 +508,17 @@ def _write_audit(graph, path: Path, compression: str):
         keys = sorted({k for r in rows for k in r.keys()})
         cols = {k: [_norm(r.get(k)) for r in rows] for k in keys}
 
-        # If polars exists, keep your typed polars path; otherwise pandas fallback.
-        if _have_polars():
-            import polars as pl
-
-            def _dtype(vals):
-                nonnull = [x for x in vals if x is not None]
-                if nonnull and all(isinstance(x, bool) for x in nonnull):
-                    return pl.Boolean
-                if nonnull and all(isinstance(x, int) for x in nonnull):
-                    return pl.Int64
-                if nonnull and all(isinstance(x, (int, float)) for x in nonnull):
-                    return pl.Float64
-                return pl.Utf8
-
-            schema_overrides = {k: _dtype(vs) for k, vs in cols.items()}
-            history_df = pl.DataFrame(cols, schema_overrides=schema_overrides, strict=False)
-
-            def is_nested(col: pl.Series) -> bool:
-                sample = col.head(32).to_list()
-                for v in sample:
-                    if isinstance(v, (dict, list, set, tuple, np.ndarray)):
-                        return True
-                    try:
-                        if hasattr(v, "to_list") and callable(v.to_list):
-                            return True
-                    except Exception:
-                        pass
-                return False
-
-            nested_cols = [c for c in history_df.columns if is_nested(history_df[c])]
-
-            def _jsonify_cell(v):
-                if v is None:
-                    return None
-                if hasattr(v, "to_list") and callable(getattr(v, "to_list", None)):
-                    try:
-                        v = v.to_list()
-                    except Exception:
-                        v = str(v)
-                if isinstance(v, np.ndarray):
-                    v = v.tolist()
-                if isinstance(v, set):
-                    try:
-                        v = sorted(v)
-                    except Exception:
-                        v = list(v)
-                elif isinstance(v, tuple):
-                    v = list(v)
-                try:
-                    return json.dumps(v, default=str)
-                except Exception:
-                    return json.dumps(str(v))
-
-            if nested_cols:
-                history_df = history_df.with_columns(
-                    *[
-                        pl.col(c).map_elements(_jsonify_cell, return_dtype=pl.Utf8).alias(c)
-                        for c in nested_cols
-                    ]
-                )
-
-            history_df.write_parquet(path / "history.parquet", compression=compression)
-
-        else:
-            import pandas as pd
-
-            history_df = pd.DataFrame(cols)
-
-            # stringify any remaining nested/object-like cells
-            def _jsonify_cell(v):
-                if v is None:
-                    return None
-                if isinstance(v, (dict, list, set, tuple, np.ndarray)):
-                    try:
-                        if isinstance(v, np.ndarray):
-                            v = v.tolist()
-                        if isinstance(v, set):
-                            v = sorted(v)
-                        if isinstance(v, tuple):
-                            v = list(v)
-                        return json.dumps(v, default=str)
-                    except Exception:
-                        return str(v)
-                return v
-
-            # Only touch object dtype columns to avoid slowing numeric cols
-            obj_cols = [c for c in history_df.columns if history_df[c].dtype == "object"]
-            for c in obj_cols:
-                history_df[c] = history_df[c].map(_jsonify_cell)
-
-            _write_parquet_df(history_df, path / "history.parquet", compression=compression)
+        history_df = dataframe_from_columns(cols)
+        _write_parquet_df(history_df, path / "history.parquet", compression=compression)
 
     # Provenance
+    try:
+        from importlib import metadata as importlib_metadata
+
+        polars_version = importlib_metadata.version("polars")
+    except Exception:
+        polars_version = None
+
     provenance = {
         "created": datetime.now(UTC).isoformat(),
         "annnet_version": "0.1.0",
@@ -693,7 +526,7 @@ def _write_audit(graph, path: Path, compression: str):
         "dependencies": {
             "scipy": scipy.__version__,
             "numpy": np.__version__,
-            "polars": (getattr(pl, "__version__", None) if pl is not None else None),
+            "polars": polars_version,
         },
     }
     (path / "provenance.json").write_text(json.dumps(provenance, indent=2))
@@ -782,10 +615,6 @@ def read(path: str | Path, *, lazy: bool = False) -> AnnNet:
 
 def _load_structure(graph, path: Path, lazy: bool):
     """Load sparse matrix and index mappings."""
-    try:
-        import polars as pl  # optional
-    except Exception:  # ModuleNotFoundError, etc.
-        pl = None
     import zarr
 
     # Load incidence matrix
@@ -809,7 +638,7 @@ def _load_structure(graph, path: Path, lazy: bool):
     # Load index mappings
     def parquet_to_dict(filepath: Path, key_col: str, val_col: str) -> dict:
         df = _read_parquet(filepath)
-        return dict(zip(df[key_col], df[val_col]))
+        return {row[key_col]: row[val_col] for row in _iter_rows(df)}
 
     from annnet.core._helpers import EdgeRecord, EntityRecord
 
@@ -891,12 +720,7 @@ def _load_structure(graph, path: Path, lazy: bool):
 
 
 def _load_tables(graph, path: Path):
-    """Load Polars DataFrames."""
-    try:
-        import polars as pl  # optional
-    except Exception:  # ModuleNotFoundError, etc.
-        pl = None
-
+    """Load annotation tables with the configured dataframe backend."""
     graph.vertex_attributes = _read_parquet(path / "vertex_attributes.parquet")
     graph.edge_attributes = _read_parquet(path / "edge_attributes.parquet")
     graph.slice_attributes = _read_parquet(path / "slice_attributes.parquet")
@@ -906,11 +730,6 @@ def _load_tables(graph, path: Path):
 def _load_multilayers(graph, path: Path):
     """Load Kivela multilayer structures."""
     import json
-
-    try:
-        import polars as pl  # optional
-    except Exception:  # ModuleNotFoundError, etc.
-        pl = None
 
     # Graceful exit if this is a legacy graph without layers
     if not path.exists() or not (path / "metadata.json").exists():
@@ -981,11 +800,6 @@ def _load_slices(graph, path: Path):
     """Reconstruct slice registry and memberships."""
     import json
 
-    try:
-        import polars as pl  # optional
-    except Exception:  # ModuleNotFoundError, etc.
-        pl = None
-
     # Registry
     registry_df = _read_parquet(path / "registry.parquet")
     for row in _iter_rows(registry_df):
@@ -1012,11 +826,6 @@ def _load_slices(graph, path: Path):
 
 def _load_audit(graph, path: Path):
     """Load history and provenance."""
-    try:
-        import polars as pl  # optional
-    except Exception:  # ModuleNotFoundError, etc.
-        pl = None
-
     history_path = path / "history.parquet"
     if history_path.exists():
         history_df = _read_parquet(history_path)

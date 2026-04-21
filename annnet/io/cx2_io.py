@@ -18,17 +18,9 @@ import gzip
 import json
 from typing import TYPE_CHECKING, Any
 
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
-    pl = None
-try:
-    import pandas as pd  # optional fallback
-except Exception:
-    pd = None
-
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
+from .._dataframe_backend import dataframe_columns, dataframe_from_rows, rename_dataframe_columns
 from ..adapters._utils import (
     _deserialize_edge_layers,
     _deserialize_layer_tuple_attrs,
@@ -118,55 +110,37 @@ def _cx2_collect_reified(aspects):
 
 
 def _rows_to_df(rows):
-    if not rows:
-        if pl is not None:
-            return pl.DataFrame()
-        if pd is not None:
-            return pd.DataFrame()
-        return []  # keep as rows
-
     # --- 1) Normalize all rows to full schema ---
-    keys = set().union(*(r.keys() for r in rows))
+    keys = set().union(*(r.keys() for r in rows)) if rows else set()
     norm = [{k: r.get(k, None) for k in keys} for r in rows]
-
-    # --- 2) Let Polars infer schema on the first few rows ---
-    # allow nulls / mixed types
-    if pl is not None:
-        try:
-            return pl.DataFrame(norm, infer_schema_length=1000)
-        except Exception:
-            return pl.DataFrame(
-                [{k: (str(v) if v is not None else None) for k, v in r.items()} for r in norm]
-            )
-    # pandas fallback
-    if pd is not None:
-        try:
-            return pd.DataFrame(norm)
-        except Exception:
-            return pd.DataFrame(
-                [{k: (str(v) if v is not None else None) for k, v in r.items()} for r in norm]
-            )
-    return norm
+    return dataframe_from_rows(norm)
 
 
-def _map_pl_to_cx2_type(dtype: pl.DataType) -> str:
-    """Map Polars DataType to CX2 attribute data type string."""
-    if dtype in (pl.Int8, pl.Int16, pl.Int32, pl.UInt8, pl.UInt16, pl.UInt32):
-        return "integer"
-    elif dtype in (pl.Int64, pl.UInt64):
-        return "long"
-    elif dtype in (pl.Float32, pl.Float64):
-        return "double"
-    elif dtype == pl.Boolean:
+def _infer_cx2_type(values: list[Any]) -> str:
+    """Infer a CX2 attribute data type string from Python row values."""
+    nonnull = [value for value in values if value is not None]
+    if not nonnull:
+        return "string"
+    first = nonnull[0]
+    if isinstance(first, bool):
         return "boolean"
-    elif dtype in (pl.Utf8, pl.String, pl.Object):
-        return "string"
-    elif isinstance(dtype, pl.List):
-        inner = _map_pl_to_cx2_type(dtype.inner)
-        return f"list_of_{inner}"
-    else:
-        # Fallback for unknown types
-        return "string"
+    if isinstance(first, int) and not isinstance(first, bool):
+        return "long"
+    if isinstance(first, float):
+        return "double"
+    if isinstance(first, (list, tuple)):
+        flattened = [item for value in nonnull if isinstance(value, (list, tuple)) for item in value]
+        return f"list_of_{_infer_cx2_type(flattened)}"
+    return "string"
+
+
+def _infer_cx2_types(rows: list[dict[str, Any]], *, id_col: str | None = None) -> dict[str, str]:
+    keys = sorted({key for row in rows for key in row})
+    return {
+        key: _infer_cx2_type([row.get(key) for row in rows])
+        for key in keys
+        if key != id_col
+    }
 
 
 def _jsonify(obj):
@@ -363,34 +337,17 @@ def to_cx2(
     v_attrs_df = getattr(G, "vertex_attributes", None)
 
     # Identify which vertex columns are string vs numeric (for cleaning None)
-    v_string_cols: set[str] = set()
-    v_numeric_cols: set[str] = set()
-    # Only do dtype-based classification if this is actually a Polars DF
-    if pl is not None and isinstance(v_attrs_df, pl.DataFrame) and v_attrs_df.height:
-        for col, dtype in v_attrs_df.schema.items():
-            # strings
-            if dtype in (pl.Utf8, pl.String, pl.Object):
-                v_string_cols.add(col)
-            # numeric: all ints + floats
-            elif dtype in (
-                pl.Int8,
-                pl.Int16,
-                pl.Int32,
-                pl.Int64,
-                pl.UInt8,
-                pl.UInt16,
-                pl.UInt32,
-                pl.UInt64,
-                pl.Float32,
-                pl.Float64,
-            ):
-                v_numeric_cols.add(col)
+    v_inferred_types = _infer_cx2_types(vert_rows, id_col="vertex_id")
+    v_string_cols = {col for col, dtype in v_inferred_types.items() if dtype == "string"}
+    v_numeric_cols = {
+        col for col, dtype in v_inferred_types.items() if dtype in {"integer", "long", "double"}
+    }
 
     # Build map: vertex_id -> attribute row dict
     v_attrs_map: dict[str, dict[str, Any]] = {}
     if v_attrs_df is not None and vert_rows:
-        cols = set(v_attrs_df.columns)
-        id_col = "vertex_id" if "vertex_id" in cols else "id"
+        row_keys = set(vert_rows[0])
+        id_col = "vertex_id" if "vertex_id" in row_keys else "id"
         for r in vert_rows:  # vert_rows is _df_to_rows(vertex_attributes)
             key = r.get(id_col)
             if key is not None:
@@ -464,16 +421,14 @@ def to_cx2(
     e_attrs_df = getattr(G, "edge_attributes", None)
 
     # string columns in edge_attributes (for None -> "")
-    e_string_cols = set()
-    if pl is not None and isinstance(e_attrs_df, pl.DataFrame) and e_attrs_df.height:
-        for col, dtype in e_attrs_df.schema.items():
-            if dtype in (pl.Utf8, pl.String, pl.Object):
-                e_string_cols.add(col)
+    e_inferred_types = _infer_cx2_types(edge_rows, id_col="edge_id")
+    e_string_cols = {col for col, dtype in e_inferred_types.items() if dtype == "string"}
 
     # Create lookup for edge attributes (handle both 'edge_id' and 'id')
     e_attrs_map = {}
     if e_attrs_df is not None and edge_rows:
-        id_col = "edge_id" if "edge_id" in e_attrs_df.columns else "id"
+        row_keys = set(edge_rows[0])
+        id_col = "edge_id" if "edge_id" in row_keys else "id"
         for r in edge_rows:
             if id_col in r:
                 e_attrs_map[str(r[id_col])] = r
@@ -667,16 +622,10 @@ def to_cx2(
     attr_decls = {"nodes": {}, "edges": {}, "networkAttributes": {}}
 
     # Define Node Attributes
-    if pl is not None and isinstance(v_attrs_df, pl.DataFrame) and v_attrs_df.height:
-        for col, dtype in v_attrs_df.schema.items():
-            if col == "id":
-                continue
-            attr_decls["nodes"][col] = {"d": _map_pl_to_cx2_type(dtype)}
-    elif v_attrs_df is not None and hasattr(v_attrs_df, "columns"):
-        for col in list(v_attrs_df.columns):
-            if col == "id":
-                continue
-            attr_decls["nodes"][col] = {"d": "string"}
+    for col, dtype in v_inferred_types.items():
+        if col == "id":
+            continue
+        attr_decls["nodes"][col] = {"d": dtype}
 
     attr_decls["nodes"]["name"] = {"d": "string"}  # Always added
     attr_decls["nodes"]["is_hyperedge"] = {"d": "boolean"}
@@ -685,18 +634,11 @@ def to_cx2(
     attr_decls["nodes"]["reaction"] = {"d": "string"}
 
     # Define Edge Attributes
-    if pl is not None and isinstance(e_attrs_df, pl.DataFrame) and e_attrs_df.height:
-        id_col = "edge_id" if "edge_id" in e_attrs_df.columns else "id"
-        for col, dtype in e_attrs_df.schema.items():
-            if col == id_col:
-                continue
-            attr_decls["edges"][col] = {"d": _map_pl_to_cx2_type(dtype)}
-    elif e_attrs_df is not None and hasattr(e_attrs_df, "columns"):
-        id_col = "edge_id" if "edge_id" in e_attrs_df.columns else "id"
-        for col in list(e_attrs_df.columns):
-            if col == id_col:
-                continue
-            attr_decls["edges"][col] = {"d": "string"}
+    id_col = "edge_id" if edge_rows and "edge_id" in edge_rows[0] else "id"
+    for col, dtype in e_inferred_types.items():
+        if col == id_col:
+            continue
+        attr_decls["edges"][col] = {"d": dtype}
     attr_decls["edges"]["interaction"] = {"d": "string"}
     attr_decls["edges"]["weight"] = {"d": "double"}
     attr_decls["edges"]["edge_id"] = {"d": "string"}
@@ -1065,7 +1007,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         vmap = {}
     else:
         vmap = {}
-        existing = _df_to_rows(getattr(G, "vertex_attributes", pl.DataFrame()))
+        existing = _df_to_rows(getattr(G, "vertex_attributes", None))
         for r in existing:
             vid = str(r.get("vertex_id", r.get("id")))
             vmap[vid] = dict(r)
@@ -1102,9 +1044,9 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
     if _manifest_mode:
         # Manifest already set the full vertex_attributes; add_vertices_bulk has upserted any
         # new layout coords into it.  Just fix the column name if needed.
-        cols = set(G.vertex_attributes.columns)
+        cols = set(dataframe_columns(G.vertex_attributes))
         if "vertex_id" not in cols and "id" in cols:
-            G.vertex_attributes = G.vertex_attributes.rename({"id": "vertex_id"})
+            G.vertex_attributes = rename_dataframe_columns(G.vertex_attributes, {"id": "vertex_id"})
     else:
         # rebuild vertex table
         if vertex_bulk_data:
@@ -1113,9 +1055,9 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
             G.vertex_attributes = _rows_to_df([])
 
         # Normalise ID column name: prefer 'vertex_id' consistently
-        cols = set(G.vertex_attributes.columns)
+        cols = set(dataframe_columns(G.vertex_attributes))
         if "vertex_id" not in cols and "id" in cols:
-            G.vertex_attributes = G.vertex_attributes.rename({"id": "vertex_id"})
+            G.vertex_attributes = rename_dataframe_columns(G.vertex_attributes, {"id": "vertex_id"})
 
     # --- edges ---
     # In manifest mode: edge_attributes is already set from the manifest — skip reading it back.
@@ -1123,7 +1065,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         emap = {}
     else:
         emap = {}
-        existing = _df_to_rows(getattr(G, "edge_attributes", pl.DataFrame()))
+        existing = _df_to_rows(getattr(G, "edge_attributes", None))
         for r in existing:
             eid = str(r.get("edge_id", r.get("id")))
             emap[eid] = dict(r)

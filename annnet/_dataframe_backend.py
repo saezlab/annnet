@@ -100,6 +100,42 @@ def dataframe_from_rows(
     )
 
 
+def dataframe_from_columns(
+    columns: dict[str, list[Any]],
+    *,
+    schema: dict[str, str] | None = None,
+    backend: str | None = "auto",
+):
+    """Build an eager dataframe/table from column-oriented data."""
+    resolved = select_dataframe_backend(backend)
+    columns = {name: list(values) for name, values in (columns or {}).items()}
+
+    if resolved == "polars":
+        import polars as pl
+
+        if schema:
+            return pl.DataFrame(columns, schema=_polars_schema(schema))
+        return pl.DataFrame(columns)
+
+    if resolved == "pandas":
+        import pandas as pd
+
+        if columns:
+            return pd.DataFrame(columns)
+        return pd.DataFrame(
+            {name: pd.Series(dtype=_pandas_dtype(kind)) for name, kind in (schema or {}).items()}
+        )
+
+    import pyarrow as pa
+
+    if columns:
+        return pa.Table.from_pydict(columns)
+    return pa.Table.from_arrays(
+        [pa.array([], type=_pyarrow_type(kind)) for kind in (schema or {}).values()],
+        names=list((schema or {}).keys()),
+    )
+
+
 def empty_dataframe(schema: dict[str, str], *, backend: str | None = "auto"):
     """Build an empty dataframe/table with a generic schema."""
     return dataframe_from_rows([], schema=schema, backend=backend)
@@ -134,6 +170,39 @@ def dataframe_height(df) -> int:
     if hasattr(df, "shape"):
         return int(df.shape[0])
     return len(dataframe_to_rows(df))
+
+
+def dataframe_columns(df) -> list[str]:
+    """Return column names for a dataframe-like object."""
+    if df is None:
+        return []
+    if hasattr(df, "columns"):
+        return list(df.columns)
+    if hasattr(df, "column_names"):
+        return list(df.column_names)
+    return list(dataframe_to_rows(df)[0]) if dataframe_height(df) else []
+
+
+def rename_dataframe_columns(df, mapping: dict[str, str]):
+    """Rename dataframe columns across supported backends."""
+    if not mapping:
+        return df
+    if hasattr(df, "rename"):
+        try:
+            return df.rename(columns=mapping)
+        except TypeError:
+            pass
+        try:
+            return df.rename(mapping)
+        except TypeError:
+            pass
+    if hasattr(df, "rename_columns"):
+        names = [mapping.get(name, name) for name in dataframe_columns(df)]
+        return df.rename_columns(names)
+    rows = []
+    for row in dataframe_to_rows(df):
+        rows.append({mapping.get(key, key): value for key, value in row.items()})
+    return dataframe_from_rows(rows)
 
 
 def _polars_schema(schema: dict[str, str]):

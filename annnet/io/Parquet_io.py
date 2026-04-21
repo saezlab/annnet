@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
+from .._dataframe_backend import dataframe_from_rows
 from ..adapters._utils import (
     _deserialize_edge_layers,
     _deserialize_endpoint,
@@ -25,49 +26,8 @@ from .io_annnet import _iter_rows, _read_parquet, _write_parquet_df
 
 
 def _build_dataframe_from_rows(rows):
-    """Build a DataFrame from a list of row records using available backends."""
-
-    try:
-        import polars as pl
-
-        if not rows:
-            return pl.DataFrame()
-
-        # Peek at first row to detect list columns
-        schema_overrides = {
-            "head": pl.List(pl.Utf8),
-            "tail": pl.List(pl.Utf8),
-            "members": pl.List(pl.Utf8),
-        }
-
-        first_row = rows[0]
-        for key, value in first_row.items():
-            if isinstance(value, (list, tuple)):
-                # Force list columns to be List(Utf8) type
-                schema_overrides[key] = pl.List(pl.Utf8)
-
-        if schema_overrides:
-            return pl.DataFrame(rows, schema_overrides=schema_overrides)
-        else:
-            return pl.DataFrame(rows)
-
-    except Exception:
-        try:
-            import pandas as pd
-
-            return pd.DataFrame.from_records(rows)
-        except Exception:
-            raise RuntimeError(
-                "No dataframe backend available. Install polars (recommended) or pandas."
-            )
-
-
-def pd_build_dataframe_from_rows(rows):
-    """Build a DataFrame from a list of row records using available backends."""
-    # Force pandas temporarily to bypass Polars list handling bug
-    import pandas as pd
-
-    return pd.DataFrame.from_records(rows)
+    """Build a dataframe/table using AnnNet's configured backend selection."""
+    return dataframe_from_rows(rows)
 
 
 def _strip_nulls(d: dict):
@@ -151,9 +111,9 @@ def _is_nullish(val) -> bool:
     except Exception:
         pass
     try:
-        import pandas as pd
-
-        if pd.isna(val):
+        # Covers numpy scalar NaN without importing a concrete dataframe backend.
+        maybe_nan = val != val
+        if isinstance(maybe_nan, bool) and maybe_nan:
             return True
     except Exception:
         pass
@@ -164,29 +124,15 @@ def _as_list_or_empty(val):
     if _is_nullish(val):
         return []
 
-    # Polars Series / Array
-    try:
-        import polars as pl
-
-        if isinstance(val, pl.Series):
-            return val.to_list()
-    except Exception:
-        pass
-
-    # numpy array
-    try:
-        import numpy as np
-
-        if isinstance(val, np.ndarray):
-            return val.tolist()
-    except Exception:
-        pass
-
     # already list / tuple
     if isinstance(val, list):
         return val
     if isinstance(val, tuple):
         return list(val)
+    if hasattr(val, "to_list") and callable(getattr(val, "to_list")):
+        return val.to_list()
+    if hasattr(val, "tolist") and callable(getattr(val, "tolist")):
+        return val.tolist()
 
     # scalar -> singleton
     return [val]
