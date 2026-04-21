@@ -3,46 +3,79 @@ name: CI testing [unit testing]
 on: [push, pull_request]
 
 jobs:
-    test:
-        runs-on: ubuntu-latest
-        strategy:
-            matrix:
-                python-version: ['3.11', '3.12', '3.13']
-        steps:
-        -   uses: actions/checkout@v4
-        -   uses: ./.github/actions/setup
-            with:
-                python-version: ${{ matrix.python-version }}
-        -   name: Install test dependency group
-            shell: bash
-            run: |
-                source .venv/bin/activate
-                uv sync --group tests
-        -   name: Install PyG-only test dependencies
-            shell: bash
-            run: |
-                source .venv/bin/activate
-                uv pip install torch torch-geometric
-        -   name: Run tests with coverage
-            run: |
-                source .venv/bin/activate
-                pytest --cov=annnet tests/
-        -   name: Upload coverage report
-            uses: actions/upload-artifact@v4
-            with:
-                name: coverage-report-${{ matrix.python-version }}
-                path: .coverage*
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
 
+      - uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    pixi-test-all:
-        runs-on: ubuntu-latest
-        steps:
-        -   uses: actions/checkout@v4
-        -   uses: prefix-dev/setup-pixi@v0.9.3
-            with:
-                environments: dev
-                cache: true
-        -   name: Run graph-tool-specific tests in Pixi env
-            run:  |
-                pip install polars
-                pixi run test-gt
+      - name: Install test dependency group
+        shell: bash
+        run: |
+          source .venv/bin/activate
+          uv sync --group tests
+
+      - name: Run tests with coverage
+        shell: bash
+        run: |
+          source .venv/bin/activate
+          pytest --cov=annnet tests/
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ matrix.python-version }}
+          path: .coverage*
+
+  pixi-test-all:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: prefix-dev/setup-pixi@v0.9.3
+        with:
+          environments: gt
+          cache: true
+
+      - name: Run full test suite in Pixi graph-tool env
+        run: pixi run -e gt test-all
+
+  pyg-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependency group
+        shell: bash
+        run: |
+          source .venv/bin/activate
+          uv sync --group tests
+
+      - name: Install PyTorch CPU
+        shell: bash
+        run: |
+          source .venv/bin/activate
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install PyG
+        shell: bash
+        run: |
+          source .venv/bin/activate
+          uv pip install torch-geometric
+
+      - name: Run PyG tests only
+        shell: bash
+        run: |
+          source .venv/bin/activate
+          pytest tests/test_pyg_adapter.py -v
+          

@@ -37,6 +37,11 @@ tests = [
     "numcodecs>=0.12",
     "matplotlib>=3.5",
     "narwhals>=1.9",
+    "xlsxwriter",
+    "openpyxl>=3.1",
+    "pydot",
+    "graphviz",
+    "cobra>=0.26",
 ]
 
 [lint.isort]
@@ -188,16 +193,6 @@ all = [
   # graphtool is not on PyPI
 ]
 
-# make CI tools installable via `.[dev]`
-dev = [
-  "ruff>=0.6",
-  "mypy>=1.10",
-  "pytest>=8.0",
-  "pytest-cov>=5.0",
-  "build>=1.2",
-  "twine>=5.0",
-]
-
 # Flavours
 metabo = [
   "lxml>=4.9",
@@ -325,7 +320,7 @@ select = [
 env_list = [
     "covclean",
     "lint",
-    "py{39,310,311,312,313}",
+    "py{310,311,312,313}",
     "coverage",
     "readme",
     "docs"
@@ -336,7 +331,6 @@ skip_missing_interpreters = true
 
 [tool.tox.envs]
 base_python = [
-    "py39: python3.9",
     "py310: python3.10",
     "py311: python3.11",
     "py312: python3.12",
@@ -374,7 +368,7 @@ commands = [
 [tool.tox.env.coverage]
 skip_install = true
 dependency_groups = ["tests"]
-depends = ["py39", "py310", "py311", "py312", "py313"]
+depends = ["py310", "py311", "py312", "py313"]
 parallel_show_output = true
 commands = [
   ["coverage", "report", "--omit=tox/*"],
@@ -384,7 +378,7 @@ commands = [
 
 [tool.tox.env.lint]
 skip_install = true
-deps = [".[dev]"]
+dependency_groups = ["dev"]
 commands = [
   ["pre-commit", "run", "--all-files", "--show-diff-on-failure"]
 ]
@@ -392,7 +386,7 @@ commands = [
 [tool.tox.env.readme]
 skip_install = true
 allowlist_externals = ["uv"]
-deps = [".[dev]"]
+dependency_groups = ["dev"]
 commands = [
   ["uv", "build", "--wheel", "--out-dir", "{envtmpdir}/build"],
   ["twine", "check", "{envtmpdir}/build/*"]
@@ -418,7 +412,6 @@ env = [
     "py313: covclean, lint, coverage, readme, docs"
 ]
 python = [
-    "3.9: py39",
     "3.10: py310",
     "3.11: py311",
     "3.12: py312",
@@ -431,19 +424,19 @@ nbsphinx = {git = "https://github.com/deeenes/nbsphinx", branch = "timings"}
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["osx-arm64", "osx-64", "linux-64"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
 
 [tool.pixi.dependencies]
-python = "3.12.*"
+python = ">=3.10,<3.14"
+pip = "*"
+
+[tool.pixi.feature.gt.dependencies]
 graph-tool = "*"
 
-[tool.pixi.pypi-dependencies]
-annnet = { path = ".", editable = true, extras = ["all", "dev"]}
+[tool.pixi.feature.gt.tasks]
+install-test-deps = "uv pip install --system -e . --group tests"
+test-gt = { depends-on = ["install-test-deps"], cmd = "pytest tests/test_graphtool.py tests/test_gt_backend_accessor.py -v", env = { MPLBACKEND = "Agg" } }
+test-all = { depends-on = ["install-test-deps"], cmd = "pytest tests/ -v", env = { MPLBACKEND = "Agg" } }
 
 [tool.pixi.environments]
-dev = { solve-group = "default" }
-
-[tool.pixi.tasks]
-_pytest = { cmd = "pytest" }
-test-all = { depends-on = [{ task = "_pytest", environment = "dev" }] }
-test-gt = { cmd = "pytest tests/test_graphtool.py tests/test_gt_backend_accessor.py", environment = "dev" }
+gt = { features = ["gt"], solve-group = "default" }
