@@ -160,7 +160,7 @@ class _IGBackendAccessor(_BackendAccessorBase):
         graph_obj = getattr(_ig, 'Graph', None)
         return sorted(set(super().__dir__()) | self._callable_names(_ig, graph_obj))
 
-    def _needed_edge_attrs_for_ig(self, func_name: str, kwargs: dict) -> set:
+    def _needed_edge_attrs_for_ig(self, kwargs: dict) -> set:
         needed = set()
         weight_name = kwargs.get('weights', kwargs.get('weight', None))
         if weight_name is not None:

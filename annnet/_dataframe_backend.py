@@ -244,6 +244,43 @@ def dataframe_upsert_rows(
     )
 
 
+def dataframe_read_delimited(
+    source,
+    *,
+    separator: str = ',',
+    backend: str | None = 'auto',
+):
+    """Read a delimited file/buffer into a Narwhals-compatible dataframe."""
+
+    resolved = select_dataframe_backend(backend)
+
+    # Read using backend-native reader
+    if resolved == 'polars':
+        import polars as pl
+
+        native = pl.read_csv(source, separator=separator)
+
+    elif resolved == 'pandas':
+        import pandas as pd
+
+        native = pd.read_csv(source, sep=separator)
+
+    else:
+        import pyarrow.csv as pacsv
+
+        native = pacsv.read_csv(
+            source,
+            parse_options=pacsv.ParseOptions(delimiter=separator),
+        )
+
+    # Normalize via Narwhals roundtrip (optional but consistent)
+    return _from_nw(_to_nw(native))
+
+
+def dataframe_read_tsv(source, *, backend: str | None = 'auto'):
+    return dataframe_read_delimited(source, separator='\t', backend=backend)
+
+
 def dataframe_write_csv(df, path) -> None:
     """Write a dataframe-like object to CSV."""
     _to_nw(df).write_csv(path)

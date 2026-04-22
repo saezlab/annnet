@@ -188,7 +188,6 @@ def from_sbml(
     *,
     slice: str = 'default',
     preserve_stoichiometry: bool = True,
-    quiet: bool = True,
 ) -> AnnNet:
     """Read SBML using COBRApy if available; falls back to python-libsbml (if you extend this file)."""
     try:

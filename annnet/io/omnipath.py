@@ -4,7 +4,11 @@ import numpy as np
 import narwhals as nw
 
 from ..core.graph import AnnNet
-from .._dataframe_backend import dataframe_height, dataframe_to_rows, select_dataframe_backend
+from .._dataframe_backend import (
+    dataframe_height,
+    dataframe_to_rows,
+    dataframe_read_tsv,
+)
 
 
 def from_omnipath(
@@ -216,6 +220,17 @@ def from_omnipath(
             pass
         return False
 
+    def _stringify_edge_id(x):
+        if _is_null(x):
+            return None
+        if isinstance(x, (int, np.integer)):
+            return str(int(x))
+        if isinstance(x, (float, np.floating)):
+            if np.isfinite(x) and float(x).is_integer():
+                return str(int(x))
+            return str(x)
+        return str(x)
+
     def _coerce_bool(x, default):
         if x is None:
             return default
@@ -230,21 +245,6 @@ def from_omnipath(
             if v in {'0', 'false', 'f', 'no', 'n', 'undirected', 'undir', 'u'}:
                 return False
         return default
-
-    def _read_tsv(source):
-        backend = select_dataframe_backend(annotations_backend)
-        if backend == 'polars':
-            import polars as pl
-
-            return pl.read_csv(source, separator='\t')
-        if backend == 'pandas':
-            import pandas as pd
-
-            return pd.read_csv(source, sep='\t')
-
-        import pyarrow.csv as pacsv
-
-        return pacsv.read_csv(source, parse_options=pacsv.ParseOptions(delimiter='\t'))
 
     # fetch
     t_fetch0 = time.perf_counter()
@@ -387,9 +387,8 @@ def from_omnipath(
         w = 1.0 if _is_null(w_raw) else float(w_raw)
         eid = None
         if edge_id_col:
-            eid_raw = row.get(edge_id_col)
-            if not _is_null(eid_raw):
-                eid = str(eid_raw)
+            eid = _stringify_edge_id(row.get(edge_id_col))
+
         edge_slice = slice
         if slice_col:
             s_raw = row.get(slice_col)
@@ -440,7 +439,7 @@ def from_omnipath(
         # 2) caller passed a local file path
         elif vertex_annotations_path is not None:
             try:
-                ann_raw = _read_tsv(vertex_annotations_path)
+                ann_raw = dataframe_read_tsv(vertex_annotations_path, backend=annotations_backend)
             except Exception as e:  # noqa: BLE001
                 print(f'[warning] vertex_annotations_path failed: {e}')
 
@@ -462,7 +461,7 @@ def from_omnipath(
                 if os.path.exists(_cache_path):
                     print(f'[vertex annotations] loading from cache: {_cache_path}')
                     t_ann = time.perf_counter()
-                    ann_raw = _read_tsv(_cache_path)
+                    ann_raw = dataframe_read_tsv(_cache_path, backend=annotations_backend)
                     print(
                         f'[vertex annotations] loaded in {time.perf_counter() - t_ann:.1f}s  rows={dataframe_height(ann_raw)}'
                     )
@@ -480,7 +479,9 @@ def from_omnipath(
                     os.makedirs(os.path.dirname(_cache_path), exist_ok=True)
                     with open(_cache_path, 'wb') as _f:
                         _f.write(resp.content)
-                    ann_raw = _read_tsv(io.BytesIO(resp.content))
+                    ann_raw = dataframe_read_tsv(
+                        io.BytesIO(resp.content), backend=annotations_backend
+                    )
                     print(
                         f'[vertex annotations] downloaded + cached in {time.perf_counter() - t_ann:.1f}s  → {_cache_path}'
                     )

@@ -499,7 +499,7 @@ class AttributesClass:
             'invalid_edge_slice_rows': bad_edge_slice,
         }
 
-    def _dtype_for_value(self, v, *, prefer='narwhals'):
+    def _dtype_for_value(self, v):
         """INTERNAL: Infer an appropriate dtype class for value `v`.
 
         Returns Narwhals dtype classes so annotation logic stays backend-neutral.
@@ -519,7 +519,7 @@ class AttributesClass:
         if isinstance(v, (bytes, bytearray)):
             return nw.Binary
         if isinstance(v, (list, tuple)):
-            inner = self._dtype_for_value(v[0], prefer='narwhals') if len(v) else nw.String
+            inner = self._dtype_for_value(v[0]) if len(v) else nw.String
             return nw.List(nw.String if inner == nw.Unknown else inner)
         if isinstance(v, dict):
             return nw.Object

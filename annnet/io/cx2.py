@@ -700,8 +700,6 @@ def to_cx2(
 
     return cx2
 
-    return cx2
-
 
 # --- Core Adapter: from_cx2 ---
 
