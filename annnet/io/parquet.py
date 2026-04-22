@@ -8,7 +8,6 @@ from pathlib import Path
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
-from .annnet_format import _iter_rows, _read_parquet, _write_parquet_df
 from ..adapters._utils import (
     _serialize_VM,
     _deserialize_VM,
@@ -22,7 +21,11 @@ from ..adapters._utils import (
     _deserialize_node_layer_attrs,
     _deserialize_layer_tuple_attrs,
 )
-from .._dataframe_backend import dataframe_from_rows
+from .._dataframe_backend import (
+    dataframe_from_rows,
+    _dataframe_read_parquet,
+    _dataframe_write_parquet,
+)
 
 
 def _build_dataframe_from_rows(rows):
@@ -163,7 +166,7 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
 def _build_attr_map(df, key_col: str) -> dict:
     """Build {key: attrs} mapping from a dataframe-like table."""
     out = {}
-    for rec in _iter_rows(df):
+    for rec in _safe_df_to_rows(df):
         if not isinstance(rec, dict):
             try:
                 rec = dict(rec)
@@ -199,10 +202,9 @@ def to_parquet(graph: AnnNet, path):
         if attrs:
             row.update(attrs)
         v_rows.append(row)
-    _write_parquet_df(
+    _dataframe_write_parquet(
         _build_dataframe_from_rows(v_rows),
         path / 'vertices.parquet',
-        compression='zstd',
     )
 
     # edges
@@ -281,10 +283,9 @@ def to_parquet(graph: AnnNet, path):
 
     # print(f"Sample e_rows[0] if hyper: {[r for r in e_rows if r['kind'] == 'hyper'][0]}")
 
-    _write_parquet_df(
+    _dataframe_write_parquet(
         _build_dataframe_from_rows(e_rows),
         path / 'edges.parquet',
-        compression='zstd',
     )
 
     # slices
@@ -294,10 +295,9 @@ def to_parquet(graph: AnnNet, path):
             L.append({'slice_id': lid})
     except Exception:  # noqa: BLE001
         pass
-    _write_parquet_df(
+    _dataframe_write_parquet(
         _build_dataframe_from_rows(L),
         path / 'slices.parquet',
-        compression='zstd',
     )
 
     # edge_slices
@@ -318,10 +318,9 @@ def to_parquet(graph: AnnNet, path):
                 EL.append(rec)
     except Exception:  # noqa: BLE001
         pass
-    _write_parquet_df(
+    _dataframe_write_parquet(
         _build_dataframe_from_rows(EL),
         path / 'edge_slices.parquet',
-        compression='zstd',
     )
 
     # manifest.json (tiny)
@@ -350,11 +349,15 @@ def from_parquet(path) -> AnnNet:
     from ..core.graph import AnnNet
 
     path = Path(path)
-    V = _read_parquet(path / 'vertices.parquet')
-    E = _read_parquet(path / 'edges.parquet')
-    L = _read_parquet(path / 'slices.parquet') if (path / 'slices.parquet').exists() else None
+    V = _dataframe_read_parquet(path / 'vertices.parquet')
+    E = _dataframe_read_parquet(path / 'edges.parquet')
+    L = (
+        _dataframe_read_parquet(path / 'slices.parquet')
+        if (path / 'slices.parquet').exists()
+        else None
+    )
     EL = (
-        _read_parquet(path / 'edge_slices.parquet')
+        _dataframe_read_parquet(path / 'edge_slices.parquet')
         if (path / 'edge_slices.parquet').exists()
         else None
     )
@@ -366,7 +369,7 @@ def from_parquet(path) -> AnnNet:
     # -------------------------
     # Convert vertices DF to dict rows once and bulk add
     v_rows = []
-    for rec in _iter_rows(V):
+    for rec in _safe_df_to_rows(V):
         v_rows.append(dict(rec))
     if v_rows:
         H.add_vertices_bulk(v_rows)
@@ -382,7 +385,7 @@ def from_parquet(path) -> AnnNet:
         is_polars_like = True
     except Exception:  # noqa: BLE001
         # Fallback: materialize rows and split
-        rows = list(_iter_rows(E))
+        rows = list(_safe_df_to_rows(E))
         binary = [r for r in rows if r.get('kind') == 'binary']
         hyper = [r for r in rows if r.get('kind') == 'hyper']
         is_polars_like = False
@@ -436,7 +439,7 @@ def from_parquet(path) -> AnnNet:
             'tail',
             'members',
         }
-        for rec in _iter_rows(binary):
+        for rec in _safe_df_to_rows(binary):
             eid = rec.get('edge_id')
             attrs = {k: v for k, v in rec.items() if k not in drop_cols}
             attrs = _strip_nulls(attrs)
@@ -536,7 +539,7 @@ def from_parquet(path) -> AnnNet:
             'members',
         }
         extra = {}
-        for rec in _iter_rows(hyper):
+        for rec in _safe_df_to_rows(hyper):
             eid = rec.get('edge_id')
             attrs = {k: v for k, v in rec.items() if k not in drop_cols}
             attrs = _strip_nulls(attrs)
@@ -587,7 +590,7 @@ def from_parquet(path) -> AnnNet:
     # Slices
     # -------------------------
     if L is not None:
-        for rec in _iter_rows(L):
+        for rec in _safe_df_to_rows(L):
             lid = rec.get('slice_id')
             try:
                 if lid not in set(H.list_slices(include_default=True)):
@@ -601,7 +604,7 @@ def from_parquet(path) -> AnnNet:
     if EL is not None:
         by_slice = {}
         slice_weights = {}
-        for rec in _iter_rows(EL):
+        for rec in _safe_df_to_rows(EL):
             lid = rec.get('slice_id')
             eid = rec.get('edge_id')
             if lid is None or eid is None:

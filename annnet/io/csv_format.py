@@ -1,4 +1,4 @@
-"""CSV ingestion and export helpers using Polars instead of stdlib `csv`.
+"""CSV ingestion and export helpers using AnnNet's dataframe backend.
 
 It ingests a CSV into AnnNet by auto-detecting common schemas:
 - Edge list (including DOK/COO triples and variations)
@@ -9,7 +9,8 @@ It ingests a CSV into AnnNet by auto-detecting common schemas:
 
 If auto-detection fails or you want control, pass schema=... explicitly.
 
-Dependencies: polars, numpy, scipy (only if you use sparse helpers), AnnNet
+Dependencies: one configured dataframe backend, numpy, scipy (only if you use sparse helpers),
+AnnNet
 
 Design notes:
 - We treat unknown columns as attributes ("pure" non-structural) and write them via
@@ -39,12 +40,20 @@ from collections.abc import Iterable
 
 import numpy as np
 
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.  # noqa: BLE001
-    pl = None
-
 from ..core.graph import AnnNet
+from .._dataframe_backend import (
+    _dataframe_width,
+    dataframe_height,
+    dataframe_columns,
+    dataframe_to_rows,
+    dataframe_from_rows,
+    _dataframe_write_csv,
+    _dataframe_column_values,
+    rename_dataframe_columns,
+    _dataframe_read_delimited,
+    _dataframe_select_to_numpy,
+    _dataframe_column_is_numeric,
+)
 
 # ---------------------------
 # Helpers / parsing utilities
@@ -155,32 +164,29 @@ def _split_set(cell: Any) -> set[str]:
     return {str(cell)}
 
 
-def _pick_first(df: pl.DataFrame, candidates: list[str]) -> str | None:
-    cols_lower = {c.lower(): c for c in df.columns}
+def _columns(df) -> list[str]:
+    return dataframe_columns(df)
+
+
+def _rows(df) -> list[dict[str, Any]]:
+    return dataframe_to_rows(df)
+
+
+def _pick_first(df, candidates: list[str]) -> str | None:
+    cols_lower = {c.lower(): c for c in _columns(df)}
     for k in candidates:
         if k in cols_lower:
             return cols_lower[k]
     return None
 
 
-def _is_numeric_series(s: pl.Series) -> bool:
-    return s.dtype.is_numeric() or s.dtype in (
-        pl.Float64,
-        pl.Float32,
-        pl.Int64,
-        pl.Int32,
-        pl.Int16,
-        pl.Int8,
-        pl.UInt64,
-        pl.UInt32,
-        pl.UInt16,
-        pl.UInt8,
-    )
+def _is_numeric_column(df, column: str) -> bool:
+    return _dataframe_column_is_numeric(df, column)
 
 
-def _attr_columns(df: pl.DataFrame, exclude: Iterable[str]) -> list[str]:
+def _attr_columns(df, exclude: Iterable[str]) -> list[str]:
     excl = {c.lower() for c in exclude}
-    return [c for c in df.columns if c.lower() not in excl]
+    return [c for c in _columns(df) if c.lower() not in excl]
 
 
 # ---------------------------
@@ -188,8 +194,8 @@ def _attr_columns(df: pl.DataFrame, exclude: Iterable[str]) -> list[str]:
 # ---------------------------
 
 
-def _detect_schema(df: pl.DataFrame) -> str:
-    cols = [c.lower() for c in df.columns]
+def _detect_schema(df) -> str:
+    cols = [c.lower() for c in _columns(df)]
 
     # Hyperedge table if we have 'members' OR (head and tail)
     if any(c in cols for c in MEMBERS_COLS) or (
@@ -214,18 +220,21 @@ def _detect_schema(df: pl.DataFrame) -> str:
         return 'edge_list'
 
     # Heuristic: if first column is a vertex id and remaining many numeric -> incidence
-    if df.width >= 3:
-        first = df.get_column(df.columns[0])
-        rest_numeric = all(_is_numeric_series(df.get_column(c)) for c in df.columns[1:])
-        if not _is_numeric_series(first) and rest_numeric:
+    width = _dataframe_width(df)
+    height = dataframe_height(df)
+    names = _columns(df)
+    if width >= 3:
+        first = names[0]
+        rest_numeric = all(_is_numeric_column(df, c) for c in names[1:])
+        if not _is_numeric_column(df, first) and rest_numeric:
             # Could be incidence OR adjacency with labels on rows
             # If square shape (n rows == n numeric columns) -> adjacency
-            if df.height == (df.width - 1):
+            if height == (width - 1):
                 return 'adjacency'
             return 'incidence'
 
     # Square, mostly numeric -> adjacency (no explicit row label)
-    if df.height == df.width and all(_is_numeric_series(df.get_column(c)) for c in df.columns):
+    if height == width and all(_is_numeric_column(df, c) for c in names):
         return 'adjacency'
 
     # Fallback
@@ -269,13 +278,13 @@ def from_csv(
     default_weight : float, default 1.0
         Default weight when not specified.
     infer_schema_length : int, default 10000
-        Row count Polars uses to infer column types.
+        Row count used by backends that support bounded schema inference.
     encoding : str or None, optional
         File encoding override.
     null_values : list[str] or None, optional
         Additional strings to interpret as nulls.
     low_memory : bool, default True
-        Pass to Polars read_csv for balanced memory usage.
+        Pass to backends that support low-memory CSV reading.
     **kwargs : Any
         Passed to AnnNet constructor if `graph` is None.
 
@@ -292,8 +301,9 @@ def from_csv(
         If schema is unknown or parsing fails.
 
     """
-    df = pl.read_csv(
+    df = _dataframe_read_delimited(
         path,
+        separator=',',
         infer_schema_length=infer_schema_length,
         encoding=encoding,
         null_values=null_values,
@@ -311,7 +321,7 @@ def from_csv(
 
 
 def from_dataframe(
-    df: pl.DataFrame,
+    df,
     *,
     graph: AnnNet | None = None,
     schema: str = 'auto',
@@ -320,11 +330,11 @@ def from_dataframe(
     default_weight: float = 1.0,
     **kwargs: Any,
 ):
-    """Build/augment an AnnNet from a Polars DataFrame.
+    """Build/augment an AnnNet from a Narwhals-compatible dataframe.
 
     Parameters
     ----------
-    df : polars.DataFrame
+    df : DataFrame-like
         Input table parsed from CSV.
     graph : AnnNet or None, optional
         If provided, mutate this graph; otherwise create a new AnnNet using
@@ -399,15 +409,13 @@ def edges_to_csv(G, path, slice=None):
     """
     df = G.edges_view(slice=slice) if slice is not None else G.edges_view()
 
-    if not isinstance(df, pl.DataFrame):
-        df = pl.DataFrame(df)
-
-    cols = {c.lower(): c for c in df.columns}
+    cols = {c.lower(): c for c in _columns(df)}
+    rows = _rows(df)
 
     # If a 'kind' column exists, drop hyper rows so we only export binary edges.
     kindcol = cols.get('kind')
     if kindcol:
-        df = df.filter(pl.col(kindcol).cast(str).str.to_lowercase() != 'hyper')
+        rows = [row for row in rows if str(row.get(kindcol, '')).lower() != 'hyper']
 
     # Find mandatory source/target columns
     src = next((cols[k] for k in ('source', 'src', 'u', 'from') if k in cols), None)
@@ -416,9 +424,6 @@ def edges_to_csv(G, path, slice=None):
         raise ValueError(
             'No binary endpoints in edges_view; likely hyperedge-only. Use hyperedges_to_csv.'
         )
-
-    # Filter out rows lacking endpoints (safety if view is mixed)
-    df = df.filter(pl.col(src).is_not_null() & pl.col(dst).is_not_null())
 
     # Optional columns
     # Prefer resolved/global weights if present
@@ -431,23 +436,21 @@ def edges_to_csv(G, path, slice=None):
     slicecol = cols.get('slice')
     dircol = cols.get('directed') or cols.get('edge_directed')
 
-    n = df.height
+    out_rows = []
+    for row in rows:
+        if row.get(src) is None or row.get(dst) is None:
+            continue
+        out_rows.append(
+            {
+                'source': row.get(src),
+                'target': row.get(dst),
+                'weight': row.get(wcol) if wcol else 1.0,
+                'directed': row.get(dircol) if dircol else None,
+                'slice': slice if slice is not None else (row.get(slicecol) if slicecol else None),
+            }
+        )
 
-    out = pl.DataFrame(
-        {
-            'source': df[src],
-            'target': df[dst],
-            'weight': (df[wcol] if wcol else pl.Series('weight', [1.0] * n)),
-            'directed': (df[dircol] if dircol else pl.Series('directed', [None] * n)),
-            'slice': (
-                pl.Series('slice', [slice] * n)
-                if slice is not None
-                else (df[slicecol] if slicecol else pl.Series('slice', [None] * n))
-            ),
-        }
-    )
-
-    out.write_csv(path)
+    _dataframe_write_csv(dataframe_from_rows(out_rows), path)
 
 
 def hyperedges_to_csv(G, path, slice=None, directed=None):
@@ -484,15 +487,14 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
 
     """
     df = G.edges_view(slice=slice) if slice is not None else G.edges_view()
-    if not isinstance(df, pl.DataFrame):
-        df = pl.DataFrame(df)
 
-    cols = {c.lower(): c for c in df.columns}
+    cols = {c.lower(): c for c in _columns(df)}
+    rows = _rows(df)
 
     # Keep only hyperedges if 'kind' is available.
     kindcol = cols.get('kind')
     if kindcol:
-        df = df.filter(pl.col(kindcol).cast(str).str.to_lowercase() == 'hyper')
+        rows = [row for row in rows if str(row.get(kindcol, '')).lower() == 'hyper']
 
     members = cols.get('members')
     head = cols.get('head')
@@ -507,51 +509,37 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
     slicecol = cols.get('slice')
 
     # Helper to coerce values/lists/tuples to pipe-joined strings; leaves strings as-is.
-    def _to_pipe_joined(series: pl.Series, name: str) -> pl.Series:
-        vals = series.to_list()
-        out = []
-        for v in vals:
-            if v is None:
-                out.append(None)
-            elif isinstance(v, (list, tuple, set)):
-                out.append('|'.join(sorted(str(x) for x in v)))
-            else:
-                s = str(v).strip()
-                # Fast path: JSON array like ["a","b"]
-                if s.startswith('[') and s.endswith(']'):
-                    try:
-                        arr = json.loads(s)
-                        out.append('|'.join(sorted(str(x) for x in arr)))
-                        continue
-                    except Exception:  # noqa: BLE001
-                        pass
-                # Split on common separators if present
-                parts = [p.strip() for p in _SET_SEP.split(s)] if _SET_SEP.search(s) else [s]
-                out.append('|'.join(sorted(p for p in parts if p)))
-        return pl.Series(name, out)
+    def _to_pipe_joined(value):
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple, set)):
+            return '|'.join(sorted(str(x) for x in value))
+        s = str(value).strip()
+        if s.startswith('[') and s.endswith(']'):
+            try:
+                arr = json.loads(s)
+                return '|'.join(sorted(str(x) for x in arr))
+            except Exception:  # noqa: BLE001
+                pass
+        parts = [p.strip() for p in _SET_SEP.split(s)] if _SET_SEP.search(s) else [s]
+        return '|'.join(sorted(p for p in parts if p))
 
     if members:
-        m = _to_pipe_joined(df[members], 'members')
-        # drop null/empty rows (mixed views might include non-hyper rows)
-        mask = m.is_not_null() & (m.str.len_chars() > 0)
-        out = pl.DataFrame(
-            {
-                'members': m.filter(mask),
-                'weight': (
-                    df[wcol].filter(mask) if wcol else pl.Series('weight', [1.0] * int(mask.sum()))
-                ),
-                'slice': (
-                    pl.Series('slice', [slice] * int(mask.sum()))
+        out_rows = []
+        for row in rows:
+            joined = _to_pipe_joined(row.get(members))
+            if not joined:
+                continue
+            out_rows.append(
+                {
+                    'members': joined,
+                    'weight': row.get(wcol) if wcol else 1.0,
+                    'slice': slice
                     if slice is not None
-                    else (
-                        df[slicecol].filter(mask)
-                        if slicecol
-                        else pl.Series('slice', [None] * int(mask.sum()))
-                    )
-                ),
-            }
-        )
-        out.write_csv(path)
+                    else (row.get(slicecol) if slicecol else None),
+                }
+            )
+        _dataframe_write_csv(dataframe_from_rows(out_rows), path)
         return
 
     if head and tail:
@@ -560,63 +548,37 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
             # If head/tail columns exist, default to directed unless explicitly overridden
             is_dir = True
 
-        h = _to_pipe_joined(df[head], 'head')
-        t = _to_pipe_joined(df[tail], 'tail')
-        # drop rows where either side is missing
-        mask = h.is_not_null() & (h.str.len_chars() > 0) & t.is_not_null() & (t.str.len_chars() > 0)
-
+        prepared = []
+        for row in rows:
+            h = _to_pipe_joined(row.get(head))
+            t = _to_pipe_joined(row.get(tail))
+            if h and t:
+                prepared.append((row, h, t))
         if is_dir:
-            out = pl.DataFrame(
+            out_rows = [
                 {
-                    'head': h.filter(mask),
-                    'tail': t.filter(mask),
-                    'weight': (
-                        df[wcol].filter(mask)
-                        if wcol
-                        else pl.Series('weight', [1.0] * int(mask.sum()))
-                    ),
-                    'slice': (
-                        pl.Series('slice', [slice] * int(mask.sum()))
-                        if slice is not None
-                        else (
-                            df[slicecol].filter(mask)
-                            if slicecol
-                            else pl.Series('slice', [None] * int(mask.sum()))
-                        )
-                    ),
+                    'head': h,
+                    'tail': t,
+                    'weight': row.get(wcol) if wcol else 1.0,
+                    'slice': slice
+                    if slice is not None
+                    else (row.get(slicecol) if slicecol else None),
                 }
-            )
+                for row, h, t in prepared
+            ]
         else:
             # Merge head/tail into undirected 'members'
-            merged = pl.Series(
-                'members',
-                [
-                    '|'.join(sorted([p for p in (hval.split('|') + tval.split('|')) if p]))
-                    for hval, tval in zip(
-                        h.filter(mask).to_list(), t.filter(mask).to_list(), strict=False
-                    )
-                ],
-            )
-            out = pl.DataFrame(
+            out_rows = [
                 {
-                    'members': merged,
-                    'weight': (
-                        df[wcol].filter(mask)
-                        if wcol
-                        else pl.Series('weight', [1.0] * int(mask.sum()))
-                    ),
-                    'slice': (
-                        pl.Series('slice', [slice] * int(mask.sum()))
-                        if slice is not None
-                        else (
-                            df[slicecol].filter(mask)
-                            if slicecol
-                            else pl.Series('slice', [None] * int(mask.sum()))
-                        )
-                    ),
+                    'members': '|'.join(sorted([p for p in (h.split('|') + t.split('|')) if p])),
+                    'weight': row.get(wcol) if wcol else 1.0,
+                    'slice': slice
+                    if slice is not None
+                    else (row.get(slicecol) if slicecol else None),
                 }
-            )
-        out.write_csv(path)
+                for row, h, t in prepared
+            ]
+        _dataframe_write_csv(dataframe_from_rows(out_rows), path)
         return
 
     raise ValueError(
@@ -630,7 +592,7 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
 
 
 def _ingest_edge_list(
-    df: pl.DataFrame,
+    df,
     G,
     default_slice: str | None,
     default_directed: bool | None,
@@ -661,7 +623,7 @@ def _ingest_edge_list(
     reserved_now = {src, dst, wcol, dcol, lcol, ecol}
     attrs_cols = _attr_columns(df, [c for c in reserved_now if c])
 
-    for row in df.iter_rows(named=True):
+    for row in _rows(df):
         u = _norm(row[src])
         v = _norm(row[dst])
         if not u or not v:
@@ -704,7 +666,7 @@ def _ingest_edge_list(
                     u, v, directed=directed, weight=w, slice=L, propagate='none', **pure_attrs
                 )
                 # per-slice override columns like weight:slice
-                for c in df.columns:
+                for c in _columns(df):
                     if c.lower().startswith('weight:'):
                         _, _, suffix = c.partition(':')
                         if suffix == L and row[c] is not None:
@@ -719,7 +681,7 @@ def _ingest_edge_list(
 
 
 def _ingest_hyperedge(
-    df: pl.DataFrame,
+    df,
     G,
     default_slice: str | None,
     default_weight: float,
@@ -734,12 +696,12 @@ def _ingest_hyperedge(
     if not mcol and not hcol:
         raise ValueError(
             "Hyperedge schema requires a 'members' column (undirected) or 'head'/'tail' columns "
-            f'(directed). Available columns: {list(df.columns)}'
+            f'(directed). Available columns: {_columns(df)}'
         )
 
     attrs_cols = _attr_columns(df, [c for c in [mcol, hcol, tcol, wcol, lcol] if c])
 
-    for row in df.iter_rows(named=True):
+    for row in _rows(df):
         weight = (
             float(row[wcol])
             if (wcol and row[wcol] is not None and str(row[wcol]).strip() != '')
@@ -776,36 +738,38 @@ def _ingest_hyperedge(
 
 
 def _ingest_incidence(
-    df: pl.DataFrame,
+    df,
     G,
     default_slice: str | None,
     default_weight: float,
 ):
     """Parse incidence matrices (first col = entity id, remaining numeric edge columns)."""
-    idcol = _pick_first(df, vertex_ID_COLS) or df.columns[0]
-    if idcol != df.columns[0]:
-        df = df.rename({idcol: df.columns[0]})
-        idcol = df.columns[0]
+    columns = _columns(df)
+    idcol = _pick_first(df, vertex_ID_COLS) or columns[0]
+    if idcol != columns[0]:
+        df = rename_dataframe_columns(df, {idcol: columns[0]})
+        columns = _columns(df)
+        idcol = columns[0]
 
     # Create / ensure all vertices
-    for nid in df.get_column(idcol).to_list():
+    id_values = _dataframe_column_values(df, idcol)
+    for nid in id_values:
         nid_s = _norm(nid)
         if nid_s:
             G.add_vertex(nid_s)
 
     # Each remaining column is an edge column; determine kind per column
-    for edge_col in df.columns[1:]:
-        col = df.get_column(edge_col)
-        if not _is_numeric_series(col):
+    for edge_col in columns[1:]:
+        if not _is_numeric_column(df, edge_col):
             # skip non-numeric columns (attribute table?)
             continue
-        values = col.fill_null(0)
+        values = _dataframe_column_values(df, edge_col)
         # collect nonzero indices
         nz_idx: list[int] = [i for i, v in enumerate(values) if float(v or 0) != 0.0]
         if not nz_idx:
             continue
         # map row index -> entity id
-        ents = [_norm(df.get_column(idcol)[i]) for i in nz_idx]
+        ents = [_norm(id_values[i]) for i in nz_idx]
         vals = [float(values[i]) for i in nz_idx]
 
         pos = [ents[i] for i, x in enumerate(vals) if x > 0]
@@ -841,7 +805,7 @@ def _ingest_incidence(
 
 
 def _ingest_adjacency(
-    df: pl.DataFrame,
+    df,
     G,
     default_slice: str | None,
     default_directed: bool | None,
@@ -851,23 +815,24 @@ def _ingest_adjacency(
     # Determine if first column holds row labels
     row_labels: list[str]
     mat_cols: list[str]
+    columns = _columns(df)
 
-    if df.width >= 2 and not _is_numeric_series(df.get_column(df.columns[0])):
-        row_labels = [_norm(x) for x in df.get_column(df.columns[0]).to_list()]
-        mat_cols = df.columns[1:]
+    if _dataframe_width(df) >= 2 and not _is_numeric_column(df, columns[0]):
+        row_labels = [_norm(x) for x in _dataframe_column_values(df, columns[0])]
+        mat_cols = columns[1:]
     else:
-        row_labels = [str(i) for i in range(df.height)]
-        mat_cols = df.columns
+        row_labels = [str(i) for i in range(dataframe_height(df))]
+        mat_cols = columns
 
     # Ensure all vertices exist
     for nid in row_labels:
         G.add_vertex(nid)
     for c in mat_cols:
-        if not _is_numeric_series(df.get_column(c)):
+        if not _is_numeric_column(df, c):
             raise ValueError('Adjacency ingest: non-numeric column detected in matrix region.')
 
     # Directedness inference: if symmetric within tolerance and default_directed is None -> undirected
-    A = np.asarray(df.select(mat_cols).to_numpy(), dtype=float)
+    A = np.asarray(_dataframe_select_to_numpy(df, mat_cols), dtype=float)
     if len(row_labels) != len(mat_cols):
         raise ValueError('Adjacency ingest: number of rows must equal number of columns.')
 
@@ -901,14 +866,14 @@ def _ingest_adjacency(
 
 
 def _ingest_lil(
-    df: pl.DataFrame,
+    df,
     G,
     default_slice: str | None,
     default_directed: bool | None,
     default_weight: float,
 ):
     """Parse LIL-style neighbor tables: one row per vertex with a neighbors column."""
-    idcol = _pick_first(df, vertex_ID_COLS) or df.columns[0]
+    idcol = _pick_first(df, vertex_ID_COLS) or _columns(df)[0]
     ncol = _pick_first(df, NEIGH_COLS)
     wcol = _pick_first(df, WGT_COLS)
     dcol = _pick_first(df, DIR_COLS)
@@ -919,7 +884,7 @@ def _ingest_lil(
 
     attrs_cols = _attr_columns(df, [idcol, ncol, wcol, dcol, lcol])
 
-    for row in df.iter_rows(named=True):
+    for row in _rows(df):
         u = _norm(row[idcol])
         if not u:
             continue

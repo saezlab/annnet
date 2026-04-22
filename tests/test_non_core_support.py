@@ -155,11 +155,11 @@ def test_dataframe_backend_helpers_preserve_rows_and_schema(tmp_path):
     assert df_backend.dataframe_backend(None) == backend
 
     csv_path = tmp_path / 'rows.csv'
-    df_backend.dataframe_write_csv(table, csv_path)
+    df_backend._dataframe_write_csv(table, csv_path)
     assert csv_path.exists()
 
     parquet_path = tmp_path / 'rows.parquet'
-    df_backend.dataframe_write_parquet(table, parquet_path)
+    df_backend._dataframe_write_parquet(table, parquet_path)
     assert parquet_path.exists()
 
 

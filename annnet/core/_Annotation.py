@@ -640,7 +640,7 @@ class AttributesClass:
             if c in schema and v is not None:
                 existing_dt = schema[c]
                 if not self._is_null_dtype(existing_dt):
-                    v_dt = self._dtype_for_value(v, prefer='narwhals')
+                    v_dt = self._dtype_for_value(v)
 
                     def _is_num(dt):
                         s = str(dt).lower()
@@ -691,7 +691,7 @@ class AttributesClass:
                 v2 = self._sanitize_value_for_nw(v)
                 tgt_dt = schema[k]
                 if self._is_null_dtype(tgt_dt):
-                    inf = self._dtype_for_value(v2, prefer='narwhals')
+                    inf = self._dtype_for_value(v)
                     upds.append(
                         nw.when(cond)
                         .then(nw.lit(v2).cast(inf))

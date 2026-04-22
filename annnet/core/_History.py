@@ -8,8 +8,8 @@ import numpy as np
 from .._dataframe_backend import (
     dataframe_to_rows,
     dataframe_from_rows,
-    dataframe_write_csv,
-    dataframe_write_parquet,
+    _dataframe_write_csv,
+    _dataframe_write_parquet,
 )
 
 
@@ -234,7 +234,7 @@ class History:
         df = dataframe_from_rows(self._history)
         p = path.lower()
         if p.endswith('.parquet'):
-            dataframe_write_parquet(df, path)
+            _dataframe_write_parquet(df, path)
             return len(self._history)
         if p.endswith('.ndjson') or p.endswith('.jsonl'):
             with open(path, 'w', encoding='utf-8') as f:
@@ -261,10 +261,10 @@ class History:
                     else:
                         flat_row[key] = value
                 flat_rows.append(flat_row)
-            dataframe_write_csv(dataframe_from_rows(flat_rows), path)
+            _dataframe_write_csv(dataframe_from_rows(flat_rows), path)
             return len(self._history)
         # Default to Parquet if unknown
-        dataframe_write_parquet(df, path + '.parquet')
+        _dataframe_write_parquet(df, path + '.parquet')
         return len(self._history)
 
     def enable_history(self, flag: bool = True):

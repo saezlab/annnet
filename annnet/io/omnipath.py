@@ -7,7 +7,7 @@ from ..core.graph import AnnNet
 from .._dataframe_backend import (
     dataframe_height,
     dataframe_to_rows,
-    dataframe_read_tsv,
+    _dataframe_read_tsv,
 )
 
 
@@ -439,7 +439,7 @@ def from_omnipath(
         # 2) caller passed a local file path
         elif vertex_annotations_path is not None:
             try:
-                ann_raw = dataframe_read_tsv(vertex_annotations_path, backend=annotations_backend)
+                ann_raw = _dataframe_read_tsv(vertex_annotations_path, backend=annotations_backend)
             except Exception as e:  # noqa: BLE001
                 print(f'[warning] vertex_annotations_path failed: {e}')
 
@@ -461,7 +461,7 @@ def from_omnipath(
                 if os.path.exists(_cache_path):
                     print(f'[vertex annotations] loading from cache: {_cache_path}')
                     t_ann = time.perf_counter()
-                    ann_raw = dataframe_read_tsv(_cache_path, backend=annotations_backend)
+                    ann_raw = _dataframe_read_tsv(_cache_path, backend=annotations_backend)
                     print(
                         f'[vertex annotations] loaded in {time.perf_counter() - t_ann:.1f}s  rows={dataframe_height(ann_raw)}'
                     )
@@ -479,7 +479,7 @@ def from_omnipath(
                     os.makedirs(os.path.dirname(_cache_path), exist_ok=True)
                     with open(_cache_path, 'wb') as _f:
                         _f.write(resp.content)
-                    ann_raw = dataframe_read_tsv(
+                    ann_raw = _dataframe_read_tsv(
                         io.BytesIO(resp.content), backend=annotations_backend
                     )
                     print(

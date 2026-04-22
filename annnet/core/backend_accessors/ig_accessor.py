@@ -85,7 +85,7 @@ class _IGBackendAccessor(_BackendAccessorBase):
             simple = bool(kwargs.pop('_ig_simple', False))
             edge_aggs = kwargs.pop('_ig_edge_aggs', None)
 
-            needed_edge_attrs = self._needed_edge_attrs_for_ig(name, kwargs)
+            needed_edge_attrs = self._needed_edge_attrs_for_ig(kwargs)
 
             if str(hyperedge_mode).lower() == 'reify':
                 import warnings

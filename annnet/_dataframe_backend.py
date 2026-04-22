@@ -105,6 +105,16 @@ def dataframe_height(df) -> int:
     return len(_to_nw(df).rows())
 
 
+def _dataframe_width(df) -> int:
+    """Return the column count for a dataframe-like object."""
+    return len(dataframe_columns(df))
+
+
+def _dataframe_is_empty(df) -> bool:
+    """Return whether a dataframe-like object has no rows."""
+    return dataframe_height(df) == 0
+
+
 def dataframe_memory_usage(df) -> int:
     """Best-effort memory usage for a dataframe-like object."""
     if df is None:
@@ -120,6 +130,44 @@ def dataframe_columns(df) -> list[str]:
     if df is None:
         return []
     return _schema_names(_schema_from_df(df))
+
+
+def _dataframe_column_values(df, column: str) -> list[Any]:
+    """Return one dataframe column as a Python list."""
+    if df is None or column not in dataframe_columns(df):
+        return []
+    return [row.get(column) for row in dataframe_to_rows(df)]
+
+
+def _dataframe_select_to_numpy(df, columns: list[str]):
+    """Return selected columns as a NumPy array via Narwhals."""
+    return _to_nw(df).select(columns).to_numpy()
+
+
+def _dataframe_column_is_numeric(df, column: str) -> bool:
+    """Best-effort numeric column probe across supported eager backends."""
+    if df is None or column not in dataframe_columns(df):
+        return False
+
+    try:
+        dtype = _to_nw(df).collect_schema()[column]
+        is_numeric = getattr(dtype, 'is_numeric', None)
+        if callable(is_numeric) and is_numeric():
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+
+    values = _dataframe_column_values(df, column)
+    seen = False
+    for value in values:
+        if value is None or value == '':
+            continue
+        try:
+            float(value)
+        except (TypeError, ValueError):
+            return False
+        seen = True
+    return seen
 
 
 def dataframe_backend(df, *, default: str | None = 'auto') -> str:
@@ -244,11 +292,15 @@ def dataframe_upsert_rows(
     )
 
 
-def dataframe_read_delimited(
+def _dataframe_read_delimited(
     source,
     *,
     separator: str = ',',
     backend: str | None = 'auto',
+    infer_schema_length: int | None = None,
+    encoding: str | None = None,
+    null_values: list[str] | None = None,
+    low_memory: bool | None = None,
 ):
     """Read a delimited file/buffer into a Narwhals-compatible dataframe."""
 
@@ -258,37 +310,99 @@ def dataframe_read_delimited(
     if resolved == 'polars':
         import polars as pl
 
-        native = pl.read_csv(source, separator=separator)
+        options = {'separator': separator}
+        if infer_schema_length is not None:
+            options['infer_schema_length'] = infer_schema_length
+        if encoding is not None:
+            options['encoding'] = encoding
+        if null_values is not None:
+            options['null_values'] = null_values
+        if low_memory is not None:
+            options['low_memory'] = low_memory
+        native = pl.read_csv(source, **options)
 
     elif resolved == 'pandas':
         import pandas as pd
 
-        native = pd.read_csv(source, sep=separator)
+        options = {'sep': separator}
+        if encoding is not None:
+            options['encoding'] = encoding
+        if null_values is not None:
+            options['na_values'] = null_values
+        native = pd.read_csv(source, **options)
 
     else:
         import pyarrow.csv as pacsv
 
+        read_options = pacsv.ReadOptions(encoding=encoding or 'utf8')
+        convert_options = (
+            pacsv.ConvertOptions(null_values=null_values)
+            if null_values is not None
+            else pacsv.ConvertOptions()
+        )
         native = pacsv.read_csv(
             source,
+            read_options=read_options,
             parse_options=pacsv.ParseOptions(delimiter=separator),
+            convert_options=convert_options,
         )
 
     # Normalize via Narwhals roundtrip (optional but consistent)
     return _from_nw(_to_nw(native))
 
 
-def dataframe_read_tsv(source, *, backend: str | None = 'auto'):
-    return dataframe_read_delimited(source, separator='\t', backend=backend)
+def _dataframe_read_tsv(source, *, backend: str | None = 'auto'):
+    return _dataframe_read_delimited(source, separator='\t', backend=backend)
 
 
-def dataframe_write_csv(df, path) -> None:
+def _dataframe_read_excel(source, *, sheet_name=None):
+    """Read an Excel sheet into a Narwhals-compatible dataframe.
+
+    Excel support is intentionally a pandas-backed boundary because Narwhals does
+    not define an Excel reader.
+    """
+    try:
+        import pandas as pd
+    except ImportError as e:
+        raise ImportError(
+            'Excel support requires `pandas` at runtime. '
+            'Install it or convert the file to CSV manually.'
+        ) from e
+
+    native = pd.read_excel(source, sheet_name=sheet_name)
+    if isinstance(native, dict):
+        if sheet_name is None:
+            _, native = next(iter(native.items()))
+        else:
+            native = native[sheet_name]
+    return _from_nw(_to_nw(native))
+
+
+def _dataframe_write_csv(df, path) -> None:
     """Write a dataframe-like object to CSV."""
     _to_nw(df).write_csv(path)
 
 
-def dataframe_write_parquet(df, path) -> None:
+def _dataframe_write_parquet(df, path) -> None:
     """Write a dataframe-like object to Parquet."""
     _to_nw(df).write_parquet(path)
+
+
+def _dataframe_read_parquet(path, *, backend: str | None = None):
+    """Read a Parquet file into the configured dataframe backend."""
+    resolved = select_dataframe_backend(backend)
+    if resolved == 'polars':
+        import polars as pl
+
+        return pl.read_parquet(path)
+    if resolved == 'pandas':
+        import pandas as pd
+
+        return pd.read_parquet(path, engine='pyarrow')
+
+    import pyarrow.parquet as pq
+
+    return pq.read_table(path)
 
 
 def rename_dataframe_columns(df, mapping: dict[str, str]):
