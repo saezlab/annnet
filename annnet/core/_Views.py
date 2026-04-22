@@ -315,7 +315,7 @@ class GraphView:
         Uses `AnnNet.edges_view()` and then filters by the view's edge IDs.
         """
         # Use AnnNet's existing edges_view() method
-        df = self._graph.edges_view(**kwargs)
+        df = self._graph.views.edges(**kwargs)
 
         # Filter by edge IDs in this view
         edge_ids = self.edge_ids
@@ -353,7 +353,7 @@ class GraphView:
         Uses `AnnNet.vertices_view()` and then filters by the view's vertex IDs.
         """
         # Use AnnNet's existing vertices_view() method
-        df = self._graph.vertices_view(**kwargs)
+        df = self._graph.views.vertices(**kwargs)
 
         # Filter by vertex IDs in this view
         vertex_ids = self.vertex_ids
@@ -418,9 +418,9 @@ class GraphView:
                     )
             except Exception:
                 vertex_records = [{"vertex_id": vid} for vid in vset]
-            subG.add_vertices_bulk(vertex_records)
+            subG.add_vertices(vertex_records)
         else:
-            subG.add_vertices_bulk({"vertex_id": vid} for vid in vset)
+            subG.add_vertices({"vertex_id": vid} for vid in vset)
 
         # ---- Collect all edge attrs in one bulk scan ----
         edge_attrs_map = {}
@@ -498,7 +498,7 @@ class GraphView:
         if binary_edges:
             subG.add_edges_bulk(binary_edges)
         if hyper_edges:
-            subG.add_hyperedges_bulk(hyper_edges)
+            subG.add_edges(hyper_edges)
 
         return subG
 
@@ -695,34 +695,42 @@ class ViewsClass:
             else None
         )
 
-        src, tgt, etype = [], [], []
-        head, tail, members = [], [], []
+        if all(rec.etype != "hyper" for rec in _edge_recs):
+            src = [str(rec.src) if rec.src is not None else None for rec in _edge_recs]
+            tgt = [str(rec.tgt) if rec.tgt is not None else None for rec in _edge_recs]
+            etype = [str(rec.etype) if rec.etype is not None else None for rec in _edge_recs]
+            head = [None] * len(_edge_recs)
+            tail = [None] * len(_edge_recs)
+            members = [None] * len(_edge_recs)
+        else:
+            src, tgt, etype = [], [], []
+            head, tail, members = [], [], []
 
-        for rec in _edge_recs:
-            if rec.etype == "hyper":
-                if rec.tgt is not None:
-                    src_vals = tuple(str(x) for x in sorted(rec.src))
-                    tgt_vals = tuple(str(x) for x in sorted(rec.tgt))
-                    head.append(src_vals)
-                    tail.append(tgt_vals)
-                    members.append(None)
-                    src.append("|".join(src_vals))
-                    tgt.append("|".join(tgt_vals))
+            for rec in _edge_recs:
+                if rec.etype == "hyper":
+                    if rec.tgt is not None:
+                        src_vals = tuple(str(x) for x in sorted(rec.src))
+                        tgt_vals = tuple(str(x) for x in sorted(rec.tgt))
+                        head.append(src_vals)
+                        tail.append(tgt_vals)
+                        members.append(None)
+                        src.append("|".join(src_vals))
+                        tgt.append("|".join(tgt_vals))
+                    else:
+                        src_vals = tuple(str(x) for x in sorted(rec.src))
+                        head.append(None)
+                        tail.append(None)
+                        members.append(src_vals)
+                        src.append("|".join(src_vals))
+                        tgt.append(None)
+                    etype.append(None)
                 else:
-                    src_vals = tuple(str(x) for x in sorted(rec.src))
+                    src.append(str(rec.src) if rec.src is not None else None)
+                    tgt.append(str(rec.tgt) if rec.tgt is not None else None)
+                    etype.append(str(rec.etype) if rec.etype is not None else None)
                     head.append(None)
                     tail.append(None)
-                    members.append(src_vals)
-                    src.append("|".join(src_vals))
-                    tgt.append(None)
-                etype.append(None)
-            else:
-                src.append(str(rec.src) if rec.src is not None else None)
-                tgt.append(str(rec.tgt) if rec.tgt is not None else None)
-                etype.append(str(rec.etype) if rec.etype is not None else None)
-                head.append(None)
-                tail.append(None)
-                members.append(None)
+                    members.append(None)
 
         # Use stringified IDs in DataFrame
         cols = {"edge_id": eids_str, "kind": kinds}
@@ -933,8 +941,7 @@ class ViewsClass:
                 "aspect": a,
                 "elem_layers": list(self.elem_layers.get(a, [])),
             }
-            # aspect attrs stored in self._aspect_attrs[a]
-            for k, v in self._aspect_attrs.get(a, {}).items():
+            for k, v in self.layers._aspect_attrs.get(a, {}).items():
                 base[k] = v
             rows.append(base)
 
@@ -948,6 +955,34 @@ class ViewsClass:
 
             df = pd.DataFrame.from_records(rows)
             return df.copy(deep=True) if copy else df
+
+
+class ViewsAccessor:
+    """Namespace for materialized graph tables.
+
+    Returned by ``G.views``. Flat ``*_view()`` methods remain as compatibility
+    wrappers during the contraction phase.
+    """
+
+    __slots__ = ("_G",)
+
+    def __init__(self, graph):
+        self._G = graph
+
+    def edges(self, *args, **kwargs):
+        return ViewsClass.edges_view(self._G, *args, **kwargs)
+
+    def vertices(self, *args, **kwargs):
+        return ViewsClass.vertices_view(self._G, *args, **kwargs)
+
+    def slices(self, *args, **kwargs):
+        return ViewsClass.slices_view(self._G, *args, **kwargs)
+
+    def aspects(self, *args, **kwargs):
+        return ViewsClass.aspects_view(self._G, *args, **kwargs)
+
+    def layers(self, *args, **kwargs):
+        return ViewsClass.layers_view(self._G, *args, **kwargs)
 
     def layers_view(self, copy=True):
         """Return a read-only table of multi-aspect layers.
@@ -1004,7 +1039,7 @@ class ViewsClass:
                 )
 
         rows = []
-        for aa in self._all_layers:
+        for aa in self.layers._all_layers:
             aa = tuple(aa)
             lid = self.layer_tuple_to_id(aa)
 
@@ -1018,7 +1053,7 @@ class ViewsClass:
                 base[a] = aa[i]
 
             # attach multi-aspect layer metadata
-            for k, v in self._layer_attrs.get(aa, {}).items():
+            for k, v in self.layers._layer_attrs.get(aa, {}).items():
                 base[k] = v
 
             # attach elementary layer attrs for each aspect (prefixed)

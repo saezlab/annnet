@@ -10,7 +10,7 @@ try:
 except Exception:  # ModuleNotFoundError, etc.
     pl = None
     is_polars = False
-from ._helpers import _get_numeric_supertype
+from ._records import _get_numeric_supertype
 
 _NUMERIC_NW_DTYPES = {
     nw.Int8,
@@ -172,7 +172,54 @@ class AttributesClass:
                             f"Composite key collision on {self._vertex_key_fields}: {new_key} owned by {owner}"
                         )
 
-        self.vertex_attributes = self._upsert_rows_bulk(self.vertex_attributes, clean_updates)
+        if is_polars and isinstance(self.vertex_attributes, pl.DataFrame):
+            df = self.vertex_attributes
+            keys = set()
+            for attrs in clean_updates.values():
+                keys.update(attrs.keys())
+            if keys:
+                df = nw.to_native(self._ensure_attr_columns(df, {k: None for k in keys}))
+            update_df = pl.DataFrame(
+                [{"vertex_id": vid, **attrs} for vid, attrs in clean_updates.items()],
+                nan_to_null=True,
+                strict=False,
+            )
+            if df.height == 0:
+                self.vertex_attributes = update_df
+            else:
+                for c in df.columns:
+                    if c not in update_df.columns:
+                        update_df = update_df.with_columns(pl.lit(None).cast(df.schema[c]).alias(c))
+                for c in df.columns:
+                    lc, rc = df.schema[c], update_df.schema[c]
+                    if lc == pl.Null and rc != pl.Null:
+                        df = df.with_columns(pl.col(c).cast(rc))
+                    elif rc == pl.Null and lc != pl.Null:
+                        update_df = update_df.with_columns(pl.col(c).cast(lc).alias(c))
+                    elif lc != rc:
+                        if lc.is_numeric() and rc.is_numeric():
+                            st = _get_numeric_supertype(lc, rc)
+                            if st is not None:
+                                df = df.with_columns(pl.col(c).cast(st))
+                                update_df = update_df.with_columns(pl.col(c).cast(st).alias(c))
+                                continue
+                        df = df.with_columns(pl.col(c).cast(pl.Utf8))
+                        update_df = update_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
+
+                joined = df.join(update_df.select(df.columns), on="vertex_id", how="left", suffix="__new")
+                exprs = [
+                    pl.coalesce([pl.col(f"{k}__new"), pl.col(k)]).alias(k)
+                    for k in keys
+                    if f"{k}__new" in joined.columns
+                ]
+                drops = [f"{k}__new" for k in keys if f"{k}__new" in joined.columns]
+                if exprs:
+                    joined = joined.with_columns(exprs)
+                if drops:
+                    joined = joined.drop(drops)
+                self.vertex_attributes = joined
+        else:
+            self.vertex_attributes = self._upsert_rows_bulk(self.vertex_attributes, clean_updates)
 
         watched = self._variables_watched_by_vertices()
         if watched:
@@ -295,11 +342,59 @@ class AttributesClass:
         if not clean_updates:
             return
 
-        self.edge_attributes = self._upsert_rows_bulk(self.edge_attributes, clean_updates)
+        if is_polars and isinstance(self.edge_attributes, pl.DataFrame):
+            df = self.edge_attributes
+            keys = set()
+            for attrs in clean_updates.values():
+                keys.update(attrs.keys())
+            if keys:
+                df = nw.to_native(self._ensure_attr_columns(df, {k: None for k in keys}))
+            update_df = pl.DataFrame(
+                [{"edge_id": eid, **attrs} for eid, attrs in clean_updates.items()],
+                nan_to_null=True,
+                strict=False,
+            )
+            if df.height == 0:
+                self.edge_attributes = update_df
+            else:
+                for c in df.columns:
+                    if c not in update_df.columns:
+                        update_df = update_df.with_columns(pl.lit(None).cast(df.schema[c]).alias(c))
+                for c in df.columns:
+                    lc, rc = df.schema[c], update_df.schema[c]
+                    if lc == pl.Null and rc != pl.Null:
+                        df = df.with_columns(pl.col(c).cast(rc))
+                    elif rc == pl.Null and lc != pl.Null:
+                        update_df = update_df.with_columns(pl.col(c).cast(lc).alias(c))
+                    elif lc != rc:
+                        if lc.is_numeric() and rc.is_numeric():
+                            st = _get_numeric_supertype(lc, rc)
+                            if st is not None:
+                                df = df.with_columns(pl.col(c).cast(st))
+                                update_df = update_df.with_columns(pl.col(c).cast(st).alias(c))
+                                continue
+                        df = df.with_columns(pl.col(c).cast(pl.Utf8))
+                        update_df = update_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
 
+                joined = df.join(update_df.select(df.columns), on="edge_id", how="left", suffix="__new")
+                exprs = [
+                    pl.coalesce([pl.col(f"{k}__new"), pl.col(k)]).alias(k)
+                    for k in keys
+                    if f"{k}__new" in joined.columns
+                ]
+                drops = [f"{k}__new" for k in keys if f"{k}__new" in joined.columns]
+                if exprs:
+                    joined = joined.with_columns(exprs)
+                if drops:
+                    joined = joined.drop(drops)
+                self.edge_attributes = joined
+        else:
+            self.edge_attributes = self._upsert_rows_bulk(self.edge_attributes, clean_updates)
+
+        policy_map = self.edge_direction_policy
         affected_edges = set()
         for eid, attrs in clean_updates.items():
-            pol = self.edge_direction_policy.get(eid)
+            pol = policy_map.get(eid)
             if pol and pol.get("scope") == "edge" and pol["var"] in attrs:
                 affected_edges.add(eid)
 
@@ -478,6 +573,10 @@ class AttributesClass:
         self.edge_slice_attributes = self._upsert_row(
             self.edge_slice_attributes, (slice_id, edge_id), clean
         )
+        self._sync_slice_edge_weights_for_rows(
+            slice_id,
+            [{"slice_id": slice_id, "edge_id": edge_id, **clean}],
+        )
 
     def get_edge_slice_attr(self, slice_id, edge_id, key, default=None):
         """Get a per-slice attribute for an edge.
@@ -561,7 +660,7 @@ class AttributesClass:
         _rec = self._edges.get(edge_id)
         if _rec is None or _rec.col_idx < 0:
             raise KeyError(f"Edge {edge_id} not found")
-        self.slice_edge_weights[slice_id][edge_id] = float(weight)
+        self.set_edge_slice_attrs(slice_id, edge_id, weight=float(weight))
 
     def get_effective_edge_weight(self, edge_id, slice=None):
         """Resolve the effective weight for an edge, optionally within a slice.
@@ -620,11 +719,6 @@ class AttributesClass:
                             w = r0.get("weight", None)
                         if w is not None and not (isinstance(w, float) and math.isnan(w)):
                             return float(w)
-
-            # fallback to legacy dict if present
-            w2 = self.slice_edge_weights.get(slice, {}).get(edge_id, None)
-            if w2 is not None:
-                return float(w2)
 
         _rec = self._edges.get(edge_id)
         return float(_rec.weight if (_rec is not None and _rec.weight is not None) else 1.0)
@@ -1064,6 +1158,61 @@ class AttributesClass:
         if not updates:
             return df
 
+        if is_polars and isinstance(df, pl.DataFrame):
+            cols = set(df.columns)
+            if {"slice_id", "edge_id"} <= cols:
+                join_keys = ["slice_id", "edge_id"]
+            elif "vertex_id" in cols:
+                join_keys = ["vertex_id"]
+            elif "edge_id" in cols:
+                join_keys = ["edge_id"]
+            else:
+                join_keys = ["slice_id"]
+
+            update_records = []
+            for idx, attrs in updates.items():
+                if isinstance(idx, tuple):
+                    record = {"slice_id": idx[0], "edge_id": idx[1], **attrs}
+                elif "vertex_id" in cols:
+                    record = {"vertex_id": idx, **attrs}
+                elif "edge_id" in cols:
+                    record = {"edge_id": idx, **attrs}
+                else:
+                    record = {"slice_id": idx, **attrs}
+                update_records.append(record)
+
+            update_df = pl.DataFrame(update_records, nan_to_null=True, strict=False)
+            if df.height == 0:
+                return update_df
+
+            for c in update_df.columns:
+                if c not in df.columns:
+                    df = df.with_columns(pl.lit(None).cast(update_df.schema[c]).alias(c))
+            for c in df.columns:
+                if c not in update_df.columns:
+                    update_df = update_df.with_columns(pl.lit(None).cast(df.schema[c]).alias(c))
+
+            update_df = update_df.select(df.columns)
+
+            for c in df.columns:
+                lc, rc = df.schema[c], update_df.schema[c]
+                if lc == pl.Null and rc != pl.Null:
+                    df = df.with_columns(pl.col(c).cast(rc))
+                elif rc == pl.Null and lc != pl.Null:
+                    update_df = update_df.with_columns(pl.col(c).cast(lc).alias(c))
+                elif lc != rc:
+                    if lc.is_numeric() and rc.is_numeric():
+                        st = _get_numeric_supertype(lc, rc)
+                        if st is not None:
+                            df = df.with_columns(pl.col(c).cast(st))
+                            update_df = update_df.with_columns(pl.col(c).cast(st).alias(c))
+                            continue
+                    df = df.with_columns(pl.col(c).cast(pl.Utf8))
+                    update_df = update_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
+
+            unchanged = df.join(update_df.select(join_keys), on=join_keys, how="anti")
+            return pl.concat([unchanged, update_df], how="vertical", rechunk=False)
+
         nw_df = nw.from_native(df, eager_only=True)
         cols = set(nw_df.columns)
 
@@ -1077,43 +1226,38 @@ class AttributesClass:
         else:
             join_keys = ["slice_id"]
 
-        native = nw.to_native(nw_df)
-
-        # Convert existing rows to a dict keyed by join-key tuple — O(n)
-        try:
-            existing_rows = native.to_dicts()
-        except AttributeError:
-            try:
-                existing_rows = native.to_dict(orient="records")
-            except Exception:
-                existing_rows = []
-
-        def _key(row):
-            return tuple(row.get(k) for k in join_keys)
-
-        row_map = {_key(r): r for r in existing_rows}
-
-        # Apply each update in-place or insert new row — O(updates)
+        # Build update DataFrame from incoming records
+        update_records = []
         for idx, attrs in updates.items():
             if isinstance(idx, tuple):
-                key_part = {"slice_id": idx[0], "edge_id": idx[1]}
+                record = {"slice_id": idx[0], "edge_id": idx[1], **attrs}
             elif "vertex_id" in cols:
-                key_part = {"vertex_id": idx}
+                record = {"vertex_id": idx, **attrs}
             elif "edge_id" in cols:
-                key_part = {"edge_id": idx}
+                record = {"edge_id": idx, **attrs}
             else:
-                key_part = {"slice_id": idx}
+                record = {"slice_id": idx, **attrs}
+            update_records.append(record)
 
-            k = tuple(key_part.get(kk) for kk in join_keys)
-            if k in row_map:
-                row_map[k].update(attrs)
-            else:
-                row_map[k] = {**key_part, **attrs}
-
-        # Rebuild DataFrame once — O(n)
-        final_records = list(row_map.values())
         backend = nw.get_native_namespace(nw_df)
-        result = nw.DataFrame.from_dicts(final_records, backend=backend)
+        update_df = nw.DataFrame.from_dicts(update_records, backend=backend)
+
+        # Keep rows not touched by this update, then append update rows
+        unchanged = nw_df.join(update_df.select(join_keys), on=join_keys, how="anti")
+
+        # Polars rejects diagonal concat when one frame has a Null-typed column and
+        # the other has a concrete type for the same column (e.g. empty frame → Null,
+        # incoming record frame → String). Cast to resolve before concat.
+        schema_u = unchanged.schema
+        schema_n = update_df.schema
+        casts_u = [nw.col(c).cast(schema_n[c]) for c in schema_u if c in schema_n and schema_u[c] == nw.Unknown and schema_n[c] != nw.Unknown]
+        casts_n = [nw.col(c).cast(schema_u[c]) for c in schema_n if c in schema_u and schema_n[c] == nw.Unknown and schema_u[c] != nw.Unknown]
+        if casts_u:
+            unchanged = unchanged.with_columns(casts_u)
+        if casts_n:
+            update_df = update_df.with_columns(casts_n)
+
+        result = nw.concat([unchanged, update_df], how="diagonal")
         return nw.to_native(result)
 
     def _variables_watched_by_vertices(self):
@@ -1133,7 +1277,7 @@ class AttributesClass:
             s, t = rec.src, rec.tgt
             if s is None or t is None:
                 continue
-            if eid in self.edge_direction_policy and (s == v or t == v):
+            if rec.direction_policy is not None and (s == v or t == v):
                 out.append(eid)
         return out
 
@@ -1156,7 +1300,7 @@ class AttributesClass:
         # decide condition and detect tie
         tie_case = False
         if scope == "edge":
-            x = self.get_attr_edge(edge_id, var, None)
+            x = AttributesClass.get_attr_edge(self, edge_id, var, None)
             if x is None:
                 return
             if x == T:
@@ -1319,7 +1463,7 @@ class AttributesClass:
                 )
 
         if is_polars and isinstance(df, pl.DataFrame):
-            return {row["edge_id"]: dict(row) for row in df.iter_rows(named=True)}
+            return {row["edge_id"]: row for row in df.to_dicts()}
 
         # non-Polars
         try:
@@ -1368,7 +1512,7 @@ class AttributesClass:
                 )
 
         if is_polars and isinstance(df, pl.DataFrame):
-            return {row["vertex_id"]: dict(row) for row in df.iter_rows(named=True)}
+            return {row["vertex_id"]: row for row in df.to_dicts()}
 
         try:
             import narwhals as nw
@@ -1532,17 +1676,7 @@ class AttributesClass:
 
         if (not is_polars) or is_empty:
             self.edge_slice_attributes = add_df
-            # legacy mirror
-            if "weight" in getattr(add_df, "columns", []):
-                self.slice_edge_weights.setdefault(slice_id, {})
-                if pl is not None and isinstance(add_df, pl.DataFrame):
-                    it = add_df.iter_rows(named=True)
-                else:
-                    it = add_df.to_dict(orient="records") if hasattr(add_df, "to_dict") else []
-                for r in it:
-                    w = r.get("weight")
-                    if w is not None:
-                        self.slice_edge_weights[slice_id][r["edge_id"]] = float(w)
+            self._sync_slice_edge_weights_for_rows(slice_id, rows)
             return
 
         # schema alignment using _ensure_attr_columns + Utf8 upcast rule
@@ -1598,19 +1732,82 @@ class AttributesClass:
             pdf = pd.concat([pdf, padd], ignore_index=True)
             self.edge_slice_attributes = pdf
 
-        # legacy mirror
-        if "weight" in getattr(add_df, "columns", []):
-            self.slice_edge_weights.setdefault(slice_id, {})
-            try:
-                import polars as pl
-            except Exception:
-                pl = None
+        self._sync_slice_edge_weights_for_rows(slice_id, rows)
 
-            if pl is not None and isinstance(add_df, pl.DataFrame):
-                it = add_df.iter_rows(named=True)
-            else:
-                it = add_df.to_dict(orient="records") if hasattr(add_df, "to_dict") else []
-            for r in it:
-                w = r.get("weight")
-                if w is not None:
-                    self.slice_edge_weights[slice_id][r["edge_id"]] = float(w)
+
+class AttributesAccessor:
+    """Namespace for graph, vertex, edge, and slice annotations."""
+
+    __slots__ = ("_G",)
+
+    def __init__(self, graph):
+        self._G = graph
+
+    def set_graph_attribute(self, *args, **kwargs):
+        return AttributesClass.set_graph_attribute(self._G, *args, **kwargs)
+
+    def get_graph_attribute(self, *args, **kwargs):
+        return AttributesClass.get_graph_attribute(self._G, *args, **kwargs)
+
+    def get_graph_attributes(self, *args, **kwargs):
+        return AttributesClass.get_graph_attributes(self._G, *args, **kwargs)
+
+    def set_vertex_attrs(self, *args, **kwargs):
+        return AttributesClass.set_vertex_attrs(self._G, *args, **kwargs)
+
+    def set_vertex_attrs_bulk(self, *args, **kwargs):
+        return AttributesClass.set_vertex_attrs_bulk(self._G, *args, **kwargs)
+
+    def get_vertex_attrs(self, *args, **kwargs):
+        return AttributesClass.get_vertex_attrs(self._G, *args, **kwargs)
+
+    def get_attr_vertex(self, *args, **kwargs):
+        return AttributesClass.get_attr_vertex(self._G, *args, **kwargs)
+
+    def get_attr_vertices(self, *args, **kwargs):
+        return AttributesClass.get_attr_vertices(self._G, *args, **kwargs)
+
+    def set_edge_attrs(self, *args, **kwargs):
+        return AttributesClass.set_edge_attrs(self._G, *args, **kwargs)
+
+    def set_edge_attrs_bulk(self, *args, **kwargs):
+        return AttributesClass.set_edge_attrs_bulk(self._G, *args, **kwargs)
+
+    def get_edge_attrs(self, *args, **kwargs):
+        return AttributesClass.get_edge_attrs(self._G, *args, **kwargs)
+
+    def get_attr_edge(self, *args, **kwargs):
+        return AttributesClass.get_attr_edge(self._G, *args, **kwargs)
+
+    def get_attr_edges(self, *args, **kwargs):
+        return AttributesClass.get_attr_edges(self._G, *args, **kwargs)
+
+    def get_attr_from_edges(self, *args, **kwargs):
+        return AttributesClass.get_attr_from_edges(self._G, *args, **kwargs)
+
+    def get_edges_by_attr(self, *args, **kwargs):
+        return AttributesClass.get_edges_by_attr(self._G, *args, **kwargs)
+
+    def set_slice_attrs(self, *args, **kwargs):
+        return AttributesClass.set_slice_attrs(self._G, *args, **kwargs)
+
+    def get_slice_attr(self, *args, **kwargs):
+        return AttributesClass.get_slice_attr(self._G, *args, **kwargs)
+
+    def set_edge_slice_attrs(self, *args, **kwargs):
+        return AttributesClass.set_edge_slice_attrs(self._G, *args, **kwargs)
+
+    def set_edge_slice_attrs_bulk(self, *args, **kwargs):
+        return AttributesClass.set_edge_slice_attrs_bulk(self._G, *args, **kwargs)
+
+    def get_edge_slice_attr(self, *args, **kwargs):
+        return AttributesClass.get_edge_slice_attr(self._G, *args, **kwargs)
+
+    def set_slice_edge_weight(self, *args, **kwargs):
+        return AttributesClass.set_slice_edge_weight(self._G, *args, **kwargs)
+
+    def get_effective_edge_weight(self, *args, **kwargs):
+        return AttributesClass.get_effective_edge_weight(self._G, *args, **kwargs)
+
+    def audit_attributes(self, *args, **kwargs):
+        return AttributesClass.audit_attributes(self._G, *args, **kwargs)
