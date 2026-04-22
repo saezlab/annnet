@@ -72,32 +72,7 @@ def dataframe_from_rows(
 ):
     """Build an eager dataframe/table using the selected backend."""
     resolved = select_dataframe_backend(backend)
-    rows = list(rows or [])
-
-    if resolved == 'polars':
-        import polars as pl
-
-        if rows:
-            return pl.DataFrame(rows)
-        return pl.DataFrame(schema=_polars_schema(schema or {}))
-
-    if resolved == 'pandas':
-        import pandas as pd
-
-        if rows:
-            return pd.DataFrame.from_records(rows)
-        return pd.DataFrame(
-            {name: pd.Series(dtype=_pandas_dtype(kind)) for name, kind in (schema or {}).items()}
-        )
-
-    import pyarrow as pa
-
-    if rows:
-        return pa.Table.from_pylist(rows)
-    return pa.Table.from_arrays(
-        [pa.array([], type=_pyarrow_type(kind)) for kind in (schema or {}).values()],
-        names=list((schema or {}).keys()),
-    )
+    return _native_from_rows(rows or [], schema=schema, backend=resolved)
 
 
 def dataframe_from_columns(
@@ -108,32 +83,7 @@ def dataframe_from_columns(
 ):
     """Build an eager dataframe/table from column-oriented data."""
     resolved = select_dataframe_backend(backend)
-    columns = {name: list(values) for name, values in (columns or {}).items()}
-
-    if resolved == 'polars':
-        import polars as pl
-
-        if schema:
-            return pl.DataFrame(columns, schema=_polars_schema(schema))
-        return pl.DataFrame(columns)
-
-    if resolved == 'pandas':
-        import pandas as pd
-
-        if columns:
-            return pd.DataFrame(columns)
-        return pd.DataFrame(
-            {name: pd.Series(dtype=_pandas_dtype(kind)) for name, kind in (schema or {}).items()}
-        )
-
-    import pyarrow as pa
-
-    if columns:
-        return pa.Table.from_pydict(columns)
-    return pa.Table.from_arrays(
-        [pa.array([], type=_pyarrow_type(kind)) for kind in (schema or {}).values()],
-        names=list((schema or {}).keys()),
-    )
+    return _native_from_columns(columns or {}, schema=schema, backend=resolved)
 
 
 def empty_dataframe(schema: dict[str, str], *, backend: str | None = 'auto'):
@@ -145,71 +95,38 @@ def dataframe_to_rows(df) -> list[dict[str, Any]]:
     """Return rows from a Narwhals-compatible eager dataframe/table."""
     if df is None:
         return []
-    if hasattr(df, 'to_dicts'):
-        return [dict(row) for row in df.to_dicts()]
-    if hasattr(df, 'to_dict'):
-        try:
-            return [dict(row) for row in df.to_dict(orient='records')]
-        except TypeError:
-            pass
-    if hasattr(df, 'to_pylist'):
-        return [dict(row) for row in df.to_pylist()]
-
-    ndf = nw.from_native(df, eager_only=True)
-    return [dict(zip(ndf.columns, row, strict=False)) for row in ndf.rows()]
+    return [dict(row) for row in _to_nw(df).rows(named=True)]
 
 
 def dataframe_height(df) -> int:
     """Return the row count for a dataframe-like object."""
     if df is None:
         return 0
-    if hasattr(df, 'height'):
-        return int(df.height)
-    if hasattr(df, 'num_rows'):
-        return int(df.num_rows)
-    if hasattr(df, 'shape'):
-        return int(df.shape[0])
-    return len(dataframe_to_rows(df))
+    return len(_to_nw(df).rows())
 
 
 def dataframe_memory_usage(df) -> int:
     """Best-effort memory usage for a dataframe-like object."""
     if df is None:
         return 0
-    if hasattr(df, 'estimated_size'):
-        try:
-            return int(df.estimated_size())
-        except Exception:  # noqa: BLE001
-            pass
-    if hasattr(df, 'memory_usage'):
-        try:
-            usage = df.memory_usage(deep=True)
-            return int(usage.sum() if hasattr(usage, 'sum') else usage)
-        except Exception:  # noqa: BLE001
-            pass
-    if hasattr(df, 'nbytes'):
-        try:
-            return int(df.nbytes)
-        except Exception:  # noqa: BLE001
-            pass
-    return 0
+    try:
+        return int(_to_nw(df).estimated_size())
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 def dataframe_columns(df) -> list[str]:
     """Return column names for a dataframe-like object."""
     if df is None:
         return []
-    if hasattr(df, 'columns'):
-        return list(df.columns)
-    if hasattr(df, 'column_names'):
-        return list(df.column_names)
-    return list(dataframe_to_rows(df)[0]) if dataframe_height(df) else []
+    return _schema_names(_schema_from_df(df))
 
 
 def dataframe_backend(df, *, default: str | None = 'auto') -> str:
     """Return the concrete backend for a dataframe-like object."""
     if df is None:
         return select_dataframe_backend(default)
+
     try:
         import polars as pl
 
@@ -217,6 +134,7 @@ def dataframe_backend(df, *, default: str | None = 'auto') -> str:
             return 'polars'
     except Exception:  # noqa: BLE001
         pass
+
     try:
         import pandas as pd
 
@@ -224,8 +142,10 @@ def dataframe_backend(df, *, default: str | None = 'auto') -> str:
             return 'pandas'
     except Exception:  # noqa: BLE001
         pass
+
     if hasattr(df, 'schema') and hasattr(df, 'num_rows') and hasattr(df, 'to_pylist'):
         return 'pyarrow'
+
     return select_dataframe_backend(default)
 
 
@@ -233,70 +153,21 @@ def clone_dataframe(df):
     """Return a shallow-safe copy/clone of a dataframe-like object."""
     if df is None:
         return None
-    if hasattr(df, 'clone'):
-        return df.clone()
-    if hasattr(df, 'copy'):
-        try:
-            return df.copy(deep=True)
-        except TypeError:
-            return df.copy()
-    return dataframe_from_rows(dataframe_to_rows(df), backend=dataframe_backend(df))
+    return _from_nw(_to_nw(df).clone())
 
 
 def dataframe_filter_eq(df, column: str, value):
     """Filter rows where ``column == value``."""
     if df is None or column not in dataframe_columns(df):
         return _empty_like(df)
-    try:
-        import polars as pl
-
-        if isinstance(df, pl.DataFrame):
-            return df.filter(pl.col(column) == value)
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        import pandas as pd
-
-        if isinstance(df, pd.DataFrame):
-            return df[df[column] == value].copy()
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        import pyarrow.compute as pc
-
-        if hasattr(df, 'filter') and hasattr(df, 'column_names'):
-            return df.filter(pc.equal(df[column], value))
-    except Exception:  # noqa: BLE001
-        pass
-    return _rows_filter(df, lambda row: row.get(column) == value)
+    return _from_nw(_to_nw(df).filter(nw.col(column) == value))
 
 
 def dataframe_filter_ne(df, column: str, value):
     """Filter rows where ``column != value``."""
     if df is None or column not in dataframe_columns(df):
         return clone_dataframe(df)
-    try:
-        import polars as pl
-
-        if isinstance(df, pl.DataFrame):
-            return df.filter(pl.col(column) != value)
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        import pandas as pd
-
-        if isinstance(df, pd.DataFrame):
-            return df[df[column] != value].copy()
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        import pyarrow.compute as pc
-
-        if hasattr(df, 'filter') and hasattr(df, 'column_names'):
-            return df.filter(pc.invert(pc.equal(df[column], value)))
-    except Exception:  # noqa: BLE001
-        pass
-    return _rows_filter(df, lambda row: row.get(column) != value)
+    return _from_nw(_to_nw(df).filter(nw.col(column) != value))
 
 
 def dataframe_filter_in(df, column: str, values):
@@ -306,30 +177,7 @@ def dataframe_filter_in(df, column: str, values):
         return _empty_like(df)
     if not vals:
         return _empty_like(df)
-    try:
-        import polars as pl
-
-        if isinstance(df, pl.DataFrame):
-            return df.filter(pl.col(column).is_in(vals))
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        import pandas as pd
-
-        if isinstance(df, pd.DataFrame):
-            return df[df[column].isin(vals)].copy()
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        import pyarrow as pa
-        import pyarrow.compute as pc
-
-        if hasattr(df, 'filter') and hasattr(df, 'column_names'):
-            return df.filter(pc.is_in(df[column], value_set=pa.array(vals)))
-    except Exception:  # noqa: BLE001
-        pass
-    valset = set(vals)
-    return _rows_filter(df, lambda row: row.get(column) in valset)
+    return _from_nw(_to_nw(df).filter(nw.col(column).is_in(vals)))
 
 
 def dataframe_filter_not_in(df, column: str, values):
@@ -339,30 +187,7 @@ def dataframe_filter_not_in(df, column: str, values):
         return clone_dataframe(df)
     if not vals:
         return clone_dataframe(df)
-    try:
-        import polars as pl
-
-        if isinstance(df, pl.DataFrame):
-            return df.filter(~pl.col(column).is_in(vals))
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        import pandas as pd
-
-        if isinstance(df, pd.DataFrame):
-            return df[~df[column].isin(vals)].copy()
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        import pyarrow as pa
-        import pyarrow.compute as pc
-
-        if hasattr(df, 'filter') and hasattr(df, 'column_names'):
-            return df.filter(pc.invert(pc.is_in(df[column], value_set=pa.array(vals))))
-    except Exception:  # noqa: BLE001
-        pass
-    valset = set(vals)
-    return _rows_filter(df, lambda row: row.get(column) not in valset)
+    return _from_nw(_to_nw(df).filter(~nw.col(column).is_in(vals)))
 
 
 def dataframe_drop_rows(df, column: str, values):
@@ -373,57 +198,18 @@ def dataframe_drop_rows(df, column: str, values):
 def dataframe_append_rows(df, rows: list[dict[str, Any]], *, backend: str | None = None):
     """Append rows to a dataframe-like object, preserving the existing backend."""
     rows = [dict(row) for row in (rows or [])]
-    resolved = backend or dataframe_backend(df)
     if not rows:
         return clone_dataframe(df)
 
-    existing_cols = dataframe_columns(df)
-    all_cols = list(existing_cols)
-    for row in rows:
-        for col in row:
-            if col not in all_cols:
-                all_cols.append(col)
+    resolved_backend = dataframe_backend(df, default=backend or 'auto')
+    add_ndf = _build_nw_from_rows(rows, schema=None, backend=resolved_backend)
 
-    if df is not None:
-        try:
-            import polars as pl
+    if df is None:
+        return _from_nw(add_ndf)
 
-            if isinstance(df, pl.DataFrame):
-                add_df = pl.DataFrame([{col: row.get(col) for col in all_cols} for row in rows])
-                if existing_cols == all_cols:
-                    return pl.concat([df, add_df], how='vertical_relaxed')
-                return pl.concat([df, add_df], how='diagonal_relaxed')
-        except Exception:  # noqa: BLE001
-            pass
-
-        try:
-            import pandas as pd
-
-            if isinstance(df, pd.DataFrame):
-                add_df = pd.DataFrame.from_records(rows)
-                return pd.concat([df, add_df], ignore_index=True)
-        except Exception:  # noqa: BLE001
-            pass
-
-        try:
-            import pyarrow as pa
-
-            if hasattr(df, 'schema') and hasattr(df, 'num_rows') and hasattr(df, 'to_pylist'):
-                add_df = pa.Table.from_pylist(
-                    [{col: row.get(col) for col in all_cols} for row in rows]
-                )
-                if existing_cols != all_cols:
-                    df = pa.Table.from_pylist(
-                        [{col: row.get(col) for col in all_cols} for row in dataframe_to_rows(df)]
-                    )
-                return pa.concat_tables([df, add_df], promote_options='default')
-        except Exception:  # noqa: BLE001
-            pass
-
-    normalized = []
-    for row in [*dataframe_to_rows(df), *rows]:
-        normalized.append({col: row.get(col) for col in all_cols})
-    return dataframe_from_rows(normalized, schema=_text_schema(all_cols), backend=resolved)
+    base_ndf = _to_nw(df)
+    out = nw.concat([base_ndf, add_ndf], how='diagonal')
+    return _from_nw(out)
 
 
 def dataframe_upsert_rows(
@@ -437,6 +223,7 @@ def dataframe_upsert_rows(
     rows = [dict(row) for row in (rows or [])]
     if not rows:
         return clone_dataframe(df)
+
     keys = (key_columns,) if isinstance(key_columns, str) else tuple(key_columns)
     incoming_keys = {tuple(row.get(key) for key in keys) for row in rows}
     kept = [
@@ -444,87 +231,52 @@ def dataframe_upsert_rows(
         for row in dataframe_to_rows(df)
         if tuple(row.get(key) for key in keys) not in incoming_keys
     ]
+
+    base = _native_from_rows(
+        kept,
+        schema=_schema_from_df(df),
+        backend=dataframe_backend(df, default=backend or 'auto'),
+    )
     return dataframe_append_rows(
-        dataframe_from_rows(
-            kept,
-            schema=_text_schema(dataframe_columns(df)),
-            backend=backend or dataframe_backend(df),
-        ),
+        base,
         rows,
-        backend=backend or dataframe_backend(df),
+        backend=backend or dataframe_backend(df, default='auto'),
     )
 
 
 def dataframe_write_csv(df, path) -> None:
     """Write a dataframe-like object to CSV."""
-    if hasattr(df, 'write_csv'):
-        df.write_csv(path)
-        return
-    if hasattr(df, 'to_csv'):
-        df.to_csv(path, index=False)
-        return
-    if hasattr(df, 'schema') and hasattr(df, 'num_rows'):
-        import pyarrow.csv as pa_csv
-
-        pa_csv.write_csv(df, path)
-        return
-    dataframe_from_rows(dataframe_to_rows(df)).write_csv(path)
+    _to_nw(df).write_csv(path)
 
 
 def dataframe_write_parquet(df, path) -> None:
     """Write a dataframe-like object to Parquet."""
-    if hasattr(df, 'write_parquet'):
-        df.write_parquet(path)
-        return
-    if hasattr(df, 'to_parquet'):
-        df.to_parquet(path, index=False)
-        return
-    if hasattr(df, 'schema') and hasattr(df, 'num_rows'):
-        import pyarrow.parquet as pq
-
-        pq.write_table(df, path)
-        return
-    table = dataframe_from_rows(dataframe_to_rows(df), backend='pyarrow')
-    import pyarrow.parquet as pq
-
-    pq.write_table(table, path)
+    _to_nw(df).write_parquet(path)
 
 
 def rename_dataframe_columns(df, mapping: dict[str, str]):
     """Rename dataframe columns across supported backends."""
-    if not mapping:
+    if df is None or not mapping:
         return df
-    if hasattr(df, 'rename'):
-        try:
-            return df.rename(columns=mapping)
-        except TypeError:
-            pass
-        try:
-            return df.rename(mapping)
-        except TypeError:
-            pass
-    if hasattr(df, 'rename_columns'):
-        names = [mapping.get(name, name) for name in dataframe_columns(df)]
-        return df.rename_columns(names)
-    rows = []
-    for row in dataframe_to_rows(df):
-        rows.append({mapping.get(key, key): value for key, value in row.items()})
-    return dataframe_from_rows(rows)
+    return _from_nw(_to_nw(df).rename(mapping))
 
 
 def _rows_filter(df, predicate):
+    """Fallback row-based filter preserving schema and backend."""
     rows = [row for row in dataframe_to_rows(df) if predicate(row)]
-    return dataframe_from_rows(
+    return _native_from_rows(
         rows,
-        schema=_text_schema(dataframe_columns(df)),
+        schema=_schema_from_df(df),
         backend=dataframe_backend(df),
     )
 
 
 def _empty_like(df):
-    return dataframe_from_rows(
+    if df is None:
+        return dataframe_from_rows([], schema={}, backend='auto')
+    return _native_from_rows(
         [],
-        schema=_text_schema(dataframe_columns(df)),
+        schema=_schema_from_df(df),
         backend=dataframe_backend(df),
     )
 
@@ -533,39 +285,103 @@ def _text_schema(columns: list[str]) -> dict[str, str]:
     return dict.fromkeys(columns, _TEXT)
 
 
-def _polars_schema(schema: dict[str, str]):
-    return {name: _polars_dtype(kind) for name, kind in schema.items()}
+def _to_nw(df):
+    return nw.from_native(df, eager_only=True)
 
 
-def _polars_dtype(kind: str):
-    import polars as pl
+def _from_nw(df):
+    return df.to_native()
 
+
+def _schema_from_df(df) -> nw.Schema | None:
+    if df is None:
+        return None
+    return _to_nw(df).collect_schema()
+
+
+def _schema_names(schema: nw.Schema | None) -> list[str]:
+    if schema is None:
+        return []
+    return list(schema.names())
+
+
+def _build_nw_from_rows(
+    rows: list[dict[str, Any]] | list[Any],
+    *,
+    schema: nw.Schema | dict[str, str] | None,
+    backend: str,
+):
+    rows = [dict(row) for row in (rows or []) if isinstance(row, dict)]
+
+    if rows:
+        return nw.from_dicts(rows, backend=backend)
+
+    nw_schema = _normalize_schema(schema)
+    empty_cols = {name: [] for name in _schema_names(nw_schema)}
+    if nw_schema is not None:
+        if backend == 'pandas':
+            return nw.from_dict(empty_cols, backend=backend)
+        return nw.from_dict(empty_cols, schema=nw_schema, backend=backend)
+    return nw.from_dict({}, backend=backend)
+
+
+def _build_nw_from_columns(
+    columns: dict[str, list[Any]],
+    *,
+    schema: nw.Schema | dict[str, str] | None,
+    backend: str,
+):
+    cols = {name: list(values) for name, values in (columns or {}).items()}
+    if any(cols.values()):
+        return nw.from_dict(cols, backend=backend)
+
+    nw_schema = _normalize_schema(schema)
+    if nw_schema is not None:
+        # Ensure empty schema columns are present.
+        for name in nw_schema.names():
+            cols.setdefault(name, [])
+        if backend == 'pandas' and not any(cols.values()):
+            return nw.from_dict(cols, backend=backend)
+        return nw.from_dict(cols, schema=nw_schema, backend=backend)
+
+    return nw.from_dict(cols, backend=backend)
+
+
+def _native_from_rows(
+    rows: list[dict[str, Any]] | list[Any],
+    *,
+    schema: nw.Schema | dict[str, str] | None,
+    backend: str,
+):
+    return _from_nw(_build_nw_from_rows(rows, schema=schema, backend=backend))
+
+
+def _native_from_columns(
+    columns: dict[str, list[Any]],
+    *,
+    schema: nw.Schema | dict[str, str] | None,
+    backend: str,
+):
+    return _from_nw(_build_nw_from_columns(columns, schema=schema, backend=backend))
+
+
+def _normalize_schema(schema: nw.Schema | dict[str, str] | None) -> nw.Schema | None:
+    if schema is None:
+        return None
+    if isinstance(schema, nw.Schema):
+        return schema
+    return _narwhals_schema(schema)
+
+
+def _narwhals_schema(schema: dict[str, str]) -> nw.Schema:
+    return nw.Schema({name: _narwhals_dtype(kind) for name, kind in schema.items()})
+
+
+def _narwhals_dtype(kind: str):
     if kind == _FLOAT:
-        return pl.Float64
+        return nw.Float64()
     if kind == _BOOL:
-        return pl.Boolean
+        return nw.Boolean()
     if kind == _LIST_TEXT:
-        return pl.List(pl.Utf8)
-    return pl.Utf8
-
-
-def _pandas_dtype(kind: str) -> str:
-    if kind == _FLOAT:
-        return 'float64'
-    if kind == _BOOL:
-        return 'bool'
-    if kind == _LIST_TEXT:
-        return 'object'
-    return 'string'
-
-
-def _pyarrow_type(kind: str):
-    import pyarrow as pa
-
-    if kind == _FLOAT:
-        return pa.float64()
-    if kind == _BOOL:
-        return pa.bool_()
-    if kind == _LIST_TEXT:
-        return pa.list_(pa.string())
-    return pa.string()
+        return nw.List(nw.String())
+    return nw.String()
