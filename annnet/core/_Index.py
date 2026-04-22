@@ -1,7 +1,10 @@
-try:
-    import polars as pl
-except Exception:  # noqa: BLE001
-    pl = None
+from .._dataframe_backend import (
+    empty_dataframe,
+    dataframe_height,
+    dataframe_columns,
+    dataframe_to_rows,
+    dataframe_append_rows,
+)
 
 
 def _entity_kind(rec):
@@ -356,19 +359,10 @@ class IndexMapping:
         needs_init = df is None or not hasattr(df, 'columns') or 'vertex_id' not in df.columns
 
         if needs_init:
-            try:
-                import polars as pl
-
-                self.vertex_attributes = pl.DataFrame({'vertex_id': pl.Series([], dtype=pl.Utf8)})
-            except Exception:  # noqa: BLE001
-                try:
-                    import pandas as pd
-
-                    self.vertex_attributes = pd.DataFrame({'vertex_id': pd.Series(dtype='string')})
-                except Exception:  # noqa: BLE001
-                    raise RuntimeError(
-                        'Cannot initialise vertex_attributes: neither Polars nor Pandas is installed.'
-                    ) from None
+            self.vertex_attributes = empty_dataframe(
+                {'vertex_id': 'text'},
+                backend=getattr(self, '_annotations_backend', None),
+            )
 
     def _ensure_vertex_row(self, vertex_id: str) -> None:
         """INTERNAL: Ensure a row for ``vertex_id`` exists in the vertex attribute DF."""
@@ -388,24 +382,12 @@ class IndexMapping:
             cached_df_id = getattr(self, '_vertex_attr_df_id', None)
             if cached_ids is None or cached_df_id != id(df):
                 ids = set()
-                try:
-                    import polars as pl
-                except Exception:  # noqa: BLE001
-                    pl = None
-                if df is not None and hasattr(df, 'columns') and 'vertex_id' in df.columns:
-                    if pl is not None and isinstance(df, pl.DataFrame):
-                        if df.height > 0:
-                            ids = set(df.get_column('vertex_id').to_list())
-                    else:
-                        import narwhals as nw
-
-                        ndf = nw.from_native(df)
-                        try:
-                            ids = set(nw.to_native(ndf.select('vertex_id')).to_series().to_list())
-                        except Exception:  # noqa: BLE001
-                            native = nw.to_native(ndf)
-                            col = native['vertex_id']
-                            ids = set(col.to_list() if hasattr(col, 'to_list') else list(col))
+                if df is not None and 'vertex_id' in dataframe_columns(df):
+                    ids = {
+                        row.get('vertex_id')
+                        for row in dataframe_to_rows(df)
+                        if row.get('vertex_id') is not None
+                    }
                 self._vertex_attr_ids = ids
                 self._vertex_attr_df_id = id(df)
         except Exception:  # noqa: BLE001
@@ -416,31 +398,14 @@ class IndexMapping:
         if ids is not None and vertex_id in ids:
             return
 
-        is_empty = False
-        try:
-            is_empty = df.is_empty()
-        except Exception:  # noqa: BLE001
-            try:
-                is_empty = len(df) == 0
-            except Exception:  # noqa: BLE001
-                is_empty = False
+        is_empty = dataframe_height(df) == 0
 
         if is_empty:
-            try:
-                import polars as pl
-
-                self.vertex_attributes = pl.DataFrame(
-                    {'vertex_id': [vertex_id]}, schema={'vertex_id': pl.Utf8}
-                )
-            except Exception:  # noqa: BLE001
-                try:
-                    import pandas as pd
-
-                    self.vertex_attributes = pd.DataFrame({'vertex_id': [vertex_id]})
-                except Exception:  # noqa: BLE001
-                    raise RuntimeError(
-                        'Cannot initialize vertex_attributes row: install polars or pandas.'
-                    ) from None
+            self.vertex_attributes = dataframe_append_rows(
+                df,
+                [{'vertex_id': vertex_id}],
+                backend=getattr(self, '_annotations_backend', None),
+            )
             try:
                 if isinstance(self._vertex_attr_ids, set):
                     self._vertex_attr_ids.add(vertex_id)
@@ -451,31 +416,14 @@ class IndexMapping:
                 pass
             return
 
-        row = dict.fromkeys(df.columns)
+        row = dict.fromkeys(dataframe_columns(df))
         row['vertex_id'] = vertex_id
 
-        try:
-            import polars as pl
-        except Exception:  # noqa: BLE001
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
-            try:
-                new_df = df.vstack(pl.DataFrame([row]))
-            except Exception:  # noqa: BLE001
-                new_df = pl.concat([df, pl.DataFrame([row])], how='vertical')
-            self.vertex_attributes = new_df
-        else:
-            try:
-                import pandas as pd
-
-                self.vertex_attributes = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-            except Exception:  # noqa: BLE001
-                import narwhals as nw
-
-                ndf = nw.from_native(df)
-                nrow = nw.from_native(pd.DataFrame([row]))
-                self.vertex_attributes = nw.to_native(nw.concat([ndf, nrow], how='vertical'))
+        self.vertex_attributes = dataframe_append_rows(
+            df,
+            [row],
+            backend=getattr(self, '_annotations_backend', None),
+        )
 
         try:
             if isinstance(self._vertex_attr_ids, set):

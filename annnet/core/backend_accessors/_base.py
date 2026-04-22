@@ -2,10 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.  # noqa: BLE001
-    pl = None
+from ..._dataframe_backend import dataframe_columns, dataframe_to_rows, dataframe_filter_eq
 
 if TYPE_CHECKING:
     from ..graph import AnnNet
@@ -55,7 +52,7 @@ class _BackendAccessorBase:
             if getattr(self._G, 'default_label_field', None):
                 return self._G.default_label_field
             va = getattr(self._G, 'vertex_attributes', None)
-            cols = list(va.columns) if va is not None and hasattr(va, 'columns') else []
+            cols = dataframe_columns(va) if va is not None else []
             for col in self.VERTEX_LABEL_FIELDS:
                 if col in cols:
                     return col
@@ -66,7 +63,7 @@ class _BackendAccessorBase:
     def _vertex_id_col(self) -> str:
         try:
             va = self._G.vertex_attributes
-            cols = list(va.columns)
+            cols = dataframe_columns(va)
             for key in ('vertex_id', 'id', 'vid'):
                 if key in cols:
                     return key
@@ -77,21 +74,12 @@ class _BackendAccessorBase:
     def _lookup_vertex_id_by_label(self, label_field: str, value):
         try:
             va = self._G.vertex_attributes
-            if va is None or not hasattr(va, 'columns') or label_field not in va.columns:
+            if va is None or label_field not in dataframe_columns(va):
                 return None
             id_col = self._vertex_id_col()
-            try:
-                matches = va.filter(pl.col(label_field) == value)
-                if matches.height == 0:
-                    return None
-                try:
-                    return matches.select(id_col).to_series().to_list()[0]
-                except Exception:  # noqa: BLE001
-                    return matches.select(id_col).item(0, 0)
-            except Exception:  # noqa: BLE001
-                for row in va.to_dicts():
-                    if row.get(label_field) == value:
-                        return row.get(id_col)
+            rows = dataframe_to_rows(dataframe_filter_eq(va, label_field, value))
+            if rows:
+                return rows[0].get(id_col)
         except Exception:  # noqa: BLE001
             return None
         return None

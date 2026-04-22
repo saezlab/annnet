@@ -4,11 +4,6 @@ import warnings
 from collections import defaultdict
 
 import numpy as np
-
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.  # noqa: BLE001
-    pl = None
 import scipy.sparse as sp
 
 from ._Cache import Operations, CacheManager

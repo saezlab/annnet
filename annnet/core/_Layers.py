@@ -6,18 +6,13 @@ import warnings
 import itertools
 
 import numpy as np
-import narwhals as nw
-
-try:
-    import polars as pl
-except Exception:  # noqa: BLE001
-    pl = None
 import scipy.sparse as sp
 
 if TYPE_CHECKING:
     from .graph import AnnNet
 
 from ._helpers import EdgeRecord, EntityRecord, build_dataframe_from_rows
+from .._dataframe_backend import dataframe_columns, dataframe_to_rows, dataframe_filter_eq
 
 
 class LayerManager:
@@ -667,68 +662,67 @@ class LayerManager:
         layers: list[str] | list[tuple[str, ...]] | None = None,
         include_inter: bool = True,
         include_coupling: bool = True,
-    ) -> tuple[sp.csr_matrix, list[str]]:
+    ) -> tuple[sp.csr_matrix, list[str], list[str]]:
         """Build the supra-incidence matrix over selected layers.
 
-            Unlike supra_adjacency, this preserves the full hyperedge structure —
-            a k-ary hyperedge becomes a single column with k nonzero entries, with
-            stoichiometric coefficients intact. Binary intra, inter, coupling, and
-            hyperedges are all handled in a unified column-oriented representation.
+        Unlike supra_adjacency, this preserves the full hyperedge structure.
+        A k-ary hyperedge becomes a single column with k nonzero entries,
+        with stoichiometric coefficients intact. Binary intra, inter,
+        coupling, and hyperedges are handled in a unified representation.
 
-            Rows  : vertex-layer pairs (u, aa) — identical index to supra_adjacency,
-                    built by ensure_vertex_layer_index.
-            Cols  : one per selected edge, ordered as: intra edges (per layer, sorted
-                    by eid), then inter/coupling edges, then unassigned hyperedges last.
+        Rows
+        ----
+        Vertex-layer pairs (u, aa), identical to supra_adjacency indexing.
 
-            Column sign convention (matches _matrix):
-                - Binary directed   : +w at source row, -w at target row
-                - Binary undirected : +w at both rows
-                - Hyperedge directed: +w at head rows, -w at tail rows (stoich-aware)
-                - Hyperedge undirected: +w at all member rows (stoich-aware)
-                - Inter/coupling    : +w at (u, La) row, -w at (v, Lb) row (directed)
+        Columns
+        -------
+        One per selected edge, ordered as:
+        intra edges (per layer, sorted by eid),
+        then inter/coupling edges,
+        then unassigned hyperedges last.
 
-            Hyperedges MUST have a layer assignment in edge_layers (set via
-            set_edge_kivela_role(eid, "intra", layer_tuple) after add_hyperedge).
-            Hyperedges without a layer assignment are collected in the returned
-            skipped list and excluded from the matrix — they do NOT silently corrupt
-            the result.
+        Column sign convention
+        ----------------------
+        - Binary directed: +w at source, -w at target
+        - Binary undirected: +w at both rows
+        - Hyperedge directed: +w at head, -w at tail (stoichiometric)
+        - Hyperedge undirected: +w at all member rows
+        - Inter/coupling: +w at (u, La), -w at (v, Lb)
+
+        Hyperedges must have a layer assignment in edge_layers. Use
+        set_edge_kivela_role(eid, "intra", layer_tuple) after add_hyperedge.
+        Unassigned edges are excluded and returned in `skipped`.
 
         Parameters
         ----------
-            layers : list[str] | list[tuple[str, ...]] | None
-                Optional subset of layers. None = all layers in V_M.
-                Single-aspect string ids are accepted.
-            include_inter : bool
-                Include inter-layer edges in the output columns. Default True.
-            include_coupling : bool
-                Include coupling edges in the output columns. Default True.
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Subset of layers. None means all layers. Single-aspect string IDs allowed.
+        include_inter : bool, optional
+            Include inter-layer edges. Default True.
+        include_coupling : bool, optional
+            Include coupling edges. Default True.
 
         Returns
         -------
-            B : scipy.sparse.csr_matrix
-                Shape (|V_M|, |E_selected|). Rows are vertex-layer pairs in the
-                order given by self._row_to_nl after ensure_vertex_layer_index.
-            edge_ids : list[str]
-                Edge id for each column of B, in column order. Use this to map
-                columns back to edges for interpretability.
-            skipped : list[str]
-                Edge ids that were excluded because their layer assignment could
-                not be resolved. Inspect these if B looks sparse.
+        B : sp.csr_matrix
+            Shape (|V_M|, |E_selected|). Rows follow self._row_to_nl.
+        edge_ids : list[str]
+            Edge ID per column.
+        skipped : list[str]
+            Edge IDs excluded due to unresolved layer assignment.
 
         Notes
         -----
-            The hypergraph random-walk diffusion operator follows directly::
+        The hypergraph random-walk diffusion operator:
 
-                B_csr = B  (this output)
-                D_v = diag(|B| @ ones)          # vertex degree (sum of |entries| per row)
-                D_e = diag(|B|.T @ ones)        # edge degree (sum of |entries| per col)
-                Theta = D_v_inv @ B @ D_e_inv @ B.T
+            B_csr = B
+            D_v = diag(|B| @ 1)
+            D_e = diag(|B|^T @ 1)
+            Theta = D_v^{-1} B D_e^{-1} B^T
 
         Examples
         --------
-        ```python
-            B, eids, skipped = G.supra_incidence()
-        ```
+        >>> B, eids, skipped = G.supra_incidence()
         """
         return self._G.supra_incidence(layers)
 
@@ -1433,22 +1427,14 @@ class LayerClass:
         """
         lid = self._elem_layer_id(aspect, label)
         df = self.layer_attributes
-        if df.height == 0 or 'layer_id' not in df.columns:
+        if df is None or 'layer_id' not in dataframe_columns(df):
             return {}
 
-        if pl is not None and isinstance(df, pl.DataFrame):
-            rows = df.filter(pl.col('layer_id') == lid)
-            if rows.height == 0:
-                return {}
-        else:
-            rows = nw.to_native(nw.from_native(df).filter(nw.col('layer_id') == lid))
-            if (hasattr(rows, '__len__') and len(rows) == 0) or (
-                getattr(rows, 'height', None) == 0
-            ):
-                return {}
-
-        # single row: drop 'layer_id' and convert to dict
-        row = rows.drop('layer_id').to_dicts()[0]
+        rows = dataframe_to_rows(dataframe_filter_eq(df, 'layer_id', lid))
+        if not rows:
+            return {}
+        row = dict(rows[0])
+        row.pop('layer_id', None)
         return row
 
     def set_aspect_attrs(self, aspect: str, **attrs):
@@ -2619,68 +2605,79 @@ class LayerClass:
         layers: list[str] | list[tuple[str, ...]] | None = None,
         include_inter: bool = True,
         include_coupling: bool = True,
-    ) -> tuple[sp.csr_matrix, list[str]]:
+    ) -> tuple[sp.csr_matrix, list[str], list[str]]:
         """Build the supra-incidence matrix over selected layers.
 
-            Unlike supra_adjacency, this preserves the full hyperedge structure —
-            a k-ary hyperedge becomes a single column with k nonzero entries, with
-            stoichiometric coefficients intact. Binary intra, inter, coupling, and
-            hyperedges are all handled in a unified column-oriented representation.
+        Unlike supra_adjacency, this preserves the full hyperedge structure:
+        a k-ary hyperedge becomes a single column with k nonzero entries, with
+        stoichiometric coefficients intact. Binary intra-layer, inter-layer,
+        coupling, and general hyperedges are handled in a unified
+        column-oriented representation.
 
-            Rows  : vertex-layer pairs (u, aa) — identical index to supra_adjacency,
-                    built by ensure_vertex_layer_index.
-            Cols  : one per selected edge, ordered as: intra edges (per layer, sorted
-                    by eid), then inter/coupling edges, then unassigned hyperedges last.
+        Rows
+        ----
+        Vertex-layer pairs ``(u, aa)``, using the same indexing as
+        ``supra_adjacency`` via ``ensure_vertex_layer_index``.
 
-            Column sign convention (matches _matrix):
-                - Binary directed   : +w at source row, -w at target row
-                - Binary undirected : +w at both rows
-                - Hyperedge directed: +w at head rows, -w at tail rows (stoich-aware)
-                - Hyperedge undirected: +w at all member rows (stoich-aware)
-                - Inter/coupling    : +w at (u, La) row, -w at (v, Lb) row (directed)
+        Columns
+        -------
+        One per selected edge, ordered as intra-layer edges (per layer,
+        sorted by edge ID), then inter-layer and coupling edges, then
+        unassigned hyperedges last.
 
-            Hyperedges MUST have a layer assignment in edge_layers (set via
-            set_edge_kivela_role(eid, "intra", layer_tuple) after add_hyperedge).
-            Hyperedges without a layer assignment are collected in the returned
-            skipped list and excluded from the matrix — they do NOT silently corrupt
-            the result.
+        Column sign convention
+        ----------------------
+        - Binary directed: ``+w`` at the source row, ``-w`` at the target row
+        - Binary undirected: ``+w`` at both rows
+        - Hyperedge directed: ``+w`` at head rows, ``-w`` at tail rows
+        (stoichiometry-aware)
+        - Hyperedge undirected: ``+w`` at all member rows
+        (stoichiometry-aware)
+        - Inter-layer/coupling: ``+w`` at ``(u, La)``, ``-w`` at ``(v, Lb)``
+        for directed edges
+
+        Hyperedges must have a layer assignment in ``edge_layers``. Set this via
+        ``set_edge_kivela_role(eid, "intra", layer_tuple)`` after
+        ``add_hyperedge``. Hyperedges without a layer assignment are excluded
+        from the matrix and returned in ``skipped``.
 
         Parameters
         ----------
-            layers : list[str] | list[tuple[str, ...]] | None
-                Optional subset of layers. None = all layers in V_M.
-                Single-aspect string ids are accepted.
-            include_inter : bool
-                Include inter-layer edges in the output columns. Default True.
-            include_coupling : bool
-                Include coupling edges in the output columns. Default True.
+        layers : list[str] | list[tuple[str, ...]] | None, optional
+            Optional subset of layers. ``None`` means all layers in ``V_M``.
+            In single-aspect mode, string IDs are accepted.
+        include_inter : bool, optional
+            Whether to include inter-layer edges in the output columns.
+            Default is ``True``.
+        include_coupling : bool, optional
+            Whether to include coupling edges in the output columns.
+            Default is ``True``.
 
         Returns
         -------
-            B : scipy.sparse.csr_matrix
-                Shape (|V_M|, |E_selected|). Rows are vertex-layer pairs in the
-                order given by self._row_to_nl after ensure_vertex_layer_index.
-            edge_ids : list[str]
-                Edge id for each column of B, in column order. Use this to map
-                columns back to edges for interpretability.
-            skipped : list[str]
-                Edge ids that were excluded because their layer assignment could
-                not be resolved. Inspect these if B looks sparse.
+        B : sp.csr_matrix
+            Supra-incidence matrix of shape ``(|V_M|, |E_selected|)``.
+            Rows are vertex-layer pairs in the order given by
+            ``self._row_to_nl`` after ``ensure_vertex_layer_index``.
+        edge_ids : list[str]
+            Edge ID for each column of ``B``, in column order.
+        skipped : list[str]
+            Edge IDs excluded because their layer assignment could not be
+            resolved.
 
         Notes
         -----
-            The hypergraph random-walk diffusion operator follows directly::
+        The hypergraph random-walk diffusion operator follows directly:
 
-                B_csr = B  (this output)
-                D_v = diag(|B| @ ones)          # vertex degree (sum of |entries| per row)
-                D_e = diag(|B|.T @ ones)        # edge degree (sum of |entries| per col)
-                Theta = D_v_inv @ B @ D_e_inv @ B.T
+        ::
+            B_csr = B
+            D_v = diag(|B| @ ones)
+            D_e = diag(|B|.T @ ones)
+            Theta = D_v_inv @ B @ D_e_inv @ B.T
 
         Examples
         --------
-        ```python
-            B, eids, skipped = G.supra_incidence()
-        ```
+        >>> B, eids, skipped = G.supra_incidence()
         """
         # 0. Normalise layers argument — identical pattern to supra_adjacency
 

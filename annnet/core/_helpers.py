@@ -6,12 +6,7 @@ from collections.abc import MutableMapping
 
 import narwhals as nw
 
-from .._dataframe_backend import dataframe_from_rows
-
-try:
-    import polars as pl
-except Exception:  # noqa: BLE001
-    pl = None
+from .._dataframe_backend import dataframe_filter_ne, dataframe_from_rows
 
 
 def _get_numeric_supertype(left, right):
@@ -81,12 +76,7 @@ def build_dataframe_from_rows(rows):
 
 
 def _df_filter_not_equal(df, col: str, value):
-    if pl is not None and isinstance(df, pl.DataFrame):
-        return df.filter(pl.col(col) != value)
-    import narwhals as nw
-
-    ndf = nw.from_native(df)
-    return nw.to_native(ndf.filter(nw.col(col) != value))
+    return dataframe_filter_ne(df, col, value)
 
 
 class EdgeType(Enum):

@@ -5,11 +5,15 @@ import time
 from typing import TYPE_CHECKING
 
 from ._helpers import EntityRecord
+from .._dataframe_backend import (
+    dataframe_height,
+    dataframe_columns,
+    dataframe_to_rows,
+    dataframe_filter_eq,
+    dataframe_filter_in,
+    dataframe_memory_usage,
+)
 
-try:
-    import polars as pl
-except Exception:  # noqa: BLE001
-    pl = None
 if TYPE_CHECKING:
     from .graph import AnnNet
 
@@ -389,20 +393,11 @@ class Operations:
         # payloads
         va = self.vertex_attributes
         va_lookup: dict = {}
-        if va is not None and hasattr(va, 'columns') and 'vertex_id' in va.columns:
-            try:
-                for row in va.to_dicts():
-                    vid = row.pop('vertex_id', None)
-                    if vid is not None:
-                        va_lookup[vid] = row
-            except AttributeError:
-                try:
-                    for row in va.to_dict(orient='records'):
-                        vid = row.pop('vertex_id', None)
-                        if vid is not None:
-                            va_lookup[vid] = row
-                except Exception:  # noqa: BLE001
-                    pass
+        if va is not None and 'vertex_id' in dataframe_columns(va):
+            for row in dataframe_to_rows(va):
+                vid = row.pop('vertex_id', None)
+                if vid is not None:
+                    va_lookup[vid] = row
         v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
 
         default_dir = True if self.directed is None else self.directed
@@ -637,82 +632,23 @@ class Operations:
         # edge attrs
         e_attrs = {}
         ea = self.edge_attributes
-        if ea is not None and hasattr(ea, 'columns') and 'edge_id' in ea.columns:
-            try:
-                import polars as pl
-            except Exception:  # noqa: BLE001
-                pl = None
-
-            if pl is not None and isinstance(ea, pl.DataFrame) and ea.height:
-                for row in ea.filter(pl.col('edge_id').is_in(list(E))).to_dicts():
-                    d = dict(row)
-                    eid = d.pop('edge_id', None)
-                    if eid is not None:
-                        e_attrs[eid] = d
-            else:
-                import narwhals as nw
-
-                ndf = nw.from_native(ea, pass_through=True)
-                native = nw.to_native(ndf.filter(nw.col('edge_id').is_in(list(E))))
-
-                # Polars: to_dicts(); Pandas: to_dict(orient="records")
-                to_dicts_fn = getattr(type(native), 'to_dicts', None)
-
-                if callable(to_dicts_fn):
-                    rows = to_dicts_fn(native)
-                else:
-                    try:
-                        rows = native.to_dict(orient='records')
-                    except TypeError:
-                        rows = native.to_dict()
-
-                for row in rows:
-                    d = dict(row)
-                    eid = d.pop('edge_id', None)
-                    if eid is not None:
-                        e_attrs[eid] = d
+        if ea is not None and 'edge_id' in dataframe_columns(ea):
+            for row in dataframe_to_rows(dataframe_filter_in(ea, 'edge_id', E)):
+                d = dict(row)
+                eid = d.pop('edge_id', None)
+                if eid is not None:
+                    e_attrs[eid] = d
 
         # weights
         eff_w = {}
         if resolve_slice_weights:
             df = self.edge_slice_attributes
-            if (
-                df is not None
-                and hasattr(df, 'columns')
-                and {'slice_id', 'edge_id', 'weight'}.issubset(df.columns)
-            ):
-                try:
-                    import polars as pl
-                except Exception:  # noqa: BLE001
-                    pl = None
-
-                if pl is not None and isinstance(df, pl.DataFrame) and df.height:
-                    for r in df.filter(
-                        (pl.col('slice_id') == slice_id) & (pl.col('edge_id').is_in(list(E)))
-                    ).iter_rows(named=True):
-                        if r.get('weight') is not None:
-                            eff_w[r['edge_id']] = float(r['weight'])
-                else:
-                    import narwhals as nw
-
-                    ndf = nw.from_native(df, pass_through=True).filter(
-                        (nw.col('slice_id') == slice_id) & (nw.col('edge_id').is_in(list(E)))
-                    )
-                    native = nw.to_native(ndf)
-                    # iterate rows as dicts (works across backends via narwhals -> native)
-                    to_dicts_fn = getattr(type(native), 'to_dicts', None)
-
-                    if callable(to_dicts_fn):
-                        rows = to_dicts_fn(native)
-                    else:
-                        try:
-                            rows = native.to_dict(orient='records')
-                        except TypeError:
-                            rows = native.to_dict()
-                    for r in rows:
-                        w = r.get('weight')
-                        if w is not None:
-                            eff_w[r['edge_id']] = float(w)
+            if df is not None and {'slice_id', 'edge_id', 'weight'}.issubset(dataframe_columns(df)):
+                slice_rows = dataframe_filter_eq(df, 'slice_id', slice_id)
+                for r in dataframe_to_rows(dataframe_filter_in(slice_rows, 'edge_id', E)):
+                    w = r.get('weight')
+                    if w is not None:
+                        eff_w[r['edge_id']] = float(w)
 
         # partition edges
         bin_payload, hyper_payload = [], []
@@ -773,24 +709,11 @@ class Operations:
         """
 
         # Basic guards
-        if df is None or not hasattr(df, 'columns') or key_col not in df.columns:
+        if df is None or key_col not in dataframe_columns(df):
             return {}
 
-        try:
-            import polars as pl
-        except Exception:  # noqa: BLE001
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
-            if df.height == 0:
-                return {}
-        else:
-            # generic emptiness check
-            try:
-                if len(df) == 0:
-                    return {}
-            except Exception:  # noqa: BLE001
-                pass
+        if dataframe_height(df) == 0:
+            return {}
 
         # Cache setup
         cache = getattr(self, '_row_attr_cache', None)
@@ -805,40 +728,13 @@ class Operations:
         if mapping is None:
             mapping = {}
             # Latest write should win if duplicates exist (matches upsert semantics)
-            try:
-                import polars as pl
-            except Exception:  # noqa: BLE001
-                pl = None
-
-            if pl is not None and isinstance(df, pl.DataFrame):
-                for row in df.iter_rows(named=True):
-                    kval = row.get(key_col)
-                    if kval is None:
-                        continue
-                    d = dict(row)
-                    d.pop(key_col, None)
-                    mapping[kval] = d
-            else:
-                import narwhals as nw
-
-                native = nw.to_native(nw.from_native(df, pass_through=True))
-                # rows as dicts across backends
-                to_dicts_fn = getattr(type(native), 'to_dicts', None)
-
-                if callable(to_dicts_fn):
-                    rows = to_dicts_fn(native)
-                else:
-                    try:
-                        rows = native.to_dict(orient='records')
-                    except TypeError:
-                        rows = native.to_dict()
-                for row in rows:
-                    kval = row.get(key_col)
-                    if kval is None:
-                        continue
-                    d = dict(row)
-                    d.pop(key_col, None)
-                    mapping[kval] = d
+            for row in dataframe_to_rows(df):
+                kval = row.get(key_col)
+                if kval is None:
+                    continue
+                d = dict(row)
+                d.pop(key_col, None)
+                mapping[kval] = d
             cache[cache_key] = mapping
 
         return mapping.get(key, {})
@@ -989,36 +885,11 @@ class Operations:
 
         # vertex attributes
         va = self.vertex_attributes
-        if va is not None:
-            try:
-                import polars as pl
-            except Exception:  # noqa: BLE001
-                pl = None
-
-            if pl is not None and isinstance(va, pl.DataFrame):
-                df_bytes += va.estimated_size()
-            else:
-                # best-effort fallback
-                try:
-                    df_bytes += va.memory_usage(deep=True).sum()
-                except Exception:  # noqa: BLE001
-                    pass
+        df_bytes += dataframe_memory_usage(va)
 
         # Edge attributes
         ea = self.edge_attributes
-        if ea is not None:
-            try:
-                import polars as pl
-            except Exception:  # noqa: BLE001
-                pl = None
-
-            if pl is not None and isinstance(ea, pl.DataFrame):
-                df_bytes += ea.estimated_size()
-            else:
-                try:
-                    df_bytes += ea.memory_usage(deep=True).sum()
-                except Exception:  # noqa: BLE001
-                    pass
+        df_bytes += dataframe_memory_usage(ea)
         return matrix_bytes + dict_bytes + df_bytes
 
     def get_vertex_incidence_matrix_as_lists(self, values: bool = False) -> dict:

@@ -223,9 +223,19 @@ Structural state answers questions like:
 
 Attribute tables answer questions like:
 
+- what annotation value is attached to this vertex or edge?
 - what label or score does this vertex carry?
 - what metadata is attached to this edge?
+- which slice-specific edge weight should be used?
 - what slice-specific override applies here?
+- which dataframe backend owns newly-created annotation rows?
+
+Core code treats those tables through shared dataframe helpers. The graph object
+can accept Narwhals-compatible eager dataframes, while newly-created annotation
+tables follow the configured annotation backend selection. This keeps core
+annotation reads, history exports, views, adapters, and IO modules on the same
+backend policy instead of letting each call site choose Polars, pandas, or
+PyArrow independently.
 
 That separation is one of the core design choices in AnnNet.
 

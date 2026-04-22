@@ -5,10 +5,12 @@ from functools import wraps
 
 import numpy as np
 
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.  # noqa: BLE001
-    pl = None
+from .._dataframe_backend import (
+    dataframe_to_rows,
+    dataframe_from_rows,
+    dataframe_write_csv,
+    dataframe_write_parquet,
+)
 
 
 class GraphDiff:
@@ -201,19 +203,7 @@ class History:
         until exported.
         """
         if as_df:
-            try:
-                import polars as pl
-
-                return pl.DataFrame(self._history)
-            except Exception:  # noqa: BLE001
-                try:
-                    import pandas as pd
-
-                    return pd.DataFrame.from_records(self._history)
-                except Exception:  # noqa: BLE001
-                    raise RuntimeError(
-                        'Cannot return history as DataFrame: install polars (recommended) or pandas.'
-                    ) from None
+            return dataframe_from_rows(self._history)
         return list(self._history)
 
     def export_history(self, path: str):
@@ -241,40 +231,27 @@ class History:
         """
         if not self._history:
             return 0
-        try:
-            import polars as pl
-
-            df = pl.DataFrame(self._history)
-        except Exception:  # noqa: BLE001
-            try:
-                import pandas as pd
-
-                df = pd.DataFrame.from_records(self._history)
-            except Exception:  # noqa: BLE001
-                raise RuntimeError(
-                    'Cannot construct DataFrame from history: install polars (recommended) or pandas.'
-                ) from None
+        df = dataframe_from_rows(self._history)
         p = path.lower()
         if p.endswith('.parquet'):
-            df.write_parquet(path)
-            return len(df)
+            dataframe_write_parquet(df, path)
+            return len(self._history)
         if p.endswith('.ndjson') or p.endswith('.jsonl'):
             with open(path, 'w', encoding='utf-8') as f:
-                for r in df.iter_rows(named=True):
+                for r in dataframe_to_rows(df):
                     import json
 
                     f.write(json.dumps(r, ensure_ascii=False) + '\n')
-            return len(df)
+            return len(self._history)
         if p.endswith('.json'):
             import json
 
             with open(path, 'w', encoding='utf-8') as f:
-                json.dump(df.to_dicts(), f, ensure_ascii=False)
-            return len(df)
+                json.dump(dataframe_to_rows(df), f, ensure_ascii=False)
+            return len(self._history)
         if p.endswith('.csv'):
-            rows = df.to_dicts() if hasattr(df, 'to_dicts') else list(self._history)
             flat_rows = []
-            for row in rows:
+            for row in dataframe_to_rows(df):
                 flat_row = {}
                 for key, value in row.items():
                     if isinstance(value, (dict, list, tuple, set, frozenset)):
@@ -284,11 +261,11 @@ class History:
                     else:
                         flat_row[key] = value
                 flat_rows.append(flat_row)
-            pl.DataFrame(flat_rows).write_csv(path)
-            return len(df)
+            dataframe_write_csv(dataframe_from_rows(flat_rows), path)
+            return len(self._history)
         # Default to Parquet if unknown
-        df.write_parquet(path + '.parquet')
-        return len(df)
+        dataframe_write_parquet(df, path + '.parquet')
+        return len(self._history)
 
     def enable_history(self, flag: bool = True):
         """Enable or disable in-memory mutation logging.
