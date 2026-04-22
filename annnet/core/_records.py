@@ -21,8 +21,16 @@ def _get_numeric_supertype(left, right):
         return nw.Float32
 
     type_order = {
-        nw.Int8: 1, nw.Int16: 2, nw.Int32: 3, nw.Int64: 4, nw.Int128: 5,
-        nw.UInt8: 1, nw.UInt16: 2, nw.UInt32: 3, nw.UInt64: 4, nw.UInt128: 5,
+        nw.Int8: 1,
+        nw.Int16: 2,
+        nw.Int32: 3,
+        nw.Int64: 4,
+        nw.Int128: 5,
+        nw.UInt8: 1,
+        nw.UInt16: 2,
+        nw.UInt32: 3,
+        nw.UInt64: 4,
+        nw.UInt128: 5,
     }
     left_unsigned = left_cls.is_unsigned_integer()
     right_unsigned = right_cls.is_unsigned_integer()
@@ -34,10 +42,12 @@ def _get_numeric_supertype(left, right):
 def build_dataframe_from_rows(rows):
     try:
         import polars as pl
+
         return pl.DataFrame(rows)
     except Exception:
         try:
             import pandas as pd
+
             return pd.DataFrame.from_records(rows)
         except Exception:
             raise RuntimeError(
@@ -60,13 +70,15 @@ class EdgeType(Enum):
 @dataclass(slots=True)
 class EntityRecord:
     """One record per entity (vertex or edge-entity) with an incidence-matrix row."""
-    row_idx: int   # row index in the incidence matrix
-    kind: str      # "vertex" | "edge_entity"
+
+    row_idx: int  # row index in the incidence matrix
+    kind: str  # "vertex" | "edge_entity"
 
 
 @dataclass(slots=True)
 class SliceRecord:
     """Typed slice membership record with dict-style compatibility."""
+
     vertices: set = field(default_factory=set)
     edges: set = field(default_factory=set)
     attributes: dict = field(default_factory=dict)
@@ -93,14 +105,15 @@ class EdgeRecord:
     structural edge-entity : src=str,       tgt=str,       etype="vertex_edge"
     edge placeholder       : src=None,      tgt=None,      etype="edge_placeholder"
     """
-    src: object            # str (binary) | frozenset (hyper) | None
-    tgt: object            # str (binary) | frozenset (directed hyper) | None
+
+    src: object  # str (binary) | frozenset (hyper) | None
+    tgt: object  # str (binary) | frozenset (directed hyper) | None
     weight: float
-    directed: object       # bool | None — None inherits graph default
-    etype: str             # "binary" | "hyper" | "vertex_edge" | "edge_placeholder"
-    col_idx: int           # column index in the incidence matrix (-1 = no column)
-    ml_kind: object        # str | None — "intra" | "inter" | "coupling"
-    ml_layers: object      # tuple | None — multilayer layer assignment
+    directed: object  # bool | None — None inherits graph default
+    etype: str  # "binary" | "hyper" | "vertex_edge" | "edge_placeholder"
+    col_idx: int  # column index in the incidence matrix (-1 = no column)
+    ml_kind: object  # str | None — "intra" | "inter" | "coupling"
+    ml_layers: object  # tuple | None — multilayer layer assignment
     direction_policy: object  # dict | None
 
 
@@ -114,7 +127,18 @@ def _internal_entity_kind(kind: str) -> str:
 
 _vertex_RESERVED = {"vertex_id"}
 _EDGE_RESERVED = {
-    "edge_id", "source", "target", "weight", "edge_type", "directed",
-    "slice", "slice_weight", "kind", "members", "head", "tail", "flexible",
+    "edge_id",
+    "source",
+    "target",
+    "weight",
+    "edge_type",
+    "directed",
+    "slice",
+    "slice_weight",
+    "kind",
+    "members",
+    "head",
+    "tail",
+    "flexible",
 }
 _slice_RESERVED = {"slice_id"}

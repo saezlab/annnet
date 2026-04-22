@@ -721,7 +721,7 @@ class IndexMapping:
     def _vertex_key_enabled(self) -> bool:
         return bool(self._vertex_key_fields)
 
-    def _build_key_from_attrs(self, attrs: dict) -> "tuple | None":
+    def _build_key_from_attrs(self, attrs: dict) -> tuple | None:
         if not self._vertex_key_fields:
             return None
         vals = []
@@ -731,7 +731,7 @@ class IndexMapping:
             vals.append(attrs[f])
         return tuple(vals)
 
-    def _current_key_of_vertex(self, vertex_id) -> "tuple | None":
+    def _current_key_of_vertex(self, vertex_id) -> tuple | None:
         if not self._vertex_key_fields:
             return None
         cur = {f: self.attrs.get_attr_vertex(vertex_id, f, None) for f in self._vertex_key_fields}

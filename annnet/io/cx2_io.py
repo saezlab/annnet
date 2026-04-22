@@ -29,7 +29,6 @@ except Exception:
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
-from ..core._records import SliceRecord
 from ..adapters._utils import (
     _deserialize_edge_layers,
     _deserialize_layer_tuple_attrs,
@@ -44,7 +43,7 @@ from ..adapters._utils import (
     _serialize_slices,
     _serialize_VM,
 )
-from ..core._records import EntityRecord
+from ..core._records import EntityRecord, SliceRecord
 
 # --- Helpers ---
 CX_STYLE_KEY = "__cx_style__"

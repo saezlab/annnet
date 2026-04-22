@@ -1,6 +1,6 @@
+import inspect
 import pathlib
 import sys
-import inspect
 from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -106,7 +106,9 @@ class TestPublicAPI:
         G = an.AnnNet()
 
         public = {name for name in dir(G) if not name.startswith("_")}
-        class_public = {name for name, _ in inspect.getmembers(an.AnnNet) if not name.startswith("_")}
+        class_public = {
+            name for name, _ in inspect.getmembers(an.AnnNet) if not name.startswith("_")
+        }
 
         for required in {
             "add_vertices",

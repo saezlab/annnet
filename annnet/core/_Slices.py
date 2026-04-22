@@ -26,6 +26,7 @@ class SliceManager:
 
         try:
             import math
+
             import polars as pl
         except Exception:
             math = None
@@ -125,6 +126,7 @@ class SliceManager:
             )
             if (not is_empty) and ("slice_id" in cols):
                 from ._records import _df_filter_not_equal
+
                 G.edge_slice_attributes = _df_filter_not_equal(ela, "slice_id", slice_id)
 
         if isinstance(G.slice_edge_weights, dict):
@@ -173,9 +175,7 @@ class SliceManager:
         sid = slice_id if slice_id is not None else G._current_slice
         data = self._ensure_slice(sid)
 
-        add_edges = {
-            eid for eid in edge_ids if eid in G._edges and G._edges[eid].col_idx >= 0
-        }
+        add_edges = {eid for eid in edge_ids if eid in G._edges and G._edges[eid].col_idx >= 0}
         if not add_edges:
             return
 
@@ -344,10 +344,16 @@ class SliceManager:
         result = self.slice_difference(slice_a, slice_b)
         return self.create_slice_from_operation(name, result, **attributes)
 
-    def aggregate(self, source_slice_ids, target_slice_id, method="union", weight_func=None, **attributes):
-        return self.create_aggregated_slice(source_slice_ids, target_slice_id, method, weight_func, **attributes)
+    def aggregate(
+        self, source_slice_ids, target_slice_id, method="union", weight_func=None, **attributes
+    ):
+        return self.create_aggregated_slice(
+            source_slice_ids, target_slice_id, method, weight_func, **attributes
+        )
 
-    def create_aggregated_slice(self, source_slice_ids, target_slice_id, method="union", weight_func=None, **attributes):
+    def create_aggregated_slice(
+        self, source_slice_ids, target_slice_id, method="union", weight_func=None, **attributes
+    ):
         if not source_slice_ids:
             raise ValueError("Must specify at least one source slice")
         if target_slice_id in self._G._slices:
@@ -402,16 +408,32 @@ class SliceManager:
         return self.vertex_presence_across_slices(vertex_id, include_default)
 
     def vertex_presence_across_slices(self, vertex_id, include_default=False):
-        return [sid for sid, data in self.get_slices_dict(include_default=include_default).items()
-                if vertex_id in data["vertices"]]
+        return [
+            sid
+            for sid, data in self.get_slices_dict(include_default=include_default).items()
+            if vertex_id in data["vertices"]
+        ]
 
-    def edge_presence(self, edge_id=None, source=None, target=None, include_default=False, undirected_match=None):
-        return self.edge_presence_across_slices(edge_id, source, target,
-                                                include_default=include_default,
-                                                undirected_match=undirected_match)
+    def edge_presence(
+        self, edge_id=None, source=None, target=None, include_default=False, undirected_match=None
+    ):
+        return self.edge_presence_across_slices(
+            edge_id,
+            source,
+            target,
+            include_default=include_default,
+            undirected_match=undirected_match,
+        )
 
-    def edge_presence_across_slices(self, edge_id=None, source=None, target=None, *,
-                                    include_default=False, undirected_match=None):
+    def edge_presence_across_slices(
+        self,
+        edge_id=None,
+        source=None,
+        target=None,
+        *,
+        include_default=False,
+        undirected_match=None,
+    ):
         G = self._G
         has_id = edge_id is not None
         has_pair = (source is not None) and (target is not None)
@@ -441,10 +463,13 @@ class SliceManager:
         return out
 
     def hyperedge_presence(self, members=None, head=None, tail=None, include_default=False):
-        return self.hyperedge_presence_across_slices(members=members, head=head, tail=tail,
-                                                     include_default=include_default)
+        return self.hyperedge_presence_across_slices(
+            members=members, head=head, tail=tail, include_default=include_default
+        )
 
-    def hyperedge_presence_across_slices(self, *, members=None, head=None, tail=None, include_default=False):
+    def hyperedge_presence_across_slices(
+        self, *, members=None, head=None, tail=None, include_default=False
+    ):
         G = self._G
         undirected = members is not None
         if undirected and (head is not None or tail is not None):
@@ -499,7 +524,8 @@ class SliceManager:
             raise KeyError(f"slice {slice_id} not found")
         target = G._slices[slice_id]["edges"]
         return {
-            eid for eid in target
+            eid
+            for eid in target
             if sum(1 for data in G._slices.values() if eid in data["edges"]) == 1
         }
 
@@ -587,20 +613,33 @@ class SliceClass:
         return self.slices.slice_difference(slice1_id, slice2_id)
 
     def create_slice_from_operation(self, result_slice_id, operation_result, **attributes):
-        return self.slices.create_slice_from_operation(result_slice_id, operation_result, **attributes)
+        return self.slices.create_slice_from_operation(
+            result_slice_id, operation_result, **attributes
+        )
 
     def add_vertex_to_slice(self, lid, vid):
         return self.slices.add_vertex_to_slice(lid, vid)
 
-    def edge_presence_across_slices(self, edge_id=None, source=None, target=None, *,
-                                    include_default=False, undirected_match=None):
+    def edge_presence_across_slices(
+        self,
+        edge_id=None,
+        source=None,
+        target=None,
+        *,
+        include_default=False,
+        undirected_match=None,
+    ):
         return self.slices.edge_presence_across_slices(
-            edge_id, source, target,
+            edge_id,
+            source,
+            target,
             include_default=include_default,
             undirected_match=undirected_match,
         )
 
-    def hyperedge_presence_across_slices(self, *, members=None, head=None, tail=None, include_default=False):
+    def hyperedge_presence_across_slices(
+        self, *, members=None, head=None, tail=None, include_default=False
+    ):
         return self.slices.hyperedge_presence_across_slices(
             members=members, head=head, tail=tail, include_default=include_default
         )
@@ -617,8 +656,9 @@ class SliceClass:
     def temporal_dynamics(self, ordered_slices, metric="edge_change"):
         return self.slices.temporal_dynamics(ordered_slices, metric)
 
-    def create_aggregated_slice(self, source_slice_ids, target_slice_id, method="union",
-                                weight_func=None, **attributes):
+    def create_aggregated_slice(
+        self, source_slice_ids, target_slice_id, method="union", weight_func=None, **attributes
+    ):
         return self.slices.create_aggregated_slice(
             source_slice_ids, target_slice_id, method, weight_func, **attributes
         )

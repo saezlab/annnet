@@ -10,8 +10,8 @@ import numpy as np
 import scipy as scipy
 import scipy.sparse as sp
 
-from ._utils import _read_archive, _write_archive
 from ..core._records import SliceRecord
+from ._utils import _read_archive, _write_archive
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
@@ -510,7 +510,9 @@ def _write_multilayers(graph, path: Path, compression: str):
 
     # 4b. Aspect Attributes (Dict -> JSON)
     if graph.layers._aspect_attrs:
-        (path / "aspect_attributes.json").write_text(json.dumps(graph.layers._aspect_attrs, indent=2))
+        (path / "aspect_attributes.json").write_text(
+            json.dumps(graph.layers._aspect_attrs, indent=2)
+        )
 
     # 4c. Tuple Layer Attributes (Dict -> Parquet due to complex keys)
     if graph.layers._layer_attrs:
@@ -552,10 +554,18 @@ def _write_slices(graph, path: Path, compression: str):
     # Edge memberships with weights
     edge_members: list[dict] = []
     esa = getattr(graph, "edge_slice_attributes", None)
-    if esa is not None and hasattr(esa, "columns") and {"slice_id", "edge_id", "weight"} <= set(esa.columns):
+    if (
+        esa is not None
+        and hasattr(esa, "columns")
+        and {"slice_id", "edge_id", "weight"} <= set(esa.columns)
+    ):
         for row in _iter_rows(esa):
             edge_members.append(
-                {"slice_id": row["slice_id"], "edge_id": row["edge_id"], "weight": row.get("weight")}
+                {
+                    "slice_id": row["slice_id"],
+                    "edge_id": row["edge_id"],
+                    "weight": row.get("weight"),
+                }
             )
     # Fallback: derive from registered slice edges if no explicit weights
     if not edge_members:

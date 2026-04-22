@@ -206,7 +206,9 @@ class AttributesClass:
                         df = df.with_columns(pl.col(c).cast(pl.Utf8))
                         update_df = update_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
 
-                joined = df.join(update_df.select(df.columns), on="vertex_id", how="left", suffix="__new")
+                joined = df.join(
+                    update_df.select(df.columns), on="vertex_id", how="left", suffix="__new"
+                )
                 exprs = [
                     pl.coalesce([pl.col(f"{k}__new"), pl.col(k)]).alias(k)
                     for k in keys
@@ -376,7 +378,9 @@ class AttributesClass:
                         df = df.with_columns(pl.col(c).cast(pl.Utf8))
                         update_df = update_df.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
 
-                joined = df.join(update_df.select(df.columns), on="edge_id", how="left", suffix="__new")
+                joined = df.join(
+                    update_df.select(df.columns), on="edge_id", how="left", suffix="__new"
+                )
                 exprs = [
                     pl.coalesce([pl.col(f"{k}__new"), pl.col(k)]).alias(k)
                     for k in keys
@@ -1250,8 +1254,16 @@ class AttributesClass:
         # incoming record frame → String). Cast to resolve before concat.
         schema_u = unchanged.schema
         schema_n = update_df.schema
-        casts_u = [nw.col(c).cast(schema_n[c]) for c in schema_u if c in schema_n and schema_u[c] == nw.Unknown and schema_n[c] != nw.Unknown]
-        casts_n = [nw.col(c).cast(schema_u[c]) for c in schema_n if c in schema_u and schema_n[c] == nw.Unknown and schema_u[c] != nw.Unknown]
+        casts_u = [
+            nw.col(c).cast(schema_n[c])
+            for c in schema_u
+            if c in schema_n and schema_u[c] == nw.Unknown and schema_n[c] != nw.Unknown
+        ]
+        casts_n = [
+            nw.col(c).cast(schema_u[c])
+            for c in schema_n
+            if c in schema_u and schema_n[c] == nw.Unknown and schema_u[c] != nw.Unknown
+        ]
         if casts_u:
             unchanged = unchanged.with_columns(casts_u)
         if casts_n:

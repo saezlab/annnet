@@ -15,6 +15,8 @@ import scipy.sparse as sp
 
 from ..algorithms.traversal import Traversal
 from ._Annotation import AttributesAccessor, AttributesClass
+from ._History import GraphDiff, History, HistoryAccessor
+from ._Layers import LayerAccessor
 from ._Matrix import CacheManager, IndexManager, IndexMapping
 from ._Ops import Operations, OperationsAccessor
 from ._records import (
@@ -30,8 +32,6 @@ from ._records import (
     _slice_RESERVED,
     _vertex_RESERVED,
 )
-from ._History import GraphDiff, History, HistoryAccessor
-from ._Layers import LayerAccessor
 from ._Slices import SliceClass, SliceManager
 from ._Views import GraphView, ViewsAccessor, ViewsClass
 from .lazy_proxies import _LazyGTProxy, _LazyIGProxy, _LazyNXProxy
@@ -407,6 +407,7 @@ class AnnNet(
 
         try:
             import math
+
             import polars as pl
         except Exception:
             math = None
@@ -462,7 +463,9 @@ class AnnNet(
             if eid is None or weight is None:
                 continue
             try:
-                if isinstance(weight, float) and math.isnan(weight):
+                import math as _math
+
+                if isinstance(weight, float) and _math.isnan(weight):
                     continue
             except Exception:
                 pass
@@ -830,7 +833,9 @@ class AnnNet(
             is_single = True
         elif isinstance(vertices, tuple) and vertices:
             is_single = len(vertices) == 1 or (
-                len(vertices) == 2 and isinstance(vertices[0], str) and isinstance(vertices[1], dict)
+                len(vertices) == 2
+                and isinstance(vertices[0], str)
+                and isinstance(vertices[1], dict)
             )
 
         if is_single:
@@ -926,8 +931,6 @@ class AnnNet(
             idx = len(_ent)
             self._register_entity_record(key, EntityRecord(row_idx=idx, kind="vertex"))
             self._grow_rows_to(len(_ent))
-
-
 
         # Add to slice (slice tracks bare vid for backward compat with _Slices.py)
         slices = self._slices
@@ -1050,7 +1053,9 @@ class AnnNet(
             a, b = (nodes[0], nodes[0]) if len(nodes) == 1 else (nodes[0], nodes[1])
             result = [eid for eid in self._src_to_edges.get(a, []) if self._edges[eid].tgt == b]
             if a != b:
-                result.extend(eid for eid in self._src_to_edges.get(b, []) if self._edges[eid].tgt == a)
+                result.extend(
+                    eid for eid in self._src_to_edges.get(b, []) if self._edges[eid].tgt == a
+                )
             return result
         # Hyperedge / stoich: scan _edges for matching member frozenset
         all_members = endpoint_set
@@ -1119,10 +1124,14 @@ class AnnNet(
             candidate = args[0]
             if not isinstance(candidate, (str, bytes, dict)):
                 if isinstance(candidate, list):
-                    if candidate and all(isinstance(item, (dict, tuple, list)) for item in candidate):
+                    if candidate and all(
+                        isinstance(item, (dict, tuple, list)) for item in candidate
+                    ):
                         batch_candidate = candidate
                 elif isinstance(candidate, tuple):
-                    if candidate and all(isinstance(item, (dict, tuple, list)) for item in candidate):
+                    if candidate and all(
+                        isinstance(item, (dict, tuple, list)) for item in candidate
+                    ):
                         batch_candidate = list(candidate)
                 else:
                     try:
@@ -1147,7 +1156,9 @@ class AnnNet(
                 raise TypeError(f"Unexpected keyword arguments for batch add_edges: {unexpected}")
 
             def _is_hyper_item(item):
-                return isinstance(item, dict) and any(k in item for k in ("members", "head", "tail"))
+                return isinstance(item, dict) and any(
+                    k in item for k in ("members", "head", "tail")
+                )
 
             kinds = set()
             for item in batch_candidate:
@@ -1948,8 +1959,7 @@ class AnnNet(
         rec = self._edges[eid]
         return self._edge_tuple_from_record(rec)
 
-    @staticmethod
-    def _edge_tuple_from_record(rec):
+    def _edge_tuple_from_record(self, rec):
         if rec.etype == "hyper":
             # src = frozenset(head or members), tgt = frozenset(tail) or None
             if rec.tgt is not None:
@@ -2928,7 +2938,9 @@ class AnnNet(
         self._vid_to_ekeys.clear()
         for vid, row_idx in dict(mapping).items():
             coord = self._placeholder_layer_coord()
-            self._register_entity_record((vid, coord), EntityRecord(row_idx=int(row_idx), kind="vertex"))
+            self._register_entity_record(
+                (vid, coord), EntityRecord(row_idx=int(row_idx), kind="vertex")
+            )
 
     @property
     def idx_to_entity(self) -> dict:
@@ -2946,7 +2958,9 @@ class AnnNet(
             ekey = self._resolve_entity_key(vid)
             rec = self._entities.get(ekey)
             row_idx = rec.row_idx if rec is not None else len(self._entities)
-            self._register_entity_record(ekey, EntityRecord(row_idx=row_idx, kind=_internal_entity_kind(kind)))
+            self._register_entity_record(
+                ekey, EntityRecord(row_idx=row_idx, kind=_internal_entity_kind(kind))
+            )
 
     @property
     def edge_to_idx(self) -> dict:
@@ -3104,7 +3118,10 @@ class AnnNet(
 
         try:
             import sys as _sys
-            norm = [(_sys.intern(vid) if isinstance(vid, str) else vid, attrs) for vid, attrs in norm]
+
+            norm = [
+                (_sys.intern(vid) if isinstance(vid, str) else vid, attrs) for vid, attrs in norm
+            ]
             if isinstance(slice, str):
                 slice = _sys.intern(slice)
         except Exception:
@@ -3138,7 +3155,9 @@ class AnnNet(
                 existing = df.select("vertex_id")
                 to_insert = incoming.join(existing, on="vertex_id", how="anti")
                 if to_insert.height:
-                    self.vertex_attributes = pl.concat([df, to_insert], how="vertical", rechunk=False)
+                    self.vertex_attributes = pl.concat(
+                        [df, to_insert], how="vertical", rechunk=False
+                    )
                 else:
                     self.vertex_attributes = df
                 return
@@ -3168,7 +3187,9 @@ class AnnNet(
 
             if is_pl:
                 nrows = len(df)
-                id_df = df.select("vertex_id") if ("vertex_id" in df.columns and nrows > 0) else None
+                id_df = (
+                    df.select("vertex_id") if ("vertex_id" in df.columns and nrows > 0) else None
+                )
 
                 def _align(left, right):
                     for c in left.columns:
@@ -3340,6 +3361,7 @@ class AnnNet(
 
         try:
             import sys as _sys
+
             for d in norm:
                 s, t = d["source"], d["target"]
                 if isinstance(s, str):
@@ -3378,7 +3400,11 @@ class AnnNet(
                 )
                 ekey = (vid, coord)
             if ekey not in self._entities:
-                if et in {"vertex_edge", "edge_placeholder"} and isinstance(vid, str) and vid.startswith("edge_"):
+                if (
+                    et in {"vertex_edge", "edge_placeholder"}
+                    and isinstance(vid, str)
+                    and vid.startswith("edge_")
+                ):
                     self._ensure_edge_entity_placeholder(vid)
                 else:
                     idx = len(self._entities)
@@ -3599,12 +3625,19 @@ class AnnNet(
 
         try:
             import sys as _sys
+
             for d in items:
                 if "members" in d and d["members"] is not None:
-                    d["members"] = [_sys.intern(x) if isinstance(x, str) else x for x in d["members"]]
+                    d["members"] = [
+                        _sys.intern(x) if isinstance(x, str) else x for x in d["members"]
+                    ]
                 else:
-                    d["head"] = [_sys.intern(x) if isinstance(x, str) else x for x in d.get("head", [])]
-                    d["tail"] = [_sys.intern(x) if isinstance(x, str) else x for x in d.get("tail", [])]
+                    d["head"] = [
+                        _sys.intern(x) if isinstance(x, str) else x for x in d.get("head", [])
+                    ]
+                    d["tail"] = [
+                        _sys.intern(x) if isinstance(x, str) else x for x in d.get("tail", [])
+                    ]
                 if isinstance(d.get("slice"), str):
                     d["slice"] = _sys.intern(d["slice"])
                 if isinstance(d.get("edge_id"), str):
@@ -3691,9 +3724,15 @@ class AnnNet(
                 col = len(self._col_to_edge)
                 self._col_to_edge[col] = e_id
                 rec = EdgeRecord(
-                    src=None, tgt=None, weight=1.0, directed=False,
-                    etype="hyper", col_idx=col,
-                    ml_kind=None, ml_layers=None, direction_policy=None,
+                    src=None,
+                    tgt=None,
+                    weight=1.0,
+                    directed=False,
+                    etype="hyper",
+                    col_idx=col,
+                    ml_kind=None,
+                    ml_layers=None,
+                    direction_policy=None,
                 )
                 self._edges[e_id] = rec
 
@@ -4013,7 +4052,9 @@ class AnnNet(
         va = self.vertex_attributes
         if va is not None and hasattr(va, "columns") and "vertex_id" in va.columns:
             if pl is not None and isinstance(va, pl.DataFrame) and va.height:
-                self.vertex_attributes = va.filter(~pl.col("vertex_id").is_in(list(drop_vertex_ids)))
+                self.vertex_attributes = va.filter(
+                    ~pl.col("vertex_id").is_in(list(drop_vertex_ids))
+                )
             else:
                 self.vertex_attributes = nw.to_native(
                     nw.from_native(va).filter(~nw.col("vertex_id").is_in(list(drop_vertex_ids)))

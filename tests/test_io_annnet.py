@@ -209,11 +209,13 @@ class TestAnnNetIO(unittest.TestCase):
             self.G.elem_layers = {"time": ["t1", "t2"], "transport": ["bus", "train"]}
 
             # Vertex Presence: (u, layer_tuple)
-            self.G._restore_supra_nodes({
-                ("v1", ("t1", "bus")),
-                ("v2", ("t1", "bus")),
-                ("v2", ("t2", "train")),
-            })
+            self.G._restore_supra_nodes(
+                {
+                    ("v1", ("t1", "bus")),
+                    ("v2", ("t1", "bus")),
+                    ("v2", ("t2", "train")),
+                }
+            )
 
             # Edge Layers — set directly on EdgeRecord
             if "e1" in self.G._edges:

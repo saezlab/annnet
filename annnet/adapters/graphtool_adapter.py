@@ -336,6 +336,7 @@ def from_graphtool(
             rec = G._entities.get(ekey)
             if rec is not None:
                 from annnet.core._records import _internal_entity_kind
+
                 rec.kind = _internal_entity_kind(kind)
 
     # ----- edges -----

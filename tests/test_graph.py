@@ -283,7 +283,9 @@ class TestGraphBasics(unittest.TestCase):
         # override via edge_slice_attributes table using the EDGE ID (string)
         self.g.attrs.set_edge_slice_attrs("Lw", eid, weight=1.25, note="downweighted")
         # effective weight in Lw reflects the override
-        self.assertAlmostEqual(self.g.attrs.get_effective_edge_weight(eid, slice="Lw"), 1.25, places=7)
+        self.assertAlmostEqual(
+            self.g.attrs.get_effective_edge_weight(eid, slice="Lw"), 1.25, places=7
+        )
         # asking for a non-existent slice should fall back to the global weight
         self.assertAlmostEqual(
             self.g.attrs.get_effective_edge_weight(eid, slice="NonExistent"), 5.0, places=7

@@ -161,7 +161,11 @@ class Operations:
     def _ordered_edge_ids(self, edge_ids) -> list[str]:
         """Return selected edge ids in column order."""
         wanted = set(edge_ids)
-        return [self._col_to_edge[col] for col in range(len(self._col_to_edge)) if self._col_to_edge[col] in wanted]
+        return [
+            self._col_to_edge[col]
+            for col in range(len(self._col_to_edge))
+            if self._col_to_edge[col] in wanted
+        ]
 
     def _build_flat_graph_from_selection(
         self,
@@ -228,7 +232,9 @@ class Operations:
         new.vertex_attributes = self._filter_attr_table(
             self.vertex_attributes, "vertex_id", ordered_vertices
         )
-        new.edge_attributes = self._filter_attr_table(self.edge_attributes, "edge_id", ordered_edges)
+        new.edge_attributes = self._filter_attr_table(
+            self.edge_attributes, "edge_id", ordered_edges
+        )
         new.slice_attributes = self._filter_attr_table(
             self.slice_attributes, "slice_id", list(new._slices.keys())
         )

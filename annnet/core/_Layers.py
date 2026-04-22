@@ -53,179 +53,314 @@ class LayerAccessor:
     # ------------------------------------------------------------------
 
     @property
-    def _entities(self): return self._G._entities
+    def _entities(self):
+        return self._G._entities
+
     @_entities.setter
-    def _entities(self, v): self._G._entities = v
+    def _entities(self, v):
+        self._G._entities = v
 
     @property
-    def _edges(self): return self._G._edges
+    def _edges(self):
+        return self._G._edges
+
     @_edges.setter
-    def _edges(self, v): self._G._edges = v
+    def _edges(self, v):
+        self._G._edges = v
 
     @property
-    def _matrix(self): return self._G._matrix
+    def _matrix(self):
+        return self._G._matrix
+
     @_matrix.setter
-    def _matrix(self, v): self._G._matrix = v
+    def _matrix(self, v):
+        self._G._matrix = v
 
     @property
-    def _col_to_edge(self): return self._G._col_to_edge
+    def _col_to_edge(self):
+        return self._G._col_to_edge
+
     @_col_to_edge.setter
-    def _col_to_edge(self, v): self._G._col_to_edge = v
+    def _col_to_edge(self, v):
+        self._G._col_to_edge = v
 
     @property
-    def _aspects(self): return self._G._aspects
+    def _aspects(self):
+        return self._G._aspects
+
     @_aspects.setter
-    def _aspects(self, v): self._G._aspects = v
+    def _aspects(self, v):
+        self._G._aspects = v
 
     @property
-    def _layers(self): return self._G._layers
+    def _layers(self):
+        return self._G._layers
+
     @_layers.setter
-    def _layers(self, v): self._G._layers = v
+    def _layers(self, v):
+        self._G._layers = v
 
     @property
-    def _slices(self): return self._G._slices
+    def _slices(self):
+        return self._G._slices
+
     @_slices.setter
-    def _slices(self, v): self._G._slices = v
+    def _slices(self, v):
+        self._G._slices = v
 
     @property
-    def _src_to_edges(self): return self._G._src_to_edges
+    def _src_to_edges(self):
+        return self._G._src_to_edges
+
     @_src_to_edges.setter
-    def _src_to_edges(self, v): self._G._src_to_edges = v
+    def _src_to_edges(self, v):
+        self._G._src_to_edges = v
 
     @property
-    def _tgt_to_edges(self): return self._G._tgt_to_edges
+    def _tgt_to_edges(self):
+        return self._G._tgt_to_edges
+
     @_tgt_to_edges.setter
-    def _tgt_to_edges(self, v): self._G._tgt_to_edges = v
+    def _tgt_to_edges(self, v):
+        self._G._tgt_to_edges = v
 
     @property
-    def _row_to_entity(self): return self._G._row_to_entity
+    def _row_to_entity(self):
+        return self._G._row_to_entity
+
     @_row_to_entity.setter
-    def _row_to_entity(self, v): self._G._row_to_entity = v
+    def _row_to_entity(self, v):
+        self._G._row_to_entity = v
 
     @property
-    def _vid_to_ekeys(self): return self._G._vid_to_ekeys
+    def _vid_to_ekeys(self):
+        return self._G._vid_to_ekeys
+
     @_vid_to_ekeys.setter
-    def _vid_to_ekeys(self, v): self._G._vid_to_ekeys = v
+    def _vid_to_ekeys(self, v):
+        self._G._vid_to_ekeys = v
 
     @property
-    def _csr_cache(self): return self._G._csr_cache
+    def _csr_cache(self):
+        return self._G._csr_cache
+
     @_csr_cache.setter
-    def _csr_cache(self, v): self._G._csr_cache = v
+    def _csr_cache(self, v):
+        self._G._csr_cache = v
 
     @property
-    def _next_edge_id(self): return self._G._next_edge_id
+    def _next_edge_id(self):
+        return self._G._next_edge_id
+
     @_next_edge_id.setter
-    def _next_edge_id(self, v): self._G._next_edge_id = v
+    def _next_edge_id(self, v):
+        self._G._next_edge_id = v
 
     @property
-    def _current_slice(self): return self._G._current_slice
+    def _current_slice(self):
+        return self._G._current_slice
+
     @_current_slice.setter
-    def _current_slice(self, v): self._G._current_slice = v
+    def _current_slice(self, v):
+        self._G._current_slice = v
 
     @property
-    def _default_slice(self): return self._G._default_slice
+    def _default_slice(self):
+        return self._G._default_slice
+
     @_default_slice.setter
-    def _default_slice(self, v): self._G._default_slice = v
+    def _default_slice(self, v):
+        self._G._default_slice = v
 
     @property
-    def _vertex_key_fields(self): return self._G._vertex_key_fields
+    def _vertex_key_fields(self):
+        return self._G._vertex_key_fields
+
     @_vertex_key_fields.setter
-    def _vertex_key_fields(self, v): self._G._vertex_key_fields = v
+    def _vertex_key_fields(self, v):
+        self._G._vertex_key_fields = v
 
     @property
-    def _vertex_key_index(self): return self._G._vertex_key_index
+    def _vertex_key_index(self):
+        return self._G._vertex_key_index
+
     @_vertex_key_index.setter
-    def _vertex_key_index(self, v): self._G._vertex_key_index = v
+    def _vertex_key_index(self, v):
+        self._G._vertex_key_index = v
 
     @property
-    def vertex_attributes(self): return self._G.vertex_attributes
+    def vertex_attributes(self):
+        return self._G.vertex_attributes
+
     @vertex_attributes.setter
-    def vertex_attributes(self, v): self._G.vertex_attributes = v
+    def vertex_attributes(self, v):
+        self._G.vertex_attributes = v
 
     @property
-    def edge_attributes(self): return self._G.edge_attributes
+    def edge_attributes(self):
+        return self._G.edge_attributes
+
     @edge_attributes.setter
-    def edge_attributes(self, v): self._G.edge_attributes = v
+    def edge_attributes(self, v):
+        self._G.edge_attributes = v
 
     @property
-    def layer_attributes(self): return self._G.layer_attributes
+    def layer_attributes(self):
+        return self._G.layer_attributes
+
     @layer_attributes.setter
-    def layer_attributes(self, v): self._G.layer_attributes = v
+    def layer_attributes(self, v):
+        self._G.layer_attributes = v
 
     @property
-    def slice_edge_weights(self): return self._G.slice_edge_weights
+    def slice_edge_weights(self):
+        return self._G.slice_edge_weights
+
     @slice_edge_weights.setter
-    def slice_edge_weights(self, v): self._G.slice_edge_weights = v
+    def slice_edge_weights(self, v):
+        self._G.slice_edge_weights = v
 
     @property
-    def slice_attributes(self): return self._G.slice_attributes
+    def slice_attributes(self):
+        return self._G.slice_attributes
+
     @slice_attributes.setter
-    def slice_attributes(self, v): self._G.slice_attributes = v
+    def slice_attributes(self, v):
+        self._G.slice_attributes = v
 
     @property
-    def edge_slice_attributes(self): return self._G.edge_slice_attributes
+    def edge_slice_attributes(self):
+        return self._G.edge_slice_attributes
+
     @edge_slice_attributes.setter
-    def edge_slice_attributes(self, v): self._G.edge_slice_attributes = v
+    def edge_slice_attributes(self, v):
+        self._G.edge_slice_attributes = v
 
     @property
-    def vertex_aligned(self): return self._G.vertex_aligned
+    def vertex_aligned(self):
+        return self._G.vertex_aligned
+
     @vertex_aligned.setter
-    def vertex_aligned(self, v): self._G.vertex_aligned = v
+    def vertex_aligned(self, v):
+        self._G.vertex_aligned = v
 
     @property
-    def directed(self): return self._G.directed
+    def directed(self):
+        return self._G.directed
+
     @directed.setter
-    def directed(self, v): self._G.directed = v
+    def directed(self, v):
+        self._G.directed = v
 
     @property
-    def aspects(self): return self._G.aspects
+    def aspects(self):
+        return self._G.aspects
+
     @aspects.setter
-    def aspects(self, v): self._G.aspects = v
+    def aspects(self, v):
+        self._G.aspects = v
 
     @property
-    def elem_layers(self): return self._G.elem_layers
+    def elem_layers(self):
+        return self._G.elem_layers
+
     @elem_layers.setter
-    def elem_layers(self, v): self._G.elem_layers = v
+    def elem_layers(self, v):
+        self._G.elem_layers = v
 
     @property
-    def _history_enabled(self): return self._G._history_enabled
+    def _history_enabled(self):
+        return self._G._history_enabled
+
     @_history_enabled.setter
-    def _history_enabled(self, v): self._G._history_enabled = v
+    def _history_enabled(self, v):
+        self._G._history_enabled = v
 
     @property
-    def _version(self): return self._G._version
+    def _version(self):
+        return self._G._version
+
     @_version.setter
-    def _version(self, v): self._G._version = v
+    def _version(self, v):
+        self._G._version = v
 
     @property
-    def _vertex_RESERVED(self): return self._G._vertex_RESERVED
+    def _vertex_RESERVED(self):
+        return self._G._vertex_RESERVED
+
     @property
-    def _EDGE_RESERVED(self): return self._G._EDGE_RESERVED
+    def _EDGE_RESERVED(self):
+        return self._G._EDGE_RESERVED
 
     # Delegate infrastructure methods that live on AnnNet / IndexMapping
-    def _placeholder_layer_coord(self): return self._G._placeholder_layer_coord()
-    def _make_layer_coord(self, *a, **kw): return self._G._make_layer_coord(*a, **kw)
-    def _resolve_entity_key(self, *a, **kw): return self._G._resolve_entity_key(*a, **kw)
-    def _resolve_vertex_insert_coord(self, *a, **kw): return self._G._resolve_vertex_insert_coord(*a, **kw)
-    def _rebuild_entity_indexes(self): return self._G._rebuild_entity_indexes()
-    def _grow_rows_to(self, n): return self._G._grow_rows_to(n)
-    def _grow_cols_to(self, n): return self._G._grow_cols_to(n)
-    def _entity_row(self, vid): return self._G._entity_row(vid)
-    def _get_next_edge_id(self): return self._G._get_next_edge_id()
-    def _register_edge_as_entity(self, eid): return self._G._register_edge_as_entity(eid)
-    def _register_entity_record(self, ekey, rec): return self._G._register_entity_record(ekey, rec)
-    def _ensure_edge_entity_placeholder(self, vid): return self._G._ensure_edge_entity_placeholder(vid)
-    def _ensure_vertex_row(self, vid): return self._G._ensure_vertex_row(vid)
-    def _ensure_vertex_table(self): return self._G._ensure_vertex_table()
-    def _upsert_row(self, df, vid, attrs): return self._G._upsert_row(df, vid, attrs)
-    def _ensure_attr_columns(self, df, keys): return self._G._ensure_attr_columns(df, keys)
-    def _propagate_to_shared_slices(self, eid, s, t): return self._G._propagate_to_shared_slices(eid, s, t)
-    def _propagate_to_all_slices(self, eid, s, t): return self._G._propagate_to_all_slices(eid, s, t)
-    def set_edge_attrs_bulk(self, d): return self._G.attrs.set_edge_attrs_bulk(d)
-    def set_edge_slice_attrs(self, sid, eid, **kw): return self._G.attrs.set_edge_slice_attrs(sid, eid, **kw)
-    def set_vertex_attrs(self, vid, **kw): return self._G.attrs.set_vertex_attrs(vid, **kw)
-    def add_edges_bulk(self, edges, **kw): return self._G.add_edges_bulk(edges, **kw)
-    def add_vertices_bulk(self, verts, **kw): return self._G.add_vertices_bulk(verts, **kw)
+    def _placeholder_layer_coord(self):
+        return self._G._placeholder_layer_coord()
+
+    def _make_layer_coord(self, *a, **kw):
+        return self._G._make_layer_coord(*a, **kw)
+
+    def _resolve_entity_key(self, *a, **kw):
+        return self._G._resolve_entity_key(*a, **kw)
+
+    def _resolve_vertex_insert_coord(self, *a, **kw):
+        return self._G._resolve_vertex_insert_coord(*a, **kw)
+
+    def _rebuild_entity_indexes(self):
+        return self._G._rebuild_entity_indexes()
+
+    def _grow_rows_to(self, n):
+        return self._G._grow_rows_to(n)
+
+    def _grow_cols_to(self, n):
+        return self._G._grow_cols_to(n)
+
+    def _entity_row(self, vid):
+        return self._G._entity_row(vid)
+
+    def _get_next_edge_id(self):
+        return self._G._get_next_edge_id()
+
+    def _register_edge_as_entity(self, eid):
+        return self._G._register_edge_as_entity(eid)
+
+    def _register_entity_record(self, ekey, rec):
+        return self._G._register_entity_record(ekey, rec)
+
+    def _ensure_edge_entity_placeholder(self, vid):
+        return self._G._ensure_edge_entity_placeholder(vid)
+
+    def _ensure_vertex_row(self, vid):
+        return self._G._ensure_vertex_row(vid)
+
+    def _ensure_vertex_table(self):
+        return self._G._ensure_vertex_table()
+
+    def _upsert_row(self, df, vid, attrs):
+        return self._G._upsert_row(df, vid, attrs)
+
+    def _ensure_attr_columns(self, df, keys):
+        return self._G._ensure_attr_columns(df, keys)
+
+    def _propagate_to_shared_slices(self, eid, s, t):
+        return self._G._propagate_to_shared_slices(eid, s, t)
+
+    def _propagate_to_all_slices(self, eid, s, t):
+        return self._G._propagate_to_all_slices(eid, s, t)
+
+    def set_edge_attrs_bulk(self, d):
+        return self._G.attrs.set_edge_attrs_bulk(d)
+
+    def set_edge_slice_attrs(self, sid, eid, **kw):
+        return self._G.attrs.set_edge_slice_attrs(sid, eid, **kw)
+
+    def set_vertex_attrs(self, vid, **kw):
+        return self._G.attrs.set_vertex_attrs(vid, **kw)
+
+    def add_edges_bulk(self, edges, **kw):
+        return self._G.add_edges_bulk(edges, **kw)
+
+    def add_vertices_bulk(self, verts, **kw):
+        return self._G.add_vertices_bulk(verts, **kw)
 
     ## Aspects & layers
 
@@ -622,7 +757,11 @@ class LayerAccessor:
         """
         if restrict_layers is not None:
             R = {tuple(x) for x in restrict_layers}
-            vm = [(u, aa) for (u, aa), rec in self._entities.items() if rec.kind == "vertex" and aa in R]
+            vm = [
+                (u, aa)
+                for (u, aa), rec in self._entities.items()
+                if rec.kind == "vertex" and aa in R
+            ]
         else:
             vm = [(u, aa) for (u, aa), rec in self._entities.items() if rec.kind == "vertex"]
         vm.sort(key=lambda x: (x[0], x[1]))

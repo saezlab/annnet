@@ -48,7 +48,9 @@ def _ensure_boundary_vertices(G, slice: str) -> None:
         add_vertex(BOUNDARY_SINK, slice=slice)
         return
 
-    raise AttributeError("graph must provide add_vertices(...), add_vertices_bulk(...), or add_vertex(...)")
+    raise AttributeError(
+        "graph must provide add_vertices(...), add_vertices_bulk(...), or add_vertex(...)"
+    )
 
 
 # ── SBML reader ───────────────────────────────────────────────────────────────
@@ -191,7 +193,8 @@ def _register_species(G, model, default_slice: str) -> dict[str, str]:
             except TypeError:
                 # Test doubles may only accept bare ids.
                 fallback_ids = [
-                    item[0] if isinstance(item, tuple) and len(item) == 2 else item for item in items
+                    item[0] if isinstance(item, tuple) and len(item) == 2 else item
+                    for item in items
                 ]
                 add_vertices_bulk(fallback_ids, slice=target_slice)
             continue
@@ -203,7 +206,9 @@ def _register_species(G, model, default_slice: str) -> dict[str, str]:
                 else:
                     add_vertex(item, slice=target_slice)
             continue
-        raise AttributeError("graph must provide add_vertices(...), add_vertices_bulk(...), or add_vertex(...)")
+        raise AttributeError(
+            "graph must provide add_vertices(...), add_vertices_bulk(...), or add_vertex(...)"
+        )
 
     return sid_to_compartment
 
@@ -408,7 +413,9 @@ def _graph_from_sbml_model(
             elif set_edge_attrs is not None:
                 set_edge_attrs(rid, stoich=coeffs)
             else:
-                raise AttributeError("graph must provide attrs.set_edge_attrs(...) or set_edge_attrs(...)")
+                raise AttributeError(
+                    "graph must provide attrs.set_edge_attrs(...) or set_edge_attrs(...)"
+                )
 
     # ── edge attributes ───────────────────────────────────────────────────────
     if edge_attrs_map:
