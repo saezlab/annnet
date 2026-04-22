@@ -6,3 +6,8 @@ Attribute table helpers from `annnet.core._Annotation`.
     options:
       filters: public
       show_root_heading: true
+
+::: annnet.core._Annotation.AttributesAccessor
+    options:
+      filters: public
+      show_root_heading: true

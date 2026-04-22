@@ -11,3 +11,8 @@ View helpers from `annnet.core._Views`.
     options:
       filters: public
       show_root_heading: true
+
+::: annnet.core._Views.ViewsAccessor
+    options:
+      filters: public
+      show_root_heading: true

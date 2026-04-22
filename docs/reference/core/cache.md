@@ -1,13 +1,8 @@
-# Cache and Operations
+# Cache
 
-Cache and execution helpers from `annnet.core._Cache`.
+Cache helpers from `annnet.core._Matrix`.
 
-::: annnet.core._Cache.CacheManager
-    options:
-      filters: public
-      show_root_heading: true
-
-::: annnet.core._Cache.Operations
+::: annnet.core._Matrix.CacheManager
     options:
       filters: public
       show_root_heading: true

@@ -11,3 +11,8 @@ Change tracking helpers from `annnet.core._History`.
     options:
       filters: public
       show_root_heading: true
+
+::: annnet.core._History.HistoryAccessor
+    options:
+      filters: public
+      show_root_heading: true
