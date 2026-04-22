@@ -88,8 +88,8 @@ cannot represent the original graph directly.
 ```python
 import annnet as an
 
-nxG, manifest = an.to_nx(G, directed=True, hyperedge_mode="skip")
-G2 = an.from_nx(nxG, manifest)
+nxG, manifest = an.adapters.to_nx(G, directed=True, hyperedge_mode="skip")
+G2 = an.adapters.from_nx(nxG, manifest)
 ```
 
 A manifest is especially useful when hyperedges, slices, or multiedges are

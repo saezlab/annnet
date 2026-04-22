@@ -160,6 +160,6 @@ hypergraph structure, and layers.
   <div class="annnet-actions">
     <a class="md-button md-button--primary" href="installation/">Installation</a>
     <a class="md-button" href="quickstart/">Quickstart</a>
-    <a class="md-button" href="tutorials/">Tutorial</a>
+    <a class="md-button" href="tutorials/">Tutorials</a>
   </div>
 </div>

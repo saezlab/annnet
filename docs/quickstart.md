@@ -19,11 +19,11 @@ for v in ["A", "B", "C", "D"]:
     G.add_vertex(v, label=v, kind="gene")
 
 # Binary edges (directed + undirected)
-G.add_edge("A", "B", weight=2.0, edge_directed=True, relation="activates")
-G.add_edge("B", "C", weight=1.0, edge_directed=False, relation="binds")
+G.add_edge("A", "B", weight=2.0, directed=True, relation="activates")
+G.add_edge("B", "C", weight=1.0, directed=False, relation="binds")
 
 # Hyperedge (directed head→tail)
-G.add_hyperedge(head=["A", "B"], tail=["C", "D"], weight=1.0)
+G.add_edge(["A", "B"], ["C", "D"], weight=1.0, directed=True)
 ```
 
 ## Run an algorithm (NetworkX)
@@ -54,11 +54,11 @@ See also [Interoperability](explanations/interoperability.md) and the [NetworkX 
 import annnet as an
 
 # File formats
-an.to_graphml(G, "graph.gml", directed=True, hyperedge_mode="reify")
+an.io.to_graphml(G, "graph.gml", directed=True, hyperedge_mode="reify")
 
 # Lossless storage
-an.annnet.write(G, "my_graph.annnet", overwrite=True)
-R = an.annnet.read("my_graph.annnet")
+an.io.write(G, "my_graph.annnet", overwrite=True)
+R = an.io.read("my_graph.annnet")
 ```
 
 See the [GraphML and GEXF reference](reference/io/graphml-gexf.md) and the [Native .annnet format reference](reference/io/annnet-format.md).

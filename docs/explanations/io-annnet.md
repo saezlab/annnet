@@ -56,7 +56,7 @@ as:
 - JSON and NDJSON
 - CSV and Excel
 - DataFrame-based import and export
-- Parquet GraphDir
+- Parquet graph directories
 
 These formats are useful for interoperability, but they do not all preserve the
 full annnet model equally well.

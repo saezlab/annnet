@@ -2,6 +2,9 @@
 
 View helpers from `annnet.core._Views`.
 
+Use `G.view(...)` for graph view workflows. Direct imports from underscore
+modules follow the [internal API policy](../api-boundary.md).
+
 ::: annnet.core._Views.GraphView
     options:
       filters: public

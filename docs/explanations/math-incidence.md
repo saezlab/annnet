@@ -55,7 +55,7 @@ themselves appear in the entity row space.
 
 ```python
 G.add_edge(edge_id="e_meta", as_entity=True, description="signal")
-G.add_edge("e_meta", "C", edge_type="vertex_edge", edge_directed=True)
+G.add_edge("e_meta", "C", as_entity=True, directed=True)
 ```
 
 An edge-entity may exist either as a structural edge that is also connectable,

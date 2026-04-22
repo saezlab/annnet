@@ -80,7 +80,9 @@ Important fields:
   Structural edge type, currently distinguishing binary, hyper, and
   vertex-edge cases.
 - `src` and `tgt`
-  The structural endpoints or member sets.
+  The current internal field names for structural source and target endpoint
+  sets. Public-facing docs should use "source" and "target" terminology even
+  while these record fields remain abbreviated internally.
 - `col_idx`
   The incidence column index, or `-1` for an edge-entity placeholder with no
   structural column yet.
@@ -272,9 +274,9 @@ It enriches it.
 The supra-node model still ultimately resolves back to the canonical entity
 rows and edge columns.
 
-## Compatibility still exists, but only at the boundary
+## Compatibility views
 
-The codebase still exposes dict-like compatibility views such as:
+AnnNet exposes dict-like compatibility views such as:
 
 - `entity_to_idx`
 - `idx_to_entity`
@@ -286,22 +288,5 @@ The codebase still exposes dict-like compatibility views such as:
 - `hyperedge_definitions`
 - `edge_kind`
 
-These are implemented as mutable mapping views in `_helpers.py`.
-
-They are not the canonical internal model anymore.
-
-Their purpose is to preserve public compatibility for external code and older
-entry points. Internal code is expected to read `_entities`, `_edges`,
-`_row_to_entity`, and `_col_to_edge` directly.
-
-## The practical reading rule
-
-When you read core code, ask this in order:
-
-1. is this the canonical structural state?
-2. is this an overlay?
-3. is this a derived index or cache?
-4. is this a public compatibility shim?
-
-That question is usually enough to explain why a given piece of state exists and
-how seriously it should be treated.
+These views are useful for compatibility and inspection, but they are separate
+from the canonical structural stores described above.

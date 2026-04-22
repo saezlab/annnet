@@ -9,8 +9,7 @@ model:
 3. derived materializations
 4. compatibility and interoperability boundaries
 
-That split is the right mental model for reading the codebase. Once you have
-it, the rest of `annnet.core` becomes much easier to navigate.
+That split is the main mental model behind the package.
 
 ## The center: one object, one structural truth
 
@@ -127,10 +126,8 @@ model.
 Internally, the package is organized around the structured SSOT described in
 [Internal representation](internal-representation.md).
 
-That distinction is important when reading the code:
-
-- public compatibility exists for stability
-- internal code is expected to read the canonical stores directly
+That distinction matters because compatibility views do not replace the
+canonical model.
 
 ## Outside `annnet.core`
 
@@ -148,20 +145,7 @@ The rest of the package has a simpler split:
 Those packages sit around the core object. They do not redefine the graph
 model.
 
-Adapters and IO modules should use the package's centralized dataframe helpers
-when reading annotation tables or creating new tables. They should not import a
-specific dataframe library just to normalize rows or create empty annotation
-tables. This keeps format adapters, backend adapters, and graph annotations
-aligned with the configured annotation backend.
-
-## Reading order
-
-If you want the package to make technical sense as a system, this is the right
-order:
-
-1. [Internal representation](internal-representation.md)
-2. [Mutation and derived state](mutation-and-derived-state.md)
-3. [Incidence representation](math-incidence.md)
-4. [Multilayer and multi-aspect graphs](math-multilayer.md)
-5. [Slices and views](managers-and-views.md)
-6. [Storage and IO](io-annnet.md)
+Adapters and IO modules use the package's centralized dataframe helpers when
+reading annotation tables or creating new tables. This keeps format adapters,
+backend adapters, and graph annotations aligned with the configured annotation
+backend.

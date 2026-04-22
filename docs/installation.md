@@ -42,23 +42,13 @@ pip install "annnet[pandas]"
 pip install "annnet[pyarrow]"
 ```
 
-- `polars`: recommended default dataframe backend for annnet tables and annotations
+- `polars`: recommended dataframe backend for annnet tables and annotations
 - `pandas`: pandas-native dataframe support
 - `pyarrow`: Arrow table support and parquet-related tabular workflows
 
-When AnnNet needs to create new annotation tables and no backend is specified,
-`annotations_backend="auto"` selects the first installed backend in this order:
-Polars, pandas, then PyArrow. DataFrame input remains Narwhals-compatible, so
-tables from different supported eager backends can be imported together.
-
-You can inspect and configure the default dataframe backend from Python:
-
-```python
-import annnet as an
-
-an.available_dataframe_backends()
-an.set_default_dataframe_backend("pandas")
-```
+If more than one dataframe backend is installed, AnnNet has a built-in
+preference order. You can still choose a backend globally or for graph
+construction when needed; see the [support helper reference](reference/support.md).
 
 ### Graph backends
 
@@ -105,16 +95,9 @@ pip install "annnet[plot]"
 - `plot`: installs all pip-installable plotting backends together
 
 When `plot(..., backend="auto")` is used, AnnNet selects the first installed
-backend in this order: Graphviz, pydot, then matplotlib.
-
-You can inspect and configure the default plotting backend from Python:
-
-```python
-import annnet as an
-
-an.available_plot_backends()
-an.set_default_plot_backend("matplotlib")
-```
+backend in its plotting preference order. You can still choose a plotting
+backend globally or for individual plotting calls; see the
+[support helper reference](reference/support.md).
 
 ### I/O extras
 
@@ -147,11 +130,9 @@ pip install "annnet[metabo]"
 
 ```bash
 pip install "annnet[all]"
-pip install "annnet[dev]"
 ```
 
 - `all`: broad pip-installable runtime bundle, excluding non-PyPI dependencies and PyG
-- `dev`: packaging and contributor tooling installable via pip
 Use `all` if you want a batteries-included pip install and do not mind a larger environment.
 
 ## Install from GitHub with uv
@@ -209,20 +190,20 @@ uv run pytest -vv
 Use Pixi when you want the repository's fuller development environment, especially for dependencies that are not reliably available from PyPI such as `graph-tool`.
 
 ```bash
-pixi install
-pixi run test-gt
+pixi install -e gt
+pixi run -e gt test-gt
 ```
 
 The Pixi environment:
 
-- installs `annnet` editable with the published `all` and `dev` extras
+- installs `annnet` editable with the repository test dependency group
 - provides `graph-tool` from `conda-forge`
 - is the right path for running tests that depend on non-pip packages
 
 If you want the full test suite inside the Pixi environment, run:
 
 ```bash
-pixi run test-all
+pixi run -e gt test-all
 ```
 
 ## Build and serve the docs with uv
@@ -231,13 +212,13 @@ This repository defines a dedicated docs dependency group for MkDocs:
 
 ```bash
 uv sync --group docs
-uv run mkdocs serve
+uv run python -m mkdocs serve
 ```
 
 For a one-off strict build:
 
 ```bash
-uv run mkdocs build --strict
+uv run python -m mkdocs build --strict
 ```
 
 The generated site is written to `site/`.

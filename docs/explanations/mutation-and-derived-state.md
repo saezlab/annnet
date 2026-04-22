@@ -192,15 +192,3 @@ This matters for interpretation.
 The history system logs what the API call did, not a reconstructed semantic
 "meaning" of the mutation after the fact. That keeps the log simple, explicit,
 and serializable.
-
-## The operational reading rule
-
-When reading a mutating method, the right question is not only "what data does
-it touch?" but also:
-
-- is it updating canonical state?
-- is it synchronizing a derived index?
-- is it invalidating a cache?
-- is it only changing an overlay?
-
-That is the real operational grammar of AnnNet.
