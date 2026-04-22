@@ -92,7 +92,7 @@ def _is_directed_eid(graph, eid):
 
     # Check attribute
     try:
-        val = graph.get_attr_edge(eid, "directed")
+        val = graph.attrs.get_attr_edge(eid, "directed")
         if val is not None:
             return bool(val)
     except Exception:
@@ -341,7 +341,7 @@ def to_parquet(graph: AnnNet, path):
     # slices
     L = []
     try:
-        for lid in graph.list_slices(include_default=True):
+        for lid in graph.slices.list_slices(include_default=True):
             L.append({"slice_id": lid})
     except Exception:
         pass
@@ -354,14 +354,14 @@ def to_parquet(graph: AnnNet, path):
     # edge_slices
     EL = []
     try:
-        for lid in graph.list_slices(include_default=True):
-            for eid in graph.get_slice_edges(lid):
+        for lid in graph.slices.list_slices(include_default=True):
+            for eid in graph.slices.get_slice_edges(lid):
                 rec = {"slice_id": lid, "edge_id": eid}
                 try:
-                    w = graph.get_edge_slice_attr(lid, eid, "weight", default=None)
+                    w = graph.attrs.get_edge_slice_attr(lid, eid, "weight", default=None)
                 except Exception:
                     try:
-                        w = graph.get_edge_slice_attr(lid, eid, "weight")
+                        w = graph.attrs.get_edge_slice_attr(lid, eid, "weight")
                     except Exception:
                         w = None
                 if w is not None:
@@ -383,13 +383,13 @@ def to_parquet(graph: AnnNet, path):
         "provenance": {"package": "annnet"},
         "multilayer": {
             "aspects": list(getattr(graph, "aspects", [])),
-            "aspect_attrs": dict(getattr(graph, "_aspect_attrs", {})),
+            "aspect_attrs": dict(graph.layers._aspect_attrs),
             "elem_layers": dict(getattr(graph, "elem_layers", {})),
             "VM": _serialize_VM(getattr(graph, "_VM", set())),
             "edge_kind": dict(getattr(graph, "edge_kind", {})),
             "edge_layers": _serialize_edge_layers(getattr(graph, "edge_layers", {})),
-            "node_layer_attrs": _serialize_node_layer_attrs(getattr(graph, "_state_attrs", {})),
-            "layer_tuple_attrs": _serialize_layer_tuple_attrs(getattr(graph, "_layer_attrs", {})),
+            "node_layer_attrs": _serialize_node_layer_attrs(graph.layers._state_attrs),
+            "layer_tuple_attrs": _serialize_layer_tuple_attrs(graph.layers._layer_attrs),
             "layer_attributes": _safe_df_to_rows(getattr(graph, "layer_attributes", None)),
         },
     }
@@ -420,7 +420,7 @@ def from_parquet(path) -> AnnNet:
     for rec in _iter_rows(V):
         v_rows.append(dict(rec))
     if v_rows:
-        H.add_vertices_bulk(v_rows)
+        H.add_vertices(v_rows)
 
     # -------------------------
     # Edges (bulk, columnar)
@@ -466,7 +466,7 @@ def from_parquet(path) -> AnnNet:
             for u, v, eid, d in zip(src, dst, eids, directed)
             if u is not None and v is not None
         )
-        H.add_edges_bulk(edge_rows)
+        H.add_edges(edge_rows)
 
         # Apply weights in batch
         for eid, w in zip(eids, weights):
@@ -492,7 +492,7 @@ def from_parquet(path) -> AnnNet:
             attrs = {k: v for k, v in rec.items() if k not in drop_cols}
             attrs = _strip_nulls(attrs)
             if attrs:
-                H.set_edge_attrs(eid, **attrs)
+                H.attrs.set_edge_attrs(eid, **attrs)
 
     else:
         # Fallback path (still bulk, but from Python rows)
@@ -517,13 +517,13 @@ def from_parquet(path) -> AnnNet:
                 extra_attrs[eid] = attrs
 
         if edge_rows:
-            H.add_edges_bulk(edge_rows)
+            H.add_edges(edge_rows)
             for eid, w in weights.items():
                 rec = H._edges.get(eid)
                 if rec is not None:
                     rec.weight = w
             if extra_attrs:
-                H.set_edge_attrs_bulk(extra_attrs)
+                H.attrs.set_edge_attrs_bulk(extra_attrs)
 
     # ---- Hyperedges ----
     if is_polars_like:
@@ -567,7 +567,7 @@ def from_parquet(path) -> AnnNet:
                     hyper_rows.append({"members": list(mm), "edge_id": eid, "edge_directed": False})
 
         if hyper_rows:
-            H.add_hyperedges_bulk(hyper_rows)
+            H.add_edges(hyper_rows)
 
         for eid, w in zip(eids, weights):
             rec = H._edges.get(eid)
@@ -594,7 +594,7 @@ def from_parquet(path) -> AnnNet:
             if attrs:
                 extra[eid] = attrs
         if extra:
-            H.set_edge_attrs_bulk(extra)
+            H.attrs.set_edge_attrs_bulk(extra)
 
     else:
         hyper_rows = []
@@ -626,13 +626,13 @@ def from_parquet(path) -> AnnNet:
                 extra_attrs[eid] = attrs
 
         if hyper_rows:
-            H.add_hyperedges_bulk(hyper_rows)
+            H.add_edges(hyper_rows)
             for eid, w in weights.items():
                 rec = H._edges.get(eid)
                 if rec is not None:
                     rec.weight = w
             if extra_attrs:
-                H.set_edge_attrs_bulk(extra_attrs)
+                H.attrs.set_edge_attrs_bulk(extra_attrs)
 
     # -------------------------
     # Slices
@@ -641,8 +641,8 @@ def from_parquet(path) -> AnnNet:
         for rec in _iter_rows(L):
             lid = rec.get("slice_id")
             try:
-                if lid not in set(H.list_slices(include_default=True)):
-                    H.add_slice(lid)
+                if lid not in set(H.slices.list_slices(include_default=True)):
+                    H.slices.add_slice(lid)
             except Exception:
                 pass
 
@@ -663,18 +663,18 @@ def from_parquet(path) -> AnnNet:
 
         for lid, eids in by_slice.items():
             try:
-                H.add_edges_to_slice_bulk(lid, eids)
+                H.slices.add_edges(lid, eids)
             except Exception:
                 for eid in eids:
                     try:
-                        H.add_edge_to_slice(lid, eid)
+                        H.slices.add_edge_to_slice(lid, eid)
                     except Exception:
                         pass
 
         for lid, mp in slice_weights.items():
             for eid, w in mp.items():
                 try:
-                    H.set_edge_slice_attrs(lid, eid, weight=w)
+                    H.attrs.set_edge_slice_attrs(lid, eid, weight=w)
                 except Exception:
                     try:
                         H.set_edge_slice_attr(lid, eid, "weight", w)
@@ -694,17 +694,18 @@ def from_parquet(path) -> AnnNet:
             elem_layers = mm.get("elem_layers", {})
 
             if aspects:
-                H.aspects = list(aspects)
-                H.elem_layers = dict(elem_layers or {})
+                H.layers.aspects = list(aspects)
+                H.layers.elem_layers = dict(elem_layers or {})
+                H.layers._rebuild_all_layers_cache()
                 H._rebuild_all_layers_cache()
 
             aspect_attrs = mm.get("aspect_attrs", {})
             if aspect_attrs:
-                H._aspect_attrs.update(aspect_attrs)
+                H.layers._aspect_attrs.update(aspect_attrs)
 
             VM_data = mm.get("VM", [])
             if VM_data:
-                H._VM = _deserialize_VM(VM_data)
+                H._restore_supra_nodes(_deserialize_VM(VM_data))
 
             ek = mm.get("edge_kind", {})
             el_ser = mm.get("edge_layers", {})
@@ -718,15 +719,17 @@ def from_parquet(path) -> AnnNet:
                     else:
                         rec.ml_kind = kind
             if el_ser:
-                H.edge_layers.update(_deserialize_edge_layers(el_ser))
+                for eid, layers in _deserialize_edge_layers(el_ser).items():
+                    if eid in H._edges:
+                        H._edges[eid].ml_layers = layers
 
             nl_attrs_ser = mm.get("node_layer_attrs", [])
             if nl_attrs_ser:
-                H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+                H.layers._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
 
             layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
             if layer_tuple_attrs_ser:
-                H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
+                H.layers._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
 
             layer_attr_rows = mm.get("layer_attributes", [])
             if layer_attr_rows:

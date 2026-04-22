@@ -144,7 +144,7 @@ def to_sif(
             "slices": {},
             "multilayer": {
                 "aspects": list(getattr(graph, "aspects", [])),
-                "aspect_attrs": dict(getattr(graph, "_aspect_attrs", {})),
+                "aspect_attrs": dict(graph.layers._aspect_attrs),
                 "elem_layers": dict(getattr(graph, "elem_layers", {})),
                 "VM": _serialize_VM(getattr(graph, "_VM", set())),
                 "edge_kind": {
@@ -153,10 +153,8 @@ def to_sif(
                     if rec.etype == "hyper" or rec.ml_kind is not None
                 },
                 "edge_layers": _serialize_edge_layers(getattr(graph, "edge_layers", {})),
-                "node_layer_attrs": _serialize_node_layer_attrs(getattr(graph, "_state_attrs", {})),
-                "layer_tuple_attrs": _serialize_layer_tuple_attrs(
-                    getattr(graph, "_layer_attrs", {})
-                ),
+                "node_layer_attrs": _serialize_node_layer_attrs(graph.layers._state_attrs),
+                "layer_tuple_attrs": _serialize_layer_tuple_attrs(graph.layers._layer_attrs),
                 "layer_attributes": _df_to_rows(getattr(graph, "layer_attributes", pl.DataFrame())),
             },
         }
@@ -288,10 +286,10 @@ def to_sif(
             }
 
         try:
-            slice_ids = list(graph.list_slices(include_default=True))
+            slice_ids = list(graph.slices.list_slices(include_default=True))
             for lid in slice_ids:
                 try:
-                    edge_ids = list(graph.get_slice_edges(lid))
+                    edge_ids = list(graph.slices.get_slice_edges(lid))
                     if not edge_ids:
                         continue
 
@@ -299,7 +297,7 @@ def to_sif(
 
                     for eid in edge_ids:
                         try:
-                            w = graph.get_edge_slice_attr(lid, eid, "weight", default=None)
+                            w = graph.attrs.get_edge_slice_attr(lid, eid, "weight", default=None)
                             if w is not None:
                                 slice_info["weights"][eid] = float(w)
                         except Exception:
@@ -511,7 +509,7 @@ def from_sif(
     # ===== BULK ADD VERTICES =====
     if vertex_data:
         vertices_bulk = [(vid, attrs) for vid, attrs in vertex_data.items()]
-        H.add_vertices_bulk(vertices_bulk)
+        H.add_vertices(vertices_bulk)
 
     # ===== BULK ADD EDGES WITH FAST HASHING + DELAYED EXPANSION =====
     if manifest and "binary_edges" in manifest:
@@ -566,7 +564,7 @@ def from_sif(
         )
 
     if edges_raw:  # Check original list, not generator
-        H.add_edges_bulk(edges_bulk, default_weight=1.0, default_edge_directed=directed)
+        H.add_edges(edges_bulk, default_weight=1.0, default_edge_directed=directed)
 
     # ===== HYPEREDGES =====
     if manifest and "hyperedges" in manifest:
@@ -589,26 +587,26 @@ def from_sif(
             hyperedges_bulk.append(he_dict)
 
         if hyperedges_bulk:
-            H.add_hyperedges_bulk(hyperedges_bulk, default_weight=1.0, default_edge_directed=False)
+            H.add_edges(hyperedges_bulk, default_weight=1.0, default_edge_directed=False)
 
     # ===== SLICES WITH NO EXCEPTIONS + CACHED SET =====
     if manifest and "slices" in manifest:
         # Build set once
-        existing_slices = set(H.list_slices(include_default=True))
+        existing_slices = set(H.slices.list_slices(include_default=True))
 
         for lid, slice_info in manifest["slices"].items():
             # Guard instead of exception
             if lid not in existing_slices:
-                H.add_slice(lid)
+                H.slices.add_slice(lid)
                 existing_slices.add(lid)  # Keep cached set in sync
 
             edge_ids = slice_info.get("edges", [])
             if edge_ids:
-                H.add_edges_to_slice_bulk(lid, edge_ids)
+                H.slices.add_edges(lid, edge_ids)
 
             weights = slice_info.get("weights", {})
             if weights:
-                H.set_edge_slice_attrs_bulk(
+                H.attrs.set_edge_slice_attrs_bulk(
                     lid, [{"edge_id": eid, "weight": w} for eid, w in weights.items()]
                 )
 
@@ -619,15 +617,16 @@ def from_sif(
             aspects = mm.get("aspects", [])
             elem_layers = mm.get("elem_layers", {})
             if aspects:
-                H.aspects = list(aspects)
-                H.elem_layers = dict(elem_layers or {})
+                H.layers.aspects = list(aspects)
+                H.layers.elem_layers = dict(elem_layers or {})
+                H.layers._rebuild_all_layers_cache()
                 H._rebuild_all_layers_cache()
             aspect_attrs = mm.get("aspect_attrs", {})
             if aspect_attrs:
-                H._aspect_attrs.update(aspect_attrs)
+                H.layers._aspect_attrs.update(aspect_attrs)
             VM_data = mm.get("VM", [])
             if VM_data:
-                H._VM = _deserialize_VM(VM_data)
+                H._restore_supra_nodes(_deserialize_VM(VM_data))
             ek = mm.get("edge_kind", {})
             el_ser = mm.get("edge_layers", {})
             if ek:
@@ -640,13 +639,15 @@ def from_sif(
                     else:
                         rec.ml_kind = kind
             if el_ser:
-                H.edge_layers.update(_deserialize_edge_layers(el_ser))
+                for eid, layers in _deserialize_edge_layers(el_ser).items():
+                    if eid in H._edges:
+                        H._edges[eid].ml_layers = layers
             nl_attrs_ser = mm.get("node_layer_attrs", [])
             if nl_attrs_ser:
-                H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+                H.layers._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
             layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
             if layer_tuple_attrs_ser:
-                H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
+                H.layers._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
             layer_attr_rows = mm.get("layer_attributes", [])
             if layer_attr_rows:
                 H.layer_attributes = _rows_to_df(layer_attr_rows)

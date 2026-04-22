@@ -130,11 +130,11 @@ def _collect_slices_and_weights(graph) -> tuple[dict, dict]:
             for eid in eids:
                 w = None
                 try:
-                    w = graph.get_edge_slice_attr(lid, eid, "weight", default=None)
+                    w = graph.attrs.get_edge_slice_attr(lid, eid, "weight", default=None)
                 except Exception:
                     try:
                         # some implementations don't support default=
-                        w = graph.get_edge_slice_attr(lid, eid, "weight")
+                        w = graph.attrs.get_edge_slice_attr(lid, eid, "weight")
                     except Exception:
                         w = None
                 if w is not None:
@@ -487,17 +487,17 @@ def to_igraph(
     # discover slices
     lids = set()
     try:
-        lids.update(list(graph.list_slices(include_default=True)))
+        lids.update(list(graph.slices.list_slices(include_default=True)))
     except Exception:
         try:
-            lids.update(list(graph.list_slices()))
+            lids.update(list(graph.slices.list_slices()))
         except Exception:
             pass
 
     slices_section = {lid: [] for lid in lids}
     for lid in list(lids):
         try:
-            eids = list(graph.get_slice_edges(lid))
+            eids = list(graph.slices.get_slice_edges(lid))
         except Exception:
             eids = []
         if eids:
@@ -560,15 +560,16 @@ def to_igraph(
 
     # per-slice weights
     slice_weights = {}
-    if hasattr(graph, "get_edge_slice_attr"):
+    attrs_ns = getattr(graph, "attrs", None)
+    if attrs_ns is not None:
         for lid, eids in slices_section.items():
             for eid in eids:
                 w = None
                 try:
-                    w = graph.get_edge_slice_attr(lid, eid, "weight", default=None)
+                    w = attrs_ns.get_edge_slice_attr(lid, eid, "weight", default=None)
                 except Exception:
                     try:
-                        w = graph.get_edge_slice_attr(lid, eid, "weight")
+                        w = attrs_ns.get_edge_slice_attr(lid, eid, "weight")
                     except Exception:
                         w = None
                 if w is not None:
@@ -677,8 +678,8 @@ def to_igraph(
                 igG.es[start:][k] = [d.get(k) for d in payloads]
 
     # ----------------- multilayer / Kivela metadata -----------------
-    aspects = list(getattr(graph, "aspects", []))
-    elem_layers = dict(getattr(graph, "elem_layers", {}))
+    aspects = list(graph.layers.aspects)
+    elem_layers = dict(graph.layers.elem_layers)
     VM_serialized = _serialize_VM(getattr(graph, "_VM", set()))
     edge_kind = {
         eid: ("hyper" if rec.etype == "hyper" else rec.ml_kind)
@@ -686,11 +687,11 @@ def to_igraph(
         if rec.col_idx >= 0 and (rec.etype == "hyper" or rec.ml_kind is not None)
     }
     edge_layers_ser = _serialize_edge_layers(getattr(graph, "edge_layers", {}))
-    node_layer_attrs_ser = _serialize_node_layer_attrs(getattr(graph, "_state_attrs", {}))
+    node_layer_attrs_ser = _serialize_node_layer_attrs(graph.layers._state_attrs)
 
     # aspect and layer-tuple level attributes (dicts)
-    aspect_attrs = dict(getattr(graph, "_aspect_attrs", {}))
-    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(getattr(graph, "_layer_attrs", {}))
+    aspect_attrs = dict(graph.layers._aspect_attrs)
+    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(graph.layers._layer_attrs)
     layer_df = getattr(graph, "layer_attributes", None)
     if layer_df is None and pl is not None:
         layer_df = pl.DataFrame()
@@ -934,7 +935,7 @@ def from_igraph(
 
     # Add vertices now (no he:: nodes will be included since they aren't in the manifest)
     if vertex_ids:
-        H.add_vertices_bulk([{"vertex_id": v} for v in vertex_ids])
+        H.add_vertices([{"vertex_id": v} for v in vertex_ids])
 
     # -------- edges/hyperedges (from manifest = SSOT) --------
     edge_directed_cache = manifest.get("edge_directed", {}) or {}
@@ -978,9 +979,9 @@ def from_igraph(
                     )
 
     if regular_edges_bulk:
-        H.add_edges_bulk(regular_edges_bulk, default_edge_directed=True)
+        H.add_edges(regular_edges_bulk, default_edge_directed=True)
     if hyperedges_bulk:
-        H.add_hyperedges_bulk(hyperedges_bulk)
+        H.add_edges(hyperedges_bulk)
 
     # -------- baseline weights --------
     for eid, w in (manifest.get("weights", {}) or {}).items():
@@ -992,27 +993,27 @@ def from_igraph(
             pass
 
     # -------- slices + per-slice overrides --------
-    existing_slices = set(H.list_slices(include_default=True))
+    existing_slices = set(H.slices.list_slices(include_default=True))
     for lid, eids in (manifest.get("slices", {}) or {}).items():
         if lid not in existing_slices:
             try:
-                H.add_slice(lid)
+                H.slices.add_slice(lid)
                 existing_slices.add(lid)
             except Exception:
                 pass
         if eids:
-            H.add_edges_to_slice_bulk(lid, eids)
+            H.slices.add_edges(lid, eids)
 
     for lid, per_edge in (manifest.get("slice_weights", {}) or {}).items():
         if lid not in existing_slices:
             try:
-                H.add_slice(lid)
+                H.slices.add_slice(lid)
                 existing_slices.add(lid)
             except Exception:
                 pass
         for eid, w in (per_edge or {}).items():
             try:
-                H.set_edge_slice_attrs(lid, eid, weight=float(w))
+                H.attrs.set_edge_slice_attrs(lid, eid, weight=float(w))
             except Exception:
                 try:
                     H.set_edge_slice_attr(lid, eid, "weight", float(w))
@@ -1025,17 +1026,18 @@ def from_igraph(
     elem_layers = mm.get("elem_layers", {})
 
     if aspects:
-        H.aspects = list(aspects)
-        H.elem_layers = dict(elem_layers or {})
+        H.layers.aspects = list(aspects)
+        H.layers.elem_layers = dict(elem_layers or {})
+        H.layers._rebuild_all_layers_cache()
         H._rebuild_all_layers_cache()
 
     aspect_attrs = mm.get("aspect_attrs", {})
     if aspect_attrs:
-        H._aspect_attrs.update(aspect_attrs)
+        H.layers._aspect_attrs.update(aspect_attrs)
 
     VM_data = mm.get("VM", [])
     if VM_data:
-        H._VM = _deserialize_VM(VM_data)
+        H._restore_supra_nodes(_deserialize_VM(VM_data))
 
     # edge_kind / edge_layers
     ek = mm.get("edge_kind", {})
@@ -1050,15 +1052,17 @@ def from_igraph(
             else:
                 rec.ml_kind = kind
     if el_ser:
-        H.edge_layers.update(_deserialize_edge_layers(el_ser))
+        for eid, layers in _deserialize_edge_layers(el_ser).items():
+            if eid in H._edges:
+                H._edges[eid].ml_layers = layers
 
     nl_attrs_ser = mm.get("node_layer_attrs", [])
     if nl_attrs_ser:
-        H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+        H.layers._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
 
     layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
     if layer_tuple_attrs_ser:
-        H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
+        H.layers._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
 
     layer_attr_rows = mm.get("layer_attributes", [])
     if layer_attr_rows:
@@ -1070,7 +1074,7 @@ def from_igraph(
         for vid, attrs in vertex_attrs_cache.items():
             if attrs:
                 try:
-                    H.set_vertex_attrs(vid, **attrs)
+                    H.attrs.set_vertex_attrs(vid, **attrs)
                 except Exception:
                     pass
 
@@ -1079,7 +1083,7 @@ def from_igraph(
         for eid, attrs in edge_attrs_cache.items():
             if attrs:
                 try:
-                    H.set_edge_attrs(eid, **attrs)
+                    H.attrs.set_edge_attrs(eid, **attrs)
                 except Exception:
                     pass
 
@@ -1097,17 +1101,17 @@ def from_igraph(
             # ensure vertices
             for x in set(head_map) | set(tail_map):
                 try:
-                    H.add_vertex(x)
+                    H.add_vertices(x)
                 except Exception:
                     pass
 
             if directed:
                 try:
-                    H.add_edge(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
+                    H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
                 except Exception:
                     pass
                 try:
-                    H.set_edge_attrs(
+                    H.attrs.set_edge_attrs(
                         eid,
                         __source_attr={u: {"__value": c} for u, c in head_map.items()},
                         __target_attr={v: {"__value": c} for v, c in tail_map.items()},
@@ -1117,11 +1121,11 @@ def from_igraph(
             else:
                 members = list(set(head_map) | set(tail_map))
                 try:
-                    H.add_edge(src=members, edge_id=eid, directed=False)
+                    H.add_edges(src=members, edge_id=eid, directed=False)
                 except Exception:
                     pass
                 try:
-                    H.set_edge_attrs(
+                    H.attrs.set_edge_attrs(
                         eid,
                         __source_attr={u: {"__value": head_map.get(u, 1.0)} for u in members},
                         __target_attr={v: {"__value": tail_map.get(v, 1.0)} for v in members},
@@ -1132,7 +1136,7 @@ def from_igraph(
             # copy HE-node attrs minus markers
             if he_attrs:
                 try:
-                    H.set_edge_attrs(eid, **he_attrs)
+                    H.attrs.set_edge_attrs(eid, **he_attrs)
                 except Exception:
                     pass
 
@@ -1198,13 +1202,13 @@ def from_ig_only(
     names = igG.vs["name"] if "name" in igG.vs.attributes() else list(range(igG.vcount()))
     for i, vid in enumerate(names):
         try:
-            H.add_vertex(vid)
+            H.add_vertices(vid)
         except Exception:
             pass
         vattrs = {k: igG.vs[i][k] for k in igG.vs.attributes()}
         if vattrs:
             try:
-                H.set_vertex_attrs(vid, **vattrs)
+                H.attrs.set_vertex_attrs(vid, **vattrs)
             except Exception:
                 pass
 
@@ -1221,16 +1225,16 @@ def from_ig_only(
         for eid, directed, head_map, tail_map, he_attrs, hi in hyperdefs:
             for x in set(head_map) | set(tail_map):
                 try:
-                    H.add_vertex(x)
+                    H.add_vertices(x)
                 except Exception:
                     pass
             if directed:
                 try:
-                    H.add_edge(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
+                    H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
                 except Exception:
                     pass
                 try:
-                    H.set_edge_attrs(
+                    H.attrs.set_edge_attrs(
                         eid,
                         __source_attr={u: {"__value": c} for u, c in head_map.items()},
                         __target_attr={v: {"__value": c} for v, c in tail_map.items()},
@@ -1240,11 +1244,11 @@ def from_ig_only(
             else:
                 members = list(set(head_map) | set(tail_map))
                 try:
-                    H.add_edge(src=members, edge_id=eid, directed=False)
+                    H.add_edges(src=members, edge_id=eid, directed=False)
                 except Exception:
                     pass
                 try:
-                    H.set_edge_attrs(
+                    H.attrs.set_edge_attrs(
                         eid,
                         __source_attr={u: {"__value": head_map.get(u, 1.0)} for u in members},
                         __target_attr={v: {"__value": tail_map.get(v, 1.0)} for v in members},
@@ -1257,7 +1261,7 @@ def from_ig_only(
             }
             if he_node_attrs:
                 try:
-                    H.set_edge_attrs(eid, **he_node_attrs)
+                    H.attrs.set_edge_attrs(eid, **he_node_attrs)
                 except Exception:
                     pass
 
@@ -1280,23 +1284,24 @@ def from_ig_only(
         w = d.get("weight", d.get("__weight", 1.0))
 
         try:
-            H.add_vertex(src)
-            H.add_vertex(dst)
+            H.add_vertices(src)
+            H.add_vertices(dst)
         except Exception:
             pass
         try:
-            H.add_edge(src, dst, edge_id=eid, directed=e_directed)
+            H.add_edges(src, dst, edge_id=eid, directed=e_directed)
         except Exception:
-            H.add_edge(src, dst, edge_id=eid, directed=True)
+            H.add_edges(src, dst, edge_id=eid, directed=True)
 
         try:
-            H.edge_weights[eid] = float(w)
+            if eid in H._edges:
+                H._edges[eid].weight = float(w)
         except Exception:
             pass
 
         if d:
             try:
-                H.set_edge_attrs(eid, **d)
+                H.attrs.set_edge_attrs(eid, **d)
             except Exception:
                 pass
 

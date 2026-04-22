@@ -164,7 +164,7 @@ def to_graphtool(
     layer_attr_rows = _df_to_rows(getattr(G, "layer_attributes", pl.DataFrame()))
 
     # 5) slices internal structure (vertex/edge sets + attributes)
-    slices_data = _serialize_slices(getattr(G, "_slices", {}))
+    slices_data = _serialize_slices(G._slices)
 
     # 6) hyperedges and direction info
     hyperedges = {
@@ -184,8 +184,8 @@ def to_graphtool(
     edge_direction_policy = dict(getattr(G, "edge_direction_policy", {}))
 
     # 7) multilayer / Kivela metadata
-    aspects = list(getattr(G, "aspects", []))
-    elem_layers = dict(getattr(G, "elem_layers", {}))
+    aspects = list(G.layers.aspects)
+    elem_layers = dict(G.layers.elem_layers)
     VM_serialized = _serialize_VM(getattr(G, "_VM", set()))
     edge_kind = {
         eid: ("hyper" if rec.etype == "hyper" else rec.ml_kind)
@@ -193,11 +193,11 @@ def to_graphtool(
         if rec.col_idx >= 0 and (rec.etype == "hyper" or rec.ml_kind is not None)
     }
     edge_layers_ser = _serialize_edge_layers(getattr(G, "edge_layers", {}))
-    node_layer_attrs_ser = _serialize_node_layer_attrs(getattr(G, "_state_attrs", {}))
+    node_layer_attrs_ser = _serialize_node_layer_attrs(G.layers._state_attrs)
 
     # aspect and layer-tuple level attributes (dicts)
-    aspect_attrs = dict(getattr(G, "_aspect_attrs", {}))
-    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(getattr(G, "_layer_attrs", {}))
+    aspect_attrs = dict(G.layers._aspect_attrs)
+    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(G.layers._layer_attrs)
 
     # 8) build manifest
     manifest = {
@@ -302,7 +302,7 @@ def from_graphtool(
             vid = str(vp[v])
         else:
             vid = str(int(v))  # fallback: numeric id
-        G.add_vertex(vid)
+        G.add_vertices(vid)
         v_to_id[v] = vid
 
     # 2) edges
@@ -314,7 +314,7 @@ def from_graphtool(
         v = v_to_id[e.target()]
         eid = str(ep_id[e]) if ep_id is not None else None
         w = float(ep_w[e]) if ep_w is not None else 1.0
-        G.add_edge(u, v, edge_id=eid, weight=w)
+        G.add_edges(u, v, edge_id=eid, weight=w)
 
     # 3) no manifest -> projected graph only
     if manifest is None:
@@ -331,7 +331,12 @@ def from_graphtool(
         G.vertex_attributes = _rows_to_df(v_rows)
     v_types = vmeta.get("types", {})
     if v_types:
-        G.entity_types.update(v_types)
+        for vid, kind in v_types.items():
+            ekey = G._resolve_entity_key(vid)
+            rec = G._entities.get(ekey)
+            if rec is not None:
+                from annnet.core._records import _internal_entity_kind
+                rec.kind = _internal_entity_kind(kind)
 
     # ----- edges -----
     emeta = manifest.get("edges", {})
@@ -355,7 +360,9 @@ def from_graphtool(
 
     e_dir_policy = emeta.get("direction_policy", {})
     if e_dir_policy:
-        G.edge_direction_policy.update(e_dir_policy)
+        for eid, policy in e_dir_policy.items():
+            if eid in G._edges:
+                G._edges[eid].direction_policy = policy
 
     hyperedges = emeta.get("hyperedges", {})
     if hyperedges:
@@ -387,13 +394,19 @@ def from_graphtool(
                 else:
                     rec.ml_kind = kind
         if el_ser:
-            G.edge_layers.update(_deserialize_edge_layers(el_ser))
+            for eid, layers in _deserialize_edge_layers(el_ser).items():
+                if eid in G._edges:
+                    G._edges[eid].ml_layers = layers
 
     # ----- slices -----
     smeta = manifest.get("slices", {})
     slices_data = smeta.get("data", {})
     if slices_data:
-        G._slices.update(_deserialize_slices(slices_data))
+        for sid, sdata in _deserialize_slices(slices_data).items():
+            if not G.slices.has_slice(sid):
+                G.slices.add_slice(sid, **sdata.get("attributes", {}))
+            G._slices[sid]["vertices"].update(sdata.get("vertices", set()))
+            G._slices[sid]["edges"].update(sdata.get("edges", set()))
 
     slice_rows = smeta.get("slice_attributes", [])
     if slice_rows:
@@ -408,9 +421,9 @@ def from_graphtool(
             lid = row.get("slice") or row.get("slice_id") or row.get("lid")
             eid = row.get("edge_id") or row.get("edge")
             if lid and eid:
-                if lid not in G._slices:
-                    G._slices[lid] = {"edges": set(), "vertices": set(), "attrs": {}}
-                G._slices[lid]["edges"].add(eid)
+                if not G.slices.has_slice(lid):
+                    G.slices.add_slice(lid)
+                G.slices.add_edge_to_slice(lid, eid)
 
     # ----- multilayer / Kivela -----
     mm = manifest.get("multilayer", {})
@@ -418,17 +431,18 @@ def from_graphtool(
     elem_layers = mm.get("elem_layers", {})
 
     if aspects:
-        G.aspects = list(aspects)
-        G.elem_layers = dict(elem_layers or {})
+        G.layers.aspects = list(aspects)
+        G.layers.elem_layers = dict(elem_layers or {})
+        G.layers._rebuild_all_layers_cache()
         G._rebuild_all_layers_cache()
 
     aspect_attrs = mm.get("aspect_attrs", {})
     if aspect_attrs:
-        G._aspect_attrs.update(aspect_attrs)
+        G.layers._aspect_attrs.update(aspect_attrs)
 
     VM_data = mm.get("VM", [])
     if VM_data:
-        G._VM = _deserialize_VM(VM_data)
+        G._restore_supra_nodes(_deserialize_VM(VM_data))
 
     # edge_kind / edge_layers again (if present under multilayer)
     ek2 = mm.get("edge_kind", {})
@@ -443,15 +457,17 @@ def from_graphtool(
             else:
                 rec.ml_kind = kind
     if el2_ser:
-        G.edge_layers.update(_deserialize_edge_layers(el2_ser))
+        for eid, layers in _deserialize_edge_layers(el2_ser).items():
+            if eid in G._edges:
+                G._edges[eid].ml_layers = layers
 
     nl_attrs_ser = mm.get("node_layer_attrs", [])
     if nl_attrs_ser:
-        G._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+        G.layers._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
 
     layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
     if layer_tuple_attrs_ser:
-        G._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
+        G.layers._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
 
     layer_attr_rows = mm.get("layer_attributes", [])
     if layer_attr_rows:

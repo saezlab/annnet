@@ -29,6 +29,7 @@ except Exception:
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
+from ..core._records import SliceRecord
 from ..adapters._utils import (
     _deserialize_edge_layers,
     _deserialize_layer_tuple_attrs,
@@ -43,7 +44,7 @@ from ..adapters._utils import (
     _serialize_slices,
     _serialize_VM,
 )
-from ..core._helpers import EntityRecord
+from ..core._records import EntityRecord
 
 # --- Helpers ---
 CX_STYLE_KEY = "__cx_style__"
@@ -298,7 +299,7 @@ def to_cx2(
         },
         "multilayer": {
             "aspects": list(getattr(G, "aspects", [])),
-            "aspect_attrs": dict(getattr(G, "_aspect_attrs", {})),
+            "aspect_attrs": dict(G.layers._aspect_attrs),
             "elem_layers": dict(getattr(G, "elem_layers", {})),
             "VM": _serialize_VM(getattr(G, "_VM", set())),
             "edge_kind": {
@@ -307,8 +308,8 @@ def to_cx2(
                 if rec.etype == "hyper" or rec.ml_kind is not None
             },
             "edge_layers": _serialize_edge_layers(getattr(G, "edge_layers", {})),
-            "node_layer_attrs": _serialize_node_layer_attrs(getattr(G, "_state_attrs", {})),
-            "layer_tuple_attrs": _serialize_layer_tuple_attrs(getattr(G, "_layer_attrs", {})),
+            "node_layer_attrs": _serialize_node_layer_attrs(G.layers._state_attrs),
+            "layer_tuple_attrs": _serialize_layer_tuple_attrs(G.layers._layer_attrs),
             "layer_attributes": layer_attr_rows,
         },
         "tables": {
@@ -916,7 +917,9 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
                     continue
                 rec.src, rec.tgt, rec.etype = defn
         if emeta.get("direction_policy"):
-            G.edge_direction_policy.update(emeta["direction_policy"])
+            for eid, policy in emeta["direction_policy"].items():
+                if eid in G._edges:
+                    G._edges[eid].direction_policy = policy
 
         # hyperedge definitions
         if emeta.get("hyperedges"):
@@ -983,7 +986,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
                     )
 
             if hyperedge_bulk_data:
-                G.add_hyperedges_bulk(hyperedge_bulk_data)
+                G.add_edges(hyperedge_bulk_data)
 
         # --- Layers (Kivela)---
         kiv = emeta.get("kivela", {})
@@ -997,7 +1000,9 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
                 else:
                     rec.ml_kind = kind
         if kiv.get("edge_layers"):
-            G.edge_layers.update(kiv["edge_layers"])
+            for eid, layers in kiv["edge_layers"].items():
+                if eid in G._edges:
+                    G._edges[eid].ml_layers = layers
 
         # --- Slices ---
         smeta = manifest.get("slices", {})
@@ -1007,11 +1012,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
                 edgs = set(sdata.get("edges", []))
                 attrs = dict(sdata.get("attributes", {}))
 
-                G._slices[sname] = {
-                    "vertices": verts,
-                    "edges": edgs,
-                    "attributes": attrs,
-                }
+                G._slices[sname] = SliceRecord(vertices=verts, edges=edgs, attributes=attrs)
         if smeta.get("slice_attributes"):
             G.slice_attributes = _rows_to_df(_normalize_rows(smeta["slice_attributes"]))
         if smeta.get("edge_slice_attributes"):
@@ -1020,15 +1021,16 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         # --- Multilayer ---
         mm = manifest.get("multilayer", {})
         if mm.get("aspects"):
-            G.aspects = mm["aspects"]
+            G.layers.aspects = mm["aspects"]
         if mm.get("elem_layers"):
-            G.elem_layers = dict(mm["elem_layers"])
+            G.layers.elem_layers = dict(mm["elem_layers"])
+            G.layers._rebuild_all_layers_cache()
         if mm.get("aspect_attrs"):
-            G._aspect_attrs = mm["aspect_attrs"]
+            G.layers._aspect_attrs = mm["aspect_attrs"]
         if mm.get("node_layer_attrs"):
-            G._state_attrs = mm["node_layer_attrs"]
+            G.layers._state_attrs = mm["node_layer_attrs"]
         if mm.get("layer_tuple_attrs"):
-            G._layer_attrs = mm["layer_tuple_attrs"]
+            G.layers._layer_attrs = mm["layer_tuple_attrs"]
         if mm.get("layer_attributes"):
             G.layer_attributes = _rows_to_df(_normalize_rows(mm["layer_attributes"]))
 
@@ -1042,7 +1044,6 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         directed = net_attrs.get("directed", True)
         G = AnnNet(directed=directed)
 
-        G.entity_types = {}
         if visual_props:
             # make sure we have a dict
             if not hasattr(G, "graph_attributes") or G.graph_attributes is None:
@@ -1097,7 +1098,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
     # Single bulk vertex insert (registers entities; also upserts layout coords in manifest mode)
     if vertex_bulk_data:
-        G.add_vertices_bulk(vertex_bulk_data)
+        G.add_vertices(vertex_bulk_data)
 
     if _manifest_mode:
         # Manifest already set the full vertex_attributes; add_vertices_bulk has upserted any
@@ -1158,7 +1159,7 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
 
     # Single bulk edge insert
     if edge_bulk_data:
-        G.add_edges_bulk(edge_bulk_data)
+        G.add_edges(edge_bulk_data)
 
     if not _manifest_mode:
         enorm = _normalize_rows(list(emap.values()))

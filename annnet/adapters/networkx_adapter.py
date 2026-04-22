@@ -254,7 +254,7 @@ def to_nx(
         selected_eids = set()
         for lid in requested_lids:
             try:
-                for eid in graph.get_slice_edges(lid):
+                for eid in graph.slices.get_slice_edges(lid):
                     selected_eids.add(eid)
             except Exception:
                 pass
@@ -343,10 +343,10 @@ def to_nx(
     # Slice discovery
     lids = set()
     try:
-        lids.update(list(graph.list_slices(include_default=True)))
+        lids.update(list(graph.slices.list_slices(include_default=True)))
     except Exception:
         try:
-            lids.update(list(graph.list_slices()))
+            lids.update(list(graph.slices.list_slices()))
         except Exception:
             pass
 
@@ -373,7 +373,7 @@ def to_nx(
     # Build slices membership
     for lid in list(lids):
         try:
-            eids = list(graph.get_slice_edges(lid))
+            eids = list(graph.slices.get_slice_edges(lid))
         except Exception:
             eids = []
         if eids:
@@ -557,8 +557,8 @@ def to_nx(
             nxG.add_edge(u, v, key=key, **attrs)
 
     # Multilayer metadata
-    aspects = list(getattr(graph, "aspects", []))
-    elem_layers = dict(getattr(graph, "elem_layers", {}))
+    aspects = list(graph.layers.aspects)
+    elem_layers = dict(graph.layers.elem_layers)
     VM_serialized = _serialize_VM(getattr(graph, "_VM", set()))
     edge_kind = {
         eid: ("hyper" if rec.etype == "hyper" else rec.ml_kind)
@@ -566,9 +566,9 @@ def to_nx(
         if rec.col_idx >= 0 and (rec.etype == "hyper" or rec.ml_kind is not None)
     }
     edge_layers_ser = _serialize_edge_layers(getattr(graph, "edge_layers", {}))
-    node_layer_attrs_ser = _serialize_node_layer_attrs(getattr(graph, "_state_attrs", {}))
-    aspect_attrs = dict(getattr(graph, "_aspect_attrs", {}))
-    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(getattr(graph, "_layer_attrs", {}))
+    node_layer_attrs_ser = _serialize_node_layer_attrs(graph.layers._state_attrs)
+    aspect_attrs = dict(graph.layers._aspect_attrs)
+    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(graph.layers._layer_attrs)
     layer_attr_rows = _safe_df_to_rows(getattr(graph, "layer_attributes", None))
 
     # BUILD EDGE_DIRECTED DICT ONCE
@@ -624,7 +624,7 @@ def from_nx(
 
     known_vertices = set()
     existing_eids = set()
-    existing_slices = set(H.list_slices(include_default=True))
+    existing_slices = set(H.slices.list_slices(include_default=True))
 
     edge_directed_cache = manifest.get("edge_directed", {}) or {}
     weights_cache = manifest.get("weights", {}) or {}
@@ -654,7 +654,7 @@ def from_nx(
 
     # BULK INSERT VERTICES ONCE
     if known_vertices:
-        H.add_vertices_bulk([{"vertex_id": v} for v in known_vertices])
+        H.add_vertices([{"vertex_id": v} for v in known_vertices])
 
     regular_edges_bulk = []
     hyperedges_bulk = []
@@ -714,11 +714,11 @@ def from_nx(
 
         # SINGLE BULK CALL FOR REGULAR EDGES
         if regular_edges_bulk:
-            H.add_edges_bulk(regular_edges_bulk, default_edge_directed=True)
+            H.add_edges(regular_edges_bulk, default_edge_directed=True)
 
         # SINGLE BULK CALL FOR HYPEREDGES
         if hyperedges_bulk:
-            H.add_hyperedges_bulk(hyperedges_bulk)
+            H.add_edges(hyperedges_bulk)
 
     # BATCH WEIGHTS
     with _time("weights", timings):
@@ -736,23 +736,23 @@ def from_nx(
         for lid, eids in slices_cache.items():
             if lid not in existing_slices:
                 try:
-                    H.add_slice(lid)
+                    H.slices.add_slice(lid)
                     existing_slices.add(lid)
                 except Exception:
                     pass
             if eids:
-                H.add_edges_to_slice_bulk(lid, eids)
+                H.slices.add_edges(lid, eids)
 
         for lid, per_edge in slice_weights_cache.items():
             if lid not in existing_slices:
                 try:
-                    H.add_slice(lid)
+                    H.slices.add_slice(lid)
                     existing_slices.add(lid)
                 except Exception:
                     pass
             for eid, w in per_edge.items():
                 try:
-                    H.set_edge_slice_attrs(lid, eid, weight=float(w))
+                    H.attrs.set_edge_slice_attrs(lid, eid, weight=float(w))
                 except Exception:
                     pass
 
@@ -761,17 +761,18 @@ def from_nx(
         elem_layers = mm.get("elem_layers", {})
 
         if aspects:
-            H.aspects = list(aspects)
-            H.elem_layers = dict(elem_layers or {})
+            H.layers.aspects = list(aspects)
+            H.layers.elem_layers = dict(elem_layers or {})
+            H.layers._rebuild_all_layers_cache()
             H._rebuild_all_layers_cache()
 
         aspect_attrs = mm.get("aspect_attrs", {})
         if aspect_attrs:
-            H._aspect_attrs.update(aspect_attrs)
+            H.layers._aspect_attrs.update(aspect_attrs)
 
         VM_data = mm.get("VM", [])
         if VM_data:
-            H._VM = _deserialize_VM(VM_data)
+            H._restore_supra_nodes(_deserialize_VM(VM_data))
 
         ek = mm.get("edge_kind", {})
         el_ser = mm.get("edge_layers", {})
@@ -785,15 +786,17 @@ def from_nx(
                 else:
                     rec.ml_kind = kind
         if el_ser:
-            H.edge_layers.update(_deserialize_edge_layers(el_ser))
+            for eid, layers in _deserialize_edge_layers(el_ser).items():
+                if eid in H._edges:
+                    H._edges[eid].ml_layers = layers
 
         nl_attrs_ser = mm.get("node_layer_attrs", [])
         if nl_attrs_ser:
-            H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+            H.layers._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
 
         layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
         if layer_tuple_attrs_ser:
-            H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
+            H.layers._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
 
         layer_attr_rows = mm.get("layer_attributes", [])
         if layer_attr_rows:
@@ -805,7 +808,7 @@ def from_nx(
             for vid, attrs in vertex_attrs_cache.items():
                 if attrs:
                     try:
-                        H.set_vertex_attrs(vid, **attrs)
+                        H.attrs.set_vertex_attrs(vid, **attrs)
                     except Exception:
                         pass
 
@@ -813,7 +816,7 @@ def from_nx(
             for eid, attrs in edge_attrs_cache.items():
                 if attrs:
                     try:
-                        H.set_edge_attrs(eid, **attrs)
+                        H.attrs.set_edge_attrs(eid, **attrs)
                     except Exception:
                         pass
 
@@ -880,7 +883,7 @@ def from_nx(
 
             # SINGLE BULK CALL FOR REIFIED HYPEREDGES
             if reified_hyperedges_bulk:
-                H.add_hyperedges_bulk(reified_hyperedges_bulk)
+                H.add_edges(reified_hyperedges_bulk)
 
     return H
 
@@ -1011,12 +1014,12 @@ def from_nx_only(
             if isinstance(v, str) and str(v).startswith(reify_prefix):
                 continue
         try:
-            H.add_vertex(v)
+            H.add_vertices(v)
         except Exception:
             pass
         if d:
             try:
-                H.set_vertex_attrs(v, **dict(d))
+                H.attrs.set_vertex_attrs(v, **dict(d))
             except Exception:
                 pass
 
@@ -1034,15 +1037,15 @@ def from_nx_only(
         for eid, directed, head_map, tail_map, he_attrs, he_node in hyperdefs:
             for x in set(head_map) | set(tail_map):
                 try:
-                    H.add_vertex(x)
+                    H.add_vertices(x)
                 except Exception:
                     pass
             if directed:
                 try:
-                    H.add_edge(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
+                    H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
                 except Exception:
                     pass
-                H.set_edge_attrs(
+                H.attrs.set_edge_attrs(
                     eid,
                     __source_attr={u: {"__value": c} for u, c in head_map.items()},
                     __target_attr={v: {"__value": c} for v, c in tail_map.items()},
@@ -1050,10 +1053,10 @@ def from_nx_only(
             else:
                 members = list(set(head_map) | set(tail_map))
                 try:
-                    H.add_edge(src=members, edge_id=eid, directed=False)
+                    H.add_edges(src=members, edge_id=eid, directed=False)
                 except Exception:
                     pass
-                H.set_edge_attrs(
+                H.attrs.set_edge_attrs(
                     eid,
                     __source_attr={u: {"__value": head_map.get(u, 1.0)} for u in members},
                     __target_attr={v: {"__value": tail_map.get(v, 1.0)} for v in members},
@@ -1064,7 +1067,7 @@ def from_nx_only(
             }
             if clean_attrs:
                 try:
-                    H.set_edge_attrs(eid, **clean_attrs)
+                    H.attrs.set_edge_attrs(eid, **clean_attrs)
                 except Exception:
                     pass
 
@@ -1096,30 +1099,26 @@ def from_nx_only(
         w = d.get("weight", d.get("__weight", 1.0))
 
         try:
-            H.add_vertex(u)
-            H.add_vertex(v)
+            H.add_vertices(u)
+            H.add_vertices(v)
         except Exception:
             pass
         try:
-            H.add_edge(u, v, edge_id=eid, directed=e_directed)
+            H.add_edges(u, v, edge_id=eid, directed=e_directed)
         except Exception:
-            H.add_edge(u, v, edge_id=eid, directed=True)
+            H.add_edges(u, v, edge_id=eid, directed=True)
 
-        try:
-            H.edge_weights[eid] = float(w)
-        except Exception:
-            pass
+        if eid in H._edges:
+            H._edges[eid].weight = float(w)
 
         if isinstance(d, dict) and d:
             try:
-                H.set_edge_attrs(eid, **dict(d))
+                H.attrs.set_edge_attrs(eid, **dict(d))
             except Exception:
                 pass
 
-    try:
-        H.edge_weights[eid] = float(w)
-    except Exception:
-        pass
+    if eid in H._edges:
+        H._edges[eid].weight = float(w)
 
     # Copy edge attributes but drop structural keys that shouldn't live in user attrs
     if isinstance(d, dict) and d:
@@ -1133,7 +1132,7 @@ def from_nx_only(
                 for k in ("eid", "id", "key", "weight", "__weight", "directed"):
                     clean.pop(k, None)
                 if clean:
-                    H.set_edge_attrs(eid, **clean)
+                    H.attrs.set_edge_attrs(eid, **clean)
         except Exception:
             pass
     return H

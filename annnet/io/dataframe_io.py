@@ -238,7 +238,7 @@ def to_dataframes(
     if include_slices:
         slices_data = []
         try:
-            for lid in graph.list_slices(include_default=True):
+            for lid in graph.slices.list_slices(include_default=True):
                 slice_meta = graph._slices.get(lid, {})
                 for eid in slice_meta.get("edges", []):
                     slices_data.append({"slice_id": lid, "edge_id": eid})
@@ -336,7 +336,7 @@ def from_dataframes(
             if "vertex_id" not in nodes_nw.columns:
                 raise ValueError("nodes DataFrame must have 'vertex_id' column")
 
-            G.add_vertices_bulk(_to_dicts(nodes_nw))
+            G.add_vertices(_to_dicts(nodes_nw))
 
     # 2. Add binary edges
     if edges is not None:
@@ -366,7 +366,7 @@ def from_dataframes(
                     }
                 )
 
-            G.add_edges_bulk(edge_rows)
+            G.add_edges(edge_rows)
 
     # 3. Add hyperedges
     if hyperedges is not None:
@@ -399,9 +399,9 @@ def from_dataframes(
                     if is_directed:
                         head = [v for v, r in zip(data["vertices"], data["roles"]) if r == "head"]
                         tail = [v for v, r in zip(data["vertices"], data["roles"]) if r == "tail"]
-                        G.add_edge(src=head, tgt=tail, edge_id=eid, directed=True, weight=weight)
+                        G.add_edges(src=head, tgt=tail, edge_id=eid, directed=True, weight=weight)
                     else:
-                        G.add_edge(
+                        G.add_edges(
                             src=data["vertices"],
                             edge_id=eid,
                             directed=False,
@@ -420,7 +420,7 @@ def from_dataframes(
                     members = row.pop("members", None)
 
                     if directed_he:
-                        G.add_edge(
+                        G.add_edges(
                             src=head or [],
                             tgt=tail or [],
                             edge_id=eid,
@@ -428,7 +428,7 @@ def from_dataframes(
                             weight=weight,
                         )
                     else:
-                        G.add_edge(
+                        G.add_edges(
                             src=members or [],
                             edge_id=eid,
                             directed=False,
@@ -436,7 +436,7 @@ def from_dataframes(
                         )
 
                     if row:
-                        G.set_edge_attrs(eid, **row)
+                        G.attrs.set_edge_attrs(eid, **row)
 
     # 4. Add slice memberships
     if slices is not None:
@@ -450,13 +450,13 @@ def from_dataframes(
                 eid = row["edge_id"]
 
                 try:
-                    if lid not in set(G.list_slices(include_default=True)):
-                        G.add_slice(lid)
+                    if lid not in set(G.slices.list_slices(include_default=True)):
+                        G.slices.add_slice(lid)
                 except Exception:
-                    G.add_slice(lid)
+                    G.slices.add_slice(lid)
 
                 try:
-                    G.add_edge_to_slice(lid, eid)
+                    G.slices.add_edge_to_slice(lid, eid)
                 except Exception:
                     pass
 
@@ -472,7 +472,7 @@ def from_dataframes(
                     weight = row["weight"]
 
                     try:
-                        G.set_edge_slice_attrs(lid, eid, weight=weight)
+                        G.attrs.set_edge_slice_attrs(lid, eid, weight=weight)
                     except Exception:
                         pass
 

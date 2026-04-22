@@ -395,7 +395,7 @@ def read_omnipath(
 
     # add_edges_bulk
     t_aeb0 = time.perf_counter()
-    G.add_edges_bulk(bulk)
+    G.add_edges(bulk)
     print(f"[timing] add_edges_bulk:       {time.perf_counter() - t_aeb0:.3f}s")
 
     G._history_enabled = True
@@ -404,7 +404,7 @@ def read_omnipath(
 
     # vertex table: register all vertices
     all_vids = [vid for vid, t in G.entity_types.items() if t == "vertex"]
-    G.add_vertices_bulk(all_vids)
+    G.add_vertices(all_vids)
 
     # vertex annotations
     if load_vertex_annotations:
@@ -494,7 +494,7 @@ def read_omnipath(
                     .rename({"genesymbol": "vertex_id"})
                 )
 
-                G.add_vertices_bulk(
+                G.add_vertices(
                     [
                         (
                             row["vertex_id"],

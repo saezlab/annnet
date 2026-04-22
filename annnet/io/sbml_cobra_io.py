@@ -45,7 +45,7 @@ def _monkeypatch_set_edge_coeffs(G) -> bool:
 
 def _ensure_vertices(G, vertices: Iterable[str], slice: str | None) -> None:
     # `add_vertices_bulk` exists and handles missing vertices efficiently.
-    G.add_vertices_bulk(list(vertices), slice=slice)
+    G.add_vertices(list(vertices), slice=slice)
 
 
 BOUNDARY_SOURCE = "__BOUNDARY_SOURCE__"
@@ -54,7 +54,7 @@ BOUNDARY_SINK = "__BOUNDARY_SINK__"
 
 def _ensure_boundary_vertices(G, slice: str):
     # idempotent – AnnNet.add_vertices_bulk ignores existing ids
-    G.add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
+    G.add_vertices([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
 
 
 def _graph_from_stoich(
@@ -74,7 +74,7 @@ def _graph_from_stoich(
         G = graph
 
     # Ensure all species + boundary placeholders exist
-    G.add_vertices_bulk(list(metabolite_ids), slice=slice)
+    G.add_vertices(list(metabolite_ids), slice=slice)
     _ensure_boundary_vertices(G, slice)
 
     m, n = S.shape
@@ -113,7 +113,7 @@ def _graph_from_stoich(
             source_coeff = float(-sum(v for v in col if v > 0))  # negative sum of products
             coeffs[BOUNDARY_SOURCE] = source_coeff
 
-        eid_added = G.add_edge(
+        eid_added = G.add_edges(
             src=head,
             tgt=tail,
             slice=slice,
@@ -126,12 +126,14 @@ def _graph_from_stoich(
         if preserve_stoichiometry and hasattr(G, "set_edge_coeffs"):
             G.set_edge_coeffs(eid_added, coeffs)  # you said you added this
         else:
-            G.set_edge_attrs(eid_added, stoich=coeffs)
+            G.attrs.set_edge_attrs(eid_added, stoich=coeffs)
 
         # mark boundary reactions for easy filtering
         if boundary:
             kind, bnode = boundary
-            G.set_edge_attrs(eid_added, is_boundary=True, boundary_kind=kind, boundary_node=bnode)
+            G.attrs.set_edge_attrs(
+                eid_added, is_boundary=True, boundary_kind=kind, boundary_node=bnode
+            )
 
     return G
 
@@ -174,7 +176,7 @@ def from_cobra_model(
         # drop Nones
         clean = {k: v for k, v in attrs.items() if v is not None}
         if clean:
-            G.set_edge_attrs(eid, **clean)
+            G.attrs.set_edge_attrs(eid, **clean)
 
     return G
 

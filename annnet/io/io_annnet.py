@@ -11,6 +11,7 @@ import scipy as scipy
 import scipy.sparse as sp
 
 from ._utils import _read_archive, _write_archive
+from ..core._records import SliceRecord
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
@@ -127,6 +128,13 @@ def _iter_rows(df):
     except Exception:
         pass
     raise TypeError(f"Unsupported dataframe type for row iteration: {type(df)!r}")
+
+
+def _layer_list(layer_coord) -> list[str]:
+    """Serialize an internal layer coordinate tuple as a parquet-friendly list."""
+    if layer_coord is None:
+        return []
+    return list(layer_coord)
 
 
 ANNNET_EXT = "graph.annnet"
@@ -269,9 +277,8 @@ def _write_structure(graph, path: Path, compression: str):
         df = _df_from_dict({id_name: list(d.keys()), val_name: list(d.values())})
         _write_parquet_df(df, filepath, compression=compression)
 
-    # Derive entity dicts from _entities / _row_to_entity
-    # Keys are (vid, layer_coord) tuples; serialize as bare vid for parquet compat.
-    # TODO: add entity_supra_node.parquet to store layer_coord for multilayer graphs.
+    # Legacy flat entity dicts are still written for compatibility with older readers,
+    # but authoritative native loading now uses entity_records.parquet below.
     def _eid_str(eid):
         return eid[0] if isinstance(eid, tuple) else eid
 
@@ -291,6 +298,45 @@ def _write_structure(graph, path: Path, compression: str):
     dict_to_parquet(entity_to_idx, path / "entity_to_idx.parquet", "entity_id", "idx")
     dict_to_parquet(idx_to_entity, path / "idx_to_entity.parquet", "idx", "entity_id")
     dict_to_parquet(entity_types, path / "entity_types.parquet", "entity_id", "type")
+
+    entity_records = sorted(
+        (
+            {
+                "row_idx": int(rec.row_idx),
+                "entity_id": ekey[0],
+                "layer": _layer_list(ekey[1]),
+                "type": rec.kind,
+            }
+            for ekey, rec in graph._entities.items()
+        ),
+        key=lambda row: row["row_idx"],
+    )
+    if _have_polars():
+        import polars as pl
+
+        entity_df = pl.DataFrame(
+            {
+                "row_idx": [row["row_idx"] for row in entity_records],
+                "entity_id": [row["entity_id"] for row in entity_records],
+                "layer": pl.Series(
+                    "layer",
+                    [row["layer"] for row in entity_records],
+                    dtype=pl.List(pl.Utf8),
+                ),
+                "type": [row["type"] for row in entity_records],
+            }
+        )
+    else:
+        entity_df = _df_from_dict(
+            {
+                "row_idx": [row["row_idx"] for row in entity_records],
+                "entity_id": [row["entity_id"] for row in entity_records],
+                "layer": [row["layer"] for row in entity_records],
+                "type": [row["type"] for row in entity_records],
+            }
+        )
+    _write_parquet_df(entity_df, path / "entity_records.parquet", compression=compression)
+
     dict_to_parquet(edge_to_idx, path / "edge_to_idx.parquet", "edge_id", "idx")
     dict_to_parquet(idx_to_edge, path / "idx_to_edge.parquet", "idx", "edge_id")
     dict_to_parquet(edge_weights, path / "edge_weights.parquet", "edge_id", "weight")
@@ -376,15 +422,15 @@ def _write_multilayers(graph, path: Path, compression: str):
     import json
 
     # If no aspects are defined, skip creating the folder
-    if not getattr(graph, "aspects", []):
+    if not graph.layers.aspects:
         return
 
     path.mkdir(parents=True, exist_ok=True)
 
     # 1. Metadata: Aspects & Elementary definitions
     metadata = {
-        "aspects": graph.aspects,
-        "elem_layers": graph.elem_layers,
+        "aspects": graph.layers.aspects,
+        "elem_layers": graph.layers.elem_layers,
     }
     (path / "metadata.json").write_text(json.dumps(metadata, indent=2))
 
@@ -463,23 +509,23 @@ def _write_multilayers(graph, path: Path, compression: str):
             )
 
     # 4b. Aspect Attributes (Dict -> JSON)
-    if hasattr(graph, "_aspect_attrs") and graph._aspect_attrs:
-        (path / "aspect_attributes.json").write_text(json.dumps(graph._aspect_attrs, indent=2))
+    if graph.layers._aspect_attrs:
+        (path / "aspect_attributes.json").write_text(json.dumps(graph.layers._aspect_attrs, indent=2))
 
     # 4c. Tuple Layer Attributes (Dict -> Parquet due to complex keys)
-    if hasattr(graph, "_layer_attrs") and graph._layer_attrs:
+    if graph.layers._layer_attrs:
         la_data = [
             {"layer": list(aa), "attributes": json.dumps(attrs)}
-            for aa, attrs in graph._layer_attrs.items()
+            for aa, attrs in graph.layers._layer_attrs.items()
         ]
         la_df = _df_from_dict(la_data)
         _write_parquet_df(la_df, path / "tuple_layer_attributes.parquet", compression=compression)
 
     # 4d. Vertex-Layer Attributes
-    if hasattr(graph, "_state_attrs") and graph._state_attrs:
+    if graph.layers._state_attrs:
         vla_data = [
             {"vertex_id": u, "layer": list(aa), "attributes": json.dumps(attrs)}
-            for (u, aa), attrs in graph._state_attrs.items()
+            for (u, aa), attrs in graph.layers._state_attrs.items()
         ]
         vla_df = _df_from_dict(vla_data)
         _write_parquet_df(vla_df, path / "vertex_layer_attributes.parquet", compression=compression)
@@ -487,16 +533,11 @@ def _write_multilayers(graph, path: Path, compression: str):
 
 def _write_slices(graph, path: Path, compression: str):
     """Write slice registry and memberships."""
-    import json
-
     path.mkdir(parents=True, exist_ok=True)
 
-    # Registry: slice_id > attributes
-    registry_data = []
-    for slice_id, slice_data in graph._slices.items():
-        registry_data.append(
-            {"slice_id": slice_id, "attributes": json.dumps(slice_data.get("attributes", {}))}
-        )
+    # Registry: structural slice identifiers only.
+    # Semantic slice attributes live in tables/slice_attributes.parquet.
+    registry_data = [{"slice_id": slice_id} for slice_id in graph._slices]
     reg_df = _df_from_dict(registry_data)
     _write_parquet_df(reg_df, path / "registry.parquet", compression=compression)
 
@@ -510,10 +551,12 @@ def _write_slices(graph, path: Path, compression: str):
 
     # Edge memberships with weights
     edge_members: list[dict] = []
-    # Primary: explicit per-slice weights (if present)
-    for slice_id, edge_weights in getattr(graph, "slice_edge_weights", {}).items():
-        for edge_id, weight in edge_weights.items():
-            edge_members.append({"slice_id": slice_id, "edge_id": edge_id, "weight": weight})
+    esa = getattr(graph, "edge_slice_attributes", None)
+    if esa is not None and hasattr(esa, "columns") and {"slice_id", "edge_id", "weight"} <= set(esa.columns):
+        for row in _iter_rows(esa):
+            edge_members.append(
+                {"slice_id": row["slice_id"], "edge_id": row["edge_id"], "weight": row.get("weight")}
+            )
     # Fallback: derive from registered slice edges if no explicit weights
     if not edge_members:
         for slice_id, slice_data in graph._slices.items():
@@ -811,18 +854,32 @@ def _load_structure(graph, path: Path, lazy: bool):
         df = _read_parquet(filepath)
         return dict(zip(df[key_col], df[val_col]))
 
-    from annnet.core._helpers import EdgeRecord, EntityRecord
+    from annnet.core._records import EdgeRecord, EntityRecord
 
-    # Build _entities and _row_to_entity from Parquet
-    entity_to_idx = parquet_to_dict(path / "entity_to_idx.parquet", "entity_id", "idx")
-    entity_types = parquet_to_dict(path / "entity_types.parquet", "entity_id", "type")
-    # _entities keys are (vid, layer_coord) tuples; flat graphs use ("_",) as basal layer.
-    raw_idx_to_entity = parquet_to_dict(path / "idx_to_entity.parquet", "idx", "entity_id")
-    graph._row_to_entity = {int(k): (v, ("_",)) for k, v in raw_idx_to_entity.items()}
-    graph._entities = {
-        (eid, ("_",)): EntityRecord(row_idx=int(idx), kind=entity_types.get(eid, "vertex"))
-        for eid, idx in entity_to_idx.items()
-    }
+    # Build _entities and _row_to_entity from Parquet. Prefer the authoritative
+    # entity_records table, and fall back to the legacy flattened mapping files.
+    entity_records_path = path / "entity_records.parquet"
+    if entity_records_path.exists():
+        entity_records_df = _read_parquet(entity_records_path)
+        graph._row_to_entity = {}
+        graph._entities = {}
+        for row in _iter_rows(entity_records_df):
+            row_idx = int(row["row_idx"])
+            vid = row["entity_id"]
+            layer = tuple(row.get("layer") or ["_"])
+            kind = row.get("type", "vertex")
+            ekey = (vid, layer)
+            graph._row_to_entity[row_idx] = ekey
+            graph._entities[ekey] = EntityRecord(row_idx=row_idx, kind=kind)
+    else:
+        entity_to_idx = parquet_to_dict(path / "entity_to_idx.parquet", "entity_id", "idx")
+        entity_types = parquet_to_dict(path / "entity_types.parquet", "entity_id", "type")
+        raw_idx_to_entity = parquet_to_dict(path / "idx_to_entity.parquet", "idx", "entity_id")
+        graph._row_to_entity = {int(k): (v, ("_",)) for k, v in raw_idx_to_entity.items()}
+        graph._entities = {
+            (eid, ("_",)): EntityRecord(row_idx=int(idx), kind=entity_types.get(eid, "vertex"))
+            for eid, idx in entity_to_idx.items()
+        }
     graph._rebuild_entity_indexes()
 
     # Load per-edge metadata for reconstruction
@@ -878,16 +935,12 @@ def _load_structure(graph, path: Path, lazy: bool):
                 direction_policy=None,
             )
 
-    # Rebuild adjacency indices from _edges
+    # Rebuild adjacency-derived edge indexes from canonical edge records.
     graph._adj = {}
-    graph._src_to_edges = {}
-    graph._tgt_to_edges = {}
+    graph._rebuild_edge_indexes()
     for eid, rec in graph._edges.items():
         if rec.etype != "hyper" and rec.src is not None and rec.tgt is not None:
-            key = (rec.src, rec.tgt)
-            graph._adj.setdefault(key, []).append(eid)
-            graph._src_to_edges.setdefault(rec.src, []).append(eid)
-            graph._tgt_to_edges.setdefault(rec.tgt, []).append(eid)
+            graph._adj.setdefault((rec.src, rec.tgt), []).append(eid)
 
 
 def _load_tables(graph, path: Path):
@@ -918,19 +971,15 @@ def _load_multilayers(graph, path: Path):
 
     # 1. Metadata
     metadata = json.loads((path / "metadata.json").read_text())
-    graph.aspects = metadata["aspects"]
-    graph.elem_layers = metadata["elem_layers"]
-    # [Vital] Rebuild the internal Cartesian product cache in the graph
-    if hasattr(graph, "_rebuild_all_layers_cache"):
-        graph._rebuild_all_layers_cache()
+    graph.layers.aspects = metadata["aspects"]
+    graph.layers.elem_layers = metadata["elem_layers"]
+    graph.layers._rebuild_all_layers_cache()
 
     # 2. Vertex Presence (V_M)
     if (path / "vertex_presence.parquet").exists():
         vm_df = _read_parquet(path / "vertex_presence.parquet")
-        # Bulk update is faster than iterating if we can, but let's be safe
-        for row in _iter_rows(vm_df):
-            aa = tuple(row["layer"])  # Convert list back to tuple
-            graph._VM.add((row["vertex_id"], aa))
+        vm_set = {(row["vertex_id"], tuple(row["layer"])) for row in _iter_rows(vm_df)}
+        graph._restore_supra_nodes(vm_set)
 
     # 3. Edge Layers
     if (path / "edge_layers.parquet").exists():
@@ -941,16 +990,19 @@ def _load_multilayers(graph, path: Path):
             eid = row["edge_id"]
             if l2 is None:
                 # Intra: stored as list, convert to tuple
-                graph.edge_layers[eid] = tuple(l1)
+                if eid in graph._edges:
+                    graph._edges[eid].ml_layers = tuple(l1)
             else:
-                # Inter/Coupling: stored as two lists, convert to (tuple, tuple)
-                graph.edge_layers[eid] = (tuple(l1), tuple(l2))
+                if eid in graph._edges:
+                    graph._edges[eid].ml_layers = (tuple(l1), tuple(l2))
 
     # 3b. Multilayer edge kind
     if (path / "edge_ml_kind.parquet").exists():
         ek_df = _read_parquet(path / "edge_ml_kind.parquet")
         for row in _iter_rows(ek_df):
-            graph.edge_kind[row["edge_id"]] = row["ml_kind"]
+            eid = row["edge_id"]
+            if eid in graph._edges:
+                graph._edges[eid].ml_kind = row["ml_kind"]
 
     # 4. Attributes
 
@@ -960,27 +1012,25 @@ def _load_multilayers(graph, path: Path):
 
     # 4b. Aspect Attributes
     if (path / "aspect_attributes.json").exists():
-        graph._aspect_attrs = json.loads((path / "aspect_attributes.json").read_text())
+        graph.layers._aspect_attrs = json.loads((path / "aspect_attributes.json").read_text())
 
     # 4c. Tuple Layer Attributes
     if (path / "tuple_layer_attributes.parquet").exists():
         la_df = _read_parquet(path / "tuple_layer_attributes.parquet")
         for row in _iter_rows(la_df):
             aa = tuple(row["layer"])
-            graph._layer_attrs[aa] = json.loads(row["attributes"])
+            graph.layers._layer_attrs[aa] = json.loads(row["attributes"])
 
     # 4d. Vertex-Layer Attributes
     if (path / "vertex_layer_attributes.parquet").exists():
         vla_df = _read_parquet(path / "vertex_layer_attributes.parquet")
         for row in _iter_rows(vla_df):
             key = (row["vertex_id"], tuple(row["layer"]))
-            graph._state_attrs[key] = json.loads(row["attributes"])
+            graph.layers._state_attrs[key] = json.loads(row["attributes"])
 
 
 def _load_slices(graph, path: Path):
     """Reconstruct slice registry and memberships."""
-    import json
-
     try:
         import polars as pl  # optional
     except Exception:  # ModuleNotFoundError, etc.
@@ -990,8 +1040,7 @@ def _load_slices(graph, path: Path):
     registry_df = _read_parquet(path / "registry.parquet")
     for row in _iter_rows(registry_df):
         slice_id = row["slice_id"]
-        attrs = json.loads(row["attributes"])
-        graph._slices[slice_id] = {"vertices": set(), "edges": set(), "attributes": attrs}
+        graph._slices[slice_id] = SliceRecord()
 
     # Vertex memberships
     vertex_df = _read_parquet(path / "vertex_memberships.parquet")
@@ -1004,10 +1053,7 @@ def _load_slices(graph, path: Path):
         lid = row["slice_id"]
         eid = row["edge_id"]
         graph._slices[lid]["edges"].add(eid)
-        # Only set a per-slice weight if it was explicitly stored (not None).
-        w = row.get("weight", None)
-        if w is not None:
-            graph.slice_edge_weights.setdefault(lid, {})[eid] = w
+    graph._rebuild_slice_edge_weights_cache()
 
 
 def _load_audit(graph, path: Path):

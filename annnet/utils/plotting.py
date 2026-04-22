@@ -60,7 +60,7 @@ def build_vertex_labels(graph, key: str | None = None) -> dict[str, str]:
         if key is None:
             labels[vid] = str(vid)
         else:
-            labels[vid] = str(graph.get_attr_vertex(vid, key, default=vid))
+            labels[vid] = str(graph.attrs.get_attr_vertex(vid, key, default=vid))
     return labels
 
 
@@ -78,12 +78,12 @@ def build_edge_labels(
         parts: list[str] = []
         if use_weight:
             try:
-                w = graph.get_effective_edge_weight(eid, slice=layer)
+                w = graph.attrs.get_effective_edge_weight(eid, slice=layer)
                 parts.append(f"w={w:.3g}")
             except Exception:
                 pass
         for k in extra_keys:
-            v = graph.get_attr_edge(eid, k, default=None)
+            v = graph.attrs.get_attr_edge(eid, k, default=None)
             if v is not None and not (isinstance(v, float) and math.isnan(v)):
                 parts.append(f"{k}={v}")
         if parts:
@@ -138,7 +138,7 @@ def edge_style_from_weights(
     for j in eidxs:
         eid = graph.idx_to_edge[j]
         try:
-            raw_vals.append(abs(float(graph.get_effective_edge_weight(eid, slice=layer))))
+            raw_vals.append(abs(float(graph.attrs.get_effective_edge_weight(eid, slice=layer))))
         except Exception:
             raw_vals.append(1.0)
 
@@ -151,7 +151,7 @@ def edge_style_from_weights(
         if color_mode == "signed":
             eid = graph.idx_to_edge[j]
             try:
-                w = float(graph.get_effective_edge_weight(eid, slice=layer))
+                w = float(graph.attrs.get_effective_edge_weight(eid, slice=layer))
             except Exception:
                 w = 0.0
             color = "firebrick4" if w > 0 else ("dodgerblue4" if w < 0 else "black")
@@ -268,7 +268,7 @@ def to_graphviz(
                 u = next(iter(S))
                 v = next(iter(T))
                 head = "normal"
-                inter = graph.get_attr_edge(graph.idx_to_edge[j], "interaction", default=None)
+                inter = graph.attrs.get_attr_edge(graph.idx_to_edge[j], "interaction", default=None)
                 if isinstance(inter, (int, float)) and inter < 0:
                     head = "tee"
                 a = {"arrowhead": head}
@@ -345,7 +345,7 @@ def to_pydot(
                 u = next(iter(S))
                 v = next(iter(T))
                 head = "normal"
-                inter = graph.get_attr_edge(graph.idx_to_edge[j], "interaction", default=None)
+                inter = graph.attrs.get_attr_edge(graph.idx_to_edge[j], "interaction", default=None)
                 if isinstance(inter, (int, float)) and inter < 0:
                     head = "tee"
                 a = {"arrowhead": head}

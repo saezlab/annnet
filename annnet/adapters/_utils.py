@@ -14,7 +14,7 @@ def _is_directed_eid(graph, eid):
     except Exception:
         pass
     try:
-        v = graph.get_attr_edge(eid, "directed")
+        v = graph.attrs.get_attr_edge(eid, "directed")
         return bool(v) if v is not None else True
     except Exception:
         return True

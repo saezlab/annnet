@@ -191,7 +191,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     # slices + per-slice weights
     slices = []
     try:
-        for lid in graph.list_slices(include_default=True):
+        for lid in graph.slices.list_slices(include_default=True):
             slices.append({"slice_id": lid})
     except Exception:
         pass
@@ -199,15 +199,15 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     edge_slices = []
     # Collect memberships + weights if available
     try:
-        for lid in graph.list_slices(include_default=True):
+        for lid in graph.slices.list_slices(include_default=True):
             try:
-                for eid in graph.get_slice_edges(lid):
+                for eid in graph.slices.get_slice_edges(lid):
                     rec = {"slice_id": lid, "edge_id": eid}
                     try:
-                        w = graph.get_edge_slice_attr(lid, eid, "weight", default=None)
+                        w = graph.attrs.get_edge_slice_attr(lid, eid, "weight", default=None)
                     except Exception:
                         try:
-                            w = graph.get_edge_slice_attr(lid, eid, "weight")
+                            w = graph.attrs.get_edge_slice_attr(lid, eid, "weight")
                         except Exception:
                             w = None
                     if w is not None:
@@ -259,15 +259,13 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
             ],
             "multilayer": {
                 "aspects": list(getattr(graph, "aspects", [])),
-                "aspect_attrs": dict(getattr(graph, "_aspect_attrs", {})),
+                "aspect_attrs": dict(graph.layers._aspect_attrs),
                 "elem_layers": dict(getattr(graph, "elem_layers", {})),
                 "VM": _serialize_VM(getattr(graph, "_VM", set())),
                 "edge_kind": dict(getattr(graph, "edge_kind", {})),
                 "edge_layers": _serialize_edge_layers(getattr(graph, "edge_layers", {})),
-                "node_layer_attrs": _serialize_node_layer_attrs(getattr(graph, "_state_attrs", {})),
-                "layer_tuple_attrs": _serialize_layer_tuple_attrs(
-                    getattr(graph, "_layer_attrs", {})
-                ),
+                "node_layer_attrs": _serialize_node_layer_attrs(graph.layers._state_attrs),
+                "layer_tuple_attrs": _serialize_layer_tuple_attrs(graph.layers._layer_attrs),
                 "layer_attributes": _df_to_rows(getattr(graph, "layer_attributes", pl.DataFrame())),
             },
         },
@@ -288,9 +286,9 @@ def from_json(path) -> AnnNet:
     aspects = mm.get("aspects", [])
     elem_layers = mm.get("elem_layers", {})
     if aspects:
-        H.set_aspects(aspects)
+        H.layers.set_aspects(aspects)
         if elem_layers:
-            H.set_elementary_layers(elem_layers)
+            H.layers.set_elementary_layers(elem_layers)
 
     # vertices
     # Multilayer graphs use _ensure_vertex_row (avoids layer contamination via bulk insert).
@@ -303,7 +301,7 @@ def from_json(path) -> AnnNet:
             H._ensure_vertex_table()
             H._ensure_vertex_row(vid)
             if vattrs:
-                H.set_vertex_attrs(vid, **vattrs)
+                H.attrs.set_vertex_attrs(vid, **vattrs)
     else:
         vertex_dicts = []
         for nd in doc.get("nodes", []):
@@ -314,7 +312,7 @@ def from_json(path) -> AnnNet:
             row.update({k: v for k, v in nd.items() if k != "id"})
             vertex_dicts.append(row)
         if vertex_dicts:
-            H.add_vertices_bulk(vertex_dicts)
+            H.add_vertices(vertex_dicts)
 
     # edges (binary)
     # Multilayer graphs use supra-node tuples as endpoints — add_edges_bulk is flat-only,
@@ -335,19 +333,19 @@ def from_json(path) -> AnnNet:
         }
         if aspects:
             # supra-node endpoints: must use scalar add_edge
-            H.add_edge(u, v, edge_id=eid, directed=directed, parallel="parallel")
+            H.add_edges(u, v, edge_id=eid, directed=directed, parallel="parallel")
             rec = H._edges.get(eid)
             if rec is not None:
                 rec.weight = float(w)
             if attrs:
-                H.set_edge_attrs(eid, **attrs)
+                H.attrs.set_edge_attrs(eid, **attrs)
         else:
             entry = {"source": u, "target": v, "edge_id": eid, "directed": directed, "weight": w}
             if attrs:
                 entry["attributes"] = attrs
             edge_dicts.append(entry)
     if edge_dicts:
-        H.add_edges_bulk(edge_dicts)
+        H.add_edges(edge_dicts)
 
     # hyperedges — bulk insert
     hyper_dicts = []
@@ -373,19 +371,19 @@ def from_json(path) -> AnnNet:
         if attrs:
             hyper_attrs_pending[eid] = attrs
     if hyper_dicts:
-        H.add_hyperedges_bulk(hyper_dicts)
+        H.add_edges(hyper_dicts)
     if hyper_attrs_pending:
-        H.set_edge_attrs_bulk(hyper_attrs_pending)
+        H.attrs.set_edge_attrs_bulk(hyper_attrs_pending)
 
     # slices + edge_slices — bulk
-    known_slices = set(H.list_slices(include_default=True))
+    known_slices = set(H.slices.list_slices(include_default=True))
     for L in ext.get("slices", []):
         lid = L.get("slice_id")
         if lid is None:
             continue
         if lid not in known_slices:
             try:
-                H.add_slice(lid)
+                H.slices.add_slice(lid)
                 known_slices.add(lid)
             except Exception:
                 pass
@@ -402,12 +400,12 @@ def from_json(path) -> AnnNet:
             slice_weights[(lid, eid)] = float(EL["weight"])
     for lid, eids in slice_edges.items():
         try:
-            H.add_edges_to_slice_bulk(lid, eids)
+            H.slices.add_edges(lid, eids)
         except Exception:
             pass
     for (lid, eid), w in slice_weights.items():
         try:
-            H.set_edge_slice_attrs(lid, eid, weight=w)
+            H.attrs.set_edge_slice_attrs(lid, eid, weight=w)
         except Exception:
             pass
 
@@ -416,11 +414,11 @@ def from_json(path) -> AnnNet:
 
     aspect_attrs = mm.get("aspect_attrs", {})
     if aspect_attrs:
-        H._aspect_attrs.update(aspect_attrs)
+        H.layers._aspect_attrs.update(aspect_attrs)
 
     VM_data = mm.get("VM", [])
     if VM_data:
-        H._VM = _deserialize_VM(VM_data)
+        H._restore_supra_nodes(_deserialize_VM(VM_data))
 
     # edge_kind / edge_layers
     ek = mm.get("edge_kind", {})
@@ -435,15 +433,17 @@ def from_json(path) -> AnnNet:
             else:
                 rec.ml_kind = kind
     if el_ser:
-        H.edge_layers.update(_deserialize_edge_layers(el_ser))
+        for eid, layers in _deserialize_edge_layers(el_ser).items():
+            if eid in H._edges:
+                H._edges[eid].ml_layers = layers
 
     nl_attrs_ser = mm.get("node_layer_attrs", [])
     if nl_attrs_ser:
-        H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
+        H.layers._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
 
     layer_tuple_attrs_ser = mm.get("layer_tuple_attrs", [])
     if layer_tuple_attrs_ser:
-        H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
+        H.layers._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
 
     layer_attr_rows = mm.get("layer_attributes", [])
     if layer_attr_rows:
@@ -528,21 +528,21 @@ def write_ndjson(graph: AnnNet, dir_path):
     # slices
     with open(f"{dir_path}/slices.ndjson", "w", encoding="utf-8") as fl:
         try:
-            for lid in graph.list_slices(include_default=True):
+            for lid in graph.slices.list_slices(include_default=True):
                 fl.write(json.dumps({"slice_id": lid}, ensure_ascii=False) + "\n")
         except Exception:
             pass
 
     with open(f"{dir_path}/edge_slices.ndjson", "w", encoding="utf-8") as fel:
         try:
-            for lid in graph.list_slices(include_default=True):
-                for eid in graph.get_slice_edges(lid):
+            for lid in graph.slices.list_slices(include_default=True):
+                for eid in graph.slices.get_slice_edges(lid):
                     rec = {"slice_id": lid, "edge_id": eid}
                     try:
-                        w = graph.get_edge_slice_attr(lid, eid, "weight", default=None)
+                        w = graph.attrs.get_edge_slice_attr(lid, eid, "weight", default=None)
                     except Exception:
                         try:
-                            w = graph.get_edge_slice_attr(lid, eid, "weight")
+                            w = graph.attrs.get_edge_slice_attr(lid, eid, "weight")
                         except Exception:
                             w = None
                     if w is not None:

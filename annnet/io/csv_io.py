@@ -397,7 +397,7 @@ def export_edge_list_csv(G, path, slice=None):
     - This format is compatible with ``load_csv_to_graph(schema="edge_list")``.
 
     """
-    df = G.edges_view(slice=slice) if slice is not None else G.edges_view()
+    df = G.views.edges(slice=slice) if slice is not None else G.views.edges()
 
     if not isinstance(df, pl.DataFrame):
         df = pl.DataFrame(df)
@@ -483,7 +483,7 @@ def export_hyperedge_csv(G, path, slice=None, directed=None):
     - If the graph does not expose hyperedge columns, a ``ValueError`` is raised.
 
     """
-    df = G.edges_view(slice=slice) if slice is not None else G.edges_view()
+    df = G.views.edges(slice=slice) if slice is not None else G.views.edges()
     if not isinstance(df, pl.DataFrame):
         df = pl.DataFrame(df)
 
@@ -683,12 +683,12 @@ def _ingest_edge_list(
         pure_attrs = {k: row[k] for k in attrs_cols if row[k] is not None}
 
         # ensure vertices
-        G.add_vertex(u)
-        G.add_vertex(v)
+        G.add_vertices(u)
+        G.add_vertices(v)
 
         # create edge per slice (or default)
         if not slices:
-            eid = G.add_edge(
+            eid = G.add_edges(
                 u,
                 v,
                 directed=directed,
@@ -700,7 +700,7 @@ def _ingest_edge_list(
         else:
             eid = None
             for L in slices:
-                eid = G.add_edge(
+                eid = G.add_edges(
                     u, v, directed=directed, weight=w, slice=L, propagate="none", **pure_attrs
                 )
                 # per-slice override columns like weight:slice
@@ -709,7 +709,7 @@ def _ingest_edge_list(
                         _, _, suffix = c.partition(":")
                         if suffix == L and row[c] is not None:
                             try:
-                                G.set_edge_slice_attrs(L, eid, weight=float(row[c]))  # type: ignore[arg-type]
+                                G.attrs.set_edge_slice_attrs(L, eid, weight=float(row[c]))  # type: ignore[arg-type]
                             except Exception:
                                 pass
         # explicit edge id mapping if present
@@ -756,16 +756,16 @@ def _ingest_hyperedge(
         if mcol:
             members = _split_set(row[mcol])
             for ent in members:
-                G.add_vertex(ent)
+                G.add_vertices(ent)
             for L in slice:
-                G.add_edge(src=list(members), slice=L, directed=False, weight=weight, **pure_attrs)
+                G.add_edges(src=list(members), slice=L, directed=False, weight=weight, **pure_attrs)
         else:
             head = _split_set(row[hcol]) if hcol else set()
             tail = _split_set(row[tcol]) if tcol else set()
             for ent in head | tail:
-                G.add_vertex(ent)
+                G.add_vertices(ent)
             for L in slice:
-                G.add_edge(
+                G.add_edges(
                     src=list(head),
                     tgt=list(tail),
                     slice=L,
@@ -791,7 +791,7 @@ def _ingest_incidence(
     for nid in df.get_column(idcol).to_list():
         nid_s = _norm(nid)
         if nid_s:
-            G.add_vertex(nid_s)
+            G.add_vertices(nid_s)
 
     # Each remaining column is an edge column; determine kind per column
     for edge_col in df.columns[1:]:
@@ -814,7 +814,7 @@ def _ingest_incidence(
         # Determine kind
         if len(pos) == 1 and len(neg) == 1:
             # directed binary
-            G.add_edge(
+            G.add_edges(
                 pos[0],
                 neg[0],
                 directed=True,
@@ -823,7 +823,7 @@ def _ingest_incidence(
             )
         elif len(pos) == 2 and len(neg) == 0:
             # undirected binary (two + entries)
-            G.add_edge(
+            G.add_edges(
                 pos[0],
                 pos[1],
                 directed=False,
@@ -833,11 +833,11 @@ def _ingest_incidence(
         else:
             # hyperedge
             if neg and pos:
-                G.add_edge(
+                G.add_edges(
                     src=list(pos), tgt=list(neg), directed=True, weight=1.0, slice=default_slice
                 )
             else:
-                G.add_edge(src=list(pos or neg), directed=False, weight=1.0, slice=default_slice)
+                G.add_edges(src=list(pos or neg), directed=False, weight=1.0, slice=default_slice)
 
 
 def _ingest_adjacency(
@@ -861,7 +861,7 @@ def _ingest_adjacency(
 
     # Ensure all vertices exist
     for nid in row_labels:
-        G.add_vertex(nid)
+        G.add_vertices(nid)
     for c in mat_cols:
         if not _is_numeric_series(df.get_column(c)):
             raise ValueError("Adjacency ingest: non-numeric column detected in matrix region.")
@@ -893,11 +893,11 @@ def _ingest_adjacency(
                     continue
                 if i == j:
                     continue  # ignore self-loops from diagonal in undirected mode
-                G.add_edge(u, v, directed=False, weight=float(w), slice=default_slice)
+                G.add_edges(u, v, directed=False, weight=float(w), slice=default_slice)
             else:
                 if i == j:
                     continue  # ignore self-loops by default; adjust if desired
-                G.add_edge(u, v, directed=True, weight=float(w), slice=default_slice)
+                G.add_edges(u, v, directed=True, weight=float(w), slice=default_slice)
 
 
 def _ingest_lil(
@@ -923,7 +923,7 @@ def _ingest_lil(
         u = _norm(row[idcol])
         if not u:
             continue
-        G.add_vertex(u)
+        G.add_vertices(u)
         nbrs = _split_set(row[ncol])
         w_default = (
             float(row[wcol])
@@ -940,11 +940,11 @@ def _ingest_lil(
         for v in nbrs:
             if not v:
                 continue
-            G.add_vertex(v)
+            G.add_vertices(v)
             if not slices:
-                G.add_edge(
+                G.add_edges(
                     u, v, directed=directed, weight=w_default, slice=default_slice, **pure_attrs
                 )
             else:
                 for L in slices:
-                    G.add_edge(u, v, directed=directed, weight=w_default, slice=L, **pure_attrs)
+                    G.add_edges(u, v, directed=directed, weight=w_default, slice=L, **pure_attrs)

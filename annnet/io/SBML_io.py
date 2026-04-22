@@ -32,7 +32,23 @@ def _isset(obj, setter_name: str) -> bool:
 
 
 def _ensure_boundary_vertices(G, slice: str) -> None:
-    G.add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
+    add_vertices = getattr(G, "add_vertices", None)
+    if add_vertices is not None:
+        add_vertices([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
+        return
+
+    add_vertices_bulk = getattr(G, "add_vertices_bulk", None)
+    if add_vertices_bulk is not None:
+        add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
+        return
+
+    add_vertex = getattr(G, "add_vertex", None)
+    if add_vertex is not None:
+        add_vertex(BOUNDARY_SOURCE, slice=slice)
+        add_vertex(BOUNDARY_SINK, slice=slice)
+        return
+
+    raise AttributeError("graph must provide add_vertices(...), add_vertices_bulk(...), or add_vertex(...)")
 
 
 # ── SBML reader ───────────────────────────────────────────────────────────────
@@ -154,8 +170,40 @@ def _register_species(G, model, default_slice: str) -> dict[str, str]:
         target = compartment if compartment else default_slice
         by_slice.setdefault(target, []).append((sid, attrs) if attrs else sid)
 
+    add_vertices = getattr(G, "add_vertices", None)
+    add_vertices_bulk = getattr(G, "add_vertices_bulk", None)
+    add_vertex = getattr(G, "add_vertex", None)
+
     for target_slice, items in by_slice.items():
-        G.add_vertices_bulk(items, slice=target_slice)
+        if add_vertices is not None:
+            add_vertices(items, slice=target_slice)
+            continue
+        if add_vertices_bulk is not None:
+            payload = []
+            for item in items:
+                if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], dict):
+                    sid, attrs = item
+                    payload.append({"vertex_id": sid, **attrs})
+                else:
+                    payload.append(item)
+            try:
+                add_vertices_bulk(payload, slice=target_slice)
+            except TypeError:
+                # Test doubles may only accept bare ids.
+                fallback_ids = [
+                    item[0] if isinstance(item, tuple) and len(item) == 2 else item for item in items
+                ]
+                add_vertices_bulk(fallback_ids, slice=target_slice)
+            continue
+        if add_vertex is not None:
+            for item in items:
+                if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], dict):
+                    sid, attrs = item
+                    add_vertex(sid, slice=target_slice, **attrs)
+                else:
+                    add_vertex(item, slice=target_slice)
+            continue
+        raise AttributeError("graph must provide add_vertices(...), add_vertices_bulk(...), or add_vertex(...)")
 
     return sid_to_compartment
 
@@ -324,14 +372,43 @@ def _graph_from_sbml_model(
         rxn_slices_map[rid] = rxn_slices
 
     # ── bulk insert ───────────────────────────────────────────────────────────
-    G.add_hyperedges_bulk(hyperedges, slice=slice)
+    add_edges = getattr(G, "add_edges", None)
+    add_hyperedges_bulk = getattr(G, "add_hyperedges_bulk", None)
+    add_hyperedge = getattr(G, "add_hyperedge", None)
+
+    if add_edges is not None:
+        add_edges(hyperedges, slice=slice)
+    elif add_hyperedges_bulk is not None:
+        add_hyperedges_bulk(hyperedges, slice=slice)
+    elif add_hyperedge is not None:
+        for h in hyperedges:
+            add_hyperedge(
+                head=h["head"],
+                tail=h["tail"],
+                slice=h.get("slice", slice),
+                edge_id=h["edge_id"],
+                directed=h.get("edge_directed", True),
+                weight=h.get("weight", 1.0),
+            )
+    else:
+        raise AttributeError(
+            "graph must provide add_edges(...), add_hyperedges_bulk(...), or add_hyperedge(...)"
+        )
 
     # ── stoichiometry ─────────────────────────────────────────────────────────
+    set_edge_attrs = getattr(G, "set_edge_attrs", None)
+    attrs_ns = getattr(G, "attrs", None)
+
     for rid, coeffs in coeffs_map.items():
         if preserve_stoichiometry:
             G.set_edge_coeffs(rid, coeffs)
         else:
-            G.set_edge_attrs(rid, stoich=coeffs)
+            if attrs_ns is not None:
+                attrs_ns.set_edge_attrs(rid, stoich=coeffs)
+            elif set_edge_attrs is not None:
+                set_edge_attrs(rid, stoich=coeffs)
+            else:
+                raise AttributeError("graph must provide attrs.set_edge_attrs(...) or set_edge_attrs(...)")
 
     # ── edge attributes ───────────────────────────────────────────────────────
     if edge_attrs_map:
@@ -340,11 +417,17 @@ def _graph_from_sbml_model(
             set_edge_attrs_bulk(edge_attrs_map)
         else:
             for rid, attrs in edge_attrs_map.items():
-                G.set_edge_attrs(rid, **attrs)
+                if attrs_ns is not None:
+                    attrs_ns.set_edge_attrs(rid, **attrs)
+                elif set_edge_attrs is not None:
+                    set_edge_attrs(rid, **attrs)
+                else:
+                    raise AttributeError(
+                        "graph must provide attrs.set_edge_attrs(...), set_edge_attrs_bulk(...), or set_edge_attrs(...)"
+                    )
 
     # ── assign reactions to their compartment slices ──────────────────────────
     add_edges_to_slice_bulk = getattr(G, "add_edges_to_slice_bulk", None)
-    add_edge_to_slice = getattr(G, "add_edge_to_slice", None)
     if add_edges_to_slice_bulk is not None:
         by_slice: dict[str, list[str]] = {}
         for rid, rxn_slices in rxn_slices_map.items():
@@ -355,11 +438,11 @@ def _graph_from_sbml_model(
                 add_edges_to_slice_bulk(cid, rids)
             except Exception:
                 pass
-    elif add_edge_to_slice is not None:
+    else:
         for rid, rxn_slices in rxn_slices_map.items():
             for cid in rxn_slices:
                 try:
-                    add_edge_to_slice(cid, rid)
+                    G.slices.add_edge_to_slice(cid, rid)
                 except Exception:
                     pass
 
