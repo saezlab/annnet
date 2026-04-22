@@ -191,7 +191,9 @@ Repository = "https://github.com/saezlab/annnet"
 
 [tool.coverage.run]
 omit = [
-    "**/test_*.py"
+    "**/test_*.py",
+    "annnet/benchmarks/*",
+    "benchmarks/*",
 ]
 source = ["annnet"]
 
@@ -305,6 +307,11 @@ section-order = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
+
+[tool.vulture]
+paths = ["annnet/"]
+exclude = ["tests/*"]
+min_confidence = 50
 
 [tool.tox]
 env_list = [
