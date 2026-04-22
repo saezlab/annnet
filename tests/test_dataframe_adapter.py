@@ -1,11 +1,15 @@
+import io
+import os
+import tempfile
 import unittest
-
 import pandas as pd
 import polars as pl
 import pyarrow as pa
 
 from annnet._dataframe_backend import (
     available_dataframe_backends,
+    dataframe_read_delimited,
+    dataframe_read_tsv,
     dataframe_to_rows,
     select_dataframe_backend,
 )
@@ -421,6 +425,105 @@ class TestDataFrameAdapter(unittest.TestCase):
 
         self.assertNotIn('slices', exported)
         self.assertNotIn('slice_weights', exported)
+
+        # -------------------------------------------------------------------------
+
+    # Delimited reader helper tests
+    # -------------------------------------------------------------------------
+
+    def test_dataframe_read_tsv_pandas_from_path(self):
+        """TSV reader should load a pandas DataFrame from a filesystem path."""
+        if not available_dataframe_backends()['pandas']:
+            self.skipTest('pandas not installed')
+
+        content = 'gene\tscore\nEGFR\t1\nTP53\t2\n'
+
+        with tempfile.NamedTemporaryFile('w', suffix='.tsv', delete=False) as f:
+            f.write(content)
+            path = f.name
+
+        try:
+            df = dataframe_read_tsv(path, backend='pandas')
+            self.assertIsInstance(df, pd.DataFrame)
+            self.assertEqual(
+                dataframe_to_rows(df),
+                [
+                    {'gene': 'EGFR', 'score': 1},
+                    {'gene': 'TP53', 'score': 2},
+                ],
+            )
+        finally:
+            os.unlink(path)
+
+    def test_dataframe_read_tsv_pandas_from_buffer(self):
+        """TSV reader should load a pandas DataFrame from an in-memory buffer."""
+        if not available_dataframe_backends()['pandas']:
+            self.skipTest('pandas not installed')
+
+        buf = io.BytesIO(b'gene\tscore\nEGFR\t1\nTP53\t2\n')
+        df = dataframe_read_tsv(buf, backend='pandas')
+
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertEqual(
+            dataframe_to_rows(df),
+            [
+                {'gene': 'EGFR', 'score': 1},
+                {'gene': 'TP53', 'score': 2},
+            ],
+        )
+
+    def test_dataframe_read_delimited_csv_polars(self):
+        """Delimited reader should load CSV into Polars when requested."""
+        if not available_dataframe_backends()['polars']:
+            self.skipTest('polars not installed')
+
+        buf = io.BytesIO(b'gene,score\nEGFR,1\nTP53,2\n')
+        df = dataframe_read_delimited(buf, separator=',', backend='polars')
+
+        self.assertIsInstance(df, pl.DataFrame)
+        self.assertEqual(
+            dataframe_to_rows(df),
+            [
+                {'gene': 'EGFR', 'score': 1},
+                {'gene': 'TP53', 'score': 2},
+            ],
+        )
+
+    def test_dataframe_read_delimited_csv_pyarrow(self):
+        """Delimited reader should load CSV into PyArrow when requested."""
+        if not available_dataframe_backends()['pyarrow']:
+            self.skipTest('pyarrow not installed')
+
+        buf = io.BytesIO(b'gene,score\nEGFR,1\nTP53,2\n')
+        df = dataframe_read_delimited(buf, separator=',', backend='pyarrow')
+
+        self.assertIsInstance(df, pa.Table)
+        self.assertEqual(
+            dataframe_to_rows(df),
+            [
+                {'gene': 'EGFR', 'score': 1},
+                {'gene': 'TP53', 'score': 2},
+            ],
+        )
+
+    def test_dataframe_read_delimited_auto_returns_supported_backend(self):
+        """Auto backend should return one of the installed dataframe types."""
+        buf = io.BytesIO(b'gene,score\nEGFR,1\nTP53,2\n')
+        df = dataframe_read_delimited(buf, separator=',', backend='auto')
+
+        backend = select_dataframe_backend('auto')
+        if backend == 'polars':
+            self.assertIsInstance(df, pl.DataFrame)
+        elif backend == 'pandas':
+            self.assertIsInstance(df, pd.DataFrame)
+        else:
+            self.assertIsInstance(df, pa.Table)
+
+        self.assertEqual(len(dataframe_to_rows(df)), 2)
+
+    def test_dataframe_read_delimited_invalid_backend_raises(self):
+        with self.assertRaises(ValueError):
+            dataframe_read_delimited(io.BytesIO(b'a,b\n1,2\n'), backend='does-not-exist')
 
 
 if __name__ == '__main__':
