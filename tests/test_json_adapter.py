@@ -47,16 +47,16 @@ class TestJSONAdapter:
         G = complex_graph
         to_json(G, tmpdir_fixture / "graph.json")
         G2 = from_json(tmpdir_fixture / "graph.json")
-        slices = set(G2.list_slices(include_default=False))
+        slices = set(G2.slices.list_slices(include_default=False))
         assert "core" in slices and "signaling" in slices and "regulatory" in slices
 
     def test_public_only_filter(self, complex_graph, tmpdir_fixture):
         G = complex_graph
-        G.set_vertex_attrs("A", __internal_flag="hidden")
-        G.set_edge_attrs("e1", __internal="private")
+        G.attrs.set_vertex_attrs("A", __internal_flag="hidden")
+        G.attrs.set_edge_attrs("e1", __internal="private")
         to_json(G, tmpdir_fixture / "graph.json", public_only=True)
         G2 = from_json(tmpdir_fixture / "graph.json")
-        attrs_a = G2.get_vertex_attrs("A") or {}
+        attrs_a = G2.attrs.get_vertex_attrs("A") or {}
         assert "__secret" not in attrs_a
 
     def test_ndjson_format(self, complex_graph, tmpdir_fixture):

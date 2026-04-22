@@ -25,11 +25,11 @@ def _build_simple():
 def _build_with_attrs():
     G = AnnNet(directed=True)
     G.add_vertex("X")
-    G.set_vertex_attrs("X", gene="TP53", score=0.95)
+    G.attrs.set_vertex_attrs("X", gene="TP53", score=0.95)
     G.add_vertex("Y")
-    G.set_vertex_attrs("Y", gene="EGFR", score=0.80)
+    G.attrs.set_vertex_attrs("Y", gene="EGFR", score=0.80)
     G.add_edge("X", "Y", edge_id="ex", weight=3.0)
-    G.set_edge_attrs("ex", relation="activates")
+    G.attrs.set_edge_attrs("ex", relation="activates")
     return G
 
 
@@ -127,9 +127,9 @@ class TestGEXFAdapter(unittest.TestCase):
     def test_public_only_strips_private(self):
         G = AnnNet(directed=True)
         G.add_vertex("A")
-        G.set_vertex_attrs("A", __private="hidden", public="visible")
+        G.attrs.set_vertex_attrs("A", __private="hidden", public="visible")
         G.add_vertex("B")
-        G.set_vertex_attrs("B", __private="also_hidden", public="other")
+        G.attrs.set_vertex_attrs("B", __private="also_hidden", public="other")
         G.add_edge("A", "B")
         p = self._path("pub.gexf")
         to_gexf(G, p, public_only=True)

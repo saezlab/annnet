@@ -21,7 +21,7 @@ class TestIntegration:
         proteins = ["TP53", "MDM2", "ATM", "CHEK2", "p21"]
         for p in proteins:
             G.add_vertex(p)
-            G.set_vertex_attrs(p, type="protein", organism="human")
+            G.attrs.set_vertex_attrs(p, type="protein", organism="human")
         interactions = [
             ("TP53", "MDM2", "inhibition"),
             ("MDM2", "TP53", "ubiquitination"),
@@ -31,7 +31,7 @@ class TestIntegration:
         ]
         for i, (src, tgt, interaction_type) in enumerate(interactions):
             G.add_edge(src, tgt, edge_id=f"int_{i}", directed=True)
-            G.set_edge_attrs(f"int_{i}", interaction_type=interaction_type, confidence=0.9)
+            G.attrs.set_edge_attrs(f"int_{i}", interaction_type=interaction_type, confidence=0.9)
         to_sif(G, tmpdir_fixture / "network.sif", relation_attr="interaction_type")
         dfs = to_dataframes(G)
         dfs["edges"].write_csv(tmpdir_fixture / "interactions.csv")
@@ -49,9 +49,9 @@ class TestIntegration:
         users = ["Alice", "Bob", "Charlie", "David"]
         for u in users:
             G.add_vertex(u)
-        G.add_slice("friendship")
-        G.add_slice("collaboration")
-        G.add_slice("mentorship")
+        G.slices.add_slice("friendship")
+        G.slices.add_slice("collaboration")
+        G.slices.add_slice("mentorship")
         G.add_edge("Alice", "Bob", edge_id="f1")
         G.add_edge_to_slice("friendship", "f1")
         G.add_edge("Bob", "Charlie", edge_id="f2")
@@ -64,7 +64,7 @@ class TestIntegration:
 
         to_json(G, tmpdir_fixture / "multislice.json")
         G2 = from_json(tmpdir_fixture / "multislice.json")
-        slices = set(G2.list_slices(include_default=False))
+        slices = set(G2.slices.list_slices(include_default=False))
         assert slices == {"friendship", "collaboration", "mentorship"}
-        friendship_edges = set(G2.get_slice_edges("friendship"))
+        friendship_edges = set(G2.slices.get_slice_edges("friendship"))
         assert "f1" in friendship_edges and "f2" in friendship_edges

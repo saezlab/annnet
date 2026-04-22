@@ -89,6 +89,14 @@ class TestLazyNXProxy(unittest.TestCase):
         nxG2 = G.nx.backend()
         self.assertIsNot(nxG1, nxG2)
 
+    def test_backend_cache_invalidate_on_version_with_history_disabled(self):
+        G = build_small()
+        G.history.enable(False)
+        nxG1 = G.nx.backend()
+        G.add_edge("a", "c")
+        nxG2 = G.nx.backend()
+        self.assertIsNot(nxG1, nxG2)
+
     # ---- simple-mode collapse of parallel edges ----
 
     def test_simple_graph_edge_collapse(self):

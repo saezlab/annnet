@@ -14,16 +14,16 @@ def _build_graph():
     """Directed graph: A→B, B→C, with attributes and a slice."""
     G = AnnNet(directed=True)
     G.add_vertex("A")
-    G.set_vertex_attrs("A", gene="TP53", score=1.0)
+    G.attrs.set_vertex_attrs("A", gene="TP53", score=1.0)
     G.add_vertex("B")
-    G.set_vertex_attrs("B", gene="EGFR", score=0.5)
+    G.attrs.set_vertex_attrs("B", gene="EGFR", score=0.5)
     G.add_vertex("C")
-    G.set_vertex_attrs("C", gene="MYC", score=0.2)
+    G.attrs.set_vertex_attrs("C", gene="MYC", score=0.2)
     G.add_edge("A", "B", edge_id="e1", weight=2.0)
-    G.set_edge_attrs("e1", relation="activates")
+    G.attrs.set_edge_attrs("e1", relation="activates")
     G.add_edge("B", "C", edge_id="e2", weight=3.0)
-    G.set_edge_attrs("e2", relation="inhibits")
-    G.add_slice("sig")
+    G.attrs.set_edge_attrs("e2", relation="inhibits")
+    G.slices.add_slice("sig")
     G.add_edge_to_slice("sig", "e1")
     return G
 
@@ -104,7 +104,7 @@ class TestGraphViewSliceFilter(unittest.TestCase):
 
     def test_slice_filter_list(self):
         G = _build_graph()
-        G.add_slice("reg")
+        G.slices.add_slice("reg")
         G.add_edge_to_slice("reg", "e2")
         G.add_vertex_to_slice("sig", "A")
         G.add_vertex_to_slice("sig", "B")
@@ -218,6 +218,22 @@ class TestGraphViewMaterialize(unittest.TestCase):
         self.assertEqual(sub.nv, 3)
         self.assertEqual(sub.ne, 2)
 
+
+class TestViewNamespace(unittest.TestCase):
+    def test_views_namespace_matches_flat_api(self):
+        G = _build_graph()
+
+        flat = G.views.edges(include_weight=True)
+        namespaced = G.views.edges(include_weight=True)
+
+        try:
+            self.assertEqual(flat.to_dicts(), namespaced.to_dicts())
+        except AttributeError:
+            self.assertEqual(
+                flat.to_dict(orient="records"),
+                namespaced.to_dict(orient="records"),
+            )
+
     def test_materialize_vertex_filter(self):
         G = _build_graph()
         # Only A and B → only e1 survives (both endpoints present)
@@ -230,7 +246,7 @@ class TestGraphViewMaterialize(unittest.TestCase):
         G = _build_graph()
         view = GraphView(G)
         sub = view.materialize(copy_attributes=True)
-        attrs = sub.get_vertex_attrs("A") or {}
+        attrs = sub.attrs.get_vertex_attrs("A") or {}
         # gene attribute should survive
         self.assertIn("gene", attrs)
 
@@ -294,11 +310,11 @@ class TestGraphViewConvenience(unittest.TestCase):
 
 
 class TestViewsClassEdgesView(unittest.TestCase):
-    """ViewsClass.edges_view() (mixin on AnnNet)."""
+    """ViewsClass.views.edges() (mixin on AnnNet)."""
 
     def test_basic_edges_view(self):
         G = _build_graph()
-        df = G.edges_view()
+        df = G.views.edges()
         try:
             import polars as pl
 
@@ -311,14 +327,14 @@ class TestViewsClassEdgesView(unittest.TestCase):
 
     def test_edges_view_includes_weight_column(self):
         G = _build_graph()
-        df = G.edges_view(include_weight=True)
+        df = G.views.edges(include_weight=True)
         cols = list(df.columns)
         self.assertIn("global_weight", cols)
 
     def test_edges_view_with_slice_weight(self):
         G = _build_graph()
-        G.set_edge_slice_attrs("sig", "e1", weight=99.0)
-        df = G.edges_view(slice="sig", resolved_weight=True)
+        G.attrs.set_edge_slice_attrs("sig", "e1", weight=99.0)
+        df = G.views.edges(slice="sig", resolved_weight=True)
         try:
             import polars as pl
 
@@ -329,13 +345,13 @@ class TestViewsClassEdgesView(unittest.TestCase):
 
     def test_edges_view_empty_graph(self):
         G = AnnNet(directed=True)
-        df = G.edges_view()
+        df = G.views.edges()
         # Should return empty DataFrame without error
         self.assertEqual(len(df), 0)
 
     def test_edges_view_uses_source_target_for_hyperedges(self):
         G = _build_hyperedge_graph()
-        df = G.edges_view()
+        df = G.views.edges()
         try:
             import polars as pl
 
@@ -350,11 +366,11 @@ class TestViewsClassEdgesView(unittest.TestCase):
 
 
 class TestViewsClassVerticesView(unittest.TestCase):
-    """ViewsClass.vertices_view() (mixin on AnnNet)."""
+    """ViewsClass.views.vertices() (mixin on AnnNet)."""
 
     def test_basic_vertices_view(self):
         G = _build_graph()
-        df = G.vertices_view()
+        df = G.views.vertices()
         try:
             import polars as pl
 
@@ -368,7 +384,7 @@ class TestViewsClassVerticesView(unittest.TestCase):
 
     def test_vertices_view_empty_graph(self):
         G = AnnNet(directed=True)
-        df = G.vertices_view()
+        df = G.views.vertices()
         self.assertEqual(len(df), 0)
 
 

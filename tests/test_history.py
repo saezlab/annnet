@@ -29,6 +29,7 @@ class TestHistoryLogging(unittest.TestCase):
     def test_history_enabled_by_default(self):
         G = AnnNet()
         self.assertTrue(G._history_enabled)
+        self.assertTrue(callable(G.history))
 
     def test_add_vertex_logged(self):
         G = AnnNet()
@@ -41,7 +42,7 @@ class TestHistoryLogging(unittest.TestCase):
         G = AnnNet()
         G.add_vertex("A")
         G.add_vertex("B")
-        G.clear_history()
+        G.history.clear()
         G.add_edge("A", "B")
         ops = [e["op"] for e in G.history()]
         self.assertIn("add_edge", ops)
@@ -65,20 +66,29 @@ class TestHistoryLogging(unittest.TestCase):
 
     def test_disable_and_reenable_history(self):
         G = AnnNet()
-        G.enable_history(False)
+        G.history.enable(False)
         G.add_vertex("A")
         before = len(G.history())
-        G.enable_history(True)
+        G.history.enable(True)
         G.add_vertex("B")
         after = len(G.history())
         self.assertEqual(after, before + 1)
+
+    def test_version_increments_even_when_history_disabled(self):
+        G = AnnNet()
+        v0 = G._version
+        G.history.enable(False)
+        G.add_vertex("A")
+        G.add_vertex("B")
+        self.assertEqual(G._version, v0 + 2)
+        self.assertEqual(len(G.history()), 0)
 
     def test_clear_history(self):
         G = AnnNet()
         G.add_vertex("A")
         G.add_vertex("B")
         self.assertGreater(len(G.history()), 0)
-        G.clear_history()
+        G.history.clear()
         self.assertEqual(len(G.history()), 0)
 
     def test_history_as_dataframe(self):
@@ -91,32 +101,43 @@ class TestHistoryLogging(unittest.TestCase):
         self.assertIn("op", cols)
         self.assertIn("version", cols)
 
+    def test_history_namespace_methods_work(self):
+        G = AnnNet()
+        G.history.clear()
+        G.add_vertex("A")
+        self.assertGreater(len(G.history()), 0)
+        G.history.enable(False)
+        before = len(G.history())
+        G.add_vertex("B")
+        self.assertEqual(len(G.history()), before)
+        G.history.enable(True)
+
 
 class TestMark(unittest.TestCase):
     """mark() inserts a labelled event."""
 
     def test_mark_appears_in_history(self):
         G = AnnNet()
-        G.clear_history()
-        G.mark("checkpoint_1")
+        G.history.clear()
+        G.history.mark("checkpoint_1")
         events = G.history()
         ops = [e["op"] for e in events]
         self.assertIn("mark", ops)
 
     def test_mark_label_stored(self):
         G = AnnNet()
-        G.clear_history()
-        G.mark("my_label")
+        G.history.clear()
+        G.history.mark("my_label")
         evt = next(e for e in G.history() if e["op"] == "mark")
         self.assertEqual(evt["label"], "my_label")
 
     def test_mark_ignored_when_disabled(self):
         G = AnnNet()
-        G.enable_history(False)
-        G.clear_history()
-        G.mark("should_not_appear")
+        G.history.enable(False)
+        G.history.clear()
+        G.history.mark("should_not_appear")
         self.assertEqual(len(G.history()), 0)
-        G.enable_history(True)
+        G.history.enable(True)
 
 
 class TestExportHistory(unittest.TestCase):
@@ -132,16 +153,16 @@ class TestExportHistory(unittest.TestCase):
 
     def test_export_returns_zero_when_empty(self):
         G = AnnNet()
-        G.clear_history()
+        G.history.clear()
         path = os.path.join(self.tmpdir, "empty.parquet")
-        n = G.export_history(path)
+        n = G.history.export(path)
         self.assertEqual(n, 0)
 
     def test_export_json(self):
         G = AnnNet()
         G.add_vertex("A")
         path = os.path.join(self.tmpdir, "hist.json")
-        n = G.export_history(path)
+        n = G.history.export(path)
         self.assertGreater(n, 0)
         self.assertTrue(os.path.exists(path))
         with open(path) as f:
@@ -153,7 +174,7 @@ class TestExportHistory(unittest.TestCase):
         G = AnnNet()
         G.add_vertex("A")
         path = os.path.join(self.tmpdir, "hist.ndjson")
-        n = G.export_history(path)
+        n = G.history.export(path)
         self.assertGreater(n, 0)
         self.assertTrue(os.path.exists(path))
         lines = open(path).readlines()
@@ -166,7 +187,7 @@ class TestExportHistory(unittest.TestCase):
         G.add_vertex("A")
         G.add_vertex("B")
         path = os.path.join(self.tmpdir, "hist2.json")
-        n = G.export_history(path)
+        n = G.history.export(path)
         # The JSON export should succeed and match len(G.history())
         self.assertEqual(n, len(G.history()))
 
@@ -175,7 +196,7 @@ class TestExportHistory(unittest.TestCase):
         G.add_vertex("A", layer=("healthy", "t0"))
         G.add_vertex("A", layer=("treated", "t1"))
         path = os.path.join(self.tmpdir, "hist.csv")
-        n = G.export_history(path)
+        n = G.history.export(path)
         self.assertGreater(n, 0)
         self.assertTrue(os.path.exists(path))
         text = open(path, encoding="utf-8").read()
@@ -188,7 +209,7 @@ class TestSnapshot(unittest.TestCase):
     def test_snapshot_returns_dict(self):
         G = AnnNet()
         G.add_vertex("A")
-        snap = G.snapshot(label="s1")
+        snap = G.history.snapshot(label="s1")
         self.assertIsInstance(snap, dict)
         self.assertEqual(snap["label"], "s1")
         self.assertIn("vertex_ids", snap)
@@ -198,52 +219,59 @@ class TestSnapshot(unittest.TestCase):
         G = AnnNet()
         G.add_vertex("A")
         G.add_vertex("B")
-        snap = G.snapshot()
+        snap = G.history.snapshot()
         self.assertIn("A", snap["vertex_ids"])
         self.assertIn("B", snap["vertex_ids"])
 
     def test_list_snapshots(self):
         G = AnnNet()
-        G.snapshot(label="a")
-        G.snapshot(label="b")
-        labels = [s["label"] for s in G.list_snapshots()]
+        G.history.snapshot(label="a")
+        G.history.snapshot(label="b")
+        labels = [s["label"] for s in G.history.list_snapshots()]
         self.assertIn("a", labels)
         self.assertIn("b", labels)
 
     def test_diff_detects_added_vertex(self):
         G = AnnNet()
         G.add_vertex("A")
-        snap1 = G.snapshot(label="before")
+        snap1 = G.history.snapshot(label="before")
         G.add_vertex("B")
-        d = G.diff("before")
+        d = G.history.diff("before")
         self.assertIn("B", d.vertices_added)
         self.assertNotIn("A", d.vertices_added)
+
+    def test_history_namespace_exposes_snapshot_ops(self):
+        G = AnnNet()
+        G.add_vertex("A")
+        snap = G.history.snapshot("s1")
+        self.assertEqual(snap["label"], "s1")
+        self.assertEqual(len(G.history.list_snapshots()), 1)
 
     def test_diff_detects_removed_vertex(self):
         G = AnnNet()
         G.add_vertex("A")
         G.add_vertex("B")
-        snap1 = G.snapshot(label="before")
+        snap1 = G.history.snapshot(label="before")
         G.remove_vertex("B")
-        d = G.diff("before")
+        d = G.history.diff("before")
         self.assertIn("B", d.vertices_removed)
 
     def test_diff_detects_added_edge(self):
         G = AnnNet()
         G.add_vertex("A")
         G.add_vertex("B")
-        snap1 = G.snapshot(label="before")
+        snap1 = G.history.snapshot(label="before")
         eid = G.add_edge("A", "B", edge_id="e1")
-        d = G.diff("before")
+        d = G.history.diff("before")
         self.assertIn("e1", d.edges_added)
 
     def test_diff_between_two_snapshots(self):
         G = AnnNet()
         G.add_vertex("A")
-        snap1 = G.snapshot(label="s1")
+        snap1 = G.history.snapshot(label="s1")
         G.add_vertex("B")
-        snap2 = G.snapshot(label="s2")
-        d = G.diff("s1", "s2")
+        snap2 = G.history.snapshot(label="s2")
+        d = G.history.diff("s1", "s2")
         self.assertIn("B", d.vertices_added)
 
 

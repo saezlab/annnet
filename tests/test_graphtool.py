@@ -106,14 +106,14 @@ class TestGraphToolAdapter(unittest.TestCase):
         gtG, manifest = to_graphtool(g)
         g2 = from_graphtool(gtG, manifest)
 
-        slices = list(g2.list_slices(include_default=True))
+        slices = list(g2.slices.list_slices(include_default=True))
         self.assertIn("Lw", slices)
 
-        edges_in_lw = list(g2.get_slice_edges("Lw"))
+        edges_in_lw = list(g2.slices.get_slice_edges("Lw"))
         self.assertGreater(len(edges_in_lw), 0)
 
         eid = edges_in_lw[0]
-        w_eff = g2.get_effective_edge_weight(eid, slice="Lw")
+        w_eff = g2.attrs.get_effective_edge_weight(eid, slice="Lw")
         self.assertEqual(w_eff, 5.0)
 
     def test_vertex_properties_in_graph(self):

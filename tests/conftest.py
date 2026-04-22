@@ -39,39 +39,39 @@ def complex_graph():
 
     # Vertices with attributes
     G.add_vertex("A")
-    G.set_vertex_attrs("A", gene="TP53", type="protein", score=0.95)
+    G.attrs.set_vertex_attrs("A", gene="TP53", type="protein", score=0.95)
     G.add_vertex("B")
-    G.set_vertex_attrs("B", gene="EGFR", type="protein", score=0.88)
+    G.attrs.set_vertex_attrs("B", gene="EGFR", type="protein", score=0.88)
     G.add_vertex("C")
-    G.set_vertex_attrs("C", gene="MYC", type="protein")
+    G.attrs.set_vertex_attrs("C", gene="MYC", type="protein")
     G.add_vertex("D")
     G.add_vertex("E")
     G.add_vertex("node with space")
 
     # Binary edges (mixed directed/undirected)
     G.add_edge("A", "B", edge_id="e1", directed=True, weight=1.5)
-    G.set_edge_attrs("e1", relation="activates", confidence=0.9)
+    G.attrs.set_edge_attrs("e1", relation="activates", confidence=0.9)
 
     G.add_edge("B", "A", edge_id="e2", directed=False, weight=2.0)
-    G.set_edge_attrs("e2", relation="interacts", confidence=0.85)
+    G.attrs.set_edge_attrs("e2", relation="interacts", confidence=0.85)
 
     G.add_edge("C", "C", edge_id="loop", directed=True, weight=0.5)
-    G.set_edge_attrs("loop", relation="self_regulation")
+    G.attrs.set_edge_attrs("loop", relation="self_regulation")
 
     G.add_edge("A", "B", edge_id="parallel", directed=True, weight=3.14)
-    G.set_edge_attrs("parallel", relation="inhibits", tag="secondary")
+    G.attrs.set_edge_attrs("parallel", relation="inhibits", tag="secondary")
 
     # Hyperedges
     G.add_edge(src=["B", "C"], tgt=["A"], edge_id="h1", directed=True, weight=0.7)
-    G.set_edge_attrs("h1", pathway="signaling", complex="ABC")
+    G.attrs.set_edge_attrs("h1", pathway="signaling", complex="ABC")
 
     G.add_edge(src=["A", "D", "E"], edge_id="h2", directed=False, weight=5.0)
-    G.set_edge_attrs("h2", complex="trimer", stability=0.75)
+    G.attrs.set_edge_attrs("h2", complex="trimer", stability=0.75)
 
     # slices
-    G.add_slice("core")
-    G.add_slice("signaling")
-    G.add_slice("regulatory")
+    G.slices.add_slice("core")
+    G.slices.add_slice("signaling")
+    G.slices.add_slice("regulatory")
 
     G.add_edge_to_slice("core", "e1")
     G.add_edge_to_slice("core", "e2")
@@ -80,8 +80,8 @@ def complex_graph():
     G.add_edge_to_slice("regulatory", "loop")
 
     # Per-slice weights
-    G.set_edge_slice_attrs("core", "e1", weight=10.0)
-    G.set_edge_slice_attrs("signaling", "h1", weight=0.33)
+    G.attrs.set_edge_slice_attrs("core", "e1", weight=10.0)
+    G.attrs.set_edge_slice_attrs("signaling", "h1", weight=0.33)
 
     return G
 
@@ -141,8 +141,8 @@ def assert_graphs_equal(G1, G2, check_slices=True, check_hyperedges=True):
     # slices
     if check_slices:
         try:
-            slices1 = set(G1.list_slices(include_default=False))
-            slices2 = set(G2.list_slices(include_default=False))
+            slices1 = set(G1.slices.list_slices(include_default=False))
+            slices2 = set(G2.slices.list_slices(include_default=False))
             assert slices1 == slices2, f"slice sets differ: {slices1} != {slices2}"
         except Exception:
             # Some adapters may not implement slices; let tests control this via flags.
@@ -151,8 +151,8 @@ def assert_graphs_equal(G1, G2, check_slices=True, check_hyperedges=True):
 
 def assert_vertex_attrs_equal(G1, G2, vertex_id, ignore_none=True):
     """Assert vertex attributes are equal."""
-    attrs1 = G1.get_vertex_attrs(vertex_id) or {}
-    attrs2 = G2.get_vertex_attrs(vertex_id) or {}
+    attrs1 = G1.attrs.get_vertex_attrs(vertex_id) or {}
+    attrs2 = G2.attrs.get_vertex_attrs(vertex_id) or {}
 
     if ignore_none:
         attrs1 = {k: v for k, v in attrs1.items() if v is not None}
@@ -216,9 +216,9 @@ def build_adapter_graph() -> AnnNet:
     g.add_edge("B", "C", weight=1.0, directed=False, interaction=-1)
     g.add_edge(src=["A", "B"], tgt=["C"], weight=0.5, interaction=+1)
 
-    g.add_slice("Lw", region="EMEA")
-    g.set_edge_slice_attrs("Lw", e1, weight=5.0)
-    g.add_slice("L0")
+    g.slices.add_slice("Lw", region="EMEA")
+    g.attrs.set_edge_slice_attrs("Lw", e1, weight=5.0)
+    g.slices.add_slice("L0")
 
     assert g.ne >= 3
     return g

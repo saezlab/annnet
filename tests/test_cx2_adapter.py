@@ -9,6 +9,7 @@ import unittest
 import polars as pl
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from annnet.core._records import SliceRecord
 from annnet.core.graph import AnnNet
 from annnet.io.cx2_io import from_cx2, to_cx2
 
@@ -18,45 +19,37 @@ class TestCX2Adapter(unittest.TestCase):
         """Set up a complex AnnNet object for testing."""
         self.G = AnnNet(directed=True)
 
-        # 1. Setup Vertices
-        # We use a mix of types to test type inference
-        self.G.entity_types = {
-            "n1": "vertex",
-            "n2": "vertex",
-            "n3": "vertex",
-            "h1": "hyperedge",  # Should NOT be a CX2 node, but saved in manifest
-        }
+        # Vertices
+        self.G.add_vertex("n1")
+        self.G.add_vertex("n2")
+        self.G.add_vertex("n3")
 
-        # 2. Setup Edges
-        # n1->n2 (binary)
-        self.G.edge_definitions = {
-            "e1": ("n1", "n2", "type_a"),
-            "he1": ("n1", "n2", "n3"),  # Malformed/Hyperedge definition
-        }
-        self.G.edge_weights = {"e1": 1.5, "he1": 0.5}
+        # Binary edge
+        self.G.add_edge("n1", "n2", edge_id="e1", weight=1.5)
 
-        # 3. Setup Attributes (Polars)
-        # Vertex Attributes
+        # Hyperedge — add_edge with a list src creates a hyperedge
+        self.G.add_edge(["n1", "n2", "n3"], edge_id="he1", weight=0.5)
+
+        # Vertex attributes
         self.G.vertex_attributes = pl.DataFrame(
             {
-                "id": ["n1", "n2", "n3"],
-                "score": [10, 20, 30],  # Integer
-                "active": [True, False, True],  # Boolean
-                "desc": ["A", "B", "C"],  # String
+                "vertex_id": ["n1", "n2", "n3"],
+                "score": [10, 20, 30],
+                "active": [True, False, True],
+                "desc": ["A", "B", "C"],
             }
         )
 
-        # Edge Attributes
+        # Edge attributes
         self.G.edge_attributes = pl.DataFrame(
             {
                 "edge_id": ["e1"],
-                "confidence": [0.99],  # Double
+                "confidence": [0.99],
             }
         )
 
-        # 4. Complex/Hidden Attributes (For Manifest testing)
-        self.G._slices = {"slice1": {"vertices": {1, 2, 3}}}
-        self.G.hyperedge_definitions = {"he1": ["n1", "n2", "n3"]}
+        # Slice data for manifest testing
+        self.G._slices["slice1"] = SliceRecord(vertices={"n1", "n2"}, edges=set(), attributes={})
 
     def test_cx2_structure_basics(self):
         """Test that to_cx2 produces the mandatory CX2 list structure."""
@@ -148,7 +141,7 @@ class TestCX2Adapter(unittest.TestCase):
 
         # Check Edges
         self.assertIn("e1", G_new.edge_definitions)
-        self.assertEqual(G_new.edge_weights["e1"], 1.5)
+        self.assertAlmostEqual(G_new._edges["e1"].weight, 1.5)
 
         # Check Attributes (Polars)
         df_new = G_new.vertex_attributes

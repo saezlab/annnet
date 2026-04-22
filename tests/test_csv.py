@@ -63,7 +63,7 @@ class TestCSVIO(unittest.TestCase):
         csv_io.from_dataframe(df_edges, graph=G2, schema="edge_list")
 
         # Validate: only binary edges came through (2); ignore directedness (importer may default True)
-        ev = G2.edges_view()
+        ev = G2.views.edges()
         self.assertEqual(ev.shape[0], 2)
 
         cols = _colmap(ev)
@@ -96,7 +96,7 @@ class TestCSVIO(unittest.TestCase):
         csv_io.from_dataframe(df_h, graph=G3, schema="hyperedge")
 
         # Validate: hyperedge exists, members survived
-        ev = G3.edges_view()
+        ev = G3.views.edges()
         self.assertGreaterEqual(ev.shape[0], 1)
         cols = _colmap(ev)
 
@@ -137,7 +137,7 @@ class TestCSVIO(unittest.TestCase):
         G4 = AnnNet(directed=True)
         csv_io.load_csv_to_graph(e_buf, graph=G4, schema="auto")  # auto-detects edge_list
 
-        ev = G4.edges_view()
+        ev = G4.views.edges()
         self.assertEqual(ev.shape[0], 2)
 
     def test_bad_schema_rejection(self):

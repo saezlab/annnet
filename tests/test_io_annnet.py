@@ -208,36 +208,25 @@ class TestAnnNetIO(unittest.TestCase):
             self.G.aspects = ["time", "transport"]
             self.G.elem_layers = {"time": ["t1", "t2"], "transport": ["bus", "train"]}
 
-            # Initialize containers if they don't exist (depends on AnnNet init)
-            if not hasattr(self.G, "_VM"):
-                self.G._VM = set()
-            if not hasattr(self.G, "edge_layers"):
-                self.G.edge_layers = {}
-            if not hasattr(self.G, "_layer_attrs"):
-                self.G._layer_attrs = {}
-            if not hasattr(self.G, "_state_attrs"):
-                self.G._state_attrs = {}
-            if not hasattr(self.G, "_aspect_attrs"):
-                self.G._aspect_attrs = {}
-
             # Vertex Presence: (u, layer_tuple)
-            self.G._VM.add(("v1", ("t1", "bus")))
-            self.G._VM.add(("v2", ("t1", "bus")))
-            self.G._VM.add(("v2", ("t2", "train")))
+            self.G._restore_supra_nodes({
+                ("v1", ("t1", "bus")),
+                ("v2", ("t1", "bus")),
+                ("v2", ("t2", "train")),
+            })
 
-            # Edge Layers
-            # e1 (v1-v2): Intra-layer edge in (t1, bus)
-            self.G.edge_layers["e1"] = ("t1", "bus")
-            self.G.edge_kind["e1"] = "intra"
-
-            # e2 (v2-v3): Inter-layer edge between (t1, bus) and (t2, train)
-            self.G.edge_layers["e2"] = (("t1", "bus"), ("t2", "train"))
-            self.G.edge_kind["e2"] = "inter"
+            # Edge Layers — set directly on EdgeRecord
+            if "e1" in self.G._edges:
+                self.G._edges["e1"].ml_layers = ("t1", "bus")
+                self.G._edges["e1"].ml_kind = "intra"
+            if "e2" in self.G._edges:
+                self.G._edges["e2"].ml_layers = (("t1", "bus"), ("t2", "train"))
+                self.G._edges["e2"].ml_kind = "inter"
 
             # Attributes
-            self.G._aspect_attrs = {"time": {"unit": "seconds"}}
-            self.G._layer_attrs = {("t1", "bus"): {"cost": 10}}
-            self.G._state_attrs = {("v1", ("t1", "bus")): {"status": "active"}}
+            self.G.layers._aspect_attrs = {"time": {"unit": "seconds"}}
+            self.G.layers._layer_attrs = {("t1", "bus"): {"cost": 10}}
+            self.G.layers._state_attrs = {("v1", ("t1", "bus")): {"status": "active"}}
 
             # Elementary layer attributes (Polars DataFrame)
             self.G.layer_attributes = pl.DataFrame(
@@ -246,9 +235,6 @@ class TestAnnNetIO(unittest.TestCase):
                     {"layer_id": "transport_bus", "desc": "Public Bus"},
                 ]
             )
-
-            # Mock the cache rebuilder if strictly necessary for IO (avoids logic errors during load)
-            self.G._rebuild_all_layers_cache = lambda: None
 
             # 2. Roundtrip
             G2, out_path = self._roundtrip(use_archive=use_archive)
@@ -263,6 +249,11 @@ class TestAnnNetIO(unittest.TestCase):
             self.assertGreaterEqual(len(G2._VM), 3)
             self.assertIn(("v1", ("t1", "bus")), G2._VM)
             self.assertIn(("v2", ("t2", "train")), G2._VM)
+            self.assertEqual(
+                {eid: rec.row_idx for eid, rec in self.G._entities.items()},
+                {eid: rec.row_idx for eid, rec in G2._entities.items()},
+            )
+            self.assertEqual(self.G._row_to_entity, G2._row_to_entity)
 
             # Edge Layers & Kinds
             self.assertEqual(G2.edge_layers["e1"], ("t1", "bus"))
@@ -273,9 +264,9 @@ class TestAnnNetIO(unittest.TestCase):
             self.assertEqual(G2.edge_kind["e2"], "inter")
 
             # Attributes
-            self.assertEqual(G2._aspect_attrs["time"]["unit"], "seconds")
-            self.assertEqual(G2._layer_attrs[("t1", "bus")]["cost"], 10)
-            self.assertEqual(G2._state_attrs[("v1", ("t1", "bus"))]["status"], "active")
+            self.assertEqual(G2.layers._aspect_attrs["time"]["unit"], "seconds")
+            self.assertEqual(G2.layers._layer_attrs[("t1", "bus")]["cost"], 10)
+            self.assertEqual(G2.layers._state_attrs[("v1", ("t1", "bus"))]["status"], "active")
 
             # Verify DataFrame attributes
             self.assertFalse(G2.layer_attributes.is_empty())
@@ -304,6 +295,7 @@ class TestAnnNetIO(unittest.TestCase):
 
             self.assertGreaterEqual(reg.height, 1)
             self.assertIn("slice_id", reg.columns)
+            self.assertNotIn("attributes", reg.columns)
 
             # slice1 must have at least v1,v2
             vset = set(vmem.filter(pl.col("slice_id") == "slice1")["vertex_id"].to_list())
@@ -368,11 +360,12 @@ class TestAnnNetIO(unittest.TestCase):
             self.G.aspects = ["time"]
             self.G.elem_layers = {"time": ["t1", "t2"]}
 
-            # Ensure containers exist but are EMPTY
-            self.G._VM = set()
-            self.G.edge_layers = {}
-            # We leave attributes empty as well to test optional attribute file writing
-            self.G._layer_attrs = {}
+            # Ensure multilayer state is empty for this test
+            self.G._entities.clear()
+            self.G._row_to_entity.clear()
+            for rec in self.G._edges.values():
+                rec.ml_layers = None
+            self.G.layers._layer_attrs = {}
 
             # 2. Roundtrip
             G2, out_path = self._roundtrip(use_archive=use_archive)
@@ -429,6 +422,28 @@ class TestAnnNetIO(unittest.TestCase):
 
             self.assertLessEqual(len(G2._matrix), int(n_edges * 2))
             self.assertLess(len(G2._matrix), n_vertices * 50)
+
+        self._test_both_modes(_test)
+
+    def test_slice_attributes_roundtrip_from_dataframe_ssot(self):
+        def _test(use_archive):
+            self.G.attrs.set_slice_attrs("slice1", region="EMEA", cohort="A")
+            G2, _ = self._roundtrip(use_archive=use_archive)
+            info = G2.slices.get_slice_info("slice1")
+            self.assertEqual(info["attributes"], {"region": "EMEA", "cohort": "A"})
+
+        self._test_both_modes(_test)
+
+    def test_roundtrip_repairs_pair_index_queries(self):
+        def _test(use_archive):
+            self.G.add_edge("v1", "v2", edge_id="e_parallel", parallel="parallel")
+            G2, _ = self._roundtrip(use_archive=use_archive)
+            G2.add_edge("v1", "v2", edge_id="e_after_read", parallel="parallel")
+
+            self.assertCountEqual(G2.get_edge_ids("v1", "v2"), ["e1", "e_parallel", "e_after_read"])
+            found, ids = G2.has_edge("v1", "v2")
+            self.assertTrue(found)
+            self.assertCountEqual(ids, ["e1", "e_parallel", "e_after_read"])
 
         self._test_both_modes(_test)
 
