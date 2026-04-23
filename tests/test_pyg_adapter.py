@@ -36,7 +36,6 @@ except Exception:
     HAS_POLARS = False
 
 try:
-
     HAS_PANDAS = True
 except Exception:
     HAS_PANDAS = False

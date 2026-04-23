@@ -1,4 +1,4 @@
-# tests/test_io_annnet.py
+# tests/test_annnet_format.py
 import json
 import os
 import shutil

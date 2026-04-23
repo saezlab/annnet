@@ -1,4 +1,4 @@
-# tests/test_graphtool_adapter.py
+# tests/test_graphtool.py
 import os
 import sys
 import unittest
@@ -15,12 +15,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from annnet.core.graph import AnnNet
 
 try:
+    import graph_tool  # noqa: F401
+    from annnet.adapters.graphtool_adapter import from_graphtool, to_graphtool
 
     HAS_GT = True
 except Exception:
     HAS_GT = False
-
-from annnet.adapters.graphtool_adapter import from_graphtool, to_graphtool
+    from_graphtool = None
+    to_graphtool = None
 
 from .conftest import build_adapter_graph as _build_graph
 

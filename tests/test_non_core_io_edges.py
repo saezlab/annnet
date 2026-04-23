@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from annnet.core.graph import AnnNet
-from annnet.io import dataframes as dataframe_io
+from annnet.io import dataframes
 from annnet.io import graphml
 from annnet.io import sif
 from annnet.adapters import graphtool_adapter
@@ -26,7 +26,7 @@ def test_dataframe_export_options_and_private_attr_filtering():
     graph.add_edge_to_slice('s1', 'e1')
     graph.attrs.set_edge_slice_attrs('s1', 'e1', weight=7.0)
 
-    exported = dataframe_io.to_dataframes(
+    exported = dataframes.to_dataframes(
         graph,
         include_slices=False,
         include_hyperedges=False,
@@ -35,7 +35,7 @@ def test_dataframe_export_options_and_private_attr_filtering():
     assert set(exported) == {'nodes', 'edges'}
     assert '__private' not in dataframe_to_rows(exported['nodes'])[0]
 
-    exploded = dataframe_io.to_dataframes(graph, explode_hyperedges=True, public_only=True)
+    exploded = dataframes.to_dataframes(graph, explode_hyperedges=True, public_only=True)
     hyper_rows = dataframe_to_rows(exploded['hyperedges'])
     assert {row['role'] for row in hyper_rows} == {'head', 'tail'}
     assert all('__internal' not in row for row in hyper_rows)
@@ -46,20 +46,20 @@ def test_dataframe_export_options_and_private_attr_filtering():
 
 def test_from_dataframes_validation_and_slice_weight_edge_cases():
     with pytest.raises(ValueError, match='vertex_id'):
-        dataframe_io.from_dataframes(nodes=dataframe_from_rows([{'id': 'A'}]))
+        dataframes.from_dataframes(nodes=dataframe_from_rows([{'id': 'A'}]))
     with pytest.raises(ValueError, match='source.*target'):
-        dataframe_io.from_dataframes(edges=dataframe_from_rows([{'source': 'A'}]))
+        dataframes.from_dataframes(edges=dataframe_from_rows([{'source': 'A'}]))
     with pytest.raises(ValueError, match='edge_id'):
-        dataframe_io.from_dataframes(hyperedges=dataframe_from_rows([{'members': ['A']}]))
+        dataframes.from_dataframes(hyperedges=dataframe_from_rows([{'members': ['A']}]))
     with pytest.raises(ValueError, match='edge_id.*vertex_id'):
-        dataframe_io.from_dataframes(
+        dataframes.from_dataframes(
             hyperedges=dataframe_from_rows([{'edge_id': 'h1'}]),
             exploded_hyperedges=True,
         )
     with pytest.raises(ValueError, match='slice_id.*edge_id'):
-        dataframe_io.from_dataframes(slices=dataframe_from_rows([{'slice_id': 's1'}]))
+        dataframes.from_dataframes(slices=dataframe_from_rows([{'slice_id': 's1'}]))
 
-    graph = dataframe_io.from_dataframes(
+    graph = dataframes.from_dataframes(
         nodes=dataframe_from_rows([{'vertex_id': 'A'}, {'vertex_id': 'B'}, {'vertex_id': 'C'}]),
         edges=dataframe_from_rows(
             [{'source': 'A', 'target': 'B', 'edge_id': 'e1', 'directed': False}]

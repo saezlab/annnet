@@ -1,4 +1,4 @@
-"""Unit tests for annnet/io/GraphML_io.py — to_gexf / from_gexf."""
+"""Unit tests for annnet/io/graphml.py — to_gexf / from_gexf."""
 
 import os
 import shutil
