@@ -735,6 +735,7 @@ class Operations:
 
     def _row_attrs(self, df, key_col: str, key):
         """INTERNAL: return a dict of attributes for the row in `df` where `key_col == key`,
+
         excluding the key column itself. If not found or df empty, return {}.
         Caches per (id(df), key_col) for speed; cache auto-refreshes when the df object changes.
         """

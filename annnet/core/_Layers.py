@@ -827,8 +827,8 @@ class LayerAccessor:
         _, row_to_nl = self._build_supra_index()
         try:
             return row_to_nl[row]
-        except (IndexError, KeyError):
-            raise KeyError(f'row {row} not in vertex–layer index')
+        except (IndexError, KeyError) as err:
+            raise KeyError(f'row {row} not in vertex–layer index') from err
 
     ## Validation helpers
 
@@ -1633,7 +1633,7 @@ class LayerAccessor:
                 return self.layer_id_to_tuple(L)
             return None
 
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             kind = rec.ml_kind
             if kind == 'intra':
                 L = _to_tuple(rec.ml_layers)
@@ -1982,7 +1982,7 @@ class LayerAccessor:
 
         # Intra-layer edges (diagonal blocks)
         if 'intra' in include_kinds:
-            for eid, rec in self._edges.items():
+            for _eid, rec in self._edges.items():
                 if rec.ml_kind != 'intra':
                     continue
                 L = _to_tuple(rec.ml_layers)
@@ -1999,7 +1999,7 @@ class LayerAccessor:
 
         # Inter/coupling edges (off-diagonal blocks)
         if include_kinds & {'inter', 'coupling'}:
-            for eid, rec in self._edges.items():
+            for _eid, rec in self._edges.items():
                 kind = rec.ml_kind
                 if kind not in include_kinds or rec.ml_layers is None:
                     continue
@@ -2212,7 +2212,7 @@ class LayerAccessor:
             buckets.setdefault((u, other), {}).setdefault(aa[ai], aa)
         for grp in groups:
             gset = set(grp)
-            for (u, other), mapping in buckets.items():
+            for (u, _other), mapping in buckets.items():
                 # pick only those aa whose aspect element is in this group
                 layers = [mapping[e] for e in mapping.keys() if e in gset]
                 if len(layers) < 2:
@@ -2326,7 +2326,7 @@ class LayerAccessor:
             return None
 
         # Intra edges -> (u,aa)↔(v,aa)
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             if rec.ml_kind != 'intra':
                 continue
             L = _to_tuple(rec.ml_layers)
@@ -2344,7 +2344,7 @@ class LayerAccessor:
             wv.extend((w, w))
 
         # Inter / coupling -> (u,aa)↔(v,bb)
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             kind = rec.ml_kind
             if kind not in {'inter', 'coupling'} or rec.ml_layers is None:
                 continue
@@ -2711,7 +2711,7 @@ class LayerAccessor:
                 raise ValueError('Layer id must be an aspect tuple')
         _, row_to_nl = self._build_supra_index()
         rows = []
-        for i, (u, aa) in enumerate(row_to_nl):
+        for i, (_u, aa) in enumerate(row_to_nl):
             if aa == L:
                 rows.append(i)
         return rows
@@ -2780,7 +2780,7 @@ class LayerAccessor:
                 P[u] = 0.0
                 continue
             s = 0.0
-            for L, kL in per_vertex_by_layer[u].items():
+            for _L, kL in per_vertex_by_layer[u].items():
                 x = kL / k
                 s += x * x
             P[u] = 1.0 - s
@@ -2882,9 +2882,9 @@ class LayerAccessor:
         B = A.tolil()
         layer_deg = self.layer_degree_vectors(layers_t)  # degrees from intra only
         _, row_to_nl_local = self._build_supra_index(layers_t)
-        row_layer = [aa for (_, aa) in row_to_nl_local]
+        [aa for (_, aa) in row_to_nl_local]
         # For each layer L: subtract gamma * (k_i^L k_j^L)/(2 m_L) within its block
-        for L, (rows, deg) in layer_deg.items():
+        for _L, (rows, deg) in layer_deg.items():
             mL2 = float(deg.sum())  # = 2 m_L
             if mL2 <= 0:
                 continue

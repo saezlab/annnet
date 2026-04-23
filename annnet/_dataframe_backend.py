@@ -556,7 +556,7 @@ def _cast_nw_to_schema(df, schema: nw.Schema):
         if name not in current:
             try:
                 out = out.with_columns(nw.lit(None).cast(target).alias(name))
-            except Exception:
+            except (AttributeError, NotImplementedError, RuntimeError, TypeError, ValueError):
                 out = out.with_columns(nw.lit(None).alias(name))
             continue
 
@@ -566,7 +566,7 @@ def _cast_nw_to_schema(df, schema: nw.Schema):
         if cur == nw.Unknown() or target != nw.Unknown():
             try:
                 out = out.with_columns(nw.col(name).cast(target))
-            except Exception:
+            except (AttributeError, NotImplementedError, RuntimeError, TypeError, ValueError):
                 pass
         current = out.collect_schema()
     return out

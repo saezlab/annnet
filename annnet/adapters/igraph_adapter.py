@@ -174,7 +174,7 @@ def _export_binary_graph(
 
     # Ensure endpoints that appear in edges are also included
     endpoints = set()
-    for eid, rec in _iter_edge_records(graph):
+    for _eid, rec in _iter_edge_records(graph):
         if rec.etype == 'hyper':
             S, T = set(rec.src or []), set(rec.tgt or [])
         else:
@@ -1059,9 +1059,7 @@ def from_igraph(
 
             if directed:
                 try:
-                    H.add_edges(
-                        src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True
-                    )
+                    H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
                 except Exception:  # noqa: BLE001
                     pass
                 try:
@@ -1149,9 +1147,7 @@ def _from_ig_without_manifest(
                     pass
             if directed:
                 try:
-                    H.add_edges(
-                        src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True
-                    )
+                    H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
                 except Exception:  # noqa: BLE001
                     pass
                 try:

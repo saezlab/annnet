@@ -384,7 +384,7 @@ def _rows_to_df(rows: list[dict]):
     df = dataframe_from_rows(rows)
     try:
         return nw.from_native(df, eager_only=True).select(order).to_native()
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         return df
 
 

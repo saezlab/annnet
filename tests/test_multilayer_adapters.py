@@ -13,14 +13,14 @@ from annnet.io.parquet import from_parquet, to_parquet
 from annnet.io.sif import from_sif, to_sif
 
 try:
-    import networkx as nx
+    import networkx  # noqa: F401
 
     HAS_NX = True
 except ImportError:
     HAS_NX = False
 
 try:
-    import igraph as ig
+    import igraph  # noqa: F401
 
     HAS_IG = True
 except ImportError:

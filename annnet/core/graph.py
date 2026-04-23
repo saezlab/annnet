@@ -200,103 +200,103 @@ class AnnNet(
 
     _BLOCKED_LEGACY_API = frozenset(
         {
-        'add_vertex',
-        'add_edge',
-        'add_slice',
-        'remove_slice',
-        'set_active_slice',
-        'get_active_slice',
-        'get_slices_dict',
-        'list_slices',
-        'has_slice',
-        'slice_count',
-        'get_slice_info',
-        'get_slice_vertices',
-        'get_slice_edges',
-        'slice_union',
-        'slice_intersection',
-        'slice_difference',
-        'create_slice_from_operation',
-        'create_aggregated_slice',
-        'slice_statistics',
-        'vertex_presence_across_slices',
-        'edge_presence_across_slices',
-        'hyperedge_presence_across_slices',
-        'conserved_edges',
-        'slice_specific_edges',
-        'temporal_dynamics',
-        'set_graph_attribute',
-        'get_graph_attribute',
-        'get_graph_attributes',
-        'set_vertex_attrs',
-        'set_vertex_attrs_bulk',
-        'get_vertex_attrs',
-        'get_attr_vertex',
-        'get_attr_vertices',
-        'set_edge_attrs',
-        'set_edge_attrs_bulk',
-        'get_edge_attrs',
-        'get_attr_edge',
-        'get_attr_edges',
-        'get_attr_from_edges',
-        'get_edges_by_attr',
-        'set_slice_attrs',
-        'get_slice_attr',
-        'set_edge_slice_attrs',
-        'set_edge_slice_attrs_bulk',
-        'get_edge_slice_attr',
-        'set_slice_edge_weight',
-        'get_effective_edge_weight',
-        'audit_attributes',
-        'edges_view',
-        'vertices_view',
-        'slices_view',
-        'aspects_view',
-        'layers_view',
-        'enable_history',
-        'clear_history',
-        'export_history',
-        'mark',
-        'snapshot',
-        'list_snapshots',
-        'diff',
-        'subgraph',
-        'edge_subgraph',
-        'extract_subgraph',
-        'copy',
-        'reverse',
-        'memory_usage',
-        'vertex_incidence_matrix',
-        'get_vertex_incidence_matrix_as_lists',
-        'set_aspects',
-        'set_elementary_layers',
-        'add_elementary_layer',
-        'flatten_layers',
-        'has_presence',
-        'iter_layers',
-        'iter_vertex_layers',
-        'layer_id_to_tuple',
-        'layer_tuple_to_id',
-        'supra_adjacency',
-        'supra_incidence',
-        'build_intra_block',
-        'build_inter_block',
-        'build_coupling_block',
-        'layer_vertex_set',
-        'layer_edge_set',
-        'layer_union',
-        'layer_intersection',
-        'layer_difference',
-        'set_aspect_attrs',
-        'get_aspect_attrs',
-        'set_layer_attrs',
-        'get_layer_attrs',
-        'set_vertex_layer_attrs',
-        'get_vertex_layer_attrs',
-        'set_elementary_layer_attrs',
-        'get_elementary_layer_attrs',
-        'list_aspects',
-        'list_layers',
+            'add_vertex',
+            'add_edge',
+            'add_slice',
+            'remove_slice',
+            'set_active_slice',
+            'get_active_slice',
+            'get_slices_dict',
+            'list_slices',
+            'has_slice',
+            'slice_count',
+            'get_slice_info',
+            'get_slice_vertices',
+            'get_slice_edges',
+            'slice_union',
+            'slice_intersection',
+            'slice_difference',
+            'create_slice_from_operation',
+            'create_aggregated_slice',
+            'slice_statistics',
+            'vertex_presence_across_slices',
+            'edge_presence_across_slices',
+            'hyperedge_presence_across_slices',
+            'conserved_edges',
+            'slice_specific_edges',
+            'temporal_dynamics',
+            'set_graph_attribute',
+            'get_graph_attribute',
+            'get_graph_attributes',
+            'set_vertex_attrs',
+            'set_vertex_attrs_bulk',
+            'get_vertex_attrs',
+            'get_attr_vertex',
+            'get_attr_vertices',
+            'set_edge_attrs',
+            'set_edge_attrs_bulk',
+            'get_edge_attrs',
+            'get_attr_edge',
+            'get_attr_edges',
+            'get_attr_from_edges',
+            'get_edges_by_attr',
+            'set_slice_attrs',
+            'get_slice_attr',
+            'set_edge_slice_attrs',
+            'set_edge_slice_attrs_bulk',
+            'get_edge_slice_attr',
+            'set_slice_edge_weight',
+            'get_effective_edge_weight',
+            'audit_attributes',
+            'edges_view',
+            'vertices_view',
+            'slices_view',
+            'aspects_view',
+            'layers_view',
+            'enable_history',
+            'clear_history',
+            'export_history',
+            'mark',
+            'snapshot',
+            'list_snapshots',
+            'diff',
+            'subgraph',
+            'edge_subgraph',
+            'extract_subgraph',
+            'copy',
+            'reverse',
+            'memory_usage',
+            'vertex_incidence_matrix',
+            'get_vertex_incidence_matrix_as_lists',
+            'set_aspects',
+            'set_elementary_layers',
+            'add_elementary_layer',
+            'flatten_layers',
+            'has_presence',
+            'iter_layers',
+            'iter_vertex_layers',
+            'layer_id_to_tuple',
+            'layer_tuple_to_id',
+            'supra_adjacency',
+            'supra_incidence',
+            'build_intra_block',
+            'build_inter_block',
+            'build_coupling_block',
+            'layer_vertex_set',
+            'layer_edge_set',
+            'layer_union',
+            'layer_intersection',
+            'layer_difference',
+            'set_aspect_attrs',
+            'get_aspect_attrs',
+            'set_layer_attrs',
+            'get_layer_attrs',
+            'set_vertex_layer_attrs',
+            'get_vertex_layer_attrs',
+            'set_elementary_layer_attrs',
+            'get_elementary_layer_attrs',
+            'list_aspects',
+            'list_layers',
         }
     )
 
@@ -490,7 +490,7 @@ class AnnNet(
 
                 if isinstance(weight, float) and _math.isnan(weight):
                     continue
-            except Exception:
+            except (TypeError, ValueError):
                 pass
             bucket[eid] = float(weight)
 
@@ -1588,12 +1588,13 @@ class AnnNet(
         target : str
 
         """
-        for slice_id, slice_data in self._slices.items():
+        for _slice_id, slice_data in self._slices.items():
             if source in slice_data['vertices'] and target in slice_data['vertices']:
                 slice_data['edges'].add(edge_id)
 
     def _propagate_to_all_slices(self, edge_id, source, target):
         """INTERNAL: Add an edge to any slice containing **either** endpoint and
+
         insert the missing endpoint into that slice.
 
         Parameters
@@ -1603,7 +1604,7 @@ class AnnNet(
         target : str
 
         """
-        for slice_id, slice_data in self._slices.items():
+        for _slice_id, slice_data in self._slices.items():
             if source in slice_data['vertices'] or target in slice_data['vertices']:
                 slice_data['edges'].add(edge_id)
                 # Only add missing endpoint if both vertices should be in slice
@@ -1696,11 +1697,11 @@ class AnnNet(
             rec.directed = False
             try:
                 self.attrs.set_edge_attrs(eid, edge_type=EdgeType.UNDIRECTED)
-            except Exception:
+            except (AttributeError, KeyError, TypeError, ValueError):
                 pass
 
         # 2) Hyperedges
-        for eid, rec in list(self._edges.items()):
+        for _eid, rec in list(self._edges.items()):
             if rec.etype != 'hyper':
                 continue
 
@@ -1995,7 +1996,7 @@ class AnnNet(
             try:
                 incident.extend(self._get_csr().getrow(ent.row_idx).indices.tolist())
                 return incident
-            except Exception:
+            except (AttributeError, IndexError, KeyError, TypeError, ValueError):
                 pass
         for j in range(len(self._col_to_edge)):
             eid = self._col_to_edge[j]
@@ -2768,11 +2769,11 @@ class AnnNet(
                 'slices': len(self._slices),
             },
             # Store minimal state for comparison (uses existing AnnNet attributes)
-            'vertex_ids': set(
+            'vertex_ids': {
                 eid[0] if isinstance(eid, tuple) else eid
                 for eid, r in self._entities.items()
                 if r.kind == 'vertex'
-            ),
+            },
             'edge_ids': set(self._col_to_edge.values()),
             'slice_ids': set(self._slices.keys()),
         }
@@ -2815,7 +2816,7 @@ class AnnNet(
             return {
                 'label': 'external',
                 'version': ref._version,
-                'vertex_ids': set(eid for eid, r in ref._entities.items() if r.kind == 'vertex'),
+                'vertex_ids': {eid for eid, r in ref._entities.items() if r.kind == 'vertex'},
                 'edge_ids': set(ref._col_to_edge.values()),
                 'slice_ids': set(ref._slices.keys()),
             }
@@ -2827,11 +2828,11 @@ class AnnNet(
         return {
             'label': 'current',
             'version': self._version,
-            'vertex_ids': set(
+            'vertex_ids': {
                 eid[0] if isinstance(eid, tuple) else eid
                 for eid, r in self._entities.items()
                 if r.kind == 'vertex'
-            ),
+            },
             'edge_ids': set(self._col_to_edge.values()),
             'slice_ids': set(self._slices.keys()),
         }
@@ -3163,7 +3164,7 @@ class AnnNet(
             ]
             if isinstance(slice, str):
                 slice = _sys.intern(slice)
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
         # --- entity registration ---
@@ -3192,7 +3193,7 @@ class AnnNet(
                 for row in dataframe_to_rows(self.vertex_attributes)
                 if row.get('vertex_id') is not None
             }
-        except Exception:
+        except (AttributeError, KeyError, TypeError, ValueError):
             pass
 
         new_attr_keys: set = set()
@@ -3315,9 +3316,9 @@ class AnnNet(
                     d['edge_id'] = _sys.intern(d['edge_id'])
                 try:
                     d['weight'] = float(d['weight'])
-                except Exception:
+                except (TypeError, ValueError):
                     pass
-        except Exception:
+        except (AttributeError, KeyError, TypeError, ValueError):
             pass
 
         M = self._matrix
@@ -3384,7 +3385,7 @@ class AnnNet(
         for d in norm:
             s, t = d['source'], d['target']
             w = d['weight']
-            etype = d.get('edge_type', 'regular')
+            d.get('edge_type', 'regular')
             prop = d.get('propagate', default_propagate)
             slice_local = d.get('slice', slice)
             slice_w = d.get('slice_weight', default_slice_weight)
@@ -3407,12 +3408,12 @@ class AnnNet(
                 old_s, old_t = rec.src, rec.tgt
                 try:
                     _M_zero_keys.append((self._entity_row(old_s), col))
-                except Exception:
+                except (AttributeError, KeyError, TypeError, ValueError):
                     pass
                 if old_t is not None and old_t != old_s:
                     try:
                         _M_zero_keys.append((self._entity_row(old_t), col))
-                    except Exception:
+                    except (AttributeError, KeyError, TypeError, ValueError):
                         pass
                 _M_writes[(s_idx, col)] = fw
                 if s != t:
@@ -3585,9 +3586,9 @@ class AnnNet(
                     d['edge_id'] = _sys.intern(d['edge_id'])
                 try:
                     d['weight'] = float(d['weight'])
-                except Exception:
+                except (TypeError, ValueError):
                     pass
-        except Exception:
+        except (AttributeError, KeyError, TypeError, ValueError):
             pass
 
         all_verts: set = set()
@@ -3647,7 +3648,7 @@ class AnnNet(
                                 _m_fast_set(r, col, 0)
                             else:
                                 M[r, col] = 0
-                        except Exception:
+                        except (AttributeError, KeyError, TypeError, ValueError):
                             pass
                 else:
                     for vid in (rec.src, rec.tgt):
@@ -3659,7 +3660,7 @@ class AnnNet(
                                 _m_fast_set(r, col, 0)
                             else:
                                 M[r, col] = 0
-                        except Exception:
+                        except (AttributeError, KeyError, TypeError, ValueError):
                             pass
             else:
                 col = len(self._col_to_edge)
@@ -3846,7 +3847,7 @@ class AnnNet(
         self._invalidate_sparse_caches()
 
         self._col_to_edge.clear()
-        for new_idx, (old_idx, eid) in enumerate(keep_pairs):
+        for new_idx, (_old_idx, eid) in enumerate(keep_pairs):
             self._col_to_edge[new_idx] = eid
             self._edges[eid].col_idx = new_idx
 
@@ -3946,15 +3947,19 @@ class AnnNet(
     # ------------------------------------------------------------------
 
     def set_aspects(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.set_aspects(...)``."""
         return self.layers.set_aspects(*args, **kwargs)
 
     def set_elementary_layers(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.set_elementary_layers(...)``."""
         return self.layers.set_elementary_layers(*args, **kwargs)
 
     def add_elementary_layer(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.add_elementary_layer(...)``."""
         return self.layers.add_elementary_layer(*args, **kwargs)
 
     def flatten_layers(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.flatten_layers(...)``."""
         return self.layers.flatten_layers(*args, **kwargs)
 
     def _restore_supra_nodes(self, *args, **kwargs):
@@ -3967,87 +3972,113 @@ class AnnNet(
         return self.layers._validate_layer_tuple(*args, **kwargs)
 
     def has_presence(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.has_presence(...)``."""
         return self.layers.has_presence(*args, **kwargs)
 
     def iter_layers(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.iter_layers(...)``."""
         return self.layers.iter_layers(*args, **kwargs)
 
     def iter_vertex_layers(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.iter_vertex_layers(...)``."""
         return self.layers.iter_vertex_layers(*args, **kwargs)
 
     def nl_to_row(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.nl_to_row(...)``."""
         return self.layers.nl_to_row(*args, **kwargs)
 
     def row_to_nl(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.row_to_nl(...)``."""
         return self.layers.row_to_nl(*args, **kwargs)
 
     def _build_supra_index(self, *args, **kwargs):
         return self.layers._build_supra_index(*args, **kwargs)
 
     def ensure_vertex_layer_index(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.ensure_vertex_layer_index(...)``."""
         return self.layers.ensure_vertex_layer_index(*args, **kwargs)
 
     def layer_id_to_tuple(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.layer_id_to_tuple(...)``."""
         return self.layers.layer_id_to_tuple(*args, **kwargs)
 
     def layer_tuple_to_id(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.layer_tuple_to_id(...)``."""
         return self.layers.layer_tuple_to_id(*args, **kwargs)
 
     def _assert_presence(self, *args, **kwargs):
         return self.layers._assert_presence(*args, **kwargs)
 
     def supra_adjacency(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.supra_adjacency(...)``."""
         return self.layers.supra_adjacency(*args, **kwargs)
 
     def supra_incidence(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.supra_incidence(...)``."""
         return self.layers.supra_incidence(*args, **kwargs)
 
     def build_intra_block(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.build_intra_block(...)``."""
         return self.layers.build_intra_block(*args, **kwargs)
 
     def build_inter_block(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.build_inter_block(...)``."""
         return self.layers.build_inter_block(*args, **kwargs)
 
     def build_coupling_block(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.build_coupling_block(...)``."""
         return self.layers.build_coupling_block(*args, **kwargs)
 
     def layer_vertex_set(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.layer_vertex_set(...)``."""
         return self.layers.layer_vertex_set(*args, **kwargs)
 
     def layer_edge_set(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.layer_edge_set(...)``."""
         return self.layers.layer_edge_set(*args, **kwargs)
 
     def layer_union(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.layer_union(...)``."""
         return self.layers.layer_union(*args, **kwargs)
 
     def layer_intersection(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.layer_intersection(...)``."""
         return self.layers.layer_intersection(*args, **kwargs)
 
     def layer_difference(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.layer_difference(...)``."""
         return self.layers.layer_difference(*args, **kwargs)
 
     def set_aspect_attrs(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.set_aspect_attrs(...)``."""
         return self.layers.set_aspect_attrs(*args, **kwargs)
 
     def get_aspect_attrs(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.get_aspect_attrs(...)``."""
         return self.layers.get_aspect_attrs(*args, **kwargs)
 
     def set_layer_attrs(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.set_layer_attrs(...)``."""
         return self.layers.set_layer_attrs(*args, **kwargs)
 
     def get_layer_attrs(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.get_layer_attrs(...)``."""
         return self.layers.get_layer_attrs(*args, **kwargs)
 
     def set_vertex_layer_attrs(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.set_vertex_layer_attrs(...)``."""
         return self.layers.set_vertex_layer_attrs(*args, **kwargs)
 
     def get_vertex_layer_attrs(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.get_vertex_layer_attrs(...)``."""
         return self.layers.get_vertex_layer_attrs(*args, **kwargs)
 
     def set_elementary_layer_attrs(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.set_elementary_layer_attrs(...)``."""
         return self.layers.set_elementary_layer_attrs(*args, **kwargs)
 
     def get_elementary_layer_attrs(self, *args, **kwargs):
+        """Legacy forwarding shim to ``G.layers.get_elementary_layer_attrs(...)``."""
         return self.layers.get_elementary_layer_attrs(*args, **kwargs)
 
 

@@ -598,7 +598,7 @@ class IndexMapping:
 
             if isinstance(vertex_id, str):
                 vertex_id = _sys.intern(vertex_id)
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
         df = self.vertex_attributes
@@ -614,7 +614,7 @@ class IndexMapping:
                     ids.discard(None)
                 self._vertex_attr_ids = ids
                 self._vertex_attr_df_id = id(df)
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
             self._vertex_attr_ids = None
             self._vertex_attr_df_id = None
 
@@ -636,7 +636,7 @@ class IndexMapping:
                 else:
                     self._vertex_attr_ids = {vertex_id}
                 self._vertex_attr_df_id = id(self.vertex_attributes)
-            except Exception:
+            except (AttributeError, TypeError, ValueError):
                 pass
             return
 
@@ -650,7 +650,7 @@ class IndexMapping:
             else:
                 self._vertex_attr_ids = {vertex_id}
             self._vertex_attr_df_id = id(self.vertex_attributes)
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
             pass
 
     def _vertex_key_enabled(self) -> bool:

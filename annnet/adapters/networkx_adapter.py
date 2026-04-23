@@ -259,7 +259,6 @@ def to_nx(
     # HOIST LOOKUPS
     vertex_attributes_df = graph.vertex_attributes
     edge_attributes_df = graph.edge_attributes
-    num_edges = graph.ne
 
     # Vertex attributes - BATCH READ
     vertex_attrs = {}
@@ -993,9 +992,7 @@ def _from_nx_without_manifest(
                     pass
             if directed:
                 try:
-                    H.add_edges(
-                        src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True
-                    )
+                    H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
                 except Exception:  # noqa: BLE001
                     pass
                 H.attrs.set_edge_attrs(

@@ -720,9 +720,7 @@ def _ingest_hyperedge(
             for ent in members:
                 G.add_vertices(ent)
             for L in slice:
-                G.add_edges(
-                    src=list(members), slice=L, directed=False, weight=weight, **pure_attrs
-                )
+                G.add_edges(src=list(members), slice=L, directed=False, weight=weight, **pure_attrs)
         else:
             head = _split_set(row[hcol]) if hcol else set()
             tail = _split_set(row[tcol]) if tcol else set()

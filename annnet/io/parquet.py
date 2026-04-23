@@ -44,7 +44,7 @@ def _build_dataframe_from_rows(rows):
     df = dataframe_from_rows(rows)
     try:
         return nw.from_native(df, eager_only=True).select(order).to_native()
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         return df
 
 

@@ -350,13 +350,13 @@ class AttributesClass:
                 slice_id = _sys.intern(slice_id)
             if isinstance(edge_id, str):
                 edge_id = _sys.intern(edge_id)
-        except Exception:
+        except (AttributeError, TypeError):
             pass
         if 'weight' in clean:
             try:
                 # cast once to float to reduce dtype mismatch churn inside _upsert_row
                 clean['weight'] = float(clean['weight'])
-            except Exception:
+            except (TypeError, ValueError):
                 # leave as-is if not coercible; behavior stays identical
                 pass
 
@@ -573,7 +573,7 @@ class AttributesClass:
         schema = nw_df.collect_schema()
 
         impl = nw_df.implementation
-        is_polars = impl.is_polars()
+        impl.is_polars()
 
         for col, val in attrs.items():
             # Use Narwhals dtypes for logic to avoid backend-mismatch pitfalls
@@ -583,7 +583,7 @@ class AttributesClass:
                 # Add new column with appropriate null-casting
                 try:
                     nw_df = nw_df.with_columns(nw.lit(None).cast(target).alias(col))
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     nw_df = nw_df.with_columns(nw.lit(None).alias(col))
             else:
                 # Upgrade logic: ONLY cast if the existing column is a Null/Unknown type
@@ -591,7 +591,7 @@ class AttributesClass:
                 if self._is_null_dtype(cur) and not self._is_null_dtype(target):
                     try:
                         nw_df = nw_df.with_columns(nw.col(col).cast(target))
-                    except Exception:
+                    except (AttributeError, TypeError, ValueError):
                         pass
                 # DELETED: The 'elif cur != target' block that forced String fallback.
                 # Type conflicts are now managed lazily during the actual upsert/concat.
@@ -624,7 +624,7 @@ class AttributesClass:
             if not isinstance(target_dtype, (nw.dtypes.DType, type(nw.Int64))):
                 return column_expr.cast(nw.String)
             return column_expr.cast(target_dtype)
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
             return column_expr.cast(nw.String)
 
     def _upsert_row(self, df: 'object', idx: Any, attrs: dict) -> 'object':
@@ -634,19 +634,19 @@ class AttributesClass:
         if {'slice_id', 'edge_id'} <= cols:
             key_cols = ('slice_id', 'edge_id')
             key_vals = {'slice_id': idx[0], 'edge_id': idx[1]}
-            cache_name, df_id_name = '_edge_slice_attr_keys', '_edge_slice_attr_df_id'
+            _cache_name, df_id_name = '_edge_slice_attr_keys', '_edge_slice_attr_df_id'
         elif 'vertex_id' in cols:
             key_cols = ('vertex_id',)
             key_vals = {'vertex_id': idx}
-            cache_name, df_id_name = '_vertex_attr_ids', '_vertex_attr_df_id'
+            _cache_name, df_id_name = '_vertex_attr_ids', '_vertex_attr_df_id'
         elif 'edge_id' in cols:
             key_cols = ('edge_id',)
             key_vals = {'edge_id': idx}
-            cache_name, df_id_name = '_edge_attr_ids', '_edge_attr_df_id'
+            _cache_name, df_id_name = '_edge_attr_ids', '_edge_attr_df_id'
         elif 'slice_id' in cols:
             key_cols = ('slice_id',)
             key_vals = {'slice_id': idx}
-            cache_name, df_id_name = '_slice_attr_ids', '_slice_attr_df_id'
+            _cache_name, df_id_name = '_slice_attr_ids', '_slice_attr_df_id'
         else:
             raise ValueError('Cannot infer key columns from DataFrame schema')
 
@@ -944,14 +944,13 @@ class AttributesClass:
             if 'weight' in r:
                 try:
                     r['weight'] = float(r['weight'])
-                except Exception:
+                except (TypeError, ValueError):
                     pass
             rows.append(r)
         if not rows:
             return
 
         # start from current DF
-        df = self.edge_slice_attributes
         updates = {
             (row['slice_id'], row['edge_id']): {
                 k: v for k, v in row.items() if k not in {'slice_id', 'edge_id'}

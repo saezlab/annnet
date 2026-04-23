@@ -146,9 +146,9 @@ class TestCSVIO(unittest.TestCase):
         bad_buf.write('foo,bar\n1,2\n3,4\n')
         bad_buf.seek(0)
         df_bad = pl.read_csv(bad_buf)
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             csv_format.from_dataframe(df_bad, graph=AnnNet(directed=True), schema='edge_list')
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             csv_format.from_dataframe(df_bad, graph=AnnNet(directed=True), schema='hyperedge')
 
 

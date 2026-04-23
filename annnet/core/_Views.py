@@ -211,7 +211,7 @@ class GraphView:
                     try:
                         if self._vertices_filter(vid):
                             filtered_vertices.add(vid)
-                    except Exception:
+                    except (AttributeError, KeyError, TypeError, ValueError):
                         pass
                 vertex_ids = filtered_vertices
             else:
@@ -233,7 +233,7 @@ class GraphView:
                     try:
                         if self._edges_filter(eid):
                             filtered_edges.add(eid)
-                    except Exception:
+                    except (AttributeError, KeyError, TypeError, ValueError):
                         pass
                 edge_ids = filtered_edges
             else:
@@ -250,7 +250,7 @@ class GraphView:
                 try:
                     if self._predicate(vid):
                         filtered_vertices.add(vid)
-                except Exception:
+                except (AttributeError, KeyError, TypeError, ValueError):
                     pass
             vertex_ids = filtered_vertices
 
@@ -473,14 +473,11 @@ class GraphView:
         # Edges
         if edges is None:
             new_edges = base_edges
-            edge_pred = None
         elif callable(edges):
             new_edges = base_edges
-            edge_pred = edges
         else:
             to_set = set(edges)
             new_edges = (set(base_edges) & to_set) if base_edges is not None else to_set
-            edge_pred = None
 
         # slices
         new_slices = slices if slices is not None else (self._slices if self._slices else None)
@@ -491,17 +488,17 @@ class GraphView:
             if self._predicate:
                 try:
                     ok = ok and bool(self._predicate(v))
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     ok = False
             if predicate:
                 try:
                     ok = ok and bool(predicate(v))
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     ok = False
             if vertex_pred:
                 try:
                     ok = ok and bool(vertex_pred(v))
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     ok = False
             return ok
 
