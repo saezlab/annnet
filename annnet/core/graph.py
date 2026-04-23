@@ -32,7 +32,7 @@ from ._records import (
     _slice_RESERVED,
     _vertex_RESERVED,
 )
-from ._Slices import SliceClass, SliceManager
+from ._Slices import SliceManager
 from ._Views import GraphView, ViewsAccessor, ViewsClass
 from .lazy_proxies import _LazyGTProxy, _LazyIGProxy, _LazyNXProxy
 
@@ -63,12 +63,25 @@ class AnnNetMeta(type):
         return sorted(set(api))
 
 
+class _BlockedLegacyAttribute:
+    """Descriptor that hides removed flat API names without global attr overhead."""
+
+    __slots__ = ("name",)
+
+    def __init__(self, name):
+        self.name = name
+
+    def __get__(self, instance, owner=None):
+        raise AttributeError(
+            f"AnnNet no longer exposes '{self.name}' directly; use the appropriate namespace or canonical API instead."
+        )
+
+
 class AnnNet(
     Operations,
     History,
     ViewsClass,
     IndexMapping,
-    SliceClass,
     AttributesClass,
     Traversal,
     metaclass=AnnNetMeta,
@@ -115,8 +128,8 @@ class AnnNet(
     --------
     add_vertex
     add_edge
-    add_vertices_bulk
-    add_edges_bulk
+    add_vertices
+    add_edges
     view
     """
 
@@ -129,13 +142,20 @@ class AnnNet(
         "has_edge",
         "vertices",
         "edges",
-        "num_vertices",
-        "num_edges",
         "degree",
         "incident_edges",
-        "view",
-        "read",
-        "write",
+        "num_vertices",
+        "num_edges",
+        "nv",
+        "ne",
+        "number_of_vertices",
+        "number_of_edges",
+        "shape",
+        "V",
+        "E",
+        "obs",
+        "var",
+        "uns",
         "layers",
         "slices",
         "attrs",
@@ -147,9 +167,21 @@ class AnnNet(
         "nx",
         "ig",
         "gt",
+        "read",
+        "write",
+        "view",
+        "global_count",
+        "get_vertex",
+        "get_edge",
+        "edge_list",
+        "make_undirected",
+        "X",
+        "is_multilayer",
     )
 
-    _BLOCKED_LEGACY_API = {
+    _BLOCKED_LEGACY_API = frozenset({
+        "add_vertex",
+        "add_edge",
         "add_slice",
         "remove_slice",
         "set_active_slice",
@@ -245,15 +277,7 @@ class AnnNet(
         "get_elementary_layer_attrs",
         "list_aspects",
         "list_layers",
-    }
-
-    def __getattribute__(self, name):
-        blocked = type(self)._BLOCKED_LEGACY_API
-        if name in blocked:
-            raise AttributeError(
-                f"AnnNet no longer exposes '{name}' directly; use the appropriate namespace or canonical API instead."
-            )
-        return super().__getattribute__(name)
+    })
 
     # Construction
     def __init__(
@@ -776,16 +800,6 @@ class AnnNet(
 
     # Aspect / layer registry queries
 
-    def list_aspects(self) -> tuple:
-        """Return declared aspect names in declaration order.
-
-        Flat graphs expose no public aspects, even though the internal storage
-        uses the sentinel ``("_",)``.
-        """
-        if self._aspects == ("_",):
-            return ()
-        return self._aspects
-
     @property
     def is_multilayer(self) -> bool:
         """True iff the graph has named aspects (is not a flat graph)."""
@@ -800,26 +814,6 @@ class AnnNet(
     def _VM(self) -> set:
         """Set of (vertex_id, layer_coord) supra-node pairs (derived from _entities)."""
         return {ekey for ekey, rec in self._entities.items() if rec.kind == "vertex"}
-
-    def list_layers(self, aspect: str | None = None):
-        """Return declared layer values for one or all aspects.
-
-        Parameters
-        ----------
-        aspect : str | None
-            Aspect name. If None, returns a dict mapping every aspect to its sorted layer list.
-
-        Returns
-        -------
-        list[str] | dict[str, list[str]]
-        """
-        if aspect is None:
-            if self._aspects == ("_",):
-                return {}
-            return {asp: sorted(vals) for asp, vals in self._layers.items()}
-        if aspect not in self._aspects:
-            raise ValueError(f"Unknown aspect {aspect!r}. Valid: {self._aspects}")
-        return sorted(self._layers[aspect])
 
     # Build graph
 
@@ -861,7 +855,7 @@ class AnnNet(
             return self._add_vertex_impl(vertex_id, slice=slice, layer=layer, **attrs)
 
         items = list(vertices)
-        self.add_vertices_bulk(items, layer=layer, slice=slice)
+        self._add_vertices_batch(items, layer=layer, slice=slice)
         out = []
         for it in items:
             if isinstance(it, dict):
@@ -1124,23 +1118,17 @@ class AnnNet(
             candidate = args[0]
             if not isinstance(candidate, (str, bytes, dict)):
                 if isinstance(candidate, list):
-                    if candidate and all(
-                        isinstance(item, (dict, tuple, list)) for item in candidate
-                    ):
+                    if candidate and isinstance(candidate[0], (dict, tuple, list)):
                         batch_candidate = candidate
                 elif isinstance(candidate, tuple):
-                    if candidate and all(
-                        isinstance(item, (dict, tuple, list)) for item in candidate
-                    ):
+                    if candidate and isinstance(candidate[0], (dict, tuple, list)):
                         batch_candidate = list(candidate)
                 else:
                     try:
                         materialized = list(candidate)
                     except TypeError:
                         materialized = None
-                    if materialized is not None and all(
-                        isinstance(item, (dict, tuple, list)) for item in materialized
-                    ):
+                    if materialized and isinstance(materialized[0], (dict, tuple, list)):
                         batch_candidate = materialized
 
         if batch_candidate is not None:
@@ -1167,7 +1155,7 @@ class AnnNet(
                     break
 
             if kinds == {"hyper"}:
-                return self.add_hyperedges_bulk(
+                return self._add_hyperedges_batch(
                     batch_candidate,
                     slice=default_slice,
                     default_weight=default_weight,
@@ -1175,7 +1163,7 @@ class AnnNet(
                 )
 
             if kinds <= {"binary"}:
-                return self.add_edges_bulk(
+                return self._add_edges_batch(
                     batch_candidate,
                     slice=default_slice,
                     as_entity=as_entity,
@@ -1190,7 +1178,7 @@ class AnnNet(
             for item in batch_candidate:
                 if _is_hyper_item(item):
                     out.extend(
-                        self.add_hyperedges_bulk(
+                        self._add_hyperedges_batch(
                             [item],
                             slice=default_slice,
                             default_weight=default_weight,
@@ -1199,7 +1187,7 @@ class AnnNet(
                     )
                 else:
                     out.extend(
-                        self.add_edges_bulk(
+                        self._add_edges_batch(
                             [item],
                             slice=default_slice,
                             as_entity=as_entity,
@@ -1417,9 +1405,9 @@ class AnnNet(
             ekey = self._resolve_entity_key(node)
             if ekey not in _ent:
                 if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
-                    self.add_vertex(node[0], layer=node[1], slice=slice)
+                    self._add_vertex_impl(node[0], layer=node[1], slice=slice)
                 else:
-                    self.add_vertex(node, slice=slice)
+                    self._add_vertex_impl(node, slice=slice)
 
         self._grow_rows_to(len(_ent))
 
@@ -2385,7 +2373,7 @@ class AnnNet(
         # Create new vertex
         vid = self._gen_vertex_id_from_key(key)
         # No need to pre-check entity_to_idx here; ids are namespaced by 'cid:' prefix
-        self.add_vertex(vid, slice=slice, **attrs)
+        self._add_vertex_impl(vid, slice=slice, **attrs)
 
         # Index ownership
         self._vertex_key_index[key] = vid
@@ -2734,65 +2722,6 @@ class AnnNet(
         """
         return GraphView(self, vertices, edges, slices, predicate)
 
-    # Audit
-    def snapshot(self, label=None):
-        """Capture a lightweight snapshot of the current graph state.
-
-        Parameters
-        ----------
-        label : str, optional
-            Human-readable label for the snapshot. Auto-generated if None.
-
-        Returns
-        -------
-        dict
-            Snapshot metadata record.
-        """
-        if label is None:
-            label = f"snapshot_{len(self._snapshots)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-        snapshot = {
-            "label": label,
-            "version": self._version,
-            "timestamp": datetime.now(UTC).isoformat(),
-            "counts": {
-                "vertices": self.nv,
-                "edges": self.ne,
-                "slices": len(self._slices),
-            },
-            # Store minimal state for comparison (uses existing AnnNet attributes)
-            "vertex_ids": set(
-                eid[0] if isinstance(eid, tuple) else eid
-                for eid, r in self._entities.items()
-                if r.kind == "vertex"
-            ),
-            "edge_ids": set(self._col_to_edge.values()),
-            "slice_ids": set(self._slices.keys()),
-        }
-
-        self._snapshots.append(snapshot)
-        return snapshot
-
-    def diff(self, a, b=None):
-        """Compare two snapshots or compare snapshot with current state.
-
-        Parameters
-        ----------
-        a : str | dict | AnnNet
-            First snapshot (label, snapshot dict, or AnnNet instance).
-        b : str | dict | AnnNet | None
-            Second snapshot. If None, compare with current state.
-
-        Returns
-        -------
-        GraphDiff
-            Difference object with added/removed entities.
-        """
-        snap_a = self._resolve_snapshot(a)
-        snap_b = self._resolve_snapshot(b) if b is not None else self._current_snapshot()
-
-        return GraphDiff(snap_a, snap_b)
-
     def _resolve_snapshot(self, ref):
         """Resolve snapshot reference (label, dict, or AnnNet)."""
         if isinstance(ref, dict):
@@ -2828,24 +2757,6 @@ class AnnNet(
             "edge_ids": set(self._col_to_edge.values()),
             "slice_ids": set(self._slices.keys()),
         }
-
-    def list_snapshots(self):
-        """List all snapshots.
-
-        Returns
-        -------
-        list[dict]
-            Snapshot metadata.
-        """
-        return [
-            {
-                "label": snap["label"],
-                "timestamp": snap["timestamp"],
-                "version": snap["version"],
-                "counts": snap["counts"],
-            }
-            for snap in self._snapshots
-        ]
 
     # -------------------------------------------------------------------------
     # aspects / elem_layers — thin read/write properties backed by _aspects / _layers
@@ -3072,7 +2983,7 @@ class AnnNet(
     # Bulk mutation API
     # ------------------------------------------------------------------
 
-    def add_vertices_bulk(self, vertices, layer=None, slice=None):
+    def _add_vertices_batch(self, vertices, layer=None, slice=None):
         """Add many vertices in one pass.
 
         Parameters
@@ -3129,7 +3040,7 @@ class AnnNet(
 
         # --- entity registration ---
         coord = self._resolve_vertex_insert_coord(
-            layer, vertex_ids=[vid for vid, _ in norm], context="add_vertices_bulk"
+            layer, vertex_ids=[vid for vid, _ in norm], context="_add_vertices_batch"
         )
         new_rows = 0
         for vid, _ in norm:
@@ -3286,7 +3197,7 @@ class AnnNet(
 
         self.vertex_attributes = df2
 
-    def add_edges_bulk(
+    def _add_edges_batch(
         self,
         edges,
         *,
@@ -3396,7 +3307,7 @@ class AnnNet(
                 ekey = vid
             else:
                 coord = self._resolve_vertex_insert_coord(
-                    None, vertex_ids=vid, context="add_edges_bulk"
+                    None, vertex_ids=vid, context="_add_edges_batch"
                 )
                 ekey = (vid, coord)
             if ekey not in self._entities:
@@ -3569,15 +3480,24 @@ class AnnNet(
             self.attrs.set_edge_attrs_bulk(pending_attrs)
 
         if as_entity:
+            entities = self._entities
+            flat = self._aspects == ("_",)
+            flat_coord = ("_",)
             for eid in out_ids:
-                self._register_edge_as_entity(eid)
+                ekey = (eid, flat_coord) if flat and isinstance(eid, str) else self._resolve_entity_key(eid)
+                if ekey not in entities:
+                    self._register_entity_record(
+                        ekey,
+                        EntityRecord(row_idx=len(entities), kind="edge_entity"),
+                    )
                 rec = self._edges[eid]
                 if rec.etype == "binary":
                     rec.etype = "vertex_edge"
+            self._grow_rows_to(len(entities))
 
         return out_ids
 
-    def add_hyperedges_bulk(
+    def _add_hyperedges_batch(
         self,
         hyperedges,
         *,
@@ -3659,7 +3579,7 @@ class AnnNet(
 
         for u in all_verts:
             coord = self._resolve_vertex_insert_coord(
-                None, vertex_ids=u, context="add_hyperedges_bulk"
+                None, vertex_ids=u, context="_add_hyperedges_batch"
             )
             ekey = (u, coord)
             if ekey not in self._entities:
@@ -3788,7 +3708,7 @@ class AnnNet(
 
         return out_ids
 
-    def add_edges_to_slice_bulk(self, slice_id, edge_ids):
+    def _add_edges_to_slice_batch(self, slice_id, edge_ids):
         """Add many edges to a slice and attach all incident vertices.
 
         Parameters
@@ -4064,21 +3984,8 @@ class AnnNet(
             slice_data["vertices"].difference_update(drop_vertex_ids)
 
     # ------------------------------------------------------------------
-    # Layer API forwarding — keep direct access on AnnNet for backward
-    # compat and internal callers (IO, tests, _Ops.py etc.)
+    # Layer internals used by LayerAccessor
     # ------------------------------------------------------------------
-
-    def set_aspects(self, *args, **kwargs):
-        return self.layers.set_aspects(*args, **kwargs)
-
-    def set_elementary_layers(self, *args, **kwargs):
-        return self.layers.set_elementary_layers(*args, **kwargs)
-
-    def add_elementary_layer(self, *args, **kwargs):
-        return self.layers.add_elementary_layer(*args, **kwargs)
-
-    def flatten_layers(self, *args, **kwargs):
-        return self.layers.flatten_layers(*args, **kwargs)
 
     def _restore_supra_nodes(self, *args, **kwargs):
         return self.layers._restore_supra_nodes(*args, **kwargs)
@@ -4089,15 +3996,6 @@ class AnnNet(
     def _validate_layer_tuple(self, *args, **kwargs):
         return self.layers._validate_layer_tuple(*args, **kwargs)
 
-    def has_presence(self, *args, **kwargs):
-        return self.layers.has_presence(*args, **kwargs)
-
-    def iter_layers(self, *args, **kwargs):
-        return self.layers.iter_layers(*args, **kwargs)
-
-    def iter_vertex_layers(self, *args, **kwargs):
-        return self.layers.iter_vertex_layers(*args, **kwargs)
-
     def nl_to_row(self, *args, **kwargs):
         return self.layers.nl_to_row(*args, **kwargs)
 
@@ -4107,68 +4005,10 @@ class AnnNet(
     def _build_supra_index(self, *args, **kwargs):
         return self.layers._build_supra_index(*args, **kwargs)
 
-    def ensure_vertex_layer_index(self, *args, **kwargs):
-        return self.layers.ensure_vertex_layer_index(*args, **kwargs)
-
-    def layer_id_to_tuple(self, *args, **kwargs):
-        return self.layers.layer_id_to_tuple(*args, **kwargs)
-
-    def layer_tuple_to_id(self, *args, **kwargs):
-        return self.layers.layer_tuple_to_id(*args, **kwargs)
-
     def _assert_presence(self, *args, **kwargs):
         return self.layers._assert_presence(*args, **kwargs)
 
-    def supra_adjacency(self, *args, **kwargs):
-        return self.layers.supra_adjacency(*args, **kwargs)
 
-    def supra_incidence(self, *args, **kwargs):
-        return self.layers.supra_incidence(*args, **kwargs)
-
-    def build_intra_block(self, *args, **kwargs):
-        return self.layers.build_intra_block(*args, **kwargs)
-
-    def build_inter_block(self, *args, **kwargs):
-        return self.layers.build_inter_block(*args, **kwargs)
-
-    def build_coupling_block(self, *args, **kwargs):
-        return self.layers.build_coupling_block(*args, **kwargs)
-
-    def layer_vertex_set(self, *args, **kwargs):
-        return self.layers.layer_vertex_set(*args, **kwargs)
-
-    def layer_edge_set(self, *args, **kwargs):
-        return self.layers.layer_edge_set(*args, **kwargs)
-
-    def layer_union(self, *args, **kwargs):
-        return self.layers.layer_union(*args, **kwargs)
-
-    def layer_intersection(self, *args, **kwargs):
-        return self.layers.layer_intersection(*args, **kwargs)
-
-    def layer_difference(self, *args, **kwargs):
-        return self.layers.layer_difference(*args, **kwargs)
-
-    def set_aspect_attrs(self, *args, **kwargs):
-        return self.layers.set_aspect_attrs(*args, **kwargs)
-
-    def get_aspect_attrs(self, *args, **kwargs):
-        return self.layers.get_aspect_attrs(*args, **kwargs)
-
-    def set_layer_attrs(self, *args, **kwargs):
-        return self.layers.set_layer_attrs(*args, **kwargs)
-
-    def get_layer_attrs(self, *args, **kwargs):
-        return self.layers.get_layer_attrs(*args, **kwargs)
-
-    def set_vertex_layer_attrs(self, *args, **kwargs):
-        return self.layers.set_vertex_layer_attrs(*args, **kwargs)
-
-    def get_vertex_layer_attrs(self, *args, **kwargs):
-        return self.layers.get_vertex_layer_attrs(*args, **kwargs)
-
-    def set_elementary_layer_attrs(self, *args, **kwargs):
-        return self.layers.set_elementary_layer_attrs(*args, **kwargs)
-
-    def get_elementary_layer_attrs(self, *args, **kwargs):
-        return self.layers.get_elementary_layer_attrs(*args, **kwargs)
+for _legacy_name in AnnNet._BLOCKED_LEGACY_API:
+    setattr(AnnNet, _legacy_name, _BlockedLegacyAttribute(_legacy_name))
+del _legacy_name

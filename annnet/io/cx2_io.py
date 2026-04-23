@@ -1100,8 +1100,8 @@ def from_cx2(cx2_data, *, hyperedges="manifest"):
         G.add_vertices(vertex_bulk_data)
 
     if _manifest_mode:
-        # Manifest already set the full vertex_attributes; add_vertices_bulk has upserted any
-        # new layout coords into it.  Just fix the column name if needed.
+        # Manifest already set the full vertex_attributes; add_vertices has
+        # upserted any new layout coords into it. Just fix the column name if needed.
         cols = set(G.vertex_attributes.columns)
         if "vertex_id" not in cols and "id" in cols:
             G.vertex_attributes = G.vertex_attributes.rename({"id": "vertex_id"})

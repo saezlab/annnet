@@ -602,7 +602,7 @@ def from_sif(
 
             edge_ids = slice_info.get("edges", [])
             if edge_ids:
-                H.slices.add_edges(lid, edge_ids)
+                H.slices._add_edges(lid, edge_ids)
 
             weights = slice_info.get("weights", {})
             if weights:

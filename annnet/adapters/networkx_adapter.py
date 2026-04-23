@@ -741,7 +741,7 @@ def from_nx(
                 except Exception:
                     pass
             if eids:
-                H.slices.add_edges(lid, eids)
+                H.slices._add_edges(lid, eids)
 
         for lid, per_edge in slice_weights_cache.items():
             if lid not in existing_slices:

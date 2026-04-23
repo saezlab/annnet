@@ -356,11 +356,11 @@ class LayerAccessor:
     def set_vertex_attrs(self, vid, **kw):
         return self._G.attrs.set_vertex_attrs(vid, **kw)
 
-    def add_edges_bulk(self, edges, **kw):
-        return self._G.add_edges_bulk(edges, **kw)
+    def _add_edges_batch(self, edges, **kw):
+        return self._G._add_edges_batch(edges, **kw)
 
-    def add_vertices_bulk(self, verts, **kw):
-        return self._G.add_vertices_bulk(verts, **kw)
+    def _add_vertices_batch(self, verts, **kw):
+        return self._G._add_vertices_batch(verts, **kw)
 
     ## Aspects & layers
 
@@ -1357,7 +1357,7 @@ class LayerAccessor:
         )
         attributes.setdefault("source", "kivela_layer")
         attributes.setdefault("layer_tuple", tuple(layer_tuple))
-        return self.create_slice_from_operation(slice_id, result, **attributes)
+        return self._G.slices.create_slice_from_operation(slice_id, result, **attributes)
 
     def create_slice_from_layer_union(
         self,
@@ -1395,7 +1395,7 @@ class LayerAccessor:
         )
         attributes.setdefault("source", "kivela_layer_union")
         attributes.setdefault("layers", [tuple(a) for a in layer_tuples])
-        return self.create_slice_from_operation(slice_id, result, **attributes)
+        return self._G.slices.create_slice_from_operation(slice_id, result, **attributes)
 
     def create_slice_from_layer_intersection(
         self,
@@ -1433,7 +1433,7 @@ class LayerAccessor:
         )
         attributes.setdefault("source", "kivela_layer_intersection")
         attributes.setdefault("layers", [tuple(a) for a in layer_tuples])
-        return self.create_slice_from_operation(slice_id, result, **attributes)
+        return self._G.slices.create_slice_from_operation(slice_id, result, **attributes)
 
     def create_slice_from_layer_difference(
         self,
@@ -1476,7 +1476,7 @@ class LayerAccessor:
         attributes.setdefault("source", "kivela_layer_difference")
         attributes.setdefault("layer_a", tuple(layer_a))
         attributes.setdefault("layer_b", tuple(layer_b))
-        return self.create_slice_from_operation(slice_id, result, **attributes)
+        return self._G.slices.create_slice_from_operation(slice_id, result, **attributes)
 
     ## Subgraph
 

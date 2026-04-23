@@ -315,8 +315,8 @@ def from_json(path) -> AnnNet:
             H.add_vertices(vertex_dicts)
 
     # edges (binary)
-    # Multilayer graphs use supra-node tuples as endpoints — add_edges_bulk is flat-only,
-    # so fall back to scalar add_edge for multilayer.
+    # Multilayer graphs use supra-node tuples as endpoints; add_edges accepts
+    # both scalar-compatible specs and batches.
     edge_dicts = []
     for e in doc.get("edges", []):
         eid = e.get("id")
@@ -400,7 +400,7 @@ def from_json(path) -> AnnNet:
             slice_weights[(lid, eid)] = float(EL["weight"])
     for lid, eids in slice_edges.items():
         try:
-            H.slices.add_edges(lid, eids)
+            H.slices._add_edges(lid, eids)
         except Exception:
             pass
     for (lid, eid), w in slice_weights.items():

@@ -344,11 +344,11 @@ class Operations:
         # vertices with attrs
         va_lookup = self._rows_attr_map(self.vertex_attributes, "vertex_id", V)
         v_rows = [{"vertex_id": v, **va_lookup.get(v, {})} for v in V]
-        g.add_vertices_bulk(v_rows, slice=g._default_slice)
+        g._add_vertices_batch(v_rows, slice=g._default_slice)
 
         # edges
         if bin_payload:
-            g.add_edges_bulk(bin_payload, slice=g._default_slice)
+            g._add_edges_batch(bin_payload, slice=g._default_slice)
         if hyper_payload:
             g.add_edges(hyper_payload, slice=g._default_slice)
 
@@ -357,7 +357,7 @@ class Operations:
             g.slices.add_slice(lid, **meta["attributes"])
             kept_edges = set(meta["edges"]) & E
             if kept_edges:
-                g.slices.add_edges(lid, kept_edges)
+                g.slices._add_edges(lid, kept_edges)
 
         return g
 
@@ -467,9 +467,9 @@ class Operations:
         g = G(
             directed=self.directed, n=len(V), e=len(E_bin) + len(E_hyper_members) + len(E_hyper_dir)
         )
-        g.add_vertices_bulk(v_rows, slice=g._default_slice)
+        g._add_vertices_batch(v_rows, slice=g._default_slice)
         if bin_payload:
-            g.add_edges_bulk(bin_payload, slice=g._default_slice)
+            g._add_edges_batch(bin_payload, slice=g._default_slice)
         if hyper_payload:
             g.add_edges(hyper_payload, slice=g._default_slice)
 
@@ -496,7 +496,7 @@ class Operations:
                     if s is not None and t is not None and s in V and t in V:
                         keep.add(eid)
             if keep:
-                g.slices.add_edges(lid, keep)
+                g.slices._add_edges(lid, keep)
 
         return g
 
@@ -719,7 +719,7 @@ class Operations:
         # vertices with attrs (edge-entities share same table)
         va_lookup = self._rows_attr_map(self.vertex_attributes, "vertex_id", V)
         v_rows = [{"vertex_id": v, **va_lookup.get(v, {})} for v in V]
-        g.add_vertices_bulk(v_rows, slice=slice_id)
+        g._add_vertices_batch(v_rows, slice=slice_id)
 
         # edge attrs
         e_attrs = self._rows_attr_map(self.edge_attributes, "edge_id", E)
@@ -808,7 +808,7 @@ class Operations:
                 )
 
         if bin_payload:
-            g.add_edges_bulk(bin_payload, slice=slice_id)
+            g._add_edges_batch(bin_payload, slice=slice_id)
         if hyper_payload:
             g.add_edges(hyper_payload, slice=slice_id)
 
@@ -1192,6 +1192,9 @@ class OperationsAccessor:
 
     def reverse(self, *args, **kwargs):
         return Operations.reverse(self._G, *args, **kwargs)
+
+    def subgraph_from_slice(self, *args, **kwargs):
+        return Operations.subgraph_from_slice(self._G, *args, **kwargs)
 
     def memory_usage(self, *args, **kwargs):
         return Operations.memory_usage(self._G, *args, **kwargs)

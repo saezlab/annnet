@@ -115,8 +115,21 @@ class History:
         if x is None or isinstance(x, (bool, int, float, str)):
             return x
         if isinstance(x, (set, frozenset)):
-            return sorted(self._jsonify(v) for v in x)
+            values = sorted(x, key=repr)
+            if len(values) > 50:
+                return {
+                    "__type__": type(x).__name__,
+                    "len": len(values),
+                    "head": [self._jsonify(v) for v in values[:10]],
+                }
+            return [self._jsonify(v) for v in values]
         if isinstance(x, (list, tuple)):
+            if len(x) > 50:
+                return {
+                    "__type__": type(x).__name__,
+                    "len": len(x),
+                    "head": [self._jsonify(v) for v in x[:10]],
+                }
             return [self._jsonify(v) for v in x]
         if isinstance(x, dict):
             return {str(k): self._jsonify(v) for k, v in x.items()}
@@ -377,10 +390,42 @@ class HistoryAccessor:
         return History.mark(self._G, label)
 
     def snapshot(self, label=None):
-        return type(self._G).snapshot(self._G, label=label)
+        G = self._G
+        if label is None:
+            label = f"snapshot_{len(G._snapshots)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        snapshot = {
+            "label": label,
+            "version": G._version,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "counts": {
+                "vertices": G.nv,
+                "edges": G.ne,
+                "slices": len(G._slices),
+            },
+            "vertex_ids": set(
+                eid[0] if isinstance(eid, tuple) else eid
+                for eid, r in G._entities.items()
+                if r.kind == "vertex"
+            ),
+            "edge_ids": set(G._col_to_edge.values()),
+            "slice_ids": set(G._slices.keys()),
+        }
+        G._snapshots.append(snapshot)
+        return snapshot
 
     def diff(self, a, b=None):
-        return type(self._G).diff(self._G, a, b=b)
+        G = self._G
+        snap_a = G._resolve_snapshot(a)
+        snap_b = G._resolve_snapshot(b) if b is not None else G._current_snapshot()
+        return GraphDiff(snap_a, snap_b)
 
     def list_snapshots(self):
-        return type(self._G).list_snapshots(self._G)
+        return [
+            {
+                "label": snap["label"],
+                "timestamp": snap["timestamp"],
+                "version": snap["version"],
+                "counts": snap["counts"],
+            }
+            for snap in self._G._snapshots
+        ]

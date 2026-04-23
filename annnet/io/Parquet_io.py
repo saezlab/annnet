@@ -663,7 +663,7 @@ def from_parquet(path) -> AnnNet:
 
         for lid, eids in by_slice.items():
             try:
-                H.slices.add_edges(lid, eids)
+                H.slices._add_edges(lid, eids)
             except Exception:
                 for eid in eids:
                     try:

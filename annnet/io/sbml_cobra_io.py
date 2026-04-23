@@ -44,7 +44,7 @@ def _monkeypatch_set_edge_coeffs(G) -> bool:
 
 
 def _ensure_vertices(G, vertices: Iterable[str], slice: str | None) -> None:
-    # `add_vertices_bulk` exists and handles missing vertices efficiently.
+    # `add_vertices` handles scalar-compatible batches and skips existing ids.
     G.add_vertices(list(vertices), slice=slice)
 
 
@@ -53,7 +53,7 @@ BOUNDARY_SINK = "__BOUNDARY_SINK__"
 
 
 def _ensure_boundary_vertices(G, slice: str):
-    # idempotent – AnnNet.add_vertices_bulk ignores existing ids
+    # idempotent: existing ids are updated, not duplicated.
     G.add_vertices([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
 
 

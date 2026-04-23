@@ -142,7 +142,7 @@ def read_omnipath(
 
     See Also
     -
-    AnnNet, AnnNet.add_edges_bulk, AnnNet.add_vertices_bulk
+    AnnNet, AnnNet.add_edges, AnnNet.add_vertices
 
     Examples
     -
@@ -393,10 +393,10 @@ def read_omnipath(
         f"[timing] bulk list build:      {time.perf_counter() - t_bulk0:.3f}s  ({len(bulk)} edges)"
     )
 
-    # add_edges_bulk
+    # add_edges
     t_aeb0 = time.perf_counter()
     G.add_edges(bulk)
-    print(f"[timing] add_edges_bulk:       {time.perf_counter() - t_aeb0:.3f}s")
+    print(f"[timing] add_edges:            {time.perf_counter() - t_aeb0:.3f}s")
 
     G._history_enabled = True
 

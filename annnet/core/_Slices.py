@@ -4,10 +4,9 @@ from ._records import EdgeRecord, SliceRecord
 class SliceManager:
     """Namespace for all slice operations.
 
-    Owns the full slice implementation — SliceClass on AnnNet is a thin
-    forwarding shell kept for callers that cannot be updated (e.g. adapters).
-    State (_slices, _current_slice, _default_slice, slice_edge_weights) lives
-    on AnnNet because it is accessed pervasively in core graph methods.
+    Owns the full slice implementation. State (_slices, _current_slice,
+    _default_slice, slice_edge_weights) lives on AnnNet because it is accessed
+    pervasively in core graph methods.
     """
 
     __slots__ = ("_G",)
@@ -90,14 +89,6 @@ class SliceManager:
         self._ensure_slice(slice_id, **attributes)
         return slice_id
 
-    # kept as a method (not just via SliceClass) so SliceManager.add() works as alias
-    def add(self, slice_id, **attributes):
-        return self.add_slice(slice_id, **attributes)
-
-    def remove(self, slice_id):
-        """Remove a non-default slice."""
-        return self.remove_slice(slice_id)
-
     def remove_slice(self, slice_id):
         """Remove a non-default slice and its per-slice attributes.
 
@@ -169,7 +160,7 @@ class SliceManager:
             )
         G._slices[lid]["edges"].add(eid)
 
-    def add_edges(self, slice_id, edge_ids):
+    def _add_edges(self, slice_id, edge_ids):
         """Attach many existing edges to a slice and include their incident vertices."""
         G = self._G
         sid = slice_id if slice_id is not None else G._current_slice
@@ -215,29 +206,20 @@ class SliceManager:
 
     # ── queries ───────────────────────────────────────────────────────────────
 
-    def get_slices_dict(self, include_default=False):
+    def _get_slices_dict(self, include_default=False):
         G = self._G
         if include_default:
             return G._slices
         return {k: v for k, v in G._slices.items() if k != G._default_slice}
 
     def list_slices(self, include_default=False):
-        return list(self.get_slices_dict(include_default=include_default).keys())
-
-    def list(self, include_default=False):
-        return self.list_slices(include_default=include_default)
+        return list(self._get_slices_dict(include_default=include_default).keys())
 
     def has_slice(self, slice_id):
         return slice_id in self._G._slices
 
-    def exists(self, slice_id):
-        return self.has_slice(slice_id)
-
     def slice_count(self):
         return len(self._G._slices)
-
-    def count(self):
-        return self.slice_count()
 
     def get_slice_info(self, slice_id):
         G = self._G
@@ -250,20 +232,11 @@ class SliceManager:
             "attributes": self._slice_attrs(slice_id),
         }
 
-    def info(self, slice_id):
-        return self.get_slice_info(slice_id)
-
     def get_slice_vertices(self, slice_id):
         return self._G._slices[slice_id]["vertices"].copy()
 
-    def vertices(self, slice_id):
-        return self.get_slice_vertices(slice_id)
-
     def get_slice_edges(self, slice_id):
         return self._G._slices[slice_id]["edges"].copy()
-
-    def edges(self, slice_id):
-        return self.get_slice_edges(slice_id)
 
     # ── set operations ────────────────────────────────────────────────────────
 
@@ -276,9 +249,6 @@ class SliceManager:
                 union_vertices.update(G._slices[sid]["vertices"])
                 union_edges.update(G._slices[sid]["edges"])
         return {"vertices": union_vertices, "edges": union_edges}
-
-    def union(self, slice_ids):
-        return self.slice_union(slice_ids)
 
     def slice_intersection(self, slice_ids):
         G = self._G
@@ -298,9 +268,6 @@ class SliceManager:
                 return {"vertices": set(), "edges": set()}
         return {"vertices": common_v, "edges": common_e}
 
-    def intersect(self, slice_ids):
-        return self.slice_intersection(slice_ids)
-
     def slice_difference(self, slice1_id, slice2_id):
         G = self._G
         if slice1_id not in G._slices or slice2_id not in G._slices:
@@ -311,9 +278,6 @@ class SliceManager:
             "vertices": s1["vertices"] - s2["vertices"],
             "edges": s1["edges"] - s2["edges"],
         }
-
-    def difference(self, slice_a, slice_b):
-        return self.slice_difference(slice_a, slice_b)
 
     def create_slice_from_operation(self, result_slice_id, operation_result, **attributes):
         G = self._G
@@ -331,25 +295,6 @@ class SliceManager:
         G._slices[lid]["vertices"].add(vid)
 
     # ── set-op creation helpers ───────────────────────────────────────────────
-
-    def union_create(self, slice_ids, name, **attributes):
-        result = self.slice_union(slice_ids)
-        return self.create_slice_from_operation(name, result, **attributes)
-
-    def intersect_create(self, slice_ids, name, **attributes):
-        result = self.slice_intersection(slice_ids)
-        return self.create_slice_from_operation(name, result, **attributes)
-
-    def difference_create(self, slice_a, slice_b, name, **attributes):
-        result = self.slice_difference(slice_a, slice_b)
-        return self.create_slice_from_operation(name, result, **attributes)
-
-    def aggregate(
-        self, source_slice_ids, target_slice_id, method="union", weight_func=None, **attributes
-    ):
-        return self.create_aggregated_slice(
-            source_slice_ids, target_slice_id, method, weight_func, **attributes
-        )
 
     def create_aggregated_slice(
         self, source_slice_ids, target_slice_id, method="union", weight_func=None, **attributes
@@ -393,7 +338,7 @@ class SliceManager:
 
     def slice_statistics(self, include_default=False):
         stats = {}
-        for sid, data in self.get_slices_dict(include_default=include_default).items():
+        for sid, data in self._get_slices_dict(include_default=include_default).items():
             stats[sid] = {
                 "vertices": len(data["vertices"]),
                 "edges": len(data["edges"]),
@@ -401,29 +346,12 @@ class SliceManager:
             }
         return stats
 
-    def stats(self, include_default=False):
-        return self.slice_statistics(include_default=include_default)
-
-    def vertex_presence(self, vertex_id, include_default=False):
-        return self.vertex_presence_across_slices(vertex_id, include_default)
-
     def vertex_presence_across_slices(self, vertex_id, include_default=False):
         return [
             sid
-            for sid, data in self.get_slices_dict(include_default=include_default).items()
+            for sid, data in self._get_slices_dict(include_default=include_default).items()
             if vertex_id in data["vertices"]
         ]
-
-    def edge_presence(
-        self, edge_id=None, source=None, target=None, include_default=False, undirected_match=None
-    ):
-        return self.edge_presence_across_slices(
-            edge_id,
-            source,
-            target,
-            include_default=include_default,
-            undirected_match=undirected_match,
-        )
 
     def edge_presence_across_slices(
         self,
@@ -439,7 +367,7 @@ class SliceManager:
         has_pair = (source is not None) and (target is not None)
         if has_id == has_pair:
             raise ValueError("Provide either edge_id OR (source and target), but not both.")
-        slices_view = self.get_slices_dict(include_default=include_default)
+        slices_view = self._get_slices_dict(include_default=include_default)
         if has_id:
             return [lid for lid, ldata in slices_view.items() if edge_id in ldata["edges"]]
         if undirected_match is None:
@@ -462,11 +390,6 @@ class SliceManager:
                 out[lid] = matches
         return out
 
-    def hyperedge_presence(self, members=None, head=None, tail=None, include_default=False):
-        return self.hyperedge_presence_across_slices(
-            members=members, head=head, tail=tail, include_default=include_default
-        )
-
     def hyperedge_presence_across_slices(
         self, *, members=None, head=None, tail=None, include_default=False
     ):
@@ -487,7 +410,7 @@ class SliceManager:
                 raise ValueError("head and tail must be non-empty.")
             if head & tail:
                 raise ValueError("head and tail must be disjoint.")
-        slices_view = self.get_slices_dict(include_default=include_default)
+        slices_view = self._get_slices_dict(include_default=include_default)
         out: dict = {}
         for lid, ldata in slices_view.items():
             matches = []
@@ -514,9 +437,6 @@ class SliceManager:
             for eid in data["edges"]:
                 edge_counts[eid] = edge_counts.get(eid, 0) + 1
         return {eid: c for eid, c in edge_counts.items() if c >= min_slices}
-
-    def specific_edges(self, slice_id):
-        return self.slice_specific_edges(slice_id)
 
     def slice_specific_edges(self, slice_id):
         G = self._G
@@ -545,123 +465,5 @@ class SliceManager:
             changes.append({"added": added, "removed": removed, "net_change": added - removed})
         return changes
 
-    # ── convenience ───────────────────────────────────────────────────────────
-
-    def summary(self):
-        stats = self.stats(include_default=True)
-        lines = [f"slices: {len(stats)}"]
-        for i, (sid, info) in enumerate(stats.items()):
-            prefix = "├─" if i < len(stats) - 1 else "└─"
-            lines.append(f"{prefix} {sid}: {info['vertices']} vertices, {info['edges']} edges")
-        return "\n".join(lines)
-
     def __repr__(self):
-        return f"SliceManager({self.count()} slices)"
-
-
-class SliceClass:
-    """Thin forwarding shell that keeps slice methods on AnnNet.
-
-    All logic lives in SliceManager. These forwarders exist because
-    external code (adapters etc.) calls G.add_slice() / G.list_slices()
-    directly and cannot be updated.
-    """
-
-    def add_slice(self, slice_id, **attributes):
-        return self.slices.add_slice(slice_id, **attributes)
-
-    def remove_slice(self, slice_id):
-        return self.slices.remove_slice(slice_id)
-
-    def add_edge_to_slice(self, lid, eid):
-        return self.slices.add_edge_to_slice(lid, eid)
-
-    def set_active_slice(self, slice_id):
-        return self.slices.set_active_slice(slice_id)
-
-    def get_active_slice(self):
-        return self.slices.get_active_slice()
-
-    def get_slices_dict(self, include_default=False):
-        return self.slices.get_slices_dict(include_default=include_default)
-
-    def list_slices(self, include_default=False):
-        return self.slices.list_slices(include_default=include_default)
-
-    def has_slice(self, slice_id):
-        return self.slices.has_slice(slice_id)
-
-    def slice_count(self):
-        return self.slices.slice_count()
-
-    def get_slice_info(self, slice_id):
-        return self.slices.get_slice_info(slice_id)
-
-    def get_slice_vertices(self, slice_id):
-        return self.slices.get_slice_vertices(slice_id)
-
-    def get_slice_edges(self, slice_id):
-        return self.slices.get_slice_edges(slice_id)
-
-    def slice_union(self, slice_ids):
-        return self.slices.slice_union(slice_ids)
-
-    def slice_intersection(self, slice_ids):
-        return self.slices.slice_intersection(slice_ids)
-
-    def slice_difference(self, slice1_id, slice2_id):
-        return self.slices.slice_difference(slice1_id, slice2_id)
-
-    def create_slice_from_operation(self, result_slice_id, operation_result, **attributes):
-        return self.slices.create_slice_from_operation(
-            result_slice_id, operation_result, **attributes
-        )
-
-    def add_vertex_to_slice(self, lid, vid):
-        return self.slices.add_vertex_to_slice(lid, vid)
-
-    def edge_presence_across_slices(
-        self,
-        edge_id=None,
-        source=None,
-        target=None,
-        *,
-        include_default=False,
-        undirected_match=None,
-    ):
-        return self.slices.edge_presence_across_slices(
-            edge_id,
-            source,
-            target,
-            include_default=include_default,
-            undirected_match=undirected_match,
-        )
-
-    def hyperedge_presence_across_slices(
-        self, *, members=None, head=None, tail=None, include_default=False
-    ):
-        return self.slices.hyperedge_presence_across_slices(
-            members=members, head=head, tail=tail, include_default=include_default
-        )
-
-    def vertex_presence_across_slices(self, vertex_id, include_default=False):
-        return self.slices.vertex_presence_across_slices(vertex_id, include_default)
-
-    def conserved_edges(self, min_slices=2, include_default=False):
-        return self.slices.conserved_edges(min_slices, include_default)
-
-    def slice_specific_edges(self, slice_id):
-        return self.slices.slice_specific_edges(slice_id)
-
-    def temporal_dynamics(self, ordered_slices, metric="edge_change"):
-        return self.slices.temporal_dynamics(ordered_slices, metric)
-
-    def create_aggregated_slice(
-        self, source_slice_ids, target_slice_id, method="union", weight_func=None, **attributes
-    ):
-        return self.slices.create_aggregated_slice(
-            source_slice_ids, target_slice_id, method, weight_func, **attributes
-        )
-
-    def slice_statistics(self, include_default=False):
-        return self.slices.slice_statistics(include_default=include_default)
+        return f"SliceManager({self.slice_count()} slices)"

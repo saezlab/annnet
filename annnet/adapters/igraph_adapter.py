@@ -1002,7 +1002,7 @@ def from_igraph(
             except Exception:
                 pass
         if eids:
-            H.slices.add_edges(lid, eids)
+            H.slices._add_edges(lid, eids)
 
     for lid, per_edge in (manifest.get("slice_weights", {}) or {}).items():
         if lid not in existing_slices:

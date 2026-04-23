@@ -496,7 +496,7 @@ class GraphView:
                 binary_edges.append(d)
 
         if binary_edges:
-            subG.add_edges_bulk(binary_edges)
+            subG._add_edges_batch(binary_edges)
         if hyper_edges:
             subG.add_edges(hyper_edges)
 
