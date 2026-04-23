@@ -1701,25 +1701,25 @@ class LayerAccessor:
 
         Parameters
         ----------
-            layers : list[str] | list[tuple[str, ...]] | None
-                Optional subset of layers. None = all layers in V_M.
-                Single-aspect string ids are accepted.
-            include_inter : bool
-                Include inter-layer edges in the output columns. Default True.
-            include_coupling : bool
-                Include coupling edges in the output columns. Default True.
+        layers : list[str] | list[tuple[str, ...]] | None
+            Optional subset of layers. None = all layers in V_M.
+            Single-aspect string ids are accepted.
+        include_inter : bool
+            Include inter-layer edges in the output columns. Default True.
+        include_coupling : bool
+            Include coupling edges in the output columns. Default True.
 
         Returns
         -------
-            B : scipy.sparse.csr_matrix
-                Shape (|V_M|, |E_selected|). Rows are vertex-layer pairs in the
-                order given by self._row_to_nl after ensure_vertex_layer_index.
-            edge_ids : list[str]
-                Edge id for each column of B, in column order. Use this to map
-                columns back to edges for interpretability.
-            skipped : list[str]
-                Edge ids that were excluded because their layer assignment could
-                not be resolved. Inspect these if B looks sparse.
+        B : scipy.sparse.csr_matrix
+            Shape (|V_M|, |E_selected|). Rows are vertex-layer pairs in the
+            order given by self._row_to_nl after ensure_vertex_layer_index.
+        edge_ids : list[str]
+            Edge id for each column of B, in column order. Use this to map
+            columns back to edges for interpretability.
+        skipped : list[str]
+            Edge ids that were excluded because their layer assignment could
+            not be resolved. Inspect these if B looks sparse.
 
         Notes
         -----

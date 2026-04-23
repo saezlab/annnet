@@ -1,16 +1,17 @@
 # Bulk Operations
 
-Bulk editing helpers now live on the main graph object and operation namespace,
-not in a separate `annnet.core._BulkOps` module.
+Bulk and structural graph operations live in `annnet.core._Ops`.
 
-Use `AnnNet` bulk methods such as `add_vertices_bulk(...)` and
-`add_edges_bulk(...)`, plus the `G.ops` namespace for copy/materialization
-operations. Direct imports from underscore modules follow the
+Use `G.ops` for graph-owned copy, extraction, reversal, memory, and incidence
+helpers. Direct imports from underscore modules follow the
 [internal API policy](../api-boundary.md).
 
-::: annnet.core.graph.AnnNet
+::: annnet.core._Ops.Operations
     options:
-      members:
-        - add_vertices_bulk
-        - add_edges_bulk
+      filters: public
+      show_root_heading: true
+
+::: annnet.core._Ops.OperationsAccessor
+    options:
+      filters: public
       show_root_heading: true
