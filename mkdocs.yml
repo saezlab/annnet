@@ -37,6 +37,7 @@ nav:
     -   Notebooks Overview: tutorials/index.md
     -   Analysis patterns: tutorials/analysis-patterns.md
     -   HowTo's:
+        -   Tutorial index: tutorials/notebooks/tutos/00_tutorial_index.ipynb
         -   Quickstart graph basics: tutorials/notebooks/tutos/01_quickstart_graph_basics.ipynb
         -   Attributes, views, and indexing: tutorials/notebooks/tutos/02_attributes_views_and_indexing.ipynb
         -   Slices and multilayer workflows: tutorials/notebooks/tutos/03_slices_and_multilayer_workflows.ipynb

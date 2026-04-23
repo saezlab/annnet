@@ -965,7 +965,7 @@ def _from_nx_without_manifest(
             if isinstance(v, str) and str(v).startswith(reify_prefix):
                 continue
         try:
-            H.add_vertex(v)
+            H.add_vertices(v)
         except Exception:  # noqa: BLE001
             pass
         if d:
@@ -988,12 +988,14 @@ def _from_nx_without_manifest(
         for eid, directed, head_map, tail_map, he_attrs, _he_node in hyperdefs:
             for x in set(head_map) | set(tail_map):
                 try:
-                    H.add_vertex(x)
+                    H.add_vertices(x)
                 except Exception:  # noqa: BLE001
                     pass
             if directed:
                 try:
-                    H.add_edge(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
+                    H.add_edges(
+                        src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 H.attrs.set_edge_attrs(
@@ -1004,7 +1006,7 @@ def _from_nx_without_manifest(
             else:
                 members = list(set(head_map) | set(tail_map))
                 try:
-                    H.add_edge(src=members, edge_id=eid, directed=False)
+                    H.add_edges(src=members, edge_id=eid, directed=False)
                 except Exception:  # noqa: BLE001
                     pass
                 H.attrs.set_edge_attrs(
@@ -1050,14 +1052,14 @@ def _from_nx_without_manifest(
         w = d.get('weight', d.get('__weight', 1.0))
 
         try:
-            H.add_vertex(u)
-            H.add_vertex(v)
+            H.add_vertices(u)
+            H.add_vertices(v)
         except Exception:  # noqa: BLE001
             pass
         try:
-            H.add_edge(u, v, edge_id=eid, directed=e_directed)
+            H.add_edges(u, v, edge_id=eid, directed=e_directed)
         except Exception:  # noqa: BLE001
-            H.add_edge(u, v, edge_id=eid, directed=True)
+            H.add_edges(u, v, edge_id=eid, directed=True)
 
         try:
             H.edge_weights[eid] = float(w)

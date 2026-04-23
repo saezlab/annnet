@@ -142,18 +142,18 @@ class TestGraphToolAdapter(unittest.TestCase):
 
     def test_directed_flag_preserved(self):
         g_dir = AnnNet(directed=True)
-        g_dir.add_vertex('X')
-        g_dir.add_vertex('Y')
-        g_dir.add_edge('X', 'Y')
+        g_dir.add_vertices('X')
+        g_dir.add_vertices('Y')
+        g_dir.add_edges('X', 'Y')
 
         gtG_dir, manifest_dir = to_graphtool(g_dir)
         self.assertTrue(gtG_dir.is_directed())
         self.assertTrue(manifest_dir['graph']['directed'])
 
         g_undir = AnnNet(directed=False)
-        g_undir.add_vertex('X')
-        g_undir.add_vertex('Y')
-        g_undir.add_edge('X', 'Y')
+        g_undir.add_vertices('X')
+        g_undir.add_vertices('Y')
+        g_undir.add_edges('X', 'Y')
 
         gtG_undir, manifest_undir = to_graphtool(g_undir)
         self.assertFalse(gtG_undir.is_directed())

@@ -349,10 +349,10 @@ class HistoryAccessor:
         return History.mark(self._G, label)
 
     def snapshot(self, label=None):
-        return type(self._G).snapshot(self._G, label=label)
+        return self._G._history_snapshot_impl(label=label)
 
     def diff(self, a, b=None):
-        return type(self._G).diff(self._G, a, b=b)
+        return self._G._history_diff_impl(a, b=b)
 
     def list_snapshots(self):
-        return type(self._G).list_snapshots(self._G)
+        return self._G._history_list_snapshots_impl()

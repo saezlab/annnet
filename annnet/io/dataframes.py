@@ -418,9 +418,9 @@ def from_dataframes(
                             for v, r in zip(data['vertices'], data['roles'], strict=False)
                             if r == 'tail'
                         ]
-                        G.add_edge(src=head, tgt=tail, edge_id=eid, directed=True, weight=weight)
+                        G.add_edges(src=head, tgt=tail, edge_id=eid, directed=True, weight=weight)
                     else:
-                        G.add_edge(
+                        G.add_edges(
                             src=data['vertices'],
                             edge_id=eid,
                             directed=False,
@@ -439,7 +439,7 @@ def from_dataframes(
                     members = row.pop('members', None)
 
                     if directed_he:
-                        G.add_edge(
+                        G.add_edges(
                             src=head or [],
                             tgt=tail or [],
                             edge_id=eid,
@@ -447,7 +447,7 @@ def from_dataframes(
                             weight=weight,
                         )
                     else:
-                        G.add_edge(
+                        G.add_edges(
                             src=members or [],
                             edge_id=eid,
                             directed=False,

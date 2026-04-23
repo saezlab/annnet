@@ -19,9 +19,9 @@ def gt_backend(G):
 # ---- Simple graph builder ----
 def build_small():
     G = AnnNet()
-    G.add_vertex('a')
-    G.add_vertex('b')
-    G.add_edge('a', 'b', weight=3.0)
+    G.add_vertices('a')
+    G.add_vertices('b')
+    G.add_edges('a', 'b', weight=3.0)
     return G
 
 
@@ -43,9 +43,9 @@ class TestGTBackendAccessor(unittest.TestCase):
 
     def test_label_components(self):
         G = AnnNet()
-        G.add_vertex('x')
-        G.add_vertex('y')
-        G.add_edge('x', 'y')
+        G.add_vertices('x')
+        G.add_vertices('y')
+        G.add_edges('x', 'y')
 
         # directed=False ensures we look for Weakly Connected Components (1 component)
         comp, hist = G.gt.topology.label_components(G, directed=False)
@@ -63,9 +63,9 @@ class TestGTBackendAccessor(unittest.TestCase):
 
     def test_direct_unique_algorithm_without_explicit_graph_arg(self):
         G = AnnNet()
-        G.add_vertex('x')
-        G.add_vertex('y')
-        G.add_edge('x', 'y')
+        G.add_vertices('x')
+        G.add_vertices('y')
+        G.add_edges('x', 'y')
 
         # label_largest_component returns a VertexPropertyMap (bool per vertex).
         # directed=False → weakly-connected components; both vertices are in the same WCC.
@@ -77,9 +77,9 @@ class TestGTBackendAccessor(unittest.TestCase):
     def test_betweenness(self):
         G = AnnNet()
         for v in ['a', 'b', 'c']:
-            G.add_vertex(v)
-        G.add_edge('a', 'b')
-        G.add_edge('b', 'c')
+            G.add_vertices(v)
+        G.add_edges('a', 'b')
+        G.add_edges('b', 'c')
 
         vc, ec = G.gt.centrality.betweenness(G)
         gtg = G.gt.backend()
@@ -97,10 +97,10 @@ class TestGTBackendAccessor(unittest.TestCase):
     def test_clustering(self):
         G = AnnNet()
         for v in ['a', 'b', 'c']:
-            G.add_vertex(v)
-        G.add_edge('a', 'b')
-        G.add_edge('b', 'c')
-        G.add_edge('c', 'a')  # triangle → clustering = 1.0
+            G.add_vertices(v)
+        G.add_edges('a', 'b')
+        G.add_edges('b', 'c')
+        G.add_edges('c', 'a')  # triangle → clustering = 1.0
 
         cc = G.gt.clustering.local_clustering(G)
         gtg = G.gt.backend()
@@ -112,9 +112,9 @@ class TestGTBackendAccessor(unittest.TestCase):
 
     def test_max_flow(self):
         G = AnnNet()
-        G.add_vertex('s')
-        G.add_vertex('t')
-        eid = G.add_edge('s', 't')
+        G.add_vertices('s')
+        G.add_vertices('t')
+        eid = G.add_edges('s', 't')
 
         # Add capacity as edge attribute
         G.edge_attributes = pl.DataFrame({'edge_id': [eid], 'capacity': [5.0]})
@@ -134,9 +134,9 @@ class TestGTBackendAccessor(unittest.TestCase):
 
     def test_generation_line_graph(self):
         g = AnnNet()
-        g.add_vertex('a')
-        g.add_vertex('b')
-        g.add_edge('a', 'b')
+        g.add_vertices('a')
+        g.add_vertices('b')
+        g.add_edges('a', 'b')
 
         lg, *_ = g.gt.generation.line_graph(g)
 

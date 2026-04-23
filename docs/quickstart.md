@@ -12,18 +12,18 @@ For exact APIs used below, see [AnnNet](reference/core/graph.md), [Slices](refer
 import annnet as an
 
 G = an.AnnNet(directed=True)
-G.add_slice("toy")
+G.slices.add_slice("toy")
 G.slices.active = "toy"
 
 for v in ["A", "B", "C", "D"]:
-    G.add_vertex(v, label=v, kind="gene")
+    G.add_vertices(v, label=v, kind="gene")
 
 # Binary edges (directed + undirected)
-G.add_edge("A", "B", weight=2.0, directed=True, relation="activates")
-G.add_edge("B", "C", weight=1.0, directed=False, relation="binds")
+G.add_edges("A", "B", weight=2.0, directed=True, relation="activates")
+G.add_edges("B", "C", weight=1.0, directed=False, relation="binds")
 
 # Hyperedge (directed head→tail)
-G.add_edge(["A", "B"], ["C", "D"], weight=1.0, directed=True)
+G.add_edges(["A", "B"], ["C", "D"], weight=1.0, directed=True)
 ```
 
 ## Run an algorithm (NetworkX)

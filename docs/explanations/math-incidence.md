@@ -54,8 +54,8 @@ AnnNet can represent vertex→edge and edge→edge relations because edges can
 themselves appear in the entity row space.
 
 ```python
-G.add_edge(edge_id="e_meta", as_entity=True, description="signal")
-G.add_edge("e_meta", "C", as_entity=True, directed=True)
+G.add_edges(edge_id="e_meta", as_entity=True, description="signal")
+G.add_edges("e_meta", "C", as_entity=True, directed=True)
 ```
 
 An edge-entity may exist either as a structural edge that is also connectable,

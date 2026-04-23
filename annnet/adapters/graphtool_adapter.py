@@ -289,7 +289,7 @@ def from_graphtool(
             vid = str(vp[v])
         else:
             vid = str(int(v))  # fallback: numeric id
-        G.add_vertex(vid)
+        G.add_vertices(vid)
         v_to_id[v] = vid
 
     # 2) edges
@@ -301,7 +301,7 @@ def from_graphtool(
         v = v_to_id[e.target()]
         eid = str(ep_id[e]) if ep_id is not None else None
         w = float(ep_w[e]) if ep_w is not None else 1.0
-        G.add_edge(u, v, edge_id=eid, weight=w)
+        G.add_edges(u, v, edge_id=eid, weight=w)
 
     # 3) no manifest -> projected graph only
     if manifest is None:

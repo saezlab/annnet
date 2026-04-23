@@ -28,9 +28,9 @@ class TestDataFrameAdapter(unittest.TestCase):
         from annnet import AnnNet
 
         G = AnnNet(directed=True, annotations_backend='pandas')
-        G.add_vertex('a', label='A')
-        G.add_vertex('b', label='B')
-        G.add_edge('a', 'b', weight=2.0)
+        G.add_vertices('a', label='A')
+        G.add_vertices('b', label='B')
+        G.add_edges('a', 'b', weight=2.0)
 
         exported = to_dataframes(G)
 

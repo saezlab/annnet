@@ -15,12 +15,12 @@ from annnet._dataframe_backend import dataframe_from_rows, dataframe_to_rows
 
 def test_dataframe_export_options_and_private_attr_filtering():
     graph = AnnNet(directed=None)
-    graph.add_vertex('A', label='alpha', __private='hidden')
-    graph.add_vertex('B')
-    graph.add_vertex('C')
-    graph.add_edge('A', 'B', edge_id='e1', directed=None, relation='activates')
+    graph.add_vertices('A', label='alpha', __private='hidden')
+    graph.add_vertices('B')
+    graph.add_vertices('C')
+    graph.add_edges('A', 'B', edge_id='e1', directed=None, relation='activates')
     graph._edges['e1'].weight = None
-    graph.add_edge(src=['A', 'B'], tgt=['C'], edge_id='h1', weight=2.5, directed=True)
+    graph.add_edges(src=['A', 'B'], tgt=['C'], edge_id='h1', weight=2.5, directed=True)
     graph.attrs.set_edge_attrs('h1', pathway='p1', __internal='secret')
     graph.slices.add_slice('s1')
     graph.add_edge_to_slice('s1', 'e1')
@@ -108,9 +108,9 @@ def test_graphml_sanitize_restore_and_gexf_smoke(tmp_path):
     assert nx_graph.nodes['A']['payload'] == ['x']
 
     ann = AnnNet()
-    ann.add_vertex('A')
-    ann.add_vertex('B')
-    ann.add_edge('A', 'B', edge_id='e1')
+    ann.add_vertices('A')
+    ann.add_vertices('B')
+    ann.add_edges('A', 'B', edge_id='e1')
     out = tmp_path / 'graph.gexf'
     graphml.to_gexf(ann, out)
     restored = graphml.from_gexf(out)
@@ -122,10 +122,10 @@ def test_sif_helpers_and_manifest_without_file(tmp_path):
     assert sif._split_sif_line('A|rel||B\n', '|') == ['A', 'rel', 'B']
 
     graph = AnnNet()
-    graph.add_vertex('A', label='alpha')
-    graph.add_vertex('B')
-    graph.add_edge('A', 'B', edge_id='e1', weight=2.0, relation='binds')
-    graph.add_edge(src=['A', 'B'], edge_id='h1', directed=False, weight=4.0)
+    graph.add_vertices('A', label='alpha')
+    graph.add_vertices('B')
+    graph.add_edges('A', 'B', edge_id='e1', weight=2.0, relation='binds')
+    graph.add_edges(src=['A', 'B'], edge_id='h1', directed=False, weight=4.0)
     graph._restore_supra_nodes({('A', ('layer',))})
 
     assert sif._safe_vertex_attr_rows(SimpleNamespace(vertex_attributes=None)) == []

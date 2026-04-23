@@ -12,28 +12,28 @@ from annnet.core.graph import AnnNet
 
 def build_small():
     G = AnnNet()
-    G.add_vertex('a')
-    G.add_vertex('b')
-    G.add_vertex('c')
-    G.add_edge('a', 'b', weight=3.0)
-    G.add_edge('b', 'c', weight=2.0)
+    G.add_vertices('a')
+    G.add_vertices('b')
+    G.add_vertices('c')
+    G.add_edges('a', 'b', weight=3.0)
+    G.add_edges('b', 'c', weight=2.0)
     return G
 
 
 def build_parallel():
     G = AnnNet()
-    G.add_vertex('x')
-    G.add_vertex('y')
-    G.add_edge('x', 'y', weight=10.0)
-    G.add_edge('x', 'y', weight=1.0)
+    G.add_vertices('x')
+    G.add_vertices('y')
+    G.add_edges('x', 'y', weight=10.0)
+    G.add_edges('x', 'y', weight=1.0)
     return G
 
 
 def build_directed():
     G = AnnNet(directed=True)
-    G.add_vertex('s')
-    G.add_vertex('t')
-    G.add_edge('s', 't', capacity=5.0)
+    G.add_vertices('s')
+    G.add_vertices('t')
+    G.add_edges('s', 't', capacity=5.0)
     return G
 
 
@@ -85,7 +85,7 @@ class TestNXBackendAccessor(unittest.TestCase):
         G = build_small()
         nxG1 = G.nx.backend()
         # mutate graph -> _version increments
-        G.add_edge('a', 'c')
+        G.add_edges('a', 'c')
         nxG2 = G.nx.backend()
         self.assertIsNot(nxG1, nxG2)
 
@@ -139,7 +139,7 @@ class TestNXBackendAccessor(unittest.TestCase):
     def test_louvain_communities_dispatch(self):
         G = build_small()
         # Add a small extra edge
-        G.add_edge('c', 'a')
+        G.add_edges('c', 'a')
         comms = list(G.nx.louvain_communities(G, weight='weight'))
         self.assertGreaterEqual(len(comms), 1)
 
@@ -169,9 +169,9 @@ class TestNXBackendAccessor(unittest.TestCase):
 
     def test_hyperedge_warning(self):
         G = AnnNet()
-        G.add_vertex('a')
-        G.add_vertex('b')
-        G.add_edge(src=['a', 'b'])  # hyperedge
+        G.add_vertices('a')
+        G.add_vertices('b')
+        G.add_edges(src=['a', 'b'])  # hyperedge
 
         with self.assertWarns(RuntimeWarning):
             G.nx.backend(hyperedge_mode='skip')
@@ -180,9 +180,9 @@ class TestNXBackendAccessor(unittest.TestCase):
 
     def test_slice_flatten_warning(self):
         G = AnnNet()
-        G.add_vertex('a', slice='s1')
-        G.add_vertex('b', slice='s2')
-        G.add_edge('a', 'b')
+        G.add_vertices('a', slice='s1')
+        G.add_vertices('b', slice='s2')
+        G.add_edges('a', 'b')
 
         with self.assertWarns(RuntimeWarning):
             G.nx.backend()

@@ -13,7 +13,7 @@ This page explains how that rule shows up in practice.
 
 The scalar mutation API in `graph.py` works against the canonical stores.
 
-Typical `add_vertex(...)` flow:
+Typical `add_vertices(...)` flow:
 
 1. normalize the layer coordinate
 2. resolve placeholder behavior if needed
@@ -22,7 +22,7 @@ Typical `add_vertex(...)` flow:
 5. update slice membership
 6. upsert attributes
 
-Typical `add_edge(...)` flow:
+Typical `add_edges(...)` flow:
 
 1. parse the endpoint specification
 2. infer the structural edge type

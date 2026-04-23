@@ -40,16 +40,16 @@ class TestMultilayerAdapters(unittest.TestCase):
 
         # 2. Vertices in their respective layers
         # u is present in (t1, bus) and (t2, train); v is present in (t1, bus)
-        G.add_vertex('u', layer=('t1', 'bus'))
-        G.add_vertex('u', layer=('t2', 'train'))
-        G.add_vertex('v', layer=('t1', 'bus'))
+        G.add_vertices('u', layer=('t1', 'bus'))
+        G.add_vertices('u', layer=('t2', 'train'))
+        G.add_vertices('v', layer=('t1', 'bus'))
 
         # 3. Multilayer edges use explicit supra-node endpoints
         # e1: u(t1,bus) -> v(t1,bus)  => inferred intra edge
-        G.add_edge(('u', ('t1', 'bus')), ('v', ('t1', 'bus')))
+        G.add_edges(('u', ('t1', 'bus')), ('v', ('t1', 'bus')))
 
         # e2: u(t1,bus) -> u(t2,train) => inferred coupling edge
-        G.add_edge(('u', ('t1', 'bus')), ('u', ('t2', 'train')))
+        G.add_edges(('u', ('t1', 'bus')), ('u', ('t2', 'train')))
 
         # 4. Attributes
         # Node-layer attribute

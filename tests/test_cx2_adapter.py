@@ -20,15 +20,15 @@ class TestCX2Adapter(unittest.TestCase):
         self.G = AnnNet(directed=True)
 
         # Vertices
-        self.G.add_vertex('n1')
-        self.G.add_vertex('n2')
-        self.G.add_vertex('n3')
+        self.G.add_vertices('n1')
+        self.G.add_vertices('n2')
+        self.G.add_vertices('n3')
 
         # Binary edge
-        self.G.add_edge('n1', 'n2', edge_id='e1', weight=1.5)
+        self.G.add_edges('n1', 'n2', edge_id='e1', weight=1.5)
 
         # Hyperedge — add_edge with a list src creates a hyperedge
-        self.G.add_edge(['n1', 'n2', 'n3'], edge_id='he1', weight=0.5)
+        self.G.add_edges(['n1', 'n2', 'n3'], edge_id='he1', weight=0.5)
 
         # Vertex attributes
         self.G.vertex_attributes = pl.DataFrame(

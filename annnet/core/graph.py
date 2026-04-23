@@ -96,6 +96,20 @@ class AnnNetMeta(type):
         return sorted(set(api))
 
 
+class _BlockedLegacyAttribute:
+    """Descriptor that hides removed flat API names without global attr overhead."""
+
+    __slots__ = ('name',)
+
+    def __init__(self, name):
+        self.name = name
+
+    def __get__(self, instance, owner=None):
+        raise AttributeError(
+            f"AnnNet no longer exposes '{self.name}' directly; use the appropriate namespace or canonical API instead."
+        )
+
+
 class AnnNet(
     Operations,
     History,
@@ -184,7 +198,10 @@ class AnnNet(
         'gt',
     )
 
-    _BLOCKED_LEGACY_API = {
+    _BLOCKED_LEGACY_API = frozenset(
+        {
+        'add_vertex',
+        'add_edge',
         'add_slice',
         'remove_slice',
         'set_active_slice',
@@ -280,15 +297,8 @@ class AnnNet(
         'get_elementary_layer_attrs',
         'list_aspects',
         'list_layers',
-    }
-
-    def __getattribute__(self, name):
-        blocked = type(self)._BLOCKED_LEGACY_API
-        if name in blocked:
-            raise AttributeError(
-                f"AnnNet no longer exposes '{name}' directly; use the appropriate namespace or canonical API instead."
-            )
-        return super().__getattribute__(name)
+        }
+    )
 
     # Construction
     def __init__(
@@ -1414,9 +1424,9 @@ class AnnNet(
             ekey = self._resolve_entity_key(node)
             if ekey not in _ent:
                 if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
-                    self.add_vertex(node[0], layer=node[1], slice=slice)
+                    self._add_vertex_impl(node[0], layer=node[1], slice=slice)
                 else:
-                    self.add_vertex(node, slice=slice)
+                    self._add_vertex_impl(node, slice=slice)
 
         self._grow_rows_to(len(_ent))
 
@@ -2382,7 +2392,7 @@ class AnnNet(
         # Create new vertex
         vid = self._gen_vertex_id_from_key(key)
         # No need to pre-check entity_to_idx here; ids are namespaced by 'cid:' prefix
-        self.add_vertex(vid, slice=slice, **attrs)
+        self._add_vertex_impl(vid, slice=slice, **attrs)
 
         # Index ownership
         self._vertex_key_index[key] = vid
@@ -4039,3 +4049,12 @@ class AnnNet(
 
     def get_elementary_layer_attrs(self, *args, **kwargs):
         return self.layers.get_elementary_layer_attrs(*args, **kwargs)
+
+
+AnnNet._history_snapshot_impl = AnnNet.snapshot
+AnnNet._history_diff_impl = AnnNet.diff
+AnnNet._history_list_snapshots_impl = AnnNet.list_snapshots
+
+for _legacy_name in AnnNet._BLOCKED_LEGACY_API:
+    setattr(AnnNet, _legacy_name, _BlockedLegacyAttribute(_legacy_name))
+del _legacy_name

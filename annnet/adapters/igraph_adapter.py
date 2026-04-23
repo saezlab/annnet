@@ -1053,13 +1053,15 @@ def from_igraph(
             # ensure vertices
             for x in set(head_map) | set(tail_map):
                 try:
-                    H.add_vertex(x)
+                    H.add_vertices(x)
                 except Exception:  # noqa: BLE001
                     pass
 
             if directed:
                 try:
-                    H.add_edge(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
+                    H.add_edges(
+                        src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 try:
@@ -1073,7 +1075,7 @@ def from_igraph(
             else:
                 members = list(set(head_map) | set(tail_map))
                 try:
-                    H.add_edge(src=members, edge_id=eid, directed=False)
+                    H.add_edges(src=members, edge_id=eid, directed=False)
                 except Exception:  # noqa: BLE001
                     pass
                 try:
@@ -1119,7 +1121,7 @@ def _from_ig_without_manifest(
     names = igG.vs['name'] if 'name' in igG.vs.attributes() else list(range(igG.vcount()))
     for i, vid in enumerate(names):
         try:
-            H.add_vertex(vid)
+            H.add_vertices(vid)
         except Exception:  # noqa: BLE001
             pass
         vattrs = {k: igG.vs[i][k] for k in igG.vs.attributes()}
@@ -1142,12 +1144,14 @@ def _from_ig_without_manifest(
         for eid, directed, head_map, tail_map, _he_attrs, hi in hyperdefs:
             for x in set(head_map) | set(tail_map):
                 try:
-                    H.add_vertex(x)
+                    H.add_vertices(x)
                 except Exception:  # noqa: BLE001
                     pass
             if directed:
                 try:
-                    H.add_edge(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
+                    H.add_edges(
+                        src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 try:
@@ -1161,7 +1165,7 @@ def _from_ig_without_manifest(
             else:
                 members = list(set(head_map) | set(tail_map))
                 try:
-                    H.add_edge(src=members, edge_id=eid, directed=False)
+                    H.add_edges(src=members, edge_id=eid, directed=False)
                 except Exception:  # noqa: BLE001
                     pass
                 try:
@@ -1201,14 +1205,14 @@ def _from_ig_without_manifest(
         w = d.get('weight', d.get('__weight', 1.0))
 
         try:
-            H.add_vertex(src)
-            H.add_vertex(dst)
+            H.add_vertices(src)
+            H.add_vertices(dst)
         except Exception:  # noqa: BLE001
             pass
         try:
-            H.add_edge(src, dst, edge_id=eid, directed=e_directed)
+            H.add_edges(src, dst, edge_id=eid, directed=e_directed)
         except Exception:  # noqa: BLE001
-            H.add_edge(src, dst, edge_id=eid, directed=True)
+            H.add_edges(src, dst, edge_id=eid, directed=True)
 
         try:
             H.edge_weights[eid] = float(w)

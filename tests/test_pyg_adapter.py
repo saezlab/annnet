@@ -51,23 +51,23 @@ def _build_graph() -> AnnNet:
     g = AnnNet(directed=True)
 
     # Vertices with different kinds and attributes
-    g.add_vertex('p1', kind='protein', weight=1.5, active=1.0, label='alpha')
-    g.add_vertex('p2', kind='protein', weight=2.3, active=0.0, label='beta')
-    g.add_vertex('p3', kind='protein', weight=1.8, active=1.0, label='gamma')
+    g.add_vertices('p1', kind='protein', weight=1.5, active=1.0, label='alpha')
+    g.add_vertices('p2', kind='protein', weight=2.3, active=0.0, label='beta')
+    g.add_vertices('p3', kind='protein', weight=1.8, active=1.0, label='gamma')
 
-    g.add_vertex('g1', kind='gene', expression=100.0, length=500.0, label='BRCA1')
-    g.add_vertex('g2', kind='gene', expression=50.0, length=300.0, label='TP53')
+    g.add_vertices('g1', kind='gene', expression=100.0, length=500.0, label='BRCA1')
+    g.add_vertices('g2', kind='gene', expression=50.0, length=300.0, label='TP53')
 
-    g.add_vertex('d1', kind='drug', dosage=10.0, approved=1.0)
+    g.add_vertices('d1', kind='drug', dosage=10.0, approved=1.0)
 
     # Binary edges: directed and undirected
-    e1 = g.add_edge('p1', 'g1', weight=2.0, interaction=+1, tag='regulates')
-    e2 = g.add_edge('p2', 'g2', weight=1.0, directed=False, interaction=-1, tag='inhibits')
-    e3 = g.add_edge('d1', 'p1', weight=0.5, interaction=+1, tag='targets')
-    e4 = g.add_edge('p3', 'g1', weight=1.5, interaction=+1, tag='activates')
+    e1 = g.add_edges('p1', 'g1', weight=2.0, interaction=+1, tag='regulates')
+    e2 = g.add_edges('p2', 'g2', weight=1.0, directed=False, interaction=-1, tag='inhibits')
+    e3 = g.add_edges('d1', 'p1', weight=0.5, interaction=+1, tag='targets')
+    e4 = g.add_edges('p3', 'g1', weight=1.5, interaction=+1, tag='activates')
 
     # Hyperedge
-    e5 = g.add_edge(src=['g1', 'g2'], tgt=['p1'], weight=3.0, interaction=+1, edge_id='he1')
+    e5 = g.add_edges(src=['g1', 'g2'], tgt=['p1'], weight=3.0, interaction=+1, edge_id='he1')
 
     g.slices.add_slice('active_only', region='high_expr')
     g.add_vertex_to_slice('active_only', 'p1')
@@ -312,12 +312,12 @@ class TestPyGAdapter(unittest.TestCase):
         g = AnnNet(directed=True)
 
         # Simple hyperedge: 2 tails × 2 heads = 4 edges
-        g.add_vertex('t1', kind='A')
-        g.add_vertex('t2', kind='A')
-        g.add_vertex('h1', kind='B')
-        g.add_vertex('h2', kind='B')
+        g.add_vertices('t1', kind='A')
+        g.add_vertices('t2', kind='A')
+        g.add_vertices('h1', kind='B')
+        g.add_vertices('h2', kind='B')
 
-        g.add_edge(src=['h1', 'h2'], tgt=['t1', 't2'], edge_id='he_test', directed=True)
+        g.add_edges(src=['h1', 'h2'], tgt=['t1', 't2'], edge_id='he_test', directed=True)
 
         data = to_pyg(g, hyperedge_mode='expand')
 
@@ -364,8 +364,8 @@ class TestPyGAdapter(unittest.TestCase):
     def test_graph_with_only_vertices(self):
         """Graph with vertices but no edges."""
         g = AnnNet()
-        g.add_vertex('v1', kind='A')
-        g.add_vertex('v2', kind='A')
+        g.add_vertices('v1', kind='A')
+        g.add_vertices('v2', kind='A')
 
         data = to_pyg(g)
 
@@ -375,8 +375,8 @@ class TestPyGAdapter(unittest.TestCase):
     def test_missing_kind_defaults_to_default(self):
         """Vertices without 'kind' attribute should use 'default'."""
         g = AnnNet()
-        g.add_vertex('v1')  # No kind specified
-        g.add_vertex('v2')
+        g.add_vertices('v1')  # No kind specified
+        g.add_vertices('v2')
 
         data = to_pyg(g)
 
@@ -401,8 +401,8 @@ class TestPyGAdapter(unittest.TestCase):
     def test_self_loops_handled(self):
         """Self-loop edges should be handled correctly."""
         g = AnnNet()
-        g.add_vertex('v1', kind='A')
-        g.add_edge('v1', 'v1', edge_id='self_loop', weight=1.0)
+        g.add_vertices('v1', kind='A')
+        g.add_edges('v1', 'v1', edge_id='self_loop', weight=1.0)
 
         data = to_pyg(g)
 
@@ -433,10 +433,10 @@ class TestPyGAdapter(unittest.TestCase):
         n_edges = 2000
 
         for i in range(n_proteins):
-            g.add_vertex(f'p{i}', kind='protein', weight=float(i))
+            g.add_vertices(f'p{i}', kind='protein', weight=float(i))
 
         for i in range(n_genes):
-            g.add_vertex(f'g{i}', kind='gene', expression=float(i * 10))
+            g.add_vertices(f'g{i}', kind='gene', expression=float(i * 10))
 
         # Random edges
         import random
@@ -445,7 +445,7 @@ class TestPyGAdapter(unittest.TestCase):
         for i in range(n_edges):
             p = f'p{random.randint(0, n_proteins - 1)}'  # nosec B311
             gn = f'g{random.randint(0, n_genes - 1)}'  # nosec B311
-            g.add_edge(p, gn, edge_id=f'e{i}', weight=random.random())  # nosec B311
+            g.add_edges(p, gn, edge_id=f'e{i}', weight=random.random())  # nosec B311
 
         import time
 
@@ -494,7 +494,7 @@ class TestPyGAdapter(unittest.TestCase):
     def test_missing_edge_vertices_skipped(self):
         """Edges referencing nonexistent vertices should be skipped."""
         g = AnnNet()
-        g.add_vertex('v1', kind='A')
+        g.add_vertices('v1', kind='A')
 
         # Manually add malformed edge definition
         g.edge_definitions['bad_edge'] = ('v1', 'v_nonexistent', {})
@@ -507,8 +507,8 @@ class TestPyGAdapter(unittest.TestCase):
     def test_null_attribute_values_handled(self):
         """Null/None attribute values should be handled gracefully."""
         g = AnnNet()
-        g.add_vertex('p1', kind='protein', weight=1.5, score=None)
-        g.add_vertex('p2', kind='protein', weight=None, score=2.0)
+        g.add_vertices('p1', kind='protein', weight=1.5, score=None)
+        g.add_vertices('p2', kind='protein', weight=None, score=2.0)
 
         data = to_pyg(g, node_features={'protein': ['weight', 'score']})
 
@@ -520,7 +520,7 @@ class TestPyGAdapter(unittest.TestCase):
     def test_non_numeric_features_raise_error(self):
         """Non-numeric feature columns should raise ValueError."""
         g = AnnNet()
-        g.add_vertex('p1', kind='protein', name='Protein1')
+        g.add_vertices('p1', kind='protein', name='Protein1')
 
         with self.assertRaises(ValueError) as ctx:
             to_pyg(g, node_features={'protein': ['name']})
@@ -543,9 +543,9 @@ class TestPyGAdapter(unittest.TestCase):
     def test_integer_vertex_ids(self):
         """Integer vertex IDs should be handled correctly."""
         g = AnnNet()
-        g.add_vertex('1', kind='A')  # Use string to avoid Polars schema conflict
-        g.add_vertex('2', kind='A')
-        g.add_edge('1', '2', edge_id='e1')
+        g.add_vertices('1', kind='A')  # Use string to avoid Polars schema conflict
+        g.add_vertices('2', kind='A')
+        g.add_edges('1', '2', edge_id='e1')
 
         data = to_pyg(g)
 
@@ -555,9 +555,9 @@ class TestPyGAdapter(unittest.TestCase):
     def test_mixed_id_types(self):
         """Mixed string/integer IDs should work."""
         g = AnnNet()
-        g.add_vertex('v1', kind='A')
-        g.add_vertex('v2', kind='A')  # Keep all as strings to avoid Polars schema issues
-        g.add_edge('v1', 'v2', edge_id='e1')
+        g.add_vertices('v1', kind='A')
+        g.add_vertices('v2', kind='A')  # Keep all as strings to avoid Polars schema issues
+        g.add_edges('v1', 'v2', edge_id='e1')
 
         data = to_pyg(g)
 

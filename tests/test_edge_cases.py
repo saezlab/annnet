@@ -79,9 +79,9 @@ SPECIAL_IDS = [
 def _build_special_graph():
     G = AnnNet()
     for vid in SPECIAL_IDS:
-        G.add_vertex(vid)
-    G.add_edge(SPECIAL_IDS[0], SPECIAL_IDS[1], edge_id='e1')
-    G.add_edge('α', 'β', edge_id='e2')
+        G.add_vertices(vid)
+    G.add_edges(SPECIAL_IDS[0], SPECIAL_IDS[1], edge_id='e1')
+    G.add_edges('α', 'β', edge_id='e2')
     return G
 
 
@@ -104,11 +104,11 @@ def test_special_characters_in_ids(adapter, tmpdir_fixture):
 
 def test_large_weights_and_extreme_values(tmpdir_fixture):
     G = AnnNet()
-    G.add_vertex('A')
-    G.add_vertex('B')
-    G.add_edge('A', 'B', edge_id='e1', weight=1e10)
-    G.add_edge('A', 'B', edge_id='e2', weight=1e-10, parallel='parallel')
-    G.add_edge('A', 'B', edge_id='e3', weight=0.0, parallel='parallel')
+    G.add_vertices('A')
+    G.add_vertices('B')
+    G.add_edges('A', 'B', edge_id='e1', weight=1e10)
+    G.add_edges('A', 'B', edge_id='e2', weight=1e-10, parallel='parallel')
+    G.add_edges('A', 'B', edge_id='e3', weight=0.0, parallel='parallel')
 
     G2 = _roundtrip_json(G, tmpdir_fixture, 'extreme')
 
@@ -125,8 +125,8 @@ def test_large_weights_and_extreme_values(tmpdir_fixture):
 @pytest.mark.parametrize('adapter', ['json', 'parquet', 'sif'])
 def test_self_loops(adapter, tmpdir_fixture):
     G = AnnNet()
-    G.add_vertex('A')
-    G.add_edge('A', 'A', edge_id='loop', weight=2.5)
+    G.add_vertices('A')
+    G.add_edges('A', 'A', edge_id='loop', weight=2.5)
 
     if adapter == 'json':
         G2 = _roundtrip_json(G, tmpdir_fixture, 'loop')
@@ -145,11 +145,11 @@ def test_self_loops(adapter, tmpdir_fixture):
 
 def test_parallel_edges(tmpdir_fixture):
     G = AnnNet()
-    G.add_vertex('A')
-    G.add_vertex('B')
-    G.add_edge('A', 'B', edge_id='e1', weight=1.0)
-    G.add_edge('A', 'B', edge_id='e2', weight=2.0, parallel='parallel')
-    G.add_edge('A', 'B', edge_id='e3', weight=3.0, parallel='parallel')
+    G.add_vertices('A')
+    G.add_vertices('B')
+    G.add_edges('A', 'B', edge_id='e1', weight=1.0)
+    G.add_edges('A', 'B', edge_id='e2', weight=2.0, parallel='parallel')
+    G.add_edges('A', 'B', edge_id='e3', weight=3.0, parallel='parallel')
 
     G2 = _roundtrip_json(G, tmpdir_fixture, 'parallel')
 
@@ -166,7 +166,7 @@ def test_parallel_edges(tmpdir_fixture):
 
 def test_null_and_none_handling(tmpdir_fixture):
     G = AnnNet()
-    G.add_vertex('A')
+    G.add_vertices('A')
     G.attrs.set_vertex_attrs('A', present='value', missing=None, zero=0, empty_string='')
 
     G2 = _roundtrip_json(G, tmpdir_fixture, 'nulls')
@@ -189,12 +189,12 @@ def test_very_large_graph(tmpdir_fixture):
     n_vertices = 1000
     n_edges = 2000
     for i in range(n_vertices):
-        G.add_vertex(f'v{i}')
+        G.add_vertices(f'v{i}')
     random.seed(42)
     for i in range(n_edges):
         u = f'v{random.randint(0, n_vertices - 1)}'  # nosec B311
         v = f'v{random.randint(0, n_vertices - 1)}'  # nosec B311
-        G.add_edge(u, v, edge_id=f'e{i}', weight=random.random(), parallel='parallel')  # nosec B311
+        G.add_edges(u, v, edge_id=f'e{i}', weight=random.random(), parallel='parallel')  # nosec B311
 
     G2 = _roundtrip_parquet(G, tmpdir_fixture, 'large')
 

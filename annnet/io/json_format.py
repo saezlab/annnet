@@ -336,8 +336,8 @@ def from_json(path) -> AnnNet:
             if k not in {'id', 'source', 'target', 'directed', 'weight'}
         }
         if aspects:
-            # supra-node endpoints: must use scalar add_edge
-            H.add_edge(u, v, edge_id=eid, directed=directed, parallel='parallel')
+            # supra-node endpoints: must use scalar add_edges
+            H.add_edges(u, v, edge_id=eid, directed=directed, parallel='parallel')
             rec = H._edges.get(eid)
             if rec is not None:
                 rec.weight = float(w)

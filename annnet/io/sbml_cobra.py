@@ -124,7 +124,7 @@ def _graph_from_stoich(
             source_coeff = float(-sum(v for v in col if v > 0))  # negative sum of products
             coeffs[BOUNDARY_SOURCE] = source_coeff
 
-        eid_added = G.add_edge(
+        eid_added = G.add_edges(
             src=head,
             tgt=tail,
             slice=slice,
