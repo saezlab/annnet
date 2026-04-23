@@ -40,11 +40,11 @@ n = G.export_history("log.parquet") # or .ndjson / .json / .csv
 Create labeled snapshots, then compute differences between them to see structural and attribute changes.
 
 ```python
-snap1 = G.snapshot(label="before")
+snap1 = G.history.snapshot(label="before")
 # ... perform mutations ...
-snap2 = G.snapshot(label="after")
+snap2 = G.history.snapshot(label="after")
 
-diff = G.diff("before", "after")
+diff = G.history.diff("before", "after")
 diff.added_vertices     # set[str]
 diff.removed_vertices   # set[str]
 diff.added_edges        # set[str]

@@ -83,7 +83,8 @@ def run(scale):
             G.add_vertices(vid, layer=aa)
 
     presence_counts = {
-        str(aa): len(G.layers.layer_vertex_set(aa)) for aa in layer_tuples[: min(10, len(layer_tuples))]
+        str(aa): len(G.layers.layer_vertex_set(aa))
+        for aa in layer_tuples[: min(10, len(layer_tuples))]
     }
 
     results["vertex_presence"] = {
@@ -114,10 +115,7 @@ def run(scale):
         bulk_count = 0
         for aa, edges_uv in bulk_by_layer.items():
             eids = G.add_edges(
-                [
-                    {"source": (u, aa), "target": (v, aa), "weight": 1.0}
-                    for u, v in edges_uv
-                ]
+                [{"source": (u, aa), "target": (v, aa), "weight": 1.0} for u, v in edges_uv]
             )
             bulk_count += len(eids)
 
@@ -181,7 +179,9 @@ def run(scale):
     if len(layer_tuples) >= 3:
         with measure() as m_union:
             union_layers = layer_tuples[:3]
-            union_result = G.layers.layer_union(union_layers, include_inter=False, include_coupling=False)
+            union_result = G.layers.layer_union(
+                union_layers, include_inter=False, include_coupling=False
+            )
 
         with measure() as m_intersection:
             inter_result = G.layers.layer_intersection(

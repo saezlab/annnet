@@ -8,6 +8,50 @@ Primary graph objects from `annnet.core.graph`.
     options:
       filters: public
       inherited_members: false
+      members:
+        - add_vertices
+        - add_edges
+        - remove_vertices
+        - remove_edges
+        - has_vertex
+        - has_edge
+        - vertices
+        - edges
+        - degree
+        - incident_edges
+        - num_vertices
+        - num_edges
+        - nv
+        - ne
+        - number_of_vertices
+        - number_of_edges
+        - shape
+        - V
+        - E
+        - obs
+        - var
+        - uns
+        - attrs
+        - views
+        - history
+        - ops
+        - layers
+        - slices
+        - idx
+        - cache
+        - nx
+        - ig
+        - gt
+        - read
+        - write
+        - view
+        - global_count
+        - get_vertex
+        - get_edge
+        - edge_list
+        - make_undirected
+        - X
+        - is_multilayer
       show_root_heading: true
       show_bases: false
 

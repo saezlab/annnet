@@ -6,8 +6,3 @@ Slice management from `annnet.core._Slices`.
     options:
       filters: public
       show_root_heading: true
-
-::: annnet.core._Slices.SliceClass
-    options:
-      filters: public
-      show_root_heading: true

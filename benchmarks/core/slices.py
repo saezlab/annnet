@@ -64,7 +64,8 @@ def run(scale):
     }
 
     all_presence = {
-        sid: sum(v.startswith("all_") for v in list(G.slices.get_slice_vertices(sid))) for sid in slice_ids
+        sid: sum(v.startswith("all_") for v in list(G.slices.get_slice_vertices(sid)))
+        for sid in slice_ids
     }
 
     results["propagation"] = {
