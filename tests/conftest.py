@@ -22,12 +22,12 @@ from annnet.core.graph import AnnNet  # noqa: E402
 def simple_graph():
     """Minimal graph with vertices and binary edges only."""
     G = AnnNet(directed=True)
-    G.add_vertex("A")
-    G.add_vertex("B")
-    G.add_vertex("C")
+    G.add_vertices("A")
+    G.add_vertices("B")
+    G.add_vertices("C")
 
-    G.add_edge("A", "B", edge_id="e1", weight=1.5)
-    G.add_edge("B", "C", edge_id="e2", weight=2.0)
+    G.add_edges("A", "B", edge_id="e1", weight=1.5)
+    G.add_edges("B", "C", edge_id="e2", weight=2.0)
 
     return G
 
@@ -38,34 +38,34 @@ def complex_graph():
     G = AnnNet(directed=None)
 
     # Vertices with attributes
-    G.add_vertex("A")
+    G.add_vertices("A")
     G.attrs.set_vertex_attrs("A", gene="TP53", type="protein", score=0.95)
-    G.add_vertex("B")
+    G.add_vertices("B")
     G.attrs.set_vertex_attrs("B", gene="EGFR", type="protein", score=0.88)
-    G.add_vertex("C")
+    G.add_vertices("C")
     G.attrs.set_vertex_attrs("C", gene="MYC", type="protein")
-    G.add_vertex("D")
-    G.add_vertex("E")
-    G.add_vertex("node with space")
+    G.add_vertices("D")
+    G.add_vertices("E")
+    G.add_vertices("node with space")
 
     # Binary edges (mixed directed/undirected)
-    G.add_edge("A", "B", edge_id="e1", directed=True, weight=1.5)
+    G.add_edges("A", "B", edge_id="e1", directed=True, weight=1.5)
     G.attrs.set_edge_attrs("e1", relation="activates", confidence=0.9)
 
-    G.add_edge("B", "A", edge_id="e2", directed=False, weight=2.0)
+    G.add_edges("B", "A", edge_id="e2", directed=False, weight=2.0)
     G.attrs.set_edge_attrs("e2", relation="interacts", confidence=0.85)
 
-    G.add_edge("C", "C", edge_id="loop", directed=True, weight=0.5)
+    G.add_edges("C", "C", edge_id="loop", directed=True, weight=0.5)
     G.attrs.set_edge_attrs("loop", relation="self_regulation")
 
-    G.add_edge("A", "B", edge_id="parallel", directed=True, weight=3.14)
+    G.add_edges("A", "B", edge_id="parallel", directed=True, weight=3.14)
     G.attrs.set_edge_attrs("parallel", relation="inhibits", tag="secondary")
 
     # Hyperedges
-    G.add_edge(src=["B", "C"], tgt=["A"], edge_id="h1", directed=True, weight=0.7)
+    G.add_edges(src=["B", "C"], tgt=["A"], edge_id="h1", directed=True, weight=0.7)
     G.attrs.set_edge_attrs("h1", pathway="signaling", complex="ABC")
 
-    G.add_edge(src=["A", "D", "E"], edge_id="h2", directed=False, weight=5.0)
+    G.add_edges(src=["A", "D", "E"], edge_id="h2", directed=False, weight=5.0)
     G.attrs.set_edge_attrs("h2", complex="trimer", stability=0.75)
 
     # slices
@@ -73,11 +73,11 @@ def complex_graph():
     G.slices.add_slice("signaling")
     G.slices.add_slice("regulatory")
 
-    G.add_edge_to_slice("core", "e1")
-    G.add_edge_to_slice("core", "e2")
-    G.add_edge_to_slice("core", "parallel")
-    G.add_edge_to_slice("signaling", "h1")
-    G.add_edge_to_slice("regulatory", "loop")
+    G.slices.add_edge_to_slice("core", "e1")
+    G.slices.add_edge_to_slice("core", "e2")
+    G.slices.add_edge_to_slice("core", "parallel")
+    G.slices.add_edge_to_slice("signaling", "h1")
+    G.slices.add_edge_to_slice("regulatory", "loop")
 
     # Per-slice weights
     G.attrs.set_edge_slice_attrs("core", "e1", weight=10.0)
@@ -208,13 +208,13 @@ def build_adapter_graph() -> AnnNet:
     """
     g = AnnNet(directed=True)
 
-    g.add_vertex("A", label="alpha", kind="src")
-    g.add_vertex("B", label="beta")
-    g.add_vertex("C", label="gamma", kind="sink")
+    g.add_vertices("A", label="alpha", kind="src")
+    g.add_vertices("B", label="beta")
+    g.add_vertices("C", label="gamma", kind="sink")
 
-    e1 = g.add_edge("A", "B", weight=2.0, interaction=+1, tag="ab")
-    g.add_edge("B", "C", weight=1.0, directed=False, interaction=-1)
-    g.add_edge(src=["A", "B"], tgt=["C"], weight=0.5, interaction=+1)
+    e1 = g.add_edges("A", "B", weight=2.0, interaction=+1, tag="ab")
+    g.add_edges("B", "C", weight=1.0, directed=False, interaction=-1)
+    g.add_edges(src=["A", "B"], tgt=["C"], weight=0.5, interaction=+1)
 
     g.slices.add_slice("Lw", region="EMEA")
     g.attrs.set_edge_slice_attrs("Lw", e1, weight=5.0)

@@ -44,12 +44,12 @@ class TestCSVIO(unittest.TestCase):
     def setUp(self):
         # Build a small test graph entirely in memory
         self.G = AnnNet(directed=True)
-        self.G.add_vertices_bulk(["A", "B", "C"])
+        self.G.add_vertices(["A", "B", "C"])
         # Binary edges: A->B (directed), B--C (undirected)
-        self.e_ab = self.G.add_edge("A", "B", directed=True, weight=1.0, slice="L1", color="red")
-        self.e_bc = self.G.add_edge("B", "C", directed=False, weight=2.0, slice="L1", tag="x")
+        self.e_ab = self.G.add_edges("A", "B", directed=True, weight=1.0, slice="L1", color="red")
+        self.e_bc = self.G.add_edges("B", "C", directed=False, weight=2.0, slice="L1", tag="x")
         # Hyperedge on a different slice
-        self.h_abc = self.G.add_edge(src=["A", "B", "C"], weight=3.0, slice="L2", note="h")
+        self.h_abc = self.G.add_edges(src=["A", "B", "C"], weight=3.0, slice="L2", note="h")
 
     def test_edge_list_roundtrip(self):
         # ---- Export binary edge list to CSV (in-memory) ----

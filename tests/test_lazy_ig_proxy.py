@@ -15,20 +15,20 @@ except Exception:
 
 def build_small():
     G = AnnNet()
-    G.add_vertex("a")
-    G.add_vertex("b")
-    G.add_vertex("c")
-    G.add_edge("a", "b", weight=3.0)
-    G.add_edge("b", "c", weight=2.0)
+    G.add_vertices("a")
+    G.add_vertices("b")
+    G.add_vertices("c")
+    G.add_edges("a", "b", weight=3.0)
+    G.add_edges("b", "c", weight=2.0)
     return G
 
 
 def build_parallel():
     G = AnnNet()
-    G.add_vertex("x")
-    G.add_vertex("y")
-    G.add_edge("x", "y", weight=10.0)
-    G.add_edge("x", "y", weight=1.0)
+    G.add_vertices("x")
+    G.add_vertices("y")
+    G.add_edges("x", "y", weight=10.0)
+    G.add_edges("x", "y", weight=1.0)
     return G
 
 
@@ -74,7 +74,7 @@ class TestLazyIGProxy(unittest.TestCase):
     def test_backend_cache_invalidate_on_version(self):
         G = build_small()
         igG1 = G.ig.backend()
-        G.add_edge("a", "c")
+        G.add_edges("a", "c")
         igG2 = G.ig.backend()
         self.assertIsNot(igG1, igG2)
 

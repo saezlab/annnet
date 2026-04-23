@@ -104,12 +104,12 @@ class TestPerformance:
         G = AnnNet()
         n_v, n_e = 5_000, 10_000
         for i in range(n_v):
-            G.add_vertex(f"v{i}")
+            G.add_vertices(f"v{i}")
         random.seed(0)
         for i in range(n_e):
             u = f"v{random.randint(0, n_v - 1)}"  # nosec B311
             v = f"v{random.randint(0, n_v - 1)}"  # nosec B311
-            G.add_edge(u, v, edge_id=f"e{i}")
+            G.add_edges(u, v, edge_id=f"e{i}")
 
         start = time.perf_counter()
         to_parquet(G, tmpdir_fixture / "large_dir")

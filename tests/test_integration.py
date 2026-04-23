@@ -20,7 +20,7 @@ class TestIntegration:
         G = AnnNet(directed=False)
         proteins = ["TP53", "MDM2", "ATM", "CHEK2", "p21"]
         for p in proteins:
-            G.add_vertex(p)
+            G.add_vertices(p)
             G.attrs.set_vertex_attrs(p, type="protein", organism="human")
         interactions = [
             ("TP53", "MDM2", "inhibition"),
@@ -30,7 +30,7 @@ class TestIntegration:
             ("CHEK2", "TP53", "phosphorylation"),
         ]
         for i, (src, tgt, interaction_type) in enumerate(interactions):
-            G.add_edge(src, tgt, edge_id=f"int_{i}", directed=True)
+            G.add_edges(src, tgt, edge_id=f"int_{i}", directed=True)
             G.attrs.set_edge_attrs(f"int_{i}", interaction_type=interaction_type, confidence=0.9)
         to_sif(G, tmpdir_fixture / "network.sif", relation_attr="interaction_type")
         dfs = to_dataframes(G)
@@ -48,18 +48,18 @@ class TestIntegration:
         G = AnnNet(directed=True)
         users = ["Alice", "Bob", "Charlie", "David"]
         for u in users:
-            G.add_vertex(u)
+            G.add_vertices(u)
         G.slices.add_slice("friendship")
         G.slices.add_slice("collaboration")
         G.slices.add_slice("mentorship")
-        G.add_edge("Alice", "Bob", edge_id="f1")
-        G.add_edge_to_slice("friendship", "f1")
-        G.add_edge("Bob", "Charlie", edge_id="f2")
-        G.add_edge_to_slice("friendship", "f2")
-        G.add_edge("Alice", "Charlie", edge_id="c1")
-        G.add_edge_to_slice("collaboration", "c1")
-        G.add_edge("Alice", "David", edge_id="m1")
-        G.add_edge_to_slice("mentorship", "m1")
+        G.add_edges("Alice", "Bob", edge_id="f1")
+        G.slices.add_edge_to_slice("friendship", "f1")
+        G.add_edges("Bob", "Charlie", edge_id="f2")
+        G.slices.add_edge_to_slice("friendship", "f2")
+        G.add_edges("Alice", "Charlie", edge_id="c1")
+        G.slices.add_edge_to_slice("collaboration", "c1")
+        G.add_edges("Alice", "David", edge_id="m1")
+        G.slices.add_edge_to_slice("mentorship", "m1")
         from annnet.io.json_io import from_json, to_json
 
         to_json(G, tmpdir_fixture / "multislice.json")

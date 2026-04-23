@@ -25,18 +25,18 @@ class TestAnnNetIO(unittest.TestCase):
         G = AnnNet(directed=True)
 
         # Vertices (two in slice1)
-        G.add_vertex("v1", slice="slice1")
-        G.add_vertex("v2", slice="slice1")
-        G.add_vertex("v3")
-        G.add_vertex("v4")
+        G.add_vertices("v1", slice="slice1")
+        G.add_vertices("v2", slice="slice1")
+        G.add_vertices("v3")
+        G.add_vertices("v4")
 
         # Edges
-        G.add_edge("v1", "v2", edge_id="e1", weight=1.5)
-        G.add_edge("v2", "v3", edge_id="e2", weight=2.0)
-        G.add_edge("v3", "v4", edge_id="e3", weight=0.5)
+        G.add_edges("v1", "v2", edge_id="e1", weight=1.5)
+        G.add_edges("v2", "v3", edge_id="e2", weight=2.0)
+        G.add_edges("v3", "v4", edge_id="e3", weight=0.5)
 
         # Hyperedge (undirected)
-        G.add_edge(src=["v1", "v2", "v3"], edge_id="h1", weight=3.0)
+        G.add_edges(src=["v1", "v2", "v3"], edge_id="h1", weight=3.0)
 
         # Some unstructured metadata (will go to uns/)
         G.graph_attributes["project"] = "unittest"
@@ -392,7 +392,7 @@ class TestAnnNetIO(unittest.TestCase):
 
             G = AnnNet(directed=True)
 
-            G.add_vertices_bulk({"vertex_id": f"v{i}"} for i in range(n_vertices))
+            G.add_vertices({"vertex_id": f"v{i}"} for i in range(n_vertices))
 
             bulk = []
             for i in range(n_edges):
@@ -405,7 +405,7 @@ class TestAnnNetIO(unittest.TestCase):
                     }
                 )
 
-            eids = G.add_edges_bulk(bulk)
+            eids = G.add_edges(bulk)
 
             if use_archive:
                 out_path = Path(self.tmpdir) / "large_graph.annnet"
@@ -438,9 +438,9 @@ class TestAnnNetIO(unittest.TestCase):
 
     def test_roundtrip_repairs_pair_index_queries(self):
         def _test(use_archive):
-            self.G.add_edge("v1", "v2", edge_id="e_parallel", parallel="parallel")
+            self.G.add_edges("v1", "v2", edge_id="e_parallel", parallel="parallel")
             G2, _ = self._roundtrip(use_archive=use_archive)
-            G2.add_edge("v1", "v2", edge_id="e_after_read", parallel="parallel")
+            G2.add_edges("v1", "v2", edge_id="e_after_read", parallel="parallel")
 
             self.assertCountEqual(G2.get_edge_ids("v1", "v2"), ["e1", "e_parallel", "e_after_read"])
             found, ids = G2.has_edge("v1", "v2")

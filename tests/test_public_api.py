@@ -115,8 +115,24 @@ class TestPublicAPI:
             "add_edges",
             "remove_vertices",
             "remove_edges",
+            "has_vertex",
+            "has_edge",
+            "vertices",
+            "edges",
+            "degree",
+            "incident_edges",
             "num_vertices",
             "num_edges",
+            "nv",
+            "ne",
+            "number_of_vertices",
+            "number_of_edges",
+            "shape",
+            "V",
+            "E",
+            "obs",
+            "var",
+            "uns",
             "layers",
             "slices",
             "attrs",
@@ -126,6 +142,13 @@ class TestPublicAPI:
             "view",
             "read",
             "write",
+            "global_count",
+            "get_vertex",
+            "get_edge",
+            "edge_list",
+            "make_undirected",
+            "X",
+            "is_multilayer",
         }:
             assert required in public
             assert required in class_public
@@ -135,14 +158,10 @@ class TestPublicAPI:
             "add_edge",
             "add_edges_bulk",
             "add_vertices_bulk",
+            "add_hyperedges_bulk",
+            "add_edges_to_slice_bulk",
             "vertices_view",
             "edges_view",
-            "number_of_vertices",
-            "number_of_edges",
-            "nv",
-            "ne",
-            "V",
-            "E",
             "set_aspects",
             "add_slice",
             "subgraph",
@@ -150,3 +169,7 @@ class TestPublicAPI:
         }:
             assert hidden not in public
             assert hidden not in class_public
+            assert not hasattr(G, hidden)
+
+        for name in public:
+            assert hasattr(G, name), name

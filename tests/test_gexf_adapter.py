@@ -14,21 +14,21 @@ from annnet.io.GraphML_io import from_gexf, to_gexf
 
 def _build_simple():
     G = AnnNet(directed=True)
-    G.add_vertex("A")
-    G.add_vertex("B")
-    G.add_vertex("C")
-    G.add_edge("A", "B", edge_id="e1", weight=1.5)
-    G.add_edge("B", "C", edge_id="e2", weight=2.0)
+    G.add_vertices("A")
+    G.add_vertices("B")
+    G.add_vertices("C")
+    G.add_edges("A", "B", edge_id="e1", weight=1.5)
+    G.add_edges("B", "C", edge_id="e2", weight=2.0)
     return G
 
 
 def _build_with_attrs():
     G = AnnNet(directed=True)
-    G.add_vertex("X")
+    G.add_vertices("X")
     G.attrs.set_vertex_attrs("X", gene="TP53", score=0.95)
-    G.add_vertex("Y")
+    G.add_vertices("Y")
     G.attrs.set_vertex_attrs("Y", gene="EGFR", score=0.80)
-    G.add_edge("X", "Y", edge_id="ex", weight=3.0)
+    G.add_edges("X", "Y", edge_id="ex", weight=3.0)
     G.attrs.set_edge_attrs("ex", relation="activates")
     return G
 
@@ -36,9 +36,9 @@ def _build_with_attrs():
 def _build_with_hyperedges():
     G = AnnNet(directed=True)
     for v in ["A", "B", "C"]:
-        G.add_vertex(v)
-    G.add_edge("A", "B", edge_id="e1", weight=1.0)
-    G.add_edge(src=["A", "B"], tgt=["C"], edge_id="h1", weight=0.5)
+        G.add_vertices(v)
+    G.add_edges("A", "B", edge_id="e1", weight=1.0)
+    G.add_edges(src=["A", "B"], tgt=["C"], edge_id="h1", weight=0.5)
     return G
 
 
@@ -93,9 +93,9 @@ class TestGEXFAdapter(unittest.TestCase):
 
     def test_directed_graph(self):
         G = AnnNet(directed=True)
-        G.add_vertex("A")
-        G.add_vertex("B")
-        G.add_edge("A", "B")
+        G.add_vertices("A")
+        G.add_vertices("B")
+        G.add_edges("A", "B")
         p = self._path("dir.gexf")
         to_gexf(G, p, directed=True)
         G2 = from_gexf(p)
@@ -103,9 +103,9 @@ class TestGEXFAdapter(unittest.TestCase):
 
     def test_undirected_graph(self):
         G = AnnNet(directed=False)
-        G.add_vertex("A")
-        G.add_vertex("B")
-        G.add_edge("A", "B")
+        G.add_vertices("A")
+        G.add_vertices("B")
+        G.add_edges("A", "B")
         p = self._path("undir.gexf")
         to_gexf(G, p, directed=False)
         G2 = from_gexf(p)
@@ -126,11 +126,11 @@ class TestGEXFAdapter(unittest.TestCase):
 
     def test_public_only_strips_private(self):
         G = AnnNet(directed=True)
-        G.add_vertex("A")
+        G.add_vertices("A")
         G.attrs.set_vertex_attrs("A", __private="hidden", public="visible")
-        G.add_vertex("B")
+        G.add_vertices("B")
         G.attrs.set_vertex_attrs("B", __private="also_hidden", public="other")
-        G.add_edge("A", "B")
+        G.add_edges("A", "B")
         p = self._path("pub.gexf")
         to_gexf(G, p, public_only=True)
         # Should not raise; file must be written

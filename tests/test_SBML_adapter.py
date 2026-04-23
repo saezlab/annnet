@@ -129,41 +129,27 @@ class DummyGraph:
         self.vertices = set()
         self.edges = []
 
-    def add_vertices_bulk(self, ids, slice=None):
-        self.vertices.update(ids)
+    def add_vertices(self, vertices, slice=None):
+        for item in vertices:
+            if isinstance(item, tuple):
+                self.vertices.add(item[0])
+            elif isinstance(item, dict):
+                self.vertices.add(item.get("vertex_id") or item.get("id"))
+            else:
+                self.vertices.add(item)
 
-    def add_hyperedges_bulk(self, hyperedges, *, slice=None):
-        for h in hyperedges:
-            self.add_hyperedge(
-                head=h["head"],
-                tail=h["tail"],
-                slice=h.get("slice", slice),
-                edge_id=h["edge_id"],
-                directed=h.get("edge_directed", True),
-                weight=h.get("weight", 1.0),
-            )
-
-    def add_hyperedge(
-        self,
-        *,
-        head,
-        tail,
-        slice,
-        edge_id,
-        directed,
-        weight,
-    ):
-        edge = {
-            "id": edge_id,
-            "head": list(head),
-            "tail": list(tail),
-            "slice": slice,
-            "directed": directed,
-            "weight": weight,
-            "attrs": {},
-        }
-        self.edges.append(edge)
-        return edge_id
+    def add_edges(self, edges, *, slice=None):
+        for h in edges:
+            edge = {
+                "id": h["edge_id"],
+                "head": list(h["head"]),
+                "tail": list(h["tail"]),
+                "slice": h.get("slice", slice),
+                "directed": h.get("edge_directed", True),
+                "weight": h.get("weight", 1.0),
+                "attrs": {},
+            }
+            self.edges.append(edge)
 
     def set_edge_attrs(self, edge_id, **attrs):
         for e in self.edges:

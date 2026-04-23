@@ -13,28 +13,28 @@ from annnet.core.graph import AnnNet
 def _build_graph():
     """Directed graph: A→B, B→C, with attributes and a slice."""
     G = AnnNet(directed=True)
-    G.add_vertex("A")
+    G.add_vertices("A")
     G.attrs.set_vertex_attrs("A", gene="TP53", score=1.0)
-    G.add_vertex("B")
+    G.add_vertices("B")
     G.attrs.set_vertex_attrs("B", gene="EGFR", score=0.5)
-    G.add_vertex("C")
+    G.add_vertices("C")
     G.attrs.set_vertex_attrs("C", gene="MYC", score=0.2)
-    G.add_edge("A", "B", edge_id="e1", weight=2.0)
+    G.add_edges("A", "B", edge_id="e1", weight=2.0)
     G.attrs.set_edge_attrs("e1", relation="activates")
-    G.add_edge("B", "C", edge_id="e2", weight=3.0)
+    G.add_edges("B", "C", edge_id="e2", weight=3.0)
     G.attrs.set_edge_attrs("e2", relation="inhibits")
     G.slices.add_slice("sig")
-    G.add_edge_to_slice("sig", "e1")
+    G.slices.add_edge_to_slice("sig", "e1")
     return G
 
 
 def _build_hyperedge_graph():
     G = AnnNet(directed=True)
     for v in ["A", "B", "C", "D"]:
-        G.add_vertex(v)
-    G.add_edge("A", "B", edge_id="e1", weight=1.0)
-    G.add_edge(src=["A", "B"], tgt=["C"], edge_id="h1", weight=0.5)
-    G.add_edge(src=["B", "C", "D"], edge_id="h2", weight=1.5)
+        G.add_vertices(v)
+    G.add_edges("A", "B", edge_id="e1", weight=1.0)
+    G.add_edges(src=["A", "B"], tgt=["C"], edge_id="h1", weight=0.5)
+    G.add_edges(src=["B", "C", "D"], edge_id="h2", weight=1.5)
     return G
 
 
@@ -95,8 +95,8 @@ class TestGraphViewSliceFilter(unittest.TestCase):
     def test_slice_filter_single(self):
         G = _build_graph()
         # "sig" slice contains only e1
-        G.add_vertex_to_slice("sig", "A")
-        G.add_vertex_to_slice("sig", "B")
+        G.slices.add_vertex_to_slice("sig", "A")
+        G.slices.add_vertex_to_slice("sig", "B")
         view = GraphView(G, slices="sig")
         edge_ids = view.edge_ids
         self.assertIn("e1", edge_ids)
@@ -105,11 +105,11 @@ class TestGraphViewSliceFilter(unittest.TestCase):
     def test_slice_filter_list(self):
         G = _build_graph()
         G.slices.add_slice("reg")
-        G.add_edge_to_slice("reg", "e2")
-        G.add_vertex_to_slice("sig", "A")
-        G.add_vertex_to_slice("sig", "B")
-        G.add_vertex_to_slice("reg", "B")
-        G.add_vertex_to_slice("reg", "C")
+        G.slices.add_edge_to_slice("reg", "e2")
+        G.slices.add_vertex_to_slice("sig", "A")
+        G.slices.add_vertex_to_slice("sig", "B")
+        G.slices.add_vertex_to_slice("reg", "B")
+        G.slices.add_vertex_to_slice("reg", "C")
         view = GraphView(G, slices=["sig", "reg"])
         edge_ids = view.edge_ids
         self.assertIn("e1", edge_ids)

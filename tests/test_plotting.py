@@ -40,13 +40,13 @@ class TestPlottingWithRealGraph(unittest.TestCase):
     def setUp(self):
         g = AnnNet()
         # vertices with labels
-        g.add_vertex("A", label="alpha")
-        g.add_vertex("B", label="beta")
-        g.add_vertex("C", label="gamma")
+        g.add_vertices("A", label="alpha")
+        g.add_vertices("B", label="beta")
+        g.add_vertices("C", label="gamma")
         # edges with attributes embedded (non-reserved keys persist)
-        e1 = g.add_edge("A", "B", weight=2.0, interaction=+1, type="activation")
-        e2 = g.add_edge("B", "C", weight=-1.0, interaction=-1)
-        e3 = g.add_edge(src=["A", "B"], tgt=["C"], weight=0.5, interaction=+1)
+        e1 = g.add_edges("A", "B", weight=2.0, interaction=+1, type="activation")
+        e2 = g.add_edges("B", "C", weight=-1.0, interaction=-1)
+        e3 = g.add_edges(src=["A", "B"], tgt=["C"], weight=0.5, interaction=+1)
 
         # Per-slice override for e1
         g.slices.add_slice("Lw")
@@ -104,12 +104,12 @@ class TestBackends(unittest.TestCase):
 
     def setUp(self):
         g = AnnNet()
-        g.add_vertex("A", label="alpha")
-        g.add_vertex("B", label="beta")
-        g.add_vertex("C", label="gamma")
-        g.add_edge("A", "B", weight=2.0, interaction=+1)
-        g.add_edge("B", "C", weight=-1.0, interaction=-1)
-        g.add_edge(src=["A", "B"], tgt=["C"], weight=0.5, interaction=+1)
+        g.add_vertices("A", label="alpha")
+        g.add_vertices("B", label="beta")
+        g.add_vertices("C", label="gamma")
+        g.add_edges("A", "B", weight=2.0, interaction=+1)
+        g.add_edges("B", "C", weight=-1.0, interaction=-1)
+        g.add_edges(src=["A", "B"], tgt=["C"], weight=0.5, interaction=+1)
         self.g = g
 
     def test_to_graphviz_builds_dot_source_when_available(self):
@@ -153,11 +153,11 @@ class TestBackends(unittest.TestCase):
         if not self.HAS_GRAPHVIZ:
             self.skipTest("graphviz package not installed")
         g = AnnNet(directed=False)
-        g.add_vertex("A")
-        g.add_vertex("B")
-        g.add_vertex("C")
-        g.add_edge("A", "B", weight=1.0)
-        g.add_edge("B", "C", weight=2.0)
+        g.add_vertices("A")
+        g.add_vertices("B")
+        g.add_vertices("C")
+        g.add_edges("A", "B", weight=1.0)
+        g.add_edges("B", "C", weight=2.0)
         Gv = plotting.to_graphviz(g)
         src = Gv.source
         # No center nodes should exist
@@ -175,11 +175,11 @@ class TestBackends(unittest.TestCase):
         if not self.HAS_PYDOT:
             self.skipTest("pydot package not installed")
         g = AnnNet(directed=False)
-        g.add_vertex("A")
-        g.add_vertex("B")
-        g.add_vertex("C")
-        g.add_edge("A", "B", weight=1.0)
-        g.add_edge("B", "C", weight=2.0)
+        g.add_vertices("A")
+        g.add_vertices("B")
+        g.add_vertices("C")
+        g.add_edges("A", "B", weight=1.0)
+        g.add_edges("B", "C", weight=2.0)
         Gd = plotting.to_pydot(g)
         node_names = {n.get_name().strip('"') for n in Gd.get_nodes()}
         # No center nodes should exist

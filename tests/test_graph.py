@@ -24,8 +24,8 @@ class TestGraphBasics(unittest.TestCase):
         self.g = AnnNet(directed=True)  # default directed
 
     def test_add_vertex_and_attributes(self):
-        self.g.add_vertex("v1", color="red", value=3)
-        self.g.add_vertex("v2")  # no attrs
+        self.g.add_vertices("v1", color="red", value=3)
+        self.g.add_vertices("v2")  # no attrs
         self.assertEqual(self.g.nv, 2)
         # row exists even if no attrs were passed
         self.assertIn("v2", self.g.vertex_attributes.select("vertex_id").to_series().to_list())
@@ -34,7 +34,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertEqual(self.g.attrs.get_attr_vertex("v1", "value"), 3)
 
     def test_add_edge_directed_default_and_matrix_signs(self):
-        eid = self.g.add_edge("a", "b", weight=2.5, label="eab")
+        eid = self.g.add_edges("a", "b", weight=2.5, label="eab")
         self.assertTrue(self.g._is_directed_edge(eid))
         self.assertIn(eid, self.g.get_edges_by_direction(True))
         # get_edge canonical form
@@ -52,7 +52,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertIsNone(self.g.attrs.get_attr_edge(eid, "source"))  # structural, not stored
 
     def test_add_edge_undirected_override(self):
-        eid = self.g.add_edge("c", "d", weight=1.0, directed=False)
+        eid = self.g.add_edges("c", "d", weight=1.0, directed=False)
         self.assertIn(eid, self.g.get_edges_by_direction(False))
         S, T = self.g.get_edge(self.g.edge_to_idx[eid])
         self.assertEqual(S, T)
@@ -65,8 +65,8 @@ class TestGraphBasics(unittest.TestCase):
         self.assertAlmostEqual(self.g._matrix[di, col], 1.0, places=7)
 
     def test_parallel_edges_and_lookup(self):
-        e1 = self.g.add_edge("p", "q", weight=1.0)
-        e2 = self.g.add_edge("p", "q", weight=3.0, parallel="parallel")
+        e1 = self.g.add_edges("p", "q", weight=1.0)
+        e2 = self.g.add_edges("p", "q", weight=3.0, parallel="parallel")
         self.assertNotEqual(e1, e2)
         ids = self.g.get_edge_ids("p", "q")
         self.assertCountEqual(ids, [e1, e2])
@@ -74,15 +74,15 @@ class TestGraphBasics(unittest.TestCase):
         self.assertTrue(self.g.has_edge("p", "q", edge_id=e1))
 
     def test_copy_repairs_pair_index_queries(self):
-        e1 = self.g.add_edge("p", "q", edge_id="e1")
-        e2 = self.g.add_edge("p", "q", edge_id="e2", parallel="parallel")
+        e1 = self.g.add_edges("p", "q", edge_id="e1")
+        e2 = self.g.add_edges("p", "q", edge_id="e2", parallel="parallel")
         g2 = self.g.ops.copy()
-        e3 = g2.add_edge("p", "q", edge_id="e3", parallel="parallel")
+        e3 = g2.add_edges("p", "q", edge_id="e3", parallel="parallel")
         self.assertCountEqual(g2.get_edge_ids("p", "q"), [e1, e2, e3])
         self.assertEqual(g2.has_edge("p", "q"), (True, ["e1", "e2", "e3"]))
 
     def test_has_vertex_flat_graph(self):
-        self.g.add_vertex("v1")
+        self.g.add_vertices("v1")
         self.assertTrue(self.g.has_vertex("v1"))
         self.assertFalse(self.g.has_vertex("missing"))
         self.assertEqual(self.g.layers.list_aspects(), ())
@@ -97,9 +97,11 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_all_stored_slices_use_slice_record(self):
         self.g.slices.add_slice("L1")
-        self.g.add_vertex("a", slice="L1")
-        self.g.add_edge("a", "b", edge_id="e1", slice="L1")
-        self.g.slices.union_create(["default", "L1"], "L2")
+        self.g.add_vertices("a", slice="L1")
+        self.g.add_edges("a", "b", edge_id="e1", slice="L1")
+        self.g.slices.create_slice_from_operation(
+            "L2", self.g.slices.slice_union(["default", "L1"])
+        )
         g2 = self.g.ops.copy()
 
         for data in self.g._slices.values():
@@ -108,11 +110,11 @@ class TestGraphBasics(unittest.TestCase):
             self.assertIsInstance(data, SliceRecord)
 
     def test_edge_direction_policy_is_derived_from_edge_records(self):
-        eid = self.g.add_edge("a", "b", flexible={"var": "score", "threshold": 1.0})
+        eid = self.g.add_edges("a", "b", flexible={"var": "score", "threshold": 1.0})
         self.assertEqual(self.g.edge_direction_policy[eid], self.g._edges[eid].direction_policy)
 
     def test_edge_direction_policy_setter_updates_records(self):
-        eid = self.g.add_edge("a", "b")
+        eid = self.g.add_edges("a", "b")
         policy = {"var": "score", "threshold": 2.0}
         self.g.edge_direction_policy = {eid: policy}
         self.assertEqual(self.g._edges[eid].direction_policy, policy)
@@ -120,7 +122,7 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_edge_entity_and_vertex_edge_mode(self):
         # Create an edge that can itself be an endpoint
-        e = self.g.add_edge(
+        e = self.g.add_edges(
             "x", "y", edge_id="edge_ghost", as_entity=True, weight=1.2, slice="Lx", label="meta"
         )
         # edge_ghost is registered as an entity (can be endpoint)
@@ -131,19 +133,19 @@ class TestGraphBasics(unittest.TestCase):
         # attributes stored as edge attrs
         self.assertEqual(self.g.attrs.get_attr_edge("edge_ghost", "label"), "meta")
         # can connect another edge TO this edge
-        e2 = self.g.add_edge("z", "edge_ghost", edge_id="meta_link")
+        e2 = self.g.add_edges("z", "edge_ghost", edge_id="meta_link")
         self.assertIn("meta_link", self.g.edge_to_idx)
         self.assertEqual(self.g._edges[e].etype, "vertex_edge")
 
     def test_edge_entity_placeholder_has_distinct_etype(self):
-        eid = self.g.add_edge(edge_id="edge_stub", as_entity=True)
+        eid = self.g.add_edges(edge_id="edge_stub", as_entity=True)
         rec = self.g._edges[eid]
         self.assertEqual(rec.etype, "edge_placeholder")
         self.assertEqual(rec.col_idx, -1)
         self.assertIsNone(rec.src)
         self.assertIsNone(rec.tgt)
 
-        self.g.add_edge("a", "b", edge_id=eid, as_entity=True)
+        self.g.add_edges("a", "b", edge_id=eid, as_entity=True)
         upgraded = self.g._edges[eid]
         self.assertEqual(upgraded.etype, "vertex_edge")
         self.assertGreaterEqual(upgraded.col_idx, 0)
@@ -151,7 +153,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertEqual(upgraded.tgt, "b")
 
     def test_hyperedge_undirected(self):
-        hid = self.g.add_edge(src=["h1", "h2", "h3"], weight=2.0, tag="tri")
+        hid = self.g.add_edges(src=["h1", "h2", "h3"], weight=2.0, tag="tri")
         self.assertEqual(self.g.edge_kind[hid], "hyper")
         S, T = self.g.get_edge(self.g.edge_to_idx[hid])
         self.assertEqual(S, T)
@@ -164,7 +166,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertEqual(self.g.attrs.get_attr_edge(hid, "tag"), "tri")
 
     def test_hyperedge_directed(self):
-        hid = self.g.add_edge(src=["s1", "s2"], tgt=["t1"], weight=4.0, category="flow")
+        hid = self.g.add_edges(src=["s1", "s2"], tgt=["t1"], weight=4.0, category="flow")
         self.assertTrue(self.g.edge_directed[hid])
         S, T = self.g.get_edge(self.g.edge_to_idx[hid])
         self.assertEqual(S, frozenset({"s1", "s2"}))
@@ -182,20 +184,20 @@ class TestGraphBasics(unittest.TestCase):
         self.g.slices.set_active_slice("L1")
         self.assertEqual(self.g.slices.get_active_slice(), "L1")
         # add some vertices into current slice
-        self.g.add_vertex("A")
-        self.g.add_vertex("B")
+        self.g.add_vertices("A")
+        self.g.add_vertices("B")
         # switch slice and add C
         self.g.slices.set_active_slice("L2")
-        self.g.add_vertex("C")
+        self.g.add_vertices("C")
         # add edge with propagate=shared (only slices that have both endpoints A,B -> L1)
-        e1 = self.g.add_edge(
+        e1 = self.g.add_edges(
             "A", "B", slice="L2", propagate="shared"
         )  # placed in L2, but should propagate to L1?
         # L1 has both A,B so edge should be present in L1 as well
         self.assertIn(e1, self.g._slices["L1"]["edges"])
         self.assertIn(e1, self.g._slices["L2"]["edges"])
         # add edge with propagate=all for A-C (A in L1, C in L2) -> should appear in both and pull missing endpoint
-        e2 = self.g.add_edge("A", "C", slice="L2", propagate="all")
+        e2 = self.g.add_edges("A", "C", slice="L2", propagate="all")
         self.assertIn(e2, self.g._slices["L1"]["edges"])
         self.assertIn(e2, self.g._slices["L2"]["edges"])
         self.assertIn("C", self.g._slices["L1"]["vertices"])  # pulled across
@@ -209,7 +211,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertEqual(self.g.attrs.get_slice_attr("Geo", "region"), "APAC")
 
     def test_slice_info_reads_attributes_from_dataframe_ssot(self):
-        self.g.add_vertex("v1", slice="Geo")
+        self.g.add_vertices("v1", slice="Geo")
         self.g.attrs.set_slice_attrs("Geo", region="EMEA")
         info = self.g.slices.get_slice_info("Geo")
         self.assertEqual(info["attributes"], {"region": "EMEA"})
@@ -222,14 +224,14 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_flatten_layers_preserves_pair_index_queries(self):
         g = AnnNet(aspects={"time": ["t1", "t2"]}, directed=True)
-        g.add_vertex("u", layer=("t1",))
-        g.add_vertex("u", layer=("t2",))
-        g.add_vertex("v", layer=("t1",))
-        g.add_edge(("u", ("t1",)), ("v", ("t1",)), edge_id="e1")
-        g.add_edge(("u", ("t1",)), ("v", ("t1",)), edge_id="e2", parallel="parallel")
+        g.add_vertices("u", layer=("t1",))
+        g.add_vertices("u", layer=("t2",))
+        g.add_vertices("v", layer=("t1",))
+        g.add_edges(("u", ("t1",)), ("v", ("t1",)), edge_id="e1")
+        g.add_edges(("u", ("t1",)), ("v", ("t1",)), edge_id="e2", parallel="parallel")
 
         out = g.layers.flatten_layers()
-        e3 = out.add_edge("u", "v", edge_id="e3", parallel="parallel")
+        e3 = out.add_edges("u", "v", edge_id="e3", parallel="parallel")
 
         self.assertCountEqual(out.get_edge_ids("u", "v"), ["e1", "e2", e3])
         found, ids = out.has_edge("u", "v")
@@ -237,7 +239,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertCountEqual(ids, ["e1", "e2", e3])
 
     def test_reverse_rebuilds_pair_indexes(self):
-        self.g.add_edge("a", "b", edge_id="e1")
+        self.g.add_edges("a", "b", edge_id="e1")
         out = self.g.ops.reverse()
 
         self.assertFalse(out.has_edge("a", "b")[0])
@@ -247,7 +249,7 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_subgraph_from_slice_flat_fast_path_preserves_slice_state(self):
         self.g.slices.add_slice("L1", region="EMEA")
-        eid = self.g.add_edge("u", "v", edge_id="e1", weight=5.0, slice="L1")
+        eid = self.g.add_edges("u", "v", edge_id="e1", weight=5.0, slice="L1")
         self.g.attrs.set_edge_slice_attrs("L1", eid, weight=1.25)
 
         out = self.g.subgraph_from_slice("L1", resolve_slice_weights=True)
@@ -262,9 +264,9 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_attrs_namespace_matches_flat_api(self):
         self.g.attrs.set_graph_attribute("source", "unit-test")
-        self.g.add_vertex("v1")
+        self.g.add_vertices("v1")
         self.g.attrs.set_vertex_attrs("v1", color="blue")
-        eid = self.g.add_edge("v1", "v2", edge_id="e1")
+        eid = self.g.add_edges("v1", "v2", edge_id="e1")
         self.g.attrs.set_edge_attrs(eid, relation="binds")
         self.g.slices.add_slice("Lw")
         self.g.attrs.set_edge_slice_attrs("Lw", eid, weight=2.0)
@@ -279,7 +281,7 @@ class TestGraphBasics(unittest.TestCase):
         # ensure the slice exists first
         self.g.slices.add_slice("Lw")
         # create the edge inside slice "Lw" so per-slice attrs apply
-        eid = self.g.add_edge("u", "v", weight=5.0, slice="Lw")
+        eid = self.g.add_edges("u", "v", weight=5.0, slice="Lw")
         # override via edge_slice_attributes table using the EDGE ID (string)
         self.g.attrs.set_edge_slice_attrs("Lw", eid, weight=1.25, note="downweighted")
         # effective weight in Lw reflects the override
@@ -292,20 +294,20 @@ class TestGraphBasics(unittest.TestCase):
         )
 
     def test_incident_edges(self):
-        e1 = self.g.add_edge("i1", "i2", weight=1)
-        e2 = self.g.add_edge("i2", "i3", weight=1)
+        e1 = self.g.add_edges("i1", "i2", weight=1)
+        e2 = self.g.add_edges("i2", "i3", weight=1)
         # undirected also counts on both sides
-        e3 = self.g.add_edge("i2", "i4", weight=1, directed=False)
+        e3 = self.g.add_edges("i2", "i4", weight=1, directed=False)
         inc = self.g.incident_edges("i2")
         ids = {self.g.idx_to_edge[j] for j, _edge in inc}
         self.assertSetEqual(ids, {e1, e2, e3})
 
     def test_remove_edge_then_vertex(self):
-        e = self.g.add_edge("r1", "r2", weight=1.0, tag="tmp")
+        e = self.g.add_edges("r1", "r2", weight=1.0, tag="tmp")
         self.g.remove_edge(e)
         self.assertNotIn(e, self.g.edge_to_idx)
         # removing a vertex also removes incident edges
-        e2 = self.g.add_edge("r1", "r3", weight=2.0)
+        e2 = self.g.add_edges("r1", "r3", weight=2.0)
         self.g.remove_vertex("r1")
         self.assertNotIn("r1", self.g.entity_to_idx)
         self.assertNotIn(e2, self.g.edge_to_idx)
@@ -319,8 +321,8 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_audit_attributes(self):
         # create mismatch intentionally
-        self.g.add_vertex("a1")
-        self.g.add_edge("a1", "a2", weight=1.0)
+        self.g.add_vertices("a1")
+        self.g.add_edges("a1", "a2", weight=1.0)
         # add stray row in vertex_attributes (keep schema identical: only 'vertex_id')
         self.g.vertex_attributes = pl.concat(
             [
@@ -335,7 +337,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertIsInstance(audit["invalid_edge_slice_rows"], list)
 
     def test_edges_views_and_counts(self):
-        e = self.g.add_edge("x1", "x2", weight=7.0, directed=False)
+        e = self.g.add_edges("x1", "x2", weight=7.0, directed=False)
         self.assertEqual(self.g.ne, len(self.g.edges()))
         elist = self.g.edge_list()
         found = [row for row in elist if row[2] == e]
@@ -347,9 +349,9 @@ class TestGraphBasics(unittest.TestCase):
         self.assertGreaterEqual(d, 1)
 
     def test_update_existing_edge(self):
-        e = self.g.add_edge("u1", "u2", weight=2.0, directed=True)
+        e = self.g.add_edges("u1", "u2", weight=2.0, directed=True)
         # Update same edge_id: flip direction flag and endpoints
-        self.g.add_edge("u2", "u3", weight=3.5, edge_id=e, directed=False)
+        self.g.add_edges("u2", "u3", weight=3.5, edge_id=e, directed=False)
         # Now undirected, between u2 and u3, weight 3.5
         S, T = self.g.get_edge(self.g.edge_to_idx[e])
         self.assertEqual(S, T)
@@ -362,16 +364,16 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_flatten_layers_makes_graph_flat_and_preserves_structure(self):
         g = AnnNet(aspects={"condition": ["healthy", "treated"], "time": ["t0", "t1"]})
-        g.add_vertex("v1", layer=("healthy", "t0"))
-        g.add_vertex("v1", layer=("treated", "t1"))
-        g.add_vertex("v2", layer=("healthy", "t0"))
-        g.add_edge(("v1", ("healthy", "t0")), ("v2", ("healthy", "t0")), edge_id="e_intra")
-        g.add_edge(
+        g.add_vertices("v1", layer=("healthy", "t0"))
+        g.add_vertices("v1", layer=("treated", "t1"))
+        g.add_vertices("v2", layer=("healthy", "t0"))
+        g.add_edges(("v1", ("healthy", "t0")), ("v2", ("healthy", "t0")), edge_id="e_intra")
+        g.add_edges(
             ("v1", ("healthy", "t0")),
             ("v1", ("treated", "t1")),
             edge_id="e_couple",
         )
-        g.add_edge(src=[("v1", ("healthy", "t0")), ("v1", ("treated", "t1"))], edge_id="h1")
+        g.add_edges(src=[("v1", ("healthy", "t0")), ("v1", ("treated", "t1"))], edge_id="h1")
 
         out = g.layers.flatten_layers()
 
@@ -387,32 +389,32 @@ class TestGraphBasics(unittest.TestCase):
         self.assertEqual(g._edges["e_intra"].ml_kind, None)
         self.assertEqual(g._edges["e_couple"].ml_kind, None)
         self.assertEqual(g._edges["h1"].ml_layers, None)
-        g.add_vertex("isolated")
+        g.add_vertices("isolated")
         self.assertIn("isolated", set(g.vertices()))
 
     def test_make_undirected_returns_self_for_chaining(self):
         g = AnnNet(directed=True)
-        g.add_edge("a", "b")
+        g.add_edges("a", "b")
         out = g.make_undirected()
         self.assertIs(out, g)
         self.assertFalse(g.directed)
 
     def test_remove_orphans_after_flatten_layers(self):
         g = AnnNet(aspects={"condition": ["healthy"], "time": ["t0"]})
-        g.add_vertex("v1", layer=("healthy", "t0"))
-        g.add_vertex("v2", layer=("healthy", "t0"))
-        g.add_edge(("v1", ("healthy", "t0")), ("v2", ("healthy", "t0")))
+        g.add_vertices("v1", layer=("healthy", "t0"))
+        g.add_vertices("v2", layer=("healthy", "t0"))
+        g.add_edges(("v1", ("healthy", "t0")), ("v2", ("healthy", "t0")))
         g.layers.flatten_layers()
-        g.add_vertex("isolated")
+        g.add_vertices("isolated")
         removed = g.remove_orphans()
         self.assertEqual(removed, 1)
         self.assertNotIn("isolated", set(g.vertices()))
 
     def test_layer_edge_set_can_select_inter_hyperedge(self):
         g = AnnNet(aspects={"condition": ["healthy", "treated"]})
-        g.add_vertex("a", layer=("healthy",))
-        g.add_vertex("b", layer=("treated",))
-        hid = g.add_edge(
+        g.add_vertices("a", layer=("healthy",))
+        g.add_vertices("b", layer=("treated",))
+        hid = g.add_edges(
             src=[("a", ("healthy",))],
             tgt=[("b", ("treated",))],
             edge_id="h_inter",
@@ -426,9 +428,9 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_supra_incidence_includes_coupling_hyperedge_when_requested(self):
         g = AnnNet(aspects={"condition": ["healthy", "treated"]})
-        g.add_vertex("a", layer=("healthy",))
-        g.add_vertex("a", layer=("treated",))
-        hid = g.add_edge(
+        g.add_vertices("a", layer=("healthy",))
+        g.add_vertices("a", layer=("treated",))
+        hid = g.add_edges(
             src=[("a", ("healthy",))],
             tgt=[("a", ("treated",))],
             edge_id="h_couple",
@@ -453,7 +455,7 @@ class TestErrorPaths(unittest.TestCase):
         self.g = AnnNet(directed=True)
 
     def test_set_aspects_lifts_existing_flat_vertices_to_placeholder(self):
-        self.g.add_vertex("v1")
+        self.g.add_vertices("v1")
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             self.g.layers.set_aspects(["condition", "time"])
@@ -464,14 +466,14 @@ class TestErrorPaths(unittest.TestCase):
         self.g.layers.set_aspects(["condition", "time"])
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            self.g.add_vertex("v1")
+            self.g.add_vertices("v1")
         self.assertIn(("v1", ("_", "_")), self.g._entities)
         self.assertTrue(any("placeholder layer" in str(w.message) for w in caught))
 
     def test_has_vertex_multilayer_with_bare_id(self):
         self.g.layers.set_aspects(["condition", "time"])
         self.g.layers.set_elementary_layers({"condition": ["healthy"], "time": ["t0"]})
-        self.g.add_vertex("v1", layer=("healthy", "t0"))
+        self.g.add_vertices("v1", layer=("healthy", "t0"))
         self.assertTrue(self.g.has_vertex("v1"))
         self.assertTrue(self.g.has_vertex(("v1", ("healthy", "t0"))))
         self.assertFalse(self.g.has_vertex("missing"))
@@ -481,8 +483,8 @@ class TestErrorPaths(unittest.TestCase):
         self.g.layers.set_elementary_layers(
             {"condition": ["healthy", "treated"], "time": ["t0", "t1"]}
         )
-        self.g.add_vertex("v1", layer=("healthy", "t0"))
-        self.g.add_vertex("v1", layer=("treated", "t1"))
+        self.g.add_vertices("v1", layer=("healthy", "t0"))
+        self.g.add_vertices("v1", layer=("treated", "t1"))
         with self.assertRaisesRegex(ValueError, "Ambiguous bare vertex_id"):
             self.g._resolve_entity_key("v1")
 
@@ -491,10 +493,10 @@ class TestErrorPaths(unittest.TestCase):
         self.g.layers.set_elementary_layers(
             {"condition": ["healthy", "treated"], "time": ["t0", "t1"]}
         )
-        self.g.add_vertex("v1", layer=("healthy", "t0"))
-        self.g.add_vertex("v1", layer=("treated", "t1"))
-        self.g.add_vertex("v2", layer=("healthy", "t0"))
-        self.g.add_edge(("v1", ("healthy", "t0")), ("v2", ("healthy", "t0")))
+        self.g.add_vertices("v1", layer=("healthy", "t0"))
+        self.g.add_vertices("v1", layer=("treated", "t1"))
+        self.g.add_vertices("v2", layer=("healthy", "t0"))
+        self.g.add_edges(("v1", ("healthy", "t0")), ("v2", ("healthy", "t0")))
         with self.assertRaisesRegex(ValueError, "Ambiguous bare vertex_id"):
             self.g.degree("v1")
 
@@ -503,16 +505,16 @@ class TestErrorPaths(unittest.TestCase):
         self.g.layers.set_elementary_layers(
             {"condition": ["healthy", "treated"], "time": ["t0", "t1"]}
         )
-        self.g.add_vertex("v1", layer=("healthy", "t0"))
-        self.g.add_vertex("v1", layer=("treated", "t1"))
+        self.g.add_vertices("v1", layer=("healthy", "t0"))
+        self.g.add_vertices("v1", layer=("treated", "t1"))
         with self.assertRaisesRegex(ValueError, "Ambiguous bare vertex_id"):
             self.g.remove_vertex("v1")
 
-    def test_add_vertices_bulk_without_layer_in_multilayer_warns_once(self):
+    def test_add_vertices_without_layer_in_multilayer_warns_once(self):
         self.g.layers.set_aspects(["condition", "time"])
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            self.g.add_vertices_bulk(["v1", "v2", "v3"])
+            self.g.add_vertices(["v1", "v2", "v3"])
         self.assertIn(("v1", ("_", "_")), self.g._entities)
         self.assertIn(("v2", ("_", "_")), self.g._entities)
         self.assertIn(("v3", ("_", "_")), self.g._entities)
@@ -522,7 +524,7 @@ class TestErrorPaths(unittest.TestCase):
     def test_add_edge_with_bare_ids_raises_on_multilayer_graph(self):
         self.g.layers.set_aspects(["condition", "time"])
         with self.assertRaisesRegex(ValueError, "explicit supra-node endpoints"):
-            self.g.add_edge("a", "b")
+            self.g.add_edges("a", "b")
 
     def test_direct_aspects_property_rebuilds_all_layers_cache(self):
         self.g.aspects = ["condition", "time"]
@@ -543,17 +545,17 @@ class TestErrorPaths(unittest.TestCase):
         )
 
     def test_sparse_cache_invalidation_keeps_get_csr_and_cache_csr_in_sync(self):
-        self.g.add_vertex("a")
-        self.g.add_vertex("b")
-        self.g.add_edge("a", "b", edge_id="e1")
+        self.g.add_vertices("a")
+        self.g.add_vertices("b")
+        self.g.add_edges("a", "b", edge_id="e1")
 
         csr0 = self.g._get_csr()
         cache0 = self.g.cache.csr
         self.assertEqual(csr0.shape, cache0.shape)
         nnz0 = csr0.nnz
 
-        self.g.add_vertex("c")
-        self.g.add_edge("b", "c", edge_id="e2")
+        self.g.add_vertices("c")
+        self.g.add_edges("b", "c", edge_id="e2")
 
         csr1 = self.g._get_csr()
         cache1 = self.g.cache.csr
@@ -570,7 +572,7 @@ class TestErrorPaths(unittest.TestCase):
             self.g.remove_vertex("does_not_exist")
 
     def test_remove_vertex_twice_raises_on_second(self):
-        self.g.add_vertex("A")
+        self.g.add_vertices("A")
         self.g.remove_vertex("A")
         with self.assertRaises(KeyError):
             self.g.remove_vertex("A")
@@ -584,9 +586,9 @@ class TestErrorPaths(unittest.TestCase):
             self.g.remove_edge("ghost_edge")
 
     def test_remove_edge_twice_raises_on_second(self):
-        self.g.add_vertex("A")
-        self.g.add_vertex("B")
-        eid = self.g.add_edge("A", "B", edge_id="e1")
+        self.g.add_vertices("A")
+        self.g.add_vertices("B")
+        eid = self.g.add_edges("A", "B", edge_id="e1")
         self.g.remove_edge(eid)
         with self.assertRaises(KeyError):
             self.g.remove_edge(eid)
@@ -596,8 +598,8 @@ class TestErrorPaths(unittest.TestCase):
     # ------------------------------------------------------------------ #
 
     def test_duplicate_vertex_is_upsert_not_error(self):
-        self.g.add_vertex("A", score=1.0)
-        self.g.add_vertex("A", score=2.0)  # should update, not raise
+        self.g.add_vertices("A", score=1.0)
+        self.g.add_vertices("A", score=2.0)  # should update, not raise
         self.assertEqual(self.g.nv, 1)
         self.assertEqual(self.g.attrs.get_attr_vertex("A", "score"), 2.0)
 
@@ -607,7 +609,7 @@ class TestErrorPaths(unittest.TestCase):
 
     def test_add_edge_auto_creates_missing_vertices(self):
         # Neither X nor Y exist yet
-        eid = self.g.add_edge("X", "Y", edge_id="auto_e")
+        eid = self.g.add_edges("X", "Y", edge_id="auto_e")
         self.assertIn("X", self.g.entity_to_idx)
         self.assertIn("Y", self.g.entity_to_idx)
         self.assertIn("auto_e", self.g.edge_to_idx)
@@ -618,11 +620,11 @@ class TestErrorPaths(unittest.TestCase):
 
     def test_add_edge_non_numeric_weight_raises_type_error(self):
         with self.assertRaises(TypeError):
-            self.g.add_edge("A", "B", weight="heavy")
+            self.g.add_edges("A", "B", weight="heavy")
 
     def test_add_edge_invalid_propagate_raises_value_error(self):
         with self.assertRaises(ValueError):
-            self.g.add_edge("A", "B", propagate="invalid_mode")
+            self.g.add_edges("A", "B", propagate="invalid_mode")
 
     # ------------------------------------------------------------------ #
     # remove_slice guard                                                   #
