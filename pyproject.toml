@@ -431,7 +431,7 @@ pip = "*"
 graph-tool = "*"
 
 [tool.pixi.feature.gt.tasks]
-install-test-deps = "uv pip install --system -e . --group tests"
+install-test-deps = "python -m pip install -e '.[all]' pytest pytest-cov tox tox-gh coverage codecov-cli diff_cover ruff"
 test-gt = { depends-on = ["install-test-deps"], cmd = "pytest tests/test_graphtool.py tests/test_gt_backend_accessor.py -v", env = { MPLBACKEND = "Agg" } }
 test-all = { depends-on = ["install-test-deps"], cmd = "pytest tests/ -v", env = { MPLBACKEND = "Agg" } }
 

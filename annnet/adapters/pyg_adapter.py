@@ -49,10 +49,14 @@ def _validate_numeric(rows: list[dict], cols: list[str], context: str):
     for row in rows:
         for col in cols:
             val = row.get(col)
-            if val is not None and not isinstance(val, (int, float, np.number)):
+            if val is None:
+                continue
+            try:
+                float(val)
+            except (TypeError, ValueError):
                 raise ValueError(
                     f"{context}: column '{col}' must be numeric, got {type(val).__name__}"
-                )
+                ) from None
 
 
 def to_pyg(
@@ -142,7 +146,7 @@ def to_pyg(
         # Slice mask
         if slice_id is not None:
             try:
-                members = set(graph.get_slice_vertices(slice_id))
+                members = set(graph.slices.get_slice_vertices(slice_id))
             except Exception:  # noqa: BLE001
                 members = set()
 

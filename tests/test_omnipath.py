@@ -469,13 +469,14 @@ def test_vertex_annotations_df_read_failure_warns_and_continues(capsys):
     assert len(g.added_vertices_calls) == 1
 
 
-def test_vertex_annotations_path_uses_read_tsv(monkeypatch):
+def test_vertex_annotations_path_uses_read_tsv(monkeypatch, tmp_path):
     edges = pd.DataFrame({'source': ['EGFR'], 'target': ['TP53']})
     ann = pd.DataFrame(
         [
             {'genesymbol': 'EGFR', 'source': 'HGNC', 'label': 'family', 'value': 'RTK'},
         ]
     )
+    ann_path = tmp_path / 'ann.tsv'
 
     seen = {}
 
@@ -488,19 +489,20 @@ def test_vertex_annotations_path_uses_read_tsv(monkeypatch):
 
     g = mod.from_omnipath(
         df=edges,
-        vertex_annotations_path='/tmp/ann.tsv',
+        vertex_annotations_path=str(ann_path),
         annotations_backend='pandas',
     )
 
-    assert seen['path'] == '/tmp/ann.tsv'
+    assert seen['path'] == str(ann_path)
     assert seen['sep'] == '\t'
 
     annotated = dict(g.added_vertices_calls[1])
     assert annotated == {'EGFR': {'HGNC:family': 'RTK'}}
 
 
-def test_vertex_annotations_path_failure_warns_and_continues(monkeypatch, capsys):
+def test_vertex_annotations_path_failure_warns_and_continues(monkeypatch, capsys, tmp_path):
     edges = pd.DataFrame({'source': ['A'], 'target': ['B']})
+    missing_path = tmp_path / 'missing.tsv'
 
     def boom(*args, **kwargs):
         raise OSError('bad file')
@@ -509,7 +511,7 @@ def test_vertex_annotations_path_failure_warns_and_continues(monkeypatch, capsys
 
     g = mod.from_omnipath(
         df=edges,
-        vertex_annotations_path='/tmp/missing.tsv',
+        vertex_annotations_path=str(missing_path),
         annotations_backend='pandas',
     )
     captured = capsys.readouterr()
