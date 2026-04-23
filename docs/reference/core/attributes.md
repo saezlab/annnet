@@ -9,3 +9,8 @@ follow the [internal API policy](../api-boundary.md).
     options:
       filters: public
       show_root_heading: true
+
+::: annnet.core._Annotation.AttributesAccessor
+    options:
+      filters: public
+      show_root_heading: true

@@ -5,8 +5,8 @@ from benchmarks.harness.metrics import measure
 def run(scale):
     G = AnnNet()
     vertices = [f"v{i}" for i in range(scale.vertices)]
-    G.add_vertices_bulk(({"vertex_id": v} for v in vertices), slice="base")
-    G.add_edges_bulk(
+    G.add_vertices(({"vertex_id": v} for v in vertices), slice="base")
+    G.add_edges(
         {
             "source": f"v{i % scale.vertices}",
             "target": f"v{(i + 1) % scale.vertices}",
@@ -19,10 +19,10 @@ def run(scale):
     # DataFrame views (on the full graph)
     # ------------------------------------------------------------------
     with measure() as m_edges_view:
-        _ = G.edges_view()
+        _ = G.views.edges()
 
     with measure() as m_vertices_view:
-        _ = G.vertices_view()
+        _ = G.views.vertices()
 
     # ------------------------------------------------------------------
     # GraphView API: create a view, then edges_df / vertices_df / materialize

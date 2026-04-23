@@ -14,3 +14,8 @@ follow the [internal API policy](../api-boundary.md).
     options:
       filters: public
       show_root_heading: true
+
+::: annnet.core._History.HistoryAccessor
+    options:
+      filters: public
+      show_root_heading: true

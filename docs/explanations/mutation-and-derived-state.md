@@ -43,9 +43,8 @@ It is not.
 
 The bulk methods:
 
-- `add_vertices_bulk(...)`
-- `add_edges_bulk(...)`
-- `add_hyperedges_bulk(...)`
+- `add_vertices(...)`
+- `add_edges(...)`
 - batched slice membership operations
 
 exist to amortize repeated overhead:

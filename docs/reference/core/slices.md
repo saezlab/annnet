@@ -9,8 +9,3 @@ imports from underscore modules follow the [internal API policy](../api-boundary
     options:
       filters: public
       show_root_heading: true
-
-::: annnet.core._Slices.SliceClass
-    options:
-      filters: public
-      show_root_heading: true

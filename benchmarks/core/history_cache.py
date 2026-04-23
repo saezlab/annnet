@@ -9,7 +9,7 @@ def run(scale):
 
     # Build base graph
     vertices = [f"v{i}" for i in range(scale.vertices)]
-    G.add_vertices_bulk(
+    G.add_vertices(
         ({"vertex_id": vid} for vid in vertices),
         slice="base",
     )
@@ -24,7 +24,7 @@ def run(scale):
                 "edge_type": "regular",
             }
         )
-    G.add_edges_bulk(edges)
+    G.add_edges(edges)
 
     hyperedges = []
     for _ in range(scale.hyperedges):
@@ -34,75 +34,75 @@ def run(scale):
                 "weight": 1.0,
             }
         )
-    G.add_hyperedges_bulk(hyperedges)
+    G.add_edges(hyperedges)
 
     # Add slices
     for i in range(3):
         slice_name = f"slice_{i}"
-        G.add_slice(slice_name)
+        G.slices.add_slice(slice_name)
         sample_edges = random.sample(list(G.edges()), min(scale.edges // 4, G.number_of_edges()))
-        G.add_edges_to_slice_bulk(slice_name, sample_edges)
+        G.slices._add_edges(slice_name, sample_edges)
 
     # Benchmark operations
 
     with measure() as m_copy:
-        G_copy = G.copy()
+        G_copy = G.ops.copy()
 
     with measure() as m_copy_history:
-        G_copy_hist = G.copy(history=True)
+        G_copy_hist = G.ops.copy(history=True)
 
     with measure() as m_subgraph_vertices:
         sample_v = random.sample(vertices, scale.vertices // 2)
-        G_sub_v = G.subgraph(sample_v)
+        G_sub_v = G.ops.subgraph(sample_v)
 
     with measure() as m_subgraph_edges:
         sample_e = random.sample(list(G.edges()), scale.edges // 2)
-        G_sub_e = G.edge_subgraph(sample_e)
+        G_sub_e = G.ops.edge_subgraph(sample_e)
 
     with measure() as m_extract_subgraph:
-        G_extract = G.extract_subgraph(vertices=sample_v, edges=sample_e)
+        G_extract = G.ops.extract_subgraph(vertices=sample_v, edges=sample_e)
 
     with measure() as m_reverse:
-        G_rev = G.reverse()
+        G_rev = G.ops.reverse()
 
     with measure() as m_subgraph_from_slice:
-        G_slice = G.subgraph_from_slice("slice_0", resolve_slice_weights=True)
+        G_slice = G.ops.subgraph_from_slice("slice_0", resolve_slice_weights=True)
 
     with measure() as m_hash:
         h = hash(G)
 
     with measure() as m_memory_usage:
-        mem = G.memory_usage()
+        mem = G.ops.memory_usage()
 
     with measure() as m_vertex_incidence_sparse:
-        M_sparse = G.vertex_incidence_matrix(values=True, sparse=True)
+        M_sparse = G.ops.vertex_incidence_matrix(values=True, sparse=True)
 
     _dense_entries = G._matrix.shape[0] * G._matrix.shape[1]
     _dense_limit = 500_000_000  # 500M float32 entries ≈ 2GB
     if _dense_entries <= _dense_limit:
         with measure() as m_vertex_incidence_dense:
-            M_dense = G.vertex_incidence_matrix(values=True, sparse=False)
+            M_dense = G.ops.vertex_incidence_matrix(values=True, sparse=False)
     else:
         m_vertex_incidence_dense = {
             "skipped": f"matrix too large ({_dense_entries:,} entries > {_dense_limit:,} limit)"
         }
 
     with measure() as m_vertex_incidence_lists:
-        inc_lists = G.get_vertex_incidence_matrix_as_lists(values=False)
+        inc_lists = G.ops.get_vertex_incidence_matrix_as_lists(values=False)
 
     # ------------------------------------------------------------------
     # Snapshot + diff
     # ------------------------------------------------------------------
     with measure() as m_snapshot:
-        G.snapshot("before_mutation")
-        G.add_vertices_bulk(
+        G.history.snapshot("before_mutation")
+        G.add_vertices(
             ({"vertex_id": f"snap_v{i}"} for i in range(500)),
             slice="base",
         )
-        G.snapshot("after_mutation")
+        G.history.snapshot("after_mutation")
 
     with measure() as m_diff:
-        d = G.diff("before_mutation", "after_mutation")
+        d = G.history.diff("before_mutation", "after_mutation")
 
     # ------------------------------------------------------------------
     # Deletions (bulk paths)

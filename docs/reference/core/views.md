@@ -14,3 +14,8 @@ modules follow the [internal API policy](../api-boundary.md).
     options:
       filters: public
       show_root_heading: true
+
+::: annnet.core._Views.ViewsAccessor
+    options:
+      filters: public
+      show_root_heading: true

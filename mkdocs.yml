@@ -73,9 +73,9 @@ nav:
         -   Backend accessors: reference/core/backend-accessors.md
         -   Indexing: reference/core/indexing.md
         -   Attributes: reference/core/attributes.md
-        -   Bulk operations: reference/core/bulk-operations.md
+        -   Operations: reference/core/bulk-operations.md
         -   History: reference/core/history.md
-        -   Cache and operations: reference/core/cache.md
+        -   Cache: reference/core/cache.md
         -   Views: reference/core/views.md
         -   Slices: reference/core/slices.md
         -   Layers: reference/core/layers.md

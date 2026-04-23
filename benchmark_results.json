@@ -1,334 +1,233 @@
 {
-  "scale": "medium",
+  "scale": "small",
   "benchmarks": {
     "benchmarks.core.attributes": {
       "vertex_attrs_bulk": {
         "metrics": {
-          "wall_time_s": 0.017143172008218244,
-          "rss_before_mb": 134.78125,
-          "rss_after_mb": 140.15625,
-          "rss_delta_mb": 5.375
+          "wall_time_s": 0.004042101998493308,
+          "rss_before_mb": 83.11328125,
+          "rss_after_mb": 86.11328125,
+          "rss_delta_mb": 3.0
         },
-        "rows": 10000,
-        "rows_per_sec": 583322.6193615809
+        "rows": 1000,
+        "rows_per_sec": 247396.03314630594
       },
       "edge_attrs_bulk": {
         "metrics": {
-          "wall_time_s": 0.13763610299793072,
-          "rss_before_mb": 145.15625,
-          "rss_after_mb": 165.37890625,
-          "rss_delta_mb": 20.22265625
+          "wall_time_s": 0.010058891999506159,
+          "rss_before_mb": 86.23828125,
+          "rss_after_mb": 89.23828125,
+          "rss_delta_mb": 3.0
         },
-        "rows": 50000,
-        "rows_per_sec": 363276.77775613655
+        "rows": 5000,
+        "rows_per_sec": 497072.6398340369
       },
       "edge_slice_attrs_bulk": {
         "metrics": {
-          "wall_time_s": 0.03197245899355039,
-          "rss_before_mb": 176.50390625,
-          "rss_after_mb": 186.546875,
-          "rss_delta_mb": 10.04296875
+          "wall_time_s": 0.0034478400011721533,
+          "rss_before_mb": 89.73828125,
+          "rss_after_mb": 90.86328125,
+          "rss_delta_mb": 1.125
         },
-        "rows": 50000,
-        "rows_per_sec": 1563845.9340924073
+        "rows": 5000,
+        "rows_per_sec": 1450183.3026765056
       },
       "bulk_reads": {
         "vertices": {
-          "wall_time_s": 0.004770009021740407,
-          "rss_before_mb": 186.546875,
-          "rss_after_mb": 187.171875,
-          "rss_delta_mb": 0.625
+          "wall_time_s": 0.0005854640003235545,
+          "rss_before_mb": 90.86328125,
+          "rss_after_mb": 91.11328125,
+          "rss_delta_mb": 0.25
         },
         "edges": {
-          "wall_time_s": 0.031771644979016855,
-          "rss_before_mb": 187.171875,
-          "rss_after_mb": 201.796875,
-          "rss_delta_mb": 14.625
+          "wall_time_s": 0.003323852000903571,
+          "rss_before_mb": 91.11328125,
+          "rss_after_mb": 91.61328125,
+          "rss_delta_mb": 0.5
         }
       }
     },
     "benchmarks.core.edge_entities": {
-      "error": "('e', ('_',))",
-      "skipped": true
+      "base_vertices": {
+        "count": 1000,
+        "wall_time_s": 0.002556195999204647,
+        "rss_delta_mb": 0.0
+      },
+      "base_edges": {
+        "count": 5000,
+        "wall_time_s": 0.02088581600037287,
+        "rss_delta_mb": 1.25
+      },
+      "node_to_edge_create": {
+        "count": 5000,
+        "wall_time_s": 0.03943049900044571,
+        "rss_delta_mb": 10.17578125
+      },
+      "edge_to_edge_create": {
+        "count": 4999,
+        "wall_time_s": 0.06061859199689934,
+        "rss_delta_mb": 3.77734375
+      },
+      "edge_entity_attr_update": {
+        "count": 4999,
+        "wall_time_s": 0.008301964000565931,
+        "rss_delta_mb": 1.875
+      },
+      "final_counts": {
+        "vertices": 6000,
+        "edges_total": 14999,
+        "edge_entities": 9999
+      }
     },
     "benchmarks.core.expressiveness": {
       "vertices": {
-        "wall_time_s": 0.020384192990604788,
-        "rss_before_mb": 263.9375,
-        "rss_after_mb": 263.9375,
-        "rss_delta_mb": 0.0
+        "wall_time_s": 0.0026725370007625315,
+        "rss_before_mb": 109.06640625,
+        "rss_after_mb": 109.19140625,
+        "rss_delta_mb": 0.125
       },
       "edges": {
-        "wall_time_s": 0.3588984310044907,
-        "rss_before_mb": 263.9375,
-        "rss_after_mb": 175.8125,
-        "rss_delta_mb": -88.125
-      },
-      "hyperedges": {
-        "wall_time_s": 0.028796561004128307,
-        "rss_before_mb": 175.8125,
-        "rss_after_mb": 175.9375,
-        "rss_delta_mb": 0.125
-      },
-      "total_vertices": 10000,
-      "total_edges": 54000
-    },
-    "benchmarks.core.history_cache": {
-      "copy": {
-        "wall_time_s": 0.1270064989803359,
-        "rss_before_mb": 187.0625,
-        "rss_after_mb": 194.9375,
-        "rss_delta_mb": 7.875
-      },
-      "copy_with_history": {
-        "wall_time_s": 0.13162737598759122,
-        "rss_before_mb": 194.9375,
-        "rss_after_mb": 214.3125,
-        "rss_delta_mb": 19.375
-      },
-      "subgraph_vertices": {
-        "wall_time_s": 0.21553045700420626,
-        "rss_before_mb": 214.3125,
-        "rss_after_mb": 234.24609375,
-        "rss_delta_mb": 19.93359375
-      },
-      "subgraph_edges": {
-        "wall_time_s": 0.29630659901886247,
-        "rss_before_mb": 234.24609375,
-        "rss_after_mb": 270.83203125,
-        "rss_delta_mb": 36.5859375
-      },
-      "extract_subgraph": {
-        "wall_time_s": 0.10230398300336674,
-        "rss_before_mb": 270.83203125,
-        "rss_after_mb": 276.08203125,
-        "rss_delta_mb": 5.25
-      },
-      "reverse": {
-        "wall_time_s": 0.13046127301640809,
-        "rss_before_mb": 276.08203125,
-        "rss_after_mb": 288.83203125,
-        "rss_delta_mb": 12.75
-      },
-      "subgraph_from_slice": {
-        "wall_time_s": 0.21946010901592672,
-        "rss_before_mb": 288.83203125,
-        "rss_after_mb": 310.84375,
-        "rss_delta_mb": 22.01171875
-      },
-      "hash": {
-        "wall_time_s": 0.05897445400478318,
-        "rss_before_mb": 310.84375,
-        "rss_after_mb": 311.375,
-        "rss_delta_mb": 0.53125
-      },
-      "memory_usage": {
-        "wall_time_s": 0.00156812000204809,
-        "rss_before_mb": 311.375,
-        "rss_after_mb": 311.375,
+        "wall_time_s": 0.021465303001605207,
+        "rss_before_mb": 109.19140625,
+        "rss_after_mb": 109.19140625,
         "rss_delta_mb": 0.0
       },
-      "vertex_incidence_sparse": {
-        "wall_time_s": 0.0026853430026676506,
-        "rss_before_mb": 311.375,
-        "rss_after_mb": 311.625,
-        "rss_delta_mb": 0.25
+      "hyperedges": {
+        "wall_time_s": 0.00160408100055065,
+        "rss_before_mb": 109.19140625,
+        "rss_after_mb": 109.19140625,
+        "rss_delta_mb": 0.0
       },
-      "vertex_incidence_dense": {
-        "skipped": "matrix too large (750,000,000 entries > 500,000,000 limit)"
-      },
-      "vertex_incidence_lists": {
-        "wall_time_s": 0.13859204400796443,
-        "rss_before_mb": 311.625,
-        "rss_after_mb": 311.75,
-        "rss_delta_mb": 0.125
-      },
-      "snapshot": {
-        "wall_time_s": 0.012219249998452142,
-        "rss_before_mb": 311.75,
-        "rss_after_mb": 316.25,
-        "rss_delta_mb": 4.5
-      },
-      "diff": {
-        "metrics": {
-          "wall_time_s": 0.002137125004082918,
-          "rss_before_mb": 316.25,
-          "rss_after_mb": 316.25,
-          "rss_delta_mb": 0.0
-        },
-        "added_vertices": 500,
-        "removed_vertices": 0,
-        "added_edges": 0,
-        "removed_edges": 0
-      },
-      "remove_edges_bulk": {
-        "metrics": {
-          "wall_time_s": 0.04475469602039084,
-          "rss_before_mb": 316.25,
-          "rss_after_mb": 325.375,
-          "rss_delta_mb": 9.125
-        },
-        "count": 5400
-      },
-      "remove_orphans": {
-        "wall_time_s": 0.021793174993945286,
-        "rss_before_mb": 325.375,
-        "rss_after_mb": 326.25,
-        "rss_delta_mb": 0.875
-      },
-      "remove_vertices_bulk": {
-        "metrics": {
-          "wall_time_s": 2.2250169422477484e-06,
-          "rss_before_mb": 326.25,
-          "rss_after_mb": 326.25,
-          "rss_delta_mb": 0.0
-        },
-        "count": 0
-      },
-      "total_vertices": 0,
-      "total_edges": 48600,
-      "subgraph_v_vertices": 5000,
-      "subgraph_v_edges": 12474,
-      "subgraph_e_vertices": 9986,
-      "subgraph_e_edges": 25000,
-      "memory_bytes": 12088890,
-      "graph_hash": 6524966803663948882
+      "total_vertices": 1000,
+      "total_edges": 5200
+    },
+    "benchmarks.core.history_cache": {
+      "error": "aspects must be a non-empty list",
+      "skipped": true
     },
     "benchmarks.core.layers": {
-      "error": "layer= must be specified for multilayer graphs with aspects ('aspect_0', 'aspect_1'). Pass a dict {aspect: value}, a tuple of values, or a bare string (single-aspect).",
+      "error": "'AnnNet' object has no attribute 'add_presence'",
       "skipped": true
     },
     "benchmarks.core.slices": {
       "vertex_presence": {
         "metrics": {
-          "wall_time_s": 0.03002224100055173,
-          "rss_before_mb": 326.25,
-          "rss_after_mb": 326.25,
-          "rss_delta_mb": 0.0
+          "wall_time_s": 0.011423522999393754,
+          "rss_before_mb": 114.06640625,
+          "rss_after_mb": 115.31640625,
+          "rss_delta_mb": 1.25
         },
         "vertex_counts": {
-          "s0": 2000,
-          "s1": 2000,
-          "s2": 2000,
-          "s3": 2000,
-          "s4": 2000
+          "s0": 333,
+          "s1": 333,
+          "s2": 333
         }
       },
       "edge_presence": {
         "metrics": {
-          "wall_time_s": 0.40204766401438974,
-          "rss_before_mb": 326.25,
-          "rss_after_mb": 258.7265625,
-          "rss_delta_mb": -67.5234375
+          "wall_time_s": 0.021952356000838336,
+          "rss_before_mb": 115.31640625,
+          "rss_after_mb": 116.44140625,
+          "rss_delta_mb": 1.125
         },
         "edge_counts": {
-          "s0": 10000,
-          "s1": 10000,
-          "s2": 10000,
-          "s3": 10000,
-          "s4": 10000
+          "s0": 1666,
+          "s1": 1666,
+          "s2": 1666
         }
       },
       "propagation": {
         "shared": {
-          "wall_time_s": 0.004648237983928993,
-          "rss_before_mb": 258.7265625,
-          "rss_after_mb": 258.7265625,
-          "rss_delta_mb": 0.0
+          "wall_time_s": 0.005298490999848582,
+          "rss_before_mb": 116.44140625,
+          "rss_after_mb": 116.56640625,
+          "rss_delta_mb": 0.125
         },
         "all": {
-          "wall_time_s": 0.0024529430083930492,
-          "rss_before_mb": 258.7265625,
-          "rss_after_mb": 258.7265625,
-          "rss_delta_mb": 0.0
+          "wall_time_s": 0.0037343820004025474,
+          "rss_before_mb": 116.56640625,
+          "rss_after_mb": 116.69140625,
+          "rss_delta_mb": 0.125
         },
         "shared_presence": {
           "s0": 50,
           "s1": 0,
-          "s2": 0,
-          "s3": 0,
-          "s4": 0
+          "s2": 0
         },
         "all_presence": {
           "s0": 50,
           "s1": 0,
-          "s2": 0,
-          "s3": 0,
-          "s4": 0
+          "s2": 0
         }
       },
       "slice_attributes": {
         "metrics": {
-          "wall_time_s": 0.0022847609943710268,
-          "rss_before_mb": 258.7265625,
-          "rss_after_mb": 259.1015625,
-          "rss_delta_mb": 0.375
+          "wall_time_s": 0.0020635750006476883,
+          "rss_before_mb": 116.69140625,
+          "rss_after_mb": 117.56640625,
+          "rss_delta_mb": 0.875
         },
         "values": {
           "s0": "s0",
           "s1": "s1",
-          "s2": "s2",
-          "s3": "s3",
-          "s4": "s4"
+          "s2": "s2"
         }
       },
       "slice_ops": {
         "union": {
-          "wall_time_s": 0.0027287949924357235,
-          "rss_before_mb": 259.3515625,
-          "rss_after_mb": 259.3515625,
-          "rss_delta_mb": 0.0
+          "wall_time_s": 0.000796642001660075,
+          "rss_before_mb": 118.56640625,
+          "rss_after_mb": 119.06640625,
+          "rss_delta_mb": 0.5
         },
         "intersection": {
-          "wall_time_s": 0.0005619250005111098,
-          "rss_before_mb": 259.3515625,
-          "rss_after_mb": 259.3515625,
+          "wall_time_s": 0.0001278019990422763,
+          "rss_before_mb": 119.06640625,
+          "rss_after_mb": 119.06640625,
           "rss_delta_mb": 0.0
         },
         "difference": {
-          "wall_time_s": 0.000594256998738274,
-          "rss_before_mb": 259.3515625,
-          "rss_after_mb": 259.3515625,
+          "wall_time_s": 0.00011479699969640933,
+          "rss_before_mb": 119.06640625,
+          "rss_after_mb": 119.06640625,
           "rss_delta_mb": 0.0
         },
-        "union_vertices": 10100,
+        "union_vertices": 1099,
         "intersection_vertices": 0,
-        "difference_vertices": 2100
+        "difference_vertices": 433
       },
       "derived_slice": {
         "metrics": {
-          "wall_time_s": 0.0009547749941702932,
-          "rss_before_mb": 259.3515625,
-          "rss_after_mb": 259.3515625,
+          "wall_time_s": 0.00011595999967539683,
+          "rss_before_mb": 119.06640625,
+          "rss_after_mb": 119.06640625,
           "rss_delta_mb": 0.0
         },
-        "vertex_count": 1010
+        "vertex_count": 112
       },
       "aggregated_slice": {
         "metrics": {
-          "wall_time_s": 0.003845524974167347,
-          "rss_before_mb": 259.3515625,
-          "rss_after_mb": 259.3515625,
-          "rss_delta_mb": 0.0
+          "wall_time_s": 0.0007345260019064881,
+          "rss_before_mb": 119.06640625,
+          "rss_after_mb": 119.56640625,
+          "rss_delta_mb": 0.5
         },
-        "vertex_count": 10100
+        "vertex_count": 1099
       },
       "edge_scope": {
         "conserved": {
           "metrics": {
-            "wall_time_s": 0.01635967698530294,
-            "rss_before_mb": 259.3515625,
-            "rss_after_mb": 259.3515625,
+            "wall_time_s": 0.0014547389982908498,
+            "rss_before_mb": 119.56640625,
+            "rss_after_mb": 119.56640625,
             "rss_delta_mb": 0.0
           },
-          "count": 50000
+          "count": 4998
         },
         "slice_local": {
           "s0": 0,
           "s1": 0,
-          "s2": 0,
-          "s3": 0,
-          "s4": 0
+          "s2": 0
         }
       },
       "presence_queries": {
@@ -349,88 +248,88 @@
     },
     "benchmarks.core.views_algorithms": {
       "edges_view": {
-        "wall_time_s": 0.030419760994846,
-        "rss_before_mb": 252.33203125,
-        "rss_after_mb": 251.3671875,
-        "rss_delta_mb": -0.96484375
+        "wall_time_s": 0.004776156001753407,
+        "rss_before_mb": 124.19140625,
+        "rss_after_mb": 124.81640625,
+        "rss_delta_mb": 0.625
       },
       "vertices_view": {
-        "wall_time_s": 2.684001810848713e-05,
-        "rss_before_mb": 251.3671875,
-        "rss_after_mb": 251.3671875,
+        "wall_time_s": 1.7737002053763717e-05,
+        "rss_before_mb": 124.81640625,
+        "rss_after_mb": 124.81640625,
         "rss_delta_mb": 0.0
       },
       "view_create": {
-        "wall_time_s": 6.9239758886396885e-06,
-        "rss_before_mb": 251.3671875,
-        "rss_after_mb": 251.3671875,
+        "wall_time_s": 7.328999345190823e-06,
+        "rss_before_mb": 124.81640625,
+        "rss_after_mb": 124.81640625,
         "rss_delta_mb": 0.0
       },
       "edges_df": {
-        "wall_time_s": 0.030608922010287642,
-        "rss_before_mb": 251.3671875,
-        "rss_after_mb": 251.37109375,
-        "rss_delta_mb": 0.00390625
+        "wall_time_s": 0.004186654998193262,
+        "rss_before_mb": 124.81640625,
+        "rss_after_mb": 124.94140625,
+        "rss_delta_mb": 0.125
       },
       "vertices_df": {
-        "wall_time_s": 0.0017897009965963662,
-        "rss_before_mb": 251.37109375,
-        "rss_after_mb": 251.37109375,
-        "rss_delta_mb": 0.0
+        "wall_time_s": 0.000698501000442775,
+        "rss_before_mb": 124.94140625,
+        "rss_after_mb": 126.06640625,
+        "rss_delta_mb": 1.125
       },
       "materialize": {
-        "wall_time_s": 0.15661046101013198,
-        "rss_before_mb": 251.37109375,
-        "rss_after_mb": 251.37109375,
-        "rss_delta_mb": 0.0
+        "wall_time_s": 0.018469932001607958,
+        "rss_before_mb": 126.06640625,
+        "rss_after_mb": 127.19140625,
+        "rss_delta_mb": 1.125
       },
       "has_vertex": {
         "metrics": {
-          "wall_time_s": 0.000895723991561681,
-          "rss_before_mb": 251.37109375,
-          "rss_after_mb": 251.37109375,
+          "wall_time_s": 9.363299977849238e-05,
+          "rss_before_mb": 127.19140625,
+          "rss_after_mb": 127.19140625,
           "rss_delta_mb": 0.0
         },
-        "n": 10000,
-        "per_call_us": 0.0895723991561681
+        "n": 1000,
+        "per_call_us": 0.09363299977849238
       },
       "has_edge": {
         "metrics": {
-          "wall_time_s": 0.005102786992210895,
-          "rss_before_mb": 251.37109375,
-          "rss_after_mb": 251.37109375,
+          "wall_time_s": 0.000826960000267718,
+          "rss_before_mb": 127.19140625,
+          "rss_after_mb": 127.19140625,
           "rss_delta_mb": 0.0
         },
-        "n": 10000,
-        "per_call_us": 0.5102786992210895
+        "n": 1000,
+        "per_call_us": 0.826960000267718
       },
       "degree": {
         "metrics": {
-          "wall_time_s": 0.004276570020010695,
-          "rss_before_mb": 251.37109375,
-          "rss_after_mb": 251.37109375,
+          "wall_time_s": 0.0007529239992436487,
+          "rss_before_mb": 127.19140625,
+          "rss_after_mb": 127.19140625,
           "rss_delta_mb": 0.0
         },
-        "n": 10000,
-        "per_call_us": 0.4276570020010695
+        "n": 1000,
+        "per_call_us": 0.7529239992436487
       },
       "in_edges": {
-        "wall_time_s": 0.0892437830043491,
-        "rss_before_mb": 251.37109375,
-        "rss_after_mb": 251.37109375,
-        "rss_delta_mb": 0.0
+        "wall_time_s": 0.010260669998388039,
+        "rss_before_mb": 127.19140625,
+        "rss_after_mb": 129.81640625,
+        "rss_delta_mb": 2.625
       },
       "out_edges": {
-        "wall_time_s": 0.1791612230008468,
-        "rss_before_mb": 251.37109375,
-        "rss_after_mb": 263.37109375,
-        "rss_delta_mb": 12.0
+        "wall_time_s": 0.009075379999558209,
+        "rss_before_mb": 129.81640625,
+        "rss_after_mb": 132.56640625,
+        "rss_delta_mb": 2.75
       },
       "neighbors": {
-        "wall_time_s": 0.011279419995844364,
-        "rss_before_mb": 263.37109375,
-        "rss_after_mb": 250.3984375,
-        "rss_delta_mb": -12.97265625
+        "wall_time_s": 0.0013678979994438123,
+        "rss_before_mb": 132.56640625,
+        "rss_after_mb": 130.7578125,
+        "rss_delta_mb": -1.80859375
       }
     }
   }
