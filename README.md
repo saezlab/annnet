@@ -8,10 +8,10 @@ Nothing else combines all of this at once:
 - Maximum graph expressiveness: hyperedges; directed/undirected per‑edge; parallel edges; self‑loops; vertex–edge and edge–edge relations; graph/edge‑level semantics.
 - Multilayer networks: support aligned with the Kivelä et al. framework (layers, aspects, inter‑layer edges).
 - Powerful slicing: create subnetworks, clusters, and arbitrary “slices”; switch active slice quickly.
-- Annotated tables everywhere: Polars‑backed tables for vertices, edges, layers, vertex‑layer couples, slices, and graph metadata.
+- Annotated tables everywhere: Narwhals-compatible tables for vertices, edges, layers, vertex-layer couples, slices, and graph metadata.
 - anndata‑style feel: familiar patterns like obs/var/layers‑like concepts, caches, and indices.
 - Interoperability without friction: import/export with NetworkX, igraph, GraphML, GEXF, SIF, SBML, CX2 (Cytoscape), Excel/CSV/JSON, Parquet graph directories, and DataFrames (via Narwhals).
-- Algorithm proxies: seamless, lazy calls into NetworkX/igraph/graph‑tool via `G.nx`, `G.ig`, and `G.gt` proxies.
+- Algorithm interoperability: seamless, lazy calls into NetworkX/igraph/graph‑tool via the graph-owned `G.nx`, `G.ig`, and `G.gt` accessors.
 - Disk‑backed, lossless `.annnet` storage:
   - Zarr for sparse matrices
   - Parquet for annotated tables
@@ -33,7 +33,7 @@ annnet is under active development. Feedback is welcome via GitHub issues: https
 ### Import/Export (file formats/data)
 - GraphML, GEXF, SIF, SBML
 - CX2 (Cytoscape)
-- Parquet GraphDir (directory of Parquet files)
+- Parquet graph directory (directory of Parquet files)
 - CSV/TSV, JSON/NDJSON
 - Excel (via pandas/openpyxl)
 - DataFrames via Narwhals (Polars, pandas, and friends)
@@ -46,18 +46,20 @@ annnet is under active development. Feedback is welcome via GitHub issues: https
 ### Export (file formats/data)
 - GraphML, GEXF, SIF
 - CX2 (Cytoscape)
-- Parquet GraphDir (directory of Parquet files)
+- Parquet graph directory (directory of Parquet files)
 - JSON/NDJSON
 - DataFrames via Narwhals (Polars, pandas, and friends)
 
-### Backend‑specific integration (lazy proxies)
-If `networkx` is installed, you can call algorithms directly via a proxy:
+### Backend-specific integration
+If `networkx` is installed, you can call algorithms directly from the AnnNet graph:
 
 ```python
 centrality = G.nx.degree_centrality(G)
 ```
 
-Similarly, `G.ig` (igraph) and `G.gt` (graph‑tool) proxies are available if those libraries are present. Proxies convert the active slice (or requested slices) to the backend on demand for algorithm calls. You can control directionality, hyperedge handling, and multigraph collapsing when converting.
+Similarly, `G.ig` (igraph) and `G.gt` (graph-tool) are available if those libraries are present. On `G.nx.<function>(G, ...)`, AnnNet resolves the NetworkX callable, converts the AnnNet graph to a NetworkX graph with the requested projection options, replaces the `G` argument with that backend graph, dispatches the call, and returns the backend result. Backend graphs are cached and refreshed after AnnNet mutations.
+
+Use `G.nx.backend(...)`, `G.ig.backend(...)`, or `G.gt.backend()` when you want the concrete projected backend graph object. Use `G.nx.<function>(G, ...)`, `G.ig.<function>(G, ...)`, or `G.gt.<namespace>.<function>(G, ...)` when you want AnnNet to do the conversion and dispatch for an algorithm call. You can control directionality, hyperedge handling, slice selection, and multigraph collapsing where the backend supports those options.
 
 Examples:
 
@@ -73,7 +75,7 @@ nxG = G.nx.backend(
     simple=True,             # collapse Multi(Di)Graph -> (Di)Graph
 )
 
-# igraph proxy (if python-igraph installed)
+# igraph interoperability (if python-igraph installed)
 pagerank = G.ig.pagerank(G)
 ```
 
@@ -97,7 +99,7 @@ pip install "annnet[networkx,igraph]"
 pip install "annnet[io]"
 
 # Or more granular extras
-pip install "annnet[parquet]"   # Parquet GraphDir (pyarrow)
+pip install "annnet[parquet]"   # Parquet graph directory support (pyarrow)
 pip install "annnet[zarr_io]"   # Zarr + numcodecs for .annnet storage
 pip install "annnet[excel]"     # Excel loader (pandas/openpyxl)
 pip install "annnet[sbml]"      # SBML import (libxml2/lxml)
@@ -106,7 +108,7 @@ pip install "annnet[sbml]"      # SBML import (libxml2/lxml)
 pip install "annnet[all]"
 ```
 
-Note: graph‑tool is supported by adapters/proxies if installed, but it is not available on PyPI; install it via your OS/package manager and annnet will detect it.
+Note: graph-tool is supported by adapters and `G.gt` interoperability if installed, but it is not available on PyPI; install it via your OS/package manager and annnet will detect it.
 
 ### Dev/test setup with Pixi 
 
@@ -145,14 +147,6 @@ import annnet as an
 
 G = an.Graph(directed=True)  # default direction; can be overridden per-edge
 
-# Add vertices with attributes
-G.add_vertices([
-    ("A", {"name": "a"}),
-    ("B", {"name": "b"}),
-    ("C", {"name": "c"}),
-    ("D", {"name": "d"}),
-])
-
 # Create slices and set active
 G.add_slice("toy")
 G.add_slice("train")
@@ -164,26 +158,26 @@ for v in ["A", "B", "C", "D"]:
     G.add_vertex(v, label=v, kind="gene")
 
 # 1) Binary directed
-e_dir = G.add_edge("A", "B", weight=2.0, edge_directed=True, relation="activates")
+e_dir = G.add_edge("A", "B", weight=2.0, directed=True, relation="activates")
 
 # 2) Binary undirected
-e_undir = G.add_edge("B", "C", weight=1.0, edge_directed=False, relation="binds")
+e_undir = G.add_edge("B", "C", weight=1.0, directed=False, relation="binds")
 
 # 3) Self-loop
-e_loop = G.add_edge("D", "D", weight=0.5, edge_directed=True, relation="self")
+e_loop = G.add_edge("D", "D", weight=0.5, directed=True, relation="self")
 
 # 4) Parallel edge
-e_parallel = G.add_parallel_edge("A", "B", weight=5.0, relation="alternative")
+e_parallel = G.add_edge("A", "B", weight=5.0, parallel="parallel", relation="alternative")
 
 # 5) Vertex–edge (hybrid) edge
-G.add_edge_entity("edge_e1", description="signal")
-e_vx = G.add_edge("edge_e1", "C", edge_type="vertex_edge", edge_directed=True, channel="edge->vertex")
+G.add_edge(edge_id="edge_e1", as_entity=True, description="signal")
+e_vx = G.add_edge("edge_e1", "C", directed=True, as_entity=True, channel="edge->vertex")
 
 # 6) Hyperedge (undirected, 3-way membership)
-e_hyper_undir = G.add_hyperedge(members=["A", "C", "D"], weight=1.0, tag="complex")
+e_hyper_undir = G.add_edge(["A", "C", "D"], weight=1.0, directed=False, tag="complex")
 
 # 7) Hyperedge (directed head→tail)
-e_hyper_dir = G.add_hyperedge(head=["A", "B"], tail=["C", "D"], weight=1.0, reaction="A+B->C+D")
+e_hyper_dir = G.add_edge(["A", "B"], ["C", "D"], weight=1.0, directed=True, reaction="A+B->C+D")
 
 # 8) Run a NetworkX algorithm (if installed)
 deg = G.nx.degree_centrality(G)
@@ -196,29 +190,28 @@ deg = G.nx.degree_centrality(G)
 High‑fidelity conversions aim to preserve IDs, attributes, and directionality. When a conversion is lossy (e.g., hyperedges to NetworkX), functions return a manifest you can pass back to restore structure where possible.
 
 Adapter types (what goes where):
-- Runtime backend adapters (interoperability): used by lazy proxies `G.nx`, `G.ig`, `G.gt` only. These power algorithm calls and in‑memory conversions to NetworkX, igraph, and graph‑tool.
-- Format/data adapters (I/O): used to read/write files and tabular data. Examples: GraphML, GEXF, SIF, SBML, CX2 (Cytoscape), Parquet GraphDir, JSON/NDJSON, Excel/CSV, and DataFrames via Narwhals.
+- Runtime backend adapters (interoperability): used by `G.nx`, `G.ig`, and `G.gt` for algorithm calls and by `to_nx`/`from_nx`, `to_igraph`/`from_igraph`, and `to_graphtool`/`from_graphtool` for explicit in-memory conversions.
+- Format/data adapters (I/O): used to read/write files and tabular data. Examples: GraphML, GEXF, SIF, SBML, CX2 (Cytoscape), Parquet graph directories, JSON/NDJSON, Excel/CSV, and DataFrames via Narwhals.
 
-In short: proxies = nx/ig/gt at runtime; file formats = adapters under the hood.
+In short: `G.nx`/`G.ig`/`G.gt` are runtime algorithm interoperability accessors; file formats use IO adapters.
 
 NetworkX:
 
 ```python
 import annnet as an
 
-nxG, manifest = an.to_nx(G, directed=True, hyperedge_mode="skip")
+nxG, manifest = an.adapters.to_nx(G, directed=True, hyperedge_mode="skip")
 
 # ... run algorithms or edit nxG ...
 
-G2 = an.from_nx(nxG, manifest)  # use manifest to reduce loss
+G2 = an.adapters.from_nx(nxG, manifest)  # use manifest to reduce loss
 ```
 
 igraph / graph‑tool (if installed):
 
 ```python
-from annnet.adapters.igraph_adapter import to_igraph, from_igraph
-igG, ig_manifest = to_igraph(G, directed=True, hyperedge_mode="skip")
-G2 = from_igraph(igG, ig_manifest)
+igG, ig_manifest = an.adapters.to_igraph(G, directed=True, hyperedge_mode="skip")
+G2 = an.adapters.from_igraph(igG, ig_manifest)
 ```
 
 File formats and dataframes:
@@ -227,24 +220,23 @@ File formats and dataframes:
 import annnet as an
 
 # GraphML / GEXF / SIF
-an.to_graphml(G, "graph.graphml", directed=True, hyperedge_mode="reify")
-G2 = an.from_graphml("graph.graphml")
+an.io.to_graphml(G, "graph.graphml", directed=True, hyperedge_mode="reify")
+G2 = an.io.from_graphml("graph.graphml")
 
-an.to_sif(G, "graph.sif", lossless=True)
-G3 = an.from_sif("graph.sif", manifest_path="graph.sif.manifest.json")
+an.io.to_sif(G, "graph.sif", lossless=True)
+G3 = an.io.from_sif("graph.sif", manifest_path="graph.sif.manifest.json")
 
 # JSON / NDJSON
-an.to_json(G, "graph.json")
-H = an.from_json("graph.json")
+an.io.to_json(G, "graph.json")
+H = an.io.from_json("graph.json")
 
-# Parquet GraphDir
-an.write_parquet_graphdir(G, "graph_dir/")
-K = an.read_parquet_graphdir("graph_dir/")
+# Parquet graph directory
+an.io.to_parquet(G, "graph_dir/")
+K = an.io.from_parquet("graph_dir/")
 
 # CX2 (Cytoscape)
-from annnet.adapters.cx2_adapter import to_cx2, from_cx2
-cx2 = to_cx2(G, hyperedges="reify")
-L = from_cx2(cx2, hyperedges="manifest")
+cx2 = an.io.to_cx2(G, hyperedges="reify")
+L = an.io.from_cx2(cx2, hyperedges="manifest")
 ```
 
 Notes:
@@ -261,8 +253,8 @@ annnet can write and read a lossless on‑disk format combining Zarr (sparse arr
 ```python
 import annnet as an
 
-an.annnet.write(G, "my_graph.annnet", overwrite=True)  # Zarr + Parquet + JSON
-R = an.annnet.read("my_graph.annnet")                   # full fidelity load
+an.io.write(G, "my_graph.annnet", overwrite=True)  # Zarr + Parquet + JSON
+R = an.io.read("my_graph.annnet")                   # full fidelity load
 ```
 
 Layout highlights:
@@ -281,7 +273,7 @@ annnet adapts internal representation for performance and compatibility:
 - Attributes decoupled from structure (Polars tables)
 - Lazy conversion to external backends on demand
 - Copy‑on‑write graph views and structured change tracking
-- Optional caching for converted backend graphs within proxies
+- Optional caching for converted backend graphs within `G.nx`/`G.ig`/`G.gt`
 
 See the architecture overview in `architecture.md` for deeper details and examples.
 
@@ -302,10 +294,9 @@ The package is modular to separate core functionality, adapters for external lib
 
 ```
 annnet/
-├── core/         # Graph class, managers, lazy proxies (nx/ig/gt)
-├── adapters/     # Backend adapters: networkx/igraph/graph-tool (runtime proxies)
-│                 # Format adapters: GraphML, GEXF, SIF, SBML, CX2, Parquet GraphDir, JSON, DataFrames
-├── io/           # Lossless .annnet storage (read/write) + Excel/CSV helpers
+├── core/         # Graph class, managers, lazy interoperability accessors (nx/ig/gt)
+├── adapters/     # Backend adapters: networkx/igraph/graph-tool conversions
+├── io/           # Lossless .annnet storage and filesystem/tabular IO
 ├── algorithms/   # Pure-Python algorithms using core only
 └── utils/        # Misc utilities (typing/validation/config)
 ```

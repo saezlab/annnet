@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from typing import Any
+from importlib import import_module
 
 _lazy_symbols: dict[str, tuple[str, str]] = {
-    "Traversal": ("annnet.algorithms.traversal", "Traversal"),
+    'Traversal': ('annnet.algorithms.traversal', 'Traversal'),
 }
 
 __all__ = sorted(_lazy_symbols)

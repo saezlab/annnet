@@ -7,7 +7,10 @@ source =
 branch = true
 parallel = true
 source = annnet
-omit = */__init__.py
+omit =
+    */__init__.py
+    annnet/benchmarks/*
+    benchmarks/*
 
 [report]
 exclude_lines =

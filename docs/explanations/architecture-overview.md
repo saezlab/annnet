@@ -9,8 +9,7 @@ model:
 3. derived materializations
 4. compatibility and interoperability boundaries
 
-That split is the right mental model for reading the codebase. Once you have
-it, the rest of `annnet.core` becomes much easier to navigate.
+That split is the main mental model behind the package.
 
 ## The center: one object, one structural truth
 
@@ -23,7 +22,7 @@ it, the rest of `annnet.core` becomes much easier to navigate.
 - annotation tables
 - history and snapshots
 - caches
-- backend adapters and lazy proxies
+- backend adapters and lazy interoperability accessors
 
 The important point is that these concerns are not independent subsystems
 floating next to each other. They all describe different views of the same
@@ -39,14 +38,9 @@ The `annnet.core` package is where the in-memory model lives.
 - `graph.py`
   The `AnnNet` class itself. This is where the canonical stores are created
   and where scalar graph mutation is defined.
-- `_helpers.py`
-  Shared low-level structures such as `EntityRecord` and `EdgeRecord`, plus
-  compatibility mappings that expose the old dict-style public API without
-  changing the canonical storage model.
-- `_BulkOps.py`
-  Batched structural mutation. These methods do not introduce a second graph
-  model; they are high-throughput paths for the same semantics as the scalar
-  API.
+- `_records.py`
+  Shared low-level structures such as `EntityRecord`, `EdgeRecord`, and
+  `SliceRecord`, plus record-oriented helpers used across the core.
 - `_Annotation.py`
   Attribute storage and upsert logic for graph-, vertex-, edge-, slice-, and
   edge-slice-level metadata.
@@ -58,10 +52,11 @@ The `annnet.core` package is where the in-memory model lives.
 - `_Views.py`
   Lazy filtered views that read from the same graph instead of materializing
   copies.
-- `_Index.py`
-  Translation between external graph identifiers and incidence coordinates.
-- `_Cache.py`
-  Derived matrix representations and materialized subgraph/copy operations.
+- `_Matrix.py`
+  Translation between external graph identifiers and incidence coordinates,
+  plus matrix/cache helpers such as CSR/CSC and adjacency materialization.
+- `_Ops.py`
+  Materialized copy/subgraph operations and topology-oriented graph transforms.
 - `_History.py`
   Mutation logging, exported history, snapshots, and diffs.
 
@@ -113,24 +108,23 @@ The current manager-first public API mirrors the internal split:
 - `G.slices` for slice state
 - `G.idx` for incidence-coordinate translation
 - `G.cache` for derived matrix materializations
+- `G.ops` for materialized graph operations
 
 This is not just naming preference. It is an architectural statement about
 which concerns are canonical, which are overlays, and which are derived.
 
 ## Compatibility is now a boundary, not an implementation model
 
-The codebase still exposes dict-like properties such as `entity_to_idx`,
-`edge_definitions`, `edge_weights`, and similar legacy names. Those should be
-understood as a public compatibility boundary, not as the internal storage
-model.
+The codebase still exposes compatibility-oriented properties such as
+`entity_to_idx`, `edge_definitions`, `edge_weights`, and similar legacy names.
+Those should be understood as a public compatibility boundary, not as the
+internal storage model.
 
 Internally, the package is organized around the structured SSOT described in
 [Internal representation](internal-representation.md).
 
-That distinction is important when reading the code:
-
-- public compatibility exists for stability
-- internal code is expected to read the canonical stores directly
+That distinction matters because compatibility views do not replace the
+canonical model.
 
 ## Outside `annnet.core`
 
@@ -148,14 +142,7 @@ The rest of the package has a simpler split:
 Those packages sit around the core object. They do not redefine the graph
 model.
 
-## Reading order
-
-If you want the package to make technical sense as a system, this is the right
-order:
-
-1. [Internal representation](internal-representation.md)
-2. [Mutation and derived state](mutation-and-derived-state.md)
-3. [Incidence representation](math-incidence.md)
-4. [Multilayer and multi-aspect graphs](math-multilayer.md)
-5. [Slices and views](managers-and-views.md)
-6. [Storage and IO](io-annnet.md)
+Adapters and IO modules use the package's centralized dataframe helpers when
+reading annotation tables or creating new tables. This keeps format adapters,
+backend adapters, and graph annotations aligned with the configured annotation
+backend.

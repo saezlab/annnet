@@ -33,15 +33,17 @@ nav:
 
 -   Installation: installation.md
 -   Quickstart: quickstart.md
--   Tutorials and Use Cases:
-    -   HowTo's and Use Cases: tutorials/index.md
-    -   Tutorials:
+-   Tutorials and Use Cases: 
+    -   Notebooks Overview: tutorials/index.md
+    -   Analysis patterns: tutorials/analysis-patterns.md
+    -   HowTo's:
         -   Tutorial index: tutorials/notebooks/tutos/00_tutorial_index.ipynb
         -   Quickstart graph basics: tutorials/notebooks/tutos/01_quickstart_graph_basics.ipynb
         -   Attributes, views, and indexing: tutorials/notebooks/tutos/02_attributes_views_and_indexing.ipynb
         -   Slices and multilayer workflows: tutorials/notebooks/tutos/03_slices_and_multilayer_workflows.ipynb
         -   Traversal and history: tutorials/notebooks/tutos/04_traversal_and_history.ipynb
         -   IO and interoperability: tutorials/notebooks/tutos/05_io_and_interoperability.ipynb
+    -   Use Cases:
         -   AnnNet Showcase: tutorials/notebooks/annnet_showcase.ipynb
         -   AnnNet Demo: tutorials/notebooks/Demo.ipynb
         -   Multi-Condition Causal Signaling: tutorials/notebooks/UC1.ipynb
@@ -51,7 +53,7 @@ nav:
         
 
 -   Explanations:
-    -   Overview: explanations/index.md
+    -   Explanations Overview: explanations/index.md
     -   Design principles: explanations/design-philosophy.md
     -   Package architecture: explanations/architecture-overview.md
     -   Internal representation: explanations/internal-representation.md
@@ -62,12 +64,14 @@ nav:
     -   Interoperability: explanations/interoperability.md
     -   Storage and IO: explanations/io-annnet.md
     -   Tracking changes: explanations/history-and-diffs.md
-    -   Typical analysis patterns: explanations/common-patterns.md
 
 -   API Reference:
-    -   Overview: reference/index.md
+    -   API Reference Overview: reference/index.md
+    -   Public and internal APIs: reference/api-boundary.md
+    -   Support helpers: reference/support.md
     -   Core:
         -   Graph: reference/core/graph.md
+        -   Backend accessors: reference/core/backend-accessors.md
         -   Indexing: reference/core/indexing.md
         -   Attributes: reference/core/attributes.md
         -   Operations: reference/core/bulk-operations.md
@@ -91,7 +95,6 @@ nav:
         -   DataFrames: reference/io/dataframes.md
         -   OmniPath: reference/io/omnipath.md
     -   Adapters:
-        -   Adapter manager: reference/adapters/manager.md
         -   NetworkX adapter: reference/adapters/networkx.md
         -   igraph adapter: reference/adapters/igraph.md
         -   graph-tool adapter: reference/adapters/graphtool.md
@@ -155,6 +158,8 @@ plugins:
                     show_bases: false
                     show_if_no_docstring: false
                     show_source: false
+                    separate_signature: true
+                    line_length: 60
 -   mkdocs-jupyter:
         execute: false
 

@@ -4,7 +4,7 @@ import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from annnet.core._Views import GraphView
 from annnet.core.graph import AnnNet
@@ -13,28 +13,28 @@ from annnet.core.graph import AnnNet
 def _build_graph():
     """Directed graph: A→B, B→C, with attributes and a slice."""
     G = AnnNet(directed=True)
-    G.add_vertices("A")
-    G.attrs.set_vertex_attrs("A", gene="TP53", score=1.0)
-    G.add_vertices("B")
-    G.attrs.set_vertex_attrs("B", gene="EGFR", score=0.5)
-    G.add_vertices("C")
-    G.attrs.set_vertex_attrs("C", gene="MYC", score=0.2)
-    G.add_edges("A", "B", edge_id="e1", weight=2.0)
-    G.attrs.set_edge_attrs("e1", relation="activates")
-    G.add_edges("B", "C", edge_id="e2", weight=3.0)
-    G.attrs.set_edge_attrs("e2", relation="inhibits")
-    G.slices.add_slice("sig")
-    G.slices.add_edge_to_slice("sig", "e1")
+    G.add_vertices('A')
+    G.attrs.set_vertex_attrs('A', gene='TP53', score=1.0)
+    G.add_vertices('B')
+    G.attrs.set_vertex_attrs('B', gene='EGFR', score=0.5)
+    G.add_vertices('C')
+    G.attrs.set_vertex_attrs('C', gene='MYC', score=0.2)
+    G.add_edges('A', 'B', edge_id='e1', weight=2.0)
+    G.attrs.set_edge_attrs('e1', relation='activates')
+    G.add_edges('B', 'C', edge_id='e2', weight=3.0)
+    G.attrs.set_edge_attrs('e2', relation='inhibits')
+    G.slices.add_slice('sig')
+    G.add_edge_to_slice('sig', 'e1')
     return G
 
 
 def _build_hyperedge_graph():
     G = AnnNet(directed=True)
-    for v in ["A", "B", "C", "D"]:
+    for v in ['A', 'B', 'C', 'D']:
         G.add_vertices(v)
-    G.add_edges("A", "B", edge_id="e1", weight=1.0)
-    G.add_edges(src=["A", "B"], tgt=["C"], edge_id="h1", weight=0.5)
-    G.add_edges(src=["B", "C", "D"], edge_id="h2", weight=1.5)
+    G.add_edges('A', 'B', edge_id='e1', weight=1.0)
+    G.add_edges(src=['A', 'B'], tgt=['C'], edge_id='h1', weight=0.5)
+    G.add_edges(src=['B', 'C', 'D'], edge_id='h2', weight=1.5)
     return G
 
 
@@ -48,26 +48,26 @@ class TestGraphViewVertexFilter(unittest.TestCase):
 
     def test_list_filter_restricts_vertices(self):
         G = _build_graph()
-        view = GraphView(G, vertices=["A", "B"])
-        self.assertEqual(view.vertex_ids, {"A", "B"})
+        view = GraphView(G, vertices=['A', 'B'])
+        self.assertEqual(view.vertex_ids, {'A', 'B'})
         self.assertEqual(view.vertex_count, 2)
 
     def test_callable_predicate_filter(self):
         G = _build_graph()
         # Keep only vertices whose gene attribute starts with "E"
-        view = GraphView(G, vertices=lambda v: v in ["A", "C"])
+        view = GraphView(G, vertices=lambda v: v in ['A', 'C'])
         ids = view.vertex_ids
-        self.assertIn("A", ids)
-        self.assertIn("C", ids)
-        self.assertNotIn("B", ids)
+        self.assertIn('A', ids)
+        self.assertIn('C', ids)
+        self.assertNotIn('B', ids)
 
     def test_extra_predicate_further_restricts(self):
         G = _build_graph()
-        view = GraphView(G, vertices=["A", "B", "C"], predicate=lambda v: v != "C")
+        view = GraphView(G, vertices=['A', 'B', 'C'], predicate=lambda v: v != 'C')
         ids = view.vertex_ids
-        self.assertIn("A", ids)
-        self.assertIn("B", ids)
-        self.assertNotIn("C", ids)
+        self.assertIn('A', ids)
+        self.assertIn('B', ids)
+        self.assertNotIn('C', ids)
 
 
 class TestGraphViewEdgeFilter(unittest.TestCase):
@@ -79,41 +79,41 @@ class TestGraphViewEdgeFilter(unittest.TestCase):
 
     def test_list_filter_restricts_edges(self):
         G = _build_graph()
-        view = GraphView(G, edges=["e1"])
-        self.assertEqual(view.edge_ids, {"e1"})
+        view = GraphView(G, edges=['e1'])
+        self.assertEqual(view.edge_ids, {'e1'})
         self.assertEqual(view.edge_count, 1)
 
     def test_callable_edge_filter(self):
         G = _build_graph()
-        view = GraphView(G, edges=lambda e: e == "e2")
+        view = GraphView(G, edges=lambda e: e == 'e2')
         ids = view.edge_ids
-        self.assertIn("e2", ids)
-        self.assertNotIn("e1", ids)
+        self.assertIn('e2', ids)
+        self.assertNotIn('e1', ids)
 
 
 class TestGraphViewSliceFilter(unittest.TestCase):
     def test_slice_filter_single(self):
         G = _build_graph()
         # "sig" slice contains only e1
-        G.slices.add_vertex_to_slice("sig", "A")
-        G.slices.add_vertex_to_slice("sig", "B")
-        view = GraphView(G, slices="sig")
+        G.add_vertex_to_slice('sig', 'A')
+        G.add_vertex_to_slice('sig', 'B')
+        view = GraphView(G, slices='sig')
         edge_ids = view.edge_ids
-        self.assertIn("e1", edge_ids)
-        self.assertNotIn("e2", edge_ids)
+        self.assertIn('e1', edge_ids)
+        self.assertNotIn('e2', edge_ids)
 
     def test_slice_filter_list(self):
         G = _build_graph()
-        G.slices.add_slice("reg")
-        G.slices.add_edge_to_slice("reg", "e2")
-        G.slices.add_vertex_to_slice("sig", "A")
-        G.slices.add_vertex_to_slice("sig", "B")
-        G.slices.add_vertex_to_slice("reg", "B")
-        G.slices.add_vertex_to_slice("reg", "C")
-        view = GraphView(G, slices=["sig", "reg"])
+        G.slices.add_slice('reg')
+        G.add_edge_to_slice('reg', 'e2')
+        G.add_vertex_to_slice('sig', 'A')
+        G.add_vertex_to_slice('sig', 'B')
+        G.add_vertex_to_slice('reg', 'B')
+        G.add_vertex_to_slice('reg', 'C')
+        view = GraphView(G, slices=['sig', 'reg'])
         edge_ids = view.edge_ids
-        self.assertIn("e1", edge_ids)
-        self.assertIn("e2", edge_ids)
+        self.assertIn('e1', edge_ids)
+        self.assertIn('e2', edge_ids)
 
 
 class TestGraphViewObs(unittest.TestCase):
@@ -124,29 +124,25 @@ class TestGraphViewObs(unittest.TestCase):
         view = GraphView(G)
         obs = view.obs
         try:
-            import polars as pl
-
             rows = obs.to_dicts()
         except Exception:
-            rows = obs.to_dict(orient="records")
-        vertex_ids = [r["vertex_id"] for r in rows]
-        self.assertIn("A", vertex_ids)
-        self.assertIn("B", vertex_ids)
-        self.assertIn("C", vertex_ids)
+            rows = obs.to_dict(orient='records')
+        vertex_ids = [r['vertex_id'] for r in rows]
+        self.assertIn('A', vertex_ids)
+        self.assertIn('B', vertex_ids)
+        self.assertIn('C', vertex_ids)
 
     def test_obs_filtered_to_subset(self):
         G = _build_graph()
-        view = GraphView(G, vertices=["A"])
+        view = GraphView(G, vertices=['A'])
         obs = view.obs
         try:
-            import polars as pl
-
             rows = obs.to_dicts()
         except Exception:
-            rows = obs.to_dict(orient="records")
-        vertex_ids = [r["vertex_id"] for r in rows]
-        self.assertIn("A", vertex_ids)
-        self.assertNotIn("B", vertex_ids)
+            rows = obs.to_dict(orient='records')
+        vertex_ids = [r['vertex_id'] for r in rows]
+        self.assertIn('A', vertex_ids)
+        self.assertNotIn('B', vertex_ids)
 
 
 class TestGraphViewVar(unittest.TestCase):
@@ -157,28 +153,24 @@ class TestGraphViewVar(unittest.TestCase):
         view = GraphView(G)
         var = view.var
         try:
-            import polars as pl
-
             rows = var.to_dicts()
         except Exception:
-            rows = var.to_dict(orient="records")
-        edge_ids = [r["edge_id"] for r in rows]
-        self.assertIn("e1", edge_ids)
-        self.assertIn("e2", edge_ids)
+            rows = var.to_dict(orient='records')
+        edge_ids = [r['edge_id'] for r in rows]
+        self.assertIn('e1', edge_ids)
+        self.assertIn('e2', edge_ids)
 
     def test_var_filtered_to_subset(self):
         G = _build_graph()
-        view = GraphView(G, edges=["e1"])
+        view = GraphView(G, edges=['e1'])
         var = view.var
         try:
-            import polars as pl
-
             rows = var.to_dicts()
         except Exception:
-            rows = var.to_dict(orient="records")
-        edge_ids = [r["edge_id"] for r in rows]
-        self.assertIn("e1", edge_ids)
-        self.assertNotIn("e2", edge_ids)
+            rows = var.to_dict(orient='records')
+        edge_ids = [r['edge_id'] for r in rows]
+        self.assertIn('e1', edge_ids)
+        self.assertNotIn('e2', edge_ids)
 
 
 class TestGraphViewX(unittest.TestCase):
@@ -187,7 +179,7 @@ class TestGraphViewX(unittest.TestCase):
     def test_X_shape_filtered_vertices_and_edges(self):
         # With explicit filters the submatrix is exactly 2×1
         G = _build_graph()
-        view = GraphView(G, vertices=["A", "B"], edges=["e1"])
+        view = GraphView(G, vertices=['A', 'B'], edges=['e1'])
         X = view.X
         self.assertEqual(X.shape[0], 2)
         self.assertEqual(X.shape[1], 1)
@@ -195,7 +187,7 @@ class TestGraphViewX(unittest.TestCase):
     def test_X_shape_vertex_edge_filter_consistent(self):
         # Filter to A,B vertices and e1 (A→B) — C is absent, so e2 (B→C) is dropped
         G = _build_graph()
-        view = GraphView(G, vertices=["A", "B"], edges=["e1", "e2"])
+        view = GraphView(G, vertices=['A', 'B'], edges=['e1', 'e2'])
         X = view.X
         # e2 (B→C) is dropped because C not in vertex filter → only 1 column
         self.assertEqual(X.shape[0], 2)
@@ -203,7 +195,7 @@ class TestGraphViewX(unittest.TestCase):
 
     def test_X_empty_for_no_matching_vertices(self):
         G = _build_graph()
-        view = GraphView(G, vertices=[], edges=["e1"])
+        view = GraphView(G, vertices=[], edges=['e1'])
         X = view.X
         self.assertEqual(X.shape[0], 0)
 
@@ -230,14 +222,14 @@ class TestViewNamespace(unittest.TestCase):
             self.assertEqual(flat.to_dicts(), namespaced.to_dicts())
         except AttributeError:
             self.assertEqual(
-                flat.to_dict(orient="records"),
-                namespaced.to_dict(orient="records"),
+                flat.to_dict(orient='records'),
+                namespaced.to_dict(orient='records'),
             )
 
     def test_materialize_vertex_filter(self):
         G = _build_graph()
         # Only A and B → only e1 survives (both endpoints present)
-        view = GraphView(G, vertices=["A", "B"], edges=["e1"])
+        view = GraphView(G, vertices=['A', 'B'], edges=['e1'])
         sub = view.materialize()
         self.assertEqual(sub.nv, 2)
         self.assertEqual(sub.ne, 1)
@@ -246,9 +238,9 @@ class TestViewNamespace(unittest.TestCase):
         G = _build_graph()
         view = GraphView(G)
         sub = view.materialize(copy_attributes=True)
-        attrs = sub.attrs.get_vertex_attrs("A") or {}
+        attrs = sub.attrs.get_vertex_attrs('A') or {}
         # gene attribute should survive
-        self.assertIn("gene", attrs)
+        self.assertIn('gene', attrs)
 
     def test_materialize_no_attrs(self):
         G = _build_graph()
@@ -271,19 +263,19 @@ class TestGraphViewSubview(unittest.TestCase):
 
     def test_subview_narrows_vertices(self):
         G = _build_graph()
-        base = GraphView(G, vertices=["A", "B", "C"])
-        sub = base.subview(vertices=["A", "B"])
+        base = GraphView(G, vertices=['A', 'B', 'C'])
+        sub = base.subview(vertices=['A', 'B'])
         ids = sub.vertex_ids
-        self.assertIn("A", ids)
-        self.assertIn("B", ids)
-        self.assertNotIn("C", ids)
+        self.assertIn('A', ids)
+        self.assertIn('B', ids)
+        self.assertNotIn('C', ids)
 
     def test_subview_narrows_edges(self):
         G = _build_graph()
-        base = GraphView(G, edges=["e1", "e2"])
-        sub = base.subview(edges=["e1"])
-        self.assertIn("e1", sub.edge_ids)
-        self.assertNotIn("e2", sub.edge_ids)
+        base = GraphView(G, edges=['e1', 'e2'])
+        sub = base.subview(edges=['e1'])
+        self.assertIn('e1', sub.edge_ids)
+        self.assertNotIn('e2', sub.edge_ids)
 
 
 class TestGraphViewConvenience(unittest.TestCase):
@@ -294,18 +286,18 @@ class TestGraphViewConvenience(unittest.TestCase):
         view = GraphView(G)
         s = view.summary()
         self.assertIsInstance(s, str)
-        self.assertIn("3", s)  # 3 vertices
-        self.assertIn("2", s)  # 2 edges
+        self.assertIn('3', s)  # 3 vertices
+        self.assertIn('2', s)  # 2 edges
 
     def test_repr(self):
         G = _build_graph()
         view = GraphView(G)
         r = repr(view)
-        self.assertIn("GraphView", r)
+        self.assertIn('GraphView', r)
 
     def test_len_equals_vertex_count(self):
         G = _build_graph()
-        view = GraphView(G, vertices=["A", "B"])
+        view = GraphView(G, vertices=['A', 'B'])
         self.assertEqual(len(view), 2)
 
 
@@ -316,32 +308,30 @@ class TestViewsClassEdgesView(unittest.TestCase):
         G = _build_graph()
         df = G.views.edges()
         try:
-            import polars as pl
-
             rows = df.to_dicts()
         except Exception:
-            rows = df.to_dict(orient="records")
-        edge_ids = [r["edge_id"] for r in rows]
-        self.assertIn("e1", edge_ids)
-        self.assertIn("e2", edge_ids)
+            rows = df.to_dict(orient='records')
+        edge_ids = [r['edge_id'] for r in rows]
+        self.assertIn('e1', edge_ids)
+        self.assertIn('e2', edge_ids)
 
     def test_edges_view_includes_weight_column(self):
         G = _build_graph()
         df = G.views.edges(include_weight=True)
         cols = list(df.columns)
-        self.assertIn("global_weight", cols)
+        self.assertIn('global_weight', cols)
 
     def test_edges_view_with_slice_weight(self):
         G = _build_graph()
-        G.attrs.set_edge_slice_attrs("sig", "e1", weight=99.0)
-        df = G.views.edges(slice="sig", resolved_weight=True)
+        G.attrs.set_edge_slice_attrs('sig', 'e1', weight=99.0)
+        df = G.views.edges(slice='sig', resolved_weight=True)
         try:
             import polars as pl
 
-            row = df.filter(pl.col("edge_id") == "e1").to_dicts()[0]
+            row = df.filter(pl.col('edge_id') == 'e1').to_dicts()[0]
         except Exception:
-            row = df[df["edge_id"] == "e1"].to_dict(orient="records")[0]
-        self.assertAlmostEqual(row["effective_weight"], 99.0)
+            row = df[df['edge_id'] == 'e1'].to_dict(orient='records')[0]
+        self.assertAlmostEqual(row['effective_weight'], 99.0)
 
     def test_edges_view_empty_graph(self):
         G = AnnNet(directed=True)
@@ -353,16 +343,14 @@ class TestViewsClassEdgesView(unittest.TestCase):
         G = _build_hyperedge_graph()
         df = G.views.edges()
         try:
-            import polars as pl
-
-            rows = {r["edge_id"]: r for r in df.to_dicts()}
+            rows = {r['edge_id']: r for r in df.to_dicts()}
         except Exception:
-            rows = {r["edge_id"]: r for r in df.to_dict(orient="records")}
+            rows = {r['edge_id']: r for r in df.to_dict(orient='records')}
 
-        self.assertEqual(rows["h1"]["source"], "A|B")
-        self.assertEqual(rows["h1"]["target"], "C")
-        self.assertEqual(rows["h2"]["source"], "B|C|D")
-        self.assertIsNone(rows["h2"]["target"])
+        self.assertEqual(rows['h1']['source'], 'A|B')
+        self.assertEqual(rows['h1']['target'], 'C')
+        self.assertEqual(rows['h2']['source'], 'B|C|D')
+        self.assertIsNone(rows['h2']['target'])
 
 
 class TestViewsClassVerticesView(unittest.TestCase):
@@ -372,15 +360,13 @@ class TestViewsClassVerticesView(unittest.TestCase):
         G = _build_graph()
         df = G.views.vertices()
         try:
-            import polars as pl
-
             rows = df.to_dicts()
         except Exception:
-            rows = df.to_dict(orient="records")
-        vertex_ids = [r["vertex_id"] for r in rows]
-        self.assertIn("A", vertex_ids)
-        self.assertIn("B", vertex_ids)
-        self.assertIn("C", vertex_ids)
+            rows = df.to_dict(orient='records')
+        vertex_ids = [r['vertex_id'] for r in rows]
+        self.assertIn('A', vertex_ids)
+        self.assertIn('B', vertex_ids)
+        self.assertIn('C', vertex_ids)
 
     def test_vertices_view_empty_graph(self):
         G = AnnNet(directed=True)
@@ -398,17 +384,17 @@ class TestAnnNetView(unittest.TestCase):
 
     def test_view_with_vertex_list(self):
         G = _build_graph()
-        v = G.view(vertices=["A"])
-        self.assertEqual(v.vertex_ids, {"A"})
+        v = G.view(vertices=['A'])
+        self.assertEqual(v.vertex_ids, {'A'})
 
     def test_view_with_predicate(self):
         G = _build_graph()
-        v = G.view(predicate=lambda x: x == "B")
+        v = G.view(predicate=lambda x: x == 'B')
         # predicate applied to all vertices; only B survives
         # (predicate alone doesn't set vertex_ids, need vertices too)
         # test that it doesn't raise and returns a GraphView
         self.assertIsInstance(v, GraphView)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

@@ -3,14 +3,15 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-import narwhals as nw
-
-from ._records import EdgeRecord, EntityRecord, SliceRecord
-
-try:
-    import polars as pl
-except Exception:
-    pl = None
+from ._records import EdgeRecord, SliceRecord, EntityRecord
+from .._dataframe_backend import (
+    clone_dataframe,
+    dataframe_height,
+    dataframe_columns,
+    dataframe_to_rows,
+    dataframe_filter_in,
+    dataframe_memory_usage,
+)
 
 if TYPE_CHECKING:
     from .graph import AnnNet
@@ -19,13 +20,13 @@ if TYPE_CHECKING:
 def _hyper_def(rec):
     """Build hyperedge metadata dict from an EdgeRecord (no compat proxy)."""
     if rec.tgt is not None:
-        return {"directed": True, "head": set(rec.src), "tail": set(rec.tgt)}
-    return {"directed": False, "members": set(rec.src)}
+        return {'directed': True, 'head': set(rec.src), 'tail': set(rec.tgt)}
+    return {'directed': False, 'members': set(rec.src)}
 
 
 def _is_hyper(graph, eid):
     rec = graph._edges.get(eid)
-    return rec is not None and rec.etype == "hyper"
+    return rec is not None and rec.etype == 'hyper'
 
 
 def _clone_edge_record(rec, *, col_idx=None, weight=None):
@@ -47,15 +48,7 @@ def _share_or_clone_table(df):
     """Reuse immutable columnar tables when safe, else copy."""
     if df is None:
         return None
-    if pl is not None and isinstance(df, pl.DataFrame):
-        return df
-    clone = getattr(df, "copy", None)
-    if callable(clone):
-        try:
-            return clone(deep=True)
-        except TypeError:
-            return clone()
-    return df
+    return clone_dataframe(df)
 
 
 class Operations:
@@ -63,18 +56,12 @@ class Operations:
 
     def _rows_attr_map(self, df, key_col: str, keys=None) -> dict:
         """Return a key -> attrs mapping from an attribute table."""
-        if df is None or not hasattr(df, "columns") or key_col not in df.columns:
+        if df is None or key_col not in dataframe_columns(df):
+            return {}
+        if dataframe_height(df) == 0:
             return {}
 
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame) and df.height == 0:
-            return {}
-
-        cache = getattr(self, "_row_attr_cache", None)
+        cache = getattr(self, '_row_attr_cache', None)
         if cache is None:
             cache = {}
             self._row_attr_cache = cache
@@ -83,20 +70,7 @@ class Operations:
         mapping = cache.get(cache_key)
         if mapping is None:
             mapping = {}
-            try:
-                if pl is not None and isinstance(df, pl.DataFrame):
-                    rows = df.iter_rows(named=True)
-                else:
-                    native = nw.to_native(nw.from_native(df, pass_through=True))
-                    rows = (
-                        native.to_dicts()
-                        if hasattr(native, "to_dicts")
-                        else native.to_dict(orient="records")
-                    )
-            except Exception:
-                rows = []
-
-            for row in rows:
+            for row in dataframe_to_rows(df):
                 kval = row.get(key_col)
                 if kval is None:
                     continue
@@ -112,19 +86,10 @@ class Operations:
 
     def _filter_attr_table(self, df, key_col: str, keys):
         """Return a filtered attribute table preserving the input backend."""
-        if df is None or not hasattr(df, "columns") or key_col not in df.columns:
+        if df is None or key_col not in dataframe_columns(df):
             return df
 
-        keys = list(keys)
-        if pl is not None and isinstance(df, pl.DataFrame):
-            if not keys:
-                return df.head(0)
-            return df.filter(pl.col(key_col).is_in(keys))
-
-        ndf = nw.from_native(df, pass_through=True)
-        if not keys:
-            return nw.to_native(ndf.head(0))
-        return nw.to_native(ndf.filter(nw.col(key_col).is_in(keys)))
+        return dataframe_filter_in(df, key_col, keys)
 
     def _flat_edge_vertices(self, edge_ids) -> set[str]:
         """Return flat vertex ids incident to the selected edges."""
@@ -133,7 +98,7 @@ class Operations:
             rec = self._edges.get(eid)
             if rec is None or rec.col_idx < 0 or rec.src is None:
                 continue
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 vertices.update(rec.src)
                 if rec.tgt is not None:
                     vertices.update(rec.tgt)
@@ -151,7 +116,7 @@ class Operations:
             if ekey is None:
                 continue
             rec = self._entities.get(ekey)
-            if rec is None or rec.kind != "vertex":
+            if rec is None or rec.kind != 'vertex':
                 continue
             vid = ekey[0]
             if vid in wanted:
@@ -179,7 +144,7 @@ class Operations:
         """Materialize a flat subgraph by slicing the internal IR directly."""
         ordered_vertices = self._ordered_flat_vertex_ids(vertex_ids)
         ordered_edges = self._ordered_edge_ids(edge_ids)
-        row_keys = [(vid, ("_",)) for vid in ordered_vertices]
+        row_keys = [(vid, ('_',)) for vid in ordered_vertices]
         row_indexes = [self._entities[ekey].row_idx for ekey in row_keys]
         col_indexes = [self._edges[eid].col_idx for eid in ordered_edges]
 
@@ -192,7 +157,7 @@ class Operations:
         new._row_to_entity = {}
         new._vid_to_ekeys = {}
         for i, ekey in enumerate(row_keys):
-            new._entities[ekey] = EntityRecord(row_idx=i, kind="vertex")
+            new._entities[ekey] = EntityRecord(row_idx=i, kind='vertex')
             new._row_to_entity[i] = ekey
             new._vid_to_ekeys.setdefault(ekey[0], []).append(ekey)
         new.vertex_aligned = self.vertex_aligned
@@ -212,7 +177,7 @@ class Operations:
             )
             new._edges[eid] = new_rec
             new._col_to_edge[new_col] = eid
-            if new_rec.etype != "hyper" and new_rec.src is not None and new_rec.tgt is not None:
+            if new_rec.etype != 'hyper' and new_rec.src is not None and new_rec.tgt is not None:
                 new._src_to_edges.setdefault(new_rec.src, []).append(eid)
                 new._tgt_to_edges.setdefault(new_rec.tgt, []).append(eid)
         new._next_edge_id = self._next_edge_id
@@ -221,25 +186,25 @@ class Operations:
         new._slices = {}
         for slice_id, spec in slice_specs.items():
             new._slices[slice_id] = SliceRecord(
-                vertices=set(spec.get("vertices", ())),
-                edges=set(spec.get("edges", ())),
-                attributes=dict(spec.get("attributes", {})),
+                vertices=set(spec.get('vertices', ())),
+                edges=set(spec.get('edges', ())),
+                attributes=dict(spec.get('attributes', {})),
             )
         if new._default_slice not in new._slices:
             new._slices[new._default_slice] = SliceRecord()
         new._current_slice = active_slice if active_slice is not None else self._default_slice
 
         new.vertex_attributes = self._filter_attr_table(
-            self.vertex_attributes, "vertex_id", ordered_vertices
+            self.vertex_attributes, 'vertex_id', ordered_vertices
         )
         new.edge_attributes = self._filter_attr_table(
-            self.edge_attributes, "edge_id", ordered_edges
+            self.edge_attributes, 'edge_id', ordered_edges
         )
         new.slice_attributes = self._filter_attr_table(
-            self.slice_attributes, "slice_id", list(new._slices.keys())
+            self.slice_attributes, 'slice_id', list(new._slices.keys())
         )
         new.edge_slice_attributes = self._filter_attr_table(
-            self.edge_slice_attributes, "edge_id", []
+            self.edge_slice_attributes, 'edge_id', []
         )
         new.layer_attributes = self.layer_attributes.clone()
         new.slice_edge_weights = type(self.slice_edge_weights)()
@@ -270,7 +235,7 @@ class Operations:
         else:
             E = set(edges)
 
-        if self._aspects == ("_",):
+        if self._aspects == ('_',):
             if all(isinstance(e, int) for e in edges):
                 E = {self._col_to_edge[e] for e in edges}
             else:
@@ -280,9 +245,9 @@ class Operations:
             slice_specs = {}
             for lid, meta in self._slices.items():
                 slice_specs[lid] = {
-                    "vertices": set(meta["vertices"]) & V if lid == self._default_slice else set(),
-                    "edges": set(meta["edges"]) & E,
-                    "attributes": dict(meta["attributes"]),
+                    'vertices': set(meta['vertices']) & V if lid == self._default_slice else set(),
+                    'edges': set(meta['edges']) & E,
+                    'attributes': dict(meta['attributes']),
                 }
             return self._build_flat_graph_from_selection(
                 vertex_ids=V,
@@ -299,26 +264,26 @@ class Operations:
             rec = self._edges.get(eid)
             if rec is None or rec.col_idx < 0:
                 continue
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 h = _hyper_def(rec)
-                if h.get("members"):
-                    V.update(h["members"])
+                if h.get('members'):
+                    V.update(h['members'])
                     hyper_payload.append(
                         {
-                            "members": list(h["members"]),
-                            "edge_id": eid,
-                            "weight": rec.weight,
+                            'members': list(h['members']),
+                            'edge_id': eid,
+                            'weight': rec.weight,
                         }
                     )
                 else:
-                    V.update(h.get("head", ()))
-                    V.update(h.get("tail", ()))
+                    V.update(h.get('head', ()))
+                    V.update(h.get('tail', ()))
                     hyper_payload.append(
                         {
-                            "head": list(h.get("head", ())),
-                            "tail": list(h.get("tail", ())),
-                            "edge_id": eid,
-                            "weight": rec.weight,
+                            'head': list(h.get('head', ())),
+                            'tail': list(h.get('tail', ())),
+                            'edge_id': eid,
+                            'weight': rec.weight,
                         }
                     )
             else:
@@ -329,12 +294,12 @@ class Operations:
                 V.add(t)
                 bin_payload.append(
                     {
-                        "source": s,
-                        "target": t,
-                        "edge_id": eid,
-                        "edge_type": etype,
-                        "edge_directed": rec.directed if rec.directed is not None else default_dir,
-                        "weight": rec.weight,
+                        'source': s,
+                        'target': t,
+                        'edge_id': eid,
+                        'edge_type': etype,
+                        'edge_directed': rec.directed if rec.directed is not None else default_dir,
+                        'weight': rec.weight,
                     }
                 )
 
@@ -342,22 +307,22 @@ class Operations:
         G = self.__class__
         g = G(directed=self.directed, n=len(V), e=len(E))
         # vertices with attrs
-        va_lookup = self._rows_attr_map(self.vertex_attributes, "vertex_id", V)
-        v_rows = [{"vertex_id": v, **va_lookup.get(v, {})} for v in V]
-        g._add_vertices_batch(v_rows, slice=g._default_slice)
+        va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
+        v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
+        g.add_vertices_bulk(v_rows, slice=g._default_slice)
 
         # edges
         if bin_payload:
-            g._add_edges_batch(bin_payload, slice=g._default_slice)
+            g.add_edges_bulk(bin_payload, slice=g._default_slice)
         if hyper_payload:
             g.add_edges(hyper_payload, slice=g._default_slice)
 
         # copy slice memberships for retained edges & incident vertices
         for lid, meta in self._slices.items():
-            g.slices.add_slice(lid, **meta["attributes"])
-            kept_edges = set(meta["edges"]) & E
+            g.slices.add_slice(lid, **meta['attributes'])
+            kept_edges = set(meta['edges']) & E
             if kept_edges:
-                g.slices._add_edges(lid, kept_edges)
+                g.slices.add_edges(lid, kept_edges)
 
         return g
 
@@ -380,12 +345,12 @@ class Operations:
         """
         V = set(vertices)
 
-        if self._aspects == ("_",):
+        if self._aspects == ('_',):
             E = set()
             for eid, rec in self._edges.items():
                 if rec.col_idx < 0 or rec.src is None:
                     continue
-                if rec.etype == "hyper":
+                if rec.etype == 'hyper':
                     if set(rec.src).issubset(V) and (rec.tgt is None or set(rec.tgt).issubset(V)):
                         E.add(eid)
                 else:
@@ -393,11 +358,11 @@ class Operations:
                         E.add(eid)
             slice_specs = {}
             for lid, meta in self._slices.items():
-                kept_edges = set(meta["edges"]) & E
+                kept_edges = set(meta['edges']) & E
                 slice_specs[lid] = {
-                    "vertices": set(meta["vertices"]) & V if lid == self._default_slice else set(),
-                    "edges": kept_edges,
-                    "attributes": dict(meta["attributes"]),
+                    'vertices': set(meta['vertices']) & V if lid == self._default_slice else set(),
+                    'edges': kept_edges,
+                    'attributes': dict(meta['attributes']),
                 }
             return self._build_flat_graph_from_selection(
                 vertex_ids=V,
@@ -410,13 +375,13 @@ class Operations:
         for eid, rec in self._edges.items():
             if rec.col_idx < 0 or rec.src is None:
                 continue
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 h = _hyper_def(rec)
-                if h.get("members"):
-                    if set(h["members"]).issubset(V):
+                if h.get('members'):
+                    if set(h['members']).issubset(V):
                         E_hyper_members.append(eid)
                 else:
-                    if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(V):
+                    if set(h.get('head', ())).issubset(V) and set(h.get('tail', ())).issubset(V):
                         E_hyper_dir.append(eid)
             else:
                 s, t = rec.src, rec.tgt
@@ -424,8 +389,8 @@ class Operations:
                     E_bin.append(eid)
 
         # payloads
-        va_lookup = self._rows_attr_map(self.vertex_attributes, "vertex_id", V)
-        v_rows = [{"vertex_id": v, **va_lookup.get(v, {})} for v in V]
+        va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
+        v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
 
         default_dir = True if self.directed is None else self.directed
 
@@ -434,12 +399,12 @@ class Operations:
             rec = self._edges[eid]
             bin_payload.append(
                 {
-                    "source": rec.src,
-                    "target": rec.tgt,
-                    "edge_id": eid,
-                    "edge_type": rec.etype,
-                    "edge_directed": rec.directed if rec.directed is not None else default_dir,
-                    "weight": rec.weight,
+                    'source': rec.src,
+                    'target': rec.tgt,
+                    'edge_id': eid,
+                    'edge_type': rec.etype,
+                    'edge_directed': rec.directed if rec.directed is not None else default_dir,
+                    'weight': rec.weight,
                 }
             )
 
@@ -448,17 +413,17 @@ class Operations:
             rec = self._edges[eid]
             h = _hyper_def(rec)
             hyper_payload.append(
-                {"members": list(h["members"]), "edge_id": eid, "weight": rec.weight}
+                {'members': list(h['members']), 'edge_id': eid, 'weight': rec.weight}
             )
         for eid in E_hyper_dir:
             rec = self._edges[eid]
             h = _hyper_def(rec)
             hyper_payload.append(
                 {
-                    "head": list(h.get("head", ())),
-                    "tail": list(h.get("tail", ())),
-                    "edge_id": eid,
-                    "weight": rec.weight,
+                    'head': list(h.get('head', ())),
+                    'tail': list(h.get('tail', ())),
+                    'edge_id': eid,
+                    'weight': rec.weight,
                 }
             )
 
@@ -467,27 +432,27 @@ class Operations:
         g = G(
             directed=self.directed, n=len(V), e=len(E_bin) + len(E_hyper_members) + len(E_hyper_dir)
         )
-        g._add_vertices_batch(v_rows, slice=g._default_slice)
+        g.add_vertices_bulk(v_rows, slice=g._default_slice)
         if bin_payload:
-            g._add_edges_batch(bin_payload, slice=g._default_slice)
+            g.add_edges_bulk(bin_payload, slice=g._default_slice)
         if hyper_payload:
             g.add_edges(hyper_payload, slice=g._default_slice)
 
         # slice memberships restricted to V
         for lid, meta in self._slices.items():
-            g.slices.add_slice(lid, **meta["attributes"])
+            g.slices.add_slice(lid, **meta['attributes'])
             keep = set()
-            for eid in meta["edges"]:
+            for eid in meta['edges']:
                 rec = self._edges.get(eid)
                 if rec is None or rec.col_idx < 0:
                     continue
-                if rec.etype == "hyper":
+                if rec.etype == 'hyper':
                     h = _hyper_def(rec)
-                    if h.get("members"):
-                        if set(h["members"]).issubset(V):
+                    if h.get('members'):
+                        if set(h['members']).issubset(V):
                             keep.add(eid)
                     else:
-                        if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(
+                        if set(h.get('head', ())).issubset(V) and set(h.get('tail', ())).issubset(
                             V
                         ):
                             keep.add(eid)
@@ -496,7 +461,7 @@ class Operations:
                     if s is not None and t is not None and s in V and t in V:
                         keep.add(eid)
             if keep:
-                g.slices._add_edges(lid, keep)
+                g.slices.add_edges(lid, keep)
 
         return g
 
@@ -533,13 +498,13 @@ class Operations:
 
         V = set(vertices) if vertices is not None else None
 
-        if self._aspects == ("_",) and V is not None and E is not None:
+        if self._aspects == ('_',) and V is not None and E is not None:
             kept_edges = set()
             for eid in E:
                 rec = self._edges.get(eid)
                 if rec is None or rec.col_idx < 0 or rec.src is None:
                     continue
-                if rec.etype == "hyper":
+                if rec.etype == 'hyper':
                     if set(rec.src).issubset(V) and (rec.tgt is None or set(rec.tgt).issubset(V)):
                         kept_edges.add(eid)
                 else:
@@ -548,9 +513,9 @@ class Operations:
             slice_specs = {}
             for lid, meta in self._slices.items():
                 slice_specs[lid] = {
-                    "vertices": set(meta["vertices"]) & V if lid == self._default_slice else set(),
-                    "edges": set(meta["edges"]) & kept_edges,
-                    "attributes": dict(meta["attributes"]),
+                    'vertices': set(meta['vertices']) & V if lid == self._default_slice else set(),
+                    'edges': set(meta['edges']) & kept_edges,
+                    'attributes': dict(meta['attributes']),
                 }
             return self._build_flat_graph_from_selection(
                 vertex_ids=V,
@@ -571,13 +536,13 @@ class Operations:
             rec = self._edges.get(eid)
             if rec is None or rec.col_idx < 0:
                 continue
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 h = _hyper_def(rec)
-                if h.get("members"):
-                    if set(h["members"]).issubset(V):
+                if h.get('members'):
+                    if set(h['members']).issubset(V):
                         kept_edges.add(eid)
                 else:
-                    if set(h.get("head", ())).issubset(V) and set(h.get("tail", ())).issubset(V):
+                    if set(h.get('head', ())).issubset(V) and set(h.get('tail', ())).issubset(V):
                         kept_edges.add(eid)
             else:
                 s, t = rec.src, rec.tgt
@@ -615,7 +580,7 @@ class Operations:
         for rec in g._edges.values():
             if rec.col_idx < 0:
                 continue
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 if rec.tgt is not None:
                     rec.src, rec.tgt = rec.tgt, rec.src
                 continue
@@ -652,59 +617,40 @@ class Operations:
             If the slice does not exist.
         """
         if slice_id not in self._slices:
-            raise KeyError(f"slice {slice_id} not found")
+            raise KeyError(f'slice {slice_id} not found')
 
         slice_meta = self._slices[slice_id]
-        V = set(slice_meta["vertices"])
-        E = set(slice_meta["edges"])
+        V = set(slice_meta['vertices'])
+        E = set(slice_meta['edges'])
 
-        if self._aspects == ("_",):
+        if self._aspects == ('_',):
             E = {eid for eid in E if eid in self._edges and self._edges[eid].col_idx >= 0}
             weight_overrides = {}
             if resolve_slice_weights:
                 df = self.edge_slice_attributes
-                if (
-                    df is not None
-                    and hasattr(df, "columns")
-                    and {"slice_id", "edge_id", "weight"}.issubset(df.columns)
+                if df is not None and {'slice_id', 'edge_id', 'weight'}.issubset(
+                    dataframe_columns(df)
                 ):
-                    if pl is not None and isinstance(df, pl.DataFrame) and df.height:
-                        for row in df.filter(
-                            (pl.col("slice_id") == slice_id) & (pl.col("edge_id").is_in(list(E)))
-                        ).iter_rows(named=True):
-                            weight = row.get("weight")
-                            if weight is not None:
-                                weight_overrides[row["edge_id"]] = float(weight)
-                    else:
-                        native = nw.to_native(
-                            nw.from_native(df, pass_through=True).filter(
-                                (nw.col("slice_id") == slice_id)
-                                & (nw.col("edge_id").is_in(list(E)))
-                            )
-                        )
-                        rows = (
-                            native.to_dicts()
-                            if hasattr(native, "to_dicts")
-                            else native.to_dict(orient="records")
-                        )
-                        for row in rows:
-                            weight = row.get("weight")
-                            if weight is not None:
-                                weight_overrides[row["edge_id"]] = float(weight)
+                    for row in dataframe_to_rows(dataframe_filter_in(df, 'edge_id', E)):
+                        if row.get('slice_id') != slice_id:
+                            continue
+                        weight = row.get('weight')
+                        if weight is not None:
+                            weight_overrides[row['edge_id']] = float(weight)
 
             return self._build_flat_graph_from_selection(
                 vertex_ids=V,
                 edge_ids=E,
                 slice_specs={
                     self._default_slice: {
-                        "vertices": set(),
-                        "edges": set(),
-                        "attributes": dict(self._slices[self._default_slice]["attributes"]),
+                        'vertices': set(),
+                        'edges': set(),
+                        'attributes': dict(self._slices[self._default_slice]['attributes']),
                     },
                     slice_id: {
-                        "vertices": V,
-                        "edges": E,
-                        "attributes": dict(slice_meta["attributes"]),
+                        'vertices': V,
+                        'edges': E,
+                        'attributes': dict(slice_meta['attributes']),
                     },
                 },
                 active_slice=slice_id,
@@ -713,55 +659,28 @@ class Operations:
 
         G = self.__class__
         g = G(directed=self.directed, n=len(V), e=len(E))
-        g.slices.add_slice(slice_id, **slice_meta["attributes"])
+        g.slices.add_slice(slice_id, **slice_meta['attributes'])
         g.slices.set_active_slice(slice_id)
 
         # vertices with attrs (edge-entities share same table)
-        va_lookup = self._rows_attr_map(self.vertex_attributes, "vertex_id", V)
-        v_rows = [{"vertex_id": v, **va_lookup.get(v, {})} for v in V]
-        g._add_vertices_batch(v_rows, slice=slice_id)
+        va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
+        v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
+        g.add_vertices_bulk(v_rows, slice=slice_id)
 
         # edge attrs
-        e_attrs = self._rows_attr_map(self.edge_attributes, "edge_id", E)
+        e_attrs = self._rows_attr_map(self.edge_attributes, 'edge_id', E)
 
         # weights
         eff_w = {}
         if resolve_slice_weights:
             df = self.edge_slice_attributes
-            if (
-                df is not None
-                and hasattr(df, "columns")
-                and {"slice_id", "edge_id", "weight"}.issubset(df.columns)
-            ):
-                try:
-                    import polars as _pl
-                except Exception:
-                    _pl = None
-
-                if _pl is not None and isinstance(df, _pl.DataFrame) and df.height:
-                    for r in df.filter(
-                        (_pl.col("slice_id") == slice_id) & (_pl.col("edge_id").is_in(list(E)))
-                    ).iter_rows(named=True):
-                        if r.get("weight") is not None:
-                            eff_w[r["edge_id"]] = float(r["weight"])
-                else:
-                    ndf = nw.from_native(df, pass_through=True).filter(
-                        (nw.col("slice_id") == slice_id) & (nw.col("edge_id").is_in(list(E)))
-                    )
-                    native = nw.to_native(ndf)
-                    to_dicts_fn = getattr(type(native), "to_dicts", None)
-
-                    if callable(to_dicts_fn):
-                        rows = to_dicts_fn(native)
-                    else:
-                        try:
-                            rows = native.to_dict(orient="records")
-                        except TypeError:
-                            rows = native.to_dict()
-                    for r in rows:
-                        w = r.get("weight")
-                        if w is not None:
-                            eff_w[r["edge_id"]] = float(w)
+            if df is not None and {'slice_id', 'edge_id', 'weight'}.issubset(dataframe_columns(df)):
+                for row in dataframe_to_rows(dataframe_filter_in(df, 'edge_id', E)):
+                    if row.get('slice_id') != slice_id:
+                        continue
+                    weight = row.get('weight')
+                    if weight is not None:
+                        eff_w[row['edge_id']] = float(weight)
 
         # partition edges
         bin_payload, hyper_payload = [], []
@@ -772,43 +691,43 @@ class Operations:
             base_weight = rec.weight if rec.weight is not None else 1.0
             w = eff_w.get(eid, base_weight) if resolve_slice_weights else base_weight
             attrs = e_attrs.get(eid, {})
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 if rec.tgt is None:
                     hyper_payload.append(
                         {
-                            "members": list(rec.src),
-                            "edge_id": eid,
-                            "weight": w,
-                            "attributes": attrs,
+                            'members': list(rec.src),
+                            'edge_id': eid,
+                            'weight': w,
+                            'attributes': attrs,
                         }
                     )
                 else:
                     hyper_payload.append(
                         {
-                            "head": list(rec.src),
-                            "tail": list(rec.tgt),
-                            "edge_id": eid,
-                            "weight": w,
-                            "attributes": attrs,
+                            'head': list(rec.src),
+                            'tail': list(rec.tgt),
+                            'edge_id': eid,
+                            'weight': w,
+                            'attributes': attrs,
                         }
                     )
             else:
                 bin_payload.append(
                     {
-                        "source": rec.src,
-                        "target": rec.tgt,
-                        "edge_id": eid,
-                        "edge_type": rec.etype,
-                        "edge_directed": rec.directed
+                        'source': rec.src,
+                        'target': rec.tgt,
+                        'edge_id': eid,
+                        'edge_type': rec.etype,
+                        'edge_directed': rec.directed
                         if rec.directed is not None
                         else (True if self.directed is None else self.directed),
-                        "weight": w,
-                        "attributes": attrs,
+                        'weight': w,
+                        'attributes': attrs,
                     }
                 )
 
         if bin_payload:
-            g._add_edges_batch(bin_payload, slice=slice_id)
+            g.add_edges_bulk(bin_payload, slice=slice_id)
         if hyper_payload:
             g.add_edges(hyper_payload, slice=slice_id)
 
@@ -816,31 +735,19 @@ class Operations:
 
     def _row_attrs(self, df, key_col: str, key):
         """INTERNAL: return a dict of attributes for the row in `df` where `key_col == key`,
+
         excluding the key column itself. If not found or df empty, return {}.
         Caches per (id(df), key_col) for speed; cache auto-refreshes when the df object changes.
         """
 
         # Basic guards
-        if df is None or not hasattr(df, "columns") or key_col not in df.columns:
+        if df is None or key_col not in dataframe_columns(df):
+            return {}
+        if dataframe_height(df) == 0:
             return {}
 
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
-            if df.height == 0:
-                return {}
-        else:
-            try:
-                if len(df) == 0:
-                    return {}
-            except Exception:
-                pass
-
         # Cache setup
-        cache = getattr(self, "_row_attr_cache", None)
+        cache = getattr(self, '_row_attr_cache', None)
         if cache is None:
             cache = {}
             self._row_attr_cache = cache
@@ -851,39 +758,13 @@ class Operations:
         # Build the mapping once per df object
         if mapping is None:
             mapping = {}
-            try:
-                import polars as pl
-            except Exception:
-                pl = None
-
-            if pl is not None and isinstance(df, pl.DataFrame):
-                for row in df.iter_rows(named=True):
-                    kval = row.get(key_col)
-                    if kval is None:
-                        continue
-                    d = dict(row)
-                    d.pop(key_col, None)
-                    mapping[kval] = d
-            else:
-                import narwhals as nw
-
-                native = nw.to_native(nw.from_native(df, pass_through=True))
-                to_dicts_fn = getattr(type(native), "to_dicts", None)
-
-                if callable(to_dicts_fn):
-                    rows = to_dicts_fn(native)
-                else:
-                    try:
-                        rows = native.to_dict(orient="records")
-                    except TypeError:
-                        rows = native.to_dict()
-                for row in rows:
-                    kval = row.get(key_col)
-                    if kval is None:
-                        continue
-                    d = dict(row)
-                    d.pop(key_col, None)
-                    mapping[kval] = d
+            for row in dataframe_to_rows(df):
+                kval = row.get(key_col)
+                if kval is None:
+                    continue
+                d = dict(row)
+                d.pop(key_col, None)
+                mapping[kval] = d
             cache[cache_key] = mapping
 
         return mapping.get(key, {})
@@ -944,7 +825,7 @@ class Operations:
         for eid, rec in self._edges.items():
             new_rec = _clone_edge_record(rec)
             new._edges[eid] = new_rec
-            if new_rec.etype != "hyper" and new_rec.src is not None and new_rec.tgt is not None:
+            if new_rec.etype != 'hyper' and new_rec.src is not None and new_rec.tgt is not None:
                 new._src_to_edges.setdefault(new_rec.src, []).append(eid)
                 new._tgt_to_edges.setdefault(new_rec.tgt, []).append(eid)
         new._next_edge_id = self._next_edge_id
@@ -956,8 +837,8 @@ class Operations:
         new._slices = {}
         for lid, meta in self._slices.items():
             new._slices[lid] = SliceRecord(
-                vertices=meta["vertices"].copy(),
-                edges=meta["edges"].copy(),
+                vertices=meta['vertices'].copy(),
+                edges=meta['edges'].copy(),
                 attributes={},
             )
 
@@ -1041,33 +922,11 @@ class Operations:
 
         va = self.vertex_attributes
         if va is not None:
-            try:
-                import polars as pl
-            except Exception:
-                pl = None
-
-            if pl is not None and isinstance(va, pl.DataFrame):
-                df_bytes += va.estimated_size()
-            else:
-                try:
-                    df_bytes += va.memory_usage(deep=True).sum()
-                except Exception:
-                    pass
+            df_bytes += dataframe_memory_usage(va)
 
         ea = self.edge_attributes
         if ea is not None:
-            try:
-                import polars as pl
-            except Exception:
-                pl = None
-
-            if pl is not None and isinstance(ea, pl.DataFrame):
-                df_bytes += ea.estimated_size()
-            else:
-                try:
-                    df_bytes += ea.memory_usage(deep=True).sum()
-                except Exception:
-                    pass
+            df_bytes += dataframe_memory_usage(ea)
         return matrix_bytes + dict_bytes + df_bytes
 
     def get_vertex_incidence_matrix_as_lists(self, values: bool = False) -> dict:
@@ -1157,9 +1016,9 @@ class Operations:
             estimated_gb = rows * cols * 4 / 1024**3
             if estimated_gb > 2.0:
                 raise MemoryError(
-                    f"Dense conversion would require ~{estimated_gb:.1f} GB "
-                    f"({rows:,} × {cols:,} float32). "
-                    "Use sparse=True instead, or call .toarray() explicitly if you are certain."
+                    f'Dense conversion would require ~{estimated_gb:.1f} GB '
+                    f'({rows:,} × {cols:,} float32). '
+                    'Use sparse=True instead, or call .toarray() explicitly if you are certain.'
                 )
             return M.toarray()
 
@@ -1170,7 +1029,7 @@ class OperationsAccessor:
     Returned by ``G.ops``. Flat methods remain during the migration window.
     """
 
-    __slots__ = ("_G",)
+    __slots__ = ('_G',)
 
     def __init__(self, graph):
         self._G = graph
@@ -1192,9 +1051,6 @@ class OperationsAccessor:
 
     def reverse(self, *args, **kwargs):
         return Operations.reverse(self._G, *args, **kwargs)
-
-    def subgraph_from_slice(self, *args, **kwargs):
-        return Operations.subgraph_from_slice(self._G, *args, **kwargs)
 
     def memory_usage(self, *args, **kwargs):
         return Operations.memory_usage(self._G, *args, **kwargs)
@@ -1252,7 +1108,7 @@ class OperationsAccessor:
 
         graph_meta = (
             tuple(sorted(self.graph_attributes.items()))
-            if hasattr(self, "graph_attributes")
+            if hasattr(self, 'graph_attributes')
             else ()
         )
 

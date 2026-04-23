@@ -19,58 +19,70 @@ development for a feature is already in progress, so it is important to check
 first to avoid duplicate work. If you have any questions, feel free to approach
 us in any way you like.
 
-## Dependency management
+## Development environment
 
-We use [Poetry](https://python-poetry.org) for dependency management. Please
-make sure that you have installed Poetry and set up the environment correctly
-before starting development.
+annnet uses standard `pyproject.toml` project metadata with Hatchling as the
+build backend. Development, documentation, and test dependencies are declared
+as dependency groups in `pyproject.toml` and are installed with
+[uv](https://docs.astral.sh/uv/).
 
-### Setting up the environment
+For a local development environment:
 
-- Install dependencies from the lock file: `poetry install`
+```bash
+git clone https://github.com/saezlab/annnet.git
+cd annnet
+uv sync --group dev --group tests --group docs
+```
 
-- Use the environment: You can either run commands directly with `poetry run
-<command>` or open a shell with `poetry shell` and then run commands directly.
+Run commands through `uv run` so they use the synchronized environment:
 
-### Updating the environment
+```bash
+uv run pytest
+uv run ruff check annnet tests
+uv run python -m mkdocs build --strict
+```
 
-If you want to fix dependency issues, please do so in the Poetry
-framework. If Poetry does not work for you for some reason, please let us know.
+### Dependency groups and extras
 
-The Poetry dependencies are organized in groups. There are groups with
-dependencies needed for running annnet (`[tool.poetry.dependencies]` with the
-group name `main`) and a group with dependencies needed for development
-(`[tool.poetry.group.dev.dependencies]` with the group name `dev`).
+Runtime dependencies and optional extras live under `[project]` and
+`[project.optional-dependencies]` in `pyproject.toml`. Development-only groups
+live under `[dependency-groups]`.
 
-For adding new dependencies:
+Use the existing groups when possible:
 
-- Add new dependencies via `poetry add`:
-`poetry add <dependency> --group <group>`. This will update the `pyproject.toml`
-and lock file automatically.
+- `dev`: contributor tooling such as Ruff, pre-commit, mypy, twine, and bump2version.
+- `tests`: pytest, coverage, and test-only optional runtime dependencies.
+- `docs`: MkDocs and documentation build dependencies.
 
-- Add new dependencies via `pyproject.toml`: Add the dependency to the
-`pyproject.toml` file in the correct group, including version. Then update the
-lock file: `poetry lock` and install the dependencies: `poetry install`.
+If a new dependency is required at runtime, add it to the appropriate
+`[project.optional-dependencies]` extra or to the base `[project]` dependencies
+only when it is needed by the core package. If a dependency is only needed for
+tests, docs, or local tooling, add it to the corresponding dependency group.
+
+### graph-tool and Pixi
+
+`graph-tool` is not available from PyPI. The repository defines a Pixi `gt`
+environment for graph-tool tests:
+
+```bash
+pixi install -e gt
+pixi run -e gt test-gt
+```
+
+To run the full test suite inside the Pixi environment:
+
+```bash
+pixi run -e gt test-all
+```
 
 ## Code quality and formal requirements
 
 For ensuring code quality, the following tools are used:
 
-- [isort](https://isort.readthedocs.io/en/latest/) for sorting imports
-
-- [black](https://black.readthedocs.io/en/stable/) for automated code formatting
-
-- [pre-commit-hooks](https://github.com/pre-commit/pre-commit-hooks) for
-ensuring some general rules
-
-- [pep585-upgrade](https://github.com/snok/pep585-upgrade) for automatically
-upgrading type hints to the new native types defined in PEP 585
-
-- [pygrep-hooks](https://github.com/pre-commit/pygrep-hooks) for ensuring some
-general naming rules
-
-- [Ruff](https://docs.astral.sh/ruff/) An extremely fast Python linter
-and code formatter, written in Rust
+- [Ruff](https://docs.astral.sh/ruff/) for linting, import sorting, and formatting rules.
+- [pre-commit](https://pre-commit.com/) for running repository hooks locally.
+- [mypy](https://mypy.readthedocs.io/) for type checking where enabled.
+- [tox](https://tox.wiki/) for CI-like local test, lint, readme, and docs environments.
 
 We recommend configuring your IDE to execute Ruff on save/type, which will
 automatically keep your code clean and fix some linting errors as you type. This
@@ -92,18 +104,30 @@ to your `.vscode/settings.json`:
 
 Alternatively, pre-commit hooks can be used to automatically or manually run
 these tools before each commit. They are defined in `.pre-commit-config.yaml`.
-To install the hooks run `poetry run pre-commit install`. The hooks are then
+To install the hooks run `uv run pre-commit install`. The hooks are then
 executed before each commit. For running the hook for all project files (not
-only the changed ones) run `poetry run pre-commit run --all-files`. Our CI runs
+only the changed ones) run `uv run pre-commit run --all-files`. Our CI runs
 the pre-commit hooks, so running them locally is a good way to check if your
 code conforms to the formatting rules.
 
 ## Testing
 
 The project uses [pytest](https://docs.pytest.org/en/stable/) for testing. To
-run the tests, please run `pytest` in the root directory of the project. We are
-developing annnet using test-driven development. Please make sure that you
-add tests for your code before submitting a pull request.
+run the tests, use the test dependency group:
+
+```bash
+uv sync --group tests
+uv run pytest
+```
+
+Run graph-tool tests through Pixi:
+
+```bash
+pixi run -e gt test-gt
+```
+
+Please add or update tests for behavior changes before submitting a pull
+request.
 
 The existing tests can also help you to understand how the code works. If you
 have any questions, please feel free to ask them in the issue tracker or on
@@ -125,10 +149,9 @@ that the version number is incremented according to the following scheme:
 
 - Increment the patch version number if you make backwards-compatible bug fixes.
 
-We use the `bumpversion` tool to update the version number in the
-`pyproject.toml` file. This will create a new git tag automatically. Usually,
-versioning is done by the maintainers, so please do not increment versions in
-pull requests by default.
+The project includes `bump2version` in the development dependency group.
+Usually, versioning is done by the maintainers, so please do not increment
+versions in pull requests by default.
 
 ## Finding an issue to contribute to
 
@@ -206,7 +229,7 @@ repository and GitHub.
 
 ### Create a fork of annnet
 
-You will need your own fork of annnetin order to eventually open a Pull
+You will need your own fork of annnet in order to eventually open a Pull
 Request. Go to the annnet project page and hit the Fork button. Please
 uncheck the box to copy only the main branch before selecting Create Fork. You
 will then want to clone your fork to your machine.
@@ -214,7 +237,7 @@ will then want to clone your fork to your machine.
 ```bash
 git clone https://github.com/your-user-name/annnet.git
 cd annnet
-git remote add upstream https://github.com/annnet/annnet.git
+git remote add upstream https://github.com/saezlab/annnet.git
 git fetch upstream
 ```
 

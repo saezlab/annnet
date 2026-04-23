@@ -2,19 +2,10 @@ This section collects some useful HowTo tutorials and Use Case notebooks.
 
 # Notebook gallery
 
-Main tutorial notebooks.
-
 ## Step-by-step tutorials
 
 <div class="grid cards annnet-feature-cards" markdown>
 
--   __Tutorial index__
-
-    ---
-
-    Entry point for the staged tutorial series.
-
-    [Open notebook](notebooks/tutos/00_tutorial_index.ipynb)
 
 -   __Quickstart graph basics__
 
@@ -58,7 +49,7 @@ Main tutorial notebooks.
 
 </div>
 
-## Showcase and orientation
+## API Showcase 
 
 <div class="grid cards annnet-feature-cards" markdown>
 
@@ -100,17 +91,11 @@ Main tutorial notebooks.
 
     [Open notebook](notebooks/UC2.ipynb)
 
-</div>
-
-## Multilayer biology
-
-<div class="grid cards annnet-feature-cards" markdown>
-
 -   __Multilayer Systems Biology__
 
     ---
 
-    Main example. Main multilayer biology example with Polars-backed tables.
+    Main example. Main multilayer biology example with Narwhals-compatible tables.
 
     [Open notebook](notebooks/SBUC.ipynb)
 
@@ -126,6 +111,6 @@ Main tutorial notebooks.
 
 ## Related reading
 
-- Read [Typical analysis patterns](../explanations/common-patterns.md) if you want the explanation-style guide that used to sit in this section.
+- Read [Analysis patterns](analysis-patterns.md) for a short guide to common workflow shapes.
 - Read [Quickstart](../quickstart.md) if you have not built a first toy graph yet.
 - Read [Explanations](../explanations/index.md) if you want the underlying concepts.

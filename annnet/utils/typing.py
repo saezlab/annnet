@@ -11,7 +11,8 @@ Edge = tuple[frozenset[Any], frozenset[Any]]
 class Attr(StrEnum):
     """Enum class representing predefined attribute names used in the `Attributes` class.
 
-    Attributes:
+    Attributes
+    ----------
         VALUE: Represents the key for a value attribute.
         EDGE_TYPE: Represents the key for an edge type attribute.
         SOURCE_ATTR: Represents the key for a source attribute.
@@ -20,11 +21,11 @@ class Attr(StrEnum):
 
     """
 
-    VALUE = "__value"
-    EDGE_TYPE = "__edge_type"
-    SOURCE_ATTR = "__source_attr"
-    TARGET_ATTR = "__target_attr"
-    CUSTOM_ATTR = "__custom_attr"
+    VALUE = '__value'
+    EDGE_TYPE = '__edge_type'
+    SOURCE_ATTR = '__source_attr'
+    TARGET_ATTR = '__target_attr'
+    CUSTOM_ATTR = '__custom_attr'
 
 
 class Attributes(dict):
@@ -46,7 +47,8 @@ class Attributes(dict):
             __value (Any): The value to assign to the attribute. If the value is an instance
                            of `Attr`, its value is used.
 
-        Raises:
+        Raises
+        ------
             AttributeError: If trying to set a protected attribute.
 
         """
@@ -63,16 +65,18 @@ class Attributes(dict):
         Args:
             __name (str): The name of the attribute to retrieve.
 
-        Returns:
+        Returns
+        -------
             Any: The value of the requested attribute.
 
-        Raises:
+        Raises
+        ------
             AttributeError: If the attribute does not exist.
 
         """
         if __name in self:
             return self.__getitem__(__name)
-        raise AttributeError(f"{__name} does not exist")
+        raise AttributeError(f'{__name} does not exist')
 
     def set_attr(self, key: Attr, value: Any) -> None:
         """Set an attribute in the dictionary using an `Attr` key.
@@ -93,7 +97,8 @@ class Attributes(dict):
             key (Attr): The key for the attribute, represented as an `Attr` enum.
             value (Optional[Any]): The optional value to check for.
 
-        Returns:
+        Returns
+        -------
             bool: `True` if the attribute exists and matches the value (if provided),
                   otherwise `False`.
 
@@ -111,7 +116,8 @@ class Attributes(dict):
             key (Attr): The key for the attribute, represented as an `Attr` enum.
             default (Any): The default value to return if the attribute does not exist.
 
-        Returns:
+        Returns
+        -------
             Any: The value of the attribute, or the default value if not found.
 
         """

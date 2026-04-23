@@ -1,16 +1,14 @@
-import hashlib
 import json
-from collections.abc import Callable, Iterable
-from itertools import filterfalse
 from typing import Any, TypeVar
+import hashlib
+from itertools import filterfalse
+from collections.abc import Callable, Iterable
 
-T = TypeVar("T")
+T = TypeVar('T')
 
 
 def canonicalize(obj):
-    """Recursively convert an object into a JSON-serializable structure
-    that is independent of internal ordering.
-    """
+    """Convert an object into an order-independent JSON-serializable structure."""
     if isinstance(obj, dict):
         # Convert dictionary keys to strings and sort the keys
         return {
@@ -29,7 +27,7 @@ def canonicalize(obj):
         return obj
     else:
         # For non-standard objects, try using the __dict__ attribute if available
-        if hasattr(obj, "__dict__"):
+        if hasattr(obj, '__dict__'):
             return canonicalize(obj.__dict__)
         else:
             # Fall back to a string representation
@@ -37,13 +35,14 @@ def canonicalize(obj):
 
 
 def obj_canonicalized_hash(obj) -> str:
+    """Return a stable SHA256 hash for a canonicalized object."""
     # First canonicalize the object
     canonical_obj = canonicalize(obj)
     # Serialize the canonical object to a JSON string.
     # 'sort_keys=True' ensures consistent key order,
     # and separators remove unnecessary whitespace.
-    obj_serialized = json.dumps(canonical_obj, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
+    obj_serialized = json.dumps(canonical_obj, sort_keys=True, separators=(',', ':')).encode(
+        'utf-8'
     )
     # Compute the SHA256 hash of the serialized bytes
     hash_obj = hashlib.sha256()
@@ -52,6 +51,7 @@ def obj_canonicalized_hash(obj) -> str:
 
 
 def unique_iter(iterable: Iterable[T], key: Callable[[T], Any] | None = None) -> Iterable[T]:
+    """Yield unique items from an iterable while preserving order."""
     # Based on https://iteration-utilities.readthedocs.io/en/latest/generated/unique_everseen.html
     seen: set[Any] = set()
     seen_add = seen.add

@@ -1,11 +1,11 @@
 # Native .annnet Format
 
-Primary read and write entry points from `annnet.io.io_annnet`.
+Primary read and write entry points from `annnet.io.annnet_format`.
 
-::: annnet.io.io_annnet.write
+::: annnet.io.annnet_format.write
     options:
       show_root_heading: true
 
-::: annnet.io.io_annnet.read
+::: annnet.io.annnet_format.read
     options:
       show_root_heading: true

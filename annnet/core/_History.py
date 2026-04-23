@@ -1,22 +1,24 @@
-import inspect
+import json
 import time
+import inspect
 from datetime import UTC, datetime
 from functools import wraps
 
-import narwhals as nw
 import numpy as np
 
-try:
-    import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
-    pl = None
+from .._dataframe_backend import (
+    dataframe_to_rows,
+    dataframe_from_rows,
+    _dataframe_write_csv,
+    _dataframe_write_parquet,
+)
 
 
 class GraphDiff:
     """Represents the difference between two graph states.
 
     Attributes
-    --
+    ----------
     vertices_added : set
         Vertices in b but not in a
     vertices_removed : set
@@ -37,12 +39,12 @@ class GraphDiff:
         self.snapshot_b = snapshot_b
 
         # Compute differences
-        self.vertices_added = snapshot_b["vertex_ids"] - snapshot_a["vertex_ids"]
-        self.vertices_removed = snapshot_a["vertex_ids"] - snapshot_b["vertex_ids"]
-        self.edges_added = snapshot_b["edge_ids"] - snapshot_a["edge_ids"]
-        self.edges_removed = snapshot_a["edge_ids"] - snapshot_b["edge_ids"]
-        self.slices_added = snapshot_b["slice_ids"] - snapshot_a["slice_ids"]
-        self.slices_removed = snapshot_a["slice_ids"] - snapshot_b["slice_ids"]
+        self.vertices_added = snapshot_b['vertex_ids'] - snapshot_a['vertex_ids']
+        self.vertices_removed = snapshot_a['vertex_ids'] - snapshot_b['vertex_ids']
+        self.edges_added = snapshot_b['edge_ids'] - snapshot_a['edge_ids']
+        self.edges_removed = snapshot_a['edge_ids'] - snapshot_b['edge_ids']
+        self.slices_added = snapshot_b['slice_ids'] - snapshot_a['slice_ids']
+        self.slices_removed = snapshot_a['slice_ids'] - snapshot_b['slice_ids']
 
     def summary(self):
         """Return a human-readable summary of differences.
@@ -53,13 +55,13 @@ class GraphDiff:
             Summary text describing added/removed vertices, edges, and slices.
         """
         lines = [
-            f"Diff: {self.snapshot_a['label']} - {self.snapshot_b['label']}",
-            "",
-            f"Vertices: {len(self.vertices_added):+d} added, {len(self.vertices_removed)} removed",
-            f"Edges: {len(self.edges_added):+d} added, {len(self.edges_removed)} removed",
-            f"slices: {len(self.slices_added):+d} added, {len(self.slices_removed)} removed",
+            f'Diff: {self.snapshot_a["label"]} - {self.snapshot_b["label"]}',
+            '',
+            f'Vertices: {len(self.vertices_added):+d} added, {len(self.vertices_removed)} removed',
+            f'Edges: {len(self.edges_added):+d} added, {len(self.edges_removed)} removed',
+            f'slices: {len(self.slices_added):+d} added, {len(self.slices_removed)} removed',
         ]
-        return "\n".join(lines)
+        return '\n'.join(lines)
 
     def is_empty(self):
         """Check whether the diff contains no changes.
@@ -88,14 +90,14 @@ class GraphDiff:
         dict
         """
         return {
-            "snapshot_a": self.snapshot_a["label"],
-            "snapshot_b": self.snapshot_b["label"],
-            "vertices_added": list(self.vertices_added),
-            "vertices_removed": list(self.vertices_removed),
-            "edges_added": list(self.edges_added),
-            "edges_removed": list(self.edges_removed),
-            "slices_added": list(self.slices_added),
-            "slices_removed": list(self.slices_removed),
+            'snapshot_a': self.snapshot_a['label'],
+            'snapshot_b': self.snapshot_b['label'],
+            'vertices_added': list(self.vertices_added),
+            'vertices_removed': list(self.vertices_removed),
+            'edges_added': list(self.edges_added),
+            'edges_removed': list(self.edges_removed),
+            'slices_added': list(self.slices_added),
+            'slices_removed': list(self.slices_removed),
         }
 
 
@@ -107,7 +109,7 @@ class History:
         return self._version
 
     def _utcnow_iso(self) -> str:
-        return datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+        return datetime.now(UTC).isoformat(timespec='microseconds').replace('+00:00', 'Z')
 
     def _jsonify(self, x):
         # Make args/return JSON-safe & compact.
@@ -115,21 +117,8 @@ class History:
         if x is None or isinstance(x, (bool, int, float, str)):
             return x
         if isinstance(x, (set, frozenset)):
-            values = sorted(x, key=repr)
-            if len(values) > 50:
-                return {
-                    "__type__": type(x).__name__,
-                    "len": len(values),
-                    "head": [self._jsonify(v) for v in values[:10]],
-                }
-            return [self._jsonify(v) for v in values]
+            return sorted(self._jsonify(v) for v in x)
         if isinstance(x, (list, tuple)):
-            if len(x) > 50:
-                return {
-                    "__type__": type(x).__name__,
-                    "len": len(x),
-                    "head": [self._jsonify(v) for v in x[:10]],
-                }
             return [self._jsonify(v) for v in x]
         if isinstance(x, dict):
             return {str(k): self._jsonify(v) for k, v in x.items()}
@@ -138,17 +127,17 @@ class History:
             return x.item()
         # Polars, SciPy, or other heavy objects -> just a tag
         t = type(x).__name__
-        return f"<<{t}>>"
+        return f'<<{t}>>'
 
     def _log_event(self, op: str, **fields):
         version = self._bump_version()
         if not self._history_enabled:
             return
         evt = {
-            "version": version,
-            "ts_utc": self._utcnow_iso(),  # ISO-8601 with Z
-            "mono_ns": time.perf_counter_ns() - self._history_clock0,
-            "op": op,
+            'version': version,
+            'ts_utc': self._utcnow_iso(),  # ISO-8601 with Z
+            'mono_ns': time.perf_counter_ns() - self._history_clock0,
+            'op': op,
         }
         # sanitize
         for k, v in fields.items():
@@ -171,9 +160,9 @@ class History:
                 payload = {}
                 # record all call args except 'self'
                 for k, v in bound.arguments.items():
-                    if k != "self":
+                    if k != 'self':
                         payload[k] = v
-                payload["result"] = result
+                payload['result'] = result
                 self._log_event(op, **payload)
                 return result
 
@@ -184,24 +173,24 @@ class History:
     def _install_history_hooks(self):
         # Mutating methods to wrap. Add here if you add new mutators.
         to_wrap = [
-            "add_vertices",
-            "add_edges",
-            "add_vertex",
-            "add_edge",
-            "add_hyperedge",
-            "flatten_layers",
-            "remove_edge",
-            "remove_vertex",
-            "set_vertex_attrs",
-            "set_edge_attrs",
-            "set_slice_attrs",
-            "set_edge_slice_attrs",
-            "register_slice",
-            "unregister_slice",
+            'add_vertices',
+            'add_edges',
+            'add_vertex',
+            'add_edge',
+            'add_hyperedge',
+            'flatten_layers',
+            'remove_edge',
+            'remove_vertex',
+            'set_vertex_attrs',
+            'set_edge_attrs',
+            'set_slice_attrs',
+            'set_edge_slice_attrs',
+            'register_slice',
+            'unregister_slice',
         ]
         for name in to_wrap:
             fn = getattr(self, name, None)
-            if fn and getattr(fn, "__wrapped__", None) is None:
+            if fn and getattr(fn, '__wrapped__', None) is None:
                 setattr(self, name, self._log_mutation(name)(fn))
 
     def history(self, as_df: bool = False):
@@ -224,19 +213,7 @@ class History:
         until exported.
         """
         if as_df:
-            try:
-                import polars as pl
-
-                return pl.DataFrame(self._history)
-            except Exception:
-                try:
-                    import pandas as pd
-
-                    return pd.DataFrame.from_records(self._history)
-                except Exception:
-                    raise RuntimeError(
-                        "Cannot return history as DataFrame: install polars (recommended) or pandas."
-                    )
+            return dataframe_from_rows(self._history)
         return list(self._history)
 
     def export_history(self, path: str):
@@ -264,54 +241,36 @@ class History:
         """
         if not self._history:
             return 0
-        try:
-            import polars as pl
-
-            df = pl.DataFrame(self._history)
-        except Exception:
-            try:
-                import pandas as pd
-
-                df = pd.DataFrame.from_records(self._history)
-            except Exception:
-                raise RuntimeError(
-                    "Cannot construct DataFrame from history: install polars (recommended) or pandas."
-                )
+        df = dataframe_from_rows(self._history)
         p = path.lower()
-        if p.endswith(".parquet"):
-            df.write_parquet(path)
-            return len(df)
-        if p.endswith(".ndjson") or p.endswith(".jsonl"):
-            with open(path, "w", encoding="utf-8") as f:
-                for r in df.iter_rows(named=True):
-                    import json
-
-                    f.write(json.dumps(r, ensure_ascii=False) + "\n")
-            return len(df)
-        if p.endswith(".json"):
-            import json
-
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(df.to_dicts(), f, ensure_ascii=False)
-            return len(df)
-        if p.endswith(".csv"):
-            rows = df.to_dicts() if hasattr(df, "to_dicts") else list(self._history)
+        if p.endswith('.parquet'):
+            _dataframe_write_parquet(df, path)
+            return len(self._history)
+        if p.endswith('.ndjson') or p.endswith('.jsonl'):
+            with open(path, 'w', encoding='utf-8') as f:
+                for r in dataframe_to_rows(df):
+                    f.write(json.dumps(r, ensure_ascii=False) + '\n')
+            return len(self._history)
+        if p.endswith('.json'):
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(dataframe_to_rows(df), f, ensure_ascii=False)
+            return len(self._history)
+        if p.endswith('.csv'):
+            rows = dataframe_to_rows(df)
             flat_rows = []
             for row in rows:
                 flat_row = {}
                 for key, value in row.items():
                     if isinstance(value, (dict, list, tuple, set, frozenset)):
-                        import json
-
                         flat_row[key] = json.dumps(self._jsonify(value), ensure_ascii=False)
                     else:
                         flat_row[key] = value
                 flat_rows.append(flat_row)
-            pl.DataFrame(flat_rows).write_csv(path)
-            return len(df)
+            _dataframe_write_csv(dataframe_from_rows(flat_rows), path)
+            return len(self._history)
         # Default to Parquet if unknown
-        df.write_parquet(path + ".parquet")
-        return len(df)
+        _dataframe_write_parquet(df, path + '.parquet')
+        return len(self._history)
 
     def enable_history(self, flag: bool = True):
         """Enable or disable in-memory mutation logging.
@@ -358,7 +317,7 @@ class History:
         (`version`, `ts_utc`, `mono_ns`). Logging must be enabled for the
         marker to be recorded.
         """
-        self._log_event("mark", label=label)
+        self._log_event('mark', label=label)
 
 
 class HistoryAccessor:
@@ -369,7 +328,7 @@ class HistoryAccessor:
     ``G.history.export(...)`` and related namespace usage.
     """
 
-    __slots__ = ("_G",)
+    __slots__ = ('_G',)
 
     def __init__(self, graph):
         self._G = graph
@@ -390,42 +349,10 @@ class HistoryAccessor:
         return History.mark(self._G, label)
 
     def snapshot(self, label=None):
-        G = self._G
-        if label is None:
-            label = f"snapshot_{len(G._snapshots)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        snapshot = {
-            "label": label,
-            "version": G._version,
-            "timestamp": datetime.now(UTC).isoformat(),
-            "counts": {
-                "vertices": G.nv,
-                "edges": G.ne,
-                "slices": len(G._slices),
-            },
-            "vertex_ids": set(
-                eid[0] if isinstance(eid, tuple) else eid
-                for eid, r in G._entities.items()
-                if r.kind == "vertex"
-            ),
-            "edge_ids": set(G._col_to_edge.values()),
-            "slice_ids": set(G._slices.keys()),
-        }
-        G._snapshots.append(snapshot)
-        return snapshot
+        return self._G._history_snapshot_impl(label=label)
 
     def diff(self, a, b=None):
-        G = self._G
-        snap_a = G._resolve_snapshot(a)
-        snap_b = G._resolve_snapshot(b) if b is not None else G._current_snapshot()
-        return GraphDiff(snap_a, snap_b)
+        return self._G._history_diff_impl(a, b=b)
 
     def list_snapshots(self):
-        return [
-            {
-                "label": snap["label"],
-                "timestamp": snap["timestamp"],
-                "version": snap["version"],
-                "counts": snap["counts"],
-            }
-            for snap in self._G._snapshots
-        ]
+        return self._G._history_list_snapshots_impl()

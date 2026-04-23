@@ -2,6 +2,11 @@
 
 Primary graph objects from `annnet.core.graph`.
 
+The main graph API centers on `AnnNet`/`Graph`, bulk vertex and edge
+construction with `add_vertices` and `add_edges`, graph-owned accessors
+(`slices`, `layers`, `attrs`, `views`, `ops`, `idx`, `cache`), annotation
+tables (`obs`, `var`, `uns`), and backend accessors (`nx`, `ig`, `gt`).
+
 ## AnnNet
 
 ::: annnet.core.graph.AnnNet
