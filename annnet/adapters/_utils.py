@@ -4,6 +4,8 @@ from enum import Enum
 import json as _json
 from typing import Any
 
+import narwhals as nw
+
 from .._dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
 
 
@@ -16,7 +18,7 @@ def _is_directed_eid(graph, eid):
     except (AttributeError, TypeError):
         pass
     try:
-        v = graph.get_attr_edge(eid, 'directed')
+        v = graph.attrs.get_attr_edge(eid, 'directed')
         return bool(v) if v is not None else True
     except (AttributeError, KeyError, TypeError, ValueError):
         return True
@@ -301,7 +303,18 @@ def _rows_to_df(rows: list[dict]):
     """
     Build a dataframe from list-of-dicts with the configured backend.
     """
-    return dataframe_from_rows(rows)
+    if not rows:
+        return dataframe_from_rows(rows)
+    order = []
+    for row in rows:
+        for key in row.keys():
+            if key not in order:
+                order.append(key)
+    df = dataframe_from_rows(rows)
+    try:
+        return nw.from_native(df, eager_only=True).select(order).to_native()
+    except Exception:
+        return df
 
 
 def _serialize_layer_tuple_attrs(layer_attrs: dict[tuple[str, ...], dict]) -> list[dict]:

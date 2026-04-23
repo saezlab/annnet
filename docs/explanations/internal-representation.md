@@ -1,7 +1,8 @@
 # Internal representation
 
 This page describes the actual in-memory model of `AnnNet` as implemented in
-`annnet.core.graph` and `annnet.core._helpers`.
+`annnet.core.graph`, `annnet.core._Matrix`, `annnet.core._Ops`, and
+`annnet.core._records`.
 
 The key fact is simple:
 

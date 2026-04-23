@@ -407,7 +407,7 @@ def edges_to_csv(G, path, slice=None):
     - This format is compatible with ``from_csv(schema="edge_list")``.
 
     """
-    df = G.edges_view(slice=slice) if slice is not None else G.edges_view()
+    df = G.views.edges(slice=slice) if slice is not None else G.views.edges()
 
     cols = {c.lower(): c for c in _columns(df)}
     rows = _rows(df)
@@ -486,7 +486,7 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
     - If the graph does not expose hyperedge columns, a ``ValueError`` is raised.
 
     """
-    df = G.edges_view(slice=slice) if slice is not None else G.edges_view()
+    df = G.views.edges(slice=slice) if slice is not None else G.views.edges()
 
     cols = {c.lower(): c for c in _columns(df)}
     rows = _rows(df)
@@ -671,7 +671,7 @@ def _ingest_edge_list(
                         _, _, suffix = c.partition(':')
                         if suffix == L and row[c] is not None:
                             try:
-                                G.set_edge_slice_attrs(L, eid, weight=float(row[c]))  # type: ignore[arg-type]
+                                G.attrs.set_edge_slice_attrs(L, eid, weight=float(row[c]))  # type: ignore[arg-type]
                             except Exception:  # noqa: BLE001
                                 pass
         # explicit edge id mapping if present

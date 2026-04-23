@@ -177,9 +177,20 @@ def _write_structure(graph, path: Path, compression: str):
         df = _df_from_dict({id_name: list(d.keys()), val_name: list(d.values())})
         _dataframe_write_parquet(df, filepath)
 
-    # Derive entity dicts from _entities / _row_to_entity
-    # Keys are (vid, layer_coord) tuples; serialize as bare vid for parquet compat.
-    # TODO: add entity_supra_node.parquet to store layer_coord for multilayer graphs.
+    entity_rows = [
+        {
+            'entity_id': ekey[0],
+            'layer': list(ekey[1]),
+            'idx': rec.row_idx,
+            'type': rec.kind,
+        }
+        for ekey, rec in graph._entities.items()
+    ]
+    _dataframe_write_parquet(_df_from_dict(entity_rows), path / 'entity_index.parquet')
+
+    # Derive entity dicts from _entities / _row_to_entity.
+    # These legacy tables remain for compatibility, while entity_index.parquet
+    # preserves full multilayer coordinates.
     def _eid_str(eid):
         return eid[0] if isinstance(eid, tuple) else eid
 
@@ -343,16 +354,12 @@ def _write_multilayers(graph, path: Path, compression: str):
 
 def _write_slices(graph, path: Path, compression: str):
     """Write slice registry and memberships."""
-    import json
-
     path.mkdir(parents=True, exist_ok=True)
 
-    # Registry: slice_id > attributes
+    # Registry: slice identifiers only. Slice attributes live in tables/.
     registry_data = []
-    for slice_id, slice_data in graph._slices.items():
-        registry_data.append(
-            {'slice_id': slice_id, 'attributes': json.dumps(slice_data.get('attributes', {}))}
-        )
+    for slice_id in graph._slices:
+        registry_data.append({'slice_id': slice_id})
     reg_df = _df_from_dict(registry_data)
     _dataframe_write_parquet(reg_df, path / 'registry.parquet')
 
@@ -533,8 +540,8 @@ def read(path: str | Path, *, lazy: bool = False) -> AnnNet:
     _load_uns(G, root / 'uns')
 
     # 9. Set active slice
-    _current_slice = manifest['active_slice']
-    _default_slice = manifest['default_slice']
+    G._current_slice = manifest['active_slice']
+    G._default_slice = manifest['default_slice']
 
     return G
 
@@ -566,19 +573,30 @@ def _load_structure(graph, path: Path, lazy: bool):
         df = _dataframe_read_parquet(filepath)
         return {row[key_col]: row[val_col] for row in dataframe_to_rows(df)}
 
-    from annnet.core._helpers import EdgeRecord, EntityRecord
+    from annnet.core._records import EdgeRecord, EntityRecord
 
-    # Build _entities and _row_to_entity from Parquet
-    entity_to_idx = parquet_to_dict(path / 'entity_to_idx.parquet', 'entity_id', 'idx')
-    entity_types = parquet_to_dict(path / 'entity_types.parquet', 'entity_id', 'type')
-    # _entities keys are (vid, layer_coord) tuples; flat graphs use ("_",) as basal layer.
-    raw_idx_to_entity = parquet_to_dict(path / 'idx_to_entity.parquet', 'idx', 'entity_id')
-    graph._row_to_entity = {int(k): (v, ('_',)) for k, v in raw_idx_to_entity.items()}
-    graph._entities = {
-        (eid, ('_',)): EntityRecord(row_idx=int(idx), kind=entity_types.get(eid, 'vertex'))
-        for eid, idx in entity_to_idx.items()
-    }
-    graph._rebuild_entity_indexes()
+    # Build _entities and _row_to_entity from Parquet. Prefer the newer
+    # entity_index.parquet which preserves multilayer coordinates exactly.
+    entity_index_path = path / 'entity_index.parquet'
+    if entity_index_path.exists():
+        graph._entities = {}
+        graph._row_to_entity = {}
+        for row in dataframe_to_rows(_dataframe_read_parquet(entity_index_path)):
+            ekey = (row['entity_id'], tuple(row.get('layer') or ['_']))
+            rec = EntityRecord(row_idx=int(row['idx']), kind=row.get('type', 'vertex'))
+            graph._entities[ekey] = rec
+            graph._row_to_entity[rec.row_idx] = ekey
+        graph._rebuild_entity_indexes()
+    else:
+        entity_to_idx = parquet_to_dict(path / 'entity_to_idx.parquet', 'entity_id', 'idx')
+        entity_types = parquet_to_dict(path / 'entity_types.parquet', 'entity_id', 'type')
+        raw_idx_to_entity = parquet_to_dict(path / 'idx_to_entity.parquet', 'idx', 'entity_id')
+        graph._row_to_entity = {int(k): (v, ('_',)) for k, v in raw_idx_to_entity.items()}
+        graph._entities = {
+            (eid, ('_',)): EntityRecord(row_idx=int(idx), kind=entity_types.get(eid, 'vertex'))
+            for eid, idx in entity_to_idx.items()
+        }
+        graph._rebuild_entity_indexes()
 
     # Load per-edge metadata for reconstruction
     edge_to_idx = parquet_to_dict(path / 'edge_to_idx.parquet', 'edge_id', 'idx')
@@ -672,10 +690,10 @@ def _load_multilayers(graph, path: Path):
     # 2. Vertex Presence (V_M)
     if (path / 'vertex_presence.parquet').exists():
         vm_df = _dataframe_read_parquet(path / 'vertex_presence.parquet')
-        # Bulk update is faster than iterating if we can, but let's be safe
-        for row in dataframe_to_rows(vm_df):
-            aa = tuple(row['layer'])  # Convert list back to tuple
-            graph._VM.add((row['vertex_id'], aa))
+        vm_set = {(row['vertex_id'], tuple(row['layer'])) for row in dataframe_to_rows(vm_df)}
+        if vm_set:
+            graph._restore_supra_nodes(vm_set)
+            graph._VM = vm_set
 
     # 3. Edge Layers
     if (path / 'edge_layers.parquet').exists():
@@ -724,14 +742,13 @@ def _load_multilayers(graph, path: Path):
 
 def _load_slices(graph, path: Path):
     """Reconstruct slice registry and memberships."""
-    import json
+    from ..core._records import SliceRecord
 
     # Registry
     registry_df = _dataframe_read_parquet(path / 'registry.parquet')
     for row in dataframe_to_rows(registry_df):
         slice_id = row['slice_id']
-        attrs = json.loads(row['attributes'])
-        graph._slices[slice_id] = {'vertices': set(), 'edges': set(), 'attributes': attrs}
+        graph._slices[slice_id] = SliceRecord()
 
     # Vertex memberships
     vertex_df = _dataframe_read_parquet(path / 'vertex_memberships.parquet')

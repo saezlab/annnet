@@ -167,11 +167,11 @@ def test_parallel_edges(tmpdir_fixture):
 def test_null_and_none_handling(tmpdir_fixture):
     G = AnnNet()
     G.add_vertex('A')
-    G.set_vertex_attrs('A', present='value', missing=None, zero=0, empty_string='')
+    G.attrs.set_vertex_attrs('A', present='value', missing=None, zero=0, empty_string='')
 
     G2 = _roundtrip_json(G, tmpdir_fixture, 'nulls')
 
-    attrs = G2.get_vertex_attrs('A') or {}
+    attrs = G2.attrs.get_vertex_attrs('A') or {}
     assert attrs.get('present') == 'value'
     assert attrs.get('zero') == 0
     assert 'missing' not in attrs or attrs.get('missing') is None

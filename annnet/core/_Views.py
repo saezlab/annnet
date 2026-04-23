@@ -211,7 +211,7 @@ class GraphView:
                     try:
                         if self._vertices_filter(vid):
                             filtered_vertices.add(vid)
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         pass
                 vertex_ids = filtered_vertices
             else:
@@ -233,7 +233,7 @@ class GraphView:
                     try:
                         if self._edges_filter(eid):
                             filtered_edges.add(eid)
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         pass
                 edge_ids = filtered_edges
             else:
@@ -250,7 +250,7 @@ class GraphView:
                 try:
                     if self._predicate(vid):
                         filtered_vertices.add(vid)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
             vertex_ids = filtered_vertices
 
@@ -298,7 +298,7 @@ class GraphView:
         Uses `AnnNet.edges_view()` and then filters by the view's edge IDs.
         """
         # Use AnnNet's existing edges_view() method
-        df = self._graph.edges_view(**kwargs)
+        df = self._graph.views.edges(**kwargs)
 
         # Filter by edge IDs in this view
         edge_ids = self.edge_ids
@@ -324,7 +324,7 @@ class GraphView:
         Uses `AnnNet.vertices_view()` and then filters by the view's vertex IDs.
         """
         # Use AnnNet's existing vertices_view() method
-        df = self._graph.vertices_view(**kwargs)
+        df = self._graph.views.vertices(**kwargs)
 
         # Filter by vertex IDs in this view
         vertex_ids = self.vertex_ids
@@ -362,27 +362,20 @@ class GraphView:
 
         # ---- Copy vertices in one bulk call ----
         if copy_attributes:
-            # obs is the already-filtered vertex attr DataFrame — one scan replaces N individual lookups
-            obs_df = self.obs
-            try:
-                vertex_records = dataframe_to_rows(obs_df)
-            except Exception:  # noqa: BLE001
+            vertex_records = dataframe_to_rows(self.obs)
+            if not vertex_records:
                 vertex_records = [{'vertex_id': vid} for vid in vset]
-            subG.add_vertices_bulk(vertex_records)
+            subG.add_vertices(vertex_records)
         else:
-            subG.add_vertices_bulk({'vertex_id': vid} for vid in vset)
+            subG.add_vertices({'vertex_id': vid} for vid in vset)
 
         # ---- Collect all edge attrs in one bulk scan ----
         edge_attrs_map = {}
         if copy_attributes:
-            var_df = self.var  # already-filtered edge attr DataFrame
-            try:
-                for row in dataframe_to_rows(var_df):
-                    eid = row.pop('edge_id', None)
-                    if eid is not None:
-                        edge_attrs_map[eid] = row
-            except Exception:  # noqa: BLE001
-                pass
+            for row in dataframe_to_rows(self.var):
+                eid = row.pop('edge_id', None)
+                if eid is not None:
+                    edge_attrs_map[eid] = row
 
         # ---- Determine which edges to copy ----
         if edge_ids is not None:
@@ -435,7 +428,7 @@ class GraphView:
         if binary_edges:
             subG.add_edges_bulk(binary_edges)
         if hyper_edges:
-            subG.add_hyperedges_bulk(hyper_edges)
+            subG.add_edges(hyper_edges)
 
         return subG
 
@@ -480,11 +473,14 @@ class GraphView:
         # Edges
         if edges is None:
             new_edges = base_edges
+            edge_pred = None
         elif callable(edges):
             new_edges = base_edges
+            edge_pred = edges
         else:
             to_set = set(edges)
             new_edges = (set(base_edges) & to_set) if base_edges is not None else to_set
+            edge_pred = None
 
         # slices
         new_slices = slices if slices is not None else (self._slices if self._slices else None)
@@ -495,17 +491,17 @@ class GraphView:
             if self._predicate:
                 try:
                     ok = ok and bool(self._predicate(v))
-                except Exception:  # noqa: BLE001
+                except Exception:
                     ok = False
             if predicate:
                 try:
                     ok = ok and bool(predicate(v))
-                except Exception:  # noqa: BLE001
+                except Exception:
                     ok = False
             if vertex_pred:
                 try:
                     ok = ok and bool(vertex_pred(v))
-                except Exception:  # noqa: BLE001
+                except Exception:
                     ok = False
             return ok
 
@@ -601,7 +597,7 @@ class ViewsClass:
         Vectorized implementation avoids per-edge scans.
         """
         if not self._col_to_edge:
-            return empty_dataframe({'edge_id': 'text', 'kind': 'text'}, backend=None)
+            return empty_dataframe({'edge_id': 'text', 'kind': 'text'})
 
         eids_raw = list(self._col_to_edge.values())
         eids_str = [str(eid) for eid in eids_raw]  # Stringified for DataFrame
@@ -620,34 +616,42 @@ class ViewsClass:
             else None
         )
 
-        src, tgt, etype = [], [], []
-        head, tail, members = [], [], []
+        if all(rec.etype != 'hyper' for rec in _edge_recs):
+            src = [str(rec.src) if rec.src is not None else None for rec in _edge_recs]
+            tgt = [str(rec.tgt) if rec.tgt is not None else None for rec in _edge_recs]
+            etype = [str(rec.etype) if rec.etype is not None else None for rec in _edge_recs]
+            head = [None] * len(_edge_recs)
+            tail = [None] * len(_edge_recs)
+            members = [None] * len(_edge_recs)
+        else:
+            src, tgt, etype = [], [], []
+            head, tail, members = [], [], []
 
-        for rec in _edge_recs:
-            if rec.etype == 'hyper':
-                if rec.tgt is not None:
-                    src_vals = tuple(str(x) for x in sorted(rec.src))
-                    tgt_vals = tuple(str(x) for x in sorted(rec.tgt))
-                    head.append(src_vals)
-                    tail.append(tgt_vals)
-                    members.append(None)
-                    src.append('|'.join(src_vals))
-                    tgt.append('|'.join(tgt_vals))
+            for rec in _edge_recs:
+                if rec.etype == 'hyper':
+                    if rec.tgt is not None:
+                        src_vals = tuple(str(x) for x in sorted(rec.src))
+                        tgt_vals = tuple(str(x) for x in sorted(rec.tgt))
+                        head.append(src_vals)
+                        tail.append(tgt_vals)
+                        members.append(None)
+                        src.append('|'.join(src_vals))
+                        tgt.append('|'.join(tgt_vals))
+                    else:
+                        src_vals = tuple(str(x) for x in sorted(rec.src))
+                        head.append(None)
+                        tail.append(None)
+                        members.append(src_vals)
+                        src.append('|'.join(src_vals))
+                        tgt.append(None)
+                    etype.append(None)
                 else:
-                    src_vals = tuple(str(x) for x in sorted(rec.src))
+                    src.append(str(rec.src) if rec.src is not None else None)
+                    tgt.append(str(rec.tgt) if rec.tgt is not None else None)
+                    etype.append(str(rec.etype) if rec.etype is not None else None)
                     head.append(None)
                     tail.append(None)
-                    members.append(src_vals)
-                    src.append('|'.join(src_vals))
-                    tgt.append(None)
-                etype.append(None)
-            else:
-                src.append(str(rec.src) if rec.src is not None else None)
-                tgt.append(str(rec.tgt) if rec.tgt is not None else None)
-                etype.append(str(rec.etype) if rec.etype is not None else None)
-                head.append(None)
-                tail.append(None)
-                members.append(None)
+                    members.append(None)
 
         # Use stringified IDs in DataFrame
         cols = {'edge_id': eids_str, 'kind': kinds}
@@ -658,57 +662,51 @@ class ViewsClass:
         if resolved_weight and not include_weight:
             cols['_gw_tmp'] = global_w
 
-        rows = []
-        for i, _eid in enumerate(eids_str):
-            row = {name: values[i] for name, values in cols.items()}
-            row.update(
-                {
-                    'source': src[i],
-                    'target': tgt[i],
-                    'edge_type': etype[i],
-                    'head': head[i],
-                    'tail': tail[i],
-                    'members': members[i],
-                }
-            )
-            rows.append(row)
-
-        edge_attr_rows = {}
-        if self.edge_attributes is not None and 'edge_id' in dataframe_columns(
-            self.edge_attributes
-        ):
-            edge_attr_rows = {
-                str(row.get('edge_id')): row
-                for row in dataframe_to_rows(self.edge_attributes)
-                if row.get('edge_id') is not None
-            }
-        if edge_attr_rows:
-            for row in rows:
-                row.update(edge_attr_rows.get(row['edge_id'], {}))
-
-        if slice is not None and self.edge_slice_attributes is not None:
-            slice_attr_rows = {}
-            for attr_row in dataframe_to_rows(self.edge_slice_attributes):
-                if attr_row.get('slice_id') != slice or attr_row.get('edge_id') is None:
+        edge_attrs_map = self._rows_attr_map(self.edge_attributes, 'edge_id')
+        slice_attrs_map = {}
+        if slice is not None:
+            for row in dataframe_to_rows(self.edge_slice_attributes):
+                if row.get('slice_id') != slice:
                     continue
-                slice_attr_rows[str(attr_row['edge_id'])] = {
-                    f'slice_{key}': value
-                    for key, value in attr_row.items()
-                    if key not in {'slice_id', 'edge_id'}
+                eid = row.get('edge_id')
+                if eid is None:
+                    continue
+                payload = {
+                    f'slice_{k}': v for k, v in row.items() if k not in {'slice_id', 'edge_id'}
                 }
-            for row in rows:
-                row.update(slice_attr_rows.get(row['edge_id'], {}))
+                slice_attrs_map[str(eid)] = payload
 
-        if resolved_weight:
-            gw_col = 'global_weight' if include_weight else '_gw_tmp'
-            for row in rows:
+        out_rows = []
+        for idx, eid in enumerate(eids_str):
+            row = {
+                'edge_id': eid,
+                'kind': kinds[idx],
+                'source': src[idx],
+                'target': tgt[idx],
+                'edge_type': etype[idx],
+                'head': list(head[idx]) if head[idx] is not None else None,
+                'tail': list(tail[idx]) if tail[idx] is not None else None,
+                'members': list(members[idx]) if members[idx] is not None else None,
+            }
+            if include_directed:
+                row['directed'] = dirs[idx]
+            if include_weight:
+                row['global_weight'] = global_w[idx]
+            elif resolved_weight:
+                row['_gw_tmp'] = global_w[idx]
+
+            row.update(edge_attrs_map.get(eid, {}))
+            row.update(slice_attrs_map.get(eid, {}))
+
+            if resolved_weight:
+                gw_col = 'global_weight' if include_weight else '_gw_tmp'
                 row['effective_weight'] = row.get('slice_weight', row.get(gw_col))
-                if row['effective_weight'] is None:
-                    row['effective_weight'] = row.get(gw_col)
                 if not include_weight:
                     row.pop('_gw_tmp', None)
 
-        out = dataframe_from_rows(rows, backend=getattr(self, '_annotations_backend', None))
+            out_rows.append(row)
+
+        out = dataframe_from_rows(out_rows)
         return clone_dataframe(out) if copy else out
 
     def vertices_view(self, copy=True):
@@ -725,9 +723,11 @@ class ViewsClass:
             Columns include `vertex_id` plus pure attributes.
         """
         df = self.vertex_attributes
-        if df is None:
-            return empty_dataframe({'vertex_id': 'text'}, backend=None)
-        return clone_dataframe(df) if copy else df
+        if df is None or 'vertex_id' not in dataframe_columns(df):
+            out = empty_dataframe({'vertex_id': 'text'})
+        else:
+            out = clone_dataframe(df)
+        return clone_dataframe(out) if copy else out
 
     def slices_view(self, copy=True):
         """Read-only slice attribute table.
@@ -743,9 +743,11 @@ class ViewsClass:
             Columns include `slice_id` plus pure attributes.
         """
         df = self.slice_attributes
-        if df is None:
-            return empty_dataframe({'slice_id': 'text'}, backend=None)
-        return clone_dataframe(df) if copy else df
+        if df is None or 'slice_id' not in dataframe_columns(df):
+            out = empty_dataframe({'slice_id': 'text'})
+        else:
+            out = clone_dataframe(df)
+        return clone_dataframe(out) if copy else out
 
     def aspects_view(self, copy=True):
         """Return a view of Kivela aspects and their metadata.
@@ -764,7 +766,7 @@ class ViewsClass:
         Columns include `aspect`, `elem_layers`, and any aspect attribute keys.
         """
         if not getattr(self, 'aspects', None):
-            return empty_dataframe({'aspect': 'text', 'elem_layers': 'list_text'}, backend=None)
+            return empty_dataframe({'aspect': 'text', 'elem_layers': 'list_text'})
 
         rows = []
         for a in self.aspects:
@@ -772,13 +774,40 @@ class ViewsClass:
                 'aspect': a,
                 'elem_layers': list(self.elem_layers.get(a, [])),
             }
-            # aspect attrs stored in self._aspect_attrs[a]
-            for k, v in self._aspect_attrs.get(a, {}).items():
+            for k, v in self.layers._aspect_attrs.get(a, {}).items():
                 base[k] = v
             rows.append(base)
 
-        df = dataframe_from_rows(rows, backend=None)
+        df = dataframe_from_rows(rows)
         return clone_dataframe(df) if copy else df
+
+
+class ViewsAccessor:
+    """Namespace for materialized graph tables.
+
+    Returned by ``G.views``. Flat ``*_view()`` methods remain as compatibility
+    wrappers during the contraction phase.
+    """
+
+    __slots__ = ('_G',)
+
+    def __init__(self, graph):
+        self._G = graph
+
+    def edges(self, *args, **kwargs):
+        return ViewsClass.edges_view(self._G, *args, **kwargs)
+
+    def vertices(self, *args, **kwargs):
+        return ViewsClass.vertices_view(self._G, *args, **kwargs)
+
+    def slices(self, *args, **kwargs):
+        return ViewsClass.slices_view(self._G, *args, **kwargs)
+
+    def aspects(self, *args, **kwargs):
+        return ViewsClass.aspects_view(self._G, *args, **kwargs)
+
+    def layers(self, *args, **kwargs):
+        return ViewsClass.layers_view(self._G, *args, **kwargs)
 
     def layers_view(self, copy=True):
         """Return a read-only table of multi-aspect layers.
@@ -799,20 +828,14 @@ class ViewsClass:
         """
         # no aspects configured → no layers
         if not getattr(self, 'aspects', None):
-            return empty_dataframe(
-                {'layer_tuple': 'list_text', 'layer_id': 'text'},
-                backend=None,
-            )
+            return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
 
         # empty product → no layers
         if not getattr(self, '_all_layers', ()):
-            return empty_dataframe(
-                {'layer_tuple': 'list_text', 'layer_id': 'text'},
-                backend=None,
-            )
+            return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
 
         rows = []
-        for aa in self._all_layers:
+        for aa in self.layers._all_layers:
             aa = tuple(aa)
             lid = self.layer_tuple_to_id(aa)
 
@@ -826,7 +849,7 @@ class ViewsClass:
                 base[a] = aa[i]
 
             # attach multi-aspect layer metadata
-            for k, v in self._layer_attrs.get(aa, {}).items():
+            for k, v in self.layers._layer_attrs.get(aa, {}).items():
                 base[k] = v
 
             # attach elementary layer attrs for each aspect (prefixed)
@@ -839,5 +862,5 @@ class ViewsClass:
 
             rows.append(base)
 
-        df = dataframe_from_rows(rows, backend=None)
+        df = dataframe_from_rows(rows)
         return clone_dataframe(df) if copy else df

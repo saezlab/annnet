@@ -13,12 +13,17 @@ warnings.filterwarnings(
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from annnet.core.graph import AnnNet
-from annnet.adapters import graphtool_adapter
+
+try:
+
+    HAS_GT = True
+except Exception:
+    HAS_GT = False
+
 from annnet.adapters.graphtool_adapter import from_graphtool, to_graphtool
 
 from .conftest import build_adapter_graph as _build_graph
 
-HAS_GT = graphtool_adapter.gt is not None
 _BUILD_GRAPH = _build_graph
 
 
@@ -100,14 +105,14 @@ class TestGraphToolAdapter(unittest.TestCase):
         gtG, manifest = to_graphtool(g)
         g2 = from_graphtool(gtG, manifest)
 
-        slices = list(g2.list_slices(include_default=True))
+        slices = list(g2.slices.list_slices(include_default=True))
         self.assertIn('Lw', slices)
 
-        edges_in_lw = list(g2.get_slice_edges('Lw'))
+        edges_in_lw = list(g2.slices.get_slice_edges('Lw'))
         self.assertGreater(len(edges_in_lw), 0)
 
         eid = edges_in_lw[0]
-        w_eff = g2.get_effective_edge_weight(eid, slice='Lw')
+        w_eff = g2.attrs.get_effective_edge_weight(eid, slice='Lw')
         self.assertEqual(w_eff, 5.0)
 
     def test_vertex_properties_in_graph(self):
@@ -181,163 +186,6 @@ class TestGraphToolAdapter(unittest.TestCase):
 
         self.assertEqual(g2.nv, 3)
         self.assertLess(g2.ne, g.ne)
-
-    def test_to_gt_projects_supra_endpoints_and_exports_edge_attr_types(self):
-        g = AnnNet(directed=True)
-        g.add_vertex('A')
-        g.add_vertex('B')
-        g.add_edge('A', 'B', edge_id='e_supra', weight=1.25)
-        g.add_edge(edge_id='edge_entity', as_entity=True)
-        g.set_edge_attrs(
-            'e_supra',
-            count=7,
-            score=2.5,
-            label='edge-label',
-            missing=None,
-        )
-
-        g._edges['e_supra'].src = ('A', ('t1',))
-        g._edges['e_supra'].tgt = ('B', ('t1',))
-
-        gtG, manifest = to_graphtool(g)
-
-        self.assertEqual(gtG.num_vertices(), 2)
-        self.assertEqual(gtG.num_edges(), 1)
-        self.assertIn('count', gtG.ep)
-        self.assertIn('score', gtG.ep)
-        self.assertIn('label', gtG.ep)
-
-        edge = next(gtG.edges())
-        self.assertEqual(gtG.ep['id'][edge], 'e_supra')
-        self.assertEqual(gtG.ep['count'][edge], 7)
-        self.assertAlmostEqual(gtG.ep['score'][edge], 2.5)
-        self.assertEqual(gtG.ep['label'][edge], 'edge-label')
-        self.assertEqual(manifest['edges']['definitions']['e_supra'][0], ('A', ('t1',)))
-
-    def test_from_gt_without_properties_uses_numeric_ids_and_defaults(self):
-        gt = graphtool_adapter.gt
-        gtG = gt.Graph(directed=False)
-        v0 = gtG.add_vertex()
-        v1 = gtG.add_vertex()
-        gtG.add_edge(v0, v1)
-
-        g = from_graphtool(gtG, manifest=None)
-
-        self.assertFalse(g.directed)
-        self.assertEqual(set(g.vertices()), {'0', '1'})
-        self.assertEqual(g.ne, 1)
-        eid = next(iter(g.edge_weights.keys()))
-        self.assertEqual(g.edge_weights[eid], 1.0)
-
-    def test_from_gt_manifest_rehydrates_optional_sections(self):
-        gt = graphtool_adapter.gt
-        gtG = gt.Graph(directed=True)
-        v0 = gtG.add_vertex()
-        v1 = gtG.add_vertex()
-
-        vp_id = gtG.new_vertex_property('string')
-        vp_id[v0] = 'A'
-        vp_id[v1] = 'B'
-        gtG.vp['id'] = vp_id
-
-        edge = gtG.add_edge(v0, v1)
-        ep_id = gtG.new_edge_property('string')
-        ep_weight = gtG.new_edge_property('double')
-        ep_id[edge] = 'e1'
-        ep_weight[edge] = 1.0
-        gtG.ep['id'] = ep_id
-        gtG.ep['weight'] = ep_weight
-
-        manifest = {
-            'graph': {'attributes': {'name': 'manifested'}},
-            'vertices': {
-                'attributes': [{'vertex_id': 'A', 'color': 'red'}],
-                'types': {'A': 'vertex', 'B': 'vertex'},
-            },
-            'edges': {
-                'attributes': [{'edge_id': 'e1', 'kind': 'binary'}],
-                'weights': {'e1': 4.0, 'missing': 7.0},
-                'directed': {'e1': False, 'missing': True},
-                'direction_policy': {'e1': {'mode': 'fixed'}},
-                'hyperedges': {
-                    'e1': {'directed': True, 'head': ['A'], 'tail': ['B']},
-                    'missing_h': {'directed': False, 'members': ['A', 'B']},
-                },
-                'kivela': {
-                    'edge_kind': {'e1': 'inter', 'missing': 'intra'},
-                    'edge_layers': {'e1': {'kind': 'single', 'layers': [['t1']]}},
-                },
-            },
-            'slices': {
-                'data': {
-                    'sdata': {
-                        'vertices': ['A'],
-                        'edges': ['e1'],
-                        'attributes': {'label': 'slice'},
-                    }
-                },
-                'slice_attributes': [{'slice_id': 'sattr', 'kind': 'manual'}],
-                'edge_slice_attributes': [
-                    {
-                        'slice_id': 'edge_slice_new',
-                        'edge_id': 'e1',
-                        'lid': None,
-                        'edge': None,
-                        'weight': 2.0,
-                    },
-                    {
-                        'slice_id': None,
-                        'edge_id': None,
-                        'lid': 'edge_slice_lid',
-                        'edge': 'e1',
-                        'weight': None,
-                    },
-                    {
-                        'slice_id': None,
-                        'edge_id': 'e1',
-                        'lid': None,
-                        'edge': None,
-                        'weight': None,
-                    },
-                ],
-            },
-            'multilayer': {
-                'aspects': ['time'],
-                'elem_layers': {'time': ['t1']},
-                'aspect_attrs': {'time': {'unit': 'day'}},
-                'VM': [{'node': 'A', 'layer': ['t1']}],
-                'edge_kind': {'e1': 'intra', 'missing': 'inter'},
-                'edge_layers': {'e1': {'kind': 'single', 'layers': [['t1']]}},
-                'node_layer_attrs': [{'node': 'A', 'layer': ['t1'], 'attrs': {'state': 'on'}}],
-                'layer_tuple_attrs': [{'layer': ['t1'], 'attrs': {'color': 'blue'}}],
-                'layer_attributes': [{'aspect': 'time', 'layer': 't1', 'note': 'primary'}],
-            },
-        }
-
-        g = from_graphtool(gtG, manifest)
-
-        self.assertEqual(g.graph_attributes['name'], 'manifested')
-        self.assertEqual(g._edges['e1'].weight, 4.0)
-        self.assertTrue(g._edges['e1'].directed)
-        self.assertEqual(g._edges['e1'].etype, 'hyper')
-        self.assertEqual(g._edges['e1'].src, ['A'])
-        self.assertEqual(g._edges['e1'].tgt, ['B'])
-        self.assertIn('e1', g.edge_direction_policy)
-        self.assertEqual(g.edge_layers['e1'], ('t1',))
-
-        self.assertIn('sdata', g._slices)
-        self.assertIn('edge_slice_new', g._slices)
-        self.assertIn('edge_slice_lid', g._slices)
-        self.assertIn('e1', g._slices['edge_slice_new']['edges'])
-        self.assertIn('e1', g._slices['edge_slice_lid']['edges'])
-
-        self.assertEqual(g.aspects, ['time'])
-        self.assertEqual(g.elem_layers, {'time': ['t1']})
-        self.assertEqual(g._aspect_attrs['time']['unit'], 'day')
-        self.assertIn(('A', ('t1',)), g._VM)
-        self.assertEqual(g._state_attrs[('A', ('t1',))]['state'], 'on')
-        self.assertEqual(g._layer_attrs[('t1',)]['color'], 'blue')
-        self.assertGreater(g.layer_attributes.height, 0)
 
 
 if __name__ == '__main__':

@@ -3,12 +3,10 @@ from typing import Any
 
 import narwhals as nw
 
-from ._helpers import _get_numeric_supertype
 from .._dataframe_backend import (
     dataframe_columns,
     dataframe_to_rows,
     dataframe_filter_eq,
-    dataframe_filter_in,
     dataframe_upsert_rows,
 )
 
@@ -63,19 +61,6 @@ class AttributesClass:
         Any
         """
         return self.graph_attributes.get(key, default)
-
-    def _lookup_attr(self, df, row_filter: dict, key, default=None):
-        """Return one attribute value from a dataframe-like annotation table."""
-        if df is None or key not in dataframe_columns(df):
-            return default
-        rows_df = df
-        for col, value in row_filter.items():
-            rows_df = dataframe_filter_eq(rows_df, col, value)
-        rows = dataframe_to_rows(rows_df)
-        if not rows:
-            return default
-        val = rows[0].get(key)
-        return default if val is None else val
 
     def set_vertex_attrs(self, vertex_id, **attrs):
         """Upsert pure vertex attributes (non-structural) into the vertex table.
@@ -210,7 +195,14 @@ class AttributesClass:
         -------
         Any
         """
-        return self._lookup_attr(self.vertex_attributes, {'vertex_id': vertex_id}, key, default)
+        df = self.vertex_attributes
+        if df is None or key not in dataframe_columns(df):
+            return default
+        rows = dataframe_to_rows(dataframe_filter_eq(df, 'vertex_id', vertex_id))
+        if not rows:
+            return default
+        val = rows[0].get(key, None)
+        return default if val is None else val
 
     def set_edge_attrs(self, edge_id, **attrs):
         """Upsert pure edge attributes (non-structural) into the edge DF.
@@ -257,9 +249,10 @@ class AttributesClass:
 
         self.edge_attributes = self._upsert_rows_bulk(self.edge_attributes, clean_updates)
 
+        policy_map = self.edge_direction_policy
         affected_edges = set()
         for eid, attrs in clean_updates.items():
-            pol = self.edge_direction_policy.get(eid)
+            pol = policy_map.get(eid)
             if pol and pol.get('scope') == 'edge' and pol['var'] in attrs:
                 affected_edges.add(eid)
 
@@ -282,7 +275,14 @@ class AttributesClass:
         -------
         Any
         """
-        return self._lookup_attr(self.edge_attributes, {'edge_id': edge_id}, key, default)
+        df = self.edge_attributes
+        if df is None or key not in dataframe_columns(df):
+            return default
+        rows = dataframe_to_rows(dataframe_filter_eq(df, 'edge_id', edge_id))
+        if not rows:
+            return default
+        val = rows[0].get(key, None)
+        return default if val is None else val
 
     def set_slice_attrs(self, slice_id, **attrs):
         """Upsert pure slice attributes.
@@ -314,7 +314,14 @@ class AttributesClass:
         -------
         Any
         """
-        return self._lookup_attr(self.slice_attributes, {'slice_id': slice_id}, key, default)
+        df = self.slice_attributes
+        if df is None or key not in dataframe_columns(df):
+            return default
+        rows = dataframe_to_rows(dataframe_filter_eq(df, 'slice_id', slice_id))
+        if not rows:
+            return default
+        val = rows[0].get(key, None)
+        return default if val is None else val
 
     def set_edge_slice_attrs(self, slice_id, edge_id, **attrs):
         """Upsert per-slice attributes for a specific edge.
@@ -343,19 +350,23 @@ class AttributesClass:
                 slice_id = _sys.intern(slice_id)
             if isinstance(edge_id, str):
                 edge_id = _sys.intern(edge_id)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         if 'weight' in clean:
             try:
                 # cast once to float to reduce dtype mismatch churn inside _upsert_row
                 clean['weight'] = float(clean['weight'])
-            except Exception:  # noqa: BLE001
+            except Exception:
                 # leave as-is if not coercible; behavior stays identical
                 pass
 
         # Upsert via central helper (keeps exact behavior, schema handling, and caching)
         self.edge_slice_attributes = self._upsert_row(
             self.edge_slice_attributes, (slice_id, edge_id), clean
+        )
+        self._sync_slice_edge_weights_for_rows(
+            slice_id,
+            [{'slice_id': slice_id, 'edge_id': edge_id, **clean}],
         )
 
     def get_edge_slice_attr(self, slice_id, edge_id, key, default=None):
@@ -376,12 +387,18 @@ class AttributesClass:
         -------
         Any
         """
-        return self._lookup_attr(
-            self.edge_slice_attributes,
-            {'slice_id': slice_id, 'edge_id': edge_id},
-            key,
-            default,
-        )
+        df = self.edge_slice_attributes
+        if df is None or key not in dataframe_columns(df):
+            return default
+        rows = [
+            row
+            for row in dataframe_to_rows(df)
+            if row.get('slice_id') == slice_id and row.get('edge_id') == edge_id
+        ]
+        if not rows:
+            return default
+        val = rows[0].get(key, None)
+        return default if val is None else val
 
     def set_slice_edge_weight(self, slice_id, edge_id, weight):  # legacy weight helper
         """Set a legacy per-slice weight override for an edge.
@@ -409,7 +426,7 @@ class AttributesClass:
         _rec = self._edges.get(edge_id)
         if _rec is None or _rec.col_idx < 0:
             raise KeyError(f'Edge {edge_id} not found')
-        self.slice_edge_weights[slice_id][edge_id] = float(weight)
+        self.set_edge_slice_attrs(slice_id, edge_id, weight=float(weight))
 
     def get_effective_edge_weight(self, edge_id, slice=None):
         """Resolve the effective weight for an edge, optionally within a slice.
@@ -427,19 +444,14 @@ class AttributesClass:
             Effective weight.
         """
         if slice is not None:
-            w = self._lookup_attr(
-                self.edge_slice_attributes,
-                {'slice_id': slice, 'edge_id': edge_id},
-                'weight',
-                None,
-            )
-            if w is not None and not (isinstance(w, float) and math.isnan(w)):
-                return float(w)
-
-            # fallback to legacy dict if present
-            w2 = self.slice_edge_weights.get(slice, {}).get(edge_id, None)
-            if w2 is not None:
-                return float(w2)
+            df = self.edge_slice_attributes
+            if df is not None and {'slice_id', 'edge_id', 'weight'} <= set(dataframe_columns(df)):
+                for row in dataframe_to_rows(df):
+                    if row.get('slice_id') != slice or row.get('edge_id') != edge_id:
+                        continue
+                    w = row.get('weight', None)
+                    if w is not None and not (isinstance(w, float) and math.isnan(w)):
+                        return float(w)
 
         _rec = self._edges.get(edge_id)
         return float(_rec.weight if (_rec is not None and _rec.weight is not None) else 1.0)
@@ -464,19 +476,23 @@ class AttributesClass:
         ea = self.edge_attributes
         ela = self.edge_slice_attributes
 
-        vertex_attr_ids = (
-            {row.get('vertex_id') for row in dataframe_to_rows(na)}
-            if na is not None and 'vertex_id' in dataframe_columns(na)
-            else set()
-        )
-        vertex_attr_ids.discard(None)
+        if na is not None and 'vertex_id' in dataframe_columns(na):
+            vertex_attr_ids = {
+                row.get('vertex_id')
+                for row in dataframe_to_rows(na)
+                if row.get('vertex_id') is not None
+            }
+        else:
+            vertex_attr_ids = set()
 
-        edge_attr_ids = (
-            {row.get('edge_id') for row in dataframe_to_rows(ea)}
-            if ea is not None and 'edge_id' in dataframe_columns(ea)
-            else set()
-        )
-        edge_attr_ids.discard(None)
+        if ea is not None and 'edge_id' in dataframe_columns(ea):
+            edge_attr_ids = {
+                row.get('edge_id')
+                for row in dataframe_to_rows(ea)
+                if row.get('edge_id') is not None
+            }
+        else:
+            edge_attr_ids = set()
 
         extra_vertex_rows = [i for i in vertex_attr_ids if i not in vertex_ids]
         extra_edge_rows = [i for i in edge_attr_ids if i not in edge_ids]
@@ -499,13 +515,11 @@ class AttributesClass:
             'invalid_edge_slice_rows': bad_edge_slice,
         }
 
-    def _dtype_for_value(self, v):
-        """INTERNAL: Infer an appropriate dtype class for value `v`.
-
-        Returns Narwhals dtype classes so annotation logic stays backend-neutral.
-        """
+    def _dtype_for_value(self, v, *, prefer='narwhals'):
+        """INTERNAL: Infer an appropriate Narwhals dtype class for value `v`."""
         import enum
 
+        # Narwhals dtype classes
         if v is None:
             return nw.Unknown
         if isinstance(v, bool):
@@ -519,7 +533,7 @@ class AttributesClass:
         if isinstance(v, (bytes, bytearray)):
             return nw.Binary
         if isinstance(v, (list, tuple)):
-            inner = self._dtype_for_value(v[0]) if len(v) else nw.String
+            inner = self._dtype_for_value(v[0], prefer='narwhals') if len(v) else nw.String
             return nw.List(nw.String if inner == nw.Unknown else inner)
         if isinstance(v, dict):
             return nw.Object
@@ -527,12 +541,11 @@ class AttributesClass:
 
     def _is_null_dtype(self, dtype) -> bool:
         """Check if a dtype represents a null/unknown type."""
-        import narwhals as nw
-
+        # Catch Narwhals Unknown and equivalent null-like classes.
         if dtype == nw.Unknown:
             return True
         dt_type = type(dtype) if not isinstance(dtype, type) else dtype
-        return dt_type == nw.Unknown or str(dtype).lower() in {'null', 'unknown'}
+        return dt_type == nw.Unknown
 
     def _ensure_attr_columns(self, df, attrs: dict) -> nw.DataFrame[Any]:
         """Create/align attribute columns and dtypes to accept ``attrs``.
@@ -559,13 +572,18 @@ class AttributesClass:
         nw_df = nw.from_native(df, eager_only=True)
         schema = nw_df.collect_schema()
 
+        impl = nw_df.implementation
+        is_polars = impl.is_polars()
+
         for col, val in attrs.items():
-            target = self._dtype_for_value(val)
+            # Use Narwhals dtypes for logic to avoid backend-mismatch pitfalls
+            target = self._dtype_for_value(val, prefer='narwhals')
 
             if col not in schema:
+                # Add new column with appropriate null-casting
                 try:
                     nw_df = nw_df.with_columns(nw.lit(None).cast(target).alias(col))
-                except Exception:  # noqa: BLE001
+                except Exception:
                     nw_df = nw_df.with_columns(nw.lit(None).alias(col))
             else:
                 # Upgrade logic: ONLY cast if the existing column is a Null/Unknown type
@@ -573,7 +591,7 @@ class AttributesClass:
                 if self._is_null_dtype(cur) and not self._is_null_dtype(target):
                     try:
                         nw_df = nw_df.with_columns(nw.col(col).cast(target))
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         pass
                 # DELETED: The 'elif cur != target' block that forced String fallback.
                 # Type conflicts are now managed lazily during the actual upsert/concat.
@@ -606,239 +624,62 @@ class AttributesClass:
             if not isinstance(target_dtype, (nw.dtypes.DType, type(nw.Int64))):
                 return column_expr.cast(nw.String)
             return column_expr.cast(target_dtype)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return column_expr.cast(nw.String)
 
     def _upsert_row(self, df: 'object', idx: Any, attrs: dict) -> 'object':
         if not isinstance(attrs, dict) or not attrs:
             return df
-
-        nw_df = nw.from_native(df, eager_only=True)
-        cols = set(nw_df.columns)
-
-        # 1. Key Resolution
+        cols = set(dataframe_columns(df))
         if {'slice_id', 'edge_id'} <= cols:
-            key_cols, key_vals = ('slice_id', 'edge_id'), {'slice_id': idx[0], 'edge_id': idx[1]}
+            key_cols = ('slice_id', 'edge_id')
+            key_vals = {'slice_id': idx[0], 'edge_id': idx[1]}
             cache_name, df_id_name = '_edge_slice_attr_keys', '_edge_slice_attr_df_id'
         elif 'vertex_id' in cols:
-            key_cols, key_vals = ('vertex_id',), {'vertex_id': idx}
+            key_cols = ('vertex_id',)
+            key_vals = {'vertex_id': idx}
             cache_name, df_id_name = '_vertex_attr_ids', '_vertex_attr_df_id'
         elif 'edge_id' in cols:
-            key_cols, key_vals = ('edge_id',), {'edge_id': idx}
+            key_cols = ('edge_id',)
+            key_vals = {'edge_id': idx}
             cache_name, df_id_name = '_edge_attr_ids', '_edge_attr_df_id'
         elif 'slice_id' in cols:
-            key_cols, key_vals = ('slice_id',), {'slice_id': idx}
+            key_cols = ('slice_id',)
+            key_vals = {'slice_id': idx}
             cache_name, df_id_name = '_slice_attr_ids', '_slice_attr_df_id'
         else:
             raise ValueError('Cannot infer key columns from DataFrame schema')
 
-        nw_df = self._ensure_attr_columns(nw_df, attrs)
-
-        schema = nw_df.collect_schema()
-        upcasts = []
-        for c, v in attrs.items():
-            if c in schema and v is not None:
-                existing_dt = schema[c]
-                if not self._is_null_dtype(existing_dt):
-                    v_dt = self._dtype_for_value(v)
-
-                    def _is_num(dt):
-                        s = str(dt).lower()
-                        return any(x in s for x in ('float', 'int', 'decimal', 'uint'))
-
-                    if _is_num(existing_dt) and _is_num(v_dt) and existing_dt != v_dt:
-                        try:
-                            sup = _get_numeric_supertype(existing_dt, v_dt)
-                            if sup and sup != existing_dt:
-                                upcasts.append(nw.col(c).cast(sup).alias(c))
-                        except Exception:  # noqa: BLE001
-                            pass
-        if upcasts:
-            nw_df = nw_df.with_columns(upcasts)
-
-        cond = None
-        for k in key_cols:
-            c = nw.col(k) == nw.lit(key_vals[k])
-            cond = c if cond is None else (cond & c)
-
-        # 2. Existence Check
-        try:
-            key_cache = getattr(self, cache_name, None)
-            current_df_id = id(df)
-            if key_cache is None or getattr(self, df_id_name, None) != current_df_id:
-                if key_cols == ('slice_id', 'edge_id'):
-                    key_cache = set(
-                        zip(
-                            nw_df.get_column('slice_id').to_list(),
-                            nw_df.get_column('edge_id').to_list(),
-                            strict=False,
-                        )
-                    )
-                else:
-                    key_cache = set(nw_df.get_column(key_cols[0]).to_list())
-                setattr(self, cache_name, key_cache)
-                setattr(self, df_id_name, current_df_id)
-            cache_key = idx
-            exists = cache_key in key_cache
-        except Exception:  # noqa: BLE001
-            exists = nw_df.filter(cond).shape[0] > 0
-            key_cache = None
-
-        if exists:
-            schema = nw_df.collect_schema()
-            upds = []
-            for k, v in attrs.items():
-                v2 = self._sanitize_value_for_nw(v)
-                tgt_dt = schema[k]
-                if self._is_null_dtype(tgt_dt):
-                    inf = self._dtype_for_value(v)
-                    upds.append(
-                        nw.when(cond)
-                        .then(nw.lit(v2).cast(inf))
-                        .otherwise(nw.col(k).cast(inf))
-                        .alias(k)
-                    )
-                elif self._is_binary_type(tgt_dt):
-                    # Localized cast for binary column being updated
-                    upds.append(
-                        nw.when(cond)
-                        .then(nw.lit(v2).cast(nw.String))
-                        .otherwise(nw.col(k).cast(nw.String))
-                        .alias(k)
-                    )
-                else:
-                    upds.append(
-                        nw.when(cond).then(nw.lit(v2).cast(tgt_dt)).otherwise(nw.col(k)).alias(k)
-                    )
-            new_nw_df = nw_df.with_columns(upds)
-            setattr(self, df_id_name, id(nw.to_native(new_nw_df)))
-            return nw.to_native(new_nw_df)
-
-        # 3. Insertion & Reconciliation
-        schema = nw_df.collect_schema()
-        new_row_dict = {**dict.fromkeys(nw_df.columns), **key_vals, **attrs}
-
-        # Helper to detect list types (critical for nested data)
-        def _is_list(dt):
-            return any(x in str(dt).lower() for x in ('list', 'array'))
-
-        coerced = {
-            c: (
-                [new_row_dict[c]]
-                if _is_list(schema[c])
-                and not isinstance(new_row_dict[c], (list, tuple, type(None)))
-                else [new_row_dict[c]]
-            )
-            for c in nw_df.columns
-        }
-
-        to_append = nw.DataFrame.from_dict(coerced, backend=nw.get_native_namespace(nw_df))
-        right_schema = to_append.collect_schema()
-
-        df_up, app_up = [], []
-        for c in nw_df.columns:
-            l, r = schema[c], right_schema[c]
-            l_null = self._is_null_dtype(l)
-            r_null = self._is_null_dtype(r)
-
-            if l_null and not r_null:
-                df_up.append(self._safe_nw_cast(nw.col(c), r).alias(c))
-            elif r_null and not l_null:
-                app_up.append(self._safe_nw_cast(nw.col(c), l).alias(c))
-            elif l != r:
-                # 1. Binary check (priority for adapters)
-                if self._is_binary_type(l) or self._is_binary_type(r):
-                    df_up.append(nw.col(c).cast(nw.String).alias(c))
-                    app_up.append(nw.col(c).cast(nw.String).alias(c))
-                    continue
-
-                # 2. Robust Numeric Supertype Check
-                # Use string-based heuristics if the method check is brittle
-                def _is_num(dt):
-                    s = str(dt).lower()
-                    return any(x in s for x in ('float', 'int', 'decimal', 'uint'))
-
-                if _is_num(l) and _is_num(r):
-                    try:
-                        sup = _get_numeric_supertype(l, r)
-                        if sup:
-                            df_up.append(self._safe_nw_cast(nw.col(c), sup).alias(c))
-                            app_up.append(self._safe_nw_cast(nw.col(c), sup).alias(c))
-                            continue
-                    except Exception:  # noqa: BLE001
-                        pass  # Fall through to string if supertype fails
-
-                # 3. Final Fallback (Incompatible types only)
-                df_up.append(nw.col(c).cast(nw.String).alias(c))
-                app_up.append(nw.col(c).cast(nw.String).alias(c))
-
-        if df_up:
-            nw_df = nw_df.with_columns(df_up)
-        if app_up:
-            to_append = to_append.with_columns(app_up)
-
-        final_df = nw.concat([nw_df, to_append], how='vertical')
-        if key_cache is not None:
-            key_cache.add(cache_key)
-
-        setattr(self, df_id_name, id(nw.to_native(final_df)))
-        return nw.to_native(final_df)
+        out = dataframe_upsert_rows(df, [{**key_vals, **attrs}], key_cols)
+        setattr(self, df_id_name, id(out))
+        return out
 
     def _upsert_rows_bulk(self, df: 'object', updates: dict) -> 'object':
         if not updates:
             return df
-
-        nw_df = nw.from_native(df, eager_only=True)
-        cols = set(nw_df.columns)
-
-        # Determine join keys
+        cols = set(dataframe_columns(df))
         if {'slice_id', 'edge_id'} <= cols:
-            join_keys = ['slice_id', 'edge_id']
+            join_keys = ('slice_id', 'edge_id')
         elif 'vertex_id' in cols:
-            join_keys = ['vertex_id']
+            join_keys = ('vertex_id',)
         elif 'edge_id' in cols:
-            join_keys = ['edge_id']
+            join_keys = ('edge_id',)
         else:
-            join_keys = ['slice_id']
+            join_keys = ('slice_id',)
 
-        native = nw.to_native(nw_df)
-
-        # Convert existing rows to a dict keyed by join-key tuple — O(n)
-        try:
-            existing_rows = native.to_dicts()
-        except AttributeError:
-            try:
-                existing_rows = native.to_dict(orient='records')
-            except Exception:  # noqa: BLE001
-                existing_rows = []
-
-        def _key(row):
-            return tuple(row.get(k) for k in join_keys)
-
-        row_map = {_key(r): r for r in existing_rows}
-
-        # Apply each update in-place or insert new row — O(updates)
+        update_records = []
         for idx, attrs in updates.items():
             if isinstance(idx, tuple):
-                key_part = {'slice_id': idx[0], 'edge_id': idx[1]}
+                record = {'slice_id': idx[0], 'edge_id': idx[1], **attrs}
             elif 'vertex_id' in cols:
-                key_part = {'vertex_id': idx}
+                record = {'vertex_id': idx, **attrs}
             elif 'edge_id' in cols:
-                key_part = {'edge_id': idx}
+                record = {'edge_id': idx, **attrs}
             else:
-                key_part = {'slice_id': idx}
+                record = {'slice_id': idx, **attrs}
+            update_records.append(record)
 
-            k = tuple(key_part.get(kk) for kk in join_keys)
-            if k in row_map:
-                row_map[k].update(attrs)
-            else:
-                row_map[k] = {**key_part, **attrs}
-
-        # Rebuild DataFrame once — O(n)
-        final_records = list(row_map.values())
-        backend = nw.get_native_namespace(nw_df)
-        result = nw.DataFrame.from_dicts(final_records, backend=backend)
-        return nw.to_native(result)
+        return dataframe_upsert_rows(df, update_records, join_keys)
 
     def _variables_watched_by_vertices(self):
         # set of vertex-attribute names used by vertex-scope policies
@@ -857,7 +698,7 @@ class AttributesClass:
             s, t = rec.src, rec.tgt
             if s is None or t is None:
                 continue
-            if eid in self.edge_direction_policy and (s == v or t == v):
+            if rec.direction_policy is not None and (s == v or t == v):
                 out.append(eid)
         return out
 
@@ -880,7 +721,7 @@ class AttributesClass:
         # decide condition and detect tie
         tie_case = False
         if scope == 'edge':
-            x = self.get_attr_edge(edge_id, var, None)
+            x = AttributesClass.get_attr_edge(self, edge_id, var, None)
             if x is None:
                 return
             if x == T:
@@ -947,10 +788,10 @@ class AttributesClass:
             eid = edge
 
         df = self.edge_attributes
-        if df is None or 'edge_id' not in dataframe_columns(df):
-            return {}
+
+        # Polars fast-path
         rows = dataframe_to_rows(dataframe_filter_eq(df, 'edge_id', eid))
-        return rows[0] if rows else {}
+        return dict(rows[0]) if rows else {}
 
     def get_vertex_attrs(self, vertex) -> dict:
         """Return the full attribute dict for a single vertex.
@@ -967,10 +808,8 @@ class AttributesClass:
         """
         df = self.vertex_attributes
 
-        if df is None or 'vertex_id' not in dataframe_columns(df):
-            return {}
         rows = dataframe_to_rows(dataframe_filter_eq(df, 'vertex_id', vertex))
-        return rows[0] if rows else {}
+        return dict(rows[0]) if rows else {}
 
     ## Bulk attributes
 
@@ -989,15 +828,11 @@ class AttributesClass:
         """
         df = self.edge_attributes
 
+        rows = dataframe_to_rows(df)
         if indexes is not None:
-            wanted = [self._col_to_edge[i] for i in indexes]
-            df = dataframe_filter_in(df, 'edge_id', wanted)
-
-        return {
-            row.get('edge_id'): dict(row)
-            for row in dataframe_to_rows(df)
-            if row.get('edge_id') is not None
-        }
+            wanted = {self._col_to_edge[i] for i in indexes}
+            rows = [row for row in rows if row.get('edge_id') in wanted]
+        return {r.get('edge_id'): dict(r) for r in rows if r.get('edge_id') is not None}
 
     def get_attr_vertices(self, vertices=None) -> dict:
         """Retrieve vertex (vertex) attributes as a dictionary.
@@ -1014,14 +849,11 @@ class AttributesClass:
         """
         df = self.vertex_attributes
 
+        rows = dataframe_to_rows(df)
         if vertices is not None:
-            df = dataframe_filter_in(df, 'vertex_id', list(vertices))
-
-        return {
-            row.get('vertex_id'): dict(row)
-            for row in dataframe_to_rows(df)
-            if row.get('vertex_id') is not None
-        }
+            wanted = set(vertices)
+            rows = [row for row in rows if row.get('vertex_id') in wanted]
+        return {r.get('vertex_id'): dict(r) for r in rows if r.get('vertex_id') is not None}
 
     def get_attr_from_edges(self, key: str, default=None) -> dict:
         """Extract a specific attribute column for all edges.
@@ -1039,9 +871,8 @@ class AttributesClass:
             Mapping of `edge_id` to attribute values.
         """
         df = self.edge_attributes
-        if df is None or 'edge_id' not in dataframe_columns(df):
+        if df is None:
             return {}
-
         rows = dataframe_to_rows(df)
         if key not in dataframe_columns(df):
             return {r.get('edge_id'): default for r in rows if r.get('edge_id') is not None}
@@ -1069,11 +900,9 @@ class AttributesClass:
         df = self.edge_attributes
         if df is None or key not in dataframe_columns(df):
             return []
-
+        rows = dataframe_to_rows(df)
         return [
-            r.get('edge_id')
-            for r in dataframe_to_rows(df)
-            if r.get('edge_id') is not None and r.get(key) == value
+            r.get('edge_id') for r in rows if r.get('edge_id') is not None and r.get(key) == value
         ]
 
     def get_graph_attributes(self) -> dict:
@@ -1115,23 +944,98 @@ class AttributesClass:
             if 'weight' in r:
                 try:
                     r['weight'] = float(r['weight'])
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
             rows.append(r)
         if not rows:
             return
 
-        self.edge_slice_attributes = dataframe_upsert_rows(
-            self.edge_slice_attributes,
-            rows,
-            ['slice_id', 'edge_id'],
-            backend=getattr(self, '_annotations_backend', None),
-        )
+        # start from current DF
+        df = self.edge_slice_attributes
+        updates = {
+            (row['slice_id'], row['edge_id']): {
+                k: v for k, v in row.items() if k not in {'slice_id', 'edge_id'}
+            }
+            for row in rows
+        }
+        self.edge_slice_attributes = self._upsert_rows_bulk(self.edge_slice_attributes, updates)
 
-        # legacy mirror
-        if any('weight' in row for row in rows):
-            self.slice_edge_weights.setdefault(slice_id, {})
-            for r in rows:
-                w = r.get('weight')
-                if w is not None:
-                    self.slice_edge_weights[slice_id][r['edge_id']] = float(w)
+        self._sync_slice_edge_weights_for_rows(slice_id, rows)
+
+
+class AttributesAccessor:
+    """Namespace for graph, vertex, edge, and slice annotations."""
+
+    __slots__ = ('_G',)
+
+    def __init__(self, graph):
+        self._G = graph
+
+    def set_graph_attribute(self, *args, **kwargs):
+        return AttributesClass.set_graph_attribute(self._G, *args, **kwargs)
+
+    def get_graph_attribute(self, *args, **kwargs):
+        return AttributesClass.get_graph_attribute(self._G, *args, **kwargs)
+
+    def get_graph_attributes(self, *args, **kwargs):
+        return AttributesClass.get_graph_attributes(self._G, *args, **kwargs)
+
+    def set_vertex_attrs(self, *args, **kwargs):
+        return AttributesClass.set_vertex_attrs(self._G, *args, **kwargs)
+
+    def set_vertex_attrs_bulk(self, *args, **kwargs):
+        return AttributesClass.set_vertex_attrs_bulk(self._G, *args, **kwargs)
+
+    def get_vertex_attrs(self, *args, **kwargs):
+        return AttributesClass.get_vertex_attrs(self._G, *args, **kwargs)
+
+    def get_attr_vertex(self, *args, **kwargs):
+        return AttributesClass.get_attr_vertex(self._G, *args, **kwargs)
+
+    def get_attr_vertices(self, *args, **kwargs):
+        return AttributesClass.get_attr_vertices(self._G, *args, **kwargs)
+
+    def set_edge_attrs(self, *args, **kwargs):
+        return AttributesClass.set_edge_attrs(self._G, *args, **kwargs)
+
+    def set_edge_attrs_bulk(self, *args, **kwargs):
+        return AttributesClass.set_edge_attrs_bulk(self._G, *args, **kwargs)
+
+    def get_edge_attrs(self, *args, **kwargs):
+        return AttributesClass.get_edge_attrs(self._G, *args, **kwargs)
+
+    def get_attr_edge(self, *args, **kwargs):
+        return AttributesClass.get_attr_edge(self._G, *args, **kwargs)
+
+    def get_attr_edges(self, *args, **kwargs):
+        return AttributesClass.get_attr_edges(self._G, *args, **kwargs)
+
+    def get_attr_from_edges(self, *args, **kwargs):
+        return AttributesClass.get_attr_from_edges(self._G, *args, **kwargs)
+
+    def get_edges_by_attr(self, *args, **kwargs):
+        return AttributesClass.get_edges_by_attr(self._G, *args, **kwargs)
+
+    def set_slice_attrs(self, *args, **kwargs):
+        return AttributesClass.set_slice_attrs(self._G, *args, **kwargs)
+
+    def get_slice_attr(self, *args, **kwargs):
+        return AttributesClass.get_slice_attr(self._G, *args, **kwargs)
+
+    def set_edge_slice_attrs(self, *args, **kwargs):
+        return AttributesClass.set_edge_slice_attrs(self._G, *args, **kwargs)
+
+    def set_edge_slice_attrs_bulk(self, *args, **kwargs):
+        return AttributesClass.set_edge_slice_attrs_bulk(self._G, *args, **kwargs)
+
+    def get_edge_slice_attr(self, *args, **kwargs):
+        return AttributesClass.get_edge_slice_attr(self._G, *args, **kwargs)
+
+    def set_slice_edge_weight(self, *args, **kwargs):
+        return AttributesClass.set_slice_edge_weight(self._G, *args, **kwargs)
+
+    def get_effective_edge_weight(self, *args, **kwargs):
+        return AttributesClass.get_effective_edge_weight(self._G, *args, **kwargs)
+
+    def audit_attributes(self, *args, **kwargs):
+        return AttributesClass.audit_attributes(self._G, *args, **kwargs)

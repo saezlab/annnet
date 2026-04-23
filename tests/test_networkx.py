@@ -73,7 +73,7 @@ class TestNetworkXAdapter(unittest.TestCase):
 
         # Ensure we can pull an edge id from Lw and read its effective weight
         eid = list(manifest['slices']['Lw'])[0]
-        w_eff = g2.get_effective_edge_weight(eid, slice='Lw')
+        w_eff = g2.attrs.get_effective_edge_weight(eid, slice='Lw')
         self.assertEqual(w_eff, 5.0)
 
     def test_slice_filters_single(self):

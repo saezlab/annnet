@@ -5,6 +5,8 @@ import math
 from typing import TYPE_CHECKING
 from pathlib import Path
 
+import narwhals as nw
+
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
@@ -30,7 +32,18 @@ from .._dataframe_backend import (
 
 def _build_dataframe_from_rows(rows):
     """Build a dataframe/table using AnnNet's configured backend selection."""
-    return dataframe_from_rows(rows)
+    if not rows:
+        return dataframe_from_rows(rows)
+    order = []
+    for row in rows:
+        for key in row.keys():
+            if key not in order:
+                order.append(key)
+    df = dataframe_from_rows(rows)
+    try:
+        return nw.from_native(df, eager_only=True).select(order).to_native()
+    except Exception:
+        return df
 
 
 def _strip_nulls(d: dict):
@@ -55,7 +68,7 @@ def _is_directed_eid(graph, eid):
 
     # Check attribute
     try:
-        val = graph.get_attr_edge(eid, 'directed')
+        val = graph.attrs.get_attr_edge(eid, 'directed')
         if val is not None:
             return bool(val)
     except Exception:  # noqa: BLE001
@@ -291,7 +304,7 @@ def to_parquet(graph: AnnNet, path):
     # slices
     L = []
     try:
-        for lid in graph.list_slices(include_default=True):
+        for lid in graph.slices.list_slices(include_default=True):
             L.append({'slice_id': lid})
     except Exception:  # noqa: BLE001
         pass
@@ -303,14 +316,14 @@ def to_parquet(graph: AnnNet, path):
     # edge_slices
     EL = []
     try:
-        for lid in graph.list_slices(include_default=True):
-            for eid in graph.get_slice_edges(lid):
+        for lid in graph.slices.list_slices(include_default=True):
+            for eid in graph.slices.get_slice_edges(lid):
                 rec = {'slice_id': lid, 'edge_id': eid}
                 try:
-                    w = graph.get_edge_slice_attr(lid, eid, 'weight', default=None)
+                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
                 except Exception:  # noqa: BLE001
                     try:
-                        w = graph.get_edge_slice_attr(lid, eid, 'weight')
+                        w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
                     except Exception:  # noqa: BLE001
                         w = None
                 if w is not None:
@@ -444,7 +457,7 @@ def from_parquet(path) -> AnnNet:
             attrs = {k: v for k, v in rec.items() if k not in drop_cols}
             attrs = _strip_nulls(attrs)
             if attrs:
-                H.set_edge_attrs(eid, **attrs)
+                H.attrs.set_edge_attrs(eid, **attrs)
 
     else:
         # Fallback path (still bulk, but from Python rows)
@@ -475,7 +488,7 @@ def from_parquet(path) -> AnnNet:
                 if rec is not None:
                     rec.weight = w
             if extra_attrs:
-                H.set_edge_attrs_bulk(extra_attrs)
+                H.attrs.set_edge_attrs_bulk(extra_attrs)
 
     # ---- Hyperedges ----
     if is_polars_like:
@@ -546,7 +559,7 @@ def from_parquet(path) -> AnnNet:
             if attrs:
                 extra[eid] = attrs
         if extra:
-            H.set_edge_attrs_bulk(extra)
+            H.attrs.set_edge_attrs_bulk(extra)
 
     else:
         hyper_rows = []
@@ -584,7 +597,7 @@ def from_parquet(path) -> AnnNet:
                 if rec is not None:
                     rec.weight = w
             if extra_attrs:
-                H.set_edge_attrs_bulk(extra_attrs)
+                H.attrs.set_edge_attrs_bulk(extra_attrs)
 
     # -------------------------
     # Slices
@@ -593,8 +606,8 @@ def from_parquet(path) -> AnnNet:
         for rec in _safe_df_to_rows(L):
             lid = rec.get('slice_id')
             try:
-                if lid not in set(H.list_slices(include_default=True)):
-                    H.add_slice(lid)
+                if lid not in set(H.slices.list_slices(include_default=True)):
+                    H.slices.add_slice(lid)
             except Exception:  # noqa: BLE001
                 pass
 
@@ -626,7 +639,7 @@ def from_parquet(path) -> AnnNet:
         for lid, mp in slice_weights.items():
             for eid, w in mp.items():
                 try:
-                    H.set_edge_slice_attrs(lid, eid, weight=w)
+                    H.attrs.set_edge_slice_attrs(lid, eid, weight=w)
                 except Exception:  # noqa: BLE001
                     try:
                         H.set_edge_slice_attr(lid, eid, 'weight', w)
@@ -656,7 +669,9 @@ def from_parquet(path) -> AnnNet:
 
             VM_data = mm.get('VM', [])
             if VM_data:
-                H._VM = _deserialize_VM(VM_data)
+                vm_set = _deserialize_VM(VM_data)
+                H._restore_supra_nodes(vm_set)
+                H._VM = vm_set
 
             ek = mm.get('edge_kind', {})
             el_ser = mm.get('edge_layers', {})

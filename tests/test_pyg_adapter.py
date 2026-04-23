@@ -36,6 +36,7 @@ except Exception:
     HAS_POLARS = False
 
 try:
+
     HAS_PANDAS = True
 except Exception:
     HAS_PANDAS = False
@@ -62,14 +63,14 @@ def _build_graph() -> AnnNet:
 
     # Binary edges: directed and undirected
     e1 = g.add_edge('p1', 'g1', weight=2.0, interaction=+1, tag='regulates')
-    g.add_edge('p2', 'g2', weight=1.0, directed=False, interaction=-1, tag='inhibits')
+    e2 = g.add_edge('p2', 'g2', weight=1.0, directed=False, interaction=-1, tag='inhibits')
     e3 = g.add_edge('d1', 'p1', weight=0.5, interaction=+1, tag='targets')
     e4 = g.add_edge('p3', 'g1', weight=1.5, interaction=+1, tag='activates')
 
     # Hyperedge
-    g.add_edge(src=['g1', 'g2'], tgt=['p1'], weight=3.0, interaction=+1, edge_id='he1')
+    e5 = g.add_edge(src=['g1', 'g2'], tgt=['p1'], weight=3.0, interaction=+1, edge_id='he1')
 
-    g.add_slice('active_only', region='high_expr')
+    g.slices.add_slice('active_only', region='high_expr')
     g.add_vertex_to_slice('active_only', 'p1')
     g.add_vertex_to_slice('active_only', 'p3')
     g.add_vertex_to_slice('active_only', 'g1')
@@ -77,10 +78,10 @@ def _build_graph() -> AnnNet:
     g.add_edge_to_slice('active_only', e4)
 
     # Per-slice weight override
-    g.set_edge_slice_attrs('active_only', e1, weight=5.0)
+    g.attrs.set_edge_slice_attrs('active_only', e1, weight=5.0)
 
     # Second slice with different membership
-    g.add_slice('druggable')
+    g.slices.add_slice('druggable')
     g.add_vertex_to_slice('druggable', 'd1')
     g.add_vertex_to_slice('druggable', 'p1')
     g.add_vertex_to_slice('druggable', 'p2')
@@ -88,7 +89,7 @@ def _build_graph() -> AnnNet:
 
     # Basic sanity
     assert g.ne >= 4
-    assert len(g.hyperedge_definitions) >= 1
+    assert len([eid for eid in g.hyperedge_definitions]) >= 1
 
     return g
 

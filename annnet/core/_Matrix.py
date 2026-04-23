@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from .._dataframe_backend import (
     empty_dataframe,
     dataframe_height,
@@ -5,6 +9,232 @@ from .._dataframe_backend import (
     dataframe_to_rows,
     dataframe_append_rows,
 )
+
+if TYPE_CHECKING:
+    pass
+
+
+class CacheManager:
+    """Materialized matrix cache manager.
+
+    The cache manager owns derived sparse representations such as CSR, CSC, and
+    adjacency. Cached values are invalidated against the graph version counter.
+    """
+
+    def __init__(self, graph):
+        self._G = graph
+        self._csr = None
+        self._csc = None
+        self._adjacency = None
+        self._csr_version = None
+        self._csc_version = None
+        self._adjacency_version = None
+
+    # ==================== CSR/CSC Properties ====================
+
+    @property
+    def csr(self):
+        """Return the CSR (Compressed Sparse Row) matrix.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+
+        Notes
+        -----
+        Built and cached on first access.
+        """
+        if self._csr is None or self._csr_version != self._G._version:
+            self._csr = self._G._matrix.tocsr()
+            self._csr_version = self._G._version
+        return self._csr
+
+    @property
+    def csc(self):
+        """Return the CSC (Compressed Sparse Column) matrix.
+
+        Returns
+        -------
+        scipy.sparse.csc_matrix
+
+        Notes
+        -----
+        Built and cached on first access.
+        """
+        if self._csc is None or self._csc_version != self._G._version:
+            self._csc = self._G._matrix.tocsc()
+            self._csc_version = self._G._version
+        return self._csc
+
+    @property
+    def adjacency(self):
+        """Return the adjacency matrix computed from incidence.
+
+        Returns
+        -------
+        scipy.sparse.spmatrix
+
+        Notes
+        -----
+        For incidence matrix `B`, adjacency is computed as `A = B @ B.T`.
+        """
+        if self._adjacency is None or self._adjacency_version != self._G._version:
+            csr = self.csr
+            # Adjacency from incidence: A = B @ B.T
+            self._adjacency = csr @ csr.T
+            self._adjacency_version = self._G._version
+        return self._adjacency
+
+    def has_csr(self) -> bool:
+        """Check whether a valid CSR cache exists.
+
+        Returns
+        -------
+        bool
+        """
+        return self._csr is not None and self._csr_version == self._G._version
+
+    def has_csc(self) -> bool:
+        """Check whether a valid CSC cache exists.
+
+        Returns
+        -------
+        bool
+        """
+        return self._csc is not None and self._csc_version == self._G._version
+
+    def has_adjacency(self) -> bool:
+        """Check whether a valid adjacency cache exists.
+
+        Returns
+        -------
+        bool
+        """
+        return self._adjacency is not None and self._adjacency_version == self._G._version
+
+    def get_csr(self):
+        """Return the cached CSR matrix.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+        """
+        return self.csr
+
+    def get_csc(self):
+        """Return the cached CSC matrix.
+
+        Returns
+        -------
+        scipy.sparse.csc_matrix
+        """
+        return self.csc
+
+    def get_adjacency(self):
+        """Return the cached adjacency matrix.
+
+        Returns
+        -------
+        scipy.sparse.spmatrix
+        """
+        return self.adjacency
+
+    # ==================== Cache Management ====================
+
+    def invalidate(self, formats=None):
+        """Invalidate cached formats.
+
+        Parameters
+        ----------
+        formats : list[str], optional
+            Formats to invalidate (`'csr'`, `'csc'`, `'adjacency'`).
+            If None, invalidate all.
+
+        Returns
+        -------
+        None
+        """
+        if formats is None:
+            formats = ['csr', 'csc', 'adjacency']
+
+        for fmt in formats:
+            if fmt == 'csr':
+                self._csr = None
+                self._csr_version = None
+            elif fmt == 'csc':
+                self._csc = None
+                self._csc_version = None
+            elif fmt == 'adjacency':
+                self._adjacency = None
+                self._adjacency_version = None
+
+    def build(self, formats=None):
+        """Pre-build specified formats (eager caching).
+
+        Parameters
+        ----------
+        formats : list[str], optional
+            Formats to build (`'csr'`, `'csc'`, `'adjacency'`).
+            If None, build all.
+
+        Returns
+        -------
+        None
+        """
+        if formats is None:
+            formats = ['csr', 'csc', 'adjacency']
+
+        for fmt in formats:
+            if fmt == 'csr':
+                _ = self.csr
+            elif fmt == 'csc':
+                _ = self.csc
+            elif fmt == 'adjacency':
+                _ = self.adjacency
+
+    def clear(self):
+        """Clear all caches.
+
+        Returns
+        -------
+        None
+        """
+        self.invalidate()
+
+    def info(self):
+        """Get cache status and memory usage.
+
+        Returns
+        -------
+        dict
+            Status and size information for each cached format.
+        """
+
+        def _format_info(matrix, version):
+            if matrix is None:
+                return {'cached': False}
+
+            size_bytes = 0
+            if hasattr(matrix, 'data'):
+                size_bytes += matrix.data.nbytes
+            if hasattr(matrix, 'indices'):
+                size_bytes += matrix.indices.nbytes
+            if hasattr(matrix, 'indptr'):
+                size_bytes += matrix.indptr.nbytes
+
+            return {
+                'cached': True,
+                'version': version,
+                'size_mb': size_bytes / (1024**2),
+                'nnz': matrix.nnz if hasattr(matrix, 'nnz') else 0,
+                'shape': matrix.shape,
+            }
+
+        return {
+            'csr': _format_info(self._csr, self._csr_version),
+            'csc': _format_info(self._csc, self._csc_version),
+            'adjacency': _format_info(self._adjacency, self._adjacency_version),
+        }
 
 
 def _entity_kind(rec):
@@ -356,13 +586,10 @@ class IndexMapping:
         """
         df = getattr(self, 'vertex_attributes', None)
 
-        needs_init = df is None or not hasattr(df, 'columns') or 'vertex_id' not in df.columns
+        needs_init = df is None or 'vertex_id' not in dataframe_columns(df)
 
         if needs_init:
-            self.vertex_attributes = empty_dataframe(
-                {'vertex_id': 'text'},
-                backend=getattr(self, '_annotations_backend', None),
-            )
+            self.vertex_attributes = empty_dataframe({'vertex_id': 'text'})
 
     def _ensure_vertex_row(self, vertex_id: str) -> None:
         """INTERNAL: Ensure a row for ``vertex_id`` exists in the vertex attribute DF."""
@@ -371,7 +598,7 @@ class IndexMapping:
 
             if isinstance(vertex_id, str):
                 vertex_id = _sys.intern(vertex_id)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
         df = self.vertex_attributes
@@ -383,14 +610,11 @@ class IndexMapping:
             if cached_ids is None or cached_df_id != id(df):
                 ids = set()
                 if df is not None and 'vertex_id' in dataframe_columns(df):
-                    ids = {
-                        row.get('vertex_id')
-                        for row in dataframe_to_rows(df)
-                        if row.get('vertex_id') is not None
-                    }
+                    ids = {row.get('vertex_id') for row in dataframe_to_rows(df)}
+                    ids.discard(None)
                 self._vertex_attr_ids = ids
                 self._vertex_attr_df_id = id(df)
-        except Exception:  # noqa: BLE001
+        except Exception:
             self._vertex_attr_ids = None
             self._vertex_attr_df_id = None
 
@@ -401,10 +625,10 @@ class IndexMapping:
         is_empty = dataframe_height(df) == 0
 
         if is_empty:
+            self.vertex_attributes = empty_dataframe({'vertex_id': 'text'})
             self.vertex_attributes = dataframe_append_rows(
-                df,
+                self.vertex_attributes,
                 [{'vertex_id': vertex_id}],
-                backend=getattr(self, '_annotations_backend', None),
             )
             try:
                 if isinstance(self._vertex_attr_ids, set):
@@ -412,18 +636,13 @@ class IndexMapping:
                 else:
                     self._vertex_attr_ids = {vertex_id}
                 self._vertex_attr_df_id = id(self.vertex_attributes)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
             return
 
         row = dict.fromkeys(dataframe_columns(df))
         row['vertex_id'] = vertex_id
-
-        self.vertex_attributes = dataframe_append_rows(
-            df,
-            [row],
-            backend=getattr(self, '_annotations_backend', None),
-        )
+        self.vertex_attributes = dataframe_append_rows(df, [row])
 
         try:
             if isinstance(self._vertex_attr_ids, set):
@@ -431,13 +650,13 @@ class IndexMapping:
             else:
                 self._vertex_attr_ids = {vertex_id}
             self._vertex_attr_df_id = id(self.vertex_attributes)
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
     def _vertex_key_enabled(self) -> bool:
         return bool(self._vertex_key_fields)
 
-    def _build_key_from_attrs(self, attrs: dict) -> 'tuple | None':
+    def _build_key_from_attrs(self, attrs: dict) -> tuple | None:
         if not self._vertex_key_fields:
             return None
         vals = []
@@ -447,8 +666,8 @@ class IndexMapping:
             vals.append(attrs[f])
         return tuple(vals)
 
-    def _current_key_of_vertex(self, vertex_id) -> 'tuple | None':
+    def _current_key_of_vertex(self, vertex_id) -> tuple | None:
         if not self._vertex_key_fields:
             return None
-        cur = {f: self.get_attr_vertex(vertex_id, f, None) for f in self._vertex_key_fields}
+        cur = {f: self.attrs.get_attr_vertex(vertex_id, f, None) for f in self._vertex_key_fields}
         return self._build_key_from_attrs(cur)

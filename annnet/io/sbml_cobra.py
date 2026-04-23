@@ -59,6 +59,15 @@ def _ensure_boundary_vertices(G, slice: str):
     G.add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
 
 
+def _set_edge_attrs(G, edge_id, **attrs):
+    if hasattr(G, 'attrs'):
+        return G.attrs.set_edge_attrs(edge_id, **attrs)
+    setter = getattr(G, 'set_edge_attrs', None)
+    if setter is None:
+        raise AttributeError('graph does not expose edge-attribute setters')
+    return setter(edge_id, **attrs)
+
+
 def _graph_from_stoich(
     S: np.ndarray,
     metabolite_ids: Sequence[str],
@@ -128,12 +137,12 @@ def _graph_from_stoich(
         if preserve_stoichiometry and hasattr(G, 'set_edge_coeffs'):
             G.set_edge_coeffs(eid_added, coeffs)  # you said you added this
         else:
-            G.set_edge_attrs(eid_added, stoich=coeffs)
+            _set_edge_attrs(G, eid_added, stoich=coeffs)
 
         # mark boundary reactions for easy filtering
         if boundary:
             kind, bnode = boundary
-            G.set_edge_attrs(eid_added, is_boundary=True, boundary_kind=kind, boundary_node=bnode)
+            _set_edge_attrs(G, eid_added, is_boundary=True, boundary_kind=kind, boundary_node=bnode)
 
     return G
 
@@ -177,7 +186,7 @@ def from_cobra_model(
         # drop Nones
         clean = {k: v for k, v in attrs.items() if v is not None}
         if clean:
-            G.set_edge_attrs(eid, **clean)
+            _set_edge_attrs(G, eid, **clean)
 
     return G
 

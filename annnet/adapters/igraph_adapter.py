@@ -93,16 +93,16 @@ def _collect_slices_and_weights(graph) -> tuple[dict, dict]:
                     slices_section.setdefault(lid, []).append(eid)
 
     # --- Collect per-slice weight overrides using canonical accessor
-    if hasattr(graph, 'get_edge_slice_attr'):
+    if hasattr(graph, 'attrs'):
         for lid, eids in list(slices_section.items()):
             for eid in eids:
                 w = None
                 try:
-                    w = graph.get_edge_slice_attr(lid, eid, 'weight', default=None)
+                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
                 except Exception:  # noqa: BLE001
                     try:
                         # some implementations don't support default=
-                        w = graph.get_edge_slice_attr(lid, eid, 'weight')
+                        w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
                     except Exception:  # noqa: BLE001
                         w = None
                 if w is not None:
@@ -449,17 +449,17 @@ def to_igraph(
     # discover slices
     lids = set()
     try:
-        lids.update(list(graph.list_slices(include_default=True)))
+        lids.update(list(graph.slices.list_slices(include_default=True)))
     except Exception:  # noqa: BLE001
         try:
-            lids.update(list(graph.list_slices()))
+            lids.update(list(graph.slices.list_slices()))
         except Exception:  # noqa: BLE001
             pass
 
     slices_section = {lid: [] for lid in lids}
     for lid in list(lids):
         try:
-            eids = list(graph.get_slice_edges(lid))
+            eids = list(graph.slices.get_slice_edges(lid))
         except Exception:  # noqa: BLE001
             eids = []
         if eids:
@@ -522,15 +522,15 @@ def to_igraph(
 
     # per-slice weights
     slice_weights = {}
-    if hasattr(graph, 'get_edge_slice_attr'):
+    if hasattr(graph, 'attrs'):
         for lid, eids in slices_section.items():
             for eid in eids:
                 w = None
                 try:
-                    w = graph.get_edge_slice_attr(lid, eid, 'weight', default=None)
+                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
                 except Exception:  # noqa: BLE001
                     try:
-                        w = graph.get_edge_slice_attr(lid, eid, 'weight')
+                        w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
                     except Exception:  # noqa: BLE001
                         w = None
                 if w is not None:
@@ -953,11 +953,11 @@ def from_igraph(
             pass
 
     # -------- slices + per-slice overrides --------
-    existing_slices = set(H.list_slices(include_default=True))
+    existing_slices = set(H.slices.list_slices(include_default=True))
     for lid, eids in (manifest.get('slices', {}) or {}).items():
         if lid not in existing_slices:
             try:
-                H.add_slice(lid)
+                H.slices.add_slice(lid)
                 existing_slices.add(lid)
             except Exception:  # noqa: BLE001
                 pass
@@ -967,13 +967,13 @@ def from_igraph(
     for lid, per_edge in (manifest.get('slice_weights', {}) or {}).items():
         if lid not in existing_slices:
             try:
-                H.add_slice(lid)
+                H.slices.add_slice(lid)
                 existing_slices.add(lid)
             except Exception:  # noqa: BLE001
                 pass
         for eid, w in (per_edge or {}).items():
             try:
-                H.set_edge_slice_attrs(lid, eid, weight=float(w))
+                H.attrs.set_edge_slice_attrs(lid, eid, weight=float(w))
             except Exception:  # noqa: BLE001
                 try:
                     H.set_edge_slice_attr(lid, eid, 'weight', float(w))
@@ -996,7 +996,9 @@ def from_igraph(
 
     VM_data = mm.get('VM', [])
     if VM_data:
-        H._VM = _deserialize_VM(VM_data)
+        vm_set = _deserialize_VM(VM_data)
+        H._restore_supra_nodes(vm_set)
+        H._VM = vm_set
 
     # edge_kind / edge_layers
     ek = mm.get('edge_kind', {})
@@ -1031,7 +1033,7 @@ def from_igraph(
         for vid, attrs in vertex_attrs_cache.items():
             if attrs:
                 try:
-                    H.set_vertex_attrs(vid, **attrs)
+                    H.attrs.set_vertex_attrs(vid, **attrs)
                 except Exception:  # noqa: BLE001
                     pass
 
@@ -1040,7 +1042,7 @@ def from_igraph(
         for eid, attrs in edge_attrs_cache.items():
             if attrs:
                 try:
-                    H.set_edge_attrs(eid, **attrs)
+                    H.attrs.set_edge_attrs(eid, **attrs)
                 except Exception:  # noqa: BLE001
                     pass
 
@@ -1068,7 +1070,7 @@ def from_igraph(
                 except Exception:  # noqa: BLE001
                     pass
                 try:
-                    H.set_edge_attrs(
+                    H.attrs.set_edge_attrs(
                         eid,
                         __source_attr={u: {'__value': c} for u, c in head_map.items()},
                         __target_attr={v: {'__value': c} for v, c in tail_map.items()},
@@ -1082,7 +1084,7 @@ def from_igraph(
                 except Exception:  # noqa: BLE001
                     pass
                 try:
-                    H.set_edge_attrs(
+                    H.attrs.set_edge_attrs(
                         eid,
                         __source_attr={u: {'__value': head_map.get(u, 1.0)} for u in members},
                         __target_attr={v: {'__value': tail_map.get(v, 1.0)} for v in members},
@@ -1093,7 +1095,7 @@ def from_igraph(
             # copy HE-node attrs minus markers
             if he_attrs:
                 try:
-                    H.set_edge_attrs(eid, **he_attrs)
+                    H.attrs.set_edge_attrs(eid, **he_attrs)
                 except Exception:  # noqa: BLE001
                     pass
 
@@ -1130,7 +1132,7 @@ def _from_ig_without_manifest(
         vattrs = {k: igG.vs[i][k] for k in igG.vs.attributes()}
         if vattrs:
             try:
-                H.set_vertex_attrs(vid, **vattrs)
+                H.attrs.set_vertex_attrs(vid, **vattrs)
             except Exception:  # noqa: BLE001
                 pass
 
@@ -1156,7 +1158,7 @@ def _from_ig_without_manifest(
                 except Exception:  # noqa: BLE001
                     pass
                 try:
-                    H.set_edge_attrs(
+                    H.attrs.set_edge_attrs(
                         eid,
                         __source_attr={u: {'__value': c} for u, c in head_map.items()},
                         __target_attr={v: {'__value': c} for v, c in tail_map.items()},
@@ -1170,7 +1172,7 @@ def _from_ig_without_manifest(
                 except Exception:  # noqa: BLE001
                     pass
                 try:
-                    H.set_edge_attrs(
+                    H.attrs.set_edge_attrs(
                         eid,
                         __source_attr={u: {'__value': head_map.get(u, 1.0)} for u in members},
                         __target_attr={v: {'__value': tail_map.get(v, 1.0)} for v in members},
@@ -1183,7 +1185,7 @@ def _from_ig_without_manifest(
             }
             if he_node_attrs:
                 try:
-                    H.set_edge_attrs(eid, **he_node_attrs)
+                    H.attrs.set_edge_attrs(eid, **he_node_attrs)
                 except Exception:  # noqa: BLE001
                     pass
 
@@ -1222,7 +1224,7 @@ def _from_ig_without_manifest(
 
         if d:
             try:
-                H.set_edge_attrs(eid, **d)
+                H.attrs.set_edge_attrs(eid, **d)
             except Exception:  # noqa: BLE001
                 pass
 

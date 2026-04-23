@@ -21,6 +21,7 @@ from ._optional_components import (
 DATAFRAME_BACKEND_PRIORITY = component_names(DATAFRAME_BACKENDS)
 _DEFAULT_DATAFRAME_BACKEND = 'auto'
 _TEXT = 'text'
+_INT = 'int'
 _FLOAT = 'float'
 _BOOL = 'bool'
 _LIST_TEXT = 'list_text'
@@ -250,14 +251,16 @@ def dataframe_append_rows(df, rows: list[dict[str, Any]], *, backend: str | None
         return clone_dataframe(df)
 
     resolved_backend = dataframe_backend(df, default=backend or 'auto')
-    add_ndf = _build_nw_from_rows(rows, schema=None, backend=resolved_backend)
-
-    if df is None:
-        return _from_nw(add_ndf)
-
-    base_ndf = _to_nw(df)
-    out = nw.concat([base_ndf, add_ndf], how='diagonal')
-    return _from_nw(out)
+    base_rows = dataframe_to_rows(df)
+    merged_schema = _merge_schema_specs(
+        _schema_spec_from_schema(_schema_from_df(df)),
+        _schema_spec_from_rows(base_rows + rows),
+    )
+    return _native_from_rows(
+        base_rows + rows,
+        schema=merged_schema,
+        backend=resolved_backend,
+    )
 
 
 def dataframe_upsert_rows(
@@ -280,15 +283,15 @@ def dataframe_upsert_rows(
         if tuple(row.get(key) for key in keys) not in incoming_keys
     ]
 
-    base = _native_from_rows(
-        kept,
-        schema=_schema_from_df(df),
-        backend=dataframe_backend(df, default=backend or 'auto'),
+    resolved_backend = dataframe_backend(df, default=backend or 'auto')
+    merged_schema = _merge_schema_specs(
+        _schema_spec_from_schema(_schema_from_df(df)),
+        _schema_spec_from_rows(kept + rows),
     )
-    return dataframe_append_rows(
-        base,
-        rows,
-        backend=backend or dataframe_backend(df, default='auto'),
+    return _native_from_rows(
+        kept + rows,
+        schema=merged_schema,
+        backend=resolved_backend,
     )
 
 
@@ -463,16 +466,20 @@ def _build_nw_from_rows(
     backend: str,
 ):
     rows = [dict(row) for row in (rows or []) if isinstance(row, dict)]
+    nw_schema = _normalize_schema(schema)
 
     if rows:
-        return nw.from_dicts(rows, backend=backend)
+        all_names = set()
+        for row in rows:
+            all_names.update(row.keys())
+        if nw_schema is not None:
+            all_names.update(nw_schema.names())
+        cols = {name: [row.get(name) for row in rows] for name in sorted(all_names)}
+        return _build_nw_from_columns(cols, schema=nw_schema, backend=backend)
 
-    nw_schema = _normalize_schema(schema)
     empty_cols = {name: [] for name in _schema_names(nw_schema)}
     if nw_schema is not None:
-        if backend == 'pandas':
-            return nw.from_dict(empty_cols, backend=backend)
-        return nw.from_dict(empty_cols, schema=nw_schema, backend=backend)
+        return _cast_nw_to_schema(nw.from_dict(empty_cols, backend=backend), nw_schema)
     return nw.from_dict({}, backend=backend)
 
 
@@ -483,17 +490,18 @@ def _build_nw_from_columns(
     backend: str,
 ):
     cols = {name: list(values) for name, values in (columns or {}).items()}
+    nw_schema = _normalize_schema(schema)
     if any(cols.values()):
+        if nw_schema is not None:
+            for name in nw_schema.names():
+                cols.setdefault(name, [None] * len(next(iter(cols.values()), [])))
+            return _cast_nw_to_schema(nw.from_dict(cols, backend=backend), nw_schema)
         return nw.from_dict(cols, backend=backend)
 
-    nw_schema = _normalize_schema(schema)
     if nw_schema is not None:
-        # Ensure empty schema columns are present.
         for name in nw_schema.names():
             cols.setdefault(name, [])
-        if backend == 'pandas' and not any(cols.values()):
-            return nw.from_dict(cols, backend=backend)
-        return nw.from_dict(cols, schema=nw_schema, backend=backend)
+        return _cast_nw_to_schema(nw.from_dict(cols, backend=backend), nw_schema)
 
     return nw.from_dict(cols, backend=backend)
 
@@ -529,6 +537,8 @@ def _narwhals_schema(schema: dict[str, str]) -> nw.Schema:
 
 
 def _narwhals_dtype(kind: str):
+    if kind == _INT:
+        return nw.Int64()
     if kind == _FLOAT:
         return nw.Float64()
     if kind == _BOOL:
@@ -536,3 +546,107 @@ def _narwhals_dtype(kind: str):
     if kind == _LIST_TEXT:
         return nw.List(nw.String())
     return nw.String()
+
+
+def _cast_nw_to_schema(df, schema: nw.Schema):
+    out = df
+    current = out.collect_schema()
+    for name in schema.names():
+        target = schema[name]
+        if name not in current:
+            try:
+                out = out.with_columns(nw.lit(None).cast(target).alias(name))
+            except Exception:
+                out = out.with_columns(nw.lit(None).alias(name))
+            continue
+
+        cur = current[name]
+        if cur == target:
+            continue
+        if cur == nw.Unknown() or target != nw.Unknown():
+            try:
+                out = out.with_columns(nw.col(name).cast(target))
+            except Exception:
+                pass
+        current = out.collect_schema()
+    return out
+
+
+def _schema_spec_from_schema(schema: nw.Schema | None) -> dict[str, str | None]:
+    if schema is None:
+        return {}
+    return {name: _kind_from_dtype(schema[name]) for name in schema.names()}
+
+
+def _schema_spec_from_rows(rows: list[dict[str, Any]]) -> dict[str, str | None]:
+    spec: dict[str, str | None] = {}
+    for row in rows:
+        for name, value in row.items():
+            spec[name] = _merge_kind(spec.get(name), _kind_for_value(value))
+    return spec
+
+
+def _kind_from_dtype(dtype) -> str | None:
+    if dtype == nw.Unknown():
+        return None
+    if dtype == nw.Boolean():
+        return _BOOL
+    if dtype in {
+        nw.Int8(),
+        nw.Int16(),
+        nw.Int32(),
+        nw.Int64(),
+        nw.UInt8(),
+        nw.UInt16(),
+        nw.UInt32(),
+        nw.UInt64(),
+    }:
+        return _INT
+    if dtype in {nw.Float32(), nw.Float64()}:
+        return _FLOAT
+    if dtype == nw.List(nw.String()):
+        return _LIST_TEXT
+    return _TEXT
+
+
+def _kind_for_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return _BOOL
+    if isinstance(value, int) and not isinstance(value, bool):
+        return _INT
+    if isinstance(value, float):
+        return _FLOAT
+    if isinstance(value, (list, tuple)):
+        return _LIST_TEXT
+    return _TEXT
+
+
+def _merge_kind(left: str | None, right: str | None) -> str | None:
+    if left is None:
+        return right
+    if right is None:
+        return left
+    if left == right:
+        return left
+    if _TEXT in {left, right}:
+        return _TEXT
+    if _LIST_TEXT in {left, right}:
+        return _TEXT
+    if _FLOAT in {left, right}:
+        return _FLOAT
+    if _INT in {left, right}:
+        return _INT
+    return _TEXT
+
+
+def _merge_schema_specs(
+    left: dict[str, str | None],
+    right: dict[str, str | None],
+) -> dict[str, str]:
+    merged: dict[str, str] = {}
+    for name in sorted(set(left) | set(right)):
+        kind = _merge_kind(left.get(name), right.get(name))
+        merged[name] = _TEXT if kind is None else kind
+    return merged

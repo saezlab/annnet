@@ -192,7 +192,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     # slices + per-slice weights
     slices = []
     try:
-        for lid in graph.list_slices(include_default=True):
+        for lid in graph.slices.list_slices(include_default=True):
             slices.append({'slice_id': lid})
     except Exception:  # noqa: BLE001
         pass
@@ -200,15 +200,15 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     edge_slices = []
     # Collect memberships + weights if available
     try:
-        for lid in graph.list_slices(include_default=True):
+        for lid in graph.slices.list_slices(include_default=True):
             try:
-                for eid in graph.get_slice_edges(lid):
+                for eid in graph.slices.get_slice_edges(lid):
                     rec = {'slice_id': lid, 'edge_id': eid}
                     try:
-                        w = graph.get_edge_slice_attr(lid, eid, 'weight', default=None)
+                        w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
                     except Exception:  # noqa: BLE001
                         try:
-                            w = graph.get_edge_slice_attr(lid, eid, 'weight')
+                            w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
                         except Exception:  # noqa: BLE001
                             w = None
                     if w is not None:
@@ -291,9 +291,9 @@ def from_json(path) -> AnnNet:
     aspects = mm.get('aspects', [])
     elem_layers = mm.get('elem_layers', {})
     if aspects:
-        H.set_aspects(aspects)
+        H.layers.set_aspects(aspects)
         if elem_layers:
-            H.set_elementary_layers(elem_layers)
+            H.layers.set_elementary_layers(elem_layers)
 
     # vertices
     # Multilayer graphs use _ensure_vertex_row (avoids layer contamination via bulk insert).
@@ -306,7 +306,7 @@ def from_json(path) -> AnnNet:
             H._ensure_vertex_table()
             H._ensure_vertex_row(vid)
             if vattrs:
-                H.set_vertex_attrs(vid, **vattrs)
+                H.attrs.set_vertex_attrs(vid, **vattrs)
     else:
         vertex_dicts = []
         for nd in doc.get('nodes', []):
@@ -343,7 +343,7 @@ def from_json(path) -> AnnNet:
             if rec is not None:
                 rec.weight = float(w)
             if attrs:
-                H.set_edge_attrs(eid, **attrs)
+                H.attrs.set_edge_attrs(eid, **attrs)
         else:
             entry = {'source': u, 'target': v, 'edge_id': eid, 'directed': directed, 'weight': w}
             if attrs:
@@ -377,17 +377,17 @@ def from_json(path) -> AnnNet:
     if hyper_dicts:
         H.add_hyperedges_bulk(hyper_dicts)
     if hyper_attrs_pending:
-        H.set_edge_attrs_bulk(hyper_attrs_pending)
+        H.attrs.set_edge_attrs_bulk(hyper_attrs_pending)
 
     # slices + edge_slices — bulk
-    known_slices = set(H.list_slices(include_default=True))
+    known_slices = set(H.slices.list_slices(include_default=True))
     for L in ext.get('slices', []):
         lid = L.get('slice_id')
         if lid is None:
             continue
         if lid not in known_slices:
             try:
-                H.add_slice(lid)
+                H.slices.add_slice(lid)
                 known_slices.add(lid)
             except Exception:  # noqa: BLE001
                 pass
@@ -409,7 +409,7 @@ def from_json(path) -> AnnNet:
             pass
     for (lid, eid), w in slice_weights.items():
         try:
-            H.set_edge_slice_attrs(lid, eid, weight=w)
+            H.attrs.set_edge_slice_attrs(lid, eid, weight=w)
         except Exception:  # noqa: BLE001
             pass
 
@@ -422,7 +422,9 @@ def from_json(path) -> AnnNet:
 
     VM_data = mm.get('VM', [])
     if VM_data:
-        H._VM = _deserialize_VM(VM_data)
+        vm_set = _deserialize_VM(VM_data)
+        H._restore_supra_nodes(vm_set)
+        H._VM = vm_set
 
     # edge_kind / edge_layers
     ek = mm.get('edge_kind', {})
@@ -517,21 +519,21 @@ def write_ndjson(graph: AnnNet, dir_path):
     # slices
     with open(f'{dir_path}/slices.ndjson', 'w', encoding='utf-8') as fl:
         try:
-            for lid in graph.list_slices(include_default=True):
+            for lid in graph.slices.list_slices(include_default=True):
                 fl.write(json.dumps({'slice_id': lid}, ensure_ascii=False) + '\n')
         except Exception:  # noqa: BLE001
             pass
 
     with open(f'{dir_path}/edge_slices.ndjson', 'w', encoding='utf-8') as fel:
         try:
-            for lid in graph.list_slices(include_default=True):
-                for eid in graph.get_slice_edges(lid):
+            for lid in graph.slices.list_slices(include_default=True):
+                for eid in graph.slices.get_slice_edges(lid):
                     rec = {'slice_id': lid, 'edge_id': eid}
                     try:
-                        w = graph.get_edge_slice_attr(lid, eid, 'weight', default=None)
+                        w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
                     except Exception:  # noqa: BLE001
                         try:
-                            w = graph.get_edge_slice_attr(lid, eid, 'weight')
+                            w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
                         except Exception:  # noqa: BLE001
                             w = None
                     if w is not None:

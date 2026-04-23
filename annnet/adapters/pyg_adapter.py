@@ -187,8 +187,8 @@ def to_pyg(
 
         w = float(1.0 if rec.weight is None else rec.weight)
 
-        src_map = graph.get_attr_edge(eid, '__source_attr') or {}
-        tgt_map = graph.get_attr_edge(eid, '__target_attr') or {}
+        src_map = graph.attrs.get_attr_edge(eid, '__source_attr') or {}
+        tgt_map = graph.attrs.get_attr_edge(eid, '__target_attr') or {}
 
         w *= src_map.get(rec.src, {}).get('__value', 1.0)
         w *= tgt_map.get(rec.tgt, {}).get('__value', 1.0)

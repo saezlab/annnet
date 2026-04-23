@@ -38,14 +38,9 @@ The `annnet.core` package is where the in-memory model lives.
 - `graph.py`
   The `AnnNet` class itself. This is where the canonical stores are created
   and where scalar graph mutation is defined.
-- `_helpers.py`
-  Shared low-level structures such as `EntityRecord` and `EdgeRecord`, plus
-  compatibility mappings that expose the old dict-style public API without
-  changing the canonical storage model.
-- `_BulkOps.py`
-  Batched structural mutation. These methods do not introduce a second graph
-  model; they are high-throughput paths for the same semantics as the scalar
-  API.
+- `_records.py`
+  Shared low-level structures such as `EntityRecord`, `EdgeRecord`, and
+  `SliceRecord`, plus record-oriented helpers used across the core.
 - `_Annotation.py`
   Attribute storage and upsert logic for graph-, vertex-, edge-, slice-, and
   edge-slice-level metadata.
@@ -57,10 +52,11 @@ The `annnet.core` package is where the in-memory model lives.
 - `_Views.py`
   Lazy filtered views that read from the same graph instead of materializing
   copies.
-- `_Index.py`
-  Translation between external graph identifiers and incidence coordinates.
-- `_Cache.py`
-  Derived matrix representations and materialized subgraph/copy operations.
+- `_Matrix.py`
+  Translation between external graph identifiers and incidence coordinates,
+  plus matrix/cache helpers such as CSR/CSC and adjacency materialization.
+- `_Ops.py`
+  Materialized copy/subgraph operations and topology-oriented graph transforms.
 - `_History.py`
   Mutation logging, exported history, snapshots, and diffs.
 
@@ -112,16 +108,17 @@ The current manager-first public API mirrors the internal split:
 - `G.slices` for slice state
 - `G.idx` for incidence-coordinate translation
 - `G.cache` for derived matrix materializations
+- `G.ops` for materialized graph operations
 
 This is not just naming preference. It is an architectural statement about
 which concerns are canonical, which are overlays, and which are derived.
 
 ## Compatibility is now a boundary, not an implementation model
 
-The codebase still exposes dict-like properties such as `entity_to_idx`,
-`edge_definitions`, `edge_weights`, and similar legacy names. Those should be
-understood as a public compatibility boundary, not as the internal storage
-model.
+The codebase still exposes compatibility-oriented properties such as
+`entity_to_idx`, `edge_definitions`, `edge_weights`, and similar legacy names.
+Those should be understood as a public compatibility boundary, not as the
+internal storage model.
 
 Internally, the package is organized around the structured SSOT described in
 [Internal representation](internal-representation.md).

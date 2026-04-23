@@ -53,7 +53,7 @@ class TestIgraphAdapter(unittest.TestCase):
         for eid in g.edge_weights:
             self.assertIn(eid, g2.edge_weights)
         self.assertAlmostEqual(
-            g2.get_effective_edge_weight(list(manifest['slices']['Lw'])[0], slice='Lw'),
+            g2.attrs.get_effective_edge_weight(list(manifest['slices']['Lw'])[0], slice='Lw'),
             5.0,
             places=7,
         )

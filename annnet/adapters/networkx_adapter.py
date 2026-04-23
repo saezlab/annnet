@@ -243,7 +243,7 @@ def to_nx(
         selected_eids = set()
         for lid in requested_lids:
             try:
-                for eid in graph.get_slice_edges(lid):
+                for eid in graph.slices.get_slice_edges(lid):
                     selected_eids.add(eid)
             except Exception:  # noqa: BLE001
                 pass
@@ -332,10 +332,10 @@ def to_nx(
     # Slice discovery
     lids = set()
     try:
-        lids.update(list(graph.list_slices(include_default=True)))
+        lids.update(list(graph.slices.list_slices(include_default=True)))
     except Exception:  # noqa: BLE001
         try:
-            lids.update(list(graph.list_slices()))
+            lids.update(list(graph.slices.list_slices()))
         except Exception:  # noqa: BLE001
             pass
 
@@ -362,7 +362,7 @@ def to_nx(
     # Build slices membership
     for lid in list(lids):
         try:
-            eids = list(graph.get_slice_edges(lid))
+            eids = list(graph.slices.get_slice_edges(lid))
         except Exception:  # noqa: BLE001
             eids = []
         if eids:
@@ -613,7 +613,7 @@ def from_nx(
 
     known_vertices = set()
     existing_eids = set()
-    existing_slices = set(H.list_slices(include_default=True))
+    existing_slices = set(H.slices.list_slices(include_default=True))
 
     edge_directed_cache = manifest.get('edge_directed', {}) or {}
     weights_cache = manifest.get('weights', {}) or {}
@@ -725,7 +725,7 @@ def from_nx(
         for lid, eids in slices_cache.items():
             if lid not in existing_slices:
                 try:
-                    H.add_slice(lid)
+                    H.slices.add_slice(lid)
                     existing_slices.add(lid)
                 except Exception:  # noqa: BLE001
                     pass
@@ -735,13 +735,13 @@ def from_nx(
         for lid, per_edge in slice_weights_cache.items():
             if lid not in existing_slices:
                 try:
-                    H.add_slice(lid)
+                    H.slices.add_slice(lid)
                     existing_slices.add(lid)
                 except Exception:  # noqa: BLE001
                     pass
             for eid, w in per_edge.items():
                 try:
-                    H.set_edge_slice_attrs(lid, eid, weight=float(w))
+                    H.attrs.set_edge_slice_attrs(lid, eid, weight=float(w))
                 except Exception:  # noqa: BLE001
                     pass
 
@@ -760,7 +760,9 @@ def from_nx(
 
         VM_data = mm.get('VM', [])
         if VM_data:
-            H._VM = _deserialize_VM(VM_data)
+            vm_set = _deserialize_VM(VM_data)
+            H._restore_supra_nodes(vm_set)
+            H._VM = vm_set
 
         ek = mm.get('edge_kind', {})
         el_ser = mm.get('edge_layers', {})
@@ -794,7 +796,7 @@ def from_nx(
             for vid, attrs in vertex_attrs_cache.items():
                 if attrs:
                     try:
-                        H.set_vertex_attrs(vid, **attrs)
+                        H.attrs.set_vertex_attrs(vid, **attrs)
                     except Exception:  # noqa: BLE001
                         pass
 
@@ -802,7 +804,7 @@ def from_nx(
             for eid, attrs in edge_attrs_cache.items():
                 if attrs:
                     try:
-                        H.set_edge_attrs(eid, **attrs)
+                        H.attrs.set_edge_attrs(eid, **attrs)
                     except Exception:  # noqa: BLE001
                         pass
 
@@ -973,7 +975,7 @@ def _from_nx_without_manifest(
             pass
         if d:
             try:
-                H.set_vertex_attrs(v, **dict(d))
+                H.attrs.set_vertex_attrs(v, **dict(d))
             except Exception:  # noqa: BLE001
                 pass
 
@@ -999,7 +1001,7 @@ def _from_nx_without_manifest(
                     H.add_edge(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
                 except Exception:  # noqa: BLE001
                     pass
-                H.set_edge_attrs(
+                H.attrs.set_edge_attrs(
                     eid,
                     __source_attr={u: {'__value': c} for u, c in head_map.items()},
                     __target_attr={v: {'__value': c} for v, c in tail_map.items()},
@@ -1010,7 +1012,7 @@ def _from_nx_without_manifest(
                     H.add_edge(src=members, edge_id=eid, directed=False)
                 except Exception:  # noqa: BLE001
                     pass
-                H.set_edge_attrs(
+                H.attrs.set_edge_attrs(
                     eid,
                     __source_attr={u: {'__value': head_map.get(u, 1.0)} for u in members},
                     __target_attr={v: {'__value': tail_map.get(v, 1.0)} for v in members},
@@ -1021,7 +1023,7 @@ def _from_nx_without_manifest(
             }
             if clean_attrs:
                 try:
-                    H.set_edge_attrs(eid, **clean_attrs)
+                    H.attrs.set_edge_attrs(eid, **clean_attrs)
                 except Exception:  # noqa: BLE001
                     pass
 
@@ -1069,7 +1071,7 @@ def _from_nx_without_manifest(
 
         if isinstance(d, dict) and d:
             try:
-                H.set_edge_attrs(eid, **dict(d))
+                H.attrs.set_edge_attrs(eid, **dict(d))
             except Exception:  # noqa: BLE001
                 pass
 
@@ -1090,7 +1092,7 @@ def _from_nx_without_manifest(
                 for k in ('eid', 'id', 'key', 'weight', '__weight', 'directed'):
                     clean.pop(k, None)
                 if clean:
-                    H.set_edge_attrs(eid, **clean)
+                    H.attrs.set_edge_attrs(eid, **clean)
         except Exception:  # noqa: BLE001
             pass
     return H

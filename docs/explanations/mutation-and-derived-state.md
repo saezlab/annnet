@@ -38,7 +38,7 @@ That is the key sequencing principle: matrix and records move together.
 
 ## Bulk mutation does not define a second model
 
-`_BulkOps.py` is easy to misread if you assume it is an alternate storage path.
+Bulk mutation is easy to misread if you assume it is an alternate storage path.
 It is not.
 
 The bulk methods:

@@ -7,13 +7,13 @@ documented `annnet`, `annnet.io`, `annnet.adapters`, `annnet.algorithms`, and
 Internal APIs are not guaranteed to be stable. This includes modules, classes,
 functions, attributes, and arguments whose names begin with an underscore, and
 anything imported from an underscore module such as `annnet.core._helpers` or
-`annnet.core._Layers`. Their locations, signatures, behavior, and existence may
+`annnet.core._records`. Their locations, signatures, behavior, and existence may
 change without a deprecation period.
 
 In other words, we do not officially support (or encourage users to do) something like
 
 ```python
-from annnet.core._helpers import EdgeRecord
+from annnet.core._records import EdgeRecord
 ```
 
 Use the documented public modules and object methods instead.

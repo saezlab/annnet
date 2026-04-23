@@ -95,7 +95,7 @@ class TestExcelIO(unittest.TestCase):
 
         try:
             G = from_excel(path, schema='edge_list')
-            ev = G.edges_view()
+            ev = G.views.edges()
             self.assertEqual(ev.shape[0], 2)
             cols = _colmap(ev)
             src = cols.get('source') or cols.get('src') or cols.get('u') or cols.get('from')
@@ -129,7 +129,7 @@ class TestExcelIO(unittest.TestCase):
 
         try:
             G = from_excel(path, schema='hyperedge')
-            ev = G.edges_view()
+            ev = G.views.edges()
             self.assertGreaterEqual(ev.shape[0], 1)
             cols = _colmap(ev)
             kind = cols.get('kind')
@@ -163,8 +163,9 @@ class TestExcelIO(unittest.TestCase):
         path = self._write_excel_temp({'Sheet1': df})
         try:
             G = from_excel(path, schema='auto')
-            ev = G.edges_view()
+            ev = G.views.edges()
             self.assertEqual(ev.shape[0], 1)
+            cols = _colmap(ev)
             self.assertIn('source', {c.lower() for c in ev.columns})
             self.assertIn('target', {c.lower() for c in ev.columns})
         finally:
@@ -177,7 +178,7 @@ class TestExcelIO(unittest.TestCase):
         path = self._write_excel_temp({'First': df1, 'Second': df2})
         try:
             G = from_excel(path, schema='edge_list', sheet='Second')
-            ev = G.edges_view()
+            ev = G.views.edges()
             self.assertEqual(ev.shape[0], 1)
             cols = _colmap(ev)
             src = cols.get('source') or 'source'

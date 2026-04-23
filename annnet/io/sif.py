@@ -276,10 +276,10 @@ def to_sif(
             }
 
         try:
-            slice_ids = list(graph.list_slices(include_default=True))
+            slice_ids = list(graph.slices.list_slices(include_default=True))
             for lid in slice_ids:
                 try:
-                    edge_ids = list(graph.get_slice_edges(lid))
+                    edge_ids = list(graph.slices.get_slice_edges(lid))
                     if not edge_ids:
                         continue
 
@@ -287,7 +287,7 @@ def to_sif(
 
                     for eid in edge_ids:
                         try:
-                            w = graph.get_edge_slice_attr(lid, eid, 'weight', default=None)
+                            w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
                             if w is not None:
                                 slice_info['weights'][eid] = float(w)
                         except Exception:  # noqa: BLE001
@@ -584,12 +584,12 @@ def from_sif(
     # ===== SLICES WITH NO EXCEPTIONS + CACHED SET =====
     if manifest and 'slices' in manifest:
         # Build set once
-        existing_slices = set(H.list_slices(include_default=True))
+        existing_slices = set(H.slices.list_slices(include_default=True))
 
         for lid, slice_info in manifest['slices'].items():
             # Guard instead of exception
             if lid not in existing_slices:
-                H.add_slice(lid)
+                H.slices.add_slice(lid)
                 existing_slices.add(lid)  # Keep cached set in sync
 
             edge_ids = slice_info.get('edges', [])
@@ -598,7 +598,7 @@ def from_sif(
 
             weights = slice_info.get('weights', {})
             if weights:
-                H.set_edge_slice_attrs_bulk(
+                H.attrs.set_edge_slice_attrs_bulk(
                     lid, [{'edge_id': eid, 'weight': w} for eid, w in weights.items()]
                 )
 
@@ -617,7 +617,9 @@ def from_sif(
                 H._aspect_attrs.update(aspect_attrs)
             VM_data = mm.get('VM', [])
             if VM_data:
-                H._VM = _deserialize_VM(VM_data)
+                vm_set = _deserialize_VM(VM_data)
+                H._restore_supra_nodes(vm_set)
+                H._VM = vm_set
             ek = mm.get('edge_kind', {})
             el_ser = mm.get('edge_layers', {})
             if ek:

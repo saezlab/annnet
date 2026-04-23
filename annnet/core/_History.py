@@ -1,3 +1,4 @@
+import json
 import time
 import inspect
 from datetime import UTC, datetime
@@ -102,6 +103,10 @@ class GraphDiff:
 
 class History:
     # History and Timeline
+    def _bump_version(self) -> int:
+        """Advance the graph mutation counter independently of history logging."""
+        self._version += 1
+        return self._version
 
     def _utcnow_iso(self) -> str:
         return datetime.now(UTC).isoformat(timespec='microseconds').replace('+00:00', 'Z')
@@ -125,11 +130,11 @@ class History:
         return f'<<{t}>>'
 
     def _log_event(self, op: str, **fields):
+        version = self._bump_version()
         if not self._history_enabled:
             return
-        self._version += 1
         evt = {
-            'version': self._version,
+            'version': version,
             'ts_utc': self._utcnow_iso(),  # ISO-8601 with Z
             'mono_ns': time.perf_counter_ns() - self._history_clock0,
             'op': op,
@@ -149,6 +154,9 @@ class History:
                 bound = sig.bind(*args, **kwargs)
                 bound.apply_defaults()
                 result = fn(*args, **kwargs)
+                if not self._history_enabled:
+                    self._bump_version()
+                    return result
                 payload = {}
                 # record all call args except 'self'
                 for k, v in bound.arguments.items():
@@ -165,6 +173,8 @@ class History:
     def _install_history_hooks(self):
         # Mutating methods to wrap. Add here if you add new mutators.
         to_wrap = [
+            'add_vertices',
+            'add_edges',
             'add_vertex',
             'add_edge',
             'add_hyperedge',
@@ -239,24 +249,19 @@ class History:
         if p.endswith('.ndjson') or p.endswith('.jsonl'):
             with open(path, 'w', encoding='utf-8') as f:
                 for r in dataframe_to_rows(df):
-                    import json
-
                     f.write(json.dumps(r, ensure_ascii=False) + '\n')
             return len(self._history)
         if p.endswith('.json'):
-            import json
-
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(dataframe_to_rows(df), f, ensure_ascii=False)
             return len(self._history)
         if p.endswith('.csv'):
+            rows = dataframe_to_rows(df)
             flat_rows = []
-            for row in dataframe_to_rows(df):
+            for row in rows:
                 flat_row = {}
                 for key, value in row.items():
                     if isinstance(value, (dict, list, tuple, set, frozenset)):
-                        import json
-
                         flat_row[key] = json.dumps(self._jsonify(value), ensure_ascii=False)
                     else:
                         flat_row[key] = value
@@ -313,3 +318,41 @@ class History:
         marker to be recorded.
         """
         self._log_event('mark', label=label)
+
+
+class HistoryAccessor:
+    """Namespace for mutation logs and snapshots.
+
+    Stored on each graph instance as ``G.history``. The accessor is callable so
+    existing ``G.history()`` call sites remain valid while enabling
+    ``G.history.export(...)`` and related namespace usage.
+    """
+
+    __slots__ = ('_G',)
+
+    def __init__(self, graph):
+        self._G = graph
+
+    def __call__(self, *args, **kwargs):
+        return History.history(self._G, *args, **kwargs)
+
+    def enable(self, flag: bool = True):
+        return History.enable_history(self._G, flag)
+
+    def clear(self):
+        return History.clear_history(self._G)
+
+    def export(self, path: str):
+        return History.export_history(self._G, path)
+
+    def mark(self, label: str):
+        return History.mark(self._G, label)
+
+    def snapshot(self, label=None):
+        return type(self._G).snapshot(self._G, label=label)
+
+    def diff(self, a, b=None):
+        return type(self._G).diff(self._G, a, b=b)
+
+    def list_snapshots(self):
+        return type(self._G).list_snapshots(self._G)

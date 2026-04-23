@@ -424,7 +424,9 @@ def from_graphtool(
 
     VM_data = mm.get('VM', [])
     if VM_data:
-        G._VM = _deserialize_VM(VM_data)
+        vm_set = _deserialize_VM(VM_data)
+        G._restore_supra_nodes(vm_set)
+        G._VM = vm_set
 
     # edge_kind / edge_layers again (if present under multilayer)
     ek2 = mm.get('edge_kind', {})

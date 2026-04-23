@@ -245,7 +245,7 @@ def to_dataframes(
     if include_slices:
         slices_data = []
         try:
-            for lid in graph.list_slices(include_default=True):
+            for lid in graph.slices.list_slices(include_default=True):
                 slice_meta = graph._slices.get(lid, {})
                 for eid in slice_meta.get('edges', []):
                     slices_data.append({'slice_id': lid, 'edge_id': eid})
@@ -455,7 +455,7 @@ def from_dataframes(
                         )
 
                     if row:
-                        G.set_edge_attrs(eid, **row)
+                        G.attrs.set_edge_attrs(eid, **row)
 
     # 4. Add slice memberships
     if slices is not None:
@@ -469,10 +469,10 @@ def from_dataframes(
                 eid = row['edge_id']
 
                 try:
-                    if lid not in set(G.list_slices(include_default=True)):
-                        G.add_slice(lid)
+                    if lid not in set(G.slices.list_slices(include_default=True)):
+                        G.slices.add_slice(lid)
                 except Exception:  # noqa: BLE001
-                    G.add_slice(lid)
+                    G.slices.add_slice(lid)
 
                 try:
                     G.add_edge_to_slice(lid, eid)
@@ -491,7 +491,7 @@ def from_dataframes(
                     weight = row['weight']
 
                     try:
-                        G.set_edge_slice_attrs(lid, eid, weight=weight)
+                        G.attrs.set_edge_slice_attrs(lid, eid, weight=weight)
                     except Exception:  # noqa: BLE001
                         pass
 

@@ -42,7 +42,7 @@ class TestSIFAdapter:
 
     def test_custom_relation_attr(self, simple_graph, tmpdir_fixture):
         G = simple_graph
-        G.set_edge_attrs('e1', interaction_type='phosphorylation')
+        G.attrs.set_edge_attrs('e1', interaction_type='phosphorylation')
         to_sif(
             G,
             tmpdir_fixture / 'net.sif',

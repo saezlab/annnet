@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
-from ..core._helpers import EntityRecord
+from ..core._records import EntityRecord
 from ..adapters._utils import (
     _df_to_rows,
     _serialize_VM,

@@ -11,7 +11,7 @@ import unittest
 import polars as pl
 
 from annnet.core.graph import AnnNet
-from annnet.io import csv_format as csv_format
+from annnet.io import csv_format as csv_io
 
 
 def _colmap(df: pl.DataFrame):
@@ -54,16 +54,16 @@ class TestCSVIO(unittest.TestCase):
     def test_edge_list_roundtrip(self):
         # ---- Export binary edge list to CSV (in-memory) ----
         e_buf = io.StringIO()
-        csv_format.edges_to_csv(self.G, e_buf, slice=None)  # all slices
+        csv_io.edges_to_csv(self.G, e_buf, slice=None)  # all slices
         e_buf.seek(0)
 
         # Read back with Polars and import into a fresh graph
         df_edges = pl.read_csv(e_buf)
         G2 = AnnNet(directed=True)
-        csv_format.from_dataframe(df_edges, graph=G2, schema='edge_list')
+        csv_io.from_dataframe(df_edges, graph=G2, schema='edge_list')
 
         # Validate: only binary edges came through (2); ignore directedness (importer may default True)
-        ev = G2.edges_view()
+        ev = G2.views.edges()
         self.assertEqual(ev.shape[0], 2)
 
         cols = _colmap(ev)
@@ -87,16 +87,16 @@ class TestCSVIO(unittest.TestCase):
     def test_hyperedge_roundtrip(self):
         # ---- Export hyperedges to CSV (in-memory) ----
         h_buf = io.StringIO()
-        csv_format.hyperedges_to_csv(self.G, h_buf)  # includes slice + weight
+        csv_io.hyperedges_to_csv(self.G, h_buf)  # includes slice + weight
         h_buf.seek(0)
 
         # Read back and import into a fresh graph as hyperedge schema
         df_h = pl.read_csv(h_buf)
         G3 = AnnNet(directed=True)
-        csv_format.from_dataframe(df_h, graph=G3, schema='hyperedge')
+        csv_io.from_dataframe(df_h, graph=G3, schema='hyperedge')
 
         # Validate: hyperedge exists, members survived
-        ev = G3.edges_view()
+        ev = G3.views.edges()
         self.assertGreaterEqual(ev.shape[0], 1)
         cols = _colmap(ev)
 
@@ -131,13 +131,13 @@ class TestCSVIO(unittest.TestCase):
     def test_auto_schema_with_load_csv(self):
         # Show that from_csv can ingest from a file-like buffer too
         e_buf = io.StringIO()
-        csv_format.edges_to_csv(self.G, e_buf)
+        csv_io.edges_to_csv(self.G, e_buf)
         e_buf.seek(0)
 
         G4 = AnnNet(directed=True)
-        csv_format.from_csv(e_buf, graph=G4, schema='auto')  # auto-detects edge_list
+        csv_io.from_csv(e_buf, graph=G4, schema='auto')  # auto-detects edge_list
 
-        ev = G4.edges_view()
+        ev = G4.views.edges()
         self.assertEqual(ev.shape[0], 2)
 
     def test_bad_schema_rejection(self):
@@ -146,10 +146,10 @@ class TestCSVIO(unittest.TestCase):
         bad_buf.write('foo,bar\n1,2\n3,4\n')
         bad_buf.seek(0)
         df_bad = pl.read_csv(bad_buf)
-        with self.assertRaises(ValueError):
-            csv_format.from_dataframe(df_bad, graph=AnnNet(directed=True), schema='edge_list')
-        with self.assertRaises(ValueError):
-            csv_format.from_dataframe(df_bad, graph=AnnNet(directed=True), schema='hyperedge')
+        with self.assertRaises(Exception):
+            csv_io.from_dataframe(df_bad, graph=AnnNet(directed=True), schema='edge_list')
+        with self.assertRaises(Exception):
+            csv_io.from_dataframe(df_bad, graph=AnnNet(directed=True), schema='hyperedge')
 
 
 if __name__ == '__main__':

@@ -34,6 +34,15 @@ def _ensure_boundary_vertices(G, slice: str) -> None:
     G.add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
 
 
+def _set_edge_attrs(G, edge_id, **attrs):
+    if hasattr(G, 'attrs'):
+        return G.attrs.set_edge_attrs(edge_id, **attrs)
+    setter = getattr(G, 'set_edge_attrs', None)
+    if setter is None:
+        raise AttributeError('graph does not expose edge-attribute setters')
+    return setter(edge_id, **attrs)
+
+
 # ── SBML reader ───────────────────────────────────────────────────────────────
 
 
@@ -74,8 +83,12 @@ def _register_compartments(G, model, default_slice: str) -> None:
     get_compartments = getattr(model, 'getListOfCompartments', None)
     if get_compartments is None:
         return
-    has_slice = getattr(G, 'has_slice', None)
-    add_slice = getattr(G, 'add_slice', None)
+    has_slice = getattr(getattr(G, 'slices', None), 'has_slice', None) or getattr(
+        G, 'has_slice', None
+    )
+    add_slice = getattr(getattr(G, 'slices', None), 'add_slice', None) or getattr(
+        G, 'add_slice', None
+    )
     if add_slice is None:
         return
 
@@ -332,7 +345,7 @@ def _graph_from_sbml_model(
         if preserve_stoichiometry:
             G.set_edge_coeffs(rid, coeffs)
         else:
-            G.set_edge_attrs(rid, stoich=coeffs)
+            _set_edge_attrs(G, rid, stoich=coeffs)
 
     # ── edge attributes ───────────────────────────────────────────────────────
     if edge_attrs_map:
@@ -341,7 +354,7 @@ def _graph_from_sbml_model(
             set_edge_attrs_bulk(edge_attrs_map)
         else:
             for rid, attrs in edge_attrs_map.items():
-                G.set_edge_attrs(rid, **attrs)
+                _set_edge_attrs(G, rid, **attrs)
 
     # ── assign reactions to their compartment slices ──────────────────────────
     add_edges_to_slice_bulk = getattr(G, 'add_edges_to_slice_bulk', None)
