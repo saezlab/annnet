@@ -8,16 +8,16 @@ def run(scale):
 
     slice_ids = [f"s{i}" for i in range(scale.slices)]
     for sid in slice_ids:
-        G.add_slice(sid)
+        G.slices.add_slice(sid)
 
     with measure() as m_vertex_presence:
         for sid in slice_ids:
-            G.add_vertices_bulk(
+            G.add_vertices(
                 ({"vertex_id": f"{sid}_v{i}"} for i in range(scale.vertices // scale.slices)),
                 slice=sid,
             )
 
-    vertex_counts = {sid: len(list(G.get_slice_vertices(sid))) for sid in slice_ids}
+    vertex_counts = {sid: len(list(G.slices.get_slice_vertices(sid))) for sid in slice_ids}
 
     results["vertex_presence"] = {
         "metrics": m_vertex_presence,
@@ -26,11 +26,11 @@ def run(scale):
 
     with measure() as m_edge_presence:
         for sid in slice_ids:
-            verts = list(G.get_slice_vertices(sid))
+            verts = list(G.slices.get_slice_vertices(sid))
             if not verts:
                 continue
-            G.set_active_slice(sid)
-            G.add_edges_bulk(
+            G.slices.set_active_slice(sid)
+            G.add_edges(
                 {
                     "source": verts[i % len(verts)],
                     "target": verts[(i + 1) % len(verts)],
@@ -39,7 +39,7 @@ def run(scale):
                 for i in range(scale.edges // scale.slices)
             )
 
-    edge_counts = {sid: len(G.get_slice_edges(sid)) for sid in slice_ids}
+    edge_counts = {sid: len(G.slices.get_slice_edges(sid)) for sid in slice_ids}
 
     results["edge_presence"] = {
         "metrics": m_edge_presence,
@@ -47,24 +47,24 @@ def run(scale):
     }
 
     with measure() as m_shared:
-        G.add_vertices_bulk(
+        G.add_vertices(
             ({"vertex_id": f"shared_v{i}"} for i in range(50)),
             slice=slice_ids[0],
         )
 
     with measure() as m_all:
-        G.add_vertices_bulk(
+        G.add_vertices(
             ({"vertex_id": f"all_v{i}"} for i in range(50)),
             slice=slice_ids[0],
         )
 
     shared_presence = {
-        sid: sum(v.startswith("shared_") for v in list(G.get_slice_vertices(sid)))
+        sid: sum(v.startswith("shared_") for v in list(G.slices.get_slice_vertices(sid)))
         for sid in slice_ids
     }
 
     all_presence = {
-        sid: sum(v.startswith("all_") for v in list(G.get_slice_vertices(sid))) for sid in slice_ids
+        sid: sum(v.startswith("all_") for v in list(G.slices.get_slice_vertices(sid))) for sid in slice_ids
     }
 
     results["propagation"] = {
@@ -76,9 +76,9 @@ def run(scale):
 
     with measure() as m_slice_attrs:
         for sid in slice_ids:
-            G.set_slice_attrs(sid, label=sid)
+            G.attrs.set_slice_attrs(sid, label=sid)
 
-    slice_attrs = {sid: G.get_slice_attr(sid, "label") for sid in slice_ids}
+    slice_attrs = {sid: G.attrs.get_slice_attr(sid, "label") for sid in slice_ids}
 
     results["slice_attributes"] = {
         "metrics": m_slice_attrs,
@@ -86,17 +86,17 @@ def run(scale):
     }
 
     with measure() as m_union:
-        union_result = G.slice_union(slice_ids)
-        union_sid = G.create_slice_from_operation("union_slice", union_result)
+        union_result = G.slices.slice_union(slice_ids)
+        union_sid = G.slices.create_slice_from_operation("union_slice", union_result)
 
     with measure() as m_intersection:
-        inter_result = G.slice_intersection(slice_ids)
-        inter_sid = G.create_slice_from_operation("inter_slice", inter_result)
+        inter_result = G.slices.slice_intersection(slice_ids)
+        inter_sid = G.slices.create_slice_from_operation("inter_slice", inter_result)
 
     with measure() as m_difference:
         if len(slice_ids) >= 2:
-            diff_result = G.slice_difference(slice_ids[0], slice_ids[1])
-            diff_sid = G.create_slice_from_operation("diff_slice", diff_result)
+            diff_result = G.slices.slice_difference(slice_ids[0], slice_ids[1])
+            diff_sid = G.slices.create_slice_from_operation("diff_slice", diff_result)
         else:
             diff_sid = None
 
@@ -111,17 +111,17 @@ def run(scale):
 
     with measure() as m_derived:
         filtered_verts = {v for v in G.vertices() if v.endswith("0")}
-        derived_sid = G.create_slice_from_operation(
+        derived_sid = G.slices.create_slice_from_operation(
             "derived_even", {"vertices": filtered_verts, "edges": set()}
         )
 
     results["derived_slice"] = {
         "metrics": m_derived,
-        "vertex_count": len(G.get_slice_vertices(derived_sid)),
+        "vertex_count": len(G.slices.get_slice_vertices(derived_sid)),
     }
 
     with measure() as m_aggregated:
-        agg_sid = G.create_aggregated_slice(
+        agg_sid = G.slices.create_aggregated_slice(
             source_slice_ids=slice_ids,
             target_slice_id="aggregated",
             method="union",
@@ -129,13 +129,13 @@ def run(scale):
 
     results["aggregated_slice"] = {
         "metrics": m_aggregated,
-        "vertex_count": len(G.get_slice_vertices(agg_sid)),
+        "vertex_count": len(G.slices.get_slice_vertices(agg_sid)),
     }
 
     with measure() as m_conserved:
-        conserved = G.conserved_edges(min_slices=2)
+        conserved = G.slices.conserved_edges(min_slices=2)
 
-    slice_local = {sid: len(G.slice_specific_edges(sid)) for sid in slice_ids}
+    slice_local = {sid: len(G.slices.slice_specific_edges(sid)) for sid in slice_ids}
 
     results["edge_scope"] = {
         "conserved": {
@@ -150,8 +150,8 @@ def run(scale):
         sample_edge = next(iter(G.edges())) if G.edges() else None
 
         results["presence_queries"] = {
-            "vertex": G.vertex_presence_across_slices(sample_vertex),
-            "edge": G.edge_presence_across_slices(sample_edge) if sample_edge else None,
+            "vertex": G.slices.vertex_presence_across_slices(sample_vertex),
+            "edge": G.slices.edge_presence_across_slices(sample_edge) if sample_edge else None,
         }
     else:
         results["presence_queries"] = {"vertex": [], "edge": None}

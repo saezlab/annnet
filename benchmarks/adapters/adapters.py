@@ -25,13 +25,13 @@ def run(scale):
     graph = AnnNet(directed=True)
 
     with measure() as m_vertices:
-        graph.add_vertices_bulk(
+        graph.add_vertices(
             ({"vertex_id": f"v{i}"} for i in range(scale.vertices)),
             slice="base",
         )
 
     with measure() as m_edges:
-        graph.add_edges_bulk(
+        graph.add_edges(
             {
                 "source": f"v{i % scale.vertices}",
                 "target": f"v{(i * 37) % scale.vertices}",

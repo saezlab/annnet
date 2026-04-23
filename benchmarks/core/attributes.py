@@ -18,12 +18,12 @@ def run(scale):
     # ------------------------------------------------------------------
     # Setup graph
     # ------------------------------------------------------------------
-    G.add_vertices_bulk(
+    G.add_vertices(
         ({"vertex_id": f"v{i}"} for i in range(scale.vertices)),
         slice="base",
     )
 
-    G.add_edges_bulk(
+    G.add_edges(
         {
             "source": f"v{i % scale.vertices}",
             "target": f"v{(i + 1) % scale.vertices}",
@@ -38,7 +38,7 @@ def run(scale):
     items = [(f"v{i}", {"kind": "gene", "score": i % 7}) for i in range(scale.vertices)]
 
     with measure() as m_vertex_bulk:
-        G.set_vertex_attrs_bulk(items)
+        G.attrs.set_vertex_attrs_bulk(items)
 
     results["vertex_attrs_bulk"] = {
         "metrics": m_vertex_bulk,
@@ -54,7 +54,7 @@ def run(scale):
     ]
 
     with measure() as m_edge_bulk:
-        G.set_edge_attrs_bulk(edge_items)
+        G.attrs.set_edge_attrs_bulk(edge_items)
 
     results["edge_attrs_bulk"] = {
         "metrics": m_edge_bulk,
@@ -70,7 +70,7 @@ def run(scale):
     slice_items = [(eid, {"confidence": float(i % 3)}) for i, eid in enumerate(G.edges())]
 
     with measure() as m_edge_slice_bulk:
-        G.set_edge_slice_attrs_bulk(slice_id, slice_items)
+        G.attrs.set_edge_slice_attrs_bulk(slice_id, slice_items)
 
     results["edge_slice_attrs_bulk"] = {
         "metrics": m_edge_slice_bulk,
@@ -82,10 +82,10 @@ def run(scale):
     # Bulk reads (control)
     # ------------------------------------------------------------------
     with measure() as m_read_vertices:
-        _ = G.get_attr_vertices()
+        _ = G.attrs.get_attr_vertices()
 
     with measure() as m_read_edges:
-        _ = G.get_attr_edges()
+        _ = G.attrs.get_attr_edges()
 
     results["bulk_reads"] = {
         "vertices": m_read_vertices,

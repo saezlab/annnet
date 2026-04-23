@@ -59,10 +59,10 @@ class TestSIFAdapter:
         from annnet.core.graph import AnnNet
 
         G = AnnNet(directed=None)
-        G.add_vertex("A")
-        G.add_vertex("B")
-        G.add_edge("A", "B", edge_id="e_dir", directed=True)
-        G.add_edge("B", "A", edge_id="e_undir", directed=False)
+        G.add_vertices("A")
+        G.add_vertices("B")
+        G.add_edges("A", "B", edge_id="e_dir", directed=True)
+        G.add_edges("B", "A", edge_id="e_undir", directed=False)
         to_sif(
             G,
             tmpdir_fixture / "net.sif",

@@ -10,13 +10,13 @@ def run(scale):
     # 0) Base graph construction
     # ------------------------------------------------------------
     with measure() as m_vertices:
-        G.add_vertices_bulk(
+        G.add_vertices(
             ({"vertex_id": f"v{i}"} for i in range(scale.vertices)),
             slice="base",
         )
 
     with measure() as m_edges:
-        G.add_edges_bulk(
+        G.add_edges(
             {
                 "source": f"v{i % scale.vertices}",
                 "target": f"v{(i + 1) % scale.vertices}",
@@ -48,7 +48,7 @@ def run(scale):
     ]
 
     with measure() as m_node_edge_create:
-        node_edge_ids = G.add_edges_bulk(edges, as_entity=True, slice="edge_entities")
+        node_edge_ids = G.add_edges(edges, as_entity=True, slice="edge_entities")
 
     results["node_to_edge_create"] = {
         "count": len(node_edge_ids),
@@ -69,7 +69,7 @@ def run(scale):
     ]
 
     with measure() as m_edge_edge:
-        ee_ids = G.add_edges_bulk(ee_edges, as_entity=True, slice="edge_edge_entities")
+        ee_ids = G.add_edges(ee_edges, as_entity=True, slice="edge_edge_entities")
 
     results["edge_to_edge_create"] = {
         "count": len(ee_ids),
@@ -85,7 +85,7 @@ def run(scale):
     }
 
     with measure() as m_attr:
-        G.set_edge_attrs_bulk(attr_payload)
+        G.attrs.set_edge_attrs_bulk(attr_payload)
 
     results["edge_entity_attr_update"] = {
         "count": len(attr_payload),

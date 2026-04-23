@@ -6,8 +6,8 @@ from benchmarks.harness.metrics import measure
 
 def run(scale):
     G = AnnNet()
-    G.add_vertices_bulk(({"vertex_id": f"v{i}"} for i in range(scale.vertices)), slice="base")
-    G.add_edges_bulk(
+    G.add_vertices(({"vertex_id": f"v{i}"} for i in range(scale.vertices)), slice="base")
+    G.add_edges(
         {
             "source": f"v{i % scale.vertices}",
             "target": f"v{(i * 13) % scale.vertices}",

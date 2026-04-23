@@ -8,13 +8,13 @@ def run(scale):
     G = AnnNet(directed=True)
 
     with measure() as m_vertices:
-        G.add_vertices_bulk(
+        G.add_vertices(
             ({"vertex_id": f"v{i}"} for i in range(scale.vertices)),
             slice="base",
         )
 
     with measure() as m_edges:
-        G.add_edges_bulk(
+        G.add_edges(
             {
                 "source": f"v{i % scale.vertices}",
                 "target": f"v{(i * 37) % scale.vertices}",
@@ -26,7 +26,7 @@ def run(scale):
 
     _all_verts = [f"v{i}" for i in range(scale.vertices)]
     with measure() as m_hypero:
-        G.add_hyperedges_bulk(
+        G.add_edges(
             {
                 "members": random.sample(_all_verts, 3),
                 "weight": 1.0,
