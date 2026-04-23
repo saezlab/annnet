@@ -11,6 +11,7 @@ import scipy as scipy
 import scipy.sparse as sp
 
 from ._utils import _read_archive, _write_archive
+from ..adapters._utils import _finalize_multilayer_state
 from .._dataframe_backend import (
     dataframe_to_rows,
     _dataframe_is_empty,
@@ -22,14 +23,6 @@ from .._dataframe_backend import (
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
-
-if '_write_cache' not in globals():
-
-    def _write_cache(*args, **kwargs):  # type: ignore[no-redef]
-        raise NotImplementedError(
-            '_write_cache() was referenced but is not defined. '
-            'Replace this call with the actual writer function for AnnNet IO.'
-        )
 
 
 def _df_from_dict(data: dict):
@@ -115,10 +108,6 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
 
     # 7. Write uns/
     _write_uns(graph, root / 'uns')
-
-    # 8. Optional: Write cache/
-    if hasattr(graph, '_cached_csr') or hasattr(graph, '_cached_csc'):
-        _write_cache(graph, root / 'cache', compression)
 
 
 def write(graph, path: str | Path, *, compression='zstd', overwrite=False):
@@ -681,11 +670,7 @@ def _load_multilayers(graph, path: Path):
 
     # 1. Metadata
     metadata = json.loads((path / 'metadata.json').read_text())
-    graph.aspects = metadata['aspects']
-    graph.elem_layers = metadata['elem_layers']
-    # [Vital] Rebuild the internal Cartesian product cache in the graph
-    if hasattr(graph, '_rebuild_all_layers_cache'):
-        graph._rebuild_all_layers_cache()
+    _finalize_multilayer_state(graph, metadata['aspects'], metadata['elem_layers'])
 
     # 2. Vertex Presence (V_M)
     if (path / 'vertex_presence.parquet').exists():

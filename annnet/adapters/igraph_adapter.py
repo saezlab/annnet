@@ -11,9 +11,11 @@ from ._utils import (
     _deserialize_VM,
     _is_directed_eid,
     _serialize_value,
+    _iter_edge_records,
     _endpoint_coeff_map,
     _serialize_edge_layers,
     _deserialize_edge_layers,
+    _finalize_multilayer_state,
     _serialize_node_layer_attrs,
     _serialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
@@ -172,9 +174,7 @@ def _export_binary_graph(
 
     # Ensure endpoints that appear in edges are also included
     endpoints = set()
-    for eidx in range(graph.ne):
-        eid = graph._col_to_edge[eidx]
-        rec = graph._edges[eid]
+    for eid, rec in _iter_edge_records(graph):
         if rec.etype == 'hyper':
             S, T = set(rec.src or []), set(rec.tgt or [])
         else:
@@ -253,9 +253,7 @@ def _export_binary_graph(
     edge_tuples = []
     edge_payloads = []  # list of dicts, parallel to edge_tuples
 
-    for eidx in range(graph.ne):
-        eid = graph._col_to_edge[eidx]
-        rec = graph._edges[eid]
+    for eid, rec in _iter_edge_records(graph):
         if rec.etype == 'hyper':
             S, T = set(rec.src or []), set(rec.tgt or [])
         else:
@@ -403,21 +401,19 @@ def to_igraph(
         if row.get('edge_id') is not None
     }
     edge_attrs = {
-        graph._col_to_edge[eidx]: _attrs_to_dict(
+        eid: _attrs_to_dict(
             {
                 k: val
-                for k, val in _raw_edge_attrs.get(graph._col_to_edge[eidx], {}).items()
+                for k, val in _raw_edge_attrs.get(eid, {}).items()
                 if not public_only or not str(k).startswith('__')
             }
         )
-        for eidx in range(graph.ne)
+        for eid, _rec in _iter_edge_records(graph)
     }
 
     # -------------- topology snapshot (regular vs hyper) --------------
     manifest_edges = {}
-    for eidx in range(graph.ne):
-        eid = graph._col_to_edge[eidx]
-        rec = graph._edges[eid]
+    for eid, rec in _iter_edge_records(graph):
         is_hyper = rec.etype == 'hyper'
         if is_hyper:
             S, T = set(rec.src or []), set(rec.tgt or [])
@@ -985,10 +981,7 @@ def from_igraph(
     aspects = mm.get('aspects', [])
     elem_layers = mm.get('elem_layers', {})
 
-    if aspects:
-        H.aspects = list(aspects)
-        H.elem_layers = dict(elem_layers or {})
-        H._rebuild_all_layers_cache()
+    _finalize_multilayer_state(H, aspects, elem_layers)
 
     aspect_attrs = mm.get('aspect_attrs', {})
     if aspect_attrs:

@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from torch_geometric.data import HeteroData
 
-from ._utils import _safe_df_to_rows
+from ._utils import _iter_vertex_ids, _safe_df_to_rows
 
 if TYPE_CHECKING:
     from annnet.core.graph import AnnNet
@@ -116,11 +116,7 @@ def to_pyg(
 
     # Group vertices by kind
     kind_to_vertices: dict[str, list[str]] = {}
-    for ekey, ent_rec in graph._entities.items():
-        if ent_rec.kind != 'vertex':
-            continue
-        uid = ekey[0]
-
+    for uid in _iter_vertex_ids(graph):
         row = v_attrs_map.get(str(uid), {})
         kind = row.get('kind', 'default')
 

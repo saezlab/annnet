@@ -25,10 +25,12 @@ from ._utils import (
     _rows_to_df,
     _serialize_VM,
     _deserialize_VM,
+    _iter_vertex_ids,
     _serialize_slices,
     _deserialize_slices,
     _serialize_edge_layers,
     _deserialize_edge_layers,
+    _finalize_multilayer_state,
     _serialize_node_layer_attrs,
     _serialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
@@ -77,16 +79,7 @@ def to_graphtool(
     vmap = {}  # annnet_id -> gt.Vertex
     vp_id = gtG.new_vertex_property('string')
 
-    vertex_ids = []
-    seen_vertex_ids = set()
-    for ekey, rec in sorted(G._entities.items(), key=lambda item: item[1].row_idx):
-        if rec.kind != 'vertex':
-            continue
-        u = ekey[0]
-        if u in seen_vertex_ids:
-            continue
-        seen_vertex_ids.add(u)
-        vertex_ids.append(u)
+    vertex_ids = list(_iter_vertex_ids(G))
 
     for u in vertex_ids:
         v = gtG.add_vertex()
@@ -203,9 +196,7 @@ def to_graphtool(
             'attributes': dict(getattr(G, 'graph_attributes', {})),
         },
         'vertices': {
-            'types': {
-                ekey[0]: ent.kind for ekey, ent in G._entities.items() if ent.kind == 'vertex'
-            },
+            'types': dict.fromkeys(_iter_vertex_ids(G), 'vertex'),
             'attributes': vert_rows,
         },
         'edges': {
@@ -413,10 +404,7 @@ def from_graphtool(
     aspects = mm.get('aspects', [])
     elem_layers = mm.get('elem_layers', {})
 
-    if aspects:
-        G.aspects = list(aspects)
-        G.elem_layers = dict(elem_layers or {})
-        G._rebuild_all_layers_cache()
+    _finalize_multilayer_state(G, aspects, elem_layers)
 
     aspect_attrs = mm.get('aspect_attrs', {})
     if aspect_attrs:

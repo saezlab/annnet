@@ -14,10 +14,12 @@ from ..adapters._utils import (
     _serialize_VM,
     _deserialize_VM,
     _safe_df_to_rows,
+    _iter_edge_records,
     _serialize_endpoint,
     _deserialize_endpoint,
     _serialize_edge_layers,
     _deserialize_edge_layers,
+    _finalize_multilayer_state,
     _serialize_node_layer_attrs,
     _serialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
@@ -223,9 +225,7 @@ def to_parquet(graph: AnnNet, path):
     # edges
     e_attr_map = _build_attr_map(getattr(graph, 'edge_attributes', None), 'edge_id')
     e_rows = []
-    for eidx in range(graph.ne):
-        eid = graph._col_to_edge[eidx]
-        rec = graph._edges[eid]
+    for eid, rec in _iter_edge_records(graph):
         is_hyper = rec.etype == 'hyper'
         if is_hyper:
             S = set(rec.src or [])
@@ -658,10 +658,7 @@ def from_parquet(path) -> AnnNet:
             aspects = mm.get('aspects', [])
             elem_layers = mm.get('elem_layers', {})
 
-            if aspects:
-                H.aspects = list(aspects)
-                H.elem_layers = dict(elem_layers or {})
-                H._rebuild_all_layers_cache()
+            _finalize_multilayer_state(H, aspects, elem_layers)
 
             aspect_attrs = mm.get('aspect_attrs', {})
             if aspect_attrs:

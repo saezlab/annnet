@@ -24,6 +24,34 @@ def _is_directed_eid(graph, eid):
         return True
 
 
+def _iter_vertex_ids(graph):
+    """
+    Yield vertex ids in stable graph/entity order.
+
+    Centralizes adapter access to the graph's vertex entity registry so
+    adapters do not open-code _entities traversal.
+    """
+    entities = getattr(graph, '_entities', None)
+    if isinstance(entities, dict):
+        seen = set()
+        for ekey, rec in sorted(entities.items(), key=lambda item: item[1].row_idx):
+            if getattr(rec, 'kind', None) != 'vertex':
+                continue
+            vid = ekey[0]
+            if vid in seen:
+                continue
+            seen.add(vid)
+            yield vid
+        return
+
+    try:
+        for vid in graph.vertices():
+            yield vid
+        return
+    except Exception as exc:
+        raise AttributeError('Graph does not expose an adapter-readable vertex store') from exc
+
+
 def _coerce_coeff_mapping(val):
     """Normalize endpoint-coeff containers into {vertex: {__value: float}|float}.
 
@@ -163,6 +191,49 @@ def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
         except (TypeError, ValueError):
             out[u] = 1.0
     return out
+
+
+def _iter_edge_records(graph):
+    """
+    Yield (eid, rec) for edge-like entities in stable graph order.
+
+    Centralizes adapter access to the graph's edge record layout so adapters
+    do not open-code _col_to_edge / _edges traversal.
+    """
+    col_to_edge = getattr(graph, '_col_to_edge', None)
+    edges = getattr(graph, '_edges', None)
+
+    if isinstance(col_to_edge, dict) and edges is not None:
+        for eidx in range(graph.ne):
+            eid = col_to_edge[eidx]
+            rec = edges[eid]
+            yield eid, rec
+        return
+
+    if edges is not None:
+        for eid, rec in edges.items():
+            yield eid, rec
+        return
+
+    raise AttributeError('Graph does not expose an adapter-readable edge record store')
+
+
+def _finalize_multilayer_state(graph, aspects, elem_layers):
+    """
+    Restore multilayer bookkeeping after adapter import.
+
+    Keeps any unavoidable graph-internal repair hook centralized in one place
+    instead of scattering private calls across adapters.
+    """
+    if not aspects:
+        return
+
+    graph.aspects = list(aspects)
+    graph.elem_layers = dict(elem_layers or {})
+
+    rebuild = getattr(graph, '_rebuild_all_layers_cache', None)
+    if callable(rebuild):
+        rebuild()
 
 
 # Serialization helpers moved from graphtool_adapter.py

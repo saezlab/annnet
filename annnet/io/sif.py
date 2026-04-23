@@ -17,6 +17,7 @@ from ..adapters._utils import (
     _deserialize_endpoint,
     _serialize_edge_layers,
     _deserialize_edge_layers,
+    _finalize_multilayer_state,
     _serialize_node_layer_attrs,
     _serialize_layer_tuple_attrs,
     _deserialize_node_layer_attrs,
@@ -608,10 +609,7 @@ def from_sif(
             mm = manifest['multilayer']
             aspects = mm.get('aspects', [])
             elem_layers = mm.get('elem_layers', {})
-            if aspects:
-                H.aspects = list(aspects)
-                H.elem_layers = dict(elem_layers or {})
-                H._rebuild_all_layers_cache()
+            _finalize_multilayer_state(H, aspects, elem_layers)
             aspect_attrs = mm.get('aspect_attrs', {})
             if aspect_attrs:
                 H._aspect_attrs.update(aspect_attrs)

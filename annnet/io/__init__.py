@@ -38,7 +38,7 @@ _lazy_symbols: dict[str, tuple[str, str]] = {
     # SBML
     'from_sbml': ('annnet.io.sbml', 'from_sbml'),
     'from_cobra_model': ('annnet.io.sbml_cobra', 'from_cobra_model'),
-    'from_sbml_via_cobra': ('annnet.io.sbml_cobra', 'from_sbml'),
+    'from_sbml_cobra': ('annnet.io.sbml_cobra', 'from_sbml'),
     # OmniPath
     'from_omnipath': ('annnet.io.omnipath', 'from_omnipath'),
 }

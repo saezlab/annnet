@@ -24,6 +24,7 @@ from ..core._records import EntityRecord
 from ..adapters._utils import (
     _df_to_rows,
     _serialize_VM,
+    _iter_vertex_ids,
     _safe_df_to_rows,
     _serialize_slices,
     _serialize_edge_layers,
@@ -225,7 +226,7 @@ def to_cx2(
             'attributes': g_attrs,
         },
         'vertices': {
-            'types': {ekey[0]: ent.kind for ekey, ent in G._entities.items()},
+            'types': dict.fromkeys(_iter_vertex_ids(G), 'vertex'),
             'attributes': vert_rows,
         },
         'edges': {
