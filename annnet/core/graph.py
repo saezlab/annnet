@@ -9,7 +9,7 @@ import narwhals as nw
 
 try:
     import polars as pl  # optional
-except Exception:  # ModuleNotFoundError, etc.
+except ImportError:
     pl = None
 import scipy.sparse as sp
 
@@ -58,7 +58,7 @@ def _to_polars_if_possible(df):
         nwd = nw.from_native(df, eager_only=True)
         if nwd.implementation.is_polars():
             return nw.to_native(nwd), True
-    except Exception:
+    except (TypeError, AttributeError):
         pass
     return df, False
 
@@ -519,7 +519,7 @@ class AnnNet(
 
                 if isinstance(weight, float) and _math.isnan(weight):
                     continue
-            except Exception:
+            except TypeError:
                 pass
             bucket[eid] = float(weight)
 
@@ -659,7 +659,7 @@ class AnnNet(
             raise ValueError(
                 f'Layer coord length {len(coord)} != number of aspects {len(self._aspects)}'
             )
-        for asp, val in zip(self._aspects, coord):
+        for asp, val in zip(self._aspects, coord, strict=False):
             if val not in self._layers[asp]:
                 raise ValueError(
                     f'Layer value {val!r} not declared for aspect {asp!r}. '
@@ -839,7 +839,7 @@ class AnnNet(
         if value:
             try:
                 self._restore_supra_nodes(value)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 pass
 
     # Build graph
@@ -1777,13 +1777,15 @@ class AnnNet(
         target : str
 
         """
-        for slice_id, slice_data in self._slices.items():
+        for _slice_id, slice_data in self._slices.items():
             if source in slice_data['vertices'] and target in slice_data['vertices']:
                 slice_data['edges'].add(edge_id)
 
     def _propagate_to_all_slices(self, edge_id, source, target):
-        """INTERNAL: Add an edge to any slice containing **either** endpoint and
-        insert the missing endpoint into that slice.
+        """INTERNAL: Add an edge to any slice containing **either** endpoint.
+
+        Inserts the missing endpoint into that slice when only one endpoint is
+        already a member.
 
         Parameters
         ----------
@@ -1792,7 +1794,7 @@ class AnnNet(
         target : str
 
         """
-        for slice_id, slice_data in self._slices.items():
+        for _slice_id, slice_data in self._slices.items():
             if source in slice_data['vertices'] or target in slice_data['vertices']:
                 slice_data['edges'].add(edge_id)
                 # Only add missing endpoint if both vertices should be in slice
@@ -1904,11 +1906,11 @@ class AnnNet(
             rec.directed = False
             try:
                 self.attrs.set_edge_attrs(eid, edge_type=EdgeType.UNDIRECTED)
-            except Exception:
+            except (AttributeError, KeyError, TypeError):
                 pass
 
         # 2) Hyperedges
-        for eid, rec in list(self._edges.items()):
+        for _eid, rec in list(self._edges.items()):
             if rec.etype != 'hyper':
                 continue
 
@@ -2229,7 +2231,7 @@ class AnnNet(
             try:
                 incident.extend(self._get_csr().getrow(ent.row_idx).indices.tolist())
                 return incident
-            except Exception:
+            except (IndexError, ValueError):
                 pass
         for j in range(len(self._col_to_edge)):
             eid = self._col_to_edge[j]
@@ -3154,7 +3156,7 @@ class AnnNet(
             return {
                 'label': 'external',
                 'version': ref._version,
-                'vertex_ids': set(eid for eid, r in ref._entities.items() if r.kind == 'vertex'),
+                'vertex_ids': {eid for eid, r in ref._entities.items() if r.kind == 'vertex'},
                 'edge_ids': set(ref._col_to_edge.values()),
                 'slice_ids': set(ref._slices.keys()),
             }
@@ -3166,11 +3168,11 @@ class AnnNet(
         return {
             'label': 'current',
             'version': self._version,
-            'vertex_ids': set(
+            'vertex_ids': {
                 eid[0] if isinstance(eid, tuple) else eid
                 for eid, r in self._entities.items()
                 if r.kind == 'vertex'
-            ),
+            },
             'edge_ids': set(self._col_to_edge.values()),
             'slice_ids': set(self._slices.keys()),
         }
@@ -3484,7 +3486,7 @@ class AnnNet(
             ]
             if isinstance(slice, str):
                 slice = _sys.intern(slice)
-        except Exception:
+        except TypeError:
             pass
 
         # --- entity registration ---
@@ -3611,7 +3613,7 @@ class AnnNet(
             _tmp = nw.from_native(self.vertex_attributes)
             col = nw.to_native(_tmp.select('vertex_id'))['vertex_id']
             existing_ids = set(col.to_list() if hasattr(col, 'to_list') else list(col))
-        except Exception:
+        except (AttributeError, TypeError, KeyError):
             pass
 
         new_attr_keys: set = set()
@@ -3734,9 +3736,9 @@ class AnnNet(
                     d['edge_id'] = _sys.intern(d['edge_id'])
                 try:
                     d['weight'] = float(d['weight'])
-                except Exception:
+                except (TypeError, ValueError):
                     pass
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         M = self._matrix
@@ -3803,7 +3805,6 @@ class AnnNet(
         for d in norm:
             s, t = d['source'], d['target']
             w = d['weight']
-            etype = d.get('edge_type', 'regular')
             prop = d.get('propagate', default_propagate)
             slice_local = d.get('slice', slice)
             slice_w = d.get('slice_weight', default_slice_weight)
@@ -3826,12 +3827,12 @@ class AnnNet(
                 old_s, old_t = rec.src, rec.tgt
                 try:
                     _M_zero_keys.append((self._entity_row(old_s), col))
-                except Exception:
+                except KeyError:
                     pass
                 if old_t is not None and old_t != old_s:
                     try:
                         _M_zero_keys.append((self._entity_row(old_t), col))
-                    except Exception:
+                    except KeyError:
                         pass
                 _M_writes[(s_idx, col)] = fw
                 if s != t:
@@ -4017,9 +4018,9 @@ class AnnNet(
                     d['edge_id'] = _sys.intern(d['edge_id'])
                 try:
                     d['weight'] = float(d['weight'])
-                except Exception:
+                except (TypeError, ValueError):
                     pass
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
         all_verts: set = set()
@@ -4079,7 +4080,7 @@ class AnnNet(
                                 _m_fast_set(r, col, 0)
                             else:
                                 M[r, col] = 0
-                        except Exception:
+                        except (KeyError, IndexError):
                             pass
                 else:
                     for vid in (rec.src, rec.tgt):
@@ -4091,7 +4092,7 @@ class AnnNet(
                                 _m_fast_set(r, col, 0)
                             else:
                                 M[r, col] = 0
-                        except Exception:
+                        except (KeyError, IndexError):
                             pass
             else:
                 col = len(self._col_to_edge)
@@ -4345,7 +4346,7 @@ class AnnNet(
         self._invalidate_sparse_caches()
 
         self._col_to_edge.clear()
-        for new_idx, (old_idx, eid) in enumerate(keep_pairs):
+        for new_idx, (_old_idx, eid) in enumerate(keep_pairs):
             self._col_to_edge[new_idx] = eid
             self._edges[eid].col_idx = new_idx
 
@@ -4463,9 +4464,11 @@ class AnnNet(
         return self.layers._validate_layer_tuple(*args, **kwargs)
 
     def nl_to_row(self, *args, **kwargs):
+        """Convert a (node, layer) key to its matrix row index."""
         return self.layers.nl_to_row(*args, **kwargs)
 
     def row_to_nl(self, *args, **kwargs):
+        """Convert a matrix row index to its (node, layer) key."""
         return self.layers.row_to_nl(*args, **kwargs)
 
     def _build_supra_index(self, *args, **kwargs):

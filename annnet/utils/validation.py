@@ -50,7 +50,7 @@ def obj_canonicalized_hash(obj) -> str:
     return hash_obj.hexdigest()
 
 
-def unique_iter(iterable: Iterable[T], key: Callable[[T], Any] | None = None) -> Iterable[T]:
+def unique_iter(iterable: Iterable[T], key: Callable[[T], Any] | None = None) -> Iterable[T]:  # noqa: UP047
     """Yield unique items from an iterable while preserving order."""
     # Based on https://iteration-utilities.readthedocs.io/en/latest/generated/unique_everseen.html
     seen: set[Any] = set()
