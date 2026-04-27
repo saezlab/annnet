@@ -148,36 +148,36 @@ import annnet as an
 G = an.Graph(directed=True)  # default direction; can be overridden per-edge
 
 # Create slices and set active
-G.add_slice("toy")
-G.add_slice("train")
-G.add_slice("eval")
+G.slices.add_slice("toy")
+G.slices.add_slice("train")
+G.slices.add_slice("eval")
 G.slices.active = "toy"   # same effect as set_active_slice("toy")
 
 # Add vertices (with attributes) in 'toy'
 for v in ["A", "B", "C", "D"]:
-    G.add_vertex(v, label=v, kind="gene")
+    G.add_vertices(v, label=v, kind="gene")
 
 # 1) Binary directed
-e_dir = G.add_edge("A", "B", weight=2.0, directed=True, relation="activates")
+e_dir = G.add_edges("A", "B", weight=2.0, directed=True, relation="activates")
 
 # 2) Binary undirected
-e_undir = G.add_edge("B", "C", weight=1.0, directed=False, relation="binds")
+e_undir = G.add_edges("B", "C", weight=1.0, directed=False, relation="binds")
 
 # 3) Self-loop
-e_loop = G.add_edge("D", "D", weight=0.5, directed=True, relation="self")
+e_loop = G.add_edges("D", "D", weight=0.5, directed=True, relation="self")
 
 # 4) Parallel edge
-e_parallel = G.add_edge("A", "B", weight=5.0, parallel="parallel", relation="alternative")
+e_parallel = G.add_edges("A", "B", weight=5.0, parallel="parallel", relation="alternative")
 
 # 5) Vertex–edge (hybrid) edge
-G.add_edge(edge_id="edge_e1", as_entity=True, description="signal")
-e_vx = G.add_edge("edge_e1", "C", directed=True, as_entity=True, channel="edge->vertex")
+G.add_edges(edge_id="edge_e1", as_entity=True, description="signal")
+e_vx = G.add_edges("edge_e1", "C", directed=True, as_entity=True, channel="edge->vertex")
 
 # 6) Hyperedge (undirected, 3-way membership)
-e_hyper_undir = G.add_edge(["A", "C", "D"], weight=1.0, directed=False, tag="complex")
+e_hyper_undir = G.add_edges(["A", "C", "D"], weight=1.0, directed=False, tag="complex")
 
 # 7) Hyperedge (directed head→tail)
-e_hyper_dir = G.add_edge(["A", "B"], ["C", "D"], weight=1.0, directed=True, reaction="A+B->C+D")
+e_hyper_dir = G.add_edges(["A", "B"], ["C", "D"], weight=1.0, directed=True, reaction="A+B->C+D")
 
 # 8) Run a NetworkX algorithm (if installed)
 deg = G.nx.degree_centrality(G)

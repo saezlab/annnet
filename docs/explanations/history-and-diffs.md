@@ -23,36 +23,20 @@ Example event:
 Controls:
 
 ```python
-G.enable_history(True)   # toggle logging
-G.clear_history()        # clear in‑memory history buffer
-G.mark("checkpoint")     # insert a labeled marker
+G.history.enable(True)   # toggle logging
+G.history.clear()        # clear in‑memory history buffer
+G.history.mark("checkpoint")  # insert a labeled marker
 ```
 
 Export:
 
 ```python
-df = G.history(as_df=True)          # Polars DataFrame view
-n = G.export_history("log.parquet") # or .ndjson / .json / .csv
-```
-
-## Snapshots and diffs
-
-Create labeled snapshots, then compute differences between them to see structural and attribute changes.
-
-```python
-snap1 = G.history.snapshot(label="before")
-# ... perform mutations ...
-snap2 = G.history.snapshot(label="after")
-
-diff = G.history.diff("before", "after")
-diff.added_vertices     # set[str]
-diff.removed_vertices   # set[str]
-diff.added_edges        # set[str]
-diff.removed_edges      # set[str]
+df = G.history(as_df=True)           # Polars/pandas DataFrame view
+n = G.history.export("log.parquet")  # or .ndjson / .json / .csv
 ```
 
 Tips:
-- Use checkpoints/marks to segment logs for analysis.
-- Export history alongside `.annnet` for provenance.
-- Pair snapshots with `export_history()` to reconstruct change timelines.
+- Use `G.history.mark(label)` to insert named checkpoints that segment the log for later analysis.
+- Export history alongside `.annnet` files for full provenance.
+- Filter events by `op` key to isolate specific mutation types.
 

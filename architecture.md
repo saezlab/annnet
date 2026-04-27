@@ -283,15 +283,15 @@ The `_upsert_row()` method handles insert-or-update with:
 - Per-table caching for fast existence checks
 
 ```python
-G.set_vertex_attrs("alice", age=30, role="engineer")
-G.get_vertex_attrs("alice")  # {"age": 30, "role": "engineer"}
+G.attrs.set_vertex_attrs("alice", age=30, role="engineer")
+G.attrs.get_vertex_attrs("alice")  # {"age": 30, "role": "engineer"}
 ```
 
 ### 6.4 Views (Read-Only)
 
 ```python
-G.vertices_view()  # Polars DF of vertex attributes
-G.edges_view(include_weight=True, include_directed=True)
+G.views.vertices()  # Polars DF of vertex attributes
+G.views.edges(include_weight=True, include_directed=True)
 G.slices_view()
 G.aspects_view()   # Kivelä aspects
 G.layers_view()    # Kivelä layers
@@ -420,16 +420,16 @@ Every mutating method is wrapped to log:
 ### 10.2 Control
 
 ```python
-G.enable_history(True)   # enable/disable logging
+G.history.enable(True)   # enable/disable logging
 G.clear_history()        # clear in-memory log
-G.mark("checkpoint")     # insert manual marker
+G.history.mark("checkpoint")     # insert manual marker
 ```
 
 ### 10.3 Export
 
 ```python
 G.history(as_df=True)                    # Polars DataFrame
-G.export_history("log.parquet")          # .parquet, .ndjson, .json, .csv
+G.history.export("log.parquet")          # .parquet, .ndjson, .json, .csv
 ```
 
 ### 10.4 Snapshots & Diffs
@@ -553,14 +553,14 @@ G.set_vertex_key("type", "name")  # declare key fields
 ### 14.2 Lookup by Attributes
 
 ```python
-G.add_vertex("v1", type="person", name="Alice")
+G.add_vertices("v1", type="person", name="Alice")
 vid = G.get_vertex_by_attrs(type="person", name="Alice")  # "v1"
 ```
 
 ### 14.3 Edge Endpoints by Attributes
 
 ```python
-G.add_edge(
+G.add_edges(
     source={"type": "person", "name": "Alice"},
     target={"type": "org", "name": "Acme"}
 )
