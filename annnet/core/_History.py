@@ -319,6 +319,63 @@ class History:
         """
         self._log_event('mark', label=label)
 
+    def _history_snapshot_impl(self, label=None):
+        """Capture and store the current graph topology as a named snapshot.
+
+        Parameters
+        ----------
+        label : str, optional
+            Human-readable name for the snapshot. Defaults to
+            ``'snap_<n>'`` where *n* is the current snapshot count.
+
+        Returns
+        -------
+        dict
+            The stored snapshot with keys ``label``, ``version``,
+            ``vertex_ids``, ``edge_ids``, ``slice_ids``.
+        """
+        raw = self._current_snapshot()
+        name = label if label is not None else f'snap_{len(self._snapshots)}'
+        snap = {
+            'label': name,
+            'version': raw['version'],
+            'vertex_ids': set(raw['vertex_ids']),
+            'edge_ids': set(raw['edge_ids']),
+            'slice_ids': set(raw['slice_ids']),
+        }
+        self._snapshots.append(snap)
+        self._log_event('snapshot', label=name, version=snap['version'])
+        return snap
+
+    def _history_diff_impl(self, a, b=None):
+        """Compare two graph states and return a :class:`GraphDiff`.
+
+        Parameters
+        ----------
+        a : str | dict | AnnNet
+            Reference for the *before* state — a snapshot label, a raw
+            snapshot dict, or another ``AnnNet`` instance.
+        b : str | dict | AnnNet | None, optional
+            Reference for the *after* state. When ``None`` (default) the
+            current graph state is used.
+
+        Returns
+        -------
+        GraphDiff
+        """
+        snap_a = self._resolve_snapshot(a)
+        snap_b = self._resolve_snapshot(b) if b is not None else self._current_snapshot()
+        return GraphDiff(snap_a, snap_b)
+
+    def _history_list_snapshots_impl(self):
+        """Return all stored snapshots in creation order.
+
+        Returns
+        -------
+        list[dict]
+        """
+        return list(self._snapshots)
+
 
 class HistoryAccessor:
     """Namespace for mutation logs and snapshots.
