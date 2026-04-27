@@ -264,6 +264,7 @@ ignore = [
     "Q000",  # Incompatible with formatter quote-style = "single"
     "Q003",  # Incompatible with formatter quote-style = "single"
     "TID252",# TODO: reintroduce when stable API, for now project uses relative imports
+    "UP047", # PEP 695 type-parameter syntax requires Python >=3.12; runtime target is 3.11
 ]
 select = [
     "B",     # flake8-bugbear
