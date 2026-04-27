@@ -127,25 +127,13 @@ class SliceManager:
         Raises
         ------
         KeyError
-            If the slice does not exist.
+            If the slice or edge does not exist.
         """
         G = self._G
         if lid not in G._slices:
-            raise KeyError(f'slice {lid} does not exist')
+            raise KeyError(f'slice {lid!r} does not exist')
         if eid not in G._edges:
-            if eid not in G._entities:
-                G._register_edge_as_entity(eid)
-            G._edges[eid] = EdgeRecord(
-                src=None,
-                tgt=None,
-                weight=1.0,
-                directed=False,
-                etype='edge_placeholder',
-                col_idx=-1,
-                ml_kind=None,
-                ml_layers=None,
-                direction_policy=None,
-            )
+            raise KeyError(f'edge {eid!r} does not exist')
         G._slices[lid]['edges'].add(eid)
 
     def add_edges(self, slice_id, edge_ids):
@@ -304,9 +292,18 @@ class SliceManager:
         return result_slice_id
 
     def add_vertex_to_slice(self, lid, vid):
+        """Attach an existing vertex to a slice.
+
+        Raises
+        ------
+        KeyError
+            If the slice or vertex does not exist.
+        """
         G = self._G
         if lid not in G._slices:
-            raise KeyError(f'slice {lid} does not exist')
+            raise KeyError(f'slice {lid!r} does not exist')
+        if vid not in G._vid_to_ekeys:
+            raise KeyError(f'vertex {vid!r} does not exist')
         G._slices[lid]['vertices'].add(vid)
 
     # ── set-op creation helpers ───────────────────────────────────────────────
