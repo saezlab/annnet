@@ -24,7 +24,7 @@ def _build_graph():
     G.add_edges('B', 'C', edge_id='e2', weight=3.0)
     G.attrs.set_edge_attrs('e2', relation='inhibits')
     G.slices.add_slice('sig')
-    G.add_edge_to_slice('sig', 'e1')
+    G.slices.add_edge_to_slice('sig', 'e1')
     return G
 
 
@@ -95,8 +95,8 @@ class TestGraphViewSliceFilter(unittest.TestCase):
     def test_slice_filter_single(self):
         G = _build_graph()
         # "sig" slice contains only e1
-        G.add_vertex_to_slice('sig', 'A')
-        G.add_vertex_to_slice('sig', 'B')
+        G.slices.add_vertex_to_slice('sig', 'A')
+        G.slices.add_vertex_to_slice('sig', 'B')
         view = GraphView(G, slices='sig')
         edge_ids = view.edge_ids
         self.assertIn('e1', edge_ids)
@@ -105,11 +105,11 @@ class TestGraphViewSliceFilter(unittest.TestCase):
     def test_slice_filter_list(self):
         G = _build_graph()
         G.slices.add_slice('reg')
-        G.add_edge_to_slice('reg', 'e2')
-        G.add_vertex_to_slice('sig', 'A')
-        G.add_vertex_to_slice('sig', 'B')
-        G.add_vertex_to_slice('reg', 'B')
-        G.add_vertex_to_slice('reg', 'C')
+        G.slices.add_edge_to_slice('reg', 'e2')
+        G.slices.add_vertex_to_slice('sig', 'A')
+        G.slices.add_vertex_to_slice('sig', 'B')
+        G.slices.add_vertex_to_slice('reg', 'B')
+        G.slices.add_vertex_to_slice('reg', 'C')
         view = GraphView(G, slices=['sig', 'reg'])
         edge_ids = view.edge_ids
         self.assertIn('e1', edge_ids)

@@ -70,21 +70,21 @@ def _build_graph() -> AnnNet:
     g.add_edges(src=['g1', 'g2'], tgt=['p1'], weight=3.0, interaction=+1, edge_id='he1')
 
     g.slices.add_slice('active_only', region='high_expr')
-    g.add_vertex_to_slice('active_only', 'p1')
-    g.add_vertex_to_slice('active_only', 'p3')
-    g.add_vertex_to_slice('active_only', 'g1')
-    g.add_edge_to_slice('active_only', e1)
-    g.add_edge_to_slice('active_only', e4)
+    g.slices.add_vertex_to_slice('active_only', 'p1')
+    g.slices.add_vertex_to_slice('active_only', 'p3')
+    g.slices.add_vertex_to_slice('active_only', 'g1')
+    g.slices.add_edge_to_slice('active_only', e1)
+    g.slices.add_edge_to_slice('active_only', e4)
 
     # Per-slice weight override
     g.attrs.set_edge_slice_attrs('active_only', e1, weight=5.0)
 
     # Second slice with different membership
     g.slices.add_slice('druggable')
-    g.add_vertex_to_slice('druggable', 'd1')
-    g.add_vertex_to_slice('druggable', 'p1')
-    g.add_vertex_to_slice('druggable', 'p2')
-    g.add_edge_to_slice('druggable', e3)
+    g.slices.add_vertex_to_slice('druggable', 'd1')
+    g.slices.add_vertex_to_slice('druggable', 'p1')
+    g.slices.add_vertex_to_slice('druggable', 'p2')
+    g.slices.add_edge_to_slice('druggable', e3)
 
     # Basic sanity
     assert g.ne >= 4

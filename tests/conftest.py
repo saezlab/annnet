@@ -73,11 +73,11 @@ def complex_graph():
     G.slices.add_slice('signaling')
     G.slices.add_slice('regulatory')
 
-    G.add_edge_to_slice('core', 'e1')
-    G.add_edge_to_slice('core', 'e2')
-    G.add_edge_to_slice('core', 'parallel')
-    G.add_edge_to_slice('signaling', 'h1')
-    G.add_edge_to_slice('regulatory', 'loop')
+    G.slices.add_edge_to_slice('core', 'e1')
+    G.slices.add_edge_to_slice('core', 'e2')
+    G.slices.add_edge_to_slice('core', 'parallel')
+    G.slices.add_edge_to_slice('signaling', 'h1')
+    G.slices.add_edge_to_slice('regulatory', 'loop')
 
     # Per-slice weights
     G.attrs.set_edge_slice_attrs('core', 'e1', weight=10.0)

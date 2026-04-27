@@ -53,13 +53,13 @@ class TestIntegration:
         G.slices.add_slice('collaboration')
         G.slices.add_slice('mentorship')
         G.add_edges('Alice', 'Bob', edge_id='f1')
-        G.add_edge_to_slice('friendship', 'f1')
+        G.slices.add_edge_to_slice('friendship', 'f1')
         G.add_edges('Bob', 'Charlie', edge_id='f2')
-        G.add_edge_to_slice('friendship', 'f2')
+        G.slices.add_edge_to_slice('friendship', 'f2')
         G.add_edges('Alice', 'Charlie', edge_id='c1')
-        G.add_edge_to_slice('collaboration', 'c1')
+        G.slices.add_edge_to_slice('collaboration', 'c1')
         G.add_edges('Alice', 'David', edge_id='m1')
-        G.add_edge_to_slice('mentorship', 'm1')
+        G.slices.add_edge_to_slice('mentorship', 'm1')
         from annnet.io.json_format import from_json, to_json
 
         to_json(G, tmpdir_fixture / 'multislice.json')

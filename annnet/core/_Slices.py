@@ -1,6 +1,6 @@
 import math
 
-from ._records import EdgeRecord, SliceRecord
+from ._records import SliceRecord
 from .._dataframe_backend import dataframe_columns, dataframe_to_rows, dataframe_filter_eq
 
 

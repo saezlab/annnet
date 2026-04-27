@@ -23,7 +23,7 @@ def test_dataframe_export_options_and_private_attr_filtering():
     graph.add_edges(src=['A', 'B'], tgt=['C'], edge_id='h1', weight=2.5, directed=True)
     graph.attrs.set_edge_attrs('h1', pathway='p1', __internal='secret')
     graph.slices.add_slice('s1')
-    graph.add_edge_to_slice('s1', 'e1')
+    graph.slices.add_edge_to_slice('s1', 'e1')
     graph.attrs.set_edge_slice_attrs('s1', 'e1', weight=7.0)
 
     exported = dataframes.to_dataframes(
