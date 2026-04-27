@@ -2,45 +2,45 @@
 
 from __future__ import annotations
 
-from importlib import import_module
 from typing import Any
+from importlib import import_module
 
 _lazy_symbols: dict[str, tuple[str, str]] = {
     # annnet native format
-    "write": ("annnet.io.io_annnet", "write"),
-    "read": ("annnet.io.io_annnet", "read"),
+    'write': ('annnet.io.annnet_format', 'write'),
+    'read': ('annnet.io.annnet_format', 'read'),
     # JSON
-    "to_json": ("annnet.io.json_io", "to_json"),
-    "from_json": ("annnet.io.json_io", "from_json"),
-    "write_ndjson": ("annnet.io.json_io", "write_ndjson"),
+    'to_json': ('annnet.io.json_format', 'to_json'),
+    'from_json': ('annnet.io.json_format', 'from_json'),
+    'write_ndjson': ('annnet.io.json_format', 'write_ndjson'),
     # DataFrame
-    "to_dataframes": ("annnet.io.dataframe_io", "to_dataframes"),
-    "from_dataframes": ("annnet.io.dataframe_io", "from_dataframes"),
+    'to_dataframes': ('annnet.io.dataframes', 'to_dataframes'),
+    'from_dataframes': ('annnet.io.dataframes', 'from_dataframes'),
     # CSV / Excel
-    "from_csv": ("annnet.io.csv_io", "load_csv_to_graph"),
-    "from_dataframe": ("annnet.io.csv_io", "from_dataframe"),
-    "edges_to_csv": ("annnet.io.csv_io", "export_edge_list_csv"),
-    "hyperedge_to_csv": ("annnet.io.csv_io", "export_hyperedge_csv"),
-    "from_excel": ("annnet.io.excel", "load_excel_to_graph"),
+    'from_csv': ('annnet.io.csv_format', 'from_csv'),
+    'from_dataframe': ('annnet.io.csv_format', 'from_dataframe'),
+    'edges_to_csv': ('annnet.io.csv_format', 'edges_to_csv'),
+    'hyperedges_to_csv': ('annnet.io.csv_format', 'hyperedges_to_csv'),
+    'from_excel': ('annnet.io.excel', 'from_excel'),
     # SIF / GraphML / GEXF / CX2
-    "to_sif": ("annnet.io.SIF_io", "to_sif"),
-    "from_sif": ("annnet.io.SIF_io", "from_sif"),
-    "to_graphml": ("annnet.io.GraphML_io", "to_graphml"),
-    "from_graphml": ("annnet.io.GraphML_io", "from_graphml"),
-    "to_gexf": ("annnet.io.GraphML_io", "to_gexf"),
-    "from_gexf": ("annnet.io.GraphML_io", "from_gexf"),
-    "to_cx2": ("annnet.io.cx2_io", "to_cx2"),
-    "from_cx2": ("annnet.io.cx2_io", "from_cx2"),
-    "show_cx2": ("annnet.io.cx2_io", "show"),
+    'to_sif': ('annnet.io.sif', 'to_sif'),
+    'from_sif': ('annnet.io.sif', 'from_sif'),
+    'to_graphml': ('annnet.io.graphml', 'to_graphml'),
+    'from_graphml': ('annnet.io.graphml', 'from_graphml'),
+    'to_gexf': ('annnet.io.graphml', 'to_gexf'),
+    'from_gexf': ('annnet.io.graphml', 'from_gexf'),
+    'to_cx2': ('annnet.io.cx2', 'to_cx2'),
+    'from_cx2': ('annnet.io.cx2', 'from_cx2'),
+    'show_cx2': ('annnet.io.cx2', 'show_cx2'),
     # Parquet
-    "to_parquet": ("annnet.io.Parquet_io", "to_parquet"),
-    "from_parquet": ("annnet.io.Parquet_io", "from_parquet"),
+    'to_parquet': ('annnet.io.parquet', 'to_parquet'),
+    'from_parquet': ('annnet.io.parquet', 'from_parquet'),
     # SBML
-    "from_sbml": ("annnet.io.SBML_io", "from_sbml"),
-    "from_cobra_model": ("annnet.io.sbml_cobra_io", "from_cobra_model"),
-    "from_sbml_via_cobra": ("annnet.io.sbml_cobra_io", "from_sbml"),
+    'from_sbml': ('annnet.io.sbml', 'from_sbml'),
+    'from_cobra_model': ('annnet.io.sbml_cobra', 'from_cobra_model'),
+    'from_sbml_cobra': ('annnet.io.sbml_cobra', 'from_sbml'),
     # OmniPath
-    "read_omnipath": ("annnet.io.read_omnipath", "read_omnipath"),
+    'from_omnipath': ('annnet.io.omnipath', 'from_omnipath'),
 }
 
 __all__ = sorted(_lazy_symbols)

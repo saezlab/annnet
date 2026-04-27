@@ -1,54 +1,83 @@
+import io
+import os
+import tempfile
 import unittest
-
 import pandas as pd
 import polars as pl
 import pyarrow as pa
 
-from annnet.io.dataframe_io import from_dataframes, to_dataframes
+from annnet._dataframe_backend import (
+    available_dataframe_backends,
+    _dataframe_read_delimited,
+    _dataframe_read_tsv,
+    dataframe_to_rows,
+    select_dataframe_backend,
+)
+from annnet.io.dataframes import from_dataframes, to_dataframes
 
 
 class TestDataFrameAdapter(unittest.TestCase):
     """Test suite for Narwhals-based dataframe adapter."""
 
+    def test_auto_backend_prefers_polars(self):
+        backends = available_dataframe_backends()
+        if backends['polars']:
+            self.assertEqual(select_dataframe_backend('auto'), 'polars')
+
+    def test_to_dataframes_uses_selected_output_backend(self):
+        from annnet import AnnNet
+
+        G = AnnNet(directed=True, annotations_backend='pandas')
+        G.add_vertices('a', label='A')
+        G.add_vertices('b', label='B')
+        G.add_edges('a', 'b', weight=2.0)
+
+        exported = to_dataframes(G)
+
+        self.assertIsInstance(exported['nodes'], pd.DataFrame)
+        self.assertIsInstance(exported['edges'], pd.DataFrame)
+        self.assertEqual(len(dataframe_to_rows(exported['nodes'])), 2)
+        self.assertEqual(len(dataframe_to_rows(exported['edges'])), 1)
+
     @classmethod
     def setUpClass(cls):
         """Set up test data once for all tests."""
         cls.nodes_data = {
-            "vertex_id": ["user_001", "user_002", "user_003", "user_004", "user_005"],
-            "username": ["alice", "bob", "charlie", "diana", "eve"],
-            "verified": [True, False, True, False, True],
-            "followers_count": [15000, 230, 89000, 1200, 45000],
+            'vertex_id': ['user_001', 'user_002', 'user_003', 'user_004', 'user_005'],
+            'username': ['alice', 'bob', 'charlie', 'diana', 'eve'],
+            'verified': [True, False, True, False, True],
+            'followers_count': [15000, 230, 89000, 1200, 45000],
         }
 
         cls.edges_data = {
-            "source": ["user_001", "user_002", "user_003", "user_001", "user_005", "user_004"],
-            "target": ["user_002", "user_003", "user_001", "user_005", "user_003", "user_001"],
-            "weight": [1.0, 1.0, 1.0, 0.8, 0.5, 1.0],
-            "directed": [True, True, True, True, True, True],
-            "edge_type": ["follow", "follow", "follow", "close_friend", "follow", "follow"],
-            "created_at": [
-                "2023-01-15",
-                "2023-02-20",
-                "2023-01-10",
-                "2024-06-01",
-                "2024-03-15",
-                "2023-11-30",
+            'source': ['user_001', 'user_002', 'user_003', 'user_001', 'user_005', 'user_004'],
+            'target': ['user_002', 'user_003', 'user_001', 'user_005', 'user_003', 'user_001'],
+            'weight': [1.0, 1.0, 1.0, 0.8, 0.5, 1.0],
+            'directed': [True, True, True, True, True, True],
+            'edge_type': ['follow', 'follow', 'follow', 'close_friend', 'follow', 'follow'],
+            'created_at': [
+                '2023-01-15',
+                '2023-02-20',
+                '2023-01-10',
+                '2024-06-01',
+                '2024-03-15',
+                '2023-11-30',
             ],
         }
 
         cls.hyperedges_exploded_data = {
-            "edge_id": [
-                "group_tech",
-                "group_tech",
-                "group_tech",
-                "group_books",
-                "group_books",
-                "group_books",
+            'edge_id': [
+                'group_tech',
+                'group_tech',
+                'group_tech',
+                'group_books',
+                'group_books',
+                'group_books',
             ],
-            "vertex_id": ["user_001", "user_003", "user_005", "user_002", "user_004", "user_005"],
-            "role": ["member", "member", "member", "member", "member", "member"],
-            "weight": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-            "directed": [False, False, False, False, False, False],
+            'vertex_id': ['user_001', 'user_003', 'user_005', 'user_002', 'user_004', 'user_005'],
+            'role': ['member', 'member', 'member', 'member', 'member', 'member'],
+            'weight': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            'directed': [False, False, False, False, False, False],
         }
 
     def _assert_graph_structure(
@@ -62,7 +91,7 @@ class TestDataFrameAdapter(unittest.TestCase):
         self.assertEqual(len(list(G.vertices())), expected_vertices)
         if expected_edges is not None:
             binary_edges = sum(
-                1 for eid, (_, _, etype) in G.edge_definitions.items() if etype != "hyper"
+                1 for eid, (_, _, etype) in G.edge_definitions.items() if etype != 'hyper'
             )
             self.assertEqual(binary_edges, expected_edges)
         if expected_hyperedges is not None:
@@ -165,9 +194,9 @@ class TestDataFrameAdapter(unittest.TestCase):
         exported = to_dataframes(G1, explode_hyperedges=True)
 
         G2 = from_dataframes(
-            nodes=exported["nodes"],
-            edges=exported["edges"],
-            hyperedges=exported["hyperedges"],
+            nodes=exported['nodes'],
+            edges=exported['edges'],
+            hyperedges=exported['hyperedges'],
             exploded_hyperedges=True,
         )
 
@@ -181,7 +210,7 @@ class TestDataFrameAdapter(unittest.TestCase):
 
         G1 = from_dataframes(nodes=nodes, edges=edges, directed=True)
         exported = to_dataframes(G1)
-        G2 = from_dataframes(nodes=exported["nodes"], edges=exported["edges"])
+        G2 = from_dataframes(nodes=exported['nodes'], edges=exported['edges'])
 
         self.assertEqual(len(list(G1.vertices())), len(list(G2.vertices())))
 
@@ -193,14 +222,14 @@ class TestDataFrameAdapter(unittest.TestCase):
         """Compact hyperedge format (list columns) should work."""
         hyperedges_compact = pl.DataFrame(
             {
-                "edge_id": ["group_tech", "group_books"],
-                "directed": [False, False],
-                "weight": [1.0, 1.0],
-                "head": [None, None],
-                "tail": [None, None],
-                "members": [
-                    ["user_001", "user_003", "user_005"],
-                    ["user_002", "user_004", "user_005"],
+                'edge_id': ['group_tech', 'group_books'],
+                'directed': [False, False],
+                'weight': [1.0, 1.0],
+                'head': [None, None],
+                'tail': [None, None],
+                'members': [
+                    ['user_001', 'user_003', 'user_005'],
+                    ['user_002', 'user_004', 'user_005'],
                 ],
             }
         )
@@ -233,9 +262,9 @@ class TestDataFrameAdapter(unittest.TestCase):
 
         exported = to_dataframes(G, explode_hyperedges=False)
 
-        self.assertIn("members", exported["hyperedges"].columns)
-        self.assertIn("head", exported["hyperedges"].columns)
-        self.assertIn("tail", exported["hyperedges"].columns)
+        self.assertIn('members', exported['hyperedges'].columns)
+        self.assertIn('head', exported['hyperedges'].columns)
+        self.assertIn('tail', exported['hyperedges'].columns)
 
     def test_export_exploded_hyperedges(self):
         """Export should produce valid exploded hyperedge format."""
@@ -246,9 +275,9 @@ class TestDataFrameAdapter(unittest.TestCase):
 
         exported = to_dataframes(G, explode_hyperedges=True)
 
-        self.assertIn("vertex_id", exported["hyperedges"].columns)
-        self.assertIn("role", exported["hyperedges"].columns)
-        self.assertEqual(exported["hyperedges"].height, 6)  # 3 + 3 members
+        self.assertIn('vertex_id', exported['hyperedges'].columns)
+        self.assertIn('role', exported['hyperedges'].columns)
+        self.assertEqual(exported['hyperedges'].height, 6)  # 3 + 3 members
 
     # -------------------------------------------------------------------------
     # Attribute tests
@@ -261,19 +290,19 @@ class TestDataFrameAdapter(unittest.TestCase):
         G = from_dataframes(nodes=nodes)
         exported = to_dataframes(G)
 
-        self.assertIn("username", exported["nodes"].columns)
-        self.assertIn("verified", exported["nodes"].columns)
-        self.assertIn("followers_count", exported["nodes"].columns)
+        self.assertIn('username', exported['nodes'].columns)
+        self.assertIn('verified', exported['nodes'].columns)
+        self.assertIn('followers_count', exported['nodes'].columns)
 
     def test_edge_attributes_preserved(self):
         """Custom edge attributes should survive round-trip."""
         edges = pd.DataFrame(
             {
-                "source": ["user_001", "user_002"],
-                "target": ["user_002", "user_003"],
-                "weight": [0.9, 0.7],
-                "interaction_type": ["dm", "reply"],
-                "sentiment_score": [0.85, -0.2],
+                'source': ['user_001', 'user_002'],
+                'target': ['user_002', 'user_003'],
+                'weight': [0.9, 0.7],
+                'interaction_type': ['dm', 'reply'],
+                'sentiment_score': [0.85, -0.2],
             }
         )
 
@@ -281,24 +310,24 @@ class TestDataFrameAdapter(unittest.TestCase):
         G = from_dataframes(nodes=nodes, edges=edges, directed=True)
         exported = to_dataframes(G)
 
-        self.assertIn("interaction_type", exported["edges"].columns)
-        self.assertIn("sentiment_score", exported["edges"].columns)
+        self.assertIn('interaction_type', exported['edges'].columns)
+        self.assertIn('sentiment_score', exported['edges'].columns)
 
     def test_public_only_filter(self):
         """public_only=True should filter out __prefixed attributes."""
         nodes = pl.DataFrame(
             {
-                "vertex_id": ["a", "b"],
-                "name": ["Alice", "Bob"],
-                "__internal_id": [123, 456],
+                'vertex_id': ['a', 'b'],
+                'name': ['Alice', 'Bob'],
+                '__internal_id': [123, 456],
             }
         )
 
         G = from_dataframes(nodes=nodes)
         exported = to_dataframes(G, public_only=True)
 
-        self.assertIn("name", exported["nodes"].columns)
-        self.assertNotIn("__internal_id", exported["nodes"].columns)
+        self.assertIn('name', exported['nodes'].columns)
+        self.assertNotIn('__internal_id', exported['nodes'].columns)
 
     # -------------------------------------------------------------------------
     # Edge case tests
@@ -306,8 +335,8 @@ class TestDataFrameAdapter(unittest.TestCase):
 
     def test_empty_dataframes(self):
         """Empty DataFrames should not crash."""
-        empty_nodes = pd.DataFrame({"vertex_id": []})
-        empty_edges = pd.DataFrame({"source": [], "target": []})
+        empty_nodes = pd.DataFrame({'vertex_id': []})
+        empty_edges = pd.DataFrame({'source': [], 'target': []})
 
         G = from_dataframes(nodes=empty_nodes, edges=empty_edges)
 
@@ -332,8 +361,8 @@ class TestDataFrameAdapter(unittest.TestCase):
         """AnnNet with edges but no explicit nodes (vertices created implicitly)."""
         edges = pd.DataFrame(
             {
-                "source": ["a", "b"],
-                "target": ["b", "c"],
+                'source': ['a', 'b'],
+                'target': ['b', 'c'],
             }
         )
 
@@ -348,30 +377,30 @@ class TestDataFrameAdapter(unittest.TestCase):
 
     def test_missing_vertex_id_column_raises(self):
         """Nodes DataFrame without vertex_id should raise ValueError."""
-        bad_nodes = pd.DataFrame({"name": ["alice", "bob"]})
+        bad_nodes = pd.DataFrame({'name': ['alice', 'bob']})
 
         with self.assertRaises(ValueError) as ctx:
             from_dataframes(nodes=bad_nodes)
 
-        self.assertIn("vertex_id", str(ctx.exception))
+        self.assertIn('vertex_id', str(ctx.exception))
 
     def test_missing_source_target_columns_raises(self):
         """Edges DataFrame without source/target should raise ValueError."""
-        bad_edges = pd.DataFrame({"from": ["a"], "to": ["b"]})
+        bad_edges = pd.DataFrame({'from': ['a'], 'to': ['b']})
 
         with self.assertRaises(ValueError) as ctx:
             from_dataframes(edges=bad_edges)
 
-        self.assertIn("source", str(ctx.exception))
+        self.assertIn('source', str(ctx.exception))
 
     def test_missing_edge_id_in_hyperedges_raises(self):
         """Hyperedges DataFrame without edge_id should raise ValueError."""
-        bad_hyperedges = pd.DataFrame({"vertex_id": ["a", "b"], "role": ["member", "member"]})
+        bad_hyperedges = pd.DataFrame({'vertex_id': ['a', 'b'], 'role': ['member', 'member']})
 
         with self.assertRaises(ValueError) as ctx:
             from_dataframes(hyperedges=bad_hyperedges, exploded_hyperedges=True)
 
-        self.assertIn("edge_id", str(ctx.exception))
+        self.assertIn('edge_id', str(ctx.exception))
 
     # -------------------------------------------------------------------------
     # Export options tests
@@ -385,7 +414,7 @@ class TestDataFrameAdapter(unittest.TestCase):
         G = from_dataframes(nodes=nodes, hyperedges=hyperedges, exploded_hyperedges=True)
         exported = to_dataframes(G, include_hyperedges=False)
 
-        self.assertNotIn("hyperedges", exported)
+        self.assertNotIn('hyperedges', exported)
 
     def test_exclude_slices(self):
         """include_slices=False should omit slice tables."""
@@ -394,9 +423,108 @@ class TestDataFrameAdapter(unittest.TestCase):
         G = from_dataframes(nodes=nodes)
         exported = to_dataframes(G, include_slices=False)
 
-        self.assertNotIn("slices", exported)
-        self.assertNotIn("slice_weights", exported)
+        self.assertNotIn('slices', exported)
+        self.assertNotIn('slice_weights', exported)
+
+        # -------------------------------------------------------------------------
+
+    # Delimited reader helper tests
+    # -------------------------------------------------------------------------
+
+    def test_dataframe_read_tsv_pandas_from_path(self):
+        """TSV reader should load a pandas DataFrame from a filesystem path."""
+        if not available_dataframe_backends()['pandas']:
+            self.skipTest('pandas not installed')
+
+        content = 'gene\tscore\nEGFR\t1\nTP53\t2\n'
+
+        with tempfile.NamedTemporaryFile('w', suffix='.tsv', delete=False) as f:
+            f.write(content)
+            path = f.name
+
+        try:
+            df = _dataframe_read_tsv(path, backend='pandas')
+            self.assertIsInstance(df, pd.DataFrame)
+            self.assertEqual(
+                dataframe_to_rows(df),
+                [
+                    {'gene': 'EGFR', 'score': 1},
+                    {'gene': 'TP53', 'score': 2},
+                ],
+            )
+        finally:
+            os.unlink(path)
+
+    def test_dataframe_read_tsv_pandas_from_buffer(self):
+        """TSV reader should load a pandas DataFrame from an in-memory buffer."""
+        if not available_dataframe_backends()['pandas']:
+            self.skipTest('pandas not installed')
+
+        buf = io.BytesIO(b'gene\tscore\nEGFR\t1\nTP53\t2\n')
+        df = _dataframe_read_tsv(buf, backend='pandas')
+
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertEqual(
+            dataframe_to_rows(df),
+            [
+                {'gene': 'EGFR', 'score': 1},
+                {'gene': 'TP53', 'score': 2},
+            ],
+        )
+
+    def test_dataframe_read_delimited_csv_polars(self):
+        """Delimited reader should load CSV into Polars when requested."""
+        if not available_dataframe_backends()['polars']:
+            self.skipTest('polars not installed')
+
+        buf = io.BytesIO(b'gene,score\nEGFR,1\nTP53,2\n')
+        df = _dataframe_read_delimited(buf, separator=',', backend='polars')
+
+        self.assertIsInstance(df, pl.DataFrame)
+        self.assertEqual(
+            dataframe_to_rows(df),
+            [
+                {'gene': 'EGFR', 'score': 1},
+                {'gene': 'TP53', 'score': 2},
+            ],
+        )
+
+    def test_dataframe_read_delimited_csv_pyarrow(self):
+        """Delimited reader should load CSV into PyArrow when requested."""
+        if not available_dataframe_backends()['pyarrow']:
+            self.skipTest('pyarrow not installed')
+
+        buf = io.BytesIO(b'gene,score\nEGFR,1\nTP53,2\n')
+        df = _dataframe_read_delimited(buf, separator=',', backend='pyarrow')
+
+        self.assertIsInstance(df, pa.Table)
+        self.assertEqual(
+            dataframe_to_rows(df),
+            [
+                {'gene': 'EGFR', 'score': 1},
+                {'gene': 'TP53', 'score': 2},
+            ],
+        )
+
+    def test_dataframe_read_delimited_auto_returns_supported_backend(self):
+        """Auto backend should return one of the installed dataframe types."""
+        buf = io.BytesIO(b'gene,score\nEGFR,1\nTP53,2\n')
+        df = _dataframe_read_delimited(buf, separator=',', backend='auto')
+
+        backend = select_dataframe_backend('auto')
+        if backend == 'polars':
+            self.assertIsInstance(df, pl.DataFrame)
+        elif backend == 'pandas':
+            self.assertIsInstance(df, pd.DataFrame)
+        else:
+            self.assertIsInstance(df, pa.Table)
+
+        self.assertEqual(len(dataframe_to_rows(df)), 2)
+
+    def test_dataframe_read_delimited_invalid_backend_raises(self):
+        with self.assertRaises(ValueError):
+            _dataframe_read_delimited(io.BytesIO(b'a,b\n1,2\n'), backend='does-not-exist')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

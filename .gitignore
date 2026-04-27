@@ -69,10 +69,13 @@ test_venv/
 test_venv/
 notebooks/data
 site/
+benchmarks/
 
 # pixi environments
 .pixi/*
 !.pixi/config.toml
 
-# cache
+# cache etc.
 .cache/
+.codex
+*PLAN.md

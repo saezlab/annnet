@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from enum import Enum
+from dataclasses import field, dataclass
 
 import narwhals as nw
 
-try:
-    import polars as pl
-except Exception:
-    pl = None
+from .._dataframe_backend import dataframe_filter_ne, dataframe_from_rows
 
 
 def _get_numeric_supertype(left, right):
-    left_cls = left.base_type() if hasattr(left, "base_type") else left
-    right_cls = right.base_type() if hasattr(right, "base_type") else right
+    left_cls = left.base_type() if hasattr(left, 'base_type') else left
+    right_cls = right.base_type() if hasattr(right, 'base_type') else right
 
     if left_cls.is_float() or right_cls.is_float():
         if left_cls == nw.Float64 or right_cls == nw.Float64:
@@ -40,31 +37,16 @@ def _get_numeric_supertype(left, right):
 
 
 def build_dataframe_from_rows(rows):
-    try:
-        import polars as pl
-
-        return pl.DataFrame(rows)
-    except Exception:
-        try:
-            import pandas as pd
-
-            return pd.DataFrame.from_records(rows)
-        except Exception:
-            raise RuntimeError(
-                "No dataframe backend available. Install polars (recommended) or pandas."
-            )
+    return dataframe_from_rows(rows)
 
 
 def _df_filter_not_equal(df, col: str, value):
-    if pl is not None and isinstance(df, pl.DataFrame):
-        return df.filter(pl.col(col) != value)
-    ndf = nw.from_native(df)
-    return nw.to_native(ndf.filter(nw.col(col) != value))
+    return dataframe_filter_ne(df, col, value)
 
 
 class EdgeType(Enum):
-    DIRECTED = "DIRECTED"
-    UNDIRECTED = "UNDIRECTED"
+    DIRECTED = 'DIRECTED'
+    UNDIRECTED = 'UNDIRECTED'
 
 
 @dataclass(slots=True)
@@ -118,27 +100,27 @@ class EdgeRecord:
 
 
 def _external_entity_kind(kind: str) -> str:
-    return "edge" if kind == "edge_entity" else kind
+    return 'edge' if kind == 'edge_entity' else kind
 
 
 def _internal_entity_kind(kind: str) -> str:
-    return "edge_entity" if kind == "edge" else kind
+    return 'edge_entity' if kind == 'edge' else kind
 
 
-_vertex_RESERVED = {"vertex_id"}
+_vertex_RESERVED = {'vertex_id'}
 _EDGE_RESERVED = {
-    "edge_id",
-    "source",
-    "target",
-    "weight",
-    "edge_type",
-    "directed",
-    "slice",
-    "slice_weight",
-    "kind",
-    "members",
-    "head",
-    "tail",
-    "flexible",
+    'edge_id',
+    'source',
+    'target',
+    'weight',
+    'edge_type',
+    'directed',
+    'slice',
+    'slice_weight',
+    'kind',
+    'members',
+    'head',
+    'tail',
+    'flexible',
 }
-_slice_RESERVED = {"slice_id"}
+_slice_RESERVED = {'slice_id'}

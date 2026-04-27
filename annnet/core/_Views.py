@@ -1,10 +1,13 @@
-import narwhals as nw
-
-try:
-    import polars as pl
-except Exception:
-    pl = None
 import scipy.sparse as sp
+
+from .._dataframe_backend import (
+    clone_dataframe,
+    empty_dataframe,
+    dataframe_columns,
+    dataframe_to_rows,
+    dataframe_filter_in,
+    dataframe_from_rows,
+)
 
 
 class GraphView:
@@ -14,7 +17,7 @@ class GraphView:
     Views can be materialized into concrete subgraphs when needed.
 
     Parameters
-    --
+    ----------
     graph : AnnNet
         Parent graph instance
     vertices : list[str] | set[str] | callable | None
@@ -66,17 +69,7 @@ class GraphView:
             return self._graph.vertex_attributes
 
         df = self._graph.vertex_attributes
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
-            return df.filter(pl.col("vertex_id").is_in(list(vertex_ids)))
-
-        import narwhals as nw
-
-        return nw.to_native(nw.from_native(df).filter(nw.col("vertex_id").is_in(list(vertex_ids))))
+        return dataframe_filter_in(df, 'vertex_id', vertex_ids)
 
     @property
     def var(self):
@@ -95,17 +88,7 @@ class GraphView:
             return self._graph.edge_attributes
 
         df = self._graph.edge_attributes
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
-            return df.filter(pl.col("edge_id").is_in(list(edge_ids)))
-
-        import narwhals as nw
-
-        return nw.to_native(nw.from_native(df).filter(nw.col("edge_id").is_in(list(edge_ids))))
+        return dataframe_filter_in(df, 'edge_id', edge_ids)
 
     @property
     def X(self):
@@ -180,7 +163,7 @@ class GraphView:
         """
         vertex_ids = self.vertex_ids
         if vertex_ids is None:
-            return sum(1 for rec in self._graph._entities.values() if rec.kind == "vertex")
+            return sum(1 for rec in self._graph._entities.values() if rec.kind == 'vertex')
         return len(vertex_ids)
 
     @property
@@ -209,8 +192,8 @@ class GraphView:
             edge_ids = set()
             for slice_id in self._slices:
                 if slice_id in self._graph._slices:
-                    vertex_ids.update(self._graph._slices[slice_id]["vertices"])
-                    edge_ids.update(self._graph._slices[slice_id]["edges"])
+                    vertex_ids.update(self._graph._slices[slice_id]['vertices'])
+                    edge_ids.update(self._graph._slices[slice_id]['edges'])
 
         # Step 2: Apply vertex filter
         if self._vertices_filter is not None:
@@ -218,7 +201,7 @@ class GraphView:
                 vertex_ids
                 if vertex_ids is not None
                 else {
-                    ekey[0] for ekey, rec in self._graph._entities.items() if rec.kind == "vertex"
+                    ekey[0] for ekey, rec in self._graph._entities.items() if rec.kind == 'vertex'
                 }
             )
 
@@ -228,7 +211,7 @@ class GraphView:
                     try:
                         if self._vertices_filter(vid):
                             filtered_vertices.add(vid)
-                    except Exception:
+                    except (AttributeError, KeyError, TypeError, ValueError):
                         pass
                 vertex_ids = filtered_vertices
             else:
@@ -250,7 +233,7 @@ class GraphView:
                     try:
                         if self._edges_filter(eid):
                             filtered_edges.add(eid)
-                    except Exception:
+                    except (AttributeError, KeyError, TypeError, ValueError):
                         pass
                 edge_ids = filtered_edges
             else:
@@ -267,7 +250,7 @@ class GraphView:
                 try:
                     if self._predicate(vid):
                         filtered_vertices.add(vid)
-                except Exception:
+                except (AttributeError, KeyError, TypeError, ValueError):
                     pass
             vertex_ids = filtered_vertices
 
@@ -278,7 +261,7 @@ class GraphView:
                 rec = self._graph._edges.get(eid)
                 if rec is None or rec.col_idx < 0:
                     continue
-                if rec.etype == "hyper":
+                if rec.etype == 'hyper':
                     if rec.tgt is not None:
                         if set(rec.src).issubset(vertex_ids) and set(rec.tgt).issubset(vertex_ids):
                             filtered_edges.add(eid)
@@ -320,19 +303,7 @@ class GraphView:
         # Filter by edge IDs in this view
         edge_ids = self.edge_ids
         if edge_ids is not None:
-            try:
-                import polars as pl
-            except Exception:
-                pl = None
-
-            if pl is not None and isinstance(df, pl.DataFrame):
-                df = df.filter(pl.col("edge_id").is_in(list(edge_ids)))
-            else:
-                import narwhals as nw
-
-                df = nw.to_native(
-                    nw.from_native(df).filter(nw.col("edge_id").is_in(list(edge_ids)))
-                )
+            df = dataframe_filter_in(df, 'edge_id', edge_ids)
 
         return df
 
@@ -358,19 +329,7 @@ class GraphView:
         # Filter by vertex IDs in this view
         vertex_ids = self.vertex_ids
         if vertex_ids is not None:
-            try:
-                import polars as pl
-            except Exception:
-                pl = None
-
-            if pl is not None and isinstance(df, pl.DataFrame):
-                df = df.filter(pl.col("vertex_id").is_in(list(vertex_ids)))
-            else:
-                import narwhals as nw
-
-                df = nw.to_native(
-                    nw.from_native(df).filter(nw.col("vertex_id").is_in(list(vertex_ids)))
-                )
+            df = dataframe_filter_in(df, 'vertex_id', vertex_ids)
         return df
 
     # ==================== Materialization (uses AnnNet methods) ====================
@@ -399,53 +358,24 @@ class GraphView:
         if vertex_ids is not None:
             vset = vertex_ids  # already a set from _compute_ids
         else:
-            vset = {ekey[0] for ekey, rec in self._graph._entities.items() if rec.kind == "vertex"}
+            vset = {ekey[0] for ekey, rec in self._graph._entities.items() if rec.kind == 'vertex'}
 
         # ---- Copy vertices in one bulk call ----
         if copy_attributes:
-            # obs is the already-filtered vertex attr DataFrame — one scan replaces N individual lookups
-            obs_df = self.obs
-            try:
-                if pl is not None and isinstance(obs_df, pl.DataFrame):
-                    vertex_records = obs_df.to_dicts()
-                else:
-                    import narwhals as nw
-
-                    vertex_records = (
-                        nw.from_native(obs_df, eager_only=True)
-                        .to_pandas()
-                        .to_dict(orient="records")
-                    )
-            except Exception:
-                vertex_records = [{"vertex_id": vid} for vid in vset]
+            vertex_records = dataframe_to_rows(self.obs)
+            if not vertex_records:
+                vertex_records = [{'vertex_id': vid} for vid in vset]
             subG.add_vertices(vertex_records)
         else:
-            subG.add_vertices({"vertex_id": vid} for vid in vset)
+            subG.add_vertices({'vertex_id': vid} for vid in vset)
 
         # ---- Collect all edge attrs in one bulk scan ----
         edge_attrs_map = {}
         if copy_attributes:
-            var_df = self.var  # already-filtered edge attr DataFrame
-            try:
-                if (
-                    pl is not None
-                    and isinstance(var_df, pl.DataFrame)
-                    and "edge_id" in var_df.columns
-                ):
-                    for row in var_df.to_dicts():
-                        eid = row.pop("edge_id", None)
-                        if eid is not None:
-                            edge_attrs_map[eid] = row
-                else:
-                    import narwhals as nw
-
-                    native = nw.from_native(var_df, eager_only=True).to_pandas()
-                    for row in native.to_dict(orient="records"):
-                        eid = row.pop("edge_id", None)
-                        if eid is not None:
-                            edge_attrs_map[eid] = row
-            except Exception:
-                pass
+            for row in dataframe_to_rows(self.var):
+                eid = row.pop('edge_id', None)
+                if eid is not None:
+                    edge_attrs_map[eid] = row
 
         # ---- Determine which edges to copy ----
         if edge_ids is not None:
@@ -462,20 +392,20 @@ class GraphView:
             if rec is None or rec.col_idx < 0:
                 continue
             weight = rec.weight if rec.weight is not None else 1.0
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 if rec.tgt is not None:
                     heads = list(rec.src)
                     tails = list(rec.tgt)
                     if not all(h in vset for h in heads) or not all(t in vset for t in tails):
                         continue
-                    d = {"head": heads, "tail": tails, "weight": weight}
+                    d = {'head': heads, 'tail': tails, 'weight': weight}
                 else:
                     members = list(rec.src)
                     if not all(m in vset for m in members):
                         continue
-                    d = {"members": members, "weight": weight}
+                    d = {'members': members, 'weight': weight}
                 if copy_attributes and eid in edge_attrs_map:
-                    d["attributes"] = edge_attrs_map[eid]
+                    d['attributes'] = edge_attrs_map[eid]
                 hyper_edges.append(d)
             else:
                 source, target = rec.src, rec.tgt
@@ -485,18 +415,18 @@ class GraphView:
                     continue
                 directed = rec.directed if rec.directed is not None else self._graph.directed
                 d = {
-                    "source": source,
-                    "target": target,
-                    "weight": weight,
-                    "edge_type": rec.etype,
-                    "edge_directed": directed,
+                    'source': source,
+                    'target': target,
+                    'weight': weight,
+                    'edge_type': rec.etype,
+                    'edge_directed': directed,
                 }
                 if copy_attributes and eid in edge_attrs_map:
-                    d["attributes"] = edge_attrs_map[eid]
+                    d['attributes'] = edge_attrs_map[eid]
                 binary_edges.append(d)
 
         if binary_edges:
-            subG._add_edges_batch(binary_edges)
+            subG.add_edges_bulk(binary_edges)
         if hyper_edges:
             subG.add_edges(hyper_edges)
 
@@ -543,14 +473,11 @@ class GraphView:
         # Edges
         if edges is None:
             new_edges = base_edges
-            edge_pred = None
         elif callable(edges):
             new_edges = base_edges
-            edge_pred = edges
         else:
             to_set = set(edges)
             new_edges = (set(base_edges) & to_set) if base_edges is not None else to_set
-            edge_pred = None
 
         # slices
         new_slices = slices if slices is not None else (self._slices if self._slices else None)
@@ -561,17 +488,17 @@ class GraphView:
             if self._predicate:
                 try:
                     ok = ok and bool(self._predicate(v))
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     ok = False
             if predicate:
                 try:
                     ok = ok and bool(predicate(v))
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     ok = False
             if vertex_pred:
                 try:
                     ok = ok and bool(vertex_pred(v))
-                except Exception:
+                except (AttributeError, TypeError, ValueError):
                     ok = False
             return ok
 
@@ -596,37 +523,37 @@ class GraphView:
         str
         """
         lines = [
-            "GraphView Summary",
-            "─" * 30,
-            f"vertices: {self.vertex_count}",
-            f"Edges: {self.edge_count}",
+            'GraphView Summary',
+            '─' * 30,
+            f'vertices: {self.vertex_count}',
+            f'Edges: {self.edge_count}',
         ]
 
         filters = []
         if self._slices:
-            filters.append(f"slices={self._slices}")
+            filters.append(f'slices={self._slices}')
         if self._vertices_filter:
             if callable(self._vertices_filter):
-                filters.append("vertices=<predicate>")
+                filters.append('vertices=<predicate>')
             else:
-                filters.append(f"vertices={len(list(self._vertices_filter))} specified")
+                filters.append(f'vertices={len(list(self._vertices_filter))} specified')
         if self._edges_filter:
             if callable(self._edges_filter):
-                filters.append("edges=<predicate>")
+                filters.append('edges=<predicate>')
             else:
-                filters.append(f"edges={len(list(self._edges_filter))} specified")
+                filters.append(f'edges={len(list(self._edges_filter))} specified')
         if self._predicate:
-            filters.append("predicate=<function>")
+            filters.append('predicate=<function>')
 
         if filters:
-            lines.append(f"Filters: {', '.join(filters)}")
+            lines.append(f'Filters: {", ".join(filters)}')
         else:
-            lines.append("Filters: None (full graph)")
+            lines.append('Filters: None (full graph)')
 
-        return "\n".join(lines)
+        return '\n'.join(lines)
 
     def __repr__(self):
-        return f"GraphView(vertices={self.vertex_count}, edges={self.edge_count})"
+        return f'GraphView(vertices={self.vertex_count}, edges={self.edge_count})'
 
     def __len__(self):
         return self.vertex_count
@@ -667,16 +594,7 @@ class ViewsClass:
         Vectorized implementation avoids per-edge scans.
         """
         if not self._col_to_edge:
-            try:
-                import polars as pl
-
-                return pl.DataFrame(schema={"edge_id": pl.Utf8, "kind": pl.Utf8})
-            except Exception:
-                import pandas as pd
-
-                return pd.DataFrame(
-                    {"edge_id": pd.Series(dtype="string"), "kind": pd.Series(dtype="string")}
-                )
+            return empty_dataframe({'edge_id': 'text', 'kind': 'text'})
 
         eids_raw = list(self._col_to_edge.values())
         eids_str = [str(eid) for eid in eids_raw]  # Stringified for DataFrame
@@ -684,7 +602,7 @@ class ViewsClass:
         _default_dir = True if self.directed is None else self.directed
         _edge_recs = [self._edges[eid] for eid in eids_raw]
         kinds = [
-            "hyper" if rec.etype == "hyper" else (rec.ml_kind or "binary") for rec in _edge_recs
+            'hyper' if rec.etype == 'hyper' else (rec.ml_kind or 'binary') for rec in _edge_recs
         ]
 
         need_global = include_weight or resolved_weight
@@ -695,7 +613,7 @@ class ViewsClass:
             else None
         )
 
-        if all(rec.etype != "hyper" for rec in _edge_recs):
+        if all(rec.etype != 'hyper' for rec in _edge_recs):
             src = [str(rec.src) if rec.src is not None else None for rec in _edge_recs]
             tgt = [str(rec.tgt) if rec.tgt is not None else None for rec in _edge_recs]
             etype = [str(rec.etype) if rec.etype is not None else None for rec in _edge_recs]
@@ -707,21 +625,21 @@ class ViewsClass:
             head, tail, members = [], [], []
 
             for rec in _edge_recs:
-                if rec.etype == "hyper":
+                if rec.etype == 'hyper':
                     if rec.tgt is not None:
                         src_vals = tuple(str(x) for x in sorted(rec.src))
                         tgt_vals = tuple(str(x) for x in sorted(rec.tgt))
                         head.append(src_vals)
                         tail.append(tgt_vals)
                         members.append(None)
-                        src.append("|".join(src_vals))
-                        tgt.append("|".join(tgt_vals))
+                        src.append('|'.join(src_vals))
+                        tgt.append('|'.join(tgt_vals))
                     else:
                         src_vals = tuple(str(x) for x in sorted(rec.src))
                         head.append(None)
                         tail.append(None)
                         members.append(src_vals)
-                        src.append("|".join(src_vals))
+                        src.append('|'.join(src_vals))
                         tgt.append(None)
                     etype.append(None)
                 else:
@@ -733,114 +651,60 @@ class ViewsClass:
                     members.append(None)
 
         # Use stringified IDs in DataFrame
-        cols = {"edge_id": eids_str, "kind": kinds}
+        cols = {'edge_id': eids_str, 'kind': kinds}
         if include_directed:
-            cols["directed"] = dirs
+            cols['directed'] = dirs
         if include_weight:
-            cols["global_weight"] = global_w
+            cols['global_weight'] = global_w
         if resolved_weight and not include_weight:
-            cols["_gw_tmp"] = global_w
+            cols['_gw_tmp'] = global_w
 
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
+        edge_attrs_map = self._rows_attr_map(self.edge_attributes, 'edge_id')
+        slice_attrs_map = {}
+        if slice is not None:
+            for row in dataframe_to_rows(self.edge_slice_attributes):
+                if row.get('slice_id') != slice:
+                    continue
+                eid = row.get('edge_id')
+                if eid is None:
+                    continue
+                payload = {
+                    f'slice_{k}': v for k, v in row.items() if k not in {'slice_id', 'edge_id'}
+                }
+                slice_attrs_map[str(eid)] = payload
 
-        if pl is not None:
-            base = pl.DataFrame(cols).with_columns(
-                pl.Series("source", src, dtype=pl.Utf8),
-                pl.Series("target", tgt, dtype=pl.Utf8),
-                pl.Series("edge_type", etype, dtype=pl.Utf8),
-                pl.Series("head", head, dtype=pl.List(pl.Utf8)),
-                pl.Series("tail", tail, dtype=pl.List(pl.Utf8)),
-                pl.Series("members", members, dtype=pl.List(pl.Utf8)),
-            )
+        out_rows = []
+        for idx, eid in enumerate(eids_str):
+            row = {
+                'edge_id': eid,
+                'kind': kinds[idx],
+                'source': src[idx],
+                'target': tgt[idx],
+                'edge_type': etype[idx],
+                'head': list(head[idx]) if head[idx] is not None else None,
+                'tail': list(tail[idx]) if tail[idx] is not None else None,
+                'members': list(members[idx]) if members[idx] is not None else None,
+            }
+            if include_directed:
+                row['directed'] = dirs[idx]
+            if include_weight:
+                row['global_weight'] = global_w[idx]
+            elif resolved_weight:
+                row['_gw_tmp'] = global_w[idx]
 
-            # Normalize edge_attributes before join
-            if isinstance(self.edge_attributes, pl.DataFrame) and self.edge_attributes.height > 0:
-                edge_attrs = self.edge_attributes
-                if "edge_id" in edge_attrs.columns:
-                    edge_attrs = edge_attrs.with_columns(pl.col("edge_id").cast(pl.Utf8))
-                out = base.join(edge_attrs, on="edge_id", how="left")
-            else:
-                out = base
-
-            if (
-                slice is not None
-                and isinstance(self.edge_slice_attributes, pl.DataFrame)
-                and self.edge_slice_attributes.height > 0
-            ):
-                slice_df = self.edge_slice_attributes
-                if "edge_id" in slice_df.columns:
-                    slice_df = slice_df.with_columns(pl.col("edge_id").cast(pl.Utf8))
-                slice_slice = slice_df.filter(pl.col("slice_id") == slice).drop("slice_id")
-                if slice_slice.height > 0:
-                    rename_map = {c: f"slice_{c}" for c in slice_slice.columns if c != "edge_id"}
-                    if rename_map:
-                        slice_slice = slice_slice.rename(rename_map)
-                    out = out.join(slice_slice, on="edge_id", how="left")
+            row.update(edge_attrs_map.get(eid, {}))
+            row.update(slice_attrs_map.get(eid, {}))
 
             if resolved_weight:
-                gw_col = "global_weight" if include_weight else "_gw_tmp"
-                lw_col = "slice_weight" if ("slice_weight" in out.columns) else None
-                if lw_col:
-                    out = out.with_columns(
-                        pl.coalesce([pl.col(lw_col), pl.col(gw_col)]).alias("effective_weight")
-                    )
-                else:
-                    out = out.with_columns(pl.col(gw_col).alias("effective_weight"))
+                gw_col = 'global_weight' if include_weight else '_gw_tmp'
+                row['effective_weight'] = row.get('slice_weight', row.get(gw_col))
+                if not include_weight:
+                    row.pop('_gw_tmp', None)
 
-                if not include_weight and "_gw_tmp" in out.columns:
-                    out = out.drop("_gw_tmp")
+            out_rows.append(row)
 
-            return out.clone() if copy else out
-
-        # pandas fallback
-        import pandas as pd
-
-        base = pd.DataFrame(cols)
-        base["source"] = src
-        base["target"] = tgt
-        base["edge_type"] = etype
-        base["head"] = head
-        base["tail"] = tail
-        base["members"] = members
-        out = base
-
-        ea = self.edge_attributes
-        if ea is not None and hasattr(ea, "columns") and len(ea) > 0 and "edge_id" in ea.columns:
-            ea_df = pd.DataFrame(ea)
-            ea_df["edge_id"] = ea_df["edge_id"].astype(str)
-            out = out.merge(ea_df, on="edge_id", how="left")
-
-        if slice is not None:
-            esa = self.edge_slice_attributes
-            if esa is not None and hasattr(esa, "columns") and len(esa) > 0:
-                esa_df = pd.DataFrame(esa)
-                if {"slice_id", "edge_id"}.issubset(esa_df.columns):
-                    esa_df["edge_id"] = esa_df["edge_id"].astype(str)
-                    slice_slice = esa_df[esa_df["slice_id"] == slice].drop(
-                        columns=["slice_id"], errors="ignore"
-                    )
-                    if not slice_slice.empty:
-                        rename_map = {
-                            c: f"slice_{c}" for c in slice_slice.columns if c != "edge_id"
-                        }
-                        slice_slice = slice_slice.rename(columns=rename_map)
-                        out = out.merge(slice_slice, on="edge_id", how="left")
-
-        if resolved_weight:
-            gw_col = "global_weight" if include_weight else "_gw_tmp"
-            if "slice_weight" in out.columns:
-                out["effective_weight"] = out["slice_weight"].where(
-                    out["slice_weight"].notna(), out[gw_col]
-                )
-            else:
-                out["effective_weight"] = out[gw_col]
-            if not include_weight and "_gw_tmp" in out.columns:
-                out = out.drop(columns=["_gw_tmp"], errors="ignore")
-
-        return out.copy(deep=True) if copy else out
+        out = dataframe_from_rows(out_rows)
+        return clone_dataframe(out) if copy else out
 
     def vertices_view(self, copy=True):
         """Read-only vertex attribute table.
@@ -856,24 +720,11 @@ class ViewsClass:
             Columns include `vertex_id` plus pure attributes.
         """
         df = self.vertex_attributes
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
-            if df.height == 0:
-                return pl.DataFrame(schema={"vertex_id": pl.Utf8})
-            return df.clone() if copy else df
-
-        # fallback
-        import pandas as pd
-
-        if df is None or (hasattr(df, "__len__") and len(df) == 0):
-            out = pd.DataFrame({"vertex_id": pd.Series(dtype="string")})
+        if df is None or 'vertex_id' not in dataframe_columns(df):
+            out = empty_dataframe({'vertex_id': 'text'})
         else:
-            out = pd.DataFrame(df)
-        return out.copy(deep=True) if copy else out
+            out = clone_dataframe(df)
+        return clone_dataframe(out) if copy else out
 
     def slices_view(self, copy=True):
         """Read-only slice attribute table.
@@ -889,23 +740,11 @@ class ViewsClass:
             Columns include `slice_id` plus pure attributes.
         """
         df = self.slice_attributes
-        try:
-            import polars as pl
-        except Exception:
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
-            if df.height == 0:
-                return pl.DataFrame(schema={"slice_id": pl.Utf8})
-            return df.clone() if copy else df
-
-        import pandas as pd
-
-        if df is None or (hasattr(df, "__len__") and len(df) == 0):
-            out = pd.DataFrame({"slice_id": pd.Series(dtype="string")})
+        if df is None or 'slice_id' not in dataframe_columns(df):
+            out = empty_dataframe({'slice_id': 'text'})
         else:
-            out = pd.DataFrame(df)
-        return out.copy(deep=True) if copy else out
+            out = clone_dataframe(df)
+        return clone_dataframe(out) if copy else out
 
     def aspects_view(self, copy=True):
         """Return a view of Kivela aspects and their metadata.
@@ -923,38 +762,21 @@ class ViewsClass:
         -----
         Columns include `aspect`, `elem_layers`, and any aspect attribute keys.
         """
-        if not getattr(self, "aspects", None):
-            try:
-                import polars as pl
-
-                return pl.DataFrame(schema={"aspect": pl.Utf8, "elem_layers": pl.List(pl.Utf8)})
-            except Exception:
-                import pandas as pd
-
-                return pd.DataFrame(
-                    {"aspect": pd.Series(dtype="string"), "elem_layers": pd.Series(dtype="object")}
-                )
+        if not getattr(self, 'aspects', None):
+            return empty_dataframe({'aspect': 'text', 'elem_layers': 'list_text'})
 
         rows = []
         for a in self.aspects:
             base = {
-                "aspect": a,
-                "elem_layers": list(self.elem_layers.get(a, [])),
+                'aspect': a,
+                'elem_layers': list(self.elem_layers.get(a, [])),
             }
             for k, v in self.layers._aspect_attrs.get(a, {}).items():
                 base[k] = v
             rows.append(base)
 
-        try:
-            import polars as pl
-
-            df = pl.DataFrame(rows)
-            return df.clone() if copy else df
-        except Exception:
-            import pandas as pd
-
-            df = pd.DataFrame.from_records(rows)
-            return df.copy(deep=True) if copy else df
+        df = dataframe_from_rows(rows)
+        return clone_dataframe(df) if copy else df
 
 
 class ViewsAccessor:
@@ -964,7 +786,7 @@ class ViewsAccessor:
     wrappers during the contraction phase.
     """
 
-    __slots__ = ("_G",)
+    __slots__ = ('_G',)
 
     def __init__(self, graph):
         self._G = graph
@@ -1002,41 +824,12 @@ class ViewsAccessor:
         and prefixed elementary layer attributes.
         """
         # no aspects configured → no layers
-        if not getattr(self, "aspects", None):
-            try:
-                import polars as pl
-
-                return pl.DataFrame(schema={"layer_tuple": pl.List(pl.Utf8), "layer_id": pl.Utf8})
-            except Exception:
-                import pandas as pd
-
-                return pd.DataFrame(
-                    {
-                        "layer_tuple": pd.Series(dtype="object"),
-                        "layer_id": pd.Series(dtype="string"),
-                    }
-                )
+        if not getattr(self, 'aspects', None):
+            return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
 
         # empty product → no layers
-        if not getattr(self, "_all_layers", ()):
-            try:
-                import polars as pl
-
-                return pl.DataFrame(
-                    schema={
-                        "layer_tuple": pl.List(pl.Utf8),
-                        "layer_id": pl.Utf8,
-                    }
-                )
-            except Exception:
-                import pandas as pd
-
-                return pd.DataFrame(
-                    {
-                        "layer_tuple": pd.Series(dtype="object"),
-                        "layer_id": pd.Series(dtype="string"),
-                    }
-                )
+        if not getattr(self, '_all_layers', ()):
+            return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
 
         rows = []
         for aa in self.layers._all_layers:
@@ -1044,8 +837,8 @@ class ViewsAccessor:
             lid = self.layer_tuple_to_id(aa)
 
             base = {
-                "layer_tuple": list(aa),
-                "layer_id": lid,
+                'layer_tuple': list(aa),
+                'layer_id': lid,
             }
 
             # split per-aspect columns
@@ -1059,20 +852,12 @@ class ViewsAccessor:
             # attach elementary layer attrs for each aspect (prefixed)
             # using the canonical elementary id "{aspect}_{label}"
             for i, a in enumerate(self.aspects):
-                lid_elem = f"{a}_{aa[i]}"
-                rdict = self._row_attrs(self.layer_attributes, "layer_id", lid_elem) or {}
+                lid_elem = f'{a}_{aa[i]}'
+                rdict = self._row_attrs(self.layer_attributes, 'layer_id', lid_elem) or {}
                 for k, v in rdict.items():
-                    base[f"{a}__{k}"] = v
+                    base[f'{a}__{k}'] = v
 
             rows.append(base)
 
-        try:
-            import polars as pl
-
-            df = pl.DataFrame(rows)
-            return df.clone() if copy else df
-        except Exception:
-            import pandas as pd
-
-            df = pd.DataFrame.from_records(rows)
-            return df.copy(deep=True) if copy else df
+        df = dataframe_from_rows(rows)
+        return clone_dataframe(df) if copy else df

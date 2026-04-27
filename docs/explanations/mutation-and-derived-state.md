@@ -13,7 +13,7 @@ This page explains how that rule shows up in practice.
 
 The scalar mutation API in `graph.py` works against the canonical stores.
 
-Typical `add_vertex(...)` flow:
+Typical `add_vertices(...)` flow:
 
 1. normalize the layer coordinate
 2. resolve placeholder behavior if needed
@@ -22,7 +22,7 @@ Typical `add_vertex(...)` flow:
 5. update slice membership
 6. upsert attributes
 
-Typical `add_edge(...)` flow:
+Typical `add_edges(...)` flow:
 
 1. parse the endpoint specification
 2. infer the structural edge type
@@ -38,7 +38,7 @@ That is the key sequencing principle: matrix and records move together.
 
 ## Bulk mutation does not define a second model
 
-`_BulkOps.py` is easy to misread if you assume it is an alternate storage path.
+Bulk mutation is easy to misread if you assume it is an alternate storage path.
 It is not.
 
 The bulk methods:
@@ -80,7 +80,7 @@ These are materializations rather than canonical state:
 
 - CSR and CSC matrices
 - adjacency matrices
-- backend graphs from lazy proxies
+- backend graphs from `G.nx`/`G.ig`/`G.gt` lazy accessors
 - certain layer-specific matrix views
 
 They are either cached behind version checks or rebuilt on demand.
@@ -191,15 +191,3 @@ This matters for interpretation.
 The history system logs what the API call did, not a reconstructed semantic
 "meaning" of the mutation after the fact. That keeps the log simple, explicit,
 and serializable.
-
-## The operational reading rule
-
-When reading a mutating method, the right question is not only "what data does
-it touch?" but also:
-
-- is it updating canonical state?
-- is it synchronizing a derived index?
-- is it invalidating a cache?
-- is it only changing an overlay?
-
-That is the real operational grammar of AnnNet.

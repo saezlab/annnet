@@ -4,8 +4,8 @@
 def _hyper_meta(rec):
     """Build the hyperedge metadata dict from an EdgeRecord."""
     if rec.tgt is not None:
-        return {"directed": True, "head": set(rec.src), "tail": set(rec.tgt)}
-    return {"directed": False, "members": set(rec.src)}
+        return {'directed': True, 'head': set(rec.src), 'tail': set(rec.tgt)}
+    return {'directed': False, 'members': set(rec.src)}
 
 
 class Traversal:
@@ -32,18 +32,18 @@ class Traversal:
         default_dir = self.directed if self.directed is not None else True
         ekey_kind = self._entities[ekey].kind
 
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             if rec.col_idx < 0:
                 continue
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 meta = _hyper_meta(rec)
-                if meta["directed"]:
-                    if entity_id in meta["head"]:
-                        out |= meta["tail"]
-                    elif entity_id in meta["tail"]:
-                        out |= meta["head"]
+                if meta['directed']:
+                    if entity_id in meta['head']:
+                        out |= meta['tail']
+                    elif entity_id in meta['tail']:
+                        out |= meta['head']
                 else:
-                    members = meta.get("members", set())
+                    members = meta.get('members', set())
                     if entity_id in members:
                         out |= members - {entity_id}
             else:
@@ -53,7 +53,7 @@ class Traversal:
                 edir = rec.directed if rec.directed is not None else default_dir
                 if s == entity_id:
                     out.add(t)
-                elif t == entity_id and (not edir or ekey_kind == "edge_entity"):
+                elif t == entity_id and (not edir or ekey_kind == 'edge_entity'):
                     out.add(s)
         return list(out)
 
@@ -77,16 +77,16 @@ class Traversal:
         out = set()
         default_dir = self.directed if self.directed is not None else True
 
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             if rec.col_idx < 0:
                 continue
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 meta = _hyper_meta(rec)
-                if meta["directed"]:
-                    if vertex_id in meta["head"]:
-                        out |= meta["tail"]
+                if meta['directed']:
+                    if vertex_id in meta['head']:
+                        out |= meta['tail']
                 else:
-                    members = meta.get("members", set())
+                    members = meta.get('members', set())
                     if vertex_id in members:
                         out |= members - {vertex_id}
             else:
@@ -135,16 +135,16 @@ class Traversal:
         inn = set()
         default_dir = self.directed if self.directed is not None else True
 
-        for eid, rec in self._edges.items():
+        for _eid, rec in self._edges.items():
             if rec.col_idx < 0:
                 continue
-            if rec.etype == "hyper":
+            if rec.etype == 'hyper':
                 meta = _hyper_meta(rec)
-                if meta["directed"]:
-                    if vertex_id in meta["tail"]:
-                        inn |= meta["head"]
+                if meta['directed']:
+                    if vertex_id in meta['tail']:
+                        inn |= meta['head']
                 else:
-                    members = meta.get("members", set())
+                    members = meta.get('members', set())
                     if vertex_id in members:
                         inn |= members - {vertex_id}
             else:

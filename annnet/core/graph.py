@@ -2,6 +2,7 @@ import json
 import time
 import warnings
 from collections import defaultdict
+from collections.abc import MutableMapping
 from datetime import UTC, datetime
 
 import narwhals as nw
@@ -14,6 +15,14 @@ except Exception:  # ModuleNotFoundError, etc.
 import scipy.sparse as sp
 
 from ..algorithms.traversal import Traversal
+from .._dataframe_backend import (
+    dataframe_columns,
+    dataframe_drop_rows,
+    dataframe_height,
+    dataframe_to_rows,
+    empty_dataframe,
+    select_dataframe_backend,
+)
 from ._Annotation import AttributesAccessor, AttributesClass
 from ._History import GraphDiff, History, HistoryAccessor
 from ._Layers import LayerAccessor
@@ -34,7 +43,7 @@ from ._records import (
 )
 from ._Slices import SliceManager
 from ._Views import GraphView, ViewsAccessor, ViewsClass
-from .lazy_proxies import _LazyGTProxy, _LazyIGProxy, _LazyNXProxy
+from .backend_accessors import _GTBackendAccessor, _IGBackendAccessor, _NXBackendAccessor
 
 # ===================================
 
@@ -53,6 +62,47 @@ def _to_polars_if_possible(df):
     except Exception:
         pass
     return df, False
+
+
+class _EdgeRecordFieldMap(MutableMapping):
+    """Mutable mapping view over one field on ``AnnNet._edges`` records."""
+
+    def __init__(self, graph, field_name, *, include, getter=None, setter=None):
+        self._graph = graph
+        self._field_name = field_name
+        self._include = include
+        self._getter = getter
+        self._setter = setter
+
+    def __getitem__(self, key):
+        rec = self._graph._edges[key]
+        value = getattr(rec, self._field_name)
+        if not self._include(rec, value):
+            raise KeyError(key)
+        return self._getter(rec, value) if self._getter else value
+
+    def __setitem__(self, key, value):
+        if key not in self._graph._edges:
+            raise KeyError(key)
+        rec = self._graph._edges[key]
+        if self._setter:
+            self._setter(rec, value)
+        else:
+            setattr(rec, self._field_name, value)
+
+    def __delitem__(self, key):
+        if key not in self._graph._edges:
+            raise KeyError(key)
+        setattr(self._graph._edges[key], self._field_name, None)
+
+    def __iter__(self):
+        for eid, rec in self._graph._edges.items():
+            value = getattr(rec, self._field_name)
+            if self._include(rec, value):
+                yield eid
+
+    def __len__(self):
+        return sum(1 for _ in self.__iter__())
 
 
 class AnnNetMeta(type):
@@ -110,8 +160,9 @@ class AnnNet(
         Initial column capacity for the incidence matrix.
     annotations : dict | None, optional
         Pre-built annotation tables to use instead of creating empty tables.
-    annotations_backend : {"polars", "pandas"}, optional
-        Preferred backend for newly initialized annotation tables.
+    annotations_backend : {"auto", "polars", "pandas", "pyarrow"} | None, optional
+        Preferred backend for newly initialized annotation tables. ``"auto"``
+        prefers the first installed supported backend.
     aspects : dict[str, list[str]] | None, optional
         Initial multilayer aspect declaration. If omitted, the graph starts
         flat with a single placeholder aspect ``"_"``.
@@ -361,7 +412,7 @@ class AnnNet(
         self._csr_cache = None
 
         # --- Attribute storage ---
-        self._annotations_backend = annotations_backend
+        self._annotations_backend = select_dataframe_backend(annotations_backend)
         self._init_annotation_tables(annotations)
         self.graph_attributes: dict = {}
         self.graph_attributes.update(kwargs)
@@ -422,47 +473,23 @@ class AnnNet(
     def _rebuild_slice_edge_weights_cache(self):
         cache = defaultdict(dict)
         df = self.edge_slice_attributes
-        if df is None or not hasattr(df, "columns"):
+        if df is None:
             self.slice_edge_weights = cache
             return
 
-        cols = set(df.columns)
+        cols = set(dataframe_columns(df))
         if not {"slice_id", "edge_id", "weight"} <= cols:
             self.slice_edge_weights = cache
             return
 
-        try:
-            import math
-
-            import polars as pl
-        except Exception:
-            math = None
-            pl = None
-
-        if pl is not None and isinstance(df, pl.DataFrame):
-            rows = df.select(["slice_id", "edge_id", "weight"]).iter_rows(named=True)
-        else:
-            try:
-                import narwhals as nw
-
-                native = nw.to_native(
-                    nw.from_native(df, pass_through=True).select(["slice_id", "edge_id", "weight"])
-                )
-                rows = (
-                    native.to_dicts()
-                    if hasattr(native, "to_dicts")
-                    else native.to_dict(orient="records")
-                )
-            except Exception:
-                rows = []
-
+        rows = dataframe_to_rows(df)
         for row in rows:
             lid = row.get("slice_id")
             eid = row.get("edge_id")
             w = row.get("weight")
             if lid is None or eid is None or w is None:
                 continue
-            if math is not None and isinstance(w, float) and math.isnan(w):
+            if isinstance(w, float) and np.isnan(w):
                 continue
             cache[lid][eid] = float(w)
 
@@ -510,38 +537,16 @@ class AnnNet(
             self.layer_attributes = annotations.get("layer_attributes")
             return
 
-        # 2) Otherwise, create empties.
-        if self._annotations_backend == "polars" and pl is not None:
-            self.vertex_attributes = pl.DataFrame(schema={"vertex_id": pl.Utf8})
-            self.edge_attributes = pl.DataFrame(schema={"edge_id": pl.Utf8})
-            self.slice_attributes = pl.DataFrame(schema={"slice_id": pl.Utf8})
-            self.edge_slice_attributes = pl.DataFrame(
-                schema={"slice_id": pl.Utf8, "edge_id": pl.Utf8, "weight": pl.Float64}
-            )
-            self.layer_attributes = pl.DataFrame(schema={"layer_id": pl.Utf8})
-            return
-
-        # 3) No polars: need a fallback engine, or force user to pass tables.
-        # Picked pandas fallback since it is common.
-        try:
-            import pandas as pd
-        except Exception:
-            raise RuntimeError(
-                "Polars is not installed, and no annotation tables were provided. "
-                "Install polars OR pass annotation tables (pandas/pyarrow/etc.) to AnnNet(..., annotations=...)."
-            )
-
-        self.vertex_attributes = pd.DataFrame({"vertex_id": pd.Series(dtype="string")})
-        self.edge_attributes = pd.DataFrame({"edge_id": pd.Series(dtype="string")})
-        self.slice_attributes = pd.DataFrame({"slice_id": pd.Series(dtype="string")})
-        self.edge_slice_attributes = pd.DataFrame(
-            {
-                "slice_id": pd.Series(dtype="string"),
-                "edge_id": pd.Series(dtype="string"),
-                "weight": pd.Series(dtype="float64"),
-            }
+        # 2) Otherwise, create empty tables with the centrally selected backend.
+        backend = self._annotations_backend
+        self.vertex_attributes = empty_dataframe({"vertex_id": "text"}, backend=backend)
+        self.edge_attributes = empty_dataframe({"edge_id": "text"}, backend=backend)
+        self.slice_attributes = empty_dataframe({"slice_id": "text"}, backend=backend)
+        self.edge_slice_attributes = empty_dataframe(
+            {"slice_id": "text", "edge_id": "text", "weight": "float"},
+            backend=backend,
         )
-        self.layer_attributes = pd.DataFrame({"layer_id": pd.Series(dtype="string")})
+        self.layer_attributes = empty_dataframe({"layer_id": "text"}, backend=backend)
 
     def __dir__(self):
         return sorted(set(self._PUBLIC_API))
@@ -824,6 +829,20 @@ class AnnNet(
         """Set of (vertex_id, layer_coord) supra-node pairs (derived from _entities)."""
         return {ekey for ekey, rec in self._entities.items() if rec.kind == "vertex"}
 
+    @_VM.setter
+    def _VM(self, value) -> None:
+        """Compatibility sink for legacy restore paths.
+
+        The canonical source of truth is ``self._entities``. Some IO/adapters
+        still assign ``G._VM = vm_set`` after calling ``_restore_supra_nodes``.
+        Accept the assignment without replacing the derived property.
+        """
+        if value:
+            try:
+                self._restore_supra_nodes(value)
+            except Exception:
+                pass
+
     # Build graph
 
     def add_vertices(self, vertices, slice=None, layer=None, **attributes):
@@ -938,6 +957,25 @@ class AnnNet(
     def add_vertex(self, vertex_id, slice=None, layer=None, **attributes):
         """Compatibility wrapper for the canonical ``add_vertices`` API."""
         return self._add_vertex_impl(vertex_id, slice=slice, layer=layer, **attributes)
+
+    def add_vertices_bulk(self, vertices, *, layer=None, slice=None):
+        """Hidden compatibility shim for legacy internal bulk insertion."""
+        items = list(vertices)
+        self._add_vertices_batch(items, layer=layer, slice=slice)
+        out = []
+        for it in items:
+            if isinstance(it, dict):
+                if it.get("vertex_id") is not None:
+                    out.append(it["vertex_id"])
+                elif it.get("id") is not None:
+                    out.append(it["id"])
+                elif it.get("name") is not None:
+                    out.append(it["name"])
+            elif isinstance(it, (tuple, list)) and it:
+                out.append(it[0])
+            else:
+                out.append(it)
+        return out
 
     def _add_vertex_impl(self, vertex_id, slice=None, layer=None, **attributes):
         """Add or update a vertex.
@@ -1373,6 +1411,30 @@ class AnnNet(
             propagate=propagate,
             flexible=flexible,
             **attrs,
+        )
+
+    def add_edges_bulk(
+        self,
+        edges,
+        *,
+        slice=None,
+        as_entity=False,
+        default_weight=1.0,
+        default_edge_type="regular",
+        default_propagate="none",
+        default_slice_weight=None,
+        default_edge_directed=None,
+    ):
+        """Hidden compatibility shim for legacy internal bulk edge insertion."""
+        return self._add_edges_batch(
+            list(edges),
+            slice=slice,
+            as_entity=as_entity,
+            default_weight=default_weight,
+            default_edge_type=default_edge_type,
+            default_propagate=default_propagate,
+            default_slice_weight=default_slice_weight,
+            default_edge_directed=default_edge_directed,
         )
 
     def _add_edge_impl(
@@ -2731,7 +2793,7 @@ class AnnNet(
 
         Returns
         -------
-        _LazyNXProxy
+        _NXBackendAccessor
             Lazy proxy that converts to NetworkX only when an algorithm or
             backend graph is requested.
 
@@ -2741,7 +2803,7 @@ class AnnNet(
         >>> G.nx.shortest_path(G, "A", "B")
         """
         if not hasattr(self, "_nx_proxy"):
-            self._nx_proxy = _LazyNXProxy(self)
+            self._nx_proxy = _NXBackendAccessor(self)
         return self._nx_proxy
 
     ## Lazy iGraph proxy
@@ -2752,11 +2814,11 @@ class AnnNet(
 
         Returns
         -------
-        _LazyIGProxy
+        _IGBackendAccessor
             Lazy proxy that converts to igraph only when requested.
         """
         if not hasattr(self, "_ig_proxy"):
-            self._ig_proxy = _LazyIGProxy(self)
+            self._ig_proxy = _IGBackendAccessor(self)
         return self._ig_proxy
 
     ## Lazy AnnNet-tool proxy
@@ -2767,11 +2829,11 @@ class AnnNet(
 
         Returns
         -------
-        _LazyGTProxy
+        _GTBackendAccessor
             Lazy proxy that converts to graph-tool only when requested.
         """
         if not hasattr(self, "_gt_proxy"):
-            self._gt_proxy = _LazyGTProxy(self)
+            self._gt_proxy = _GTBackendAccessor(self)
         return self._gt_proxy
 
     # AnnNet API
@@ -3159,7 +3221,11 @@ class AnnNet(
     @property
     def edge_layers(self) -> dict:
         """edge_id -> ml_layers for all edges that have a layer assignment."""
-        return {eid: rec.ml_layers for eid, rec in self._edges.items() if rec.ml_layers is not None}
+        return _EdgeRecordFieldMap(
+            self,
+            "ml_layers",
+            include=lambda _rec, value: value is not None,
+        )
 
     @edge_layers.setter
     def edge_layers(self, mapping):
@@ -3170,13 +3236,17 @@ class AnnNet(
     @property
     def edge_kind(self) -> dict:
         """edge_id -> kind (hyper edges use 'hyper'; others use ml_kind)."""
-        out = {}
-        for eid, rec in self._edges.items():
-            if rec.etype == "hyper":
-                out[eid] = "hyper"
-            elif rec.ml_kind is not None:
-                out[eid] = rec.ml_kind
-        return out
+        return _EdgeRecordFieldMap(
+            self,
+            "ml_kind",
+            include=lambda rec, value: rec.etype == "hyper" or value is not None,
+            getter=lambda rec, value: "hyper" if rec.etype == "hyper" else value,
+            setter=lambda rec, value: (
+                setattr(rec, "etype", "hyper")
+                if value == "hyper"
+                else setattr(rec, "ml_kind", value)
+            ),
+        )
 
     @edge_kind.setter
     def edge_kind(self, mapping):
@@ -3188,6 +3258,30 @@ class AnnNet(
                 rec.etype = "hyper"
             else:
                 rec.ml_kind = kind
+
+    @property
+    def _aspect_attrs(self) -> dict:
+        return self.layers._aspect_attrs
+
+    @_aspect_attrs.setter
+    def _aspect_attrs(self, value) -> None:
+        self.layers._aspect_attrs = dict(value or {})
+
+    @property
+    def _layer_attrs(self) -> dict:
+        return self.layers._layer_attrs
+
+    @_layer_attrs.setter
+    def _layer_attrs(self, value) -> None:
+        self.layers._layer_attrs = dict(value or {})
+
+    @property
+    def _state_attrs(self) -> dict:
+        return self.layers._state_attrs
+
+    @_state_attrs.setter
+    def _state_attrs(self, value) -> None:
+        self.layers._state_attrs = dict(value or {})
 
     @property
     def entity_to_idx(self) -> dict:
@@ -4064,6 +4158,22 @@ class AnnNet(
 
         return out_ids
 
+    def add_hyperedges_bulk(
+        self,
+        hyperedges,
+        *,
+        slice=None,
+        default_weight=1.0,
+        default_edge_directed=None,
+    ):
+        """Hidden compatibility shim for legacy internal hyperedge insertion."""
+        return self._add_hyperedges_batch(
+            list(hyperedges),
+            slice=slice,
+            default_weight=default_weight,
+            default_edge_directed=default_edge_directed,
+        )
+
     def _add_edges_to_slice_batch(self, slice_id, edge_ids):
         """Add many edges to a slice and attach all incident vertices.
 
@@ -4100,6 +4210,10 @@ class AnnNet(
 
         L["vertices"].update(verts)
 
+    def add_edges_to_slice_bulk(self, slice_id, edge_ids):
+        """Hidden compatibility shim for legacy internal slice edge attachment."""
+        return self._add_edges_to_slice_batch(slice_id, edge_ids)
+
     def set_vertex_key(self, *fields: str):
         """Declare composite key fields and rebuild the uniqueness index.
 
@@ -4119,68 +4233,22 @@ class AnnNet(
         self._vertex_key_index.clear()
 
         df = self.vertex_attributes
-        if pl is not None and isinstance(df, pl.DataFrame):
-            if df.height == 0:
-                return
-        else:
-            try:
-                if df is None or len(df) == 0:
-                    return
-            except Exception:
-                return
+        if df is None or dataframe_height(df) == 0:
+            return
 
-        missing = [f for f in self._vertex_key_fields if f not in df.columns]
+        missing = [f for f in self._vertex_key_fields if f not in dataframe_columns(df)]
         if missing:
             pass  # rows without those fields are simply skipped
 
-        if pl is not None and isinstance(df, pl.DataFrame):
-            try:
-                for row in df.iter_rows(named=True):
-                    vid = row.get("vertex_id")
-                    key = tuple(row.get(f) for f in self._vertex_key_fields)
-                    if any(v is None for v in key):
-                        continue
-                    owner = self._vertex_key_index.get(key)
-                    if owner is not None and owner != vid:
-                        raise ValueError(f"Composite key conflict for {key}: {owner} vs {vid}")
-                    self._vertex_key_index[key] = vid
-                return
-            except Exception:
-                pass
-
-        try:
-            native = nw.to_native(nw.from_native(df))
-            rows = (
-                native.to_dicts()
-                if hasattr(native, "to_dicts")
-                else native.to_dict(orient="records")
-            )
-            for row in rows:
-                vid = row.get("vertex_id")
-                key = tuple(row.get(f) for f in self._vertex_key_fields)
-                if any(v is None for v in key):
-                    continue
-                owner = self._vertex_key_index.get(key)
-                if owner is not None and owner != vid:
-                    raise ValueError(f"Composite key conflict for {key}: {owner} vs {vid}")
-                self._vertex_key_index[key] = vid
-        except Exception:
-            try:
-                vids = df.get_column("vertex_id").to_list()
-            except Exception:
-                try:
-                    vids = list(df["vertex_id"])
-                except Exception:
-                    vids = []
-            for vid in vids:
-                cur = {f: self.attrs.get_attr_vertex(vid, f, None) for f in self._vertex_key_fields}
-                key = self._build_key_from_attrs(cur)
-                if key is None:
-                    continue
-                owner = self._vertex_key_index.get(key)
-                if owner is not None and owner != vid:
-                    raise ValueError(f"Composite key conflict for {key}: {owner} vs {vid}")
-                self._vertex_key_index[key] = vid
+        for row in dataframe_to_rows(df):
+            vid = row.get("vertex_id")
+            key = tuple(row.get(f) for f in self._vertex_key_fields)
+            if any(v is None for v in key):
+                continue
+            owner = self._vertex_key_index.get(key)
+            if owner is not None and owner != vid:
+                raise ValueError(f"Composite key conflict for {key}: {owner} vs {vid}")
+            self._vertex_key_index[key] = vid
 
     def remove_edges(self, edge_ids):
         """Remove one edge or many edges.
@@ -4309,21 +4377,11 @@ class AnnNet(
                 d.pop(eid, None)
 
         ea = self.edge_attributes
-        if ea is not None and hasattr(ea, "columns") and "edge_id" in ea.columns:
-            if pl is not None and isinstance(ea, pl.DataFrame) and ea.height:
-                self.edge_attributes = ea.filter(~pl.col("edge_id").is_in(list(drop)))
-            else:
-                self.edge_attributes = nw.to_native(
-                    nw.from_native(ea).filter(~nw.col("edge_id").is_in(list(drop)))
-                )
+        if ea is not None and "edge_id" in dataframe_columns(ea):
+            self.edge_attributes = dataframe_drop_rows(ea, "edge_id", drop)
         ela = self.edge_slice_attributes
-        if ela is not None and hasattr(ela, "columns") and "edge_id" in ela.columns:
-            if pl is not None and isinstance(ela, pl.DataFrame) and ela.height:
-                self.edge_slice_attributes = ela.filter(~pl.col("edge_id").is_in(list(drop)))
-            else:
-                self.edge_slice_attributes = nw.to_native(
-                    nw.from_native(ela).filter(~nw.col("edge_id").is_in(list(drop)))
-                )
+        if ela is not None and "edge_id" in dataframe_columns(ela):
+            self.edge_slice_attributes = dataframe_drop_rows(ela, "edge_id", drop)
 
     def _remove_vertices_bulk(self, vertex_ids):
         drop_keys = set()
@@ -4382,15 +4440,8 @@ class AnnNet(
         self._rebuild_entity_indexes()
 
         va = self.vertex_attributes
-        if va is not None and hasattr(va, "columns") and "vertex_id" in va.columns:
-            if pl is not None and isinstance(va, pl.DataFrame) and va.height:
-                self.vertex_attributes = va.filter(
-                    ~pl.col("vertex_id").is_in(list(drop_vertex_ids))
-                )
-            else:
-                self.vertex_attributes = nw.to_native(
-                    nw.from_native(va).filter(~nw.col("vertex_id").is_in(list(drop_vertex_ids)))
-                )
+        if va is not None and "vertex_id" in dataframe_columns(va):
+            self.vertex_attributes = dataframe_drop_rows(va, "vertex_id", drop_vertex_ids)
 
         for slice_data in self._slices.values():
             slice_data["vertices"].difference_update(drop_vertex_ids)

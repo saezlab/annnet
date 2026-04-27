@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import pathlib
-import tempfile
+
+from .._dataframe_backend import _dataframe_read_excel
 
 
-def load_excel_to_graph(
+def from_excel(
     path: str | pathlib.Path,
     graph=None,
-    schema: str = "auto",
+    schema: str = 'auto',
     sheet: str | None = None,
     default_slice=None,
     default_directed=None,
@@ -42,46 +43,16 @@ def load_excel_to_graph(
 
     Notes
     -----
-    - This function **does not require `fastexcel` or `openpyxl`**.
-    - The Excel is read once into memory and written to a temporary CSV, then processed with the CSV loader.
-    - Supported formats and schemas are identical to `load_csv_to_graph`.
+    - Excel reading is centralized through AnnNet's dataframe backend helpers.
+    - Supported formats and schemas are identical to `from_csv`.
 
     """
     path = pathlib.Path(path)
 
-    # Convert Excel → temporary CSV
-    # Using pandas for one-time conversion (NOT a package dependency if user has pandas in the notebook)
-    try:
-        import pandas as pd
-    except ImportError as e:
-        raise ImportError(
-            "Excel support requires `pandas` at runtime for conversion. "
-            "Install it or convert the file to CSV manually."
-        ) from e
+    from .csv_format import from_dataframe
 
-    # Read sheet (default first)
-    data = pd.read_excel(path, sheet_name=sheet)
-
-    # If multiple sheets, pick the first one (or allow user to choose)
-    if isinstance(data, dict):
-        if sheet is None:
-            # Pick the first sheet if user didn't specify
-            sheet_name, df = next(iter(data.items()))
-        else:
-            df = data[sheet]
-    else:
-        df = data
-
-    # Now convert to CSV
-    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
-        tmp_path = pathlib.Path(tmp.name)
-        df.to_csv(tmp_path, index=False)
-
-    # Pass the temporary CSV into the existing loader
-    from .csv_io import load_csv_to_graph
-
-    G = load_csv_to_graph(
-        tmp_path,
+    return from_dataframe(
+        _dataframe_read_excel(path, sheet_name=sheet),
         graph=graph,
         schema=schema,
         default_slice=default_slice,
@@ -89,8 +60,3 @@ def load_excel_to_graph(
         default_weight=default_weight,
         **kwargs,
     )
-    try:
-        tmp_path.unlink(missing_ok=True)  # Python 3.8+: wrap in try/except if needed
-    except Exception:
-        pass
-    return G

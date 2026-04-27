@@ -29,6 +29,11 @@ parts of the graph have different access patterns.
 That split keeps the format both faithful to annnet and practical for the wider
 Arrow, Parquet, and Zarr ecosystem.
 
+When the native writer materializes intermediate annotation tables, it uses
+annnet's centralized dataframe backend selection instead of choosing Polars or
+pandas locally. The storage format is still Parquet-based, but in-memory table
+construction follows the configured annotation backend.
+
 ## Storage goals
 
 The native format is designed to support:
@@ -51,7 +56,7 @@ as:
 - JSON and NDJSON
 - CSV and Excel
 - DataFrame-based import and export
-- Parquet GraphDir
+- Parquet graph directories
 
 These formats are useful for interoperability, but they do not all preserve the
 full annnet model equally well.

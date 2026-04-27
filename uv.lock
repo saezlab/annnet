@@ -152,7 +152,7 @@ wheels = [
 
 [[package]]
 name = "annnet"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "narwhals" },
@@ -188,29 +188,20 @@ backends = [
     { name = "networkx", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "python-igraph" },
 ]
-bio = [
-    { name = "cobra" },
-    { name = "lxml" },
-]
-dev = [
-    { name = "build" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "twine" },
-]
 excel = [
     { name = "openpyxl" },
+]
+graphviz = [
+    { name = "graphviz" },
 ]
 igraph = [
     { name = "python-igraph" },
 ]
 io = [
     { name = "lxml" },
-    { name = "narwhals" },
     { name = "numcodecs", version = "0.13.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numcodecs", version = "0.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "openpyxl" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "toml" },
@@ -219,6 +210,11 @@ io = [
 ]
 matplotlib = [
     { name = "matplotlib" },
+]
+metabo = [
+    { name = "cobra" },
+    { name = "graphviz" },
+    { name = "lxml" },
 ]
 networkx = [
     { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -237,6 +233,12 @@ plot = [
 ]
 polars = [
     { name = "polars" },
+]
+pyarrow = [
+    { name = "pyarrow" },
+]
+pydot = [
+    { name = "pydot" },
 ]
 pyg = [
     { name = "torch" },
@@ -267,6 +269,7 @@ dev = [
     { name = "distlib" },
     { name = "mypy" },
     { name = "pre-commit" },
+    { name = "ruff" },
     { name = "twine" },
 ]
 docs = [
@@ -277,46 +280,50 @@ docs = [
     { name = "mkdocstrings", extra = ["python"] },
 ]
 tests = [
+    { name = "cobra" },
     { name = "codecov-cli" },
     { name = "coverage" },
     { name = "diff-cover" },
+    { name = "graphviz" },
     { name = "matplotlib" },
     { name = "narwhals" },
     { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "networkx", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "numcodecs", version = "0.13.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numcodecs", version = "0.16.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "openpyxl" },
     { name = "pandas" },
     { name = "polars" },
     { name = "pyarrow" },
+    { name = "pydot" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "python-igraph" },
     { name = "ruff" },
     { name = "tox" },
     { name = "tox-gh" },
+    { name = "xlsxwriter" },
     { name = "zarr", version = "2.18.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "zarr", version = "3.1.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "build", marker = "extra == 'dev'", specifier = ">=1.2" },
     { name = "cobra", marker = "extra == 'all'", specifier = ">=0.26" },
-    { name = "cobra", marker = "extra == 'bio'", specifier = ">=0.26" },
+    { name = "cobra", marker = "extra == 'metabo'", specifier = ">=0.26" },
     { name = "graphviz", marker = "extra == 'all'" },
+    { name = "graphviz", marker = "extra == 'graphviz'" },
+    { name = "graphviz", marker = "extra == 'metabo'" },
     { name = "graphviz", marker = "extra == 'plot'" },
     { name = "lxml", marker = "extra == 'all'", specifier = ">=4.9" },
-    { name = "lxml", marker = "extra == 'bio'", specifier = ">=4.9" },
     { name = "lxml", marker = "extra == 'io'", specifier = ">=4.9" },
+    { name = "lxml", marker = "extra == 'metabo'", specifier = ">=4.9" },
     { name = "lxml", marker = "extra == 'sbml'", specifier = ">=4.9" },
     { name = "matplotlib", marker = "extra == 'all'", specifier = ">=3.5" },
     { name = "matplotlib", marker = "extra == 'matplotlib'", specifier = ">=3.5" },
     { name = "matplotlib", marker = "extra == 'plot'", specifier = ">=3.5" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "narwhals", specifier = ">=1.9" },
     { name = "narwhals", marker = "extra == 'all'", specifier = ">=1.9" },
-    { name = "narwhals", marker = "extra == 'io'", specifier = ">=1.9" },
     { name = "networkx", marker = "extra == 'all'", specifier = ">=3.3" },
     { name = "networkx", marker = "extra == 'backends'", specifier = ">=3.3" },
     { name = "networkx", marker = "extra == 'networkx'", specifier = ">=3.3" },
@@ -327,6 +334,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.24" },
     { name = "openpyxl", marker = "extra == 'all'", specifier = ">=3.1" },
     { name = "openpyxl", marker = "extra == 'excel'", specifier = ">=3.1" },
+    { name = "openpyxl", marker = "extra == 'io'", specifier = ">=3.1" },
     { name = "pandas", marker = "extra == 'all'", specifier = ">=1.5" },
     { name = "pandas", marker = "extra == 'io'", specifier = ">=2.0" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=1.5" },
@@ -336,27 +344,25 @@ requires-dist = [
     { name = "pyarrow", marker = "extra == 'all'", specifier = ">=10" },
     { name = "pyarrow", marker = "extra == 'io'", specifier = ">=10" },
     { name = "pyarrow", marker = "extra == 'parquet'", specifier = ">=10" },
+    { name = "pyarrow", marker = "extra == 'pyarrow'", specifier = ">=10" },
     { name = "pyarrow", marker = "extra == 'storage'", specifier = ">=10" },
     { name = "pydot", marker = "extra == 'all'" },
     { name = "pydot", marker = "extra == 'plot'" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
+    { name = "pydot", marker = "extra == 'pydot'" },
     { name = "python-igraph", marker = "extra == 'all'", specifier = ">=0.11" },
     { name = "python-igraph", marker = "extra == 'backends'", specifier = ">=0.11" },
     { name = "python-igraph", marker = "extra == 'igraph'", specifier = ">=0.11" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "scipy", specifier = ">=1.10" },
     { name = "toml", marker = "extra == 'all'", specifier = ">=0.10" },
     { name = "toml", marker = "extra == 'io'", specifier = ">=0.10" },
     { name = "torch", marker = "extra == 'pyg'", specifier = ">=2.2" },
     { name = "torch-geometric", marker = "extra == 'pyg'", specifier = ">=2.5" },
-    { name = "twine", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "zarr", marker = "extra == 'all'", specifier = ">=2.18" },
     { name = "zarr", marker = "extra == 'io'", specifier = ">=2.18" },
     { name = "zarr", marker = "extra == 'storage'", specifier = ">=2.18" },
     { name = "zarr", marker = "extra == 'zarr-io'", specifier = ">=2.18" },
 ]
-provides-extras = ["polars", "networkx", "igraph", "pandas", "pyg", "excel", "sbml", "parquet", "zarr-io", "matplotlib", "io", "backends", "plot", "bio", "storage", "all", "dev"]
+provides-extras = ["polars", "pandas", "pyarrow", "networkx", "igraph", "pyg", "matplotlib", "pydot", "graphviz", "excel", "sbml", "parquet", "zarr-io", "backends", "plot", "io", "storage", "all", "metabo"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -365,6 +371,7 @@ dev = [
     { name = "distlib" },
     { name = "mypy", specifier = ">=1.0" },
     { name = "pre-commit", specifier = ">=2.17.0" },
+    { name = "ruff", specifier = ">=0.6" },
     { name = "twine" },
 ]
 docs = [
@@ -375,22 +382,27 @@ docs = [
     { name = "mkdocstrings", extras = ["python"], specifier = ">=0.25" },
 ]
 tests = [
+    { name = "cobra", specifier = ">=0.26" },
     { name = "codecov-cli", specifier = ">=10.2.0" },
     { name = "coverage", specifier = ">=6.0" },
     { name = "diff-cover" },
+    { name = "graphviz" },
     { name = "matplotlib", specifier = ">=3.5" },
     { name = "narwhals", specifier = ">=1.9" },
     { name = "networkx", specifier = ">=3.3" },
     { name = "numcodecs", specifier = ">=0.12" },
+    { name = "openpyxl", specifier = ">=3.1" },
     { name = "pandas", specifier = ">=1.5" },
     { name = "polars", specifier = ">=0.20.0" },
     { name = "pyarrow", specifier = ">=10" },
+    { name = "pydot" },
     { name = "pytest", specifier = ">=7.0" },
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "python-igraph", specifier = ">=0.11" },
     { name = "ruff" },
     { name = "tox", specifier = ">=4.11" },
     { name = "tox-gh", specifier = ">=1.5.0" },
+    { name = "xlsxwriter" },
     { name = "zarr", specifier = ">=2.18" },
 ]
 
@@ -564,22 +576,6 @@ wheels = [
 [package.optional-dependencies]
 css = [
     { name = "tinycss2" },
-]
-
-[[package]]
-name = "build"
-version = "1.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "colorama", marker = "os_name == 'nt'" },
-    { name = "importlib-metadata", marker = "python_full_version < '3.10.2'" },
-    { name = "packaging" },
-    { name = "pyproject-hooks" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/25/1c/23e33405a7c9eac261dff640926b8b5adaed6a6eb3e1767d441ed611d0c0/build-1.3.0.tar.gz", hash = "sha256:698edd0ea270bde950f53aed21f3a0135672206f3911e0176261a31e0e07b397", size = 48544, upload-time = "2025-08-01T21:27:09.268Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/cb/8c/2b30c12155ad8de0cf641d76a8b396a16d2c36bc6d50b621a62b7c4567c1/build-1.3.0-py3-none-any.whl", hash = "sha256:7145f0b5061ba90a1500d60bd1b13ca0a8a4cebdd0cc16ed8adf1c0e739f43b4", size = 23382, upload-time = "2025-08-01T21:27:07.844Z" },
 ]
 
 [[package]]
@@ -4084,15 +4080,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pyproject-hooks"
-version = "1.2.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e7/82/28175b2414effca1cdac8dc99f76d660e7a4fb0ceefa4b4ab8f5f6742925/pyproject_hooks-1.2.0.tar.gz", hash = "sha256:1e859bd5c40fae9448642dd871adf459e5e2084186e8d2c2a79a824c970da1f8", size = 19228, upload-time = "2024-09-29T09:24:13.293Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/24/12818598c362d7f300f18e74db45963dbcb85150324092410c8b49405e42/pyproject_hooks-1.2.0-py3-none-any.whl", hash = "sha256:9e5c6bfa8dcc30091c74b0cf803c81fdd29d94f01992a7707bc97babb1141913", size = 10216, upload-time = "2024-09-29T09:24:11.978Z" },
-]
-
-[[package]]
 name = "pytest"
 version = "8.4.2"
 source = { registry = "https://pypi.org/simple" }
@@ -5370,6 +5357,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/0b/02/ae6ceac1baeda530866a85075641cec12989bd8d31af6d5ab4a3e8c92f47/webencodings-0.5.1.tar.gz", hash = "sha256:b36a1c245f2d304965eb4e0a82848379241dc04b865afcc4aab16748587e1923", size = 9721, upload-time = "2017-04-05T20:21:34.189Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f4/24/2a3e3df732393fed8b3ebf2ec078f05546de641fe1b667ee316ec1dcf3b7/webencodings-0.5.1-py2.py3-none-any.whl", hash = "sha256:a0af1213f3c2226497a97e2b3aa01a7e4bee4f403f95be16fc9acd2947514a78", size = 11774, upload-time = "2017-04-05T20:21:32.581Z" },
+]
+
+[[package]]
+name = "xlsxwriter"
+version = "3.2.9"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/46/2c/c06ef49dc36e7954e55b802a8b231770d286a9758b3d936bd1e04ce5ba88/xlsxwriter-3.2.9.tar.gz", hash = "sha256:254b1c37a368c444eac6e2f867405cc9e461b0ed97a3233b2ac1e574efb4140c", size = 215940, upload-time = "2025-09-16T00:16:21.63Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3a/0c/3662f4a66880196a590b202f0db82d919dd2f89e99a27fadef91c4a33d41/xlsxwriter-3.2.9-py3-none-any.whl", hash = "sha256:9a5db42bc5dff014806c58a20b9eae7322a134abb6fce3c92c181bfb275ec5b3", size = 175315, upload-time = "2025-09-16T00:16:20.108Z" },
 ]
 
 [[package]]

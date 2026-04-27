@@ -3,7 +3,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]  # project root
 sys.path.insert(0, str(ROOT))
-from annnet.io.Parquet_io import (
+from annnet.io.parquet import (
     from_parquet,
     to_parquet,
 )  # Parquet (columnar storage)
@@ -16,40 +16,40 @@ class TestGraphDirAdapter:
 
     def test_simple_round_trip(self, simple_graph, tmpdir_fixture):
         G = simple_graph
-        to_parquet(G, tmpdir_fixture / "graphdir")
-        assert (tmpdir_fixture / "graphdir" / "vertices.parquet").exists()
-        assert (tmpdir_fixture / "graphdir" / "edges.parquet").exists()
-        assert (tmpdir_fixture / "graphdir" / "manifest.json").exists()
-        G2 = from_parquet(tmpdir_fixture / "graphdir")
+        to_parquet(G, tmpdir_fixture / 'graphdir')
+        assert (tmpdir_fixture / 'graphdir' / 'vertices.parquet').exists()
+        assert (tmpdir_fixture / 'graphdir' / 'edges.parquet').exists()
+        assert (tmpdir_fixture / 'graphdir' / 'manifest.json').exists()
+        G2 = from_parquet(tmpdir_fixture / 'graphdir')
         assert_graphs_equal(G, G2, check_slices=False, check_hyperedges=False)
 
     def test_complex_round_trip(self, complex_graph, tmpdir_fixture):
         G = complex_graph
-        to_parquet(G, tmpdir_fixture / "graphdir")
-        G2 = from_parquet(tmpdir_fixture / "graphdir")
+        to_parquet(G, tmpdir_fixture / 'graphdir')
+        G2 = from_parquet(tmpdir_fixture / 'graphdir')
         assert_graphs_equal(G, G2, check_slices=True, check_hyperedges=True)
-        assert_vertex_attrs_equal(G, G2, "A")
-        assert_edge_attrs_equal(G, G2, "e1", ignore_private=False)
+        assert_vertex_attrs_equal(G, G2, 'A')
+        assert_edge_attrs_equal(G, G2, 'e1', ignore_private=False)
 
     def test_hyperedge_preservation(self, complex_graph, tmpdir_fixture):
         G = complex_graph
-        to_parquet(G, tmpdir_fixture / "graphdir")
-        G2 = from_parquet(tmpdir_fixture / "graphdir")
+        to_parquet(G, tmpdir_fixture / 'graphdir')
+        G2 = from_parquet(tmpdir_fixture / 'graphdir')
         assert set(G.hyperedge_definitions.keys()) == set(G2.hyperedge_definitions.keys())
         for eid in G.hyperedge_definitions.keys():
             h1 = G.hyperedge_definitions[eid]
             h2 = G2.hyperedge_definitions[eid]
-            assert h1["directed"] == h2["directed"]
-            if h1["directed"]:
-                assert set(h1["head"]) == set(h2["head"])
-                assert set(h1["tail"]) == set(h2["tail"])
+            assert h1['directed'] == h2['directed']
+            if h1['directed']:
+                assert set(h1['head']) == set(h2['head'])
+                assert set(h1['tail']) == set(h2['tail'])
             else:
-                assert set(h1["members"]) == set(h2["members"])
+                assert set(h1['members']) == set(h2['members'])
 
     def test_slice_preservation(self, complex_graph, tmpdir_fixture):
         G = complex_graph
-        to_parquet(G, tmpdir_fixture / "graphdir")
-        G2 = from_parquet(tmpdir_fixture / "graphdir")
+        to_parquet(G, tmpdir_fixture / 'graphdir')
+        G2 = from_parquet(tmpdir_fixture / 'graphdir')
         slices1 = set(G.slices.list_slices(include_default=False))
         slices2 = set(G2.slices.list_slices(include_default=False))
         assert slices1 == slices2
@@ -60,8 +60,8 @@ class TestGraphDirAdapter:
 
     def test_compression(self, complex_graph, tmpdir_fixture):
         G = complex_graph
-        to_parquet(G, tmpdir_fixture / "graphdir")
-        vertices_size = (tmpdir_fixture / "graphdir" / "vertices.parquet").stat().st_size
-        edges_size = (tmpdir_fixture / "graphdir" / "edges.parquet").stat().st_size
+        to_parquet(G, tmpdir_fixture / 'graphdir')
+        vertices_size = (tmpdir_fixture / 'graphdir' / 'vertices.parquet').stat().st_size
+        edges_size = (tmpdir_fixture / 'graphdir' / 'edges.parquet').stat().st_size
         assert vertices_size > 0
         assert edges_size > 0

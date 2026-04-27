@@ -1,8 +1,8 @@
 # OmniPath
 
-OmniPath loading helpers from `annnet.io.read_omnipath`.
+OmniPath loading helpers from `annnet.io.omnipath`.
 
-::: annnet.io.read_omnipath
+::: annnet.io.omnipath
     options:
       filters: public
       show_root_heading: true
