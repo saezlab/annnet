@@ -40,6 +40,7 @@ def _monkeypatch_set_edge_coeffs(G) -> bool:
         for vid, coeff in coeffs.items():
             row = self._entities[self._resolve_entity_key(vid)].row_idx
             self._matrix[row, col] = float(coeff)
+        self._invalidate_sparse_caches()
 
     G.set_edge_coeffs = types.MethodType(set_edge_coeffs, G)  # type: ignore
     return True
