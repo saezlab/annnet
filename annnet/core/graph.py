@@ -1234,16 +1234,28 @@ class AnnNet(
         as_entity : bool, default False
             If ``True``, each created edge is also registered as an entity so it
             can be used as the endpoint of later edges.
-        parallel : {"update", "allow"}, default "update"
-            Policy for single-edge insertion when an edge with the same
-            endpoints already exists. ``"update"`` reuses the existing edge;
-            ``"allow"`` creates a parallel edge.
+        parallel : {"update", "error", "parallel"}, default "update"
+            Policy for single-edge insertion when ``edge_id`` is not supplied
+            and the same endpoints already have an edge. ``"update"`` reuses
+            the existing edge; ``"parallel"`` creates an additional edge;
+            ``"error"`` raises ``ValueError``. Ignored in batch mode.
         propagate : {"none", "shared", "all"}, default "none"
-            Slice propagation policy.
+            Slice propagation policy. ``"shared"`` adds the edge to every slice
+            containing both endpoints; ``"all"`` adds it to every slice
+            containing either endpoint.
+        flexible : dict, optional
+            Data-driven direction policy. Requires keys ``"var"`` and
+            ``"threshold"``. Single-edge path only.
         default_weight : float, default 1.0
             Batch default for edge specs without an explicit weight.
         default_edge_directed : bool, optional
             Batch default directedness.
+        default_propagate : {"none", "shared", "all"}, default "none"
+            Batch default propagation policy.
+        default_edge_type : str, default "regular"
+            Batch default edge type stored in the edge record.
+        default_slice_weight : float, optional
+            Batch per-slice weight override.
 
         Returns
         -------
@@ -1263,6 +1275,10 @@ class AnnNet(
         Hyperedges are detected from dictionaries containing ``"members"`` for
         undirected hyperedges or ``"head"``/``"tail"`` for directed hyperedges.
         Binary edges use ``"source"``/``"target"`` or ``"src"``/``"tgt"``.
+
+        For a full guide covering all input forms, dispatch logic, parallel
+        policy, propagation, flexible direction, and batch formats, see the
+        [Adding edges](../explanations/add-edges.md) explanation page.
 
         Examples
         --------

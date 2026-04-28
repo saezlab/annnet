@@ -64,6 +64,7 @@ nav:
     -   Interoperability: explanations/interoperability.md
     -   Storage and IO: explanations/io-annnet.md
     -   Tracking changes: explanations/history-and-diffs.md
+    -   Adding edges: explanations/add-edges.md
 
 -   API Reference:
     -   API Reference Overview: reference/index.md
