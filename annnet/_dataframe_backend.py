@@ -650,3 +650,149 @@ def _merge_schema_specs(
         kind = _merge_kind(left.get(name), right.get(name))
         merged[name] = _TEXT if kind is None else kind
     return merged
+
+
+# ---------------------------------------------------------------------------
+# Polars fast-path helpers for vertex annotation table upserts
+# ---------------------------------------------------------------------------
+
+
+def _is_polars_df(df) -> bool:
+    """Return True if *df* is a live Polars DataFrame (narwhals probe)."""
+    try:
+        nwd = nw.from_native(df, eager_only=True)
+        return nwd.implementation.is_polars()
+    except (TypeError, AttributeError):
+        return False
+
+
+def _pl_numeric_supertype(lc, rc):
+    """Return the wider of two Polars numeric dtypes."""
+    import polars as pl
+
+    float_priority = {pl.Float32: 1, pl.Float64: 2}
+    int_priority = {
+        pl.Int8: 1,
+        pl.Int16: 2,
+        pl.Int32: 3,
+        pl.Int64: 4,
+        pl.UInt8: 1,
+        pl.UInt16: 2,
+        pl.UInt32: 3,
+        pl.UInt64: 4,
+    }
+    lct, rct = type(lc), type(rc)
+    if lct in float_priority or rct in float_priority:
+        return pl.Float64 if pl.Float64 in (lct, rct) else pl.Float32
+    return lc if int_priority.get(lct, 0) >= int_priority.get(rct, 0) else rc
+
+
+def _pl_align_schemas(left, right):
+    """Make two Polars DataFrames share identical column sets and compatible dtypes."""
+    import polars as pl
+
+    for c in left.columns:
+        if c not in right.columns:
+            right = right.with_columns(pl.lit(None).alias(c))
+    for c in right.columns:
+        if c not in left.columns:
+            left = left.with_columns(pl.lit(None).alias(c))
+    for c in left.columns:
+        lc, rc = left.schema[c], right.schema[c]
+        if lc == pl.Null and rc != pl.Null:
+            left = left.with_columns(pl.col(c).cast(rc))
+        elif rc == pl.Null and lc != pl.Null:
+            right = right.with_columns(pl.col(c).cast(lc).alias(c))
+        elif lc != rc:
+            if lc.is_numeric() and rc.is_numeric():
+                st = _pl_numeric_supertype(lc, rc)
+                left = left.with_columns(pl.col(c).cast(st))
+                right = right.with_columns(pl.col(c).cast(st).alias(c))
+            else:
+                left = left.with_columns(pl.col(c).cast(pl.Utf8))
+                right = right.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
+    return left, right.select(left.columns)
+
+
+def polars_upsert_vertices(df, norm: list[tuple]):
+    """Polars-native upsert of ``(vertex_id, attrs)`` pairs into *df*.
+
+    Parameters
+    ----------
+    df :
+        Existing Polars vertex-attributes table.  Attribute columns must
+        already be present before calling this function (use
+        ``_ensure_attr_columns`` on the caller side first).
+    norm :
+        Sequence of ``(vertex_id, attrs_dict)`` pairs.
+
+    Returns
+    -------
+    polars.DataFrame | None
+        Updated table, or ``None`` if the Polars fast path cannot be
+        applied (e.g. non-string vertex IDs).  The caller must fall back
+        to the generic path when ``None`` is returned.
+    """
+    import polars as pl
+
+    # Unwrap narwhals wrappers (e.g. returned by _ensure_attr_columns) to native Polars.
+    if not isinstance(df, pl.DataFrame):
+        df = nw.to_native(nw.from_native(df, eager_only=True))
+
+    keys: set[str] = {k for _, attrs in norm for k in attrs}
+    norm_vids = [vid for vid, _ in norm]
+
+    # Polars infers vertex_id as String; non-string vids (e.g. layer tuples) must
+    # use the generic fallback so return None to signal the caller.
+    if not all(isinstance(vid, str) for vid in norm_vids):
+        return None
+
+    if not keys:
+        # No-attributes fast path: anti-join to find truly new vertices.
+        incoming = pl.DataFrame({'vertex_id': norm_vids})
+        if df.height == 0:
+            return incoming
+        to_insert = incoming.join(df.select('vertex_id'), on='vertex_id', how='anti')
+        if to_insert.height:
+            return pl.concat([df, to_insert], how='vertical', rechunk=False)
+        return df
+
+    # With-attributes path: caller guarantees df already has the required columns.
+    norm_attrs = [attrs for _, attrs in norm]
+    cols: dict = {'vertex_id': norm_vids}
+    for k in keys:
+        cols[k] = [a.get(k) for a in norm_attrs]
+    incoming = pl.DataFrame(cols, nan_to_null=True, strict=False)
+
+    nrows = len(df)
+    id_df = df.select('vertex_id') if ('vertex_id' in df.columns and nrows > 0) else None
+
+    if id_df is None:
+        to_insert, to_update = incoming, None
+    else:
+        to_insert = incoming.join(id_df, on='vertex_id', how='anti')
+        to_update = incoming.join(id_df, on='vertex_id', how='semi')
+
+    if to_insert is not None and len(to_insert) > 0:
+        df, to_insert = _pl_align_schemas(df, to_insert)
+        df = pl.concat([df, to_insert], how='vertical', rechunk=False)
+
+    if to_update is not None and len(to_update) > 0:
+        suffix = '__new'
+        df = df.drop([c for c in df.columns if c.endswith(suffix)])
+        to_update = to_update.drop([c for c in to_update.columns if c.endswith(suffix)])
+        df, to_update = _pl_align_schemas(df, to_update)
+        df2 = df.join(to_update, on='vertex_id', how='left', suffix=suffix)
+        exprs, drops = [], []
+        for k in keys:
+            nk = k + suffix
+            if k in df2.columns and nk in df2.columns:
+                exprs.append(pl.coalesce([pl.col(nk), pl.col(k)]).alias(k))
+                drops.append(nk)
+        if exprs:
+            df2 = df2.with_columns(exprs)
+        if drops:
+            df2 = df2.drop(drops)
+        df = df2
+
+    return df

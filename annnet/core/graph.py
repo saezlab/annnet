@@ -6,11 +6,6 @@ from collections.abc import MutableMapping
 
 import numpy as np
 import narwhals as nw
-
-try:
-    import polars as pl  # optional
-except ImportError:
-    pl = None
 import scipy.sparse as sp
 
 from ._Ops import Operations, OperationsAccessor
@@ -30,16 +25,17 @@ from ._records import (
     _df_filter_not_equal,
     _external_entity_kind,
     _internal_entity_kind,
-    _get_numeric_supertype,
 )
 from ._Annotation import AttributesClass, AttributesAccessor
 from .backend_accessors import _GTBackendAccessor, _IGBackendAccessor, _NXBackendAccessor
 from .._dataframe_backend import (
+    _is_polars_df,
     empty_dataframe,
     dataframe_height,
     dataframe_columns,
     dataframe_to_rows,
     dataframe_drop_rows,
+    polars_upsert_vertices,
     select_dataframe_backend,
 )
 from ..algorithms.traversal import Traversal
@@ -51,16 +47,6 @@ def _sanitize(v):
     if isinstance(v, (list, tuple, dict)):
         return json.dumps(v, ensure_ascii=False)
     return v
-
-
-def _to_polars_if_possible(df):
-    try:
-        nwd = nw.from_native(df, eager_only=True)
-        if nwd.implementation.is_polars():
-            return nw.to_native(nwd), True
-    except (TypeError, AttributeError):
-        pass
-    return df, False
 
 
 class _EdgeRecordFieldMap(MutableMapping):
@@ -3506,106 +3492,18 @@ class AnnNet(
         # --- slice ---
         self.slices._ensure_slice(slice)['vertices'].update(vid for vid, _ in norm)
 
-        if not any(attrs for _, attrs in norm) and all(isinstance(vid, str) for vid, _ in norm):
-            self._ensure_vertex_table()
-            df, is_pl = _to_polars_if_possible(self.vertex_attributes)
-            if is_pl:
-                incoming = pl.DataFrame({'vertex_id': [vid for vid, _ in norm]})
-                if df.height == 0:
-                    self.vertex_attributes = incoming
-                    return
-                existing = df.select('vertex_id')
-                to_insert = incoming.join(existing, on='vertex_id', how='anti')
-                if to_insert.height:
-                    self.vertex_attributes = pl.concat(
-                        [df, to_insert], how='vertical', rechunk=False
-                    )
-                else:
-                    self.vertex_attributes = df
-                return
-
-        # --- attribute table ---
+        # --- attribute table (Polars fast path) ---
         self._ensure_vertex_table()
-        df, is_pl = _to_polars_if_possible(self.vertex_attributes)
-
-        if is_pl:
-            # Polars fast path: one incoming DF, anti-join for inserts, semi-join for updates
-            keys = set()
-            for _, a in norm:
-                keys.update(a.keys())
-
-            norm_vids = [vid for vid, _ in norm]
-            norm_attrs = [attrs for _, attrs in norm]
-            cols = {'vertex_id': norm_vids}
-            for k in keys:
-                cols[k] = [a.get(k, None) for a in norm_attrs]
-            incoming = pl.DataFrame(cols, nan_to_null=True, strict=False)
-
+        if _is_polars_df(self.vertex_attributes):
+            keys = {k for _, attrs in norm for k in attrs}
+            df = self.vertex_attributes
             if keys:
-                df_tmp = self._ensure_attr_columns(df, dict.fromkeys(keys))
-                df, is_pl2 = _to_polars_if_possible(df_tmp)
-                if not is_pl2:
-                    is_pl = False
-
-            if is_pl:
-                nrows = len(df)
-                id_df = (
-                    df.select('vertex_id') if ('vertex_id' in df.columns and nrows > 0) else None
-                )
-
-                def _align(left, right):
-                    for c in left.columns:
-                        if c not in right.columns:
-                            right = right.with_columns(pl.lit(None).alias(c))
-                    for c in right.columns:
-                        if c not in left.columns:
-                            left = left.with_columns(pl.lit(None).alias(c))
-                    for c in left.columns:
-                        lc, rc = left.schema[c], right.schema[c]
-                        if lc == pl.Null and rc != pl.Null:
-                            left = left.with_columns(pl.col(c).cast(rc))
-                        elif rc == pl.Null and lc != pl.Null:
-                            right = right.with_columns(pl.col(c).cast(lc).alias(c))
-                        elif lc != rc:
-                            if lc.is_numeric() and rc.is_numeric():
-                                st = _get_numeric_supertype(lc, rc)
-                                left = left.with_columns(pl.col(c).cast(st))
-                                right = right.with_columns(pl.col(c).cast(st).alias(c))
-                            else:
-                                left = left.with_columns(pl.col(c).cast(pl.Utf8))
-                                right = right.with_columns(pl.col(c).cast(pl.Utf8).alias(c))
-                    return left, right.select(left.columns)
-
-                if id_df is None:
-                    to_insert, to_update = incoming, None
-                else:
-                    to_insert = incoming.join(id_df, on='vertex_id', how='anti')
-                    to_update = incoming.join(id_df, on='vertex_id', how='semi')
-
-                if to_insert is not None and len(to_insert) > 0:
-                    df, to_insert = _align(df, to_insert)
-                    df = pl.concat([df, to_insert], how='vertical', rechunk=False)
-
-                if to_update is not None and len(to_update) > 0 and keys:
-                    suffix = '__new'
-                    df = df.drop([c for c in df.columns if c.endswith(suffix)])
-                    to_update = to_update.drop([c for c in to_update.columns if c.endswith(suffix)])
-                    df, to_update = _align(df, to_update)
-                    df2 = df.join(to_update, on='vertex_id', how='left', suffix=suffix)
-                    exprs, drops = [], []
-                    for k in keys:
-                        nk = k + suffix
-                        if k in df2.columns and nk in df2.columns:
-                            exprs.append(pl.coalesce([pl.col(nk), pl.col(k)]).alias(k))
-                            drops.append(nk)
-                    if exprs:
-                        df2 = df2.with_columns(exprs)
-                    if drops:
-                        df2 = df2.drop(drops)
-                    df = df2
-
-                self.vertex_attributes = df
-                return
+                df = self._ensure_attr_columns(df, dict.fromkeys(keys))
+            if _is_polars_df(df):
+                result = polars_upsert_vertices(df, norm)
+                if result is not None:
+                    self.vertex_attributes = result
+                    return
 
         # --- non-Polars fallback ---
         existing_ids: set = set()
