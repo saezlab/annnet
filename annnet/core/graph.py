@@ -1211,6 +1211,7 @@ class AnnNet(
             - ``G.add_edges([{"source": "A", "target": "B"}, ...])``
             - ``G.add_edges([{"members": ["A", "B", "C"]}, ...])``
             - ``G.add_edges([{"tail": ["A"], "head": ["B", "C"]}, ...])``
+            - ``G.add_edges([{"edge_id": "EE1", ...}, ...], as_entity=True)``
         **kwargs
             Options for single-edge or batch insertion.
 
@@ -1233,7 +1234,9 @@ class AnnNet(
             used.
         as_entity : bool, default False
             If ``True``, each created edge is also registered as an entity so it
-            can be used as the endpoint of later edges.
+            can be used as the endpoint of later edges. In batch mode, items
+            that carry no ``source``/``target`` are treated as null-endpoint
+            edge-entity placeholders and require this flag to be set.
         parallel : {"update", "error", "parallel"}, default "update"
             Policy for single-edge insertion when ``edge_id`` is not supplied
             and the same endpoints already have an edge. ``"update"`` reuses
@@ -3635,6 +3638,31 @@ class AnnNet(
         if not norm:
             return []
 
+        # ── Null-endpoint entity-placeholders ──────────────────────────────────
+        _EE_RESERVED = {
+            'source', 'target', 'edge_id', 'slice', 'weight',
+            'edge_directed', 'edge_type', 'propagate',
+        }
+        entity_items = [d for d in norm if 'source' not in d and 'target' not in d]
+        if entity_items:
+            if not as_entity:
+                raise ValueError(
+                    'Batch items without source/target require as_entity=True to be '
+                    'treated as edge-entity placeholders.'
+                )
+            norm = [d for d in norm if 'source' in d or 'target' in d]
+
+        entity_out: list = []
+        for d in entity_items:
+            e_id = d.get('edge_id') or self._get_next_edge_id()
+            sl = d.get('slice', slice)
+            extra = {k: v for k, v in d.items() if k not in _EE_RESERVED}
+            self._ensure_edge_entity_placeholder(e_id, slice=sl, **extra)
+            entity_out.append(e_id)
+
+        if not norm:
+            return entity_out
+
         try:
             import sys as _sys
 
@@ -3863,7 +3891,7 @@ class AnnNet(
                     rec.etype = 'vertex_edge'
             self._grow_rows_to(len(entities))
 
-        return out_ids
+        return entity_out + out_ids
 
     def _add_hyperedges_batch(
         self,

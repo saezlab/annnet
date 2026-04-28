@@ -84,14 +84,14 @@ G.add_edges({"A": -1.0, "B": -2.0}, {"C": 3.0})
 Literal coefficient values are written directly into the incidence matrix column.
 This form is **single-edge only**.
 
-### Edge-entity placeholder
+### Edge-entity placeholder (single)
 
 ```python
-G.add_edges(None, None, as_entity=True, edge_id="virtual_e1")
+G.add_edges(None, None, as_entity=True, edge_id="virtual_e1", role="enzyme")
 ```
 
 Creates a named edge that has no incident vertices yet, but occupies a row in the
-entity space so it can later be used as an endpoint.  
+entity space so it can later be used as an endpoint.
 `edge_id` is required here — there is nothing to derive an auto-ID from.
 
 ---
@@ -130,6 +130,27 @@ G.add_edges([
     {"tail": ["A", "B"], "head": ["C"]},
 ])
 ```
+
+### Edge-entity placeholder batch
+
+Pass dicts with no `source`/`target` and set `as_entity=True` at the batch level.
+Each item is registered as a null-endpoint entity — a connectable row in the entity
+space with no incidence column.
+
+```python
+G.add_edges(
+    [
+        {"edge_id": "EE1", "role": "enzyme", "pathway": "glycolysis"},
+        {"edge_id": "EE2", "role": "enzyme", "pathway": "tca"},
+    ],
+    as_entity=True,
+    slice="Healthy",
+)
+```
+
+Any keys other than `edge_id`, `slice`, `weight`, `edge_directed`, `edge_type`,
+and `propagate` are stored as edge attributes. `as_entity=True` is required; omitting
+it when items have no source/target raises `ValueError`.
 
 ### Mixed batch
 
@@ -223,8 +244,8 @@ to run immediately after the edge is stored.
 | `parallel` policy per batch item | The batch path is optimised for throughput and has no per-item dedup logic. |
 | `flexible` direction in batch mode | Not wired into the batch path. |
 | Bare string IDs in a multilayer graph | `_add_edge_impl` raises `ValueError` if any endpoint is not a supra-node when `G.is_multilayer` is `True`. |
-| `src=None, tgt=None` without `as_entity=True` | At least one structural endpoint is required, or `as_entity=True` must be set. |
-| `as_entity=True, src=None, tgt=None` without `edge_id` | `edge_id` is mandatory — the auto-ID counter has no input to derive from. |
+| Items without `source`/`target` without `as_entity=True` | Batch items with no endpoints raise `ValueError` unless `as_entity=True` is set. |
+| Single-edge `src=None, tgt=None` without `edge_id` | In the single-edge path, `edge_id` is mandatory for null-endpoint entities — the auto-ID counter has no input to derive from. In batch mode, `edge_id` can be omitted and an auto-ID is assigned. |
 | Passing an exhausted generator | The dispatcher materialises the generator once. An already-exhausted generator produces an empty batch silently. |
 
 ---
