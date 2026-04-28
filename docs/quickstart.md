@@ -25,6 +25,8 @@ G.add_edges("B", "C", weight=1.0, directed=False, relation="binds")
 # Hyperedge (directed head→tail)
 G.add_edges(["A", "B"], ["C", "D"], weight=1.0, directed=True)
 ```
+For the complete structural edge API, see the [`AnnNet.add_edges` reference](reference/core/graph.md) and the [Adding edges](explanations/add-edges.md) explanation page.
+
 
 ## Run an algorithm (NetworkX)
 
