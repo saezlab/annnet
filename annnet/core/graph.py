@@ -3640,8 +3640,14 @@ class AnnNet(
 
         # ── Null-endpoint entity-placeholders ──────────────────────────────────
         _EE_RESERVED = {
-            'source', 'target', 'edge_id', 'slice', 'weight',
-            'edge_directed', 'edge_type', 'propagate',
+            'source',
+            'target',
+            'edge_id',
+            'slice',
+            'weight',
+            'edge_directed',
+            'edge_type',
+            'propagate',
         }
         entity_items = [d for d in norm if 'source' not in d and 'target' not in d]
         if entity_items:
