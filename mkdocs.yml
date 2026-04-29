@@ -101,8 +101,6 @@ nav:
         -   graph-tool adapter: reference/adapters/graphtool.md
         -   PyTorch Geometric adapter: reference/adapters/pyg.md
     -   Utilities:
-        -   Typing: reference/utils/typing.md
-        -   Validation: reference/utils/validation.md
         -   Plotting: reference/utils/plotting.md
 
 -   Community:

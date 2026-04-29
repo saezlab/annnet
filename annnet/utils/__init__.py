@@ -6,10 +6,6 @@ from typing import Any
 from importlib import import_module
 
 _lazy_symbols: dict[str, tuple[str, str]] = {
-    'Edge': ('annnet.utils.typing', 'Edge'),
-    'Attr': ('annnet.utils.typing', 'Attr'),
-    'Attributes': ('annnet.utils.typing', 'Attributes'),
-    'canonicalize': ('annnet.utils.validation', 'canonicalize'),
     'to_graphviz': ('annnet.utils.plotting', 'to_graphviz'),
     'to_matplotlib': ('annnet.utils.plotting', 'to_matplotlib'),
     'to_pydot': ('annnet.utils.plotting', 'to_pydot'),

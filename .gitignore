@@ -79,3 +79,4 @@ benchmarks/
 .cache/
 .codex
 *PLAN.md
+_*.md

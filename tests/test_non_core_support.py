@@ -16,8 +16,6 @@ from annnet import _plotting_backend
 from annnet import _dataframe_backend as df_backend
 from annnet.adapters import _utils as adapter_utils
 from annnet.io._utils import _read_archive, _write_archive
-from annnet.utils import validation
-from annnet.utils.typing import Attr, Attributes
 
 
 class ExampleEnum(Enum):
@@ -404,32 +402,6 @@ def test_metadata_helpers_and_info_rendering(monkeypatch):
     assert _metadata.get_latest_version(url='ftp://example.org/pyproject.toml') is None
 
 
-def test_validation_and_typing_helpers_are_stable():
-    class ObjectWithDict:
-        def __init__(self):
-            self.values = {3, 1, 2}
-
-    canonical = validation.canonicalize({'b': {2, 1}, 'a': ObjectWithDict()})
-    assert list(canonical) == ['a', 'b']
-    assert canonical['b'] == [1, 2]
-    assert validation.obj_canonicalized_hash({'a': [1, 2]}) == validation.obj_canonicalized_hash(
-        {'a': (1, 2)}
-    )
-    assert list(validation.unique_iter(['a', 'b', 'a', 'A'], key=str.lower)) == ['a', 'b']
-
-    attrs = Attributes()
-    attrs.label = 'node'
-    attrs.set_attr(Attr.VALUE, ExampleEnum.ONE)
-    assert attrs.label == 'node'
-    assert attrs.has_attr(Attr.VALUE, 'one')
-    assert attrs.get_attr(Attr.VALUE) == 'one'
-    assert attrs.get_attr(Attr.CUSTOM_ATTR, default='missing') == 'missing'
-    with pytest.raises(AttributeError, match='protected attribute'):
-        attrs.keys = 'bad'
-    with pytest.raises(AttributeError, match='does not exist'):
-        _ = attrs.missing
-
-
 def test_plotting_helpers_with_fake_graph(tmp_path):
     from annnet.utils import plotting
 
@@ -477,7 +449,6 @@ def test_plotting_helpers_with_fake_graph(tmp_path):
 def test_lazy_module_exports_and_unknown_attributes():
     assert annnet.adapters.available_backends()
     assert 'plot' in dir(annnet.utils)
-    assert annnet.utils.canonicalize({'x': 1}) == {'x': 1}
 
     with pytest.raises(AttributeError):
         annnet.adapters.__getattr__('missing_adapter')
