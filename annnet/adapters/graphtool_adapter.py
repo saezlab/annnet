@@ -37,7 +37,7 @@ from ._utils import (
     _deserialize_layer_tuple_attrs,
 )
 from ..core.graph import AnnNet
-from .._dataframe_backend import empty_dataframe
+from .._support.dataframe_backend import empty_dataframe
 
 # Core adapter: to_graphtool
 

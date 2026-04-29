@@ -5,7 +5,7 @@ from typing import Any
 import narwhals as nw
 from narwhals.typing import IntoDataFrame
 
-from .._dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
+from .._support.dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
 
 if __name__ == '__main__':
     import sys

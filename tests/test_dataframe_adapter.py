@@ -6,7 +6,7 @@ import pandas as pd
 import polars as pl
 import pyarrow as pa
 
-from annnet._dataframe_backend import (
+from annnet._support.dataframe_backend import (
     available_dataframe_backends,
     _dataframe_read_delimited,
     _dataframe_read_tsv,

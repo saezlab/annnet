@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pathlib
 
-from .._dataframe_backend import _dataframe_read_excel
+from .._support.dataframe_backend import _dataframe_read_excel
 
 
 def from_excel(

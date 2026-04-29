@@ -6,7 +6,7 @@ from functools import wraps
 
 import numpy as np
 
-from .._dataframe_backend import (
+from .._support.dataframe_backend import (
     dataframe_to_rows,
     dataframe_from_rows,
     _dataframe_write_csv,

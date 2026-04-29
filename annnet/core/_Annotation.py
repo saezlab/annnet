@@ -3,7 +3,7 @@ from typing import Any
 
 import narwhals as nw
 
-from .._dataframe_backend import (
+from .._support.dataframe_backend import (
     dataframe_columns,
     dataframe_to_rows,
     dataframe_filter_eq,

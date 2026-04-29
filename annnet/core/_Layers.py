@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from .graph import AnnNet
 
 from ._records import SliceRecord, EntityRecord, build_dataframe_from_rows
-from .._dataframe_backend import dataframe_columns, dataframe_to_rows, dataframe_filter_eq
+from .._support.dataframe_backend import dataframe_columns, dataframe_to_rows, dataframe_filter_eq
 
 
 class LayerAccessor:

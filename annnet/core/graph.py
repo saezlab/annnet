@@ -28,7 +28,8 @@ from ._records import (
 )
 from ._Annotation import AttributesClass, AttributesAccessor
 from .backend_accessors import _GTBackendAccessor, _IGBackendAccessor, _NXBackendAccessor
-from .._dataframe_backend import (
+from ..algorithms.traversal import Traversal
+from .._support.dataframe_backend import (
     _is_polars_df,
     empty_dataframe,
     dataframe_height,
@@ -38,7 +39,6 @@ from .._dataframe_backend import (
     polars_upsert_vertices,
     select_dataframe_backend,
 )
-from ..algorithms.traversal import Traversal
 
 # ===================================
 

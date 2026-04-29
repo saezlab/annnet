@@ -41,7 +41,7 @@ from collections.abc import Iterable
 import numpy as np
 
 from ..core.graph import AnnNet
-from .._dataframe_backend import (
+from .._support.dataframe_backend import (
     _dataframe_width,
     dataframe_height,
     dataframe_columns,

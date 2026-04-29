@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .._dataframe_backend import (
+from .._support.dataframe_backend import (
     empty_dataframe,
     dataframe_height,
     dataframe_columns,

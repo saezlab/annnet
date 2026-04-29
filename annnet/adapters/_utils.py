@@ -6,7 +6,7 @@ from typing import Any
 
 import narwhals as nw
 
-from .._dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
+from .._support.dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
 
 
 def _is_directed_eid(graph, eid):

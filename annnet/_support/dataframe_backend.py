@@ -11,7 +11,7 @@ from typing import Any
 
 import narwhals as nw
 
-from ._optional_components import (
+from .optional_components import (
     DATAFRAME_BACKENDS,
     component_names,
     select_component,

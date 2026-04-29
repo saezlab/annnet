@@ -10,7 +10,7 @@ from annnet.io import dataframes
 from annnet.io import graphml
 from annnet.io import sif
 from annnet.adapters import graphtool_adapter
-from annnet._dataframe_backend import dataframe_from_rows, dataframe_to_rows
+from annnet._support.dataframe_backend import dataframe_from_rows, dataframe_to_rows
 
 
 def test_dataframe_export_options_and_private_attr_filtering():

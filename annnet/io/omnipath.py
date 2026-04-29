@@ -4,7 +4,7 @@ import numpy as np
 import narwhals as nw
 
 from ..core.graph import AnnNet
-from .._dataframe_backend import (
+from .._support.dataframe_backend import (
     dataframe_height,
     dataframe_to_rows,
     _dataframe_read_tsv,

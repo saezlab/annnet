@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..._dataframe_backend import dataframe_columns, dataframe_to_rows, dataframe_filter_eq
+from ..._support.dataframe_backend import dataframe_columns, dataframe_to_rows, dataframe_filter_eq
 
 if TYPE_CHECKING:
     from ..graph import AnnNet

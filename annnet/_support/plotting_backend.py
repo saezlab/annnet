@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._optional_components import (
+from .optional_components import (
     PLOT_BACKENDS,
     component_names,
     select_component,

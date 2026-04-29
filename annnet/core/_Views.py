@@ -1,6 +1,6 @@
 import scipy.sparse as sp
 
-from .._dataframe_backend import (
+from .._support.dataframe_backend import (
     clone_dataframe,
     empty_dataframe,
     dataframe_columns,

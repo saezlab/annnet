@@ -22,7 +22,7 @@ from ..adapters._utils import (
     _deserialize_node_layer_attrs,
     _deserialize_layer_tuple_attrs,
 )
-from .._dataframe_backend import empty_dataframe
+from .._support.dataframe_backend import empty_dataframe
 
 
 def _coerce_coeff_mapping(val):

@@ -10,10 +10,10 @@ from unittest.mock import Mock
 import pytest
 
 import annnet
-from annnet import _metadata
-from annnet import _optional_components as optional_components
-from annnet import _plotting_backend
-from annnet import _dataframe_backend as df_backend
+from annnet._support import metadata as _metadata
+from annnet._support import optional_components
+from annnet._support import plotting_backend as _plotting_backend
+from annnet._support import dataframe_backend as df_backend
 from annnet.adapters import _utils as adapter_utils
 from annnet.io._utils import _read_archive, _write_archive
 

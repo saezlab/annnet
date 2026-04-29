@@ -25,7 +25,7 @@ from ..adapters._utils import (
     _deserialize_node_layer_attrs,
     _deserialize_layer_tuple_attrs,
 )
-from .._dataframe_backend import (
+from .._support.dataframe_backend import (
     dataframe_from_rows,
     _dataframe_read_parquet,
     _dataframe_write_parquet,

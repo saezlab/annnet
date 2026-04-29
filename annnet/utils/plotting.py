@@ -8,7 +8,7 @@ from collections.abc import Iterable
 
 import numpy as np
 
-from .._plotting_backend import select_plot_backend
+from .._support.plotting_backend import select_plot_backend
 
 
 def _vertex_attr_getter(graph):

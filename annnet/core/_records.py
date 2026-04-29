@@ -5,7 +5,7 @@ from dataclasses import field, dataclass
 
 import narwhals as nw
 
-from .._dataframe_backend import dataframe_filter_ne, dataframe_from_rows
+from .._support.dataframe_backend import dataframe_filter_ne, dataframe_from_rows
 
 
 def _get_numeric_supertype(left, right):

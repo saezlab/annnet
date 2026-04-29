@@ -31,7 +31,11 @@ from ..adapters._utils import (
     _serialize_node_layer_attrs,
     _serialize_layer_tuple_attrs,
 )
-from .._dataframe_backend import dataframe_columns, dataframe_from_rows, rename_dataframe_columns
+from .._support.dataframe_backend import (
+    dataframe_columns,
+    dataframe_from_rows,
+    rename_dataframe_columns,
+)
 
 # --- Helpers ---
 CX_STYLE_KEY = '__cx_style__'

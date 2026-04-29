@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from typing import Any
-from importlib import import_module
 from importlib.metadata import (
     PackageNotFoundError,
     version as _pkg_version,
 )
 
-from ._metadata import (
+from ._support.metadata import (
     info,
     metadata as __metadata__,
     __title__,
@@ -21,6 +20,7 @@ from ._metadata import (
     __maintainers__,
     get_latest_version,
 )
+from ._support.lazy_exports import load_attr, export_dir, make_lazy_function
 
 _lazy_submodules = {
     'adapters': 'annnet.adapters',
@@ -38,20 +38,23 @@ _lazy_objects: dict[str, tuple[str, str]] = {
 
 _lazy_functions: dict[str, tuple[str, str]] = {
     'available_backends': ('annnet.adapters', 'available_backends'),
-    'available_dataframe_backends': ('annnet._dataframe_backend', 'available_dataframe_backends'),
-    'available_plot_backends': ('annnet._plotting_backend', 'available_plot_backends'),
+    'available_dataframe_backends': (
+        'annnet._support.dataframe_backend',
+        'available_dataframe_backends',
+    ),
+    'available_plot_backends': ('annnet._support.plotting_backend', 'available_plot_backends'),
     'get_default_dataframe_backend': (
-        'annnet._dataframe_backend',
+        'annnet._support.dataframe_backend',
         'get_default_dataframe_backend',
     ),
-    'get_default_plot_backend': ('annnet._plotting_backend', 'get_default_plot_backend'),
-    'select_dataframe_backend': ('annnet._dataframe_backend', 'select_dataframe_backend'),
-    'select_plot_backend': ('annnet._plotting_backend', 'select_plot_backend'),
+    'get_default_plot_backend': ('annnet._support.plotting_backend', 'get_default_plot_backend'),
+    'select_dataframe_backend': ('annnet._support.dataframe_backend', 'select_dataframe_backend'),
+    'select_plot_backend': ('annnet._support.plotting_backend', 'select_plot_backend'),
     'set_default_dataframe_backend': (
-        'annnet._dataframe_backend',
+        'annnet._support.dataframe_backend',
         'set_default_dataframe_backend',
     ),
-    'set_default_plot_backend': ('annnet._plotting_backend', 'set_default_plot_backend'),
+    'set_default_plot_backend': ('annnet._support.plotting_backend', 'set_default_plot_backend'),
     'to_nx': ('annnet.adapters.networkx_adapter', 'to_nx'),
     'from_nx': ('annnet.adapters.networkx_adapter', 'from_nx'),
     'to_igraph': ('annnet.adapters.igraph_adapter', 'to_igraph'),
@@ -106,26 +109,16 @@ __all__ = sorted(
 )
 
 
-def _make_lazy_function(module_name: str, attr_name: str):
-    def _lazy_function(*args, **kwargs):
-        module = import_module(module_name)
-        return getattr(module, attr_name)(*args, **kwargs)
-
-    _lazy_function.__name__ = attr_name
-    _lazy_function.__qualname__ = attr_name
-    _lazy_function.__module__ = __name__
-    return _lazy_function
-
-
 def __getattr__(name: str) -> Any:
     if name in _lazy_submodules:
+        from importlib import import_module
+
         value = import_module(_lazy_submodules[name])
     elif name in _lazy_objects:
-        mod, attr = _lazy_objects[name]
-        value = getattr(import_module(mod), attr)
+        value = load_attr(_lazy_objects, name)
     elif name in _lazy_functions:
         mod, attr = _lazy_functions[name]
-        value = _make_lazy_function(mod, attr)
+        value = make_lazy_function(mod, attr, __name__)
     else:
         raise AttributeError(name)
 
@@ -134,4 +127,4 @@ def __getattr__(name: str) -> Any:
 
 
 def __dir__() -> list[str]:
-    return sorted(list(globals().keys()) + list(__all__))
+    return export_dir(globals(), __all__)

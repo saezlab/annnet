@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from typing import Any
-from importlib import import_module
 
-from .._optional_components import GRAPH_BACKENDS, available_optional_components
+from .._support.lazy_exports import export_dir, make_lazy_function
+from .._support.optional_components import GRAPH_BACKENDS, available_optional_components
 
 _lazy_functions: dict[str, tuple[str, str]] = {
     'to_nx': ('annnet.adapters.networkx_adapter', 'to_nx'),
@@ -25,25 +25,14 @@ def available_backends() -> dict[str, bool]:
     return available_optional_components(GRAPH_BACKENDS)
 
 
-def _make_lazy_function(module_name: str, attr_name: str):
-    def _lazy_function(*args, **kwargs):
-        module = import_module(module_name)
-        return getattr(module, attr_name)(*args, **kwargs)
-
-    _lazy_function.__name__ = attr_name
-    _lazy_function.__qualname__ = attr_name
-    _lazy_function.__module__ = __name__
-    return _lazy_function
-
-
 def __getattr__(name: str) -> Any:
     if name in _lazy_functions:
         mod, attr = _lazy_functions[name]
-        value = _make_lazy_function(mod, attr)
+        value = make_lazy_function(mod, attr, __name__)
         globals()[name] = value
         return value
     raise AttributeError(name)
 
 
 def __dir__() -> list[str]:
-    return sorted(list(globals().keys()) + list(__all__))
+    return export_dir(globals(), __all__)

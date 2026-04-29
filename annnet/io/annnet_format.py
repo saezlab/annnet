@@ -12,7 +12,7 @@ import scipy.sparse as sp
 
 from ._utils import _read_archive, _write_archive
 from ..adapters._utils import _finalize_multilayer_state
-from .._dataframe_backend import (
+from .._support.dataframe_backend import (
     dataframe_to_rows,
     _dataframe_is_empty,
     dataframe_from_rows,

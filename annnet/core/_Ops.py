@@ -4,7 +4,7 @@ import time
 from typing import TYPE_CHECKING
 
 from ._records import EdgeRecord, SliceRecord, EntityRecord
-from .._dataframe_backend import (
+from .._support.dataframe_backend import (
     clone_dataframe,
     dataframe_height,
     dataframe_columns,
