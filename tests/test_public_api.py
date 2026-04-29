@@ -102,6 +102,26 @@ class TestPublicAPI:
         assert len(edges_df) == 1
         assert G.attrs.get_edge_attrs('e1') == {}
 
+    def test_native_read_write_methods_resolve_and_roundtrip(self, tmp_path):
+        G = an.AnnNet(directed=True)
+        G.add_vertices(['A', 'B'])
+        G.add_edges([{'source': 'A', 'target': 'B', 'edge_id': 'e1', 'weight': 1.5}])
+
+        path = tmp_path / 'graph.annnet'
+        G.write(path, overwrite=True)
+
+        G2 = an.AnnNet.read(path)
+        assert G2.num_vertices == 2
+        assert G2.num_edges == 1
+        assert G2.get_edge('e1') == (frozenset({'A'}), frozenset({'B'}))
+        edges_df = G2.views.edges(include_weight=True)
+        try:
+            rows = edges_df.to_dicts()
+        except Exception:
+            rows = edges_df.to_dict(orient='records')
+        row = next(r for r in rows if r['edge_id'] == 'e1')
+        assert row['global_weight'] == 1.5
+
     def test_dir_exposes_compact_annnet_api(self):
         G = an.AnnNet()
 
