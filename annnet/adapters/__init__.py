@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .._support.lazy_exports import export_dir, make_lazy_function
+from .._support.lazy_exports import export_dir, resolve_lazy_export
 from .._support.optional_components import GRAPH_BACKENDS, available_optional_components
 
 _lazy_functions: dict[str, tuple[str, str]] = {
@@ -26,12 +26,12 @@ def available_backends() -> dict[str, bool]:
 
 
 def __getattr__(name: str) -> Any:
-    if name in _lazy_functions:
-        mod, attr = _lazy_functions[name]
-        value = make_lazy_function(mod, attr, __name__)
-        globals()[name] = value
-        return value
-    raise AttributeError(name)
+    return resolve_lazy_export(
+        globals(),
+        name,
+        functions=_lazy_functions,
+        package_name=__name__,
+    )
 
 
 def __dir__() -> list[str]:

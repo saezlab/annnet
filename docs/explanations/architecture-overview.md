@@ -137,7 +137,12 @@ The rest of the package has a simpler split:
 - `annnet.io`
   Persistence and exchange formats.
 - `annnet.utils`
-  Validation, plotting, typing, and smaller support utilities.
+  A small public utility namespace, currently centered on plotting helpers.
+
+- `annnet._support`
+  Private cross-cutting support modules such as metadata, optional component
+  detection, dataframe backend selection, plotting backend selection, and lazy
+  export helpers.
 
 Those packages sit around the core object. They do not redefine the graph
 model.

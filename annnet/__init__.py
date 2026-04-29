@@ -20,7 +20,7 @@ from ._support.metadata import (
     __maintainers__,
     get_latest_version,
 )
-from ._support.lazy_exports import load_attr, export_dir, make_lazy_function
+from ._support.lazy_exports import export_dir, resolve_lazy_export
 
 _lazy_submodules = {
     'adapters': 'annnet.adapters',
@@ -110,20 +110,14 @@ __all__ = sorted(
 
 
 def __getattr__(name: str) -> Any:
-    if name in _lazy_submodules:
-        from importlib import import_module
-
-        value = import_module(_lazy_submodules[name])
-    elif name in _lazy_objects:
-        value = load_attr(_lazy_objects, name)
-    elif name in _lazy_functions:
-        mod, attr = _lazy_functions[name]
-        value = make_lazy_function(mod, attr, __name__)
-    else:
-        raise AttributeError(name)
-
-    globals()[name] = value
-    return value
+    return resolve_lazy_export(
+        globals(),
+        name,
+        modules=_lazy_submodules,
+        attrs=_lazy_objects,
+        functions=_lazy_functions,
+        package_name=__name__,
+    )
 
 
 def __dir__() -> list[str]:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .._support.lazy_exports import load_attr, export_dir
+from .._support.lazy_exports import export_dir, resolve_lazy_export
 
 _lazy_symbols: dict[str, tuple[str, str]] = {
     # annnet native format
@@ -48,9 +48,7 @@ __all__ = sorted(_lazy_symbols)
 
 
 def __getattr__(name: str) -> Any:
-    if name in _lazy_symbols:
-        return load_attr(_lazy_symbols, name)
-    raise AttributeError(name)
+    return resolve_lazy_export(globals(), name, attrs=_lazy_symbols)
 
 
 def __dir__() -> list[str]:

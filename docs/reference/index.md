@@ -10,7 +10,7 @@ policy for documented public APIs and internal underscore-prefixed APIs.
 - `annnet.algorithms`: algorithmic helpers exposed by the package.
 - `annnet.io`: storage and exchange formats.
 - `annnet.adapters`: optional backend conversion helpers and backend availability checks.
-- `annnet.utils`: typing, validation, and plotting helpers.
+- `annnet.utils`: plotting helpers.
 - Support helpers: package metadata, optional component status, dataframe
   backend selection, and plotting backend selection.
 

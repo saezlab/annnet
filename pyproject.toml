@@ -201,7 +201,7 @@ source = ["annnet"]
 skip = [
     "tests",
     "annnet/__init__.py",
-    "annnet/_metadata.py",
+    "annnet/_support/metadata.py",
     "docs/api.md",
     "docs/changelog.md",
     "docs/references.bib",

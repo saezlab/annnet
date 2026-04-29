@@ -1,11 +1,12 @@
 # Support Helpers
 
-These helpers report package metadata and configure AnnNet's optional dataframe
-and plotting backends. Use them through the documented top-level `annnet`
-namespace.
+These helpers expose package metadata plus backend-selection utilities for
+dataframe and plotting support. Use them through the documented top-level
+`annnet` namespace.
 
-Some of these functions are implemented in underscore-prefixed support modules.
-Direct imports from underscore modules follow the [internal API policy](api-boundary.md).
+Their implementations live in private `annnet._support.*` modules. Direct
+imports from those underscore-prefixed modules follow the
+[internal API policy](api-boundary.md).
 
 ## Package Metadata
 
