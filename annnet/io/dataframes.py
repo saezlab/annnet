@@ -5,18 +5,8 @@ from typing import Any
 import narwhals as nw
 from narwhals.typing import IntoDataFrame
 
+from ..core.graph import AnnNet
 from .._support.dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
-
-if __name__ == '__main__':
-    import sys
-    import pathlib
-
-    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
-
-try:
-    from annnet.core.graph import AnnNet
-except ImportError:
-    from ..core.graph import AnnNet
 
 
 def _edge_weight(rec) -> float:
@@ -244,13 +234,9 @@ def to_dataframes(
     # 4. Slice membership
     if include_slices:
         slices_data = []
-        try:
-            for lid in graph.slices.list_slices(include_default=True):
-                slice_meta = graph._slices.get(lid, {})
-                for eid in slice_meta.get('edges', []):
-                    slices_data.append({'slice_id': lid, 'edge_id': eid})
-        except Exception:  # noqa: BLE001
-            pass
+        for lid in graph.slices.list_slices(include_default=True):
+            for eid in graph.slices.edges(lid):
+                slices_data.append({'slice_id': lid, 'edge_id': eid})
 
         result['slices'] = dataframe_from_rows(
             slices_data,
@@ -260,18 +246,15 @@ def to_dataframes(
 
         # 5. Per-slice weights
         slice_weights_data = []
-        try:
-            for row in dataframe_to_rows(graph.edge_slice_attributes):
-                if {'slice_id', 'edge_id', 'weight'}.issubset(row):
-                    slice_weights_data.append(
-                        {
-                            'slice_id': row['slice_id'],
-                            'edge_id': row['edge_id'],
-                            'weight': row['weight'],
-                        }
-                    )
-        except Exception:  # noqa: BLE001
-            pass
+        for row in dataframe_to_rows(getattr(graph, 'edge_slice_attributes', None)):
+            if {'slice_id', 'edge_id', 'weight'}.issubset(row):
+                slice_weights_data.append(
+                    {
+                        'slice_id': row['slice_id'],
+                        'edge_id': row['edge_id'],
+                        'weight': row['weight'],
+                    }
+                )
 
         result['slice_weights'] = dataframe_from_rows(
             slice_weights_data,
@@ -464,20 +447,18 @@ def from_dataframes(
             if 'slice_id' not in slices_nw.columns or 'edge_id' not in slices_nw.columns:
                 raise ValueError("slices DataFrame must have 'slice_id' and 'edge_id' columns")
 
+            existing_slices = set(G.slices.list_slices(include_default=True))
+            existing_edges = set(G.edge_definitions) | set(G.hyperedge_definitions)
             for row in _to_dicts(slices_nw):
                 lid = row['slice_id']
                 eid = row['edge_id']
 
-                try:
-                    if lid not in set(G.slices.list_slices(include_default=True)):
-                        G.slices.add_slice(lid)
-                except Exception:  # noqa: BLE001
+                if lid not in existing_slices:
                     G.slices.add_slice(lid)
+                    existing_slices.add(lid)
 
-                try:
-                    G.add_edge_to_slice(lid, eid)
-                except Exception:  # noqa: BLE001
-                    pass
+                if eid in existing_edges:
+                    G.slices.add_edge_to_slice(lid, eid)
 
     # 5. Add per-slice weights
     if slice_weights is not None:
@@ -485,14 +466,14 @@ def from_dataframes(
         if _get_height(slice_weights_nw) > 0:
             cols = set(slice_weights_nw.columns)
             if {'slice_id', 'edge_id', 'weight'}.issubset(cols):
+                existing_slices = set(G.slices.list_slices(include_default=True))
+                existing_edges = set(G.edge_definitions) | set(G.hyperedge_definitions)
                 for row in _to_dicts(slice_weights_nw):
                     lid = row['slice_id']
                     eid = row['edge_id']
                     weight = row['weight']
 
-                    try:
+                    if lid in existing_slices and eid in existing_edges:
                         G.attrs.set_edge_slice_attrs(lid, eid, weight=weight)
-                    except Exception:  # noqa: BLE001
-                        pass
 
     return G

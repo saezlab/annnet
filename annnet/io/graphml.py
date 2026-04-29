@@ -29,7 +29,7 @@ def _sanitize_graphml_inplace(G):
                 continue
             try:
                 d[k] = json.dumps(v, ensure_ascii=False)
-            except Exception:  # noqa: BLE001
+            except (TypeError, ValueError):
                 d[k] = str(v)
 
     clean_dict(G.graph)
@@ -52,14 +52,14 @@ def _restore_types_graphml_inplace(G):
         if (t.startswith('{') and t.endswith('}')) or (t.startswith('[') and t.endswith(']')):
             try:
                 return json.loads(t)
-            except Exception:  # noqa: BLE001
+            except json.JSONDecodeError:
                 return t
         if _NUM_RE.match(t):
             try:
                 if '.' not in t and 'e' not in low:
                     return int(t)
                 return float(t)
-            except Exception:  # noqa: BLE001
+            except ValueError:
                 return t
         return t
 

@@ -78,15 +78,19 @@ class DummyReaction:
 
 
 class DummyModel:
-    def __init__(self, species, reactions):
+    def __init__(self, species, reactions, compartments=None):
         self._species = species
         self._reactions = reactions
+        self._compartments = compartments or []
 
     def getListOfSpecies(self):
         return self._species
 
     def getListOfReactions(self):
         return self._reactions
+
+    def getListOfCompartments(self):
+        return self._compartments
 
 
 class DummyError:
@@ -128,6 +132,10 @@ class DummyGraph:
         self.directed = directed
         self.vertices = set()
         self.edges = []
+        self.slice_memberships = {}
+        self.slice_attrs = {}
+        self.attrs = _DummyAttrs(self)
+        self.slices = _DummySlices(self)
 
     def add_vertices_bulk(self, ids, slice=None):
         self.vertices.update(ids)
@@ -165,7 +173,7 @@ class DummyGraph:
         self.edges.append(edge)
         return edge_id
 
-    def set_edge_attrs(self, edge_id, **attrs):
+    def _set_edge_attrs(self, edge_id, **attrs):
         for e in self.edges:
             if e['id'] == edge_id:
                 e['attrs'].update(attrs)
@@ -180,6 +188,37 @@ class DummyGraph:
                 e['attrs']['stoich'] = dict(coeffs)
                 return
         raise KeyError(f'Edge {edge_id!r} not found')
+
+
+class _DummyAttrs:
+    def __init__(self, graph):
+        self._graph = graph
+
+    def set_edge_attrs(self, edge_id, **attrs):
+        self._graph._set_edge_attrs(edge_id, **attrs)
+
+    def set_edge_attrs_bulk(self, updates):
+        for edge_id, attrs in updates.items():
+            self.set_edge_attrs(edge_id, **attrs)
+
+
+class _DummySlices:
+    def __init__(self, graph):
+        self._graph = graph
+
+    def has_slice(self, slice_id):
+        return slice_id in self._graph.slice_memberships
+
+    def add_slice(self, slice_id, **attrs):
+        self._graph.slice_memberships.setdefault(slice_id, set())
+        if attrs:
+            self._graph.slice_attrs[slice_id] = dict(attrs)
+
+    def list_slices(self, include_default=False):
+        return list(self._graph.slice_memberships)
+
+    def add_edges(self, slice_id, edge_ids):
+        self._graph.slice_memberships.setdefault(slice_id, set()).update(edge_ids)
 
 
 # -----------------------

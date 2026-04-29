@@ -718,7 +718,13 @@ class LayerAccessor:
         tuple[str, ...]
             Layer tuples in configured order.
         """
-        return iter(self._all_layers)
+        seen = set()
+        for layer_tuple in self._all_layers:
+            seen.add(layer_tuple)
+            yield layer_tuple
+        for layer_tuple in self._layer_attrs:
+            if layer_tuple not in seen:
+                yield layer_tuple
 
     def iter_vertex_layers(self, u: str):
         """Iterate layer tuples where ``(u, aa)`` is in ``V_M``.

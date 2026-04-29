@@ -7,13 +7,10 @@ Two entry points:
   - from_sbml(path, graph=None, slice="default", preserve_stoichiometry=True)
   - from_cobra_model(model, graph=None, slice="default", preserve_stoichiometry=True)
 
-If `AnnNet.set_edge_coeffs(edge_id, coeffs: dict[str, float])` is not available,
-stoichiometric coefficients are stored under an edge attribute `stoich` (lossy but usable).
 """
 
 from __future__ import annotations
 
-import types
 import warnings
 from collections.abc import Iterable, Sequence
 
@@ -22,28 +19,6 @@ import numpy as np
 from ..core.graph import AnnNet
 
 warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
-
-# ----------------------- utilities -----------------------
-
-
-def _monkeypatch_set_edge_coeffs(G) -> bool:
-    """Add `set_edge_coeffs(edge_id, coeffs)` to AnnNet instance if missing.
-
-    Writes per-vertex coefficients into the incidence column (DOK [Dictionary Of Keys]).
-    Returns True if patch was applied, False if already available.
-    """
-    if hasattr(G, 'set_edge_coeffs'):
-        return False  # already there
-
-    def set_edge_coeffs(self, edge_id: str, coeffs: dict[str, float]) -> None:
-        col = self._edges[edge_id].col_idx
-        for vid, coeff in coeffs.items():
-            row = self._entities[self._resolve_entity_key(vid)].row_idx
-            self._matrix[row, col] = float(coeff)
-        self._invalidate_sparse_caches()
-
-    G.set_edge_coeffs = types.MethodType(set_edge_coeffs, G)  # type: ignore
-    return True
 
 
 def _ensure_vertices(G, vertices: Iterable[str], slice: str | None) -> None:
@@ -58,15 +33,6 @@ BOUNDARY_SINK = '__BOUNDARY_SINK__'
 def _ensure_boundary_vertices(G, slice: str):
     # idempotent – AnnNet.add_vertices_bulk ignores existing ids
     G.add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
-
-
-def _set_edge_attrs(G, edge_id, **attrs):
-    if hasattr(G, 'attrs'):
-        return G.attrs.set_edge_attrs(edge_id, **attrs)
-    setter = getattr(G, 'set_edge_attrs', None)
-    if setter is None:
-        raise AttributeError('graph does not expose edge-attribute setters')
-    return setter(edge_id, **attrs)
 
 
 def _graph_from_stoich(
@@ -92,11 +58,6 @@ def _graph_from_stoich(
     m, n = S.shape
     assert m == len(metabolite_ids)
     assert n == len(reaction_ids)
-
-    # Optional: enable per-vertex coefficients
-    if preserve_stoichiometry and not hasattr(G, 'set_edge_coeffs'):
-        # fallback = store stoich dict as attribute later
-        pass
 
     for j, eid in enumerate(reaction_ids):
         col = S[:, j]
@@ -134,16 +95,17 @@ def _graph_from_stoich(
             weight=1.0,
         )
 
-        # write exact coefficients if supported; else stash as attribute
-        if preserve_stoichiometry and hasattr(G, 'set_edge_coeffs'):
-            G.set_edge_coeffs(eid_added, coeffs)  # you said you added this
+        if preserve_stoichiometry:
+            G.set_edge_coeffs(eid_added, coeffs)
         else:
-            _set_edge_attrs(G, eid_added, stoich=coeffs)
+            G.attrs.set_edge_attrs(eid_added, stoich=coeffs)
 
         # mark boundary reactions for easy filtering
         if boundary:
             kind, bnode = boundary
-            _set_edge_attrs(G, eid_added, is_boundary=True, boundary_kind=kind, boundary_node=bnode)
+            G.attrs.set_edge_attrs(
+                eid_added, is_boundary=True, boundary_kind=kind, boundary_node=bnode
+            )
 
     return G
 
@@ -164,7 +126,7 @@ def from_cobra_model(
     """
     try:
         from cobra.util.array import create_stoichiometric_matrix  # type: ignore
-    except Exception as e:  # pragma: no cover
+    except ImportError as e:  # pragma: no cover
         raise ImportError('COBRApy not installed (needed for stoichiometric matrix).') from e
 
     S = create_stoichiometric_matrix(model)
@@ -187,7 +149,7 @@ def from_cobra_model(
         # drop Nones
         clean = {k: v for k, v in attrs.items() if v is not None}
         if clean:
-            _set_edge_attrs(G, eid, **clean)
+            G.attrs.set_edge_attrs(eid, **clean)
 
     return G
 
@@ -202,7 +164,7 @@ def from_sbml(
     """Read SBML using COBRApy if available; falls back to python-libsbml (if you extend this file)."""
     try:
         from cobra.io import read_sbml_model  # type: ignore
-    except Exception as e:  # pragma: no cover
+    except ImportError as e:  # pragma: no cover
         raise ImportError('COBRApy not installed; install cobra to read SBML.') from e
 
     model = read_sbml_model(path)

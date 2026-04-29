@@ -9,83 +9,18 @@ if TYPE_CHECKING:
 from ..adapters._utils import (
     _df_to_rows,
     _rows_to_df,
-    _serialize_VM,
-    _deserialize_VM,
     _is_directed_eid,
     _iter_edge_records,
     _serialize_endpoint,
     _deserialize_endpoint,
     _serialize_edge_layers,
     _deserialize_edge_layers,
-    _serialize_node_layer_attrs,
-    _serialize_layer_tuple_attrs,
-    _deserialize_node_layer_attrs,
-    _deserialize_layer_tuple_attrs,
 )
-from .._support.dataframe_backend import empty_dataframe
-
-
-def _coerce_coeff_mapping(val):
-    """Normalize various serialized forms into {vertex: {__value: float}|float}
-
-    Accepts:
-      - dict({v: x} or {v: {"__value": x}})
-      - list of pairs [(v,x), ...]
-      - list of dicts [{"vertex": v, "__value": x} | {v: x}, ...]
-      - JSON string of any of the above
-    """
-    if val is None:
-        return {}
-    # JSON string?
-    if isinstance(val, str):
-        try:
-            return _coerce_coeff_mapping(json.loads(val))
-        except Exception:  # noqa: BLE001
-            return {}
-    # Already dict?
-    if isinstance(val, dict):
-        return val
-    # List-like
-    if isinstance(val, (list, tuple)):
-        out = {}
-        for item in val:
-            if isinstance(item, dict):
-                if 'vertex' in item and '__value' in item:
-                    out[item['vertex']] = {'__value': item['__value']}
-                else:
-                    # e.g., {"A": 2.0}
-                    for k, v in item.items():
-                        out[k] = v
-            elif isinstance(item, (list, tuple)) and len(item) == 2:
-                k, v = item
-                out[k] = v
-            else:
-                # ignore unrecognized shapes
-                pass
-        return out
-    # Fallback
-    return {}
-
-
-def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
-    """Return {vertex: float_coeff} for the given endpoint_set.
-
-    Reads from edge_attrs[private_key] which may be serialized in multiple shapes.
-    Missing endpoints default to 1.0.
-    """
-    raw_mapping = (edge_attrs or {}).get(private_key, {})
-    mapping = _coerce_coeff_mapping(raw_mapping)
-    endpoints = list(endpoint_set or mapping.keys())
-    out = {}
-    for u in endpoints:
-        val = mapping.get(u, 1.0)
-        if isinstance(val, dict):
-            val = val.get('__value', 1.0)
-        try:
-            out[u] = float(val)
-        except Exception:  # noqa: BLE001
-            out[u] = 1.0
-    return out
+from .._support.serialization_policy import (
+    endpoint_coeff_map as _endpoint_coeff_map,
+    restore_multilayer_manifest as _restore_multilayer_manifest,
+    serialize_multilayer_manifest as _serialize_multilayer_manifest,
+)
 
 
 def _edge_endpoint_sets(rec):
@@ -142,11 +77,11 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
         # weight + directed
         try:
             w = float(1.0 if rec.weight is None else rec.weight)
-        except Exception:  # noqa: BLE001
+        except (TypeError, ValueError):
             w = 1.0
         try:
             directed = bool(_is_directed_eid(graph, eid))
-        except Exception:  # noqa: BLE001
+        except (AttributeError, KeyError, TypeError, ValueError):
             directed = True
 
         if is_hyper:
@@ -190,33 +125,20 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
 
     # slices + per-slice weights
     slices = []
-    try:
-        for lid in graph.slices.list_slices(include_default=True):
-            slices.append({'slice_id': lid})
-    except Exception:  # noqa: BLE001
-        pass
+    for lid in graph.slices.list_slices(include_default=True):
+        slices.append({'slice_id': lid})
 
     edge_slices = []
-    # Collect memberships + weights if available
-    try:
-        for lid in graph.slices.list_slices(include_default=True):
+    for lid in graph.slices.list_slices(include_default=True):
+        for eid in graph.slices.get_slice_edges(lid):
+            rec = {'slice_id': lid, 'edge_id': eid}
             try:
-                for eid in graph.slices.get_slice_edges(lid):
-                    rec = {'slice_id': lid, 'edge_id': eid}
-                    try:
-                        w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
-                    except Exception:  # noqa: BLE001
-                        try:
-                            w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
-                        except Exception:  # noqa: BLE001
-                            w = None
-                    if w is not None:
-                        rec['weight'] = float(w)
-                    edge_slices.append(rec)
-            except Exception:  # noqa: BLE001
-                continue
-    except Exception:  # noqa: BLE001
-        pass
+                w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
+            except TypeError:
+                w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
+            if w is not None:
+                rec['weight'] = float(w)
+            edge_slices.append(rec)
 
     doc = {
         'directed': True,  # node-link convention; per-edge directedness is in edges[*].directed
@@ -257,21 +179,11 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
                 )
                 for h in hyperedges
             ],
-            'multilayer': {
-                'aspects': list(getattr(graph, 'aspects', [])),
-                'aspect_attrs': dict(getattr(graph, '_aspect_attrs', {})),
-                'elem_layers': dict(getattr(graph, 'elem_layers', {})),
-                'VM': _serialize_VM(getattr(graph, '_VM', set())),
-                'edge_kind': dict(getattr(graph, 'edge_kind', {})),
-                'edge_layers': _serialize_edge_layers(getattr(graph, 'edge_layers', {})),
-                'node_layer_attrs': _serialize_node_layer_attrs(getattr(graph, '_state_attrs', {})),
-                'layer_tuple_attrs': _serialize_layer_tuple_attrs(
-                    getattr(graph, '_layer_attrs', {})
-                ),
-                'layer_attributes': _df_to_rows(
-                    getattr(graph, 'layer_attributes', empty_dataframe({}))
-                ),
-            },
+            'multilayer': _serialize_multilayer_manifest(
+                graph,
+                table_to_rows=_df_to_rows,
+                serialize_edge_layers=_serialize_edge_layers,
+            ),
         },
     }
     with open(path, 'w', encoding='utf-8') as f:
@@ -295,18 +207,17 @@ def from_json(path) -> AnnNet:
             H.layers.set_elementary_layers(elem_layers)
 
     # vertices
-    # Multilayer graphs use _ensure_vertex_row (avoids layer contamination via bulk insert).
     if aspects:
+        vertex_attrs_pending = {}
         for nd in doc.get('nodes', []):
             vid = nd.get('id')
             if vid is None:
                 continue
             vattrs = {k: v for k, v in nd.items() if k != 'id'}
-            H._ensure_vertex_table()
-            H._ensure_vertex_row(vid)
             if vattrs:
-                H.attrs.set_vertex_attrs(vid, **vattrs)
+                vertex_attrs_pending[vid] = vattrs
     else:
+        vertex_attrs_pending = {}
         vertex_dicts = []
         for nd in doc.get('nodes', []):
             vid = nd.get('id')
@@ -337,10 +248,7 @@ def from_json(path) -> AnnNet:
         }
         if aspects:
             # supra-node endpoints: must use scalar add_edges
-            H.add_edges(u, v, edge_id=eid, directed=directed, parallel='parallel')
-            rec = H._edges.get(eid)
-            if rec is not None:
-                rec.weight = float(w)
+            H.add_edges(u, v, edge_id=eid, directed=directed, weight=float(w), parallel='parallel')
             if attrs:
                 H.attrs.set_edge_attrs(eid, **attrs)
         else:
@@ -385,11 +293,8 @@ def from_json(path) -> AnnNet:
         if lid is None:
             continue
         if lid not in known_slices:
-            try:
-                H.slices.add_slice(lid)
-                known_slices.add(lid)
-            except Exception:  # noqa: BLE001
-                pass
+            H.slices.add_slice(lid)
+            known_slices.add(lid)
 
     slice_edges: dict = {}
     slice_weights: dict = {}
@@ -401,56 +306,26 @@ def from_json(path) -> AnnNet:
         slice_edges.setdefault(lid, set()).add(eid)
         if 'weight' in EL:
             slice_weights[(lid, eid)] = float(EL['weight'])
+    known_edges = set(H.edge_definitions) | set(H.hyperedge_definitions)
     for lid, eids in slice_edges.items():
-        try:
-            H.add_edges_to_slice_bulk(lid, eids)
-        except Exception:  # noqa: BLE001
-            pass
+        if lid not in known_slices:
+            continue
+        for eid in eids:
+            if eid in known_edges:
+                H.slices.add_edge_to_slice(lid, eid)
     for (lid, eid), w in slice_weights.items():
-        try:
+        if lid in known_slices and eid in known_edges:
             H.attrs.set_edge_slice_attrs(lid, eid, weight=w)
-        except Exception:  # noqa: BLE001
-            pass
 
-    # multilayer / Kivela
-    mm = ext.get('multilayer', {})
-
-    aspect_attrs = mm.get('aspect_attrs', {})
-    if aspect_attrs:
-        H._aspect_attrs.update(aspect_attrs)
-
-    VM_data = mm.get('VM', [])
-    if VM_data:
-        vm_set = _deserialize_VM(VM_data)
-        H._restore_supra_nodes(vm_set)
-        H._VM = vm_set
-
-    # edge_kind / edge_layers
-    ek = mm.get('edge_kind', {})
-    el_ser = mm.get('edge_layers', {})
-    if ek:
-        for eid, kind in ek.items():
-            rec = H._edges.get(eid)
-            if rec is None:
-                continue
-            if kind == 'hyper':
-                rec.etype = 'hyper'
-            else:
-                rec.ml_kind = kind
-    if el_ser:
-        H.edge_layers.update(_deserialize_edge_layers(el_ser))
-
-    nl_attrs_ser = mm.get('node_layer_attrs', [])
-    if nl_attrs_ser:
-        H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
-
-    layer_tuple_attrs_ser = mm.get('layer_tuple_attrs', [])
-    if layer_tuple_attrs_ser:
-        H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
-
-    layer_attr_rows = mm.get('layer_attributes', [])
-    if layer_attr_rows:
-        H.layer_attributes = _rows_to_df(layer_attr_rows)
+    _restore_multilayer_manifest(
+        H,
+        mm,
+        rows_to_table=_rows_to_df,
+        deserialize_edge_layers=_deserialize_edge_layers,
+    )
+    if vertex_attrs_pending:
+        for vid, attrs in vertex_attrs_pending.items():
+            H.attrs.set_vertex_attrs(vid, **attrs)
 
     return H
 
@@ -485,11 +360,11 @@ def write_ndjson(graph: AnnNet, dir_path):
 
             try:
                 w = float(1.0 if rec.weight is None else rec.weight)
-            except Exception:  # noqa: BLE001
+            except (TypeError, ValueError):
                 w = 1.0
             try:
                 directed = bool(_is_directed_eid(graph, eid))
-            except Exception:  # noqa: BLE001
+            except (AttributeError, KeyError, TypeError, ValueError):
                 directed = True
 
             if is_hyper:
@@ -515,26 +390,17 @@ def write_ndjson(graph: AnnNet, dir_path):
 
     # slices
     with open(f'{dir_path}/slices.ndjson', 'w', encoding='utf-8') as fl:
-        try:
-            for lid in graph.slices.list_slices(include_default=True):
-                fl.write(json.dumps({'slice_id': lid}, ensure_ascii=False) + '\n')
-        except Exception:  # noqa: BLE001
-            pass
+        for lid in graph.slices.list_slices(include_default=True):
+            fl.write(json.dumps({'slice_id': lid}, ensure_ascii=False) + '\n')
 
     with open(f'{dir_path}/edge_slices.ndjson', 'w', encoding='utf-8') as fel:
-        try:
-            for lid in graph.slices.list_slices(include_default=True):
-                for eid in graph.slices.get_slice_edges(lid):
-                    rec = {'slice_id': lid, 'edge_id': eid}
-                    try:
-                        w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
-                    except Exception:  # noqa: BLE001
-                        try:
-                            w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
-                        except Exception:  # noqa: BLE001
-                            w = None
-                    if w is not None:
-                        rec['weight'] = float(w)
-                    fel.write(json.dumps(rec, ensure_ascii=False) + '\n')
-        except Exception:  # noqa: BLE001
-            pass
+        for lid in graph.slices.list_slices(include_default=True):
+            for eid in graph.slices.get_slice_edges(lid):
+                rec = {'slice_id': lid, 'edge_id': eid}
+                try:
+                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
+                except TypeError:
+                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
+                if w is not None:
+                    rec['weight'] = float(w)
+                fel.write(json.dumps(rec, ensure_ascii=False) + '\n')

@@ -133,7 +133,7 @@ storage = [
   "pandas>=2.0"
 ]
 
-# "everything except conda packages adn PyG"
+# Everything except conda packages and PyG
 all = [
   "polars",
   "networkx>=3.3",

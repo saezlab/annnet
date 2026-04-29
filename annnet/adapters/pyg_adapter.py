@@ -9,7 +9,7 @@ from torch_geometric.data import HeteroData
 from ._utils import _iter_vertex_ids, _safe_df_to_rows
 
 if TYPE_CHECKING:
-    from annnet.core.graph import AnnNet
+    from ..core.graph import AnnNet
 
 
 def _rows_to_tensor(
@@ -147,7 +147,7 @@ def to_pyg(
         if slice_id is not None:
             try:
                 members = set(graph.slices.get_slice_vertices(slice_id))
-            except Exception:  # noqa: BLE001
+            except KeyError:
                 members = set()
 
             mask = np.array([v in members for v in vids], dtype=bool)

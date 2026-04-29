@@ -3,27 +3,19 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 
-try:
-    from ..core.graph import AnnNet
-except Exception:  # noqa: BLE001
-    from annnet.core.graph import AnnNet
-
+from ..core.graph import AnnNet
 from ..adapters._utils import (
     _df_to_rows,
     _rows_to_df,
-    _serialize_VM,
-    _deserialize_VM,
     _serialize_endpoint,
     _deserialize_endpoint,
     _serialize_edge_layers,
     _deserialize_edge_layers,
-    _finalize_multilayer_state,
-    _serialize_node_layer_attrs,
-    _serialize_layer_tuple_attrs,
-    _deserialize_node_layer_attrs,
-    _deserialize_layer_tuple_attrs,
 )
-from .._support.dataframe_backend import empty_dataframe
+from .._support.serialization_policy import (
+    restore_multilayer_manifest as _restore_multilayer_manifest,
+    serialize_multilayer_manifest as _serialize_multilayer_manifest,
+)
 
 
 def _split_sif_line(line: str, delimiter: str | None) -> list[str]:
@@ -53,34 +45,42 @@ def _get_all_edge_attrs(graph: AnnNet, edge_id: str):
 
 
 def _get_edge_weight(graph: AnnNet, edge_id: str, default=1.0):
-    try:
-        rec = getattr(graph, '_edges', {}).get(edge_id)
-        if rec is not None and rec.weight is not None:
-            return float(rec.weight)
-    except Exception:  # noqa: BLE001
-        pass
+    edge_weights = getattr(graph, 'edge_weights', None)
+    if edge_weights is not None:
+        weight = edge_weights.get(edge_id)
+        if weight is not None:
+            try:
+                return float(weight)
+            except (TypeError, ValueError):
+                return default
     return default
+
+
+def _get_edge_directed(graph: AnnNet, edge_id: str) -> bool:
+    if edge_id in graph.edge_directed:
+        return bool(graph.edge_directed[edge_id])
+    value = graph.attrs.get_attr_edge(edge_id, 'directed', None)
+    if value is not None:
+        return bool(value)
+    return True if graph.directed is None else bool(graph.directed)
 
 
 def _build_edge_attr_map(graph: AnnNet):
     ea = getattr(graph, 'edge_attributes', None)
     if ea is None:
         return None
-    try:
-        rows = _df_to_rows(ea)
-        if not rows:
-            return None
-        out = {}
-        for row in rows:
-            eid = row.get('edge_id', None)
-            if eid is None:
-                continue
-            attrs = {k: v for k, v in row.items() if k != 'edge_id' and v is not None}
-            if attrs:
-                out[eid] = attrs
-        return out if out else None
-    except Exception:  # noqa: BLE001
+    rows = _df_to_rows(ea)
+    if not rows:
         return None
+    out = {}
+    for row in rows:
+        eid = row.get('edge_id', None)
+        if eid is None:
+            continue
+        attrs = {k: v for k, v in row.items() if k != 'edge_id' and v is not None}
+        if attrs:
+            out[eid] = attrs
+    return out if out else None
 
 
 def to_sif(
@@ -129,25 +129,11 @@ def to_sif(
             'vertex_attrs': {},
             'edge_metadata': {},
             'slices': {},
-            'multilayer': {
-                'aspects': list(getattr(graph, 'aspects', [])),
-                'aspect_attrs': dict(getattr(graph, '_aspect_attrs', {})),
-                'elem_layers': dict(getattr(graph, 'elem_layers', {})),
-                'VM': _serialize_VM(getattr(graph, '_VM', set())),
-                'edge_kind': {
-                    eid: ('hyper' if rec.etype == 'hyper' else rec.ml_kind)
-                    for eid, rec in graph._edges.items()
-                    if rec.etype == 'hyper' or rec.ml_kind is not None
-                },
-                'edge_layers': _serialize_edge_layers(getattr(graph, 'edge_layers', {})),
-                'node_layer_attrs': _serialize_node_layer_attrs(getattr(graph, '_state_attrs', {})),
-                'layer_tuple_attrs': _serialize_layer_tuple_attrs(
-                    getattr(graph, '_layer_attrs', {})
-                ),
-                'layer_attributes': _df_to_rows(
-                    getattr(graph, 'layer_attributes', empty_dataframe({}))
-                ),
-            },
+            'multilayer': _serialize_multilayer_manifest(
+                graph,
+                table_to_rows=_df_to_rows,
+                serialize_edge_layers=_serialize_edge_layers,
+            ),
         }
         if lossless
         else None
@@ -157,10 +143,7 @@ def to_sif(
         edge_attr_map = _build_edge_attr_map(graph)
 
         with open(path, 'w', encoding='utf-8') as f:
-            for eid, rec in graph._edges.items():
-                if rec.etype == 'hyper':
-                    continue
-                src, tgt = rec.src, rec.tgt
+            for eid, (src, tgt, _etype) in graph.edge_definitions.items():
                 if src is None or tgt is None:
                     continue
                 src_str = str(src).strip()
@@ -182,7 +165,7 @@ def to_sif(
                 f.write(f'{src_str}\t{rel}\t{tgt_str}\n')
 
                 if lossless:
-                    directed = rec.directed if rec.directed is not None else True
+                    directed = _get_edge_directed(graph, eid)
                     weight = _get_edge_weight(graph, eid, 1.0)
 
                     manifest['binary_edges'][eid] = {
@@ -208,20 +191,17 @@ def to_sif(
                 vmap: dict[str, dict[str, object]] = {}
 
                 if vrows:
-                    try:
-                        for row in vrows:
-                            vid_raw = row.get('vertex_id', None)
-                            if vid_raw is None:
-                                continue
-                            vid = str(vid_raw).strip()
-                            if not vid or vid.lower() == 'none':
-                                continue
-                            attrs = {
-                                k: v for k, v in row.items() if k != 'vertex_id' and v is not None
-                            }
-                            vmap[vid] = attrs
-                    except Exception:  # noqa: BLE001
-                        vmap = {}
+                    for row in vrows:
+                        if not isinstance(row, dict):
+                            continue
+                        vid_raw = row.get('vertex_id', None)
+                        if vid_raw is None:
+                            continue
+                        vid = str(vid_raw).strip()
+                        if not vid or vid.lower() == 'none':
+                            continue
+                        attrs = {k: v for k, v in row.items() if k != 'vertex_id' and v is not None}
+                        vmap[vid] = attrs
 
                 if not vmap:
                     getter = getattr(graph, 'get_vertex_attrs', None)
@@ -235,7 +215,7 @@ def to_sif(
                                     continue
                                 attrs = getter(vid) or {}
                                 vmap[svid] = {k: v for k, v in attrs.items() if v is not None}
-                        except Exception:  # noqa: BLE001
+                        except AttributeError:
                             pass
 
                 for vid in graph.vertices():
@@ -255,14 +235,11 @@ def to_sif(
                         manifest['vertex_attrs'][svid] = attrs
 
     if lossless:
-        for eid, rec in graph._edges.items():
-            if rec.etype != 'hyper':
-                continue
-
-            directed = rec.tgt is not None
-            head = list(rec.src or []) if directed else []
-            tail = list(rec.tgt or []) if directed else []
-            members = list(rec.src or []) if not directed else []
+        for eid, info in graph.hyperedge_definitions.items():
+            directed = bool(info.get('directed', False))
+            head = list(info.get('head', [])) if directed else []
+            tail = list(info.get('tail', [])) if directed else []
+            members = list(info.get('members', [])) if not directed else []
 
             weight = _get_edge_weight(graph, eid, 1.0)
             attrs = _get_all_edge_attrs(graph, eid)
@@ -276,29 +253,22 @@ def to_sif(
                 'attrs': attrs,
             }
 
-        try:
-            slice_ids = list(graph.slices.list_slices(include_default=True))
-            for lid in slice_ids:
+        for lid in graph.slices.list_slices(include_default=True):
+            edge_ids = list(graph.slices.get_slice_edges(lid))
+            if not edge_ids:
+                continue
+
+            slice_info = {'edges': edge_ids, 'weights': {}}
+
+            for eid in edge_ids:
                 try:
-                    edge_ids = list(graph.slices.get_slice_edges(lid))
-                    if not edge_ids:
-                        continue
+                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
+                except TypeError:
+                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
+                if w is not None:
+                    slice_info['weights'][eid] = float(w)
 
-                    slice_info = {'edges': edge_ids, 'weights': {}}
-
-                    for eid in edge_ids:
-                        try:
-                            w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
-                            if w is not None:
-                                slice_info['weights'][eid] = float(w)
-                        except Exception:  # noqa: BLE001
-                            pass
-
-                    manifest['slices'][str(lid)] = slice_info
-                except Exception:  # noqa: BLE001
-                    pass
-        except Exception:  # noqa: BLE001
-            pass
+            manifest['slices'][str(lid)] = slice_info
 
         if manifest_path:
             with open(manifest_path, 'w', encoding='utf-8') as mf:
@@ -411,7 +381,7 @@ def from_sif(
             return k, v
         try:
             return k, float(v)
-        except:  # noqa: E722
+        except ValueError:
             return k, v
 
     # ===== NODES SIDECAR WITH PRE-DETECT DELIMITER =====
@@ -595,7 +565,7 @@ def from_sif(
 
             edge_ids = slice_info.get('edges', [])
             if edge_ids:
-                H.add_edges_to_slice_bulk(lid, edge_ids)
+                H.slices.add_edges(lid, edge_ids)
 
             weights = slice_info.get('weights', {})
             if weights:
@@ -605,42 +575,11 @@ def from_sif(
 
     # ===== MULTILAYER =====
     if manifest and 'multilayer' in manifest:
-        try:
-            mm = manifest['multilayer']
-            aspects = mm.get('aspects', [])
-            elem_layers = mm.get('elem_layers', {})
-            _finalize_multilayer_state(H, aspects, elem_layers)
-            aspect_attrs = mm.get('aspect_attrs', {})
-            if aspect_attrs:
-                H._aspect_attrs.update(aspect_attrs)
-            VM_data = mm.get('VM', [])
-            if VM_data:
-                vm_set = _deserialize_VM(VM_data)
-                H._restore_supra_nodes(vm_set)
-                H._VM = vm_set
-            ek = mm.get('edge_kind', {})
-            el_ser = mm.get('edge_layers', {})
-            if ek:
-                for eid, kind in ek.items():
-                    rec = H._edges.get(eid)
-                    if rec is None:
-                        continue
-                    if kind == 'hyper':
-                        rec.etype = 'hyper'
-                    else:
-                        rec.ml_kind = kind
-            if el_ser:
-                H.edge_layers.update(_deserialize_edge_layers(el_ser))
-            nl_attrs_ser = mm.get('node_layer_attrs', [])
-            if nl_attrs_ser:
-                H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
-            layer_tuple_attrs_ser = mm.get('layer_tuple_attrs', [])
-            if layer_tuple_attrs_ser:
-                H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
-            layer_attr_rows = mm.get('layer_attributes', [])
-            if layer_attr_rows:
-                H.layer_attributes = _rows_to_df(layer_attr_rows)
-        except:  # noqa: E722
-            pass
+        _restore_multilayer_manifest(
+            H,
+            manifest['multilayer'],
+            rows_to_table=_rows_to_df,
+            deserialize_edge_layers=_deserialize_edge_layers,
+        )
 
     return H

@@ -399,14 +399,14 @@ def _write_audit(graph, path: Path, compression: str):
             if hasattr(v, 'to_list') and callable(getattr(v, 'to_list', None)):
                 try:
                     v = v.to_list()
-                except Exception:  # noqa: BLE001
+                except (AttributeError, TypeError, ValueError):
                     return str(v)
             if isinstance(v, np.ndarray):
                 v = v.tolist()
             if isinstance(v, set):
                 try:
                     v = sorted(v)
-                except Exception:  # noqa: BLE001
+                except TypeError:
                     v = list(v)
             elif isinstance(v, tuple):
                 v = list(v)
@@ -418,13 +418,13 @@ def _write_audit(graph, path: Path, compression: str):
 
                 if isinstance(v, (_dt_datetime, _dt_date)):
                     return v.isoformat()
-            except Exception:  # noqa: BLE001
+            except ImportError:
                 pass
             if isinstance(v, (int, float, bool, str)):
                 return v
             try:
                 return json.dumps(v, default=str)
-            except Exception:  # noqa: BLE001
+            except (TypeError, ValueError):
                 return str(v)
 
         keys = sorted({k for r in rows for k in r.keys()})
@@ -438,7 +438,7 @@ def _write_audit(graph, path: Path, compression: str):
         from importlib import metadata as importlib_metadata
 
         polars_version = importlib_metadata.version('polars')
-    except Exception:  # noqa: BLE001
+    except importlib_metadata.PackageNotFoundError:
         polars_version = None
 
     provenance = {

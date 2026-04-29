@@ -11,10 +11,10 @@ imports from those underscore-prefixed modules follow the
 ## Package Metadata
 
 ```python
-annnet.get_metadata()
+annnet.__version__
 ```
 
-Return normalized package metadata.
+Return the current package version.
 
 ```python
 annnet.info()

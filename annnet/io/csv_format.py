@@ -61,16 +61,16 @@ from .._support.dataframe_backend import (
 
 _STR_TRUE = {'1', 'true', 't', 'yes', 'y', 'on'}
 _STR_FALSE = {'0', 'false', 'f', 'no', 'n', 'off'}
-_slice_SEP = re.compile(r'[|;,]')
+_SLICE_SEP = re.compile(r'[|;,]')
 _SET_SEP = re.compile(r'[|;,]\s*')
 
 SRC_COLS = ['source', 'src', 'from', 'u']
-DST_COLS = ['target', 'dst', 'to', 'v']
+DST_COLS = ['target', 'tgt', 'dst', 'to', 'v']
 WGT_COLS = ['weight', 'w']
 DIR_COLS = ['directed', 'is_directed', 'dir', 'orientation']
-slice_COLS = ['slice', 'slices']
+SLICE_COLS = ['slice', 'slices']
 EDGE_ID_COLS = ['edge', 'edge_id', 'id']
-vertex_ID_COLS = ['vertex', 'vertex_id', 'id', 'name', 'label']
+VERTEX_ID_COLS = ['vertex', 'vertex_id', 'id', 'name', 'label']
 NEIGH_COLS = ['neighbors', 'nbrs', 'adj', 'adjacency', 'neighbors_out', 'neighbors_in']
 MEMBERS_COLS = ['members', 'verts', 'participants']
 HEAD_COLS = ['head', 'heads']
@@ -84,9 +84,9 @@ RESERVED = set(
     + DST_COLS
     + WGT_COLS
     + DIR_COLS
-    + slice_COLS
+    + SLICE_COLS
     + EDGE_ID_COLS
-    + vertex_ID_COLS
+    + VERTEX_ID_COLS
     + NEIGH_COLS
     + MEMBERS_COLS
     + HEAD_COLS
@@ -137,9 +137,9 @@ def _split_slices(cell: Any) -> list[str]:
                     return [_norm(v) for v in val]
                 if isinstance(val, dict):
                     return list(val.keys())
-            except Exception:  # noqa: BLE001
+            except json.JSONDecodeError:
                 pass
-        return [p.strip() for p in _slice_SEP.split(cell) if p.strip()]
+        return [p.strip() for p in _SLICE_SEP.split(cell) if p.strip()]
     if isinstance(cell, (list, tuple, set)):
         return [_norm(v) for v in cell]
     return [str(cell)]
@@ -156,7 +156,7 @@ def _split_set(cell: Any) -> set[str]:
         if s.startswith('[') and s.endswith(']'):
             try:
                 return {_norm(v) for v in json.loads(s)}
-            except Exception:  # noqa: BLE001
+            except json.JSONDecodeError:
                 return {p.strip() for p in _SET_SEP.split(s) if p.strip()}
         return {p.strip() for p in _SET_SEP.split(s) if p.strip()}
     if isinstance(cell, (list, tuple, set)):
@@ -519,7 +519,7 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
             try:
                 arr = json.loads(s)
                 return '|'.join(sorted(str(x) for x in arr))
-            except Exception:  # noqa: BLE001
+            except json.JSONDecodeError:
                 pass
         parts = [p.strip() for p in _SET_SEP.split(s)] if _SET_SEP.search(s) else [s]
         return '|'.join(sorted(p for p in parts if p))
@@ -617,7 +617,7 @@ def _ingest_edge_list(
         wcol = _pick_first(df, WGT_COLS)
 
     dcol = _pick_first(df, DIR_COLS)
-    lcol = _pick_first(df, slice_COLS)
+    lcol = _pick_first(df, SLICE_COLS)
     ecol = _pick_first(df, EDGE_ID_COLS)
 
     reserved_now = {src, dst, wcol, dcol, lcol, ecol}
@@ -672,7 +672,7 @@ def _ingest_edge_list(
                         if suffix == L and row[c] is not None:
                             try:
                                 G.attrs.set_edge_slice_attrs(L, eid, weight=float(row[c]))  # type: ignore[arg-type]
-                            except Exception:  # noqa: BLE001
+                            except (KeyError, TypeError, ValueError):
                                 pass
         # explicit edge id mapping if present
         if ecol and eid is not None and row[ecol]:
@@ -691,7 +691,7 @@ def _ingest_hyperedge(
     hcol = _pick_first(df, HEAD_COLS)
     tcol = _pick_first(df, TAIL_COLS)
     wcol = _pick_first(df, WGT_COLS)
-    lcol = _pick_first(df, slice_COLS)
+    lcol = _pick_first(df, SLICE_COLS)
 
     if not mcol and not hcol:
         raise ValueError(
@@ -745,7 +745,7 @@ def _ingest_incidence(
 ):
     """Parse incidence matrices (first col = entity id, remaining numeric edge columns)."""
     columns = _columns(df)
-    idcol = _pick_first(df, vertex_ID_COLS) or columns[0]
+    idcol = _pick_first(df, VERTEX_ID_COLS) or columns[0]
     if idcol != columns[0]:
         df = rename_dataframe_columns(df, {idcol: columns[0]})
         columns = _columns(df)
@@ -873,11 +873,11 @@ def _ingest_lil(
     default_weight: float,
 ):
     """Parse LIL-style neighbor tables: one row per vertex with a neighbors column."""
-    idcol = _pick_first(df, vertex_ID_COLS) or _columns(df)[0]
+    idcol = _pick_first(df, VERTEX_ID_COLS) or _columns(df)[0]
     ncol = _pick_first(df, NEIGH_COLS)
     wcol = _pick_first(df, WGT_COLS)
     dcol = _pick_first(df, DIR_COLS)
-    lcol = _pick_first(df, slice_COLS)
+    lcol = _pick_first(df, SLICE_COLS)
 
     if not ncol:
         raise ValueError('LIL ingest: no neighbors column found.')

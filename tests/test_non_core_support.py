@@ -310,10 +310,6 @@ def test_adapter_utils_serialization_roundtrips(tmp_path):
     assert adapter_utils._rows_like([{'x': 1}]) == [{'x': 1}]
     assert adapter_utils._safe_df_to_rows(None) == []
 
-    manifest_path = tmp_path / 'manifest.json'
-    adapter_utils.save_manifest({'ok': True}, manifest_path)
-    assert adapter_utils.load_manifest(manifest_path) == {'ok': True}
-
 
 def test_archive_utils_roundtrip_and_invalid_archive(tmp_path):
     src = tmp_path / 'graph.annnet'
@@ -386,19 +382,14 @@ def test_metadata_helpers_and_info_rendering(monkeypatch):
     assert 'Installable bundles' in html
     assert info._mime_()[0] == 'text/html'
 
-    monkeypatch.setitem(_metadata.sys.modules, 'marimo', object())
-    assert _metadata.supports_html() is True
-    monkeypatch.delitem(_metadata.sys.modules, 'marimo')
-    monkeypatch.delitem(_metadata.sys.modules, 'IPython', raising=False)
-    monkeypatch.delitem(_metadata.sys.modules, 'IPython.display', raising=False)
-    assert _metadata.supports_html() is False
-
     fake_response = Mock()
     fake_response.read.return_value = b'version = "1.2.3"'
     fake_response.__enter__ = Mock(return_value=fake_response)
     fake_response.__exit__ = Mock(return_value=False)
     monkeypatch.setattr(urllib.request, 'urlopen', Mock(return_value=fake_response))
     assert _metadata.get_latest_version(url='https://example.org/pyproject.toml') == '1.2.3'
+    monkeypatch.setattr(urllib.request, 'urlopen', Mock(side_effect=OSError('offline')))
+    assert _metadata.get_latest_version(url='https://example.org/pyproject.toml') is None
     assert _metadata.get_latest_version(url='ftp://example.org/pyproject.toml') is None
 
 

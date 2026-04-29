@@ -53,10 +53,10 @@ class TestMultilayerAdapters(unittest.TestCase):
 
         # 4. Attributes
         # Node-layer attribute
-        G.layers._state_attrs[('u', ('t1', 'bus'))] = {'cost': 10.0}
+        G.layers.set_vertex_layer_attrs('u', ('t1', 'bus'), cost=10.0)
 
         # Layer-tuple attribute
-        G.layers._layer_attrs[('t1', 'bus')] = {'freq': 'high'}
+        G.layers.set_layer_attrs(('t1', 'bus'), freq='high')
 
         # Layer attribute table (elementary layers)
         G.layer_attributes = pl.DataFrame(

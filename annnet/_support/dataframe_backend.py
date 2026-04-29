@@ -122,7 +122,7 @@ def dataframe_memory_usage(df) -> int:
         return 0
     try:
         return int(_to_nw(df).estimated_size())
-    except Exception:  # noqa: BLE001
+    except (AttributeError, TypeError, ValueError):
         return 0
 
 
@@ -155,7 +155,7 @@ def _dataframe_column_is_numeric(df, column: str) -> bool:
         is_numeric = getattr(dtype, 'is_numeric', None)
         if callable(is_numeric) and is_numeric():
             return True
-    except Exception:  # noqa: BLE001
+    except (AttributeError, KeyError, TypeError, ValueError):
         pass
 
     values = _dataframe_column_values(df, column)
@@ -181,7 +181,7 @@ def dataframe_backend(df, *, default: str | None = 'auto') -> str:
 
         if isinstance(df, pl.DataFrame):
             return 'polars'
-    except Exception:  # noqa: BLE001
+    except ImportError:
         pass
 
     try:
@@ -189,7 +189,7 @@ def dataframe_backend(df, *, default: str | None = 'auto') -> str:
 
         if isinstance(df, pd.DataFrame):
             return 'pandas'
-    except Exception:  # noqa: BLE001
+    except ImportError:
         pass
 
     if hasattr(df, 'schema') and hasattr(df, 'num_rows') and hasattr(df, 'to_pylist'):

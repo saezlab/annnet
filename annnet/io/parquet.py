@@ -11,24 +11,21 @@ if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
 from ..adapters._utils import (
-    _serialize_VM,
-    _deserialize_VM,
     _safe_df_to_rows,
-    _iter_edge_records,
     _serialize_endpoint,
     _deserialize_endpoint,
     _serialize_edge_layers,
     _deserialize_edge_layers,
-    _finalize_multilayer_state,
-    _serialize_node_layer_attrs,
-    _serialize_layer_tuple_attrs,
-    _deserialize_node_layer_attrs,
-    _deserialize_layer_tuple_attrs,
 )
 from .._support.dataframe_backend import (
     dataframe_from_rows,
     _dataframe_read_parquet,
     _dataframe_write_parquet,
+)
+from .._support.serialization_policy import (
+    endpoint_coeff_map as _endpoint_coeff_map,
+    restore_multilayer_manifest as _restore_multilayer_manifest,
+    serialize_multilayer_manifest as _serialize_multilayer_manifest,
 )
 
 
@@ -48,6 +45,16 @@ def _build_dataframe_from_rows(rows):
         return df
 
 
+def _empty_table(columns: list[str]):
+    df = dataframe_from_rows([dict.fromkeys(columns)])
+    try:
+        return nw.from_native(df, eager_only=True).head(0).to_native()
+    except (AttributeError, TypeError, ValueError):
+        if hasattr(df, 'head'):
+            return df.head(0)
+        return df
+
+
 def _strip_nulls(d: dict):
     # remove keys whose value is None or NaN
     clean = {}
@@ -62,63 +69,31 @@ def _strip_nulls(d: dict):
 
 def _is_directed_eid(graph, eid):
     """Get edge directedness. Default False for hyperedges, True for binary."""
-    rec = getattr(graph, '_edges', {}).get(eid)
-    kind = 'hyper' if rec is not None and rec.etype == 'hyper' else 'binary'
+    kind = 'hyper' if eid in graph.hyperedge_definitions else 'binary'
 
-    if rec is not None and rec.directed is not None:
-        return bool(rec.directed)
+    if eid in graph.edge_directed:
+        return bool(graph.edge_directed[eid])
 
     # Check attribute
-    try:
-        val = graph.attrs.get_attr_edge(eid, 'directed')
-        if val is not None:
-            return bool(val)
-    except Exception:  # noqa: BLE001
-        pass
+    val = graph.attrs.get_attr_edge(eid, 'directed', None)
+    if val is not None:
+        return bool(val)
 
     # For hyperedges, check if S and T are identical (undirected)
     if kind == 'hyper':
-        try:
-            S = set(rec.src or [])
-            T = set(rec.tgt or [])
-            # If S == T, it's undirected (same member set in both)
-            if S == T:
-                return False
-        except Exception:  # noqa: BLE001
-            pass
+        info = graph.hyperedge_definitions.get(eid, {})
+        S = set(info.get('head', info.get('members', [])))
+        T = set(info.get('tail', info.get('members', [])))
+        if S == T:
+            return False
 
     # Default: True for binary, False for hyper
     return kind != 'hyper'
 
 
-def _coerce_coeff_mapping(val):
-    """Normalize various serialized forms into {vertex: {__value: float}|float}.
-
-    Accepts dict | list | list-of-dicts | list-of-pairs | JSON string.
-    """
-    if val is None:
-        return {}
-    if isinstance(val, str):
-        try:
-            return _coerce_coeff_mapping(json.loads(val))
-        except Exception:  # noqa: BLE001
-            return {}
-    if isinstance(val, dict):
-        return val
-    if isinstance(val, (list, tuple)):
-        out = {}
-        for item in val:
-            if isinstance(item, dict):
-                if 'vertex' in item and '__value' in item:
-                    out[item['vertex']] = {'__value': item['__value']}
-                else:
-                    for k, v in item.items():
-                        out[k] = v
-            elif isinstance(item, (list, tuple)) and len(item) == 2:
-                k, v = item
-                out[k] = v
-        return out
-    return {}
+def _edge_weight(graph, eid: str) -> float:
+    weight = graph.edge_weights.get(eid)
+    return 1.0 if weight is None else float(weight)
 
 
 def _is_nullish(val) -> bool:
@@ -127,14 +102,14 @@ def _is_nullish(val) -> bool:
     try:
         if isinstance(val, float) and math.isnan(val):
             return True
-    except Exception:  # noqa: BLE001
+    except TypeError:
         pass
     try:
         # Covers numpy scalar NaN without importing a concrete dataframe backend.
         maybe_nan = val != val
         if isinstance(maybe_nan, bool) and maybe_nan:
             return True
-    except Exception:  # noqa: BLE001
+    except (TypeError, ValueError):
         pass
     return False
 
@@ -157,27 +132,6 @@ def _as_list_or_empty(val):
     return [val]
 
 
-def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
-    """Return {vertex: float_coeff} for the given endpoint_set.
-
-    Reads from edge_attrs[private_key] which may be serialized in multiple shapes.
-    Missing endpoints default to 1.0.
-    """
-    raw_mapping = (edge_attrs or {}).get(private_key, {})
-    mapping = _coerce_coeff_mapping(raw_mapping)
-    endpoints = list(endpoint_set or mapping.keys())
-    out = {}
-    for u in endpoints:
-        val = mapping.get(u, 1.0)
-        if isinstance(val, dict):
-            val = val.get('__value', 1.0)
-        try:
-            out[u] = float(val)
-        except Exception:  # noqa: BLE001
-            out[u] = 1.0
-    return out
-
-
 def _build_attr_map(df, key_col: str) -> dict:
     """Build {key: attrs} mapping from a dataframe-like table."""
     out = {}
@@ -185,7 +139,7 @@ def _build_attr_map(df, key_col: str) -> dict:
         if not isinstance(rec, dict):
             try:
                 rec = dict(rec)
-            except Exception:  # noqa: BLE001
+            except (TypeError, ValueError):
                 continue
         if key_col not in rec:
             continue
@@ -217,27 +171,20 @@ def to_parquet(graph: AnnNet, path):
         if attrs:
             row.update(attrs)
         v_rows.append(row)
-    _dataframe_write_parquet(
-        _build_dataframe_from_rows(v_rows),
-        path / 'vertices.parquet',
-    )
+    vertex_df = _build_dataframe_from_rows(v_rows) if v_rows else _empty_table(['vertex_id'])
+    _dataframe_write_parquet(vertex_df, path / 'vertices.parquet')
 
     # edges
     e_attr_map = _build_attr_map(getattr(graph, 'edge_attributes', None), 'edge_id')
     e_rows = []
-    for eid, rec in _iter_edge_records(graph):
-        is_hyper = rec.etype == 'hyper'
-        if is_hyper:
-            S = set(rec.src or [])
-            T = set(rec.tgt or [])
-        else:
-            S = set() if rec.src is None else {rec.src}
-            T = set() if rec.tgt is None else {rec.tgt}
+    for eid, info in graph.hyperedge_definitions.items():
+        S = set(info.get('head', info.get('members', [])))
+        T = set(info.get('tail', info.get('members', [])))
         row = {
             'edge_id': eid,
-            'kind': ('hyper' if is_hyper else 'binary'),
+            'kind': 'hyper',
             'directed': bool(_is_directed_eid(graph, eid)),
-            'weight': float(1.0 if rec.weight is None else rec.weight),
+            'weight': _edge_weight(graph, eid),
         }
         attrs = e_attr_map.get(eid)
         if attrs:
@@ -260,81 +207,81 @@ def to_parquet(graph: AnnNet, path):
             }
             row.update(attrs)
 
-        if row['kind'] == 'binary':
-            members = S | T
-            if len(members) == 1:
-                u = next(iter(members))
-                v = u
-            else:
-                u, v = sorted(members)
-            row.update(
-                {
-                    'source': json.dumps(_serialize_endpoint(u), ensure_ascii=False),
-                    'target': json.dumps(_serialize_endpoint(v), ensure_ascii=False),
-                }
-            )
-        else:
-            head_map = _endpoint_coeff_map(row, '__source_attr', S) or dict.fromkeys(S or [], 1.0)
-            tail_map = _endpoint_coeff_map(row, '__target_attr', T) or dict.fromkeys(T or [], 1.0)
-            # DEBUG
-            # print(f"Exporting hyperedge {eid}: S={S}, T={T}, directed={row['directed']}")
-            # print(f"  head_map={head_map}, tail_map={tail_map}")
-
-            row.update(
-                {
-                    'head': list(head_map.keys()),
-                    'tail': list(tail_map.keys()),
-                    'members': list({*head_map.keys(), *tail_map.keys()})
-                    if not row['directed']
-                    else None,
-                }
-            )
-        # if row["kind"] == "hyper":
-        # print(f"Row to append: {row}")
-
+        head_map = _endpoint_coeff_map(row, '__source_attr', S) or dict.fromkeys(S or [], 1.0)
+        tail_map = _endpoint_coeff_map(row, '__target_attr', T) or dict.fromkeys(T or [], 1.0)
+        row.update(
+            {
+                'head': list(head_map.keys()),
+                'tail': list(tail_map.keys()),
+                'members': list({*head_map.keys(), *tail_map.keys()})
+                if not row['directed']
+                else None,
+            }
+        )
         e_rows.append(row)
 
-    # print(f"Sample e_rows[0] if hyper: {[r for r in e_rows if r['kind'] == 'hyper'][0]}")
+    for eid, (src, tgt, _etype) in graph.edge_definitions.items():
+        S = set() if src is None else {src}
+        T = set() if tgt is None else {tgt}
+        row = {
+            'edge_id': eid,
+            'kind': 'binary',
+            'directed': bool(_is_directed_eid(graph, eid)),
+            'weight': _edge_weight(graph, eid),
+            'source': json.dumps(_serialize_endpoint(src), ensure_ascii=False),
+            'target': json.dumps(_serialize_endpoint(tgt), ensure_ascii=False),
+        }
+        attrs = e_attr_map.get(eid)
+        if attrs:
+            attrs = {
+                k: v
+                for k, v in attrs.items()
+                if k
+                not in (
+                    'head',
+                    'tail',
+                    'members',
+                    'source',
+                    'target',
+                    'kind',
+                    'directed',
+                    'weight',
+                    'edge_id',
+                )
+            }
+            row.update(attrs)
+        e_rows.append(row)
 
-    _dataframe_write_parquet(
-        _build_dataframe_from_rows(e_rows),
-        path / 'edges.parquet',
+    edge_df = (
+        _build_dataframe_from_rows(e_rows)
+        if e_rows
+        else _empty_table(
+            ['edge_id', 'kind', 'directed', 'weight', 'source', 'target', 'head', 'tail', 'members']
+        )
     )
+    _dataframe_write_parquet(edge_df, path / 'edges.parquet')
 
     # slices
-    L = []
-    try:
-        for lid in graph.slices.list_slices(include_default=True):
-            L.append({'slice_id': lid})
-    except Exception:  # noqa: BLE001
-        pass
-    _dataframe_write_parquet(
-        _build_dataframe_from_rows(L),
-        path / 'slices.parquet',
-    )
+    L = [{'slice_id': lid} for lid in graph.slices.list_slices(include_default=True)]
+    slices_df = _build_dataframe_from_rows(L) if L else _empty_table(['slice_id'])
+    _dataframe_write_parquet(slices_df, path / 'slices.parquet')
 
     # edge_slices
     EL = []
-    try:
-        for lid in graph.slices.list_slices(include_default=True):
-            for eid in graph.slices.get_slice_edges(lid):
-                rec = {'slice_id': lid, 'edge_id': eid}
-                try:
-                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
-                except Exception:  # noqa: BLE001
-                    try:
-                        w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
-                    except Exception:  # noqa: BLE001
-                        w = None
-                if w is not None:
-                    rec['weight'] = float(w)
-                EL.append(rec)
-    except Exception:  # noqa: BLE001
-        pass
-    _dataframe_write_parquet(
-        _build_dataframe_from_rows(EL),
-        path / 'edge_slices.parquet',
+    for lid in graph.slices.list_slices(include_default=True):
+        for eid in graph.slices.get_slice_edges(lid):
+            rec = {'slice_id': lid, 'edge_id': eid}
+            try:
+                w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
+            except TypeError:
+                w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
+            if w is not None:
+                rec['weight'] = float(w)
+            EL.append(rec)
+    edge_slices_df = (
+        _build_dataframe_from_rows(EL) if EL else _empty_table(['slice_id', 'edge_id', 'weight'])
     )
+    _dataframe_write_parquet(edge_slices_df, path / 'edge_slices.parquet')
 
     # manifest.json (tiny)
     manifest = {
@@ -342,17 +289,11 @@ def to_parquet(graph: AnnNet, path):
         'counts': {'V': len(v_rows), 'E': len(e_rows), 'slices': len(L)},
         'schema': {'edges.kind': ['binary', 'hyper']},
         'provenance': {'package': 'annnet'},
-        'multilayer': {
-            'aspects': list(getattr(graph, 'aspects', [])),
-            'aspect_attrs': dict(getattr(graph, '_aspect_attrs', {})),
-            'elem_layers': dict(getattr(graph, 'elem_layers', {})),
-            'VM': _serialize_VM(getattr(graph, '_VM', set())),
-            'edge_kind': dict(getattr(graph, 'edge_kind', {})),
-            'edge_layers': _serialize_edge_layers(getattr(graph, 'edge_layers', {})),
-            'node_layer_attrs': _serialize_node_layer_attrs(getattr(graph, '_state_attrs', {})),
-            'layer_tuple_attrs': _serialize_layer_tuple_attrs(getattr(graph, '_layer_attrs', {})),
-            'layer_attributes': _safe_df_to_rows(getattr(graph, 'layer_attributes', None)),
-        },
+        'multilayer': _serialize_multilayer_manifest(
+            graph,
+            table_to_rows=_safe_df_to_rows,
+            serialize_edge_layers=_serialize_edge_layers,
+        ),
     }
     (path / 'manifest.json').write_text(json.dumps(manifest, indent=2))
 
@@ -391,17 +332,22 @@ def from_parquet(path) -> AnnNet:
     # Edges (bulk, columnar)
     # -------------------------
     # Split binary vs hyper first (avoid row-wise graph ops)
-    try:
-        # Polars / Narwhals fast path
-        binary = E.filter(E['kind'] == 'binary')
-        hyper = E.filter(E['kind'] == 'hyper')
-        is_polars_like = True
-    except Exception:  # noqa: BLE001
-        # Fallback: materialize rows and split
-        rows = list(_safe_df_to_rows(E))
-        binary = [r for r in rows if r.get('kind') == 'binary']
-        hyper = [r for r in rows if r.get('kind') == 'hyper']
+    rows = list(_safe_df_to_rows(E))
+    if not rows:
+        binary = []
+        hyper = []
         is_polars_like = False
+    else:
+        try:
+            # Polars / Narwhals fast path
+            binary = E.filter(E['kind'] == 'binary')
+            hyper = E.filter(E['kind'] == 'hyper')
+            is_polars_like = True
+        except (AttributeError, TypeError, NotImplementedError):
+            # Fallback: materialize rows and split
+            binary = [r for r in rows if r.get('kind') == 'binary']
+            hyper = [r for r in rows if r.get('kind') == 'hyper']
+            is_polars_like = False
 
     # ---- Binary edges ----
     if is_polars_like:
@@ -427,17 +373,12 @@ def from_parquet(path) -> AnnNet:
                 'target': _deserialize_endpoint(v),
                 'edge_id': eid,
                 'edge_directed': bool(d),
+                'weight': float(w),
             }
-            for u, v, eid, d in zip(src, dst, eids, directed, strict=False)
+            for u, v, eid, d, w in zip(src, dst, eids, directed, weights, strict=False)
             if u is not None and v is not None
         )
         H.add_edges_bulk(edge_rows)
-
-        # Apply weights in batch
-        for eid, w in zip(eids, weights, strict=False):
-            rec = H._edges.get(eid)
-            if rec is not None:
-                rec.weight = float(w)
 
         # Remaining edge attrs (vectorized -> rows, but small)
         # Drop structural columns before attaching attrs
@@ -462,7 +403,6 @@ def from_parquet(path) -> AnnNet:
     else:
         # Fallback path (still bulk, but from Python rows)
         edge_rows = []
-        weights = {}
         extra_attrs = {}
         for rec in binary:
             rec = dict(rec)
@@ -473,8 +413,9 @@ def from_parquet(path) -> AnnNet:
             w = float(rec.pop('weight', 1.0))
             if u is None or v is None:
                 continue
-            edge_rows.append({'source': u, 'target': v, 'edge_id': eid, 'edge_directed': d})
-            weights[eid] = w
+            edge_rows.append(
+                {'source': u, 'target': v, 'edge_id': eid, 'edge_directed': d, 'weight': w}
+            )
             attrs = _strip_nulls(
                 {k: v for k, v in rec.items() if k not in ('kind', 'head', 'tail', 'members')}
             )
@@ -483,10 +424,6 @@ def from_parquet(path) -> AnnNet:
 
         if edge_rows:
             H.add_edges_bulk(edge_rows)
-            for eid, w in weights.items():
-                rec = H._edges.get(eid)
-                if rec is not None:
-                    rec.weight = w
             if extra_attrs:
                 H.attrs.set_edge_attrs_bulk(extra_attrs)
 
@@ -515,29 +452,37 @@ def from_parquet(path) -> AnnNet:
         )
 
         hyper_rows = []
-        for eid, d, h, t, m in zip(eids, directed, heads, tails, members, strict=False):
+        for eid, d, h, t, m, w in zip(eids, directed, heads, tails, members, weights, strict=False):
             d = bool(d)
             if d:
                 hh = _as_list_or_empty(h)
                 tt = _as_list_or_empty(t)
                 if hh and tt:
                     hyper_rows.append(
-                        {'head': list(hh), 'tail': list(tt), 'edge_id': eid, 'edge_directed': True}
+                        {
+                            'head': list(hh),
+                            'tail': list(tt),
+                            'edge_id': eid,
+                            'edge_directed': True,
+                            'weight': float(w),
+                        }
                     )
             else:
                 mm = _as_list_or_empty(m)
                 if not mm:
                     mm = list(set(_as_list_or_empty(h)) | set(_as_list_or_empty(t)))
                 if len(mm) >= 2:
-                    hyper_rows.append({'members': list(mm), 'edge_id': eid, 'edge_directed': False})
+                    hyper_rows.append(
+                        {
+                            'members': list(mm),
+                            'edge_id': eid,
+                            'edge_directed': False,
+                            'weight': float(w),
+                        }
+                    )
 
         if hyper_rows:
             H.add_hyperedges_bulk(hyper_rows)
-
-        for eid, w in zip(eids, weights, strict=False):
-            rec = H._edges.get(eid)
-            if rec is not None:
-                rec.weight = float(w)
 
         # Extra attrs
         drop_cols = {
@@ -563,7 +508,6 @@ def from_parquet(path) -> AnnNet:
 
     else:
         hyper_rows = []
-        weights = {}
         extra_attrs = {}
         for rec in hyper:
             rec = dict(rec)
@@ -577,25 +521,27 @@ def from_parquet(path) -> AnnNet:
             if d:
                 if h and t:
                     hyper_rows.append(
-                        {'head': list(h), 'tail': list(t), 'edge_id': eid, 'edge_directed': True}
+                        {
+                            'head': list(h),
+                            'tail': list(t),
+                            'edge_id': eid,
+                            'edge_directed': True,
+                            'weight': w,
+                        }
                     )
             else:
                 if not m:
                     m = list(set(h) | set(t))
                 if len(m) >= 2:
-                    hyper_rows.append({'members': list(m), 'edge_id': eid, 'edge_directed': False})
-
-            weights[eid] = w
+                    hyper_rows.append(
+                        {'members': list(m), 'edge_id': eid, 'edge_directed': False, 'weight': w}
+                    )
             attrs = _strip_nulls({k: v for k, v in rec.items() if k != 'kind'})
             if attrs:
                 extra_attrs[eid] = attrs
 
         if hyper_rows:
             H.add_hyperedges_bulk(hyper_rows)
-            for eid, w in weights.items():
-                rec = H._edges.get(eid)
-                if rec is not None:
-                    rec.weight = w
             if extra_attrs:
                 H.attrs.set_edge_attrs_bulk(extra_attrs)
 
@@ -603,13 +549,12 @@ def from_parquet(path) -> AnnNet:
     # Slices
     # -------------------------
     if L is not None:
+        existing_slices = set(H.slices.list_slices(include_default=True))
         for rec in _safe_df_to_rows(L):
             lid = rec.get('slice_id')
-            try:
-                if lid not in set(H.slices.list_slices(include_default=True)):
-                    H.slices.add_slice(lid)
-            except Exception:  # noqa: BLE001
-                pass
+            if lid is not None and lid not in existing_slices:
+                H.slices.add_slice(lid)
+                existing_slices.add(lid)
 
     # -------------------------
     # Edge slices (bulk add edges to slice)
@@ -627,76 +572,23 @@ def from_parquet(path) -> AnnNet:
                 slice_weights.setdefault(lid, {})[eid] = float(rec['weight'])
 
         for lid, eids in by_slice.items():
-            try:
-                H.add_edges_to_slice_bulk(lid, eids)
-            except Exception:  # noqa: BLE001
-                for eid in eids:
-                    try:
-                        H.add_edge_to_slice(lid, eid)
-                    except Exception:  # noqa: BLE001
-                        pass
+            H.slices.add_edges(lid, eids)
 
         for lid, mp in slice_weights.items():
             for eid, w in mp.items():
-                try:
-                    H.attrs.set_edge_slice_attrs(lid, eid, weight=w)
-                except Exception:  # noqa: BLE001
-                    try:
-                        H.set_edge_slice_attr(lid, eid, 'weight', w)
-                    except Exception:  # noqa: BLE001
-                        pass
+                H.attrs.set_edge_slice_attrs(lid, eid, weight=w)
 
     # -------------------------
     # Manifest (unchanged)
     # -------------------------
     manifest_path = path / 'manifest.json'
     if manifest_path.exists():
-        try:
-            manifest = json.loads(manifest_path.read_text())
-            mm = manifest.get('multilayer', {})
-
-            aspects = mm.get('aspects', [])
-            elem_layers = mm.get('elem_layers', {})
-
-            _finalize_multilayer_state(H, aspects, elem_layers)
-
-            aspect_attrs = mm.get('aspect_attrs', {})
-            if aspect_attrs:
-                H._aspect_attrs.update(aspect_attrs)
-
-            VM_data = mm.get('VM', [])
-            if VM_data:
-                vm_set = _deserialize_VM(VM_data)
-                H._restore_supra_nodes(vm_set)
-                H._VM = vm_set
-
-            ek = mm.get('edge_kind', {})
-            el_ser = mm.get('edge_layers', {})
-            if ek:
-                for eid, kind in ek.items():
-                    rec = H._edges.get(eid)
-                    if rec is None:
-                        continue
-                    if kind == 'hyper':
-                        rec.etype = 'hyper'
-                    else:
-                        rec.ml_kind = kind
-            if el_ser:
-                H.edge_layers.update(_deserialize_edge_layers(el_ser))
-
-            nl_attrs_ser = mm.get('node_layer_attrs', [])
-            if nl_attrs_ser:
-                H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
-
-            layer_tuple_attrs_ser = mm.get('layer_tuple_attrs', [])
-            if layer_tuple_attrs_ser:
-                H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
-
-            layer_attr_rows = mm.get('layer_attributes', [])
-            if layer_attr_rows:
-                H.layer_attributes = _build_dataframe_from_rows(layer_attr_rows)
-
-        except Exception:  # noqa: BLE001
-            pass
+        manifest = json.loads(manifest_path.read_text())
+        _restore_multilayer_manifest(
+            H,
+            manifest.get('multilayer', {}),
+            rows_to_table=_build_dataframe_from_rows,
+            deserialize_edge_layers=_deserialize_edge_layers,
+        )
 
     return H

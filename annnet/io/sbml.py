@@ -34,15 +34,6 @@ def _ensure_boundary_vertices(G, slice: str) -> None:
     G.add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
 
 
-def _set_edge_attrs(G, edge_id, **attrs):
-    if hasattr(G, 'attrs'):
-        return G.attrs.set_edge_attrs(edge_id, **attrs)
-    setter = getattr(G, 'set_edge_attrs', None)
-    if setter is None:
-        raise AttributeError('graph does not expose edge-attribute setters')
-    return setter(edge_id, **attrs)
-
-
 # ── SBML reader ───────────────────────────────────────────────────────────────
 
 
@@ -76,27 +67,12 @@ def _read_sbml_model(path: str):
 
 
 def _register_compartments(G, model, default_slice: str) -> None:
-    """Create one AnnNet slice per SBML compartment, carrying compartment metadata.
-
-    No-ops gracefully if the graph or model does not support the required API.
-    """
-    get_compartments = getattr(model, 'getListOfCompartments', None)
-    if get_compartments is None:
-        return
-    has_slice = getattr(getattr(G, 'slices', None), 'has_slice', None) or getattr(
-        G, 'has_slice', None
-    )
-    add_slice = getattr(getattr(G, 'slices', None), 'add_slice', None) or getattr(
-        G, 'add_slice', None
-    )
-    if add_slice is None:
-        return
-
-    for c in get_compartments():
+    """Create one AnnNet slice per SBML compartment, carrying compartment metadata."""
+    for c in model.getListOfCompartments():
         cid = _call(c, 'getId')
         if not cid or cid == default_slice:
             continue
-        if has_slice is not None and has_slice(cid):
+        if G.slices.has_slice(cid):
             continue
         attrs = {}
         name = _call(c, 'getName')
@@ -117,7 +93,7 @@ def _register_compartments(G, model, default_slice: str) -> None:
         outside = _call(c, 'getOutside')  # L2 parent compartment
         if outside:
             attrs['outside'] = outside
-        add_slice(cid, **attrs)
+        G.slices.add_slice(cid, **attrs)
 
 
 # ── species → vertices ────────────────────────────────────────────────────────
@@ -345,37 +321,21 @@ def _graph_from_sbml_model(
         if preserve_stoichiometry:
             G.set_edge_coeffs(rid, coeffs)
         else:
-            _set_edge_attrs(G, rid, stoich=coeffs)
+            G.attrs.set_edge_attrs(rid, stoich=coeffs)
 
     # ── edge attributes ───────────────────────────────────────────────────────
     if edge_attrs_map:
-        set_edge_attrs_bulk = getattr(G, 'set_edge_attrs_bulk', None)
-        if set_edge_attrs_bulk is not None:
-            set_edge_attrs_bulk(edge_attrs_map)
-        else:
-            for rid, attrs in edge_attrs_map.items():
-                _set_edge_attrs(G, rid, **attrs)
+        G.attrs.set_edge_attrs_bulk(edge_attrs_map)
 
     # ── assign reactions to their compartment slices ──────────────────────────
-    add_edges_to_slice_bulk = getattr(G, 'add_edges_to_slice_bulk', None)
-    add_edge_to_slice = getattr(G, 'add_edge_to_slice', None)
-    if add_edges_to_slice_bulk is not None:
-        by_slice: dict[str, list[str]] = {}
-        for rid, rxn_slices in rxn_slices_map.items():
-            for cid in rxn_slices:
+    by_slice: dict[str, list[str]] = {}
+    existing_slices = set(G.slices.list_slices(include_default=True))
+    for rid, rxn_slices in rxn_slices_map.items():
+        for cid in rxn_slices:
+            if cid in existing_slices:
                 by_slice.setdefault(cid, []).append(rid)
-        for cid, rids in by_slice.items():
-            try:
-                add_edges_to_slice_bulk(cid, rids)
-            except Exception:  # noqa: BLE001
-                pass
-    elif add_edge_to_slice is not None:
-        for rid, rxn_slices in rxn_slices_map.items():
-            for cid in rxn_slices:
-                try:
-                    add_edge_to_slice(cid, rid)
-                except Exception:  # noqa: BLE001
-                    pass
+    for cid, rids in by_slice.items():
+        G.slices.add_edges(cid, rids)
 
     return G
 

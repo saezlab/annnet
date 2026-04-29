@@ -10,13 +10,10 @@ from importlib.metadata import (
 
 from ._support.metadata import (
     info,
-    metadata as __metadata__,
     __title__,
-    __author__,
     __authors__,
     __license__,
     __version__,
-    get_metadata,
     __maintainers__,
     get_latest_version,
 )
@@ -94,12 +91,9 @@ _lazy_functions: dict[str, tuple[str, str]] = {
 _metadata_exports = {
     '__title__',
     '__version__',
-    '__author__',
     '__authors__',
     '__maintainers__',
     '__license__',
-    '__metadata__',
-    'get_metadata',
     'get_latest_version',
     'info',
 }

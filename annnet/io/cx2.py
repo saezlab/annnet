@@ -797,7 +797,7 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
 
     # Construct AnnNet
 
-    from annnet.core.graph import AnnNet
+    from ..core.graph import AnnNet
 
     G = AnnNet()
 

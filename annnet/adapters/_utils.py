@@ -48,38 +48,8 @@ def _iter_vertex_ids(graph):
         for vid in graph.vertices():
             yield vid
         return
-    except Exception as exc:
+    except AttributeError as exc:
         raise AttributeError('Graph does not expose an adapter-readable vertex store') from exc
-
-
-def _coerce_coeff_mapping(val):
-    """Normalize endpoint-coeff containers into {vertex: {__value: float}|float}.
-
-    Accepts dict | list | list-of-dicts | list-of-pairs | JSON string.
-    """
-    if val is None:
-        return {}
-    if isinstance(val, str):
-        try:
-            return _coerce_coeff_mapping(_json.loads(val))
-        except _json.JSONDecodeError:
-            return {}
-    if isinstance(val, dict):
-        return val
-    if isinstance(val, (list, tuple)):
-        out = {}
-        for item in val:
-            if isinstance(item, dict):
-                if 'vertex' in item and '__value' in item:
-                    out[item['vertex']] = {'__value': item['__value']}
-                else:
-                    for k, v in item.items():
-                        out[k] = v
-            elif isinstance(item, (list, tuple)) and len(item) == 2:
-                k, v = item
-                out[k] = v
-        return out
-    return {}
 
 
 def _serialize_value(val: Any) -> Any:
@@ -160,37 +130,6 @@ def _rows_like(table):
     if isinstance(table, list) and table and isinstance(table[0], dict):
         return list(table)
     return []
-
-
-def save_manifest(manifest: dict, path: str):
-    with open(path, 'w') as f:
-        _json.dump(manifest, f, indent=2)
-
-
-def load_manifest(path: str) -> dict:
-    with open(path) as f:
-        return _json.load(f)
-
-
-def _endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
-    """Return {vertex: float_coeff} for the given endpoint_set.
-
-    Reads from edge_attrs[private_key], which may be serialized in multiple shapes.
-    Missing endpoints default to 1.0.
-    """
-    raw_mapping = (edge_attrs or {}).get(private_key, {})
-    mapping = _coerce_coeff_mapping(raw_mapping)
-    endpoints = list(endpoint_set or mapping.keys())
-    out = {}
-    for u in endpoints:
-        val = mapping.get(u, 1.0)
-        if isinstance(val, dict):
-            val = val.get('__value', 1.0)
-        try:
-            out[u] = float(val)
-        except (TypeError, ValueError):
-            out[u] = 1.0
-    return out
 
 
 def _iter_edge_records(graph):

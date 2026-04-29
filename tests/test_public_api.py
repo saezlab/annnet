@@ -16,7 +16,6 @@ class TestPublicAPI:
         assert an.Traversal is not None
         assert an.__version__
         assert an.__license__
-        assert callable(an.get_metadata)
         assert callable(an.get_latest_version)
         assert callable(an.info)
 
@@ -58,15 +57,6 @@ class TestPublicAPI:
             'from_omnipath',
         ]:
             assert callable(getattr(an, name))
-
-    def test_metadata_exports_resolve(self):
-        meta = an.get_metadata()
-        summary = an.info()
-
-        assert meta['version'] == an.__version__
-        assert meta['license'] == an.__license__
-        assert isinstance(str(summary), str)
-        assert 'graph backends' in str(summary).lower()
 
     def test_get_latest_version_rejects_non_http_schemes(self):
         with patch('urllib.request.urlopen') as urlopen:
