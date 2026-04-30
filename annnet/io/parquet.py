@@ -10,7 +10,7 @@ import narwhals as nw
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
-from ..adapters._utils import _safe_df_to_rows
+from .._support.graph_records import _rows_to_df
 from .._support.serialization import (
     endpoint_coeff_map,
     serialize_endpoint,
@@ -21,26 +21,11 @@ from .._support.serialization import (
     serialize_multilayer_manifest,
 )
 from .._support.dataframe_backend import (
+    dataframe_to_rows,
     dataframe_from_rows,
-    _dataframe_read_parquet,
-    _dataframe_write_parquet,
+    dataframe_read_parquet,
+    dataframe_write_parquet,
 )
-
-
-def _build_dataframe_from_rows(rows):
-    """Build a dataframe/table using AnnNet's configured backend selection."""
-    if not rows:
-        return dataframe_from_rows(rows)
-    order = []
-    for row in rows:
-        for key in row.keys():
-            if key not in order:
-                order.append(key)
-    df = dataframe_from_rows(rows)
-    try:
-        return nw.from_native(df, eager_only=True).select(order).to_native()
-    except (AttributeError, TypeError, ValueError):
-        return df
 
 
 def _empty_table(columns: list[str]):
@@ -133,7 +118,7 @@ def _as_list_or_empty(val):
 def _build_attr_map(df, key_col: str) -> dict:
     """Build {key: attrs} mapping from a dataframe-like table."""
     out = {}
-    for rec in _safe_df_to_rows(df):
+    for rec in dataframe_to_rows(df):
         if not isinstance(rec, dict):
             try:
                 rec = dict(rec)
@@ -169,8 +154,8 @@ def to_parquet(graph: AnnNet, path):
         if attrs:
             row.update(attrs)
         v_rows.append(row)
-    vertex_df = _build_dataframe_from_rows(v_rows) if v_rows else _empty_table(['vertex_id'])
-    _dataframe_write_parquet(vertex_df, path / 'vertices.parquet')
+    vertex_df = _rows_to_df(v_rows) if v_rows else _empty_table(['vertex_id'])
+    dataframe_write_parquet(vertex_df, path / 'vertices.parquet')
 
     # edges
     e_attr_map = _build_attr_map(getattr(graph, 'edge_attributes', None), 'edge_id')
@@ -251,18 +236,18 @@ def to_parquet(graph: AnnNet, path):
         e_rows.append(row)
 
     edge_df = (
-        _build_dataframe_from_rows(e_rows)
+        _rows_to_df(e_rows)
         if e_rows
         else _empty_table(
             ['edge_id', 'kind', 'directed', 'weight', 'source', 'target', 'head', 'tail', 'members']
         )
     )
-    _dataframe_write_parquet(edge_df, path / 'edges.parquet')
+    dataframe_write_parquet(edge_df, path / 'edges.parquet')
 
     # slices
     L = [{'slice_id': lid} for lid in graph.slices.list_slices(include_default=True)]
-    slices_df = _build_dataframe_from_rows(L) if L else _empty_table(['slice_id'])
-    _dataframe_write_parquet(slices_df, path / 'slices.parquet')
+    slices_df = _rows_to_df(L) if L else _empty_table(['slice_id'])
+    dataframe_write_parquet(slices_df, path / 'slices.parquet')
 
     # edge_slices
     EL = []
@@ -276,10 +261,8 @@ def to_parquet(graph: AnnNet, path):
             if w is not None:
                 rec['weight'] = float(w)
             EL.append(rec)
-    edge_slices_df = (
-        _build_dataframe_from_rows(EL) if EL else _empty_table(['slice_id', 'edge_id', 'weight'])
-    )
-    _dataframe_write_parquet(edge_slices_df, path / 'edge_slices.parquet')
+    edge_slices_df = _rows_to_df(EL) if EL else _empty_table(['slice_id', 'edge_id', 'weight'])
+    dataframe_write_parquet(edge_slices_df, path / 'edge_slices.parquet')
 
     # manifest.json (tiny)
     manifest = {
@@ -289,7 +272,7 @@ def to_parquet(graph: AnnNet, path):
         'provenance': {'package': 'annnet'},
         'multilayer': serialize_multilayer_manifest(
             graph,
-            table_to_rows=_safe_df_to_rows,
+            table_to_rows=dataframe_to_rows,
             serialize_edge_layers=serialize_edge_layers,
         ),
     }
@@ -301,15 +284,15 @@ def from_parquet(path) -> AnnNet:
     from ..core.graph import AnnNet
 
     path = Path(path)
-    V = _dataframe_read_parquet(path / 'vertices.parquet')
-    E = _dataframe_read_parquet(path / 'edges.parquet')
+    V = dataframe_read_parquet(path / 'vertices.parquet')
+    E = dataframe_read_parquet(path / 'edges.parquet')
     L = (
-        _dataframe_read_parquet(path / 'slices.parquet')
+        dataframe_read_parquet(path / 'slices.parquet')
         if (path / 'slices.parquet').exists()
         else None
     )
     EL = (
-        _dataframe_read_parquet(path / 'edge_slices.parquet')
+        dataframe_read_parquet(path / 'edge_slices.parquet')
         if (path / 'edge_slices.parquet').exists()
         else None
     )
@@ -321,7 +304,7 @@ def from_parquet(path) -> AnnNet:
     # -------------------------
     # Convert vertices DF to dict rows once and bulk add
     v_rows = []
-    for rec in _safe_df_to_rows(V):
+    for rec in dataframe_to_rows(V):
         v_rows.append(dict(rec))
     if v_rows:
         H.add_vertices_bulk(v_rows)
@@ -330,7 +313,7 @@ def from_parquet(path) -> AnnNet:
     # Edges (bulk, columnar)
     # -------------------------
     # Split binary vs hyper first (avoid row-wise graph ops)
-    rows = list(_safe_df_to_rows(E))
+    rows = list(dataframe_to_rows(E))
     if not rows:
         binary = []
         hyper = []
@@ -391,7 +374,7 @@ def from_parquet(path) -> AnnNet:
             'tail',
             'members',
         }
-        for rec in _safe_df_to_rows(binary):
+        for rec in dataframe_to_rows(binary):
             eid = rec.get('edge_id')
             attrs = {k: v for k, v in rec.items() if k not in drop_cols}
             attrs = _strip_nulls(attrs)
@@ -495,7 +478,7 @@ def from_parquet(path) -> AnnNet:
             'members',
         }
         extra = {}
-        for rec in _safe_df_to_rows(hyper):
+        for rec in dataframe_to_rows(hyper):
             eid = rec.get('edge_id')
             attrs = {k: v for k, v in rec.items() if k not in drop_cols}
             attrs = _strip_nulls(attrs)
@@ -548,7 +531,7 @@ def from_parquet(path) -> AnnNet:
     # -------------------------
     if L is not None:
         existing_slices = set(H.slices.list_slices(include_default=True))
-        for rec in _safe_df_to_rows(L):
+        for rec in dataframe_to_rows(L):
             lid = rec.get('slice_id')
             if lid is not None and lid not in existing_slices:
                 H.slices.add_slice(lid)
@@ -560,7 +543,7 @@ def from_parquet(path) -> AnnNet:
     if EL is not None:
         by_slice = {}
         slice_weights = {}
-        for rec in _safe_df_to_rows(EL):
+        for rec in dataframe_to_rows(EL):
             lid = rec.get('slice_id')
             eid = rec.get('edge_id')
             if lid is None or eid is None:
@@ -585,7 +568,7 @@ def from_parquet(path) -> AnnNet:
         restore_multilayer_manifest(
             H,
             manifest.get('multilayer', {}),
-            rows_to_table=_build_dataframe_from_rows,
+            rows_to_table=_rows_to_df,
             deserialize_edge_layers=deserialize_edge_layers,
         )
 

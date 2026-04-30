@@ -15,12 +15,11 @@ except ModuleNotFoundError as e:
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
-from ._utils import (
+from .._support.graph_records import (
     _rows_like,
     _rows_to_df,
     _attrs_to_dict,
     _is_directed_eid,
-    _safe_df_to_rows,
     _serialize_value,
     _iter_edge_records,
 )
@@ -33,6 +32,7 @@ from .._support.serialization import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
+from .._support.dataframe_backend import dataframe_to_rows
 
 
 @contextmanager
@@ -437,7 +437,7 @@ def to_nx(
         'manifest_version': 1,
         'multilayer': serialize_multilayer_manifest(
             graph,
-            table_to_rows=_safe_df_to_rows,
+            table_to_rows=dataframe_to_rows,
             serialize_edge_layers=serialize_edge_layers,
         ),
     }
@@ -836,3 +836,27 @@ def _from_nx_without_manifest(
             if clean:
                 H.attrs.set_edge_attrs(eid, **clean)
     return H
+
+
+def from_nx_without_manifest(
+    nxG,
+    *,
+    hyperedge='none',
+    he_node_flag='is_hyperedge',
+    he_id_attr='eid',
+    role_attr='role',
+    coeff_attr='coeff',
+    membership_attr='membership_of',
+    reify_prefix='he::',
+):
+    """Public façade for best-effort import from bare NetworkX graphs."""
+    return _from_nx_without_manifest(
+        nxG,
+        hyperedge=hyperedge,
+        he_node_flag=he_node_flag,
+        he_id_attr=he_id_attr,
+        role_attr=role_attr,
+        coeff_attr=coeff_attr,
+        membership_attr=membership_attr,
+        reify_prefix=reify_prefix,
+    )

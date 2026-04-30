@@ -42,17 +42,17 @@ import numpy as np
 
 from ..core.graph import AnnNet
 from .._support.dataframe_backend import (
-    _dataframe_width,
+    dataframe_width,
     dataframe_height,
     dataframe_columns,
     dataframe_to_rows,
     dataframe_from_rows,
-    _dataframe_write_csv,
-    _dataframe_column_values,
+    dataframe_write_csv,
+    dataframe_column_values,
+    dataframe_read_delimited,
     rename_dataframe_columns,
-    _dataframe_read_delimited,
-    _dataframe_select_to_numpy,
-    _dataframe_column_is_numeric,
+    dataframe_select_to_numpy,
+    dataframe_column_is_numeric,
 )
 
 # ---------------------------
@@ -181,7 +181,7 @@ def _pick_first(df, candidates: list[str]) -> str | None:
 
 
 def _is_numeric_column(df, column: str) -> bool:
-    return _dataframe_column_is_numeric(df, column)
+    return dataframe_column_is_numeric(df, column)
 
 
 def _attr_columns(df, exclude: Iterable[str]) -> list[str]:
@@ -220,7 +220,7 @@ def _detect_schema(df) -> str:
         return 'edge_list'
 
     # Heuristic: if first column is a vertex id and remaining many numeric -> incidence
-    width = _dataframe_width(df)
+    width = dataframe_width(df)
     height = dataframe_height(df)
     names = _columns(df)
     if width >= 3:
@@ -301,7 +301,7 @@ def from_csv(
         If schema is unknown or parsing fails.
 
     """
-    df = _dataframe_read_delimited(
+    df = dataframe_read_delimited(
         path,
         separator=',',
         infer_schema_length=infer_schema_length,
@@ -450,7 +450,7 @@ def edges_to_csv(G, path, slice=None):
             }
         )
 
-    _dataframe_write_csv(dataframe_from_rows(out_rows), path)
+    dataframe_write_csv(dataframe_from_rows(out_rows), path)
 
 
 def hyperedges_to_csv(G, path, slice=None, directed=None):
@@ -539,7 +539,7 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
                     else (row.get(slicecol) if slicecol else None),
                 }
             )
-        _dataframe_write_csv(dataframe_from_rows(out_rows), path)
+        dataframe_write_csv(dataframe_from_rows(out_rows), path)
         return
 
     if head and tail:
@@ -578,7 +578,7 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
                 }
                 for row, h, t in prepared
             ]
-        _dataframe_write_csv(dataframe_from_rows(out_rows), path)
+        dataframe_write_csv(dataframe_from_rows(out_rows), path)
         return
 
     raise ValueError(
@@ -752,7 +752,7 @@ def _ingest_incidence(
         idcol = columns[0]
 
     # Create / ensure all vertices
-    id_values = _dataframe_column_values(df, idcol)
+    id_values = dataframe_column_values(df, idcol)
     for nid in id_values:
         nid_s = _norm(nid)
         if nid_s:
@@ -763,7 +763,7 @@ def _ingest_incidence(
         if not _is_numeric_column(df, edge_col):
             # skip non-numeric columns (attribute table?)
             continue
-        values = _dataframe_column_values(df, edge_col)
+        values = dataframe_column_values(df, edge_col)
         # collect nonzero indices
         nz_idx: list[int] = [i for i, v in enumerate(values) if float(v or 0) != 0.0]
         if not nz_idx:
@@ -817,8 +817,8 @@ def _ingest_adjacency(
     mat_cols: list[str]
     columns = _columns(df)
 
-    if _dataframe_width(df) >= 2 and not _is_numeric_column(df, columns[0]):
-        row_labels = [_norm(x) for x in _dataframe_column_values(df, columns[0])]
+    if dataframe_width(df) >= 2 and not _is_numeric_column(df, columns[0]):
+        row_labels = [_norm(x) for x in dataframe_column_values(df, columns[0])]
         mat_cols = columns[1:]
     else:
         row_labels = [str(i) for i in range(dataframe_height(df))]
@@ -832,7 +832,7 @@ def _ingest_adjacency(
             raise ValueError('Adjacency ingest: non-numeric column detected in matrix region.')
 
     # Directedness inference: if symmetric within tolerance and default_directed is None -> undirected
-    A = np.asarray(_dataframe_select_to_numpy(df, mat_cols), dtype=float)
+    A = np.asarray(dataframe_select_to_numpy(df, mat_cols), dtype=float)
     if len(row_labels) != len(mat_cols):
         raise ValueError('Adjacency ingest: number of rows must equal number of columns.')
 

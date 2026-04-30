@@ -4,7 +4,7 @@ import json
 from collections.abc import Iterable
 
 from ..core.graph import AnnNet
-from ..adapters._utils import _df_to_rows, _rows_to_df
+from .._support.graph_records import _rows_to_df
 from .._support.serialization import (
     serialize_endpoint,
     deserialize_endpoint,
@@ -13,6 +13,7 @@ from .._support.serialization import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
+from .._support.dataframe_backend import dataframe_to_rows
 
 
 def _split_sif_line(line: str, delimiter: str | None) -> list[str]:
@@ -27,13 +28,13 @@ def _safe_vertex_attr_rows(graph: AnnNet):
     va = getattr(graph, 'vertex_attributes', None)
     if va is None:
         return []
-    return _df_to_rows(va)
+    return dataframe_to_rows(va)
 
 
 def _get_all_edge_attrs(graph: AnnNet, edge_id: str):
     ea = getattr(graph, 'edge_attributes', None)
     if ea is not None:
-        for row in _df_to_rows(ea):
+        for row in dataframe_to_rows(ea):
             if row.get('edge_id') == edge_id:
                 attrs = dict(row)
                 attrs.pop('edge_id', None)
@@ -66,7 +67,7 @@ def _build_edge_attr_map(graph: AnnNet):
     ea = getattr(graph, 'edge_attributes', None)
     if ea is None:
         return None
-    rows = _df_to_rows(ea)
+    rows = dataframe_to_rows(ea)
     if not rows:
         return None
     out = {}
@@ -128,7 +129,7 @@ def to_sif(
             'slices': {},
             'multilayer': serialize_multilayer_manifest(
                 graph,
-                table_to_rows=_df_to_rows,
+                table_to_rows=dataframe_to_rows,
                 serialize_edge_layers=serialize_edge_layers,
             ),
         }

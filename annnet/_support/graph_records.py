@@ -1,17 +1,13 @@
-"""Adapter-only helpers.
+"""Generic internal helpers for graph/row record conversion."""
 
-Boundary:
-- adapter helper: how another graph backend is projected to/from AnnNet
-- not generic serialization policy
-- not responsible for bytes/files/archives
-"""
+from __future__ import annotations
 
 from enum import Enum
 from typing import Any
 
 import narwhals as nw
 
-from .._support.dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
+from .dataframe_backend import dataframe_to_rows, dataframe_from_rows
 
 
 def _is_directed_eid(graph, eid):
@@ -23,19 +19,14 @@ def _is_directed_eid(graph, eid):
     except (AttributeError, TypeError):
         pass
     try:
-        v = graph.attrs.get_attr_edge(eid, 'directed')
-        return bool(v) if v is not None else True
+        value = graph.attrs.get_attr_edge(eid, 'directed')
+        return bool(value) if value is not None else True
     except (AttributeError, KeyError, TypeError, ValueError):
         return True
 
 
 def _iter_vertex_ids(graph):
-    """
-    Yield vertex ids in stable graph/entity order.
-
-    Centralizes adapter access to the graph's vertex entity registry so
-    adapters do not open-code _entities traversal.
-    """
+    """Yield vertex ids in stable graph/entity order."""
     entities = getattr(graph, '_entities', None)
     if isinstance(entities, dict):
         seen = set()
@@ -96,20 +87,15 @@ def _rows_like(table):
     if isinstance(table, dict):
         keys = list(table.keys())
         if keys and isinstance(table[keys[0]], list):
-            n = len(table[keys[0]])
-            return [{k: table[k][i] for k in keys} for i in range(n)]
+            n_rows = len(table[keys[0]])
+            return [{key: table[key][idx] for key in keys} for idx in range(n_rows)]
     if isinstance(table, list) and table and isinstance(table[0], dict):
         return list(table)
     return []
 
 
 def _iter_edge_records(graph):
-    """
-    Yield (eid, rec) for edge-like entities in stable graph order.
-
-    Centralizes adapter access to the graph's edge record layout so adapters
-    do not open-code _col_to_edge / _edges traversal.
-    """
+    """Yield ``(eid, rec)`` for edge-like entities in stable graph order."""
     col_to_edge = getattr(graph, '_col_to_edge', None)
     edges = getattr(graph, '_edges', None)
 
@@ -128,19 +114,8 @@ def _iter_edge_records(graph):
     raise AttributeError('Graph does not expose an adapter-readable edge record store')
 
 
-def _df_to_rows(df) -> list[dict]:
-    """
-    Convert a dataframe-like table to list-of-dicts in a stable way.
-    """
-    if df is None or dataframe_height(df) == 0:
-        return []
-    return dataframe_to_rows(df)
-
-
 def _rows_to_df(rows: list[dict]):
-    """
-    Build a dataframe from list-of-dicts with the configured backend.
-    """
+    """Build a dataframe from list-of-dicts, preserving first-seen column order."""
     if not rows:
         return dataframe_from_rows(rows)
     order = []
@@ -153,10 +128,3 @@ def _rows_to_df(rows: list[dict]):
         return nw.from_native(df, eager_only=True).select(order).to_native()
     except (AttributeError, TypeError, ValueError):
         return df
-
-
-def _safe_df_to_rows(df):
-    """Return list[dict] rows from dataframe-like input; return [] on None."""
-    if df is None:
-        return []
-    return _df_to_rows(df)

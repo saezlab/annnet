@@ -6,8 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
-from ..adapters._utils import (
-    _df_to_rows,
+from .._support.graph_records import (
     _rows_to_df,
     _is_directed_eid,
     _iter_edge_records,
@@ -21,6 +20,7 @@ from .._support.serialization import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
+from .._support.dataframe_backend import dataframe_to_rows
 
 
 def _edge_endpoint_sets(rec):
@@ -33,7 +33,7 @@ def _edge_endpoint_sets(rec):
 
 def _attrs_by_id(table, id_col: str, *, public_only: bool = False) -> dict:
     out = {}
-    for row in _df_to_rows(table):
+    for row in dataframe_to_rows(table):
         item_id = row.get(id_col)
         if item_id is None:
             continue
@@ -181,7 +181,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
             ],
             'multilayer': serialize_multilayer_manifest(
                 graph,
-                table_to_rows=_df_to_rows,
+                table_to_rows=dataframe_to_rows,
                 serialize_edge_layers=serialize_edge_layers,
             ),
         },

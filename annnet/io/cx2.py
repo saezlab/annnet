@@ -21,12 +21,8 @@ from binascii import Error as BinasciiError
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
-from ..core._records import EntityRecord
-from ..adapters._utils import (
-    _df_to_rows,
-    _iter_vertex_ids,
-    _safe_df_to_rows,
-)
+from ..core.graph import EntityRecord
+from .._support.graph_records import _rows_to_df, _iter_vertex_ids
 from .._support.serialization import (
     serialize_edge_layers,
     deserialize_edge_layers,
@@ -35,7 +31,7 @@ from .._support.serialization import (
 )
 from .._support.dataframe_backend import (
     dataframe_columns,
-    dataframe_from_rows,
+    dataframe_to_rows,
     rename_dataframe_columns,
 )
 
@@ -120,13 +116,6 @@ def _cx2_collect_reified(aspects):
         hyperdefs.append((eid, directed, head_map, tail_map, attrs, he_id))
 
     return hyperdefs, membership_edges
-
-
-def _rows_to_df(rows):
-    # --- 1) Normalize all rows to full schema ---
-    keys = set().union(*(r.keys() for r in rows)) if rows else set()
-    norm = [{k: r.get(k, None) for k in keys} for r in rows]
-    return dataframe_from_rows(norm)
 
 
 def _infer_cx2_type(values: list[Any]) -> str:
@@ -226,11 +215,11 @@ def to_cx2(
         )
 
     # 1. Prepare Manifest (Lossless storage of complex features)
-    vert_rows = _safe_df_to_rows(getattr(G, 'vertex_attributes', None))
-    edge_rows = _safe_df_to_rows(getattr(G, 'edge_attributes', None))
-    slice_rows = _safe_df_to_rows(getattr(G, 'slice_attributes', None))
-    edge_slice_rows = _safe_df_to_rows(getattr(G, 'edge_slice_attributes', None))
-    layer_attr_rows = _safe_df_to_rows(getattr(G, 'layer_attributes', None))
+    vert_rows = dataframe_to_rows(getattr(G, 'vertex_attributes', None))
+    edge_rows = dataframe_to_rows(getattr(G, 'edge_attributes', None))
+    slice_rows = dataframe_to_rows(getattr(G, 'slice_attributes', None))
+    edge_slice_rows = dataframe_to_rows(getattr(G, 'edge_slice_attributes', None))
+    layer_attr_rows = dataframe_to_rows(getattr(G, 'layer_attributes', None))
 
     # strip CX-specific style from what we embed into the manifest
     g_attrs = dict(getattr(G, 'graph_attributes', {}))
@@ -283,7 +272,7 @@ def to_cx2(
         },
         'multilayer': serialize_multilayer_manifest(
             G,
-            table_to_rows=_safe_df_to_rows,
+            table_to_rows=dataframe_to_rows,
             serialize_edge_layers=serialize_edge_layers,
         ),
         'tables': {
@@ -1001,7 +990,7 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
         vmap = {}
     else:
         vmap = {}
-        existing = _df_to_rows(getattr(G, 'vertex_attributes', None))
+        existing = dataframe_to_rows(getattr(G, 'vertex_attributes', None))
         for r in existing:
             vid = str(r.get('vertex_id', r.get('id')))
             vmap[vid] = dict(r)
@@ -1059,7 +1048,7 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
         emap = {}
     else:
         emap = {}
-        existing = _df_to_rows(getattr(G, 'edge_attributes', None))
+        existing = dataframe_to_rows(getattr(G, 'edge_attributes', None))
         for r in existing:
             eid = str(r.get('edge_id', r.get('id')))
             emap[eid] = dict(r)

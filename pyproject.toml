@@ -435,6 +435,7 @@ graph-tool = "*"
 install-test-deps = "python -m pip install -e '.[all]' pytest pytest-cov tox tox-gh coverage codecov-cli diff_cover ruff"
 test-gt = { depends-on = ["install-test-deps"], cmd = "pytest tests/test_graphtool.py tests/test_gt_backend_accessor.py -v", env = { MPLBACKEND = "Agg" } }
 test-all = { depends-on = ["install-test-deps"], cmd = "pytest tests/ -v", env = { MPLBACKEND = "Agg" } }
+import-graph = "uv run python tools/import_graph.py --repo . --package annnet --out .cache/import_graphs --render-svg"
 
 [tool.pixi.environments]
 gt = { features = ["gt"], solve-group = "default" }

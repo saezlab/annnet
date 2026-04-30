@@ -20,13 +20,8 @@ try:
     import graph_tool.all as gt
 except ImportError:
     gt = None
-from ._utils import (
-    _df_to_rows,
-    _rows_to_df,
-    _iter_vertex_ids,
-    _iter_edge_records,
-)
 from ..core.graph import AnnNet
+from .._support.graph_records import _rows_to_df, _iter_vertex_ids, _iter_edge_records
 from .._support.serialization import (
     serialize_edge_layers,
     collect_slice_manifest,
@@ -35,7 +30,7 @@ from .._support.serialization import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
-from .._support.dataframe_backend import empty_dataframe
+from .._support.dataframe_backend import empty_dataframe, dataframe_to_rows
 
 # Core adapter: to_graphtool
 
@@ -155,11 +150,11 @@ def to_graphtool(
 
     # 4) attribute tables as rows (DF [DataFrame] -> list[dict])
 
-    vert_rows = _df_to_rows(getattr(G, 'vertex_attributes', empty_dataframe({})))
-    edge_rows = _df_to_rows(getattr(G, 'edge_attributes', empty_dataframe({})))
-    slice_rows = _df_to_rows(getattr(G, 'slice_attributes', empty_dataframe({})))
-    edge_slice_rows = _df_to_rows(getattr(G, 'edge_slice_attributes', empty_dataframe({})))
-    layer_attr_rows = _df_to_rows(getattr(G, 'layer_attributes', empty_dataframe({})))
+    vert_rows = dataframe_to_rows(getattr(G, 'vertex_attributes', empty_dataframe({})))
+    edge_rows = dataframe_to_rows(getattr(G, 'edge_attributes', empty_dataframe({})))
+    slice_rows = dataframe_to_rows(getattr(G, 'slice_attributes', empty_dataframe({})))
+    edge_slice_rows = dataframe_to_rows(getattr(G, 'edge_slice_attributes', empty_dataframe({})))
+    layer_attr_rows = dataframe_to_rows(getattr(G, 'layer_attributes', empty_dataframe({})))
 
     # 5) slices internal structure (vertex/edge sets + attributes)
     slices_data = _serialize_slice_data(G)
@@ -184,7 +179,7 @@ def to_graphtool(
 
     multilayer_manifest = serialize_multilayer_manifest(
         G,
-        table_to_rows=_df_to_rows,
+        table_to_rows=dataframe_to_rows,
         serialize_edge_layers=serialize_edge_layers,
     )
 

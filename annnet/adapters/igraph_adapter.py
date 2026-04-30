@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ._utils import (
+from .._support.graph_records import (
     _rows_like,
-    _df_to_rows,
     _rows_to_df,
     _attrs_to_dict,
     _is_directed_eid,
@@ -20,20 +19,10 @@ from .._support.serialization import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
+from .._support.dataframe_backend import dataframe_to_rows
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
-
-
-def _safe_df_to_rows(df):
-    """Never crash if df is None or backend is missing."""
-    if df is None:
-        return []
-    try:
-        return _df_to_rows(df)
-    except (AttributeError, TypeError, ValueError):
-        # fallback to generic rows() conversion
-        return _rows_like(df)
 
 
 def _export_binary_graph(
@@ -97,7 +86,7 @@ def _export_binary_graph(
     # Pre-scan to a dict for O(1) lookup
     vattr_map = {}
     if vtab is not None:
-        for row in _safe_df_to_rows(vtab):
+        for row in dataframe_to_rows(vtab):
             d = dict(row)
             vid = d.pop('vertex_id', None)
             if vid is not None:
@@ -449,7 +438,7 @@ def to_igraph(
         'manifest_version': 1,
         'multilayer': serialize_multilayer_manifest(
             graph,
-            table_to_rows=_safe_df_to_rows,
+            table_to_rows=dataframe_to_rows,
             serialize_edge_layers=serialize_edge_layers,
         ),
     }

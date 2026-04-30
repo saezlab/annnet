@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pathlib
 
-from .._support.dataframe_backend import _dataframe_read_excel
+from .._support.dataframe_backend import dataframe_read_excel
 
 
 def from_excel(
@@ -52,7 +52,7 @@ def from_excel(
     from .csv_format import from_dataframe
 
     return from_dataframe(
-        _dataframe_read_excel(path, sheet_name=sheet),
+        dataframe_read_excel(path, sheet_name=sheet),
         graph=graph,
         schema=schema,
         default_slice=default_slice,

@@ -106,7 +106,7 @@ def dataframe_height(df) -> int:
     return len(_to_nw(df).rows())
 
 
-def _dataframe_width(df) -> int:
+def dataframe_width(df) -> int:
     """Return the column count for a dataframe-like object."""
     return len(dataframe_columns(df))
 
@@ -133,19 +133,19 @@ def dataframe_columns(df) -> list[str]:
     return _schema_names(_schema_from_df(df))
 
 
-def _dataframe_column_values(df, column: str) -> list[Any]:
+def dataframe_column_values(df, column: str) -> list[Any]:
     """Return one dataframe column as a Python list."""
     if df is None or column not in dataframe_columns(df):
         return []
     return [row.get(column) for row in dataframe_to_rows(df)]
 
 
-def _dataframe_select_to_numpy(df, columns: list[str]):
+def dataframe_select_to_numpy(df, columns: list[str]):
     """Return selected columns as a NumPy array via Narwhals."""
     return _to_nw(df).select(columns).to_numpy()
 
 
-def _dataframe_column_is_numeric(df, column: str) -> bool:
+def dataframe_column_is_numeric(df, column: str) -> bool:
     """Best-effort numeric column probe across supported eager backends."""
     if df is None or column not in dataframe_columns(df):
         return False
@@ -158,7 +158,7 @@ def _dataframe_column_is_numeric(df, column: str) -> bool:
     except (AttributeError, KeyError, TypeError, ValueError):
         pass
 
-    values = _dataframe_column_values(df, column)
+    values = dataframe_column_values(df, column)
     seen = False
     for value in values:
         if value is None or value == '':
@@ -295,7 +295,7 @@ def dataframe_upsert_rows(
     )
 
 
-def _dataframe_read_delimited(
+def dataframe_read_delimited(
     source,
     *,
     separator: str = ',',
@@ -354,11 +354,11 @@ def _dataframe_read_delimited(
     return _from_nw(_to_nw(native))
 
 
-def _dataframe_read_tsv(source, *, backend: str | None = 'auto'):
-    return _dataframe_read_delimited(source, separator='\t', backend=backend)
+def dataframe_read_tsv(source, *, backend: str | None = 'auto'):
+    return dataframe_read_delimited(source, separator='\t', backend=backend)
 
 
-def _dataframe_read_excel(source, *, sheet_name=None):
+def dataframe_read_excel(source, *, sheet_name=None):
     """Read an Excel sheet into a Narwhals-compatible dataframe.
 
     Excel support is intentionally a pandas-backed boundary because Narwhals does
@@ -381,17 +381,17 @@ def _dataframe_read_excel(source, *, sheet_name=None):
     return _from_nw(_to_nw(native))
 
 
-def _dataframe_write_csv(df, path) -> None:
+def dataframe_write_csv(df, path) -> None:
     """Write a dataframe-like object to CSV."""
     _to_nw(df).write_csv(path)
 
 
-def _dataframe_write_parquet(df, path) -> None:
+def dataframe_write_parquet(df, path) -> None:
     """Write a dataframe-like object to Parquet."""
     _to_nw(df).write_parquet(path)
 
 
-def _dataframe_read_parquet(path, *, backend: str | None = None):
+def dataframe_read_parquet(path, *, backend: str | None = None):
     """Read a Parquet file into the configured dataframe backend."""
     resolved = select_dataframe_backend(backend)
     if resolved == 'polars':
@@ -657,7 +657,7 @@ def _merge_schema_specs(
 # ---------------------------------------------------------------------------
 
 
-def _is_polars_df(df) -> bool:
+def is_polars_dataframe(df) -> bool:
     """Return True if *df* is a live Polars DataFrame (narwhals probe)."""
     try:
         nwd = nw.from_native(df, eager_only=True)

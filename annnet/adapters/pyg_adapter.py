@@ -6,7 +6,8 @@ import numpy as np
 import torch
 from torch_geometric.data import HeteroData
 
-from ._utils import _iter_vertex_ids, _safe_df_to_rows
+from .._support.graph_records import _iter_vertex_ids
+from .._support.dataframe_backend import dataframe_to_rows
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
@@ -97,8 +98,8 @@ def to_pyg(
     }
 
     # Build attribute lookup maps
-    vert_rows = _safe_df_to_rows(getattr(graph, 'vertex_attributes', None))
-    edge_rows = _safe_df_to_rows(getattr(graph, 'edge_attributes', None))
+    vert_rows = dataframe_to_rows(getattr(graph, 'vertex_attributes', None))
+    edge_rows = dataframe_to_rows(getattr(graph, 'edge_attributes', None))
 
     v_attrs_map: dict[str, dict] = {}
     if vert_rows:

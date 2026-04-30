@@ -547,7 +547,7 @@ def test_cached_annotation_path_is_used(monkeypatch):
         seen['backend'] = backend
         return ann
 
-    monkeypatch.setattr(mod, '_dataframe_read_tsv', fake_read_tsv)
+    monkeypatch.setattr(mod, 'dataframe_read_tsv', fake_read_tsv)
 
     g = mod.from_omnipath(df=edges, annotations_backend='pandas')
 
@@ -607,7 +607,7 @@ def test_download_annotation_path_is_used_when_cache_missing(monkeypatch):
         seen['backend'] = backend
         return ann
 
-    monkeypatch.setattr(mod, '_dataframe_read_tsv', fake_read_tsv)
+    monkeypatch.setattr(mod, 'dataframe_read_tsv', fake_read_tsv)
     monkeypatch.setattr('builtins.open', fake_open)
 
     g = mod.from_omnipath(df=edges, annotations_backend='pandas')

@@ -30,12 +30,12 @@ from ._Annotation import AttributesClass, AttributesAccessor
 from .backend_accessors import _GTBackendAccessor, _IGBackendAccessor, _NXBackendAccessor
 from ..algorithms.traversal import Traversal
 from .._support.dataframe_backend import (
-    _is_polars_df,
     empty_dataframe,
     dataframe_height,
     dataframe_columns,
     dataframe_to_rows,
     dataframe_drop_rows,
+    is_polars_dataframe,
     polars_upsert_vertices,
     select_dataframe_backend,
 )
@@ -3091,7 +3091,7 @@ class AnnNet(
         --------
         >>> G.write('graph.annnet')
         """
-        from ..io.annnet_format import write
+        from .. import write
 
         write(self, path, **kwargs)
 
@@ -3115,7 +3115,7 @@ class AnnNet(
         --------
         >>> G = AnnNet.read('graph.annnet')
         """
-        from ..io.annnet_format import read
+        from .. import read
 
         return read(path, **kwargs)
 
@@ -3513,12 +3513,12 @@ class AnnNet(
 
         # --- attribute table (Polars fast path) ---
         self._ensure_vertex_table()
-        if _is_polars_df(self.vertex_attributes):
+        if is_polars_dataframe(self.vertex_attributes):
             keys = {k for _, attrs in norm for k in attrs}
             df = self.vertex_attributes
             if keys:
                 df = self._ensure_attr_columns(df, dict.fromkeys(keys))
-            if _is_polars_df(df):
+            if is_polars_dataframe(df):
                 result = polars_upsert_vertices(df, norm)
                 if result is not None:
                     self.vertex_attributes = result

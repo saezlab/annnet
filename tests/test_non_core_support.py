@@ -14,8 +14,8 @@ from annnet._support import metadata as _metadata
 from annnet._support import optional_components
 from annnet._support import plotting_backend as _plotting_backend
 from annnet._support import dataframe_backend as df_backend
+from annnet._support import graph_records
 from annnet._support import serialization as serialization_support
-from annnet.adapters import _utils as adapter_utils
 from annnet.io._utils import _read_archive, _write_archive
 
 
@@ -154,11 +154,11 @@ def test_dataframe_backend_helpers_preserve_rows_and_schema(tmp_path):
     assert df_backend.dataframe_backend(None) == backend
 
     csv_path = tmp_path / 'rows.csv'
-    df_backend._dataframe_write_csv(table, csv_path)
+    df_backend.dataframe_write_csv(table, csv_path)
     assert csv_path.exists()
 
     parquet_path = tmp_path / 'rows.parquet'
-    df_backend._dataframe_write_parquet(table, parquet_path)
+    df_backend.dataframe_write_parquet(table, parquet_path)
     assert parquet_path.exists()
 
 
@@ -302,8 +302,8 @@ def test_adapter_utils_serialization_roundtrips(tmp_path):
     assert serialization_support.endpoint_coeff_map(
         {'coeffs': {'A': {'__value': 'bad'}}}, 'coeffs', {'A'}
     ) == {'A': 1.0}
-    assert adapter_utils._serialize_value(ExampleEnum.ONE) == 'ONE'
-    assert adapter_utils._attrs_to_dict(
+    assert graph_records._serialize_value(ExampleEnum.ONE) == 'ONE'
+    assert graph_records._attrs_to_dict(
         {'outer': {'x': ExampleEnum.TWO}, 'enum': ExampleEnum.ONE}
     ) == {
         'outer': {'x': 'TWO'},
@@ -313,14 +313,14 @@ def test_adapter_utils_serialization_roundtrips(tmp_path):
     table = df_backend.dataframe_from_rows(
         [{'a': 1}], backend=df_backend.select_dataframe_backend()
     )
-    assert adapter_utils._rows_like(table) == [{'a': 1}]
-    assert adapter_utils._rows_like(CursorLike()) == [{'a': 1, 'b': 2}, {'a': 3, 'b': 4}]
-    assert adapter_utils._rows_like({'a': [1, 2], 'b': [3, 4]}) == [
+    assert graph_records._rows_like(table) == [{'a': 1}]
+    assert graph_records._rows_like(CursorLike()) == [{'a': 1, 'b': 2}, {'a': 3, 'b': 4}]
+    assert graph_records._rows_like({'a': [1, 2], 'b': [3, 4]}) == [
         {'a': 1, 'b': 3},
         {'a': 2, 'b': 4},
     ]
-    assert adapter_utils._rows_like([{'x': 1}]) == [{'x': 1}]
-    assert adapter_utils._safe_df_to_rows(None) == []
+    assert graph_records._rows_like([{'x': 1}]) == [{'x': 1}]
+    assert df_backend.dataframe_to_rows(None) == []
 
 
 def test_archive_utils_roundtrip_and_invalid_archive(tmp_path):

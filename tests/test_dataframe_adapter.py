@@ -8,8 +8,8 @@ import pyarrow as pa
 
 from annnet._support.dataframe_backend import (
     available_dataframe_backends,
-    _dataframe_read_delimited,
-    _dataframe_read_tsv,
+    dataframe_read_delimited,
+    dataframe_read_tsv,
     dataframe_to_rows,
     select_dataframe_backend,
 )
@@ -443,7 +443,7 @@ class TestDataFrameAdapter(unittest.TestCase):
             path = f.name
 
         try:
-            df = _dataframe_read_tsv(path, backend='pandas')
+            df = dataframe_read_tsv(path, backend='pandas')
             self.assertIsInstance(df, pd.DataFrame)
             self.assertEqual(
                 dataframe_to_rows(df),
@@ -461,7 +461,7 @@ class TestDataFrameAdapter(unittest.TestCase):
             self.skipTest('pandas not installed')
 
         buf = io.BytesIO(b'gene\tscore\nEGFR\t1\nTP53\t2\n')
-        df = _dataframe_read_tsv(buf, backend='pandas')
+        df = dataframe_read_tsv(buf, backend='pandas')
 
         self.assertIsInstance(df, pd.DataFrame)
         self.assertEqual(
@@ -478,7 +478,7 @@ class TestDataFrameAdapter(unittest.TestCase):
             self.skipTest('polars not installed')
 
         buf = io.BytesIO(b'gene,score\nEGFR,1\nTP53,2\n')
-        df = _dataframe_read_delimited(buf, separator=',', backend='polars')
+        df = dataframe_read_delimited(buf, separator=',', backend='polars')
 
         self.assertIsInstance(df, pl.DataFrame)
         self.assertEqual(
@@ -495,7 +495,7 @@ class TestDataFrameAdapter(unittest.TestCase):
             self.skipTest('pyarrow not installed')
 
         buf = io.BytesIO(b'gene,score\nEGFR,1\nTP53,2\n')
-        df = _dataframe_read_delimited(buf, separator=',', backend='pyarrow')
+        df = dataframe_read_delimited(buf, separator=',', backend='pyarrow')
 
         self.assertIsInstance(df, pa.Table)
         self.assertEqual(
@@ -509,7 +509,7 @@ class TestDataFrameAdapter(unittest.TestCase):
     def test_dataframe_read_delimited_auto_returns_supported_backend(self):
         """Auto backend should return one of the installed dataframe types."""
         buf = io.BytesIO(b'gene,score\nEGFR,1\nTP53,2\n')
-        df = _dataframe_read_delimited(buf, separator=',', backend='auto')
+        df = dataframe_read_delimited(buf, separator=',', backend='auto')
 
         backend = select_dataframe_backend('auto')
         if backend == 'polars':
@@ -523,7 +523,7 @@ class TestDataFrameAdapter(unittest.TestCase):
 
     def test_dataframe_read_delimited_invalid_backend_raises(self):
         with self.assertRaises(ValueError):
-            _dataframe_read_delimited(io.BytesIO(b'a,b\n1,2\n'), backend='does-not-exist')
+            dataframe_read_delimited(io.BytesIO(b'a,b\n1,2\n'), backend='does-not-exist')
 
 
 if __name__ == '__main__':
