@@ -1,3 +1,11 @@
+"""Archive/container helpers for IO modules.
+
+Boundary:
+- io helper: how bytes/files/archives are written and extracted
+- not generic serialization policy
+- not responsible for backend projection mechanics
+"""
+
 from pathlib import Path
 import tarfile
 

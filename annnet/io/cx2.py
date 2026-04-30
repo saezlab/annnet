@@ -17,19 +17,21 @@ import gzip
 import json
 import base64
 from typing import TYPE_CHECKING, Any
+from binascii import Error as BinasciiError
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 from ..core._records import EntityRecord
 from ..adapters._utils import (
     _df_to_rows,
-    _serialize_VM,
     _iter_vertex_ids,
     _safe_df_to_rows,
-    _serialize_slices,
-    _serialize_edge_layers,
-    _serialize_node_layer_attrs,
-    _serialize_layer_tuple_attrs,
+)
+from .._support.serialization import (
+    serialize_edge_layers,
+    deserialize_edge_layers,
+    restore_multilayer_manifest,
+    serialize_multilayer_manifest,
 )
 from .._support.dataframe_backend import (
     dataframe_columns,
@@ -39,6 +41,17 @@ from .._support.dataframe_backend import (
 
 # --- Helpers ---
 CX_STYLE_KEY = '__cx_style__'
+
+
+def _serialize_slices_public(graph) -> dict[str, dict]:
+    out = {}
+    for slice_id in graph.slices.list_slices(include_default=True):
+        out[slice_id] = {
+            'vertices': list(graph.slices.get_slice_vertices(slice_id)),
+            'edges': list(graph.slices.get_slice_edges(slice_id)),
+            'attributes': {},
+        }
+    return out
 
 
 def _cx2_collect_reified(aspects):
@@ -260,29 +273,19 @@ def to_cx2(
                     for eid, rec in G._edges.items()
                     if rec.etype == 'hyper' or rec.ml_kind is not None
                 },
-                'edge_layers': _serialize_edge_layers(getattr(G, 'edge_layers', {})),
+                'edge_layers': serialize_edge_layers(getattr(G, 'edge_layers', {})),
             },
         },
         'slices': {
-            'data': _serialize_slices(getattr(G, '_slices', {})),
+            'data': _serialize_slices_public(G),
             'slice_attributes': slice_rows,
             'edge_slice_attributes': edge_slice_rows,
         },
-        'multilayer': {
-            'aspects': list(getattr(G, 'aspects', [])),
-            'aspect_attrs': dict(getattr(G, '_aspect_attrs', {})),
-            'elem_layers': dict(getattr(G, 'elem_layers', {})),
-            'VM': _serialize_VM(getattr(G, '_VM', set())),
-            'edge_kind': {
-                eid: ('hyper' if rec.etype == 'hyper' else rec.ml_kind)
-                for eid, rec in G._edges.items()
-                if rec.etype == 'hyper' or rec.ml_kind is not None
-            },
-            'edge_layers': _serialize_edge_layers(getattr(G, 'edge_layers', {})),
-            'node_layer_attrs': _serialize_node_layer_attrs(getattr(G, '_state_attrs', {})),
-            'layer_tuple_attrs': _serialize_layer_tuple_attrs(getattr(G, '_layer_attrs', {})),
-            'layer_attributes': layer_attr_rows,
-        },
+        'multilayer': serialize_multilayer_manifest(
+            G,
+            table_to_rows=_safe_df_to_rows,
+            serialize_edge_layers=serialize_edge_layers,
+        ),
         'tables': {
             'vertex_attributes': vert_rows,
             'edge_attributes': edge_rows,
@@ -741,7 +744,7 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
         else:
             try:
                 cx2_data = json.loads(cx2_data)
-            except Exception:  # noqa: BLE001
+            except (TypeError, json.JSONDecodeError):
                 raise ValueError('Invalid CX2 string or file') from None
 
     # Parse aspects into a dict
@@ -770,9 +773,9 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
             # Support both compressed (gzip+base64) and legacy plain-JSON manifests
             try:
                 manifest = json.loads(gzip.decompress(base64.b64decode(manifest_str)).decode())
-            except Exception:  # noqa: BLE001
+            except (BinasciiError, OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
                 manifest = json.loads(manifest_str)
-        except Exception:  # noqa: BLE001
+        except (TypeError, json.JSONDecodeError):
             manifest = None
     visual_props = aspects.get('visualProperties', [])
 
@@ -821,7 +824,7 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
             for vid, kind in vmeta['types'].items():
                 try:
                     ekey = G._resolve_entity_key(vid)
-                except Exception:  # noqa: BLE001
+                except (KeyError, TypeError, ValueError):
                     continue
                 if ekey in G._entities:
                     G._entities[ekey].kind = kind
@@ -941,16 +944,16 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
         # --- Slices ---
         smeta = manifest.get('slices', {})
         if smeta.get('data'):
+            existing_slices = set(G.slices.list_slices(include_default=True))
             for sname, sdata in smeta['data'].items():
-                verts = set(sdata.get('vertices', []))
-                edgs = set(sdata.get('edges', []))
-                attrs = dict(sdata.get('attributes', {}))
-
-                G._slices[sname] = {
-                    'vertices': verts,
-                    'edges': edgs,
-                    'attributes': attrs,
-                }
+                if sname not in existing_slices:
+                    G.slices.add_slice(sname)
+                    existing_slices.add(sname)
+                for vid in sdata.get('vertices', []):
+                    G.slices.add_vertex_to_slice(sname, vid)
+                edge_ids = list(sdata.get('edges', []))
+                if edge_ids:
+                    G.slices.add_edges(sname, edge_ids)
         if smeta.get('slice_attributes'):
             G.slice_attributes = _rows_to_df(_normalize_rows(smeta['slice_attributes']))
         if smeta.get('edge_slice_attributes'):
@@ -958,18 +961,12 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
 
         # --- Multilayer ---
         mm = manifest.get('multilayer', {})
-        if mm.get('aspects'):
-            G.aspects = mm['aspects']
-        if mm.get('elem_layers'):
-            G.elem_layers = dict(mm['elem_layers'])
-        if mm.get('aspect_attrs'):
-            G._aspect_attrs = mm['aspect_attrs']
-        if mm.get('node_layer_attrs'):
-            G._state_attrs = mm['node_layer_attrs']
-        if mm.get('layer_tuple_attrs'):
-            G._layer_attrs = mm['layer_tuple_attrs']
-        if mm.get('layer_attributes'):
-            G.layer_attributes = _rows_to_df(_normalize_rows(mm['layer_attributes']))
+        restore_multilayer_manifest(
+            G,
+            mm,
+            rows_to_table=_rows_to_df,
+            deserialize_edge_layers=deserialize_edge_layers,
+        )
 
         # --- OPTIONAL: overlay reified hyperedges ---
         if hyperedges == 'reified':

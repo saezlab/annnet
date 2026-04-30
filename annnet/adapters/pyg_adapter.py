@@ -59,6 +59,16 @@ def _validate_numeric(rows: list[dict], cols: list[str], context: str):
                 ) from None
 
 
+def _edge_weight(graph: AnnNet, edge_id: str) -> float:
+    weight = graph.edge_weights.get(edge_id)
+    return 1.0 if weight is None else float(weight)
+
+
+def _endpoint_coeff(graph: AnnNet, edge_id: str, key: str, endpoint) -> float:
+    coeff_map = graph.attrs.get_attr_edge(edge_id, key) or {}
+    return float(coeff_map.get(endpoint, {}).get('__value', 1.0))
+
+
 def to_pyg(
     graph: AnnNet,
     node_features: dict[str, list[str]] | None = None,
@@ -154,12 +164,9 @@ def to_pyg(
             data[kind][f'{slice_id}_mask'] = torch.from_numpy(mask).to(device)
 
     # Process binary edges
-    for eid, rec in graph._edges.items():
-        if rec.col_idx < 0 or rec.etype == 'hyper':
-            continue
-
-        u_str = str(rec.src)
-        v_str = str(rec.tgt)
+    for eid, (src, tgt, _etype) in graph.edge_definitions.items():
+        u_str = str(src)
+        v_str = str(tgt)
 
         u_row = v_attrs_map.get(u_str, {})
         v_row = v_attrs_map.get(v_str, {})
@@ -185,27 +192,21 @@ def to_pyg(
         edge_idx = torch.tensor([[ui], [vi]], dtype=torch.long, device=device)
         data[etype].edge_index = torch.cat([data[etype].edge_index, edge_idx], dim=1)
 
-        w = float(1.0 if rec.weight is None else rec.weight)
-
-        src_map = graph.attrs.get_attr_edge(eid, '__source_attr') or {}
-        tgt_map = graph.attrs.get_attr_edge(eid, '__target_attr') or {}
-
-        w *= src_map.get(rec.src, {}).get('__value', 1.0)
-        w *= tgt_map.get(rec.tgt, {}).get('__value', 1.0)
+        w = _edge_weight(graph, eid)
+        w *= _endpoint_coeff(graph, eid, '__source_attr', src)
+        w *= _endpoint_coeff(graph, eid, '__target_attr', tgt)
 
         ew = torch.tensor([w], dtype=torch.float32, device=device)
         data[etype].edge_weight = torch.cat([data[etype].edge_weight, ew])
 
     # Process hyperedges separately; they are no longer exposed via edge_definitions.
     if hyperedge_mode != 'skip':
-        for eid, rec in graph._edges.items():
-            if rec.col_idx < 0 or rec.etype != 'hyper':
-                continue
+        for eid, spec in graph.hyperedge_definitions.items():
             if hyperedge_mode == 'reify':
-                _process_hyperedge_reify(graph, eid, data, manifest, device, v_attrs_map)
+                _process_hyperedge_reify(graph, eid, spec, data, manifest, device, v_attrs_map)
             elif hyperedge_mode == 'expand':
                 _process_hyperedge_expand(
-                    graph, eid, data, manifest, device, v_attrs_map, e_attrs_map
+                    graph, eid, spec, data, manifest, device, v_attrs_map, e_attrs_map
                 )
 
     # Edge features
@@ -228,6 +229,7 @@ def to_pyg(
 def _process_hyperedge_reify(
     graph: AnnNet,
     eid: str,
+    spec: dict,
     data: HeteroData,
     manifest: dict,
     device: str,
@@ -240,15 +242,12 @@ def _process_hyperedge_reify(
     he_idx = data['hypernode'].num_nodes
     data['hypernode'].num_nodes += 1
 
-    rec = graph._edges[eid]
-    directed = rec.tgt is not None
+    directed = bool(spec.get('directed', False))
 
     if directed:
-        S = set(rec.src or [])
-        T = set(rec.tgt or [])
-        members = S | T
+        members = set(spec.get('head', [])) | set(spec.get('tail', []))
     else:
-        members = set(rec.src or [])
+        members = set(spec.get('members', []))
 
     for u in members:
         u_str = str(u)
@@ -274,6 +273,7 @@ def _process_hyperedge_reify(
 def _process_hyperedge_expand(
     graph: AnnNet,
     eid: str,
+    spec: dict,
     data: HeteroData,
     manifest: dict,
     device: str,
@@ -281,12 +281,11 @@ def _process_hyperedge_expand(
     e_attrs_map: dict,
 ):
     """Expand hyperedge into pairwise edges."""
-    rec = graph._edges[eid]
-    directed = rec.tgt is not None
+    directed = bool(spec.get('directed', False))
 
     if directed:
-        S = set(rec.src or [])
-        T = set(rec.tgt or [])
+        S = set(spec.get('head', []))
+        T = set(spec.get('tail', []))
 
         for t in T:
             for s in S:
@@ -294,7 +293,7 @@ def _process_hyperedge_expand(
                     graph, eid, str(t), str(s), data, manifest, device, v_attrs_map, e_attrs_map
                 )
     else:
-        members = list(rec.src or [])
+        members = list(spec.get('members', []))
         for i in range(len(members)):
             for j in range(i + 1, len(members)):
                 _add_expanded_edge(
@@ -346,7 +345,6 @@ def _add_expanded_edge(
     edge_idx = torch.tensor([[ui], [vi]], dtype=torch.long, device=device)
     data[etype].edge_index = torch.cat([data[etype].edge_index, edge_idx], dim=1)
 
-    rec = graph._edges[eid]
-    w = float(1.0 if rec.weight is None else rec.weight)
+    w = _edge_weight(graph, eid)
     ew = torch.tensor([w], dtype=torch.float32, device=device)
     data[etype].edge_weight = torch.cat([data[etype].edge_weight, ew])

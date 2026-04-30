@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from types import SimpleNamespace
 
 import pytest
@@ -215,22 +214,11 @@ def test_graphtool_adapter_missing_dependency_paths(monkeypatch):
 def test_json_helper_edge_cases():
     from annnet.io import json_format
 
-    assert json_format._coerce_coeff_mapping(None) == {}
-    assert json_format._coerce_coeff_mapping('not-json') == {}
-    assert json_format._coerce_coeff_mapping([{'vertex': 'A', '__value': 2}, ['B', 3], 4]) == {
-        'A': {'__value': 2},
-        'B': 3,
-    }
-    assert json_format._endpoint_coeff_map(
-        {'coeff': {'A': {'__value': object()}}}, 'coeff', {'A'}
-    ) == {'A': 1.0}
     assert json_format._attrs_by_id(
         dataframe_from_rows([{'edge_id': None}, {'edge_id': 'e1', '__x': 1, 'v': 2}]),
         'edge_id',
         public_only=True,
     ) == {'e1': {'v': 2}}
-
-    assert math.isfinite(json_format._endpoint_coeff_map({}, 'missing', {'A'})['A'])
 
 
 def test_json_multilayer_and_malformed_entries_roundtrip(tmp_path):

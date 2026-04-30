@@ -6,122 +6,23 @@ from ._utils import (
     _rows_like,
     _df_to_rows,
     _rows_to_df,
-    _serialize_VM,
     _attrs_to_dict,
-    _deserialize_VM,
     _is_directed_eid,
     _serialize_value,
     _iter_edge_records,
-    _endpoint_coeff_map,
-    _serialize_edge_layers,
-    _deserialize_edge_layers,
-    _finalize_multilayer_state,
-    _serialize_node_layer_attrs,
-    _serialize_layer_tuple_attrs,
-    _deserialize_node_layer_attrs,
-    _deserialize_layer_tuple_attrs,
 )
-from .._support.dataframe_backend import empty_dataframe
+from .._support.serialization import (
+    endpoint_coeff_map,
+    serialize_edge_layers,
+    collect_slice_manifest,
+    restore_slice_manifest,
+    deserialize_edge_layers,
+    restore_multilayer_manifest,
+    serialize_multilayer_manifest,
+)
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
-
-
-def _collect_slices_and_weights(graph) -> tuple[dict, dict]:
-    """Returns:
-
-      slices_section: {slice_id: [edge_id, ...]}
-      slice_weights:  {slice_id: {edge_id: weight}}
-    Backends supported: Narwhals-compatible dataframe-like tables and dicts.
-
-    """
-    slices_section: dict = {}
-    slice_weights: dict = {}
-
-    # --- Source A: edge_slice_attributes table
-    t = getattr(graph, 'edge_slice_attributes', None)
-    if t is not None:
-        try:
-            for r in _rows_like(t):
-                lid = r.get('slice')
-                if lid is None:
-                    continue
-                eid = r.get('edge_id', r.get('edge'))
-                if eid is None:
-                    continue
-                slices_section.setdefault(lid, []).append(eid)
-                w = r.get('weight')
-                if w is not None:
-                    slice_weights.setdefault(lid, {})[eid] = float(w)
-        except Exception:  # noqa: BLE001
-            pass
-
-    # --- Source C: dict mapping slice -> {edge_id: attrs}
-    if not slices_section and isinstance(t, dict):
-        for lid, ed in t.items():
-            if isinstance(ed, dict):
-                eids = list(ed.keys())
-                slices_section.setdefault(lid, []).extend(eids)
-                # pick weights if present
-                for eid, attrs in ed.items():
-                    if (
-                        isinstance(attrs, dict)
-                        and 'weight' in attrs
-                        and attrs['weight'] is not None
-                    ):
-                        slice_weights.setdefault(lid, {})[eid] = float(attrs['weight'])
-
-    # --- Fallback D: per-edge scan (if graph exposes edge iteration + get_edge_slices)
-    if not slices_section:
-        edges_iter = None
-        for attr in ('edges', 'iter_edges', 'edge_ids'):
-            if hasattr(graph, attr):
-                try:
-                    edges_iter = list(getattr(graph, attr)())
-                    break
-                except Exception:  # noqa: BLE001
-                    pass
-        if edges_iter:
-            for eid in edges_iter:
-                lids = []
-                for probe in ('get_edge_slices', 'edge_slices'):
-                    if hasattr(graph, probe):
-                        try:
-                            lids = list(getattr(graph, probe)(eid))
-                            break
-                        except Exception:  # noqa: BLE001
-                            pass
-                for lid in lids or []:
-                    slices_section.setdefault(lid, []).append(eid)
-
-    # --- Collect per-slice weight overrides using canonical accessor
-    if hasattr(graph, 'attrs'):
-        for lid, eids in list(slices_section.items()):
-            for eid in eids:
-                w = None
-                try:
-                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
-                except Exception:  # noqa: BLE001
-                    try:
-                        # some implementations don't support default=
-                        w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
-                    except Exception:  # noqa: BLE001
-                        w = None
-                if w is not None:
-                    slice_weights.setdefault(lid, {})[eid] = float(w)
-
-    # Ensure deterministic and non-empty lists in manifest
-    for lid, eids in slices_section.items():
-        # unique, stable order
-        seen = set()
-        uniq = []
-        for e in eids:
-            if e not in seen:
-                seen.add(e)
-                uniq.append(e)
-        slices_section[lid] = uniq
-
-    return slices_section, slice_weights
 
 
 def _safe_df_to_rows(df):
@@ -130,7 +31,7 @@ def _safe_df_to_rows(df):
         return []
     try:
         return _df_to_rows(df)
-    except Exception:  # noqa: BLE001
+    except (AttributeError, TypeError, ValueError):
         # fallback to generic rows() conversion
         return _rows_like(df)
 
@@ -183,14 +84,6 @@ def _export_binary_graph(
         endpoints.update(S)
         endpoints.update(T)
 
-    # If we are going to expand hyperedges, include their members/head/tail too
-    if not skip_hyperedges:
-        for rec in graph._edges.values():
-            if rec.col_idx < 0 or rec.etype != 'hyper':
-                continue
-            endpoints.update(rec.src or [])
-            endpoints.update(rec.tgt or [])
-
     vertices = list(dict.fromkeys(list(base_vertices) + list(endpoints)))  # stable order
     vidx = {v: i for i, v in enumerate(vertices)}
 
@@ -203,15 +96,12 @@ def _export_binary_graph(
     vtab = getattr(graph, 'vertex_attributes', None)
     # Pre-scan to a dict for O(1) lookup
     vattr_map = {}
-    try:
-        if vtab is not None:
-            for row in _safe_df_to_rows(vtab):
-                d = dict(row)
-                vid = d.pop('vertex_id', None)
-                if vid is not None:
-                    vattr_map[vid] = d
-    except Exception:  # noqa: BLE001
-        vattr_map = {}
+    if vtab is not None:
+        for row in _safe_df_to_rows(vtab):
+            d = dict(row)
+            vid = d.pop('vertex_id', None)
+            if vid is not None:
+                vattr_map[vid] = d
 
     processed_vattrs = {}
     for v in vertices:
@@ -240,15 +130,12 @@ def _export_binary_graph(
 
     # Add edges (binary & vertex-edge). Hyperedges: skip or expand
     eattr_map = {}
-    try:
-        for row in _rows_like(getattr(graph, 'edge_attributes', None)):
-            eid = row.get('edge_id')
-            if eid is not None:
-                d = dict(row)
-                d.pop('edge_id', None)
-                eattr_map[eid] = d
-    except Exception:  # noqa: BLE001
-        eattr_map = {}
+    for row in _rows_like(getattr(graph, 'edge_attributes', None)):
+        eid = row.get('edge_id')
+        if eid is not None:
+            d = dict(row)
+            d.pop('edge_id', None)
+            eattr_map[eid] = d
     # collect all edges as tuples first, write them in one bulk call
     edge_tuples = []
     edge_payloads = []  # list of dicts, parallel to edge_tuples
@@ -348,7 +235,7 @@ def _coeff_from_obj(obj) -> float:
             v = v.get('__value', 1)
         try:
             return float(v)
-        except Exception:  # noqa: BLE001
+        except (TypeError, ValueError):
             return 1.0
     return 1.0
 
@@ -430,115 +317,31 @@ def to_igraph(
                 manifest_edges[eid] = (u, v, 'regular')
             else:
                 eattr = edge_attrs.get(eid, {})
-                head_map = _endpoint_coeff_map(eattr, '__source_attr', S)
-                tail_map = _endpoint_coeff_map(eattr, '__target_attr', T)
+                head_map = endpoint_coeff_map(eattr, '__source_attr', S)
+                tail_map = endpoint_coeff_map(eattr, '__target_attr', T)
                 manifest_edges[eid] = (head_map, tail_map, 'hyper')
         else:
             eattr = edge_attrs.get(eid, {})
-            head_map = _endpoint_coeff_map(eattr, '__source_attr', S)
-            tail_map = _endpoint_coeff_map(eattr, '__target_attr', T)
+            head_map = endpoint_coeff_map(eattr, '__source_attr', S)
+            tail_map = endpoint_coeff_map(eattr, '__target_attr', T)
             manifest_edges[eid] = (head_map, tail_map, 'hyper')
 
     # ---------- slices + per-slice weights for manifest ----------
     all_eids = list(manifest_edges.keys())
 
-    # discover slices
-    lids = set()
-    try:
-        lids.update(list(graph.slices.list_slices(include_default=True)))
-    except Exception:  # noqa: BLE001
-        try:
-            lids.update(list(graph.slices.list_slices()))
-        except Exception:  # noqa: BLE001
-            pass
-
-    slices_section = {lid: [] for lid in lids}
-    for lid in list(lids):
-        try:
-            eids = list(graph.slices.get_slice_edges(lid))
-        except Exception:  # noqa: BLE001
-            eids = []
-        if eids:
-            seen = set(slices_section[lid])
-            for e in eids:
-                if e not in seen:
-                    slices_section[lid].append(e)
-                    seen.add(e)
-
-    t = getattr(graph, 'edge_slice_attributes', None)
-    if isinstance(t, dict):
-        for lid, mapping in t.items():
-            if isinstance(mapping, dict):
-                arr = slices_section.setdefault(lid, [])
-                seen = set(arr)
-                for eid in list(mapping.keys()):
-                    if eid not in seen:
-                        arr.append(eid)
-                        seen.add(eid)
-    for r in _rows_like(t):
-        lid = r.get('slice') or r.get('slice_id') or r.get('lid')
-        if lid is None:
-            continue
-        eid = r.get('edge_id', r.get('edge'))
-        if eid is not None:
-            arr = slices_section.setdefault(lid, [])
-            if eid not in arr:
-                arr.append(eid)
-
-    etl = getattr(graph, 'edge_to_slices', None)
-    if isinstance(etl, dict):
-        for eid, arr_lids in etl.items():
-            for lid in arr_lids or []:
-                arr = slices_section.setdefault(lid, [])
-                if eid not in arr:
-                    arr.append(eid)
-
-    le = getattr(graph, 'slice_edges', None)
-    if isinstance(le, dict):
-        for lid, eids in le.items():
-            arr = slices_section.setdefault(lid, [])
-            seen = set(arr)
-            for eid in list(eids):
-                if eid not in seen:
-                    arr.append(eid)
-                    seen.add(eid)
-
-    # remove empties
-    slices_section = {lid: eids for lid, eids in slices_section.items() if eids}
-
-    # filter slices if requested
     requested_lids = set()
     if slice is not None:
         requested_lids.update([slice] if isinstance(slice, str) else list(slice))
     if slices is not None:
         requested_lids.update(list(slices))
-    if requested_lids:
-        req_norm = {str(x) for x in requested_lids}
-        slices_section = {lid: eids for lid, eids in slices_section.items() if str(lid) in req_norm}
+    slices_section, slice_weights = collect_slice_manifest(
+        graph,
+        requested_lids=(list(requested_lids) if requested_lids else None),
+    )
 
-    # per-slice weights
-    slice_weights = {}
-    if hasattr(graph, 'attrs'):
-        for lid, eids in slices_section.items():
-            for eid in eids:
-                w = None
-                try:
-                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
-                except Exception:  # noqa: BLE001
-                    try:
-                        w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
-                    except Exception:  # noqa: BLE001
-                        w = None
-                if w is not None:
-                    slice_weights.setdefault(lid, {})[eid] = float(w)
-
-    # baseline weights
-    try:
-        base_weights = {
-            eid: float(rec.weight) for eid, rec in graph._edges.items() if rec.weight is not None
-        }
-    except Exception:  # noqa: BLE001
-        base_weights = {}
+    base_weights = {
+        eid: float(rec.weight) for eid, rec in _iter_edge_records(graph) if rec.weight is not None
+    }
 
     # -------------- REIFY: add HE nodes + membership edges to igG --------------
     if hyperedge_mode == 'reify':
@@ -634,26 +437,6 @@ def to_igraph(
             for k in keys:
                 igG.es[start:][k] = [d.get(k) for d in payloads]
 
-    # ----------------- multilayer / Kivela metadata -----------------
-    aspects = list(getattr(graph, 'aspects', []))
-    elem_layers = dict(getattr(graph, 'elem_layers', {}))
-    VM_serialized = _serialize_VM(getattr(graph, '_VM', set()))
-    edge_kind = {
-        eid: ('hyper' if rec.etype == 'hyper' else rec.ml_kind)
-        for eid, rec in graph._edges.items()
-        if rec.col_idx >= 0 and (rec.etype == 'hyper' or rec.ml_kind is not None)
-    }
-    edge_layers_ser = _serialize_edge_layers(getattr(graph, 'edge_layers', {}))
-    node_layer_attrs_ser = _serialize_node_layer_attrs(getattr(graph, '_state_attrs', {}))
-
-    # aspect and layer-tuple level attributes (dicts)
-    aspect_attrs = dict(getattr(graph, '_aspect_attrs', {}))
-    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(getattr(graph, '_layer_attrs', {}))
-    layer_df = getattr(graph, 'layer_attributes', None)
-    if layer_df is None:
-        layer_df = empty_dataframe({})
-    layer_attr_rows = _safe_df_to_rows(layer_df)
-
     # -------------- manifest (unchanged semantics) --------------
     manifest = {
         'edges': manifest_edges,
@@ -664,17 +447,11 @@ def to_igraph(
         'slice_weights': slice_weights,
         'edge_directed': {eid: bool(_is_directed_eid(graph, eid)) for eid in all_eids},
         'manifest_version': 1,
-        'multilayer': {
-            'aspects': aspects,
-            'aspect_attrs': aspect_attrs,
-            'elem_layers': elem_layers,
-            'VM': VM_serialized,
-            'edge_kind': edge_kind,
-            'edge_layers': edge_layers_ser,
-            'node_layer_attrs': node_layer_attrs_ser,
-            'layer_tuple_attrs': layer_tuple_attrs_ser,
-            'layer_attributes': layer_attr_rows,
-        },
+        'multilayer': serialize_multilayer_manifest(
+            graph,
+            table_to_rows=_safe_df_to_rows,
+            serialize_edge_layers=serialize_edge_layers,
+        ),
     }
 
     return igG, manifest
@@ -729,7 +506,7 @@ def _ig_collect_reified(
                 coeff = float(coeff)
                 if math.isnan(coeff):
                     coeff = 1.0
-            except Exception:  # noqa: BLE001
+            except (TypeError, ValueError):
                 coeff = 1.0
 
             if role == 'head':
@@ -767,6 +544,13 @@ def from_igraph(
     from ..core.graph import AnnNet
 
     H = AnnNet()
+    known_vertices = set()
+
+    def ensure_vertex(vertex_id):
+        if vertex_id in known_vertices:
+            return
+        H.add_vertices(vertex_id)
+        known_vertices.add(vertex_id)
 
     # -------- helper: scan reified HE nodes in igG (used only if hyperedge == "reified") --------
     def _ig_collect_reified(ig):
@@ -786,7 +570,7 @@ def from_igraph(
             is_he = False
             try:
                 is_he = bool(ig.vs[i][he_node_flag])
-            except Exception:  # noqa: BLE001
+            except (KeyError, IndexError, TypeError, ValueError):
                 is_he = False
             if not is_he:
                 nm = name_of(i)
@@ -804,7 +588,7 @@ def from_igraph(
             eid = None
             try:
                 eid = ig.vs[hi][he_id_attr]
-            except Exception:  # noqa: BLE001
+            except (KeyError, IndexError, TypeError, ValueError):
                 eid = None
             if not eid and isinstance(he_name, str) and he_name.startswith(reify_prefix):
                 eid = he_name[len(reify_prefix) :]
@@ -817,7 +601,7 @@ def from_igraph(
             # all incident edges to this HE node
             try:
                 inc = ig.incident(hi, mode='ALL')
-            except Exception:  # noqa: BLE001
+            except (ValueError, TypeError):
                 inc = []
             for eidx in inc:
                 e = ig.es[eidx]
@@ -830,13 +614,13 @@ def from_igraph(
                 if 'role' in edge_attr_names:
                     try:
                         role = e['role']
-                    except Exception:  # noqa: BLE001
+                    except (KeyError, IndexError, TypeError, ValueError):
                         role = None
                 coeff = 1.0
                 if 'coeff' in edge_attr_names:
                     try:
                         coeff = float(e['coeff'])
-                    except Exception:  # noqa: BLE001
+                    except (KeyError, IndexError, TypeError, ValueError):
                         coeff = 1.0
 
                 if role == 'head':
@@ -859,7 +643,7 @@ def from_igraph(
                     continue
                 try:
                     he_attrs[k] = ig.vs[hi][k]
-                except Exception:  # noqa: BLE001
+                except (KeyError, IndexError, TypeError, ValueError):
                     pass
 
             out.append((eid, directed, head_map, tail_map, he_attrs, hi))
@@ -904,7 +688,13 @@ def from_igraph(
         if kind == 'regular':
             u, v = defn[0], defn[1]
             regular_edges_bulk.append(
-                {'source': u, 'target': v, 'edge_id': eid, 'edge_directed': is_dir}
+                {
+                    'source': u,
+                    'target': v,
+                    'edge_id': eid,
+                    'edge_directed': is_dir,
+                    'weight': (manifest.get('weights', {}) or {}).get(eid, 1.0),
+                }
             )
         elif kind == 'hyper':
             head_map, tail_map = defn[0], defn[1]
@@ -921,6 +711,7 @@ def from_igraph(
                             'tail': tail,
                             'edge_id': eid,
                             'edge_directed': True,
+                            'weight': (manifest.get('weights', {}) or {}).get(eid, 1.0),
                             'attributes': attrs,
                         }
                     )
@@ -930,6 +721,7 @@ def from_igraph(
                             'members': list(set(head) | set(tail)),
                             'edge_id': eid,
                             'edge_directed': False,
+                            'weight': (manifest.get('weights', {}) or {}).get(eid, 1.0),
                             'attributes': attrs,
                         }
                     )
@@ -939,112 +731,37 @@ def from_igraph(
     if hyperedges_bulk:
         H.add_hyperedges_bulk(hyperedges_bulk)
 
-    # -------- baseline weights --------
-    for eid, w in (manifest.get('weights', {}) or {}).items():
-        try:
-            rec = H._edges.get(eid)
-            if rec is not None:
-                rec.weight = float(w)
-        except Exception:  # noqa: BLE001
-            pass
-
     # -------- slices + per-slice overrides --------
-    existing_slices = set(H.slices.list_slices(include_default=True))
-    for lid, eids in (manifest.get('slices', {}) or {}).items():
-        if lid not in existing_slices:
-            try:
-                H.slices.add_slice(lid)
-                existing_slices.add(lid)
-            except Exception:  # noqa: BLE001
-                pass
-        if eids:
-            H.add_edges_to_slice_bulk(lid, eids)
-
-    for lid, per_edge in (manifest.get('slice_weights', {}) or {}).items():
-        if lid not in existing_slices:
-            try:
-                H.slices.add_slice(lid)
-                existing_slices.add(lid)
-            except Exception:  # noqa: BLE001
-                pass
-        for eid, w in (per_edge or {}).items():
-            try:
-                H.attrs.set_edge_slice_attrs(lid, eid, weight=float(w))
-            except Exception:  # noqa: BLE001
-                try:
-                    H.set_edge_slice_attr(lid, eid, 'weight', float(w))
-                except Exception:  # noqa: BLE001
-                    pass
+    restore_slice_manifest(
+        H,
+        manifest.get('slices', {}) or {},
+        manifest.get('slice_weights', {}) or {},
+    )
 
     # ----- multilayer / Kivela -----
-    mm = manifest.get('multilayer', {})
-    aspects = mm.get('aspects', [])
-    elem_layers = mm.get('elem_layers', {})
-
-    _finalize_multilayer_state(H, aspects, elem_layers)
-
-    aspect_attrs = mm.get('aspect_attrs', {})
-    if aspect_attrs:
-        H._aspect_attrs.update(aspect_attrs)
-
-    VM_data = mm.get('VM', [])
-    if VM_data:
-        vm_set = _deserialize_VM(VM_data)
-        H._restore_supra_nodes(vm_set)
-        H._VM = vm_set
-
-    # edge_kind / edge_layers
-    ek = mm.get('edge_kind', {})
-    el_ser = mm.get('edge_layers', {})
-    if ek:
-        for eid, kind in ek.items():
-            rec = H._edges.get(eid)
-            if rec is None:
-                continue
-            if kind == 'hyper':
-                rec.etype = 'hyper'
-            else:
-                rec.ml_kind = kind
-    if el_ser:
-        H.edge_layers.update(_deserialize_edge_layers(el_ser))
-
-    nl_attrs_ser = mm.get('node_layer_attrs', [])
-    if nl_attrs_ser:
-        H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
-
-    layer_tuple_attrs_ser = mm.get('layer_tuple_attrs', [])
-    if layer_tuple_attrs_ser:
-        H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
-
-    layer_attr_rows = mm.get('layer_attributes', [])
-    if layer_attr_rows:
-        H.layer_attributes = _rows_to_df(layer_attr_rows)
+    restore_multilayer_manifest(
+        H,
+        manifest.get('multilayer', {}),
+        rows_to_table=_rows_to_df,
+        deserialize_edge_layers=deserialize_edge_layers,
+    )
 
     # -------- restore vertex/edge attrs --------
     vertex_attrs_cache = manifest.get('vertex_attrs', {}) or {}
     if vertex_attrs_cache:
         for vid, attrs in vertex_attrs_cache.items():
             if attrs:
-                try:
-                    H.attrs.set_vertex_attrs(vid, **attrs)
-                except Exception:  # noqa: BLE001
-                    pass
+                H.attrs.set_vertex_attrs(vid, **attrs)
 
     edge_attrs_cache = manifest.get('edge_attrs', {}) or {}
     if edge_attrs_cache:
         for eid, attrs in edge_attrs_cache.items():
             if attrs:
-                try:
-                    H.attrs.set_edge_attrs(eid, **attrs)
-                except Exception:  # noqa: BLE001
-                    pass
+                H.attrs.set_edge_attrs(eid, **attrs)
 
     # -------- OPTIONAL: pull in reified HEs from igG not present in manifest --------
     if hyperedge == 'reified':
-        try:
-            hyperdefs = _ig_collect_reified(igG)
-        except Exception:  # noqa: BLE001
-            hyperdefs = []
+        hyperdefs = _ig_collect_reified(igG)
         existing_eids = set(edges_def.keys())
 
         for eid, directed, head_map, tail_map, he_attrs, _hi in hyperdefs:
@@ -1052,45 +769,27 @@ def from_igraph(
                 continue
             # ensure vertices
             for x in set(head_map) | set(tail_map):
-                try:
-                    H.add_vertices(x)
-                except Exception:  # noqa: BLE001
-                    pass
+                ensure_vertex(x)
 
             if directed:
-                try:
-                    H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
-                except Exception:  # noqa: BLE001
-                    pass
-                try:
-                    H.attrs.set_edge_attrs(
-                        eid,
-                        __source_attr={u: {'__value': c} for u, c in head_map.items()},
-                        __target_attr={v: {'__value': c} for v, c in tail_map.items()},
-                    )
-                except Exception:  # noqa: BLE001
-                    pass
+                H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
+                H.attrs.set_edge_attrs(
+                    eid,
+                    __source_attr={u: {'__value': c} for u, c in head_map.items()},
+                    __target_attr={v: {'__value': c} for v, c in tail_map.items()},
+                )
             else:
                 members = list(set(head_map) | set(tail_map))
-                try:
-                    H.add_edges(src=members, edge_id=eid, directed=False)
-                except Exception:  # noqa: BLE001
-                    pass
-                try:
-                    H.attrs.set_edge_attrs(
-                        eid,
-                        __source_attr={u: {'__value': head_map.get(u, 1.0)} for u in members},
-                        __target_attr={v: {'__value': tail_map.get(v, 1.0)} for v in members},
-                    )
-                except Exception:  # noqa: BLE001
-                    pass
+                H.add_edges(src=members, edge_id=eid, directed=False)
+                H.attrs.set_edge_attrs(
+                    eid,
+                    __source_attr={u: {'__value': head_map.get(u, 1.0)} for u in members},
+                    __target_attr={v: {'__value': tail_map.get(v, 1.0)} for v in members},
+                )
 
             # copy HE-node attrs minus markers
             if he_attrs:
-                try:
-                    H.attrs.set_edge_attrs(eid, **he_attrs)
-                except Exception:  # noqa: BLE001
-                    pass
+                H.attrs.set_edge_attrs(eid, **he_attrs)
 
     return H
 
@@ -1114,20 +813,21 @@ def _from_ig_without_manifest(
     from ..core.graph import AnnNet
 
     H = AnnNet()
+    known_vertices = set()
+
+    def ensure_vertex(vertex_id):
+        if vertex_id in known_vertices:
+            return
+        H.add_vertices(vertex_id)
+        known_vertices.add(vertex_id)
 
     # vertices
     names = igG.vs['name'] if 'name' in igG.vs.attributes() else list(range(igG.vcount()))
     for i, vid in enumerate(names):
-        try:
-            H.add_vertices(vid)
-        except Exception:  # noqa: BLE001
-            pass
+        ensure_vertex(vid)
         vattrs = {k: igG.vs[i][k] for k in igG.vs.attributes()}
         if vattrs:
-            try:
-                H.attrs.set_vertex_attrs(vid, **vattrs)
-            except Exception:  # noqa: BLE001
-                pass
+            H.attrs.set_vertex_attrs(vid, **vattrs)
 
     membership_idx = set()
     if hyperedge == 'reified':
@@ -1141,46 +841,28 @@ def _from_ig_without_manifest(
         )
         for eid, directed, head_map, tail_map, _he_attrs, hi in hyperdefs:
             for x in set(head_map) | set(tail_map):
-                try:
-                    H.add_vertices(x)
-                except Exception:  # noqa: BLE001
-                    pass
+                ensure_vertex(x)
             if directed:
-                try:
-                    H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
-                except Exception:  # noqa: BLE001
-                    pass
-                try:
-                    H.attrs.set_edge_attrs(
-                        eid,
-                        __source_attr={u: {'__value': c} for u, c in head_map.items()},
-                        __target_attr={v: {'__value': c} for v, c in tail_map.items()},
-                    )
-                except Exception:  # noqa: BLE001
-                    pass
+                H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
+                H.attrs.set_edge_attrs(
+                    eid,
+                    __source_attr={u: {'__value': c} for u, c in head_map.items()},
+                    __target_attr={v: {'__value': c} for v, c in tail_map.items()},
+                )
             else:
                 members = list(set(head_map) | set(tail_map))
-                try:
-                    H.add_edges(src=members, edge_id=eid, directed=False)
-                except Exception:  # noqa: BLE001
-                    pass
-                try:
-                    H.attrs.set_edge_attrs(
-                        eid,
-                        __source_attr={u: {'__value': head_map.get(u, 1.0)} for u in members},
-                        __target_attr={v: {'__value': tail_map.get(v, 1.0)} for v in members},
-                    )
-                except Exception:  # noqa: BLE001
-                    pass
+                H.add_edges(src=members, edge_id=eid, directed=False)
+                H.attrs.set_edge_attrs(
+                    eid,
+                    __source_attr={u: {'__value': head_map.get(u, 1.0)} for u in members},
+                    __target_attr={v: {'__value': tail_map.get(v, 1.0)} for v in members},
+                )
             # copy HE-node attrs (minus markers)
             he_node_attrs = {
                 k: igG.vs[hi][k] for k in igG.vs.attributes() if k not in {he_node_flag, he_id_attr}
             }
             if he_node_attrs:
-                try:
-                    H.attrs.set_edge_attrs(eid, **he_node_attrs)
-                except Exception:  # noqa: BLE001
-                    pass
+                H.attrs.set_edge_attrs(eid, **he_node_attrs)
 
     # binary edges (skip membership edges if reified)
     is_dir = igG.is_directed()
@@ -1200,25 +882,15 @@ def _from_ig_without_manifest(
         e_directed = bool(d.get('directed', is_dir))
         w = d.get('weight', d.get('__weight', 1.0))
 
-        try:
-            H.add_vertices(src)
-            H.add_vertices(dst)
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            H.add_edges(src, dst, edge_id=eid, directed=e_directed)
-        except Exception:  # noqa: BLE001
-            H.add_edges(src, dst, edge_id=eid, directed=True)
-
-        try:
-            H.edge_weights[eid] = float(w)
-        except Exception:  # noqa: BLE001
-            pass
+        ensure_vertex(src)
+        ensure_vertex(dst)
+        H.add_edges(src, dst, edge_id=eid, directed=e_directed, weight=float(w))
 
         if d:
-            try:
-                H.attrs.set_edge_attrs(eid, **d)
-            except Exception:  # noqa: BLE001
-                pass
+            clean = dict(d)
+            for k in ('eid', 'weight', '__weight', 'directed'):
+                clean.pop(k, None)
+            if clean:
+                H.attrs.set_edge_attrs(eid, **clean)
 
     return H

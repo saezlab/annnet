@@ -11,15 +11,15 @@ from ..adapters._utils import (
     _rows_to_df,
     _is_directed_eid,
     _iter_edge_records,
-    _serialize_endpoint,
-    _deserialize_endpoint,
-    _serialize_edge_layers,
-    _deserialize_edge_layers,
 )
-from .._support.serialization_policy import (
-    endpoint_coeff_map as _endpoint_coeff_map,
-    restore_multilayer_manifest as _restore_multilayer_manifest,
-    serialize_multilayer_manifest as _serialize_multilayer_manifest,
+from .._support.serialization import (
+    endpoint_coeff_map,
+    serialize_endpoint,
+    deserialize_endpoint,
+    serialize_edge_layers,
+    deserialize_edge_layers,
+    restore_multilayer_manifest,
+    serialize_multilayer_manifest,
 )
 
 
@@ -86,19 +86,19 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
 
         if is_hyper:
             # endpoint coeffs from private maps if present; else 1.0
-            head_map = _endpoint_coeff_map(d, '__source_attr', S) or dict.fromkeys(S or [], 1.0)
-            tail_map = _endpoint_coeff_map(d, '__target_attr', T) or dict.fromkeys(T or [], 1.0)
+            head_map = endpoint_coeff_map(d, '__source_attr', S) or dict.fromkeys(S or [], 1.0)
+            tail_map = endpoint_coeff_map(d, '__target_attr', T) or dict.fromkeys(T or [], 1.0)
             # directed hyperedge
             hyperedges.append(
                 {
                     'id': eid,
                     'directed': bool(directed),
-                    'head': [_serialize_endpoint(x) for x in head_map.keys()] if directed else None,
-                    'tail': [_serialize_endpoint(x) for x in tail_map.keys()] if directed else None,
+                    'head': [serialize_endpoint(x) for x in head_map.keys()] if directed else None,
+                    'tail': [serialize_endpoint(x) for x in tail_map.keys()] if directed else None,
                     'members': (
                         None
                         if directed
-                        else [_serialize_endpoint(x) for x in {*head_map.keys(), *tail_map.keys()}]
+                        else [serialize_endpoint(x) for x in {*head_map.keys(), *tail_map.keys()}]
                     ),
                     'attrs': d,
                     'weight': w,
@@ -115,8 +115,8 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
             edges.append(
                 {
                     'id': eid,
-                    'source': _serialize_endpoint(u),
-                    'target': _serialize_endpoint(v),
+                    'source': serialize_endpoint(u),
+                    'target': serialize_endpoint(v),
                     'directed': bool(directed),
                     'weight': w,
                     'attrs': d,
@@ -179,10 +179,10 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
                 )
                 for h in hyperedges
             ],
-            'multilayer': _serialize_multilayer_manifest(
+            'multilayer': serialize_multilayer_manifest(
                 graph,
                 table_to_rows=_df_to_rows,
-                serialize_edge_layers=_serialize_edge_layers,
+                serialize_edge_layers=serialize_edge_layers,
             ),
         },
     }
@@ -235,8 +235,8 @@ def from_json(path) -> AnnNet:
     edge_dicts = []
     for e in doc.get('edges', []):
         eid = e.get('id')
-        u = _deserialize_endpoint(e.get('source'))
-        v = _deserialize_endpoint(e.get('target'))
+        u = deserialize_endpoint(e.get('source'))
+        v = deserialize_endpoint(e.get('target'))
         if eid is None or u is None or v is None:
             continue
         directed = bool(e.get('directed', True))
@@ -272,11 +272,11 @@ def from_json(path) -> AnnNet:
             if k not in {'id', 'directed', 'head', 'tail', 'members', 'weight'}
         }
         if directed:
-            head = [_deserialize_endpoint(x) for x in list(h.get('head') or [])]
-            tail = [_deserialize_endpoint(x) for x in list(h.get('tail') or [])]
+            head = [deserialize_endpoint(x) for x in list(h.get('head') or [])]
+            tail = [deserialize_endpoint(x) for x in list(h.get('tail') or [])]
             entry = {'head': head, 'tail': tail, 'edge_id': eid, 'edge_directed': True, 'weight': w}
         else:
-            members = [_deserialize_endpoint(x) for x in list(h.get('members') or [])]
+            members = [deserialize_endpoint(x) for x in list(h.get('members') or [])]
             entry = {'members': members, 'edge_id': eid, 'edge_directed': False, 'weight': w}
         hyper_dicts.append(entry)
         if attrs:
@@ -317,11 +317,11 @@ def from_json(path) -> AnnNet:
         if lid in known_slices and eid in known_edges:
             H.attrs.set_edge_slice_attrs(lid, eid, weight=w)
 
-    _restore_multilayer_manifest(
+    restore_multilayer_manifest(
         H,
         mm,
         rows_to_table=_rows_to_df,
-        deserialize_edge_layers=_deserialize_edge_layers,
+        deserialize_edge_layers=deserialize_edge_layers,
     )
     if vertex_attrs_pending:
         for vid, attrs in vertex_attrs_pending.items():
@@ -368,8 +368,8 @@ def write_ndjson(graph: AnnNet, dir_path):
                 directed = True
 
             if is_hyper:
-                head_map = _endpoint_coeff_map(d, '__source_attr', S) or dict.fromkeys(S or [], 1.0)
-                tail_map = _endpoint_coeff_map(d, '__target_attr', T) or dict.fromkeys(T or [], 1.0)
+                head_map = endpoint_coeff_map(d, '__source_attr', S) or dict.fromkeys(S or [], 1.0)
+                tail_map = endpoint_coeff_map(d, '__target_attr', T) or dict.fromkeys(T or [], 1.0)
                 obj = {'id': eid, 'directed': directed, 'weight': w}
                 if directed:
                     obj.update({'head': list(head_map), 'tail': list(tail_map)})

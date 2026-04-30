@@ -4,17 +4,14 @@ import json
 from collections.abc import Iterable
 
 from ..core.graph import AnnNet
-from ..adapters._utils import (
-    _df_to_rows,
-    _rows_to_df,
-    _serialize_endpoint,
-    _deserialize_endpoint,
-    _serialize_edge_layers,
-    _deserialize_edge_layers,
-)
-from .._support.serialization_policy import (
-    restore_multilayer_manifest as _restore_multilayer_manifest,
-    serialize_multilayer_manifest as _serialize_multilayer_manifest,
+from ..adapters._utils import _df_to_rows, _rows_to_df
+from .._support.serialization import (
+    serialize_endpoint,
+    deserialize_endpoint,
+    serialize_edge_layers,
+    deserialize_edge_layers,
+    restore_multilayer_manifest,
+    serialize_multilayer_manifest,
 )
 
 
@@ -129,10 +126,10 @@ def to_sif(
             'vertex_attrs': {},
             'edge_metadata': {},
             'slices': {},
-            'multilayer': _serialize_multilayer_manifest(
+            'multilayer': serialize_multilayer_manifest(
                 graph,
                 table_to_rows=_df_to_rows,
-                serialize_edge_layers=_serialize_edge_layers,
+                serialize_edge_layers=serialize_edge_layers,
             ),
         }
         if lossless
@@ -171,8 +168,8 @@ def to_sif(
                     manifest['binary_edges'][eid] = {
                         'source': src_str,
                         'target': tgt_str,
-                        'source_endpoint': _serialize_endpoint(src),
-                        'target_endpoint': _serialize_endpoint(tgt),
+                        'source_endpoint': serialize_endpoint(src),
+                        'target_endpoint': serialize_endpoint(tgt),
                         'directed': directed,
                     }
 
@@ -495,8 +492,8 @@ def from_sif(
 
                 append(
                     {
-                        'source': _deserialize_endpoint(info.get('source_endpoint', src)),
-                        'target': _deserialize_endpoint(info.get('target_endpoint', tgt)),
+                        'source': deserialize_endpoint(info.get('source_endpoint', src)),
+                        'target': deserialize_endpoint(info.get('target_endpoint', tgt)),
                         'weight': weight,
                         'edge_id': orig_eid,
                         'edge_directed': edge_directed_val,
@@ -575,11 +572,11 @@ def from_sif(
 
     # ===== MULTILAYER =====
     if manifest and 'multilayer' in manifest:
-        _restore_multilayer_manifest(
+        restore_multilayer_manifest(
             H,
             manifest['multilayer'],
             rows_to_table=_rows_to_df,
-            deserialize_edge_layers=_deserialize_edge_layers,
+            deserialize_edge_layers=deserialize_edge_layers,
         )
 
     return H

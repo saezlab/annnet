@@ -14,6 +14,7 @@ from annnet._support import metadata as _metadata
 from annnet._support import optional_components
 from annnet._support import plotting_backend as _plotting_backend
 from annnet._support import dataframe_backend as df_backend
+from annnet._support import serialization as serialization_support
 from annnet.adapters import _utils as adapter_utils
 from annnet.io._utils import _read_archive, _write_archive
 
@@ -243,10 +244,19 @@ def test_dataframe_backend_edge_paths_and_backend_detection(monkeypatch):
 
 def test_adapter_utils_serialization_roundtrips(tmp_path):
     supra = ('nodeA', ('layer1', 'layer2'))
-    assert adapter_utils._deserialize_endpoint(adapter_utils._serialize_endpoint(supra)) == supra
-    assert adapter_utils._deserialize_endpoint(json.dumps(['nodeB', ['x']])) == ('nodeB', ('x',))
-    assert adapter_utils._deserialize_endpoint("('nodeC', ('y',))") == ('nodeC', ('y',))
-    assert adapter_utils._deserialize_endpoint('plain') == 'plain'
+    assert (
+        serialization_support.deserialize_endpoint(serialization_support.serialize_endpoint(supra))
+        == supra
+    )
+    assert serialization_support.deserialize_endpoint(json.dumps(['nodeB', ['x']])) == (
+        'nodeB',
+        ('x',),
+    )
+    assert serialization_support.deserialize_endpoint("('nodeC', ('y',))") == (
+        'nodeC',
+        ('y',),
+    )
+    assert serialization_support.deserialize_endpoint('plain') == 'plain'
 
     layers = {
         'intra': ('t1', 'bus'),
@@ -254,40 +264,42 @@ def test_adapter_utils_serialization_roundtrips(tmp_path):
         'raw': {'not': 'a tuple'},
         'none': None,
     }
-    encoded_layers = adapter_utils._serialize_edge_layers(layers)
-    assert adapter_utils._deserialize_edge_layers(encoded_layers) == {
+    encoded_layers = serialization_support.serialize_edge_layers(layers)
+    assert serialization_support.deserialize_edge_layers(encoded_layers) == {
         'intra': ('t1', 'bus'),
         'inter': (('t1', 'bus'), ('t2', 'train')),
     }
 
-    vm = {('A', ('x',)), ('B', ('y',))}
-    assert adapter_utils._deserialize_VM(adapter_utils._serialize_VM(vm)) == vm
-
     nl_attrs = {('A', ('x',)): {'color': 'red'}}
     assert (
-        adapter_utils._deserialize_node_layer_attrs(
-            adapter_utils._serialize_node_layer_attrs(nl_attrs)
+        serialization_support.deserialize_node_layer_attrs(
+            serialization_support.serialize_node_layer_attrs(nl_attrs)
         )
         == nl_attrs
     )
 
     slices = {'s1': {'vertices': {'A'}, 'edges': {'e1'}, 'attributes': {'kind': 'test'}}}
-    assert adapter_utils._deserialize_slices(adapter_utils._serialize_slices(slices)) == slices
+    assert (
+        serialization_support.deserialize_slices(serialization_support.serialize_slices(slices))
+        == slices
+    )
 
     layer_attrs = {('x', 'y'): {'speed': 10}}
     assert (
-        adapter_utils._deserialize_layer_tuple_attrs(
-            adapter_utils._serialize_layer_tuple_attrs(layer_attrs)
+        serialization_support.deserialize_layer_tuple_attrs(
+            serialization_support.serialize_layer_tuple_attrs(layer_attrs)
         )
         == layer_attrs
     )
 
-    assert adapter_utils._coerce_coeff_mapping('[["A", 2], {"vertex": "B", "__value": 3}]') == {
+    assert serialization_support.coerce_coeff_mapping(
+        '[["A", 2], {"vertex": "B", "__value": 3}]'
+    ) == {
         'A': 2,
         'B': {'__value': 3},
     }
-    assert adapter_utils._coerce_coeff_mapping('not json') == {}
-    assert adapter_utils._endpoint_coeff_map(
+    assert serialization_support.coerce_coeff_mapping('not json') == {}
+    assert serialization_support.endpoint_coeff_map(
         {'coeffs': {'A': {'__value': 'bad'}}}, 'coeffs', {'A'}
     ) == {'A': 1.0}
     assert adapter_utils._serialize_value(ExampleEnum.ONE) == 'ONE'

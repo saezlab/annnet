@@ -1,7 +1,12 @@
-# ---- robust helpers (keep in sync across adapters) ----
-import ast as _ast
+"""Adapter-only helpers.
+
+Boundary:
+- adapter helper: how another graph backend is projected to/from AnnNet
+- not generic serialization policy
+- not responsible for bytes/files/archives
+"""
+
 from enum import Enum
-import json as _json
 from typing import Any
 
 import narwhals as nw
@@ -75,40 +80,6 @@ def _attrs_to_dict(attrs_dict: dict) -> dict:
     return out
 
 
-def _serialize_endpoint(endpoint: Any) -> Any:
-    """Convert an endpoint into a JSON-safe representation."""
-    if isinstance(endpoint, tuple) and len(endpoint) == 2 and isinstance(endpoint[1], tuple):
-        return {'kind': 'supra', 'vertex': endpoint[0], 'layer': list(endpoint[1])}
-    return endpoint
-
-
-def _deserialize_endpoint(value: Any) -> Any:
-    """Restore a structural endpoint from JSON-safe or legacy serialized forms."""
-    if isinstance(value, dict) and value.get('kind') == 'supra':
-        return (value.get('vertex'), tuple(value.get('layer') or []))
-    if isinstance(value, list) and len(value) == 2 and isinstance(value[1], list):
-        return (value[0], tuple(value[1]))
-    if isinstance(value, str):
-        try:
-            parsed = _json.loads(value)
-        except _json.JSONDecodeError:
-            parsed = None
-        if parsed is not None and parsed != value:
-            return _deserialize_endpoint(parsed)
-        if value.startswith('(') and value.endswith(')'):
-            try:
-                parsed = _ast.literal_eval(value)
-            except (SyntaxError, ValueError):
-                parsed = None
-            if (
-                isinstance(parsed, tuple)
-                and len(parsed) == 2
-                and isinstance(parsed[1], (tuple, list))
-            ):
-                return (parsed[0], tuple(parsed[1]))
-    return value
-
-
 def _rows_like(table):
     if table is None:
         return []
@@ -157,149 +128,6 @@ def _iter_edge_records(graph):
     raise AttributeError('Graph does not expose an adapter-readable edge record store')
 
 
-def _finalize_multilayer_state(graph, aspects, elem_layers):
-    """
-    Restore multilayer bookkeeping after adapter import.
-
-    Keeps any unavoidable graph-internal repair hook centralized in one place
-    instead of scattering private calls across adapters.
-    """
-    if not aspects:
-        return
-
-    graph.aspects = list(aspects)
-    graph.elem_layers = dict(elem_layers or {})
-
-    rebuild = getattr(graph, '_rebuild_all_layers_cache', None)
-    if callable(rebuild):
-        rebuild()
-
-
-# Serialization helpers moved from graphtool_adapter.py
-
-
-def _serialize_edge_layers(edge_layers: dict[str, Any]) -> dict[str, Any]:
-    """
-    Convert edge_layers[eid] (aa or (aa, bb)) into JSON-safe form.
-
-    - intra:  aa -> {"kind": "single", "layers": [list(aa)]}
-    - inter/coupling: (aa, bb) -> {"kind": "pair", "layers": [list(aa), list(bb)]}
-    """
-    out = {}
-    for eid, L in edge_layers.items():
-        if L is None:
-            continue
-        # e.g. intra: L == aa (tuple[str,...])
-        if isinstance(L, tuple) and (len(L) == 0 or isinstance(L[0], str)):
-            out[eid] = {'kind': 'single', 'layers': [list(L)]}
-        # inter/coupling: L == (aa, bb)
-        elif (
-            isinstance(L, tuple)
-            and len(L) == 2
-            and isinstance(L[0], tuple)
-            and isinstance(L[1], tuple)
-        ):
-            out[eid] = {'kind': 'pair', 'layers': [list(L[0]), list(L[1])]}
-        else:
-            # fallback: just repr it
-            out[eid] = {'kind': 'raw', 'value': repr(L)}
-    return out
-
-
-def _deserialize_edge_layers(data: dict[str, Any]) -> dict[str, Any]:
-    """
-    Inverse of _serialize_edge_layers.
-
-    Returns eid -> aa or (aa, bb) (tuples).
-    """
-    out = {}
-    for eid, rec in data.items():
-        kind = rec.get('kind')
-        if kind == 'single':
-            aa = tuple(rec['layers'][0])
-            out[eid] = aa
-        elif kind == 'pair':
-            La = tuple(rec['layers'][0])
-            Lb = tuple(rec['layers'][1])
-            out[eid] = (La, Lb)
-        else:
-            # unknown / raw -> ignore or store as is
-            # here we just skip, user can handle it manually if needed
-            continue
-    return out
-
-
-def _serialize_VM(VM: set[tuple[str, tuple[str, ...]]]) -> list[dict]:
-    """
-    Serialize V_M = {(u, aa)} to JSON-safe list of dicts.
-    """
-    return [{'node': u, 'layer': list(aa)} for (u, aa) in VM]
-
-
-def _deserialize_VM(data: list[dict]) -> set[tuple[str, tuple[str, ...]]]:
-    """
-    Inverse of _serialize_VM.
-    """
-    return {(rec['node'], tuple(rec['layer'])) for rec in data}
-
-
-def _serialize_node_layer_attrs(nl_attrs: dict[tuple[str, tuple[str, ...]], dict]) -> list[dict]:
-    """
-    (u, aa) -> {attrs}  ->  [{"node": u, "layer": list(aa), "attrs": {...}}, ...]
-    """
-    out = []
-    for (u, aa), attrs in nl_attrs.items():
-        out.append(
-            {
-                'node': u,
-                'layer': list(aa),
-                'attrs': dict(attrs),
-            }
-        )
-    return out
-
-
-def _deserialize_node_layer_attrs(data: list[dict]) -> dict[tuple[str, tuple[str, ...]], dict]:
-    """
-    Inverse of _serialize_node_layer_attrs.
-    """
-    out: dict[tuple[str, tuple[str, ...]], dict] = {}
-    for rec in data:
-        key = (rec['node'], tuple(rec['layer']))
-        out[key] = dict(rec.get('attrs', {}))
-    return out
-
-
-def _serialize_slices(slices: dict[str, dict]) -> dict[str, dict]:
-    """Serialize slice records to JSON-safe dictionaries.
-
-    _slices is {slice_id: {"vertices": set, "edges": set, "attributes": dict}}
-    Convert sets to lists for JSON.
-    """
-    out = {}
-    for sid, rec in slices.items():
-        out[sid] = {
-            'vertices': list(rec.get('vertices', [])),
-            'edges': list(rec.get('edges', [])),
-            'attributes': dict(rec.get('attributes', {})),
-        }
-    return out
-
-
-def _deserialize_slices(data: dict[str, dict]) -> dict[str, dict]:
-    """
-    Inverse of _serialize_slices.
-    """
-    out = {}
-    for sid, rec in data.items():
-        out[sid] = {
-            'vertices': set(rec.get('vertices', [])),
-            'edges': set(rec.get('edges', [])),
-            'attributes': dict(rec.get('attributes', {})),
-        }
-    return out
-
-
 def _df_to_rows(df) -> list[dict]:
     """
     Convert a dataframe-like table to list-of-dicts in a stable way.
@@ -325,29 +153,6 @@ def _rows_to_df(rows: list[dict]):
         return nw.from_native(df, eager_only=True).select(order).to_native()
     except (AttributeError, TypeError, ValueError):
         return df
-
-
-def _serialize_layer_tuple_attrs(layer_attrs: dict[tuple[str, ...], dict]) -> list[dict]:
-    """Serialize layer-tuple attributes to JSON-safe records.
-
-    _layer_attrs: {aa_tuple -> {attr_name: value}}
-    -> JSON-safe: [{"layer": list(aa), "attrs": {...}}, ...]
-    """
-    out = []
-    for aa, attrs in layer_attrs.items():
-        out.append({'layer': list(aa), 'attrs': dict(attrs)})
-    return out
-
-
-def _deserialize_layer_tuple_attrs(data: list[dict]) -> dict[tuple[str, ...], dict]:
-    """
-    Inverse of _serialize_layer_tuple_attrs.
-    """
-    out: dict[tuple[str, ...], dict] = {}
-    for rec in data:
-        aa = tuple(rec['layer'])
-        out[aa] = dict(rec.get('attrs', {}))
-    return out
 
 
 def _safe_df_to_rows(df):

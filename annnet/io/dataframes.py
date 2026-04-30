@@ -9,13 +9,92 @@ from ..core.graph import AnnNet
 from .._support.dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
 
 
-def _edge_weight(rec) -> float:
-    return 1.0 if rec.weight is None else float(rec.weight)
+def _binary_edge_rows(graph: AnnNet, edge_attrs: dict, *, public_only: bool):
+    edge_weights = graph.edge_weights
+    edge_directed = graph.edge_directed
+    default_directed = True if graph.directed is None else graph.directed
+
+    for eid, (src, tgt, etype) in graph.edge_definitions.items():
+        row = {
+            'edge_id': eid,
+            'source': src,
+            'target': tgt,
+            'weight': 1.0 if edge_weights.get(eid) is None else float(edge_weights[eid]),
+            'directed': edge_directed.get(eid, default_directed),
+            'edge_type': etype,
+        }
+
+        attrs = edge_attrs.get(eid)
+        if attrs:
+            attr_dict = dict(attrs)
+            attr_dict.pop('edge_id', None)
+            if public_only:
+                attr_dict = {k: v for k, v in attr_dict.items() if not str(k).startswith('__')}
+            row.update(attr_dict)
+
+        yield row
 
 
-def _edge_directed(graph: AnnNet, rec) -> bool:
-    default = True if graph.directed is None else graph.directed
-    return rec.directed if rec.directed is not None else default
+def _hyperedge_rows(graph: AnnNet, edge_attrs: dict, *, public_only: bool, explode: bool):
+    edge_weights = graph.edge_weights
+
+    for eid, spec in graph.hyperedge_definitions.items():
+        directed = bool(spec.get('directed', False))
+        weight = 1.0 if edge_weights.get(eid) is None else float(edge_weights[eid])
+        attrs = edge_attrs.get(eid)
+        attr_dict = {}
+        if attrs:
+            attr_dict = dict(attrs)
+            attr_dict.pop('edge_id', None)
+            if public_only:
+                attr_dict = {k: v for k, v in attr_dict.items() if not str(k).startswith('__')}
+
+        if explode:
+            if directed:
+                for vertex_id in spec.get('head', []):
+                    row = {
+                        'edge_id': eid,
+                        'vertex_id': vertex_id,
+                        'role': 'head',
+                        'weight': weight,
+                        'directed': True,
+                    }
+                    row.update(attr_dict)
+                    yield row
+
+                for vertex_id in spec.get('tail', []):
+                    row = {
+                        'edge_id': eid,
+                        'vertex_id': vertex_id,
+                        'role': 'tail',
+                        'weight': weight,
+                        'directed': True,
+                    }
+                    row.update(attr_dict)
+                    yield row
+            else:
+                for vertex_id in spec.get('members', []):
+                    row = {
+                        'edge_id': eid,
+                        'vertex_id': vertex_id,
+                        'role': 'member',
+                        'weight': weight,
+                        'directed': False,
+                    }
+                    row.update(attr_dict)
+                    yield row
+            continue
+
+        row = {
+            'edge_id': eid,
+            'directed': directed,
+            'weight': weight,
+            'head': list(spec.get('head', [])) if directed else None,
+            'tail': list(spec.get('tail', [])) if directed else None,
+            'members': None if directed else list(spec.get('members', [])),
+        }
+        row.update(attr_dict)
+        yield row
 
 
 def to_dataframes(
@@ -80,29 +159,7 @@ def to_dataframes(
     )
 
     # 2. Binary edges table
-    edges_data = []
-    for eid, rec in graph._edges.items():
-        if rec.col_idx < 0 or rec.etype == 'hyper':
-            continue
-
-        row = {
-            'edge_id': eid,
-            'source': rec.src,
-            'target': rec.tgt,
-            'weight': _edge_weight(rec),
-            'directed': _edge_directed(graph, rec),
-            'edge_type': rec.etype,
-        }
-
-        attrs = edge_attrs.get(eid)
-        if attrs:
-            attr_dict = dict(attrs)
-            attr_dict.pop('edge_id', None)
-            if public_only:
-                attr_dict = {k: v for k, v in attr_dict.items() if not str(k).startswith('__')}
-            row.update(attr_dict)
-
-        edges_data.append(row)
+    edges_data = list(_binary_edge_rows(graph, edge_attrs, public_only=public_only))
 
     result['edges'] = dataframe_from_rows(
         edges_data,
@@ -119,91 +176,14 @@ def to_dataframes(
 
     # 3. Hyperedges table
     if include_hyperedges:
-        hyperedges_data = []
-
-        if explode_hyperedges:
-            for eid, rec in graph._edges.items():
-                if rec.col_idx < 0 or rec.etype != 'hyper':
-                    continue
-                directed = rec.tgt is not None
-                weight = _edge_weight(rec)
-
-                attrs = edge_attrs.get(eid)
-                attr_dict = {}
-                if attrs:
-                    attr_dict = dict(attrs)
-                    attr_dict.pop('edge_id', None)
-                    if public_only:
-                        attr_dict = {
-                            k: v for k, v in attr_dict.items() if not str(k).startswith('__')
-                        }
-
-                if directed:
-                    for v in rec.src:
-                        row = {
-                            'edge_id': eid,
-                            'vertex_id': v,
-                            'role': 'head',
-                            'weight': weight,
-                            'directed': True,
-                        }
-                        row.update(attr_dict)
-                        hyperedges_data.append(row)
-
-                    for v in rec.tgt:
-                        row = {
-                            'edge_id': eid,
-                            'vertex_id': v,
-                            'role': 'tail',
-                            'weight': weight,
-                            'directed': True,
-                        }
-                        row.update(attr_dict)
-                        hyperedges_data.append(row)
-                else:
-                    for v in rec.src:
-                        row = {
-                            'edge_id': eid,
-                            'vertex_id': v,
-                            'role': 'member',
-                            'weight': weight,
-                            'directed': False,
-                        }
-                        row.update(attr_dict)
-                        hyperedges_data.append(row)
-        else:
-            for eid, rec in graph._edges.items():
-                if rec.col_idx < 0 or rec.etype != 'hyper':
-                    continue
-                directed = rec.tgt is not None
-                weight = _edge_weight(rec)
-
-                row = {
-                    'edge_id': eid,
-                    'directed': directed,
-                    'weight': weight,
-                }
-
-                if directed:
-                    row['head'] = list(rec.src)
-                    row['tail'] = list(rec.tgt)
-                    row['members'] = None
-                else:
-                    row['head'] = None
-                    row['tail'] = None
-                    row['members'] = list(rec.src)
-
-                attrs = edge_attrs.get(eid)
-                if attrs:
-                    attr_dict = dict(attrs)
-                    attr_dict.pop('edge_id', None)
-                    if public_only:
-                        attr_dict = {
-                            k: v for k, v in attr_dict.items() if not str(k).startswith('__')
-                        }
-                    row.update(attr_dict)
-
-                hyperedges_data.append(row)
+        hyperedges_data = list(
+            _hyperedge_rows(
+                graph,
+                edge_attrs,
+                public_only=public_only,
+                explode=explode_hyperedges,
+            )
+        )
 
         if explode_hyperedges:
             result['hyperedges'] = dataframe_from_rows(

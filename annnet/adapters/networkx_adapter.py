@@ -18,21 +18,20 @@ if TYPE_CHECKING:
 from ._utils import (
     _rows_like,
     _rows_to_df,
-    _serialize_VM,
     _attrs_to_dict,
-    _deserialize_VM,
     _is_directed_eid,
     _safe_df_to_rows,
     _serialize_value,
     _iter_edge_records,
-    _endpoint_coeff_map,
-    _serialize_edge_layers,
-    _deserialize_edge_layers,
-    _finalize_multilayer_state,
-    _serialize_node_layer_attrs,
-    _serialize_layer_tuple_attrs,
-    _deserialize_node_layer_attrs,
-    _deserialize_layer_tuple_attrs,
+)
+from .._support.serialization import (
+    endpoint_coeff_map,
+    serialize_edge_layers,
+    collect_slice_manifest,
+    restore_slice_manifest,
+    deserialize_edge_layers,
+    restore_multilayer_manifest,
+    serialize_multilayer_manifest,
 )
 
 
@@ -189,7 +188,7 @@ def _coeff_from_obj(obj) -> float:
             v = v.get('__value', 1)
         try:
             return float(v)
-        except Exception:  # noqa: BLE001
+        except (TypeError, ValueError):
             return 1.0
     return 1.0
 
@@ -242,11 +241,9 @@ def to_nx(
     if requested_lids:
         selected_eids = set()
         for lid in requested_lids:
-            try:
+            if graph.slices.has_slice(lid):
                 for eid in graph.slices.get_slice_edges(lid):
                     selected_eids.add(eid)
-            except Exception:  # noqa: BLE001
-                pass
 
     # Base NX graph (binary edges only)
     nxG = _export_binary_graph(
@@ -307,141 +304,25 @@ def to_nx(
                 manifest_edges[eid] = (u, v, 'regular')
             else:
                 eattr = edge_attrs.get(eid, {})
-                head_map = _endpoint_coeff_map(eattr, '__source_attr', S)
-                tail_map = _endpoint_coeff_map(eattr, '__target_attr', T)
+                head_map = endpoint_coeff_map(eattr, '__source_attr', S)
+                tail_map = endpoint_coeff_map(eattr, '__target_attr', T)
                 manifest_edges[eid] = (head_map, tail_map, 'hyper')
         else:
             eattr = edge_attrs.get(eid, {})
-            head_map = _endpoint_coeff_map(eattr, '__source_attr', S)
-            tail_map = _endpoint_coeff_map(eattr, '__target_attr', T)
+            head_map = endpoint_coeff_map(eattr, '__source_attr', S)
+            tail_map = endpoint_coeff_map(eattr, '__target_attr', T)
             manifest_edges[eid] = (head_map, tail_map, 'hyper')
 
     # Baseline edge weights
-    try:
-        weights_map = {
-            eid: float(rec.weight) for eid, rec in graph._edges.items() if rec.weight is not None
-        }
-    except Exception:  # noqa: BLE001
-        weights_map = {}
+    weights_map = {
+        eid: float(rec.weight) for eid, rec in _iter_edge_records(graph) if rec.weight is not None
+    }
 
     all_eids = list(manifest_edges.keys())
-
-    # Slice discovery
-    lids = set()
-    try:
-        lids.update(list(graph.slices.list_slices(include_default=True)))
-    except Exception:  # noqa: BLE001
-        try:
-            lids.update(list(graph.slices.list_slices()))
-        except Exception:  # noqa: BLE001
-            pass
-
-    t = getattr(graph, 'edge_slice_attributes', None)
-    if isinstance(t, dict):
-        lids.update(t.keys())
-    for r in _rows_like(t):
-        lid = r.get('slice') or r.get('slice_id') or r.get('lid')
-        if lid is not None:
-            lids.add(lid)
-
-    le = getattr(graph, 'slice_edges', None)
-    if isinstance(le, dict):
-        lids.update(le.keys())
-
-    etl = getattr(graph, 'edge_to_slices', None)
-    if isinstance(etl, dict):
-        for arr in etl.values():
-            for lid in arr or []:
-                lids.add(lid)
-
-    slices_section = {lid: [] for lid in lids}
-
-    # Build slices membership
-    for lid in list(lids):
-        try:
-            eids = list(graph.slices.get_slice_edges(lid))
-        except Exception:  # noqa: BLE001
-            eids = []
-        if eids:
-            seen = set(slices_section[lid])
-            for e in eids:
-                if e not in seen:
-                    slices_section[lid].append(e)
-                    seen.add(e)
-
-    if isinstance(t, dict):
-        for lid, mapping in t.items():
-            if isinstance(mapping, dict):
-                arr = slices_section.setdefault(lid, [])
-                seen = set(arr)
-                for eid in list(mapping.keys()):
-                    if eid not in seen:
-                        arr.append(eid)
-                        seen.add(eid)
-
-    for r in _rows_like(t):
-        lid = r.get('slice') or r.get('slice_id') or r.get('lid')
-        if lid is None:
-            continue
-        eid = r.get('edge_id', r.get('edge'))
-        if eid is not None:
-            arr = slices_section.setdefault(lid, [])
-            if eid not in arr:
-                arr.append(eid)
-
-    if isinstance(le, dict):
-        for lid, eids in le.items():
-            arr = slices_section.setdefault(lid, [])
-            seen = set(arr)
-            for eid in list(eids):
-                if eid not in seen:
-                    arr.append(eid)
-                    seen.add(eid)
-
-    if isinstance(etl, dict):
-        for eid, arr_lids in etl.items():
-            for lid in arr_lids or []:
-                arr = slices_section.setdefault(lid, [])
-                if eid not in arr:
-                    arr.append(eid)
-
-    # Per-edge slice weights - BATCH READ
-    slice_weights = {}
-    candidate_lids = set(slices_section.keys()) or lids
-
-    # Read entire slice attributes table once
-    slice_attr_table = getattr(graph, 'edge_slice_attributes', None)
-    slice_attr_rows = _rows_like(slice_attr_table)
-
-    # Build lookup: {(slice, edge_id): weight}
-    slice_weight_lookup = {}
-    for row in slice_attr_rows:
-        lid = row.get('slice') or row.get('slice_id') or row.get('lid')
-        eid = row.get('edge_id') or row.get('edge')
-        w = row.get('weight')
-        if lid is not None and eid is not None and w is not None:
-            slice_weight_lookup[(lid, eid)] = float(w)
-
-    # Populate slice_weights from lookup
-    for lid in candidate_lids:
-        arr = slices_section.setdefault(lid, [])
-        seen = set(arr)
-        for eid in all_eids:
-            w = slice_weight_lookup.get((lid, eid))
-            if w is not None:
-                if eid not in seen:
-                    arr.append(eid)
-                    seen.add(eid)
-                slice_weights.setdefault(lid, {})[eid] = w
-
-    # Drop empties
-    slices_section = {lid: eids for lid, eids in slices_section.items() if eids}
-
-    # Respect slice/slices filters
-    if requested_lids:
-        req_norm = {str(x) for x in requested_lids}
-        slices_section = {lid: eids for lid, eids in slices_section.items() if str(lid) in req_norm}
-        slice_weights = {lid: m for lid, m in slice_weights.items() if str(lid) in req_norm}
+    slices_section, slice_weights = collect_slice_manifest(
+        graph,
+        requested_lids=(list(requested_lids) if requested_lids else None),
+    )
 
     # REIFY: add HE nodes + membership edges
     if hyperedge_mode == 'reify':
@@ -542,21 +423,6 @@ def to_nx(
         for u, v, key, attrs in membership_edges_to_add:
             nxG.add_edge(u, v, key=key, **attrs)
 
-    # Multilayer metadata
-    aspects = list(getattr(graph, 'aspects', []))
-    elem_layers = dict(getattr(graph, 'elem_layers', {}))
-    VM_serialized = _serialize_VM(getattr(graph, '_VM', set()))
-    edge_kind = {
-        eid: ('hyper' if rec.etype == 'hyper' else rec.ml_kind)
-        for eid, rec in graph._edges.items()
-        if rec.col_idx >= 0 and (rec.etype == 'hyper' or rec.ml_kind is not None)
-    }
-    edge_layers_ser = _serialize_edge_layers(getattr(graph, 'edge_layers', {}))
-    node_layer_attrs_ser = _serialize_node_layer_attrs(getattr(graph, '_state_attrs', {}))
-    aspect_attrs = dict(getattr(graph, '_aspect_attrs', {}))
-    layer_tuple_attrs_ser = _serialize_layer_tuple_attrs(getattr(graph, '_layer_attrs', {}))
-    layer_attr_rows = _safe_df_to_rows(getattr(graph, 'layer_attributes', None))
-
     # BUILD EDGE_DIRECTED DICT ONCE
     edge_directed_dict = {eid: bool(_is_directed_eid(graph, eid)) for eid in all_eids}
 
@@ -569,17 +435,11 @@ def to_nx(
         'slice_weights': slice_weights,
         'edge_directed': edge_directed_dict,
         'manifest_version': 1,
-        'multilayer': {
-            'aspects': aspects,
-            'aspect_attrs': aspect_attrs,
-            'elem_layers': elem_layers,
-            'VM': VM_serialized,
-            'edge_kind': edge_kind,
-            'edge_layers': edge_layers_ser,
-            'node_layer_attrs': node_layer_attrs_ser,
-            'layer_tuple_attrs': layer_tuple_attrs_ser,
-            'layer_attributes': layer_attr_rows,
-        },
+        'multilayer': serialize_multilayer_manifest(
+            graph,
+            table_to_rows=_safe_df_to_rows,
+            serialize_edge_layers=serialize_edge_layers,
+        ),
     }
 
     return nxG, manifest
@@ -610,8 +470,6 @@ def from_nx(
 
     known_vertices = set()
     existing_eids = set()
-    existing_slices = set(H.slices.list_slices(include_default=True))
-
     edge_directed_cache = manifest.get('edge_directed', {}) or {}
     weights_cache = manifest.get('weights', {}) or {}
     vertex_attrs_cache = manifest.get('vertex_attrs', {}) or {}
@@ -626,17 +484,14 @@ def from_nx(
             known_vertices.add(v)
 
     with _time('nx_vertices', timings):
-        try:
-            for v, d in nxG.nodes(data=True):
-                if hyperedge == 'reified':
-                    d = d or {}
-                    if bool(d.get(he_node_flag, False)):
-                        continue
-                    if isinstance(v, str) and v.startswith(reify_prefix):
-                        continue
-                add_vertex_once(v)
-        except Exception:  # noqa: BLE001
-            pass
+        for v, d in nxG.nodes(data=True):
+            if hyperedge == 'reified':
+                d = d or {}
+                if bool(d.get(he_node_flag, False)):
+                    continue
+                if isinstance(v, str) and v.startswith(reify_prefix):
+                    continue
+            add_vertex_once(v)
 
     # BULK INSERT VERTICES ONCE
     if known_vertices:
@@ -673,6 +528,7 @@ def from_nx(
                                 'tail': tail,
                                 'edge_id': eid,
                                 'edge_directed': True,
+                                'weight': weights_cache.get(eid, 1.0),
                                 'attributes': attrs,
                             }
                         )
@@ -682,6 +538,7 @@ def from_nx(
                                 'members': list(all_vertices),
                                 'edge_id': eid,
                                 'edge_directed': False,
+                                'weight': weights_cache.get(eid, 1.0),
                                 'attributes': attrs,
                             }
                         )
@@ -694,6 +551,7 @@ def from_nx(
                         'target': v,
                         'edge_id': eid,
                         'edge_directed': is_dir,
+                        'weight': weights_cache.get(eid, 1.0),
                     }
                 )
                 existing_eids.add(eid)
@@ -706,101 +564,32 @@ def from_nx(
         if hyperedges_bulk:
             H.add_hyperedges_bulk(hyperedges_bulk)
 
-    # BATCH WEIGHTS
     with _time('weights', timings):
-        if weights_cache:
-            for eid, w in weights_cache.items():
-                try:
-                    rec = H._edges.get(eid)
-                    if rec is not None:
-                        rec.weight = float(w)
-                except Exception:  # noqa: BLE001
-                    pass
+        pass
 
     # BATCH SLICES
     with _time('slices', timings):
-        for lid, eids in slices_cache.items():
-            if lid not in existing_slices:
-                try:
-                    H.slices.add_slice(lid)
-                    existing_slices.add(lid)
-                except Exception:  # noqa: BLE001
-                    pass
-            if eids:
-                H.add_edges_to_slice_bulk(lid, eids)
-
-        for lid, per_edge in slice_weights_cache.items():
-            if lid not in existing_slices:
-                try:
-                    H.slices.add_slice(lid)
-                    existing_slices.add(lid)
-                except Exception:  # noqa: BLE001
-                    pass
-            for eid, w in per_edge.items():
-                try:
-                    H.attrs.set_edge_slice_attrs(lid, eid, weight=float(w))
-                except Exception:  # noqa: BLE001
-                    pass
+        restore_slice_manifest(H, slices_cache, slice_weights_cache)
 
     with _time('multilayer', timings):
-        aspects = mm.get('aspects', [])
-        elem_layers = mm.get('elem_layers', {})
-
-        _finalize_multilayer_state(H, aspects, elem_layers)
-
-        aspect_attrs = mm.get('aspect_attrs', {})
-        if aspect_attrs:
-            H._aspect_attrs.update(aspect_attrs)
-
-        VM_data = mm.get('VM', [])
-        if VM_data:
-            vm_set = _deserialize_VM(VM_data)
-            H._restore_supra_nodes(vm_set)
-            H._VM = vm_set
-
-        ek = mm.get('edge_kind', {})
-        el_ser = mm.get('edge_layers', {})
-        if ek:
-            for eid, kind in ek.items():
-                rec = H._edges.get(eid)
-                if rec is None:
-                    continue
-                if kind == 'hyper':
-                    rec.etype = 'hyper'
-                else:
-                    rec.ml_kind = kind
-        if el_ser:
-            H.edge_layers.update(_deserialize_edge_layers(el_ser))
-
-        nl_attrs_ser = mm.get('node_layer_attrs', [])
-        if nl_attrs_ser:
-            H._state_attrs = _deserialize_node_layer_attrs(nl_attrs_ser)
-
-        layer_tuple_attrs_ser = mm.get('layer_tuple_attrs', [])
-        if layer_tuple_attrs_ser:
-            H._layer_attrs = _deserialize_layer_tuple_attrs(layer_tuple_attrs_ser)
-
-        layer_attr_rows = mm.get('layer_attributes', [])
-        if layer_attr_rows:
-            H.layer_attributes = _rows_to_df(layer_attr_rows)
+        restore_multilayer_manifest(
+            H,
+            mm,
+            rows_to_table=_rows_to_df,
+            deserialize_edge_layers=deserialize_edge_layers,
+        )
 
     # BATCH ATTRIBUTES
     with _time('attrs', timings):
         if vertex_attrs_cache:
             for vid, attrs in vertex_attrs_cache.items():
                 if attrs:
-                    try:
-                        H.attrs.set_vertex_attrs(vid, **attrs)
-                    except Exception:  # noqa: BLE001
-                        pass
+                    H.attrs.set_vertex_attrs(vid, **attrs)
 
         if edge_attrs_cache:
             for eid, attrs in edge_attrs_cache.items():
                 if attrs:
-                    try:
-                        H.attrs.set_edge_attrs(eid, **attrs)
-                    except Exception:  # noqa: BLE001
-                        pass
+                    H.attrs.set_edge_attrs(eid, **attrs)
 
     if hyperedge == 'reified':
         with _time('reified', timings):
@@ -916,7 +705,7 @@ def _nx_collect_reified_optimized(
             coeff = d.get(coeff_attr, d.get('__value', 1.0))
             try:
                 coeff = float(coeff)
-            except Exception:  # noqa: BLE001
+            except (TypeError, ValueError):
                 coeff = 1.0
 
             if role == 'head':
@@ -955,6 +744,13 @@ def _from_nx_without_manifest(
     from ..core.graph import AnnNet
 
     H = AnnNet()
+    known_vertices = set()
+
+    def ensure_vertex(vertex_id):
+        if vertex_id in known_vertices:
+            return
+        H.add_vertices(vertex_id)
+        known_vertices.add(vertex_id)
 
     # 1) Nodes + node attributes (verbatim, but skip HE nodes if reified)
     for v, d in nxG.nodes(data=True):
@@ -963,15 +759,9 @@ def _from_nx_without_manifest(
                 continue
             if isinstance(v, str) and str(v).startswith(reify_prefix):
                 continue
-        try:
-            H.add_vertices(v)
-        except Exception:  # noqa: BLE001
-            pass
+        ensure_vertex(v)
         if d:
-            try:
-                H.attrs.set_vertex_attrs(v, **dict(d))
-            except Exception:  # noqa: BLE001
-                pass
+            H.attrs.set_vertex_attrs(v, **dict(d))
 
     # 2) Optionally collect reified hyperedges
     membership_edges = set()
@@ -986,15 +776,9 @@ def _from_nx_without_manifest(
         )
         for eid, directed, head_map, tail_map, he_attrs, _he_node in hyperdefs:
             for x in set(head_map) | set(tail_map):
-                try:
-                    H.add_vertices(x)
-                except Exception:  # noqa: BLE001
-                    pass
+                ensure_vertex(x)
             if directed:
-                try:
-                    H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
-                except Exception:  # noqa: BLE001
-                    pass
+                H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
                 H.attrs.set_edge_attrs(
                     eid,
                     __source_attr={u: {'__value': c} for u, c in head_map.items()},
@@ -1002,10 +786,7 @@ def _from_nx_without_manifest(
                 )
             else:
                 members = list(set(head_map) | set(tail_map))
-                try:
-                    H.add_edges(src=members, edge_id=eid, directed=False)
-                except Exception:  # noqa: BLE001
-                    pass
+                H.add_edges(src=members, edge_id=eid, directed=False)
                 H.attrs.set_edge_attrs(
                     eid,
                     __source_attr={u: {'__value': head_map.get(u, 1.0)} for u in members},
@@ -1016,10 +797,7 @@ def _from_nx_without_manifest(
                 k: v for k, v in (he_attrs or {}).items() if k not in {he_node_flag, he_id_attr}
             }
             if clean_attrs:
-                try:
-                    H.attrs.set_edge_attrs(eid, **clean_attrs)
-                except Exception:  # noqa: BLE001
-                    pass
+                H.attrs.set_edge_attrs(eid, **clean_attrs)
 
     # 3) Binary edges (skip membership edges if we consumed them above)
     is_multi = nxG.is_multigraph()
@@ -1047,46 +825,14 @@ def _from_nx_without_manifest(
 
         e_directed = bool(d.get('directed', is_dir))
         w = d.get('weight', d.get('__weight', 1.0))
-
-        try:
-            H.add_vertices(u)
-            H.add_vertices(v)
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            H.add_edges(u, v, edge_id=eid, directed=e_directed)
-        except Exception:  # noqa: BLE001
-            H.add_edges(u, v, edge_id=eid, directed=True)
-
-        try:
-            H.edge_weights[eid] = float(w)
-        except Exception:  # noqa: BLE001
-            pass
+        ensure_vertex(u)
+        ensure_vertex(v)
+        H.add_edges(u, v, edge_id=eid, directed=e_directed, weight=float(w))
 
         if isinstance(d, dict) and d:
-            try:
-                H.attrs.set_edge_attrs(eid, **dict(d))
-            except Exception:  # noqa: BLE001
-                pass
-
-    try:
-        H.edge_weights[eid] = float(w)
-    except Exception:  # noqa: BLE001
-        pass
-
-    # Copy edge attributes but drop structural keys that shouldn't live in user attrs
-    if isinstance(d, dict) and d:
-        try:
             clean = dict(d)
-            # structural keys used for reconstruction only
-            for k in ('eid', 'weight', '__weight', 'directed'):
+            for k in ('eid', 'id', 'key', 'weight', '__weight', 'directed'):
                 clean.pop(k, None)
             if clean:
-                clean = dict(d)
-                for k in ('eid', 'id', 'key', 'weight', '__weight', 'directed'):
-                    clean.pop(k, None)
-                if clean:
-                    H.attrs.set_edge_attrs(eid, **clean)
-        except Exception:  # noqa: BLE001
-            pass
+                H.attrs.set_edge_attrs(eid, **clean)
     return H

@@ -10,22 +10,20 @@ import narwhals as nw
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
 
-from ..adapters._utils import (
-    _safe_df_to_rows,
-    _serialize_endpoint,
-    _deserialize_endpoint,
-    _serialize_edge_layers,
-    _deserialize_edge_layers,
+from ..adapters._utils import _safe_df_to_rows
+from .._support.serialization import (
+    endpoint_coeff_map,
+    serialize_endpoint,
+    deserialize_endpoint,
+    serialize_edge_layers,
+    deserialize_edge_layers,
+    restore_multilayer_manifest,
+    serialize_multilayer_manifest,
 )
 from .._support.dataframe_backend import (
     dataframe_from_rows,
     _dataframe_read_parquet,
     _dataframe_write_parquet,
-)
-from .._support.serialization_policy import (
-    endpoint_coeff_map as _endpoint_coeff_map,
-    restore_multilayer_manifest as _restore_multilayer_manifest,
-    serialize_multilayer_manifest as _serialize_multilayer_manifest,
 )
 
 
@@ -207,8 +205,8 @@ def to_parquet(graph: AnnNet, path):
             }
             row.update(attrs)
 
-        head_map = _endpoint_coeff_map(row, '__source_attr', S) or dict.fromkeys(S or [], 1.0)
-        tail_map = _endpoint_coeff_map(row, '__target_attr', T) or dict.fromkeys(T or [], 1.0)
+        head_map = endpoint_coeff_map(row, '__source_attr', S) or dict.fromkeys(S or [], 1.0)
+        tail_map = endpoint_coeff_map(row, '__target_attr', T) or dict.fromkeys(T or [], 1.0)
         row.update(
             {
                 'head': list(head_map.keys()),
@@ -228,8 +226,8 @@ def to_parquet(graph: AnnNet, path):
             'kind': 'binary',
             'directed': bool(_is_directed_eid(graph, eid)),
             'weight': _edge_weight(graph, eid),
-            'source': json.dumps(_serialize_endpoint(src), ensure_ascii=False),
-            'target': json.dumps(_serialize_endpoint(tgt), ensure_ascii=False),
+            'source': json.dumps(serialize_endpoint(src), ensure_ascii=False),
+            'target': json.dumps(serialize_endpoint(tgt), ensure_ascii=False),
         }
         attrs = e_attr_map.get(eid)
         if attrs:
@@ -289,10 +287,10 @@ def to_parquet(graph: AnnNet, path):
         'counts': {'V': len(v_rows), 'E': len(e_rows), 'slices': len(L)},
         'schema': {'edges.kind': ['binary', 'hyper']},
         'provenance': {'package': 'annnet'},
-        'multilayer': _serialize_multilayer_manifest(
+        'multilayer': serialize_multilayer_manifest(
             graph,
             table_to_rows=_safe_df_to_rows,
-            serialize_edge_layers=_serialize_edge_layers,
+            serialize_edge_layers=serialize_edge_layers,
         ),
     }
     (path / 'manifest.json').write_text(json.dumps(manifest, indent=2))
@@ -369,8 +367,8 @@ def from_parquet(path) -> AnnNet:
         # Build minimal dicts for bulk add
         edge_rows = (
             {
-                'source': _deserialize_endpoint(u),
-                'target': _deserialize_endpoint(v),
+                'source': deserialize_endpoint(u),
+                'target': deserialize_endpoint(v),
                 'edge_id': eid,
                 'edge_directed': bool(d),
                 'weight': float(w),
@@ -407,8 +405,8 @@ def from_parquet(path) -> AnnNet:
         for rec in binary:
             rec = dict(rec)
             eid = rec.pop('edge_id')
-            u = _deserialize_endpoint(rec.pop('source', None))
-            v = _deserialize_endpoint(rec.pop('target', None))
+            u = deserialize_endpoint(rec.pop('source', None))
+            v = deserialize_endpoint(rec.pop('target', None))
             d = bool(rec.pop('directed', True))
             w = float(rec.pop('weight', 1.0))
             if u is None or v is None:
@@ -584,11 +582,11 @@ def from_parquet(path) -> AnnNet:
     manifest_path = path / 'manifest.json'
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text())
-        _restore_multilayer_manifest(
+        restore_multilayer_manifest(
             H,
             manifest.get('multilayer', {}),
             rows_to_table=_build_dataframe_from_rows,
-            deserialize_edge_layers=_deserialize_edge_layers,
+            deserialize_edge_layers=deserialize_edge_layers,
         )
 
     return H
