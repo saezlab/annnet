@@ -1,28 +1,43 @@
+"""
+AnnNet-igraph adapter for AnnNet.
+
+Provides:
+    to_igraph(G)      -> igraph.Graph
+    from_igraph(igG)  -> AnnNet
+
+igraph natively represents:
+    - vertices
+    - binary edges
+    - graph, vertex, and edge attributes
+
+AnnNet-specific structures such as hyperedges, slices, multilayer metadata,
+per-edge directedness, and richer attribute tables are preserved through
+manifest-style graph attributes where possible.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .._support.graph_records import (
-    _rows_like,
-    _rows_to_df,
+from ._common import (
     _attrs_to_dict,
     _is_directed_eid,
-    _serialize_value,
     _iter_edge_records,
-)
-from .._support.serialization import (
-    endpoint_coeff_map,
-    serialize_edge_layers,
+    _rows_like,
+    _rows_to_df,
+    _serialize_value,
     collect_slice_manifest,
-    restore_slice_manifest,
+    dataframe_to_rows,
     deserialize_edge_layers,
+    endpoint_coeff_map,
     restore_multilayer_manifest,
+    restore_slice_manifest,
+    serialize_edge_layers,
     serialize_multilayer_manifest,
 )
-from .._support.dataframe_backend import dataframe_to_rows
 
 if TYPE_CHECKING:
-    from ..core.graph import AnnNet
+    from ..core import AnnNet
 
 
 def _export_binary_graph(
@@ -530,7 +545,7 @@ def from_igraph(
       When "reified", also detect hyperedge nodes in igG and rebuild true hyperedges
       that are NOT present in the manifest.
     """
-    from ..core.graph import AnnNet
+    from ..core import AnnNet
 
     H = AnnNet()
     known_vertices = set()
@@ -799,7 +814,7 @@ def _from_ig_without_manifest(
     hyperedge: "none" | "reified"
       When "reified", rebuild true hyperedges and skip membership edges from binary import.
     """
-    from ..core.graph import AnnNet
+    from ..core import AnnNet
 
     H = AnnNet()
     known_vertices = set()

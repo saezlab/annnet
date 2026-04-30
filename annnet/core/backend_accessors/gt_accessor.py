@@ -1,6 +1,12 @@
-## graph-tool backend accessor
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+import inspect
 
 from ._base import _BackendAccessorBase
+
+if TYPE_CHECKING:
+    from ..graph import AnnNet
 
 
 class _GTBackendAccessor(_BackendAccessorBase):
@@ -228,8 +234,6 @@ class _GTNamespaceProxy:
             gtG = None
 
             try:
-                import inspect
-
                 sig = inspect.signature(func)
             except Exception:  # noqa: BLE001
                 sig = None

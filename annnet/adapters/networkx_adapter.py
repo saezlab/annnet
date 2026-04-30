@@ -1,38 +1,54 @@
+"""
+AnnNet-NetworkX adapter for AnnNet.
+
+Provides:
+    to_nx(G)      -> networkx.Graph, networkx.DiGraph, networkx.MultiGraph, or networkx.MultiDiGraph
+    from_nx(nxG)  -> AnnNet
+
+NetworkX natively represents:
+    - vertices/nodes
+    - binary edges
+    - graph, node, and edge attributes
+    - directed, undirected, simple, and multigraph structures
+
+AnnNet-specific structures such as hyperedges, slices, multilayer metadata,
+per-edge directedness, and richer attribute tables are preserved through
+manifest-style graph attributes where possible.
+"""
+
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
 try:
     import networkx as nx
 except ModuleNotFoundError as e:
     raise ModuleNotFoundError(
         "Optional dependency 'networkx' is not installed. "
-        'Install with: pip install annnet[networkx]'
+        "Install with: pip install annnet[networkx]"
     ) from e
 
-if TYPE_CHECKING:
-    from ..core.graph import AnnNet
-
-from .._support.graph_records import (
-    _rows_like,
-    _rows_to_df,
+from ._common import (
     _attrs_to_dict,
     _is_directed_eid,
-    _serialize_value,
     _iter_edge_records,
-)
-from .._support.serialization import (
-    endpoint_coeff_map,
-    serialize_edge_layers,
+    _rows_like,
+    _rows_to_df,
+    _serialize_value,
     collect_slice_manifest,
-    restore_slice_manifest,
+    dataframe_to_rows,
     deserialize_edge_layers,
+    endpoint_coeff_map,
     restore_multilayer_manifest,
+    restore_slice_manifest,
+    serialize_edge_layers,
     serialize_multilayer_manifest,
 )
-from .._support.dataframe_backend import dataframe_to_rows
+
+if TYPE_CHECKING:
+    from ..core import AnnNet
 
 
 @contextmanager
@@ -463,7 +479,7 @@ def from_nx(
       When "reified", also detect hyperedge nodes in nxG and rebuild true hyperedges
       (in addition to those specified in the manifest).
     """
-    from ..core.graph import AnnNet
+    from ..core import AnnNet
 
     H = AnnNet()
     timings = {}
@@ -741,7 +757,7 @@ def _from_nx_without_manifest(
       When "reified", detect hyperedge nodes + membership edges and rebuild true hyperedges.
     """
 
-    from ..core.graph import AnnNet
+    from ..core import AnnNet
 
     H = AnnNet()
     known_vertices = set()

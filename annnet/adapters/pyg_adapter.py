@@ -1,3 +1,18 @@
+"""
+AnnNet-PyTorch Geometric adapter for AnnNet.
+
+Provides:
+    to_pyg(G) -> torch_geometric.data.HeteroData
+
+PyTorch Geometric represents graph data as tensors. This adapter exports AnnNet
+vertices and edges into a heterogeneous graph structure suitable for downstream
+GNN workflows.
+
+AnnNet-specific structures such as slices, multilayer metadata, hyperedge
+semantics, and rich attribute tables are only exported where they can be mapped
+to tensor-compatible node, edge, or graph-level fields.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
@@ -6,12 +21,14 @@ import numpy as np
 import torch
 from torch_geometric.data import HeteroData
 
-from .._support.graph_records import _iter_vertex_ids
-from .._support.dataframe_backend import dataframe_to_rows
+from ._common import (
+    _iter_vertex_ids,
+    dataframe_to_rows,
+)
 
 if TYPE_CHECKING:
-    from ..core.graph import AnnNet
-
+    from ..core import AnnNet
+    
 
 def _rows_to_tensor(
     rows: list[dict],

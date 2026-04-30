@@ -1054,7 +1054,7 @@ def write_dot_graph(
 
     lines = [
         "digraph G {",
-        '  graph [rankdir="LR", bgcolor="white", compound=true, pad=0.3, nodesep=0.45, ranksep=0.8];',
+        '  graph [rankdir="LR", bgcolor="white", compound=true, splines=false, pad=0.3, nodesep=0.45, ranksep=0.8];',
         '  node [shape="box", style="rounded,filled", fontname="Helvetica", fontsize=10, color="#64748b", fillcolor="white"];',
         '  edge [fontname="Helvetica", fontsize=9, color="#64748b", arrowsize=0.7];',
         "",
@@ -1169,7 +1169,7 @@ def write_symbol_import_dot(
 
     lines = [
         "digraph G {",
-        '  graph [rankdir="LR", bgcolor="white", compound=true, pad=0.3, nodesep=0.35, ranksep=1.0];',
+        '  graph [rankdir="LR", bgcolor="white", compound=true, splines=false, pad=0.3, nodesep=0.35, ranksep=1.0];',
         '  node [shape="box", style="rounded,filled", fontname="Helvetica", fontsize=9, color="#64748b", fillcolor="white"];',
         '  edge [fontname="Helvetica", fontsize=8, color="#64748b", arrowsize=0.6];',
         "",
@@ -1283,10 +1283,24 @@ def render_svg(dot_file: Path) -> None:
         return
 
     svg_file = dot_file.with_suffix(".svg")
-    subprocess.run(
+
+    commands = [
         [dot, "-Tsvg", str(dot_file), "-o", str(svg_file)],
-        check=True,
-    )
+        [dot, "-Gsplines=false", "-Tsvg", str(dot_file), "-o", str(svg_file)],
+        [dot, "-Gsplines=polyline", "-Tsvg", str(dot_file), "-o", str(svg_file)],
+    ]
+
+    for i, cmd in enumerate(commands, start=1):
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            if i > 1:
+                print(f"[ok] Rendered {svg_file.name} with Graphviz fallback {i}")
+            return
+        except subprocess.CalledProcessError as err:
+            if i == len(commands):
+                print(f"[warn] Could not render {dot_file.name} to SVG.")
+                print(err.stderr.strip())
+                return
 
 
 # -----------------------------

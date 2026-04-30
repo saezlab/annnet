@@ -20,18 +20,25 @@ try:
     import graph_tool.all as gt
 except ImportError:
     gt = None
-from ..core.graph import AnnNet
-from .._support.graph_records import _rows_to_df, _iter_vertex_ids, _iter_edge_records
-from .._support.serialization import (
-    serialize_edge_layers,
+
+from ._common import (
+    _iter_edge_records,
+    _iter_vertex_ids,
+    _rows_to_df,
     collect_slice_manifest,
-    restore_slice_manifest,
+    dataframe_to_rows,
     deserialize_edge_layers,
+    empty_dataframe,
     restore_multilayer_manifest,
+    restore_slice_manifest,
+    serialize_edge_layers,
     serialize_multilayer_manifest,
 )
-from .._support.dataframe_backend import empty_dataframe, dataframe_to_rows
 
+if TYPE_CHECKING:
+    from ..core import AnnNet
+
+    
 # Core adapter: to_graphtool
 
 
@@ -263,6 +270,8 @@ def from_graphtool(
     """
     if gt is None:
         raise RuntimeError('graph-tool is not installed; cannot call from_graphtool')
+
+    from ..core import AnnNet
 
     directed = bool(gtG.is_directed())
     G = AnnNet(directed=directed)
