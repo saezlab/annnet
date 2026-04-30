@@ -20,19 +20,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ._common import (
-    _attrs_to_dict,
-    _is_directed_eid,
-    _iter_edge_records,
     _rows_like,
     _rows_to_df,
+    _attrs_to_dict,
+    _is_directed_eid,
     _serialize_value,
-    collect_slice_manifest,
     dataframe_to_rows,
-    deserialize_edge_layers,
+    _iter_edge_records,
     endpoint_coeff_map,
-    restore_multilayer_manifest,
-    restore_slice_manifest,
     serialize_edge_layers,
+    collect_slice_manifest,
+    restore_slice_manifest,
+    deserialize_edge_layers,
+    restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
 

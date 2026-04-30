@@ -1,3 +1,20 @@
+"""
+GraphML/GEXF import and export helpers for AnnNet.
+
+Provides:
+    to_graphml(G, path, ...)   -> None
+    from_graphml(path, ...)    -> AnnNet
+    to_gexf(G, path, ...)      -> None
+    from_gexf(path, ...)       -> AnnNet
+
+GraphML and GEXF support are implemented through NetworkX because NetworkX
+already owns mature readers and writers for these formats. This module is
+therefore an intentional IO-to-adapter bridge: AnnNet is first projected to a
+NetworkX graph, then NetworkX handles the file format.
+
+This is an accepted boundary exception.
+"""
+
 from __future__ import annotations
 
 import os
@@ -8,9 +25,15 @@ from typing import TYPE_CHECKING
 
 import networkx as nx
 
+from ..adapters.networkx_adapter import (
+    to_nx,
+    from_nx,
+    from_nx_without_manifest,
+)
+
 if TYPE_CHECKING:
-    from ..core.graph import AnnNet
-from ..adapters.networkx_adapter import to_nx, from_nx, from_nx_without_manifest
+    from ..core import AnnNet
+
 
 _BOOL = {'true': True, 'false': False}
 _NUM_RE = re.compile(r'^[+-]?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$')

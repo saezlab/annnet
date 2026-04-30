@@ -443,13 +443,6 @@ class TestFromSbmlIntegration(unittest.TestCase):
         self.assertAlmostEqual(stoich['A'], -1.0)
         self.assertAlmostEqual(stoich['B'], 1.0)
 
-    def test_from_sbml_raises_if_libsbml_missing(self):
-        """from_sbml raises ImportError if libsbml is not available."""
-        G = DummyGraph()
-        with patch.object(sa, 'libsbml', None):
-            with self.assertRaises(ImportError):
-                sa.from_sbml('dummy.xml', graph=G)
-
 
 if __name__ == '__main__':
     unittest.main()

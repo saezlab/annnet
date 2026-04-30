@@ -28,7 +28,7 @@ from ._common import (
 
 if TYPE_CHECKING:
     from ..core import AnnNet
-    
+
 
 def _rows_to_tensor(
     rows: list[dict],

@@ -1,17 +1,26 @@
+"""
+JSON import/export helpers for AnnNet.
+
+Provides:
+    to_json(G, ...)       -> dict
+    from_json(data, ...)  -> AnnNet
+    write_ndjson(...)     -> None
+
+This module serializes AnnNet graphs to plain JSON-compatible structures and
+restores them back into AnnNet. Shared dataframe, graph-record, and manifest
+serialization helpers are routed through the IO common façade.
+"""
+
 from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from ..core.graph import AnnNet
-
-from .._support.graph_records import (
+from ._common import (
     _rows_to_df,
     _is_directed_eid,
+    dataframe_to_rows,
     _iter_edge_records,
-)
-from .._support.serialization import (
     endpoint_coeff_map,
     serialize_endpoint,
     deserialize_endpoint,
@@ -20,7 +29,9 @@ from .._support.serialization import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
-from .._support.dataframe_backend import dataframe_to_rows
+
+if TYPE_CHECKING:
+    from ..core import AnnNet
 
 
 def _edge_endpoint_sets(rec):
@@ -192,7 +203,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
 
 def from_json(path) -> AnnNet:
     """Load AnnNet from node-link JSON + x-extensions (lossless wrt schema above)."""
-    from ..core.graph import AnnNet
+    from ..core import AnnNet
 
     with open(path, encoding='utf-8') as f:
         doc = json.load(f)

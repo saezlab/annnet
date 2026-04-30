@@ -1,15 +1,31 @@
+"""SBML ingestion helper for AnnNet.
+
+Provides:
+    from_sbml(path, graph=None, slice="default", preserve_stoichiometry=True) -> AnnNet
+
+This module reads SBML through python-libsbml when available and converts
+stoichiometric reactions into directed AnnNet hyperedges. Reactants and products
+are represented as edge endpoint sets, with optional stoichiometric coefficients
+stored on the edge.
+
+Boundary reactions are represented using dedicated placeholder vertices.
+"""
+
 from __future__ import annotations
 
 import warnings
 
-from ..core.graph import AnnNet
+from ..core import AnnNet
 
 warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
 
 try:
     import libsbml
-except ImportError:
-    libsbml = None
+except ImportError as exc:
+    raise ImportError(
+        'python-libsbml is required for SBML import. Install with `pip install python-libsbml`.'
+    ) from exc
+
 
 BOUNDARY_SOURCE = '__BOUNDARY_SOURCE__'
 BOUNDARY_SINK = '__BOUNDARY_SINK__'
@@ -38,11 +54,6 @@ def _ensure_boundary_vertices(G, slice: str) -> None:
 
 
 def _read_sbml_model(path: str):
-    if libsbml is None:
-        raise ImportError(
-            'python-libsbml is required for SBML import. Install with `pip install python-libsbml`.'
-        )
-
     doc = libsbml.readSBML(path)
     if doc is None:
         raise ValueError(f'libSBML failed to read file: {path}')
@@ -173,12 +184,7 @@ def _graph_from_sbml_model(
     Edge attrs: reversible, name, sbo_term, kinetic_law, local_params,
                 modifier_roles, compartment, meta_id, is_boundary, …
     """
-    if graph is None:
-        if AnnNet is None:
-            raise RuntimeError('AnnNet class not importable; pass `graph=` explicitly.')
-        G = AnnNet(directed=True)
-    else:
-        G = graph
+    G = AnnNet(directed=True) if graph is None else graph
 
     _register_compartments(G, model, slice)
     sid_to_compartment = _register_species(G, model, slice)

@@ -1,11 +1,22 @@
+"""
+OmniPath ingestion helper for AnnNet.
+
+Provides:
+    from_omnipath(...) -> AnnNet
+
+This module loads OmniPath-style interaction tables and converts them into an
+AnnNet graph. Table handling is routed through AnnNet's dataframe backend so
+the implementation does not depend directly on a specific dataframe library.
+"""
+
 import time
 
 import numpy as np
-import narwhals as nw
 
-from ..core.graph import AnnNet
-from .._support.dataframe_backend import (
+from ..core import AnnNet
+from ._common import (
     dataframe_height,
+    dataframe_columns,
     dataframe_to_rows,
     dataframe_read_tsv,
 )
@@ -48,8 +59,8 @@ def from_omnipath(
     ----------
     df : DataFrame-like, optional
         If provided, skip the OmniPath network request and build from this table.
-        Must contain at least source and target columns. Accepts Polars, pandas,
-        or any Narwhals-compatible DataFrame.
+        Must contain at least source and target columns. Accepts any dataframe-like
+        object supported by AnnNet's dataframe backend.
     dataset : str, optional
         OmniPath interaction dataset to fetch. One of:
         ``"omnipath"`` (default, curated core), ``"all"``, ``"posttranslational"``,
@@ -131,9 +142,9 @@ def from_omnipath(
         - Vertices: one per unique gene symbol encountered as source or target.
         - Edges: one per interaction row, with incidence matrix weights encoding
           direction (+w source, −w target for directed; +w both for undirected).
-        - ``edge_attributes``: Polars DF with one row per edge and one column
+        - ``edge_attributes``: dataframe-backed table with one row per edge and one column
           per entry in ``edge_attr_cols``.
-        - ``vertex_attributes``: Polars DF with one row per vertex and one column
+        - ``vertex_attributes``: dataframe-backed table with one row per vertex and one column
           per ``(source:label)`` annotation pair from the requested resources.
 
     Notes
@@ -295,9 +306,7 @@ def from_omnipath(
     # column resolution
     t_cols0 = time.perf_counter()
 
-    ndf = nw.from_native(df, eager_only=True)
-    native = nw.to_native(ndf)
-    cols = list(getattr(native, 'columns', ndf.columns))
+    cols = dataframe_columns(df)
 
     if source_col is None:
         source_col = _pick_col(
@@ -348,23 +357,24 @@ def from_omnipath(
 
     # AnnNet init
     t_init0 = time.perf_counter()
+
+    n_rows = dataframe_height(df)
     G = AnnNet(
         directed=default_directed,
         annotations_backend=annotations_backend,
-        n=len(ndf),
-        e=len(ndf),
+        n=n_rows,
+        e=n_rows,
         **graph_kwargs,
     )
     G._history_enabled = False
     print(
-        f'[timing] AnnNet init:          {time.perf_counter() - t_init0:.3f}s  (pre-sized n={len(ndf)} e={len(ndf)})'
+        f'[timing] AnnNet init:          {time.perf_counter() - t_init0:.3f}s  (pre-sized n={n_rows} e={n_rows})'
     )
 
-    # _to_dicts
     t_dicts0 = time.perf_counter()
-    rows = dataframe_to_rows(native)
+    rows = dataframe_to_rows(df)
     print(
-        f'[timing] _to_dicts:            {time.perf_counter() - t_dicts0:.3f}s  ({len(rows)} rows)'
+        f'[timing] to_rows:              {time.perf_counter() - t_dicts0:.3f}s  ({len(rows)} rows)'
     )
 
     # bulk list build
@@ -430,11 +440,7 @@ def from_omnipath(
 
         # 1) caller passed a pre-loaded DF directly
         if vertex_annotations_df is not None:
-            try:
-                ann_raw = nw.from_native(vertex_annotations_df, eager_only=True)
-                ann_raw = nw.to_native(ann_raw)  # keep as native (polars or pandas)
-            except Exception as e:  # noqa: BLE001
-                print(f'[warning] vertex_annotations_df could not be read: {e}')
+            ann_raw = vertex_annotations_df
 
         # 2) caller passed a local file path
         elif vertex_annotations_path is not None:

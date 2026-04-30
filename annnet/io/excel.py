@@ -1,8 +1,19 @@
+"""
+Excel ingestion helper for AnnNet.
+
+Provides:
+    from_excel(path, ...) -> AnnNet
+
+Excel files are read through AnnNet's dataframe backend and then delegated to
+the dataframe/CSV ingestion path, so schema handling remains centralized in
+csv_format.from_dataframe.
+"""
+
 from __future__ import annotations
 
 import pathlib
 
-from .._support.dataframe_backend import dataframe_read_excel
+from ._common import dataframe_read_excel
 
 
 def from_excel(

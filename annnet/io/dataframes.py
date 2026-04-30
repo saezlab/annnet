@@ -1,12 +1,27 @@
+"""
+DataFrame import/export helpers for AnnNet.
+
+Provides:
+    to_dataframes(G)      -> dict[str, DataFrame]
+    from_dataframes(...)  -> AnnNet
+
+This module converts AnnNet graphs to and from dataframe-backed tables using
+AnnNet's configured dataframe backend. It accepts dataframe-like inputs through
+the shared dataframe_backend abstraction rather than depending directly on a
+specific dataframe library.
+"""
+
 from __future__ import annotations
 
 from typing import Any
 
-import narwhals as nw
-from narwhals.typing import IntoDataFrame
-
-from ..core.graph import AnnNet
-from .._support.dataframe_backend import dataframe_height, dataframe_to_rows, dataframe_from_rows
+from ..core import AnnNet
+from ._common import (
+    dataframe_height,
+    dataframe_columns,
+    dataframe_to_rows,
+    dataframe_from_rows,
+)
 
 
 def _binary_edge_rows(graph: AnnNet, edge_attrs: dict, *, public_only: bool):
@@ -245,22 +260,12 @@ def to_dataframes(
     return result
 
 
-def _to_dicts(df: nw.DataFrame[Any]) -> list[dict[str, Any]]:
-    """Convert narwhals DataFrame to list of dicts."""
-    return dataframe_to_rows(nw.to_native(df))
-
-
-def _get_height(df: nw.DataFrame[Any]) -> int:
-    """Get row count from narwhals DataFrame."""
-    return dataframe_height(nw.to_native(df))
-
-
 def from_dataframes(
-    nodes: IntoDataFrame | None = None,
-    edges: IntoDataFrame | None = None,
-    hyperedges: IntoDataFrame | None = None,
-    slices: IntoDataFrame | None = None,
-    slice_weights: IntoDataFrame | None = None,
+    nodes: Any | None = None,
+    edges: Any | None = None,
+    hyperedges: Any | None = None,
+    slices: Any | None = None,
+    slice_weights: Any | None = None,
     *,
     directed: bool | None = None,
     exploded_hyperedges: bool = False,
@@ -305,22 +310,20 @@ def from_dataframes(
 
     # 1. Add vertices
     if nodes is not None:
-        nodes_nw = nw.from_native(nodes, eager_only=True)
-        if _get_height(nodes_nw) > 0:
-            if 'vertex_id' not in nodes_nw.columns:
+        if dataframe_height(nodes) > 0:
+            if 'vertex_id' not in dataframe_columns(nodes):
                 raise ValueError("nodes DataFrame must have 'vertex_id' column")
 
-            G.add_vertices_bulk(_to_dicts(nodes_nw))
+            G.add_vertices_bulk(dataframe_to_rows(nodes))
 
     # 2. Add binary edges
     if edges is not None:
-        edges_nw = nw.from_native(edges, eager_only=True)
-        if _get_height(edges_nw) > 0:
-            if 'source' not in edges_nw.columns or 'target' not in edges_nw.columns:
+        if dataframe_height(edges) > 0:
+            if 'source' not in dataframe_columns(edges) or 'target' not in dataframe_columns(edges):
                 raise ValueError("edges DataFrame must have 'source' and 'target' columns")
 
             edge_rows = []
-            for row in _to_dicts(edges_nw):
+            for row in dataframe_to_rows(edges):
                 src = row.pop('source')
                 tgt = row.pop('target')
                 eid = row.pop('edge_id', None)
@@ -344,20 +347,18 @@ def from_dataframes(
 
     # 3. Add hyperedges
     if hyperedges is not None:
-        hyperedges_nw = nw.from_native(hyperedges, eager_only=True)
-        if _get_height(hyperedges_nw) > 0:
+        if dataframe_height(hyperedges) > 0:
             if exploded_hyperedges:
-                if (
-                    'edge_id' not in hyperedges_nw.columns
-                    or 'vertex_id' not in hyperedges_nw.columns
-                ):
+                if 'edge_id' not in dataframe_columns(
+                    hyperedges
+                ) or 'vertex_id' not in dataframe_columns(hyperedges):
                     raise ValueError(
                         "Exploded hyperedges must have 'edge_id' and 'vertex_id' columns"
                     )
 
                 # Group by edge_id - need to collect all rows first
                 grouped: dict[str, dict[str, list[Any]]] = {}
-                for row in _to_dicts(hyperedges_nw):
+                for row in dataframe_to_rows(hyperedges):
                     eid = row['edge_id']
                     if eid not in grouped:
                         grouped[eid] = {'vertices': [], 'roles': [], 'directed': [], 'weights': []}
@@ -390,10 +391,10 @@ def from_dataframes(
                             weight=weight,
                         )
             else:
-                if 'edge_id' not in hyperedges_nw.columns:
+                if 'edge_id' not in dataframe_columns(hyperedges):
                     raise ValueError("hyperedges DataFrame must have 'edge_id' column")
 
-                for row in _to_dicts(hyperedges_nw):
+                for row in dataframe_to_rows(hyperedges):
                     eid = row.pop('edge_id')
                     directed_he = row.pop('directed', False)
                     weight = row.pop('weight', 1.0)
@@ -422,14 +423,15 @@ def from_dataframes(
 
     # 4. Add slice memberships
     if slices is not None:
-        slices_nw = nw.from_native(slices, eager_only=True)
-        if _get_height(slices_nw) > 0:
-            if 'slice_id' not in slices_nw.columns or 'edge_id' not in slices_nw.columns:
+        if dataframe_height(slices) > 0:
+            if 'slice_id' not in dataframe_columns(slices) or 'edge_id' not in dataframe_columns(
+                slices
+            ):
                 raise ValueError("slices DataFrame must have 'slice_id' and 'edge_id' columns")
 
             existing_slices = set(G.slices.list_slices(include_default=True))
             existing_edges = set(G.edge_definitions) | set(G.hyperedge_definitions)
-            for row in _to_dicts(slices_nw):
+            for row in dataframe_to_rows(slices):
                 lid = row['slice_id']
                 eid = row['edge_id']
 
@@ -442,13 +444,12 @@ def from_dataframes(
 
     # 5. Add per-slice weights
     if slice_weights is not None:
-        slice_weights_nw = nw.from_native(slice_weights, eager_only=True)
-        if _get_height(slice_weights_nw) > 0:
-            cols = set(slice_weights_nw.columns)
+        if dataframe_height(slice_weights) > 0:
+            cols = set(dataframe_columns(slice_weights))
             if {'slice_id', 'edge_id', 'weight'}.issubset(cols):
                 existing_slices = set(G.slices.list_slices(include_default=True))
                 existing_edges = set(G.edge_definitions) | set(G.hyperedge_definitions)
-                for row in _to_dicts(slice_weights_nw):
+                for row in dataframe_to_rows(slice_weights):
                     lid = row['slice_id']
                     eid = row['edge_id']
                     weight = row['weight']

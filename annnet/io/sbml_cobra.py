@@ -1,12 +1,14 @@
-"""SBML (Systems Biology Markup Language) → AnnNet adapter
+"""SBML and COBRA model ingestion helpers for AnnNet.
 
-------------------------------------------------------
-Targets the provided `AnnNet` API.
+Provides:
+    from_sbml(path, graph=None, slice="default", preserve_stoichiometry=True) -> AnnNet
+    from_cobra_model(model, graph=None, slice="default", preserve_stoichiometry=True) -> AnnNet
 
-Two entry points:
-  - from_sbml(path, graph=None, slice="default", preserve_stoichiometry=True)
-  - from_cobra_model(model, graph=None, slice="default", preserve_stoichiometry=True)
+This module converts stoichiometric models into directed AnnNet hyperedges.
+Reactants and products are represented as edge endpoint sets, with optional
+stoichiometric coefficients stored on the edge.
 
+Boundary reactions are represented using dedicated placeholder vertices.
 """
 
 from __future__ import annotations
@@ -16,7 +18,16 @@ from collections.abc import Iterable, Sequence
 
 import numpy as np
 
-from ..core.graph import AnnNet
+from ..core import AnnNet
+
+try:
+    from cobra.io import read_sbml_model  # type: ignore
+    from cobra.util.array import create_stoichiometric_matrix  # type: ignore
+except ImportError as e:  # pragma: no cover
+    raise ImportError(
+        'COBRApy not installed; install cobra or use the libsbml-based IO module instead.'
+    ) from e
+
 
 warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
 
@@ -44,12 +55,7 @@ def _graph_from_stoich(
     slice: str = 'default',
     preserve_stoichiometry: bool = True,
 ) -> AnnNet:
-    if graph is None:
-        if AnnNet is None:
-            raise RuntimeError('AnnNet class not importable; pass `graph=` explicitly.')
-        G = AnnNet(directed=True)
-    else:
-        G = graph
+    G = AnnNet(directed=True) if graph is None else graph
 
     # Ensure all species + boundary placeholders exist
     G.add_vertices_bulk(list(metabolite_ids), slice=slice)
@@ -124,10 +130,6 @@ def from_cobra_model(
 
     Edge attributes added: name, default_lb, default_ub, gpr (Gene-Protein-Reaction rule [GPR]).
     """
-    try:
-        from cobra.util.array import create_stoichiometric_matrix  # type: ignore
-    except ImportError as e:  # pragma: no cover
-        raise ImportError('COBRApy not installed (needed for stoichiometric matrix).') from e
 
     S = create_stoichiometric_matrix(model)
     rxn_ids = [rxn.id for rxn in model.reactions]
@@ -161,11 +163,7 @@ def from_sbml(
     slice: str = 'default',
     preserve_stoichiometry: bool = True,
 ) -> AnnNet:
-    """Read SBML using COBRApy if available; falls back to python-libsbml (if you extend this file)."""
-    try:
-        from cobra.io import read_sbml_model  # type: ignore
-    except ImportError as e:  # pragma: no cover
-        raise ImportError('COBRApy not installed; install cobra to read SBML.') from e
+    """Read SBML using COBRApy if available."""
 
     model = read_sbml_model(path)
     return from_cobra_model(

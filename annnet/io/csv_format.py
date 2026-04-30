@@ -40,8 +40,8 @@ from collections.abc import Iterable
 
 import numpy as np
 
-from ..core.graph import AnnNet
-from .._support.dataframe_backend import (
+from ..core import AnnNet
+from ._common import (
     dataframe_width,
     dataframe_height,
     dataframe_columns,

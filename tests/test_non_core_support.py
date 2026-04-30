@@ -16,7 +16,7 @@ from annnet._support import plotting_backend as _plotting_backend
 from annnet._support import dataframe_backend as df_backend
 from annnet._support import graph_records
 from annnet._support import serialization as serialization_support
-from annnet.io._utils import _read_archive, _write_archive
+from annnet.io._archive import _read_archive, _write_archive
 
 
 class ExampleEnum(Enum):

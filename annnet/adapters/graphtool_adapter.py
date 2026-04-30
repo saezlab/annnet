@@ -14,7 +14,7 @@ all attribute tables, etc.) is preserved in `manifest`.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 try:
     import graph_tool.all as gt
@@ -22,23 +22,23 @@ except ImportError:
     gt = None
 
 from ._common import (
-    _iter_edge_records,
-    _iter_vertex_ids,
     _rows_to_df,
-    collect_slice_manifest,
-    dataframe_to_rows,
-    deserialize_edge_layers,
     empty_dataframe,
-    restore_multilayer_manifest,
-    restore_slice_manifest,
+    _iter_vertex_ids,
+    dataframe_to_rows,
+    _iter_edge_records,
     serialize_edge_layers,
+    collect_slice_manifest,
+    restore_slice_manifest,
+    deserialize_edge_layers,
+    restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
 
 if TYPE_CHECKING:
     from ..core import AnnNet
 
-    
+
 # Core adapter: to_graphtool
 
 

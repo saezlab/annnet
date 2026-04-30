@@ -1,11 +1,24 @@
+"""SIF import/export helpers for AnnNet.
+
+Provides:
+    to_sif(G, path, ...)      -> None | tuple[None, dict]
+    from_sif(path, ...)       -> AnnNet
+
+SIF is a simple binary interaction format. Standard export is necessarily
+lossy, while lossless mode stores AnnNet-specific structures such as
+hyperedges, slices, multilayer metadata, edge weights, and attributes in a
+separate manifest.
+"""
+
 from __future__ import annotations
 
 import json
 from collections.abc import Iterable
 
-from ..core.graph import AnnNet
-from .._support.graph_records import _rows_to_df
-from .._support.serialization import (
+from ..core import AnnNet
+from ._common import (
+    _rows_to_df,
+    dataframe_to_rows,
     serialize_endpoint,
     deserialize_endpoint,
     serialize_edge_layers,
@@ -13,7 +26,6 @@ from .._support.serialization import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
-from .._support.dataframe_backend import dataframe_to_rows
 
 
 def _split_sif_line(line: str, delimiter: str | None) -> list[str]:

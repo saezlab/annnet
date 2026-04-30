@@ -456,19 +456,6 @@ def test_vertex_annotation_sources_filter_is_applied():
     }
 
 
-def test_vertex_annotations_df_read_failure_warns_and_continues(capsys):
-    class BadNative:
-        pass
-
-    df = pd.DataFrame({'source': ['A'], 'target': ['B']})
-
-    g = mod.from_omnipath(df=df, vertex_annotations_df=BadNative())
-    captured = capsys.readouterr()
-
-    assert '[warning] vertex_annotations_df could not be read:' in captured.out
-    assert len(g.added_vertices_calls) == 1
-
-
 def test_vertex_annotations_path_uses_read_tsv(monkeypatch, tmp_path):
     edges = pd.DataFrame({'source': ['EGFR'], 'target': ['TP53']})
     ann = pd.DataFrame(
@@ -880,7 +867,7 @@ def test_prints_timing_lines(capsys):
     assert '[timing] fetch/receive df:' in out
     assert '[timing] column resolution:' in out
     assert '[timing] AnnNet init:' in out
-    assert '[timing] _to_dicts:' in out
+    assert '[timing] to_rows:' in out
     assert '[timing] bulk list build:' in out
     assert '[timing] add_edges_bulk:' in out
     assert 'vertices=' in out

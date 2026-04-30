@@ -19,21 +19,22 @@ import base64
 from typing import TYPE_CHECKING, Any
 from binascii import Error as BinasciiError
 
-if TYPE_CHECKING:
-    from ..core.graph import AnnNet
-from ..core.graph import EntityRecord
-from .._support.graph_records import _rows_to_df, _iter_vertex_ids
-from .._support.serialization import (
+from ..core import EntityRecord
+from ._common import (
+    _rows_to_df,
+    _iter_vertex_ids,
+    dataframe_columns,
+    dataframe_to_rows,
     serialize_edge_layers,
     deserialize_edge_layers,
+    rename_dataframe_columns,
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
-from .._support.dataframe_backend import (
-    dataframe_columns,
-    dataframe_to_rows,
-    rename_dataframe_columns,
-)
+
+if TYPE_CHECKING:
+    from ..core import AnnNet
+
 
 # --- Helpers ---
 CX_STYLE_KEY = '__cx_style__'
@@ -789,7 +790,7 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
 
     # Construct AnnNet
 
-    from ..core.graph import AnnNet
+    from ..core import AnnNet
 
     G = AnnNet()
 

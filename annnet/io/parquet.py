@@ -1,3 +1,15 @@
+"""
+Parquet import/export helpers for AnnNet.
+
+Provides:
+    to_parquet(G, path, ...)   -> None
+    from_parquet(path, ...)    -> AnnNet
+
+This module stores AnnNet graph tables and metadata as Parquet-backed files.
+Dataframe construction and Parquet IO are routed through AnnNet's dataframe
+backend via the IO common façade.
+"""
+
 from __future__ import annotations
 
 import json
@@ -5,37 +17,28 @@ import math
 from typing import TYPE_CHECKING
 from pathlib import Path
 
-import narwhals as nw
-
-if TYPE_CHECKING:
-    from ..core.graph import AnnNet
-
-from .._support.graph_records import _rows_to_df
-from .._support.serialization import (
+from ._common import (
+    _rows_to_df,
+    empty_dataframe,
+    dataframe_to_rows,
     endpoint_coeff_map,
     serialize_endpoint,
     deserialize_endpoint,
     serialize_edge_layers,
+    dataframe_read_parquet,
+    dataframe_write_parquet,
     deserialize_edge_layers,
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
-from .._support.dataframe_backend import (
-    dataframe_to_rows,
-    dataframe_from_rows,
-    dataframe_read_parquet,
-    dataframe_write_parquet,
-)
+
+if TYPE_CHECKING:
+    from ..core import AnnNet
 
 
 def _empty_table(columns: list[str]):
-    df = dataframe_from_rows([dict.fromkeys(columns)])
-    try:
-        return nw.from_native(df, eager_only=True).head(0).to_native()
-    except (AttributeError, TypeError, ValueError):
-        if hasattr(df, 'head'):
-            return df.head(0)
-        return df
+    """Create an empty dataframe/table with text-typed columns."""
+    return empty_dataframe(dict.fromkeys(columns, 'text'))
 
 
 def _strip_nulls(d: dict):
@@ -281,7 +284,7 @@ def to_parquet(graph: AnnNet, path):
 
 def from_parquet(path) -> AnnNet:
     """Read GraphDir (lossless) using bulk ops for speed."""
-    from ..core.graph import AnnNet
+    from ..core import AnnNet
 
     path = Path(path)
     V = dataframe_read_parquet(path / 'vertices.parquet')

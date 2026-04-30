@@ -6,7 +6,7 @@ import inspect
 from ._base import _BackendAccessorBase
 
 if TYPE_CHECKING:
-    from ..graph import AnnNet
+    pass
 
 
 class _GTBackendAccessor(_BackendAccessorBase):

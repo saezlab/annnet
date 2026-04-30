@@ -1,3 +1,19 @@
+"""
+Native AnnNet archive format.
+
+Provides:
+    write(G, filename) -> None
+    read(filename)     -> AnnNet
+
+The native format stores graph structure, sparse matrices, dataframe-backed
+tables, slice metadata, multilayer metadata, audit information, and unstructured
+metadata in a compressed archive.
+
+This module owns the on-disk AnnNet container format. It should use IO-local
+helpers for archive handling and shared support helpers for dataframe and
+serialization operations.
+"""
+
 from __future__ import annotations
 
 import sys
@@ -10,25 +26,23 @@ import numpy as np
 import scipy as scipy
 import scipy.sparse as sp
 
-from ._utils import _read_archive, _write_archive
-from .._support.serialization import (
+from ._common import (
+    dataframe_to_rows,
+    dataframe_from_rows,
     serialize_edge_layers,
     collect_slice_manifest,
+    dataframe_from_columns,
+    dataframe_read_parquet,
     restore_slice_manifest,
+    dataframe_write_parquet,
     deserialize_edge_layers,
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
-from .._support.dataframe_backend import (
-    dataframe_to_rows,
-    dataframe_from_rows,
-    dataframe_from_columns,
-    dataframe_read_parquet,
-    dataframe_write_parquet,
-)
+from ._archive import _read_archive, _write_archive
 
 if TYPE_CHECKING:
-    from ..core.graph import AnnNet
+    from ..core import AnnNet
 
 
 def _df_from_dict(data: dict):
@@ -532,7 +546,7 @@ def read(path: str | Path, *, lazy: bool = False) -> AnnNet:
     manifest = json.loads((root / 'manifest.json').read_text())
 
     # 2. Create empty graph
-    from ..core.graph import AnnNet
+    from ..core import AnnNet
 
     G = AnnNet(directed=manifest['directed'])
     G._version = manifest['graph_version']
