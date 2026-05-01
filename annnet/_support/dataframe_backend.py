@@ -13,12 +13,10 @@ import narwhals as nw
 
 from .optional_components import (
     DATAFRAME_BACKENDS,
-    component_names,
     select_component,
     available_optional_components,
 )
 
-DATAFRAME_BACKEND_PRIORITY = component_names(DATAFRAME_BACKENDS)
 _DEFAULT_DATAFRAME_BACKEND = 'auto'
 _TEXT = 'text'
 _INT = 'int'
@@ -57,12 +55,10 @@ def set_default_dataframe_backend(backend: str | None = 'auto') -> str:
     global _DEFAULT_DATAFRAME_BACKEND
 
     requested = 'auto' if backend is None else str(backend).lower()
-    if requested != 'auto':
-        select_dataframe_backend(requested)
-    elif not any(available_dataframe_backends().values()):
-        select_dataframe_backend('auto')
+    select_dataframe_backend(requested)
+
     _DEFAULT_DATAFRAME_BACKEND = requested
-    return _DEFAULT_DATAFRAME_BACKEND
+    return requested
 
 
 def dataframe_from_rows(
@@ -72,8 +68,13 @@ def dataframe_from_rows(
     backend: str | None = 'auto',
 ):
     """Build an eager dataframe/table using the selected backend."""
-    resolved = select_dataframe_backend(backend)
-    return _native_from_rows(rows or [], schema=schema, backend=resolved)
+    return _from_nw(
+        _build_nw_from_rows(
+            rows or [],
+            schema=schema,
+            backend=select_dataframe_backend(backend),
+        )
+    )
 
 
 def dataframe_from_columns(
@@ -83,13 +84,18 @@ def dataframe_from_columns(
     backend: str | None = 'auto',
 ):
     """Build an eager dataframe/table from column-oriented data."""
-    resolved = select_dataframe_backend(backend)
-    return _native_from_columns(columns or {}, schema=schema, backend=resolved)
+    return _from_nw(
+        _build_nw_from_columns(
+            columns or {},
+            schema=schema,
+            backend=select_dataframe_backend(backend),
+        )
+    )
 
 
 def empty_dataframe(schema: dict[str, str], *, backend: str | None = 'auto'):
     """Build an empty dataframe/table with a generic schema."""
-    return dataframe_from_rows([], schema=schema, backend=backend)
+    return dataframe_from_columns({}, schema=schema, backend=backend)
 
 
 def dataframe_to_rows(df) -> list[dict[str, Any]]:
@@ -111,11 +117,6 @@ def dataframe_width(df) -> int:
     return len(dataframe_columns(df))
 
 
-def _dataframe_is_empty(df) -> bool:
-    """Return whether a dataframe-like object has no rows."""
-    return dataframe_height(df) == 0
-
-
 def dataframe_memory_usage(df) -> int:
     """Best-effort memory usage for a dataframe-like object."""
     if df is None:
@@ -128,9 +129,7 @@ def dataframe_memory_usage(df) -> int:
 
 def dataframe_columns(df) -> list[str]:
     """Return column names for a dataframe-like object."""
-    if df is None:
-        return []
-    return _schema_names(_schema_from_df(df))
+    return [] if df is None else list(_to_nw(df).collect_schema().names())
 
 
 def dataframe_column_values(df, column: str) -> list[Any]:
@@ -147,28 +146,27 @@ def dataframe_select_to_numpy(df, columns: list[str]):
 
 def dataframe_column_is_numeric(df, column: str) -> bool:
     """Best-effort numeric column probe across supported eager backends."""
-    if df is None or column not in dataframe_columns(df):
+    if not _has_column(df, column):
         return False
 
     try:
-        dtype = _to_nw(df).collect_schema()[column]
-        is_numeric = getattr(dtype, 'is_numeric', None)
-        if callable(is_numeric) and is_numeric():
-            return True
+        is_numeric = getattr(_to_nw(df).collect_schema()[column], 'is_numeric', None)
+        if callable(is_numeric):
+            return bool(is_numeric())
     except (AttributeError, KeyError, TypeError, ValueError):
         pass
 
-    values = dataframe_column_values(df, column)
-    seen = False
-    for value in values:
-        if value is None or value == '':
-            continue
-        try:
+    values = [v for v in dataframe_column_values(df, column) if v not in (None, '')]
+    if not values:
+        return False
+
+    try:
+        for value in values:
             float(value)
-        except (TypeError, ValueError):
-            return False
-        seen = True
-    return seen
+    except (TypeError, ValueError):
+        return False
+
+    return True
 
 
 def dataframe_backend(df, *, default: str | None = 'auto') -> str:
@@ -205,38 +203,47 @@ def clone_dataframe(df):
     return _from_nw(_to_nw(df).clone())
 
 
+def _fallback_dataframe(df, *, empty: bool):
+    return _empty_like(df) if empty else clone_dataframe(df)
+
+
+def _has_column(df, column: str) -> bool:
+    return df is not None and column in dataframe_columns(df)
+
+
+def _filter_column(df, column: str, expr, *, empty_if_missing: bool):
+    if not _has_column(df, column):
+        return _fallback_dataframe(df, empty=empty_if_missing)
+    return _from_nw(_to_nw(df).filter(expr(nw.col(column))))
+
+
 def dataframe_filter_eq(df, column: str, value):
     """Filter rows where ``column == value``."""
-    if df is None or column not in dataframe_columns(df):
-        return _empty_like(df)
-    return _from_nw(_to_nw(df).filter(nw.col(column) == value))
+    return _filter_column(df, column, lambda col: col == value, empty_if_missing=True)
 
 
 def dataframe_filter_ne(df, column: str, value):
     """Filter rows where ``column != value``."""
-    if df is None or column not in dataframe_columns(df):
-        return clone_dataframe(df)
-    return _from_nw(_to_nw(df).filter(nw.col(column) != value))
+    return _filter_column(df, column, lambda col: col != value, empty_if_missing=False)
+
+
+def _filter_in(df, column: str, values, *, negate: bool):
+    vals = list(values or [])
+    if not _has_column(df, column) or not vals:
+        return _fallback_dataframe(df, empty=not negate)
+
+    expr = nw.col(column).is_in(vals)
+    return _from_nw(_to_nw(df).filter(~expr if negate else expr))
 
 
 def dataframe_filter_in(df, column: str, values):
     """Filter rows where ``column`` is in ``values``."""
-    vals = list(values or [])
-    if df is None or column not in dataframe_columns(df):
-        return _empty_like(df)
-    if not vals:
-        return _empty_like(df)
-    return _from_nw(_to_nw(df).filter(nw.col(column).is_in(vals)))
+    return _filter_in(df, column, values, negate=False)
 
 
 def dataframe_filter_not_in(df, column: str, values):
     """Filter rows where ``column`` is not in ``values``."""
-    vals = list(values or [])
-    if df is None or column not in dataframe_columns(df):
-        return clone_dataframe(df)
-    if not vals:
-        return clone_dataframe(df)
-    return _from_nw(_to_nw(df).filter(~nw.col(column).is_in(vals)))
+    return _filter_in(df, column, values, negate=True)
 
 
 def dataframe_drop_rows(df, column: str, values):
@@ -250,17 +257,8 @@ def dataframe_append_rows(df, rows: list[dict[str, Any]], *, backend: str | None
     if not rows:
         return clone_dataframe(df)
 
-    resolved_backend = dataframe_backend(df, default=backend or 'auto')
     base_rows = dataframe_to_rows(df)
-    merged_schema = _merge_schema_specs(
-        _schema_spec_from_schema(_schema_from_df(df)),
-        _schema_spec_from_rows(base_rows + rows),
-    )
-    return _native_from_rows(
-        base_rows + rows,
-        schema=merged_schema,
-        backend=resolved_backend,
-    )
+    return _rebuild_dataframe(df, base_rows + rows, backend=backend)
 
 
 def dataframe_upsert_rows(
@@ -282,17 +280,7 @@ def dataframe_upsert_rows(
         for row in dataframe_to_rows(df)
         if tuple(row.get(key) for key in keys) not in incoming_keys
     ]
-
-    resolved_backend = dataframe_backend(df, default=backend or 'auto')
-    merged_schema = _merge_schema_specs(
-        _schema_spec_from_schema(_schema_from_df(df)),
-        _schema_spec_from_rows(kept + rows),
-    )
-    return _native_from_rows(
-        kept + rows,
-        schema=merged_schema,
-        backend=resolved_backend,
-    )
+    return _rebuild_dataframe(df, kept + rows, backend=backend)
 
 
 def dataframe_read_delimited(
@@ -307,50 +295,49 @@ def dataframe_read_delimited(
 ):
     """Read a delimited file/buffer into a Narwhals-compatible dataframe."""
 
+    def _drop_none(**kwargs):
+        return {key: value for key, value in kwargs.items() if value is not None}
+
     resolved = select_dataframe_backend(backend)
 
-    # Read using backend-native reader
     if resolved == 'polars':
         import polars as pl
 
-        options = {'separator': separator}
-        if infer_schema_length is not None:
-            options['infer_schema_length'] = infer_schema_length
-        if encoding is not None:
-            options['encoding'] = encoding
-        if null_values is not None:
-            options['null_values'] = null_values
-        if low_memory is not None:
-            options['low_memory'] = low_memory
-        native = pl.read_csv(source, **options)
+        native = pl.read_csv(
+            source,
+            **_drop_none(
+                separator=separator,
+                infer_schema_length=infer_schema_length,
+                encoding=encoding,
+                null_values=null_values,
+                low_memory=low_memory,
+            ),
+        )
 
     elif resolved == 'pandas':
         import pandas as pd
 
-        options = {'sep': separator}
-        if encoding is not None:
-            options['encoding'] = encoding
-        if null_values is not None:
-            options['na_values'] = null_values
-        native = pd.read_csv(source, **options)
+        native = pd.read_csv(
+            source,
+            **_drop_none(
+                sep=separator,
+                encoding=encoding,
+                na_values=null_values,
+            ),
+        )
 
     else:
         import pyarrow.csv as pacsv
 
-        read_options = pacsv.ReadOptions(encoding=encoding or 'utf8')
-        convert_options = (
-            pacsv.ConvertOptions(null_values=null_values)
-            if null_values is not None
-            else pacsv.ConvertOptions()
-        )
         native = pacsv.read_csv(
             source,
-            read_options=read_options,
+            read_options=pacsv.ReadOptions(encoding=encoding or 'utf8'),
             parse_options=pacsv.ParseOptions(delimiter=separator),
-            convert_options=convert_options,
+            convert_options=pacsv.ConvertOptions(null_values=null_values)
+            if null_values is not None
+            else pacsv.ConvertOptions(),
         )
 
-    # Normalize via Narwhals roundtrip (optional but consistent)
     return _from_nw(_to_nw(native))
 
 
@@ -359,11 +346,7 @@ def dataframe_read_tsv(source, *, backend: str | None = 'auto'):
 
 
 def dataframe_read_excel(source, *, sheet_name=None):
-    """Read an Excel sheet into a Narwhals-compatible dataframe.
-
-    Excel support is intentionally a pandas-backed boundary because Narwhals does
-    not define an Excel reader.
-    """
+    """Read an Excel sheet into a dataframe via pandas."""
     try:
         import pandas as pd
     except ImportError as e:
@@ -415,28 +398,18 @@ def rename_dataframe_columns(df, mapping: dict[str, str]):
     return _from_nw(_to_nw(df).rename(mapping))
 
 
-def _rows_filter(df, predicate):
-    """Fallback row-based filter preserving schema and backend."""
-    rows = [row for row in dataframe_to_rows(df) if predicate(row)]
-    return _native_from_rows(
-        rows,
-        schema=_schema_from_df(df),
-        backend=dataframe_backend(df),
-    )
-
-
 def _empty_like(df):
-    if df is None:
-        return dataframe_from_rows([], schema={}, backend='auto')
-    return _native_from_rows(
-        [],
-        schema=_schema_from_df(df),
-        backend=dataframe_backend(df),
+    schema = {} if df is None else _schema_spec(df)
+    backend = 'auto' if df is None else dataframe_backend(df)
+    return dataframe_from_columns({}, schema=schema, backend=backend)
+
+
+def _rebuild_dataframe(df, rows: list[dict[str, Any]], *, backend: str | None = None):
+    return dataframe_from_rows(
+        rows,
+        schema=_schema_spec(df, rows),
+        backend=dataframe_backend(df, default=backend or 'auto'),
     )
-
-
-def _text_schema(columns: list[str]) -> dict[str, str]:
-    return dict.fromkeys(columns, _TEXT)
 
 
 def _to_nw(df):
@@ -447,18 +420,6 @@ def _from_nw(df):
     return df.to_native()
 
 
-def _schema_from_df(df) -> nw.Schema | None:
-    if df is None:
-        return None
-    return _to_nw(df).collect_schema()
-
-
-def _schema_names(schema: nw.Schema | None) -> list[str]:
-    if schema is None:
-        return []
-    return list(schema.names())
-
-
 def _build_nw_from_rows(
     rows: list[dict[str, Any]] | list[Any],
     *,
@@ -467,20 +428,13 @@ def _build_nw_from_rows(
 ):
     rows = [dict(row) for row in (rows or []) if isinstance(row, dict)]
     nw_schema = _normalize_schema(schema)
-
-    if rows:
-        all_names = set()
-        for row in rows:
-            all_names.update(row.keys())
-        if nw_schema is not None:
-            all_names.update(nw_schema.names())
-        cols = {name: [row.get(name) for row in rows] for name in sorted(all_names)}
-        return _build_nw_from_columns(cols, schema=nw_schema, backend=backend)
-
-    empty_cols = {name: [] for name in _schema_names(nw_schema)}
-    if nw_schema is not None:
-        return _cast_nw_to_schema(nw.from_dict(empty_cols, backend=backend), nw_schema)
-    return nw.from_dict({}, backend=backend)
+    names = list(nw_schema.names()) if nw_schema is not None else []
+    for row in rows:
+        for name in row:
+            if name not in names:
+                names.append(name)
+    cols = {name: [row.get(name) for row in rows] for name in names}
+    return _build_nw_from_columns(cols, schema=nw_schema, backend=backend)
 
 
 def _build_nw_from_columns(
@@ -491,37 +445,12 @@ def _build_nw_from_columns(
 ):
     cols = {name: list(values) for name, values in (columns or {}).items()}
     nw_schema = _normalize_schema(schema)
-    if any(cols.values()):
-        if nw_schema is not None:
-            for name in nw_schema.names():
-                cols.setdefault(name, [None] * len(next(iter(cols.values()), [])))
-            return _cast_nw_to_schema(nw.from_dict(cols, backend=backend), nw_schema)
-        return nw.from_dict(cols, backend=backend)
-
     if nw_schema is not None:
+        row_count = len(next(iter(cols.values()), []))
         for name in nw_schema.names():
-            cols.setdefault(name, [])
-        return _cast_nw_to_schema(nw.from_dict(cols, backend=backend), nw_schema)
-
-    return nw.from_dict(cols, backend=backend)
-
-
-def _native_from_rows(
-    rows: list[dict[str, Any]] | list[Any],
-    *,
-    schema: nw.Schema | dict[str, str] | None,
-    backend: str,
-):
-    return _from_nw(_build_nw_from_rows(rows, schema=schema, backend=backend))
-
-
-def _native_from_columns(
-    columns: dict[str, list[Any]],
-    *,
-    schema: nw.Schema | dict[str, str] | None,
-    backend: str,
-):
-    return _from_nw(_build_nw_from_columns(columns, schema=schema, backend=backend))
+            cols.setdefault(name, [None] * row_count)
+    df = nw.from_dict(cols, backend=backend)
+    return _cast_nw_to_schema(df, nw_schema) if nw_schema is not None else df
 
 
 def _normalize_schema(schema: nw.Schema | dict[str, str] | None) -> nw.Schema | None:
@@ -572,18 +501,15 @@ def _cast_nw_to_schema(df, schema: nw.Schema):
     return out
 
 
-def _schema_spec_from_schema(schema: nw.Schema | None) -> dict[str, str | None]:
-    if schema is None:
-        return {}
-    return {name: _kind_from_dtype(schema[name]) for name in schema.names()}
-
-
-def _schema_spec_from_rows(rows: list[dict[str, Any]]) -> dict[str, str | None]:
+def _schema_spec(df=None, rows: list[dict[str, Any]] | None = None) -> dict[str, str]:
     spec: dict[str, str | None] = {}
-    for row in rows:
+    if df is not None:
+        schema = _to_nw(df).collect_schema()
+        spec.update({name: _kind_from_dtype(schema[name]) for name in schema.names()})
+    for row in rows or []:
         for name, value in row.items():
             spec[name] = _merge_kind(spec.get(name), _kind_for_value(value))
-    return spec
+    return {name: (_TEXT if kind is None else kind) for name, kind in spec.items()}
 
 
 def _kind_from_dtype(dtype) -> str | None:
@@ -614,7 +540,7 @@ def _kind_for_value(value: Any) -> str | None:
         return None
     if isinstance(value, bool):
         return _BOOL
-    if isinstance(value, int) and not isinstance(value, bool):
+    if isinstance(value, int):
         return _INT
     if isinstance(value, float):
         return _FLOAT
@@ -624,43 +550,24 @@ def _kind_for_value(value: Any) -> str | None:
 
 
 def _merge_kind(left: str | None, right: str | None) -> str | None:
-    if left is None:
-        return right
-    if right is None:
-        return left
-    if left == right:
-        return left
-    if _TEXT in {left, right}:
+    kinds = {left, right} - {None}
+    if not kinds:
+        return None
+    if len(kinds) == 1:
+        return next(iter(kinds))
+    if kinds & {_TEXT, _LIST_TEXT}:
         return _TEXT
-    if _LIST_TEXT in {left, right}:
-        return _TEXT
-    if _FLOAT in {left, right}:
+    if _FLOAT in kinds:
         return _FLOAT
-    if _INT in {left, right}:
+    if _INT in kinds:
         return _INT
     return _TEXT
 
 
-def _merge_schema_specs(
-    left: dict[str, str | None],
-    right: dict[str, str | None],
-) -> dict[str, str]:
-    merged: dict[str, str] = {}
-    for name in sorted(set(left) | set(right)):
-        kind = _merge_kind(left.get(name), right.get(name))
-        merged[name] = _TEXT if kind is None else kind
-    return merged
-
-
-# ---------------------------------------------------------------------------
-# Polars fast-path helpers for vertex annotation table upserts
-# ---------------------------------------------------------------------------
-
-
 def is_polars_dataframe(df) -> bool:
-    """Return True if *df* is a live Polars DataFrame (narwhals probe)."""
+    """Return whether ``df`` is a live Polars dataframe."""
     try:
-        nwd = nw.from_native(df, eager_only=True)
+        nwd = _to_nw(df)
         return nwd.implementation.is_polars()
     except (TypeError, AttributeError):
         return False
@@ -688,7 +595,7 @@ def _pl_numeric_supertype(lc, rc):
 
 
 def _pl_align_schemas(left, right):
-    """Make two Polars DataFrames share identical column sets and compatible dtypes."""
+    """Align two Polars dataframes to the same columns and compatible dtypes."""
     import polars as pl
 
     for c in left.columns:
@@ -715,40 +622,19 @@ def _pl_align_schemas(left, right):
 
 
 def polars_upsert_vertices(df, norm: list[tuple]):
-    """Polars-native upsert of ``(vertex_id, attrs)`` pairs into *df*.
-
-    Parameters
-    ----------
-    df :
-        Existing Polars vertex-attributes table.  Attribute columns must
-        already be present before calling this function (use
-        ``_ensure_attr_columns`` on the caller side first).
-    norm :
-        Sequence of ``(vertex_id, attrs_dict)`` pairs.
-
-    Returns
-    -------
-    polars.DataFrame | None
-        Updated table, or ``None`` if the Polars fast path cannot be
-        applied (e.g. non-string vertex IDs).  The caller must fall back
-        to the generic path when ``None`` is returned.
-    """
+    """Polars-native upsert of ``(vertex_id, attrs)`` pairs."""
     import polars as pl
 
-    # Unwrap narwhals wrappers (e.g. returned by _ensure_attr_columns) to native Polars.
     if not isinstance(df, pl.DataFrame):
-        df = nw.to_native(nw.from_native(df, eager_only=True))
+        df = _from_nw(_to_nw(df))
 
     keys: set[str] = {k for _, attrs in norm for k in attrs}
     norm_vids = [vid for vid, _ in norm]
 
-    # Polars infers vertex_id as String; non-string vids (e.g. layer tuples) must
-    # use the generic fallback so return None to signal the caller.
     if not all(isinstance(vid, str) for vid in norm_vids):
         return None
 
     if not keys:
-        # No-attributes fast path: anti-join to find truly new vertices.
         incoming = pl.DataFrame({'vertex_id': norm_vids})
         if df.height == 0:
             return incoming
@@ -757,7 +643,6 @@ def polars_upsert_vertices(df, norm: list[tuple]):
             return pl.concat([df, to_insert], how='vertical', rechunk=False)
         return df
 
-    # With-attributes path: caller guarantees df already has the required columns.
     norm_attrs = [attrs for _, attrs in norm]
     cols: dict = {'vertex_id': norm_vids}
     for k in keys:

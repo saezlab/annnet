@@ -52,21 +52,21 @@ def component_names(specs: Mapping[str, OptionalComponent]) -> tuple[str, ...]:
     return tuple(specs)
 
 
-def is_component_available(component: OptionalComponent) -> bool:
+def _is_component_available(component: OptionalComponent) -> bool:
     """Return whether a component's import target is available."""
     return find_spec(component.module) is not None
 
 
 def available_optional_components(specs: Mapping[str, OptionalComponent]) -> dict[str, bool]:
     """Return availability by component name."""
-    return {name: is_component_available(component) for name, component in specs.items()}
+    return {name: _is_component_available(component) for name, component in specs.items()}
 
 
 def component_status(specs: Mapping[str, OptionalComponent]) -> dict[str, dict[str, str]]:
     """Return docs/UI-friendly component status."""
     return {
         name: {
-            'available': 'yes' if is_component_available(component) else 'no',
+            'available': 'yes' if _is_component_available(component) else 'no',
             'install': component.install or 'built in',
         }
         for name, component in specs.items()
@@ -95,7 +95,7 @@ def select_component(
         allowed = ', '.join(('auto', *names))
         raise ValueError(f'Unknown {kind} backend {preferred!r}; expected one of: {allowed}.')
 
-    if not is_component_available(specs[requested]):
+    if not _is_component_available(specs[requested]):
         raise RuntimeError(
             f'{kind.capitalize()} backend {requested!r} is not installed. '
             f"{install_message}, or use backend='auto'."

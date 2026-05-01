@@ -19,17 +19,6 @@ def make_lazy_function(module_name: str, attr_name: str, package_name: str):
     return _lazy_function
 
 
-def load_attr(mapping: dict[str, tuple[str, str]], name: str) -> Any:
-    """Load an attribute described by a ``name -> (module, attr)`` mapping."""
-    module_name, attr_name = mapping[name]
-    return getattr(import_module(module_name), attr_name)
-
-
-def load_module(module_name: str) -> Any:
-    """Import and return a lazily exposed submodule."""
-    return import_module(module_name)
-
-
 def resolve_lazy_export(
     namespace: dict[str, Any],
     name: str,
@@ -48,9 +37,10 @@ def resolve_lazy_export(
     backends immediately.
     """
     if modules and name in modules:
-        value = load_module(modules[name])
+        value = import_module(modules[name])
     elif attrs and name in attrs:
-        value = load_attr(attrs, name)
+        module_name, attr_name = attrs[name]
+        value = getattr(import_module(module_name), attr_name)
     elif functions and name in functions:
         if package_name is None:
             raise ValueError('package_name is required for lazy function exports')

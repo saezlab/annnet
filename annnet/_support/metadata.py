@@ -151,28 +151,6 @@ def _optional_dependency_bundles(meta: dict[str, Any]) -> dict[str, list[str]]:
     return {k: v for k, v in optional.items() if k in _OPTIONAL_BUNDLES}
 
 
-def _first_available(values: dict[str, dict[str, str]], backends: Any) -> str:
-    return next(
-        (
-            name
-            for name in component_names(backends)
-            if values.get(name, {}).get('available') == 'yes'
-        ),
-        'none',
-    )
-
-
-def _section_message(values: dict[str, dict[str, str]]) -> str:
-    if not values:
-        return 'n/a'
-
-    return '; '.join(
-        f'{name}: {details["available"]}'
-        f'{f" ({details['install']})" if details["available"] == "no" else ""}'
-        for name, details in values.items()
-    )
-
-
 def _author_links(authors: list[str]) -> str:
     rendered = []
 
@@ -191,36 +169,52 @@ def _author_links(authors: list[str]) -> str:
     return ', '.join(rendered) or 'n/a'
 
 
-def _chips(items: dict[str, bool], *, icons: bool = True) -> str:
+def _component_message(values: dict[str, dict[str, str]]) -> str:
+    if not values:
+        return 'n/a'
+
+    return '; '.join(
+        f'{name}: {details["available"]}'
+        f'{f" ({details['install']})" if details["available"] == "no" else ""}'
+        for name, details in values.items()
+    )
+
+
+def _default_available(values: dict[str, dict[str, str]], backends: Any) -> str:
+    return next(
+        (
+            name
+            for name in component_names(backends)
+            if values.get(name, {}).get('available') == 'yes'
+        ),
+        'none',
+    )
+
+
+def _chips(
+    items: dict[str, bool] | dict[str, list[str]],
+    *,
+    icons: bool = True,
+    titles: bool = False,
+) -> str:
     if not items:
         return "<span style='color:#57606a'>none</span>"
 
     html = []
-    for name, ok in items.items():
+    for name, details in items.items():
         icon = ''
+        title = ''
+        ok = bool(details) if isinstance(details, bool) else True
         if icons:
             color = '#1a7f37' if ok else '#cf222e'
             symbol = '&#10003;' if ok else '&#10007;'
             icon = f"<span style='color:{color};font-weight:700'>{symbol}</span>"
+        if titles:
+            title = f' title="{escape(", ".join(details))}"'
 
-        html.append(f"<span style='{_CHIP_STYLE}'>{icon}<span>{escape(name)}</span></span>")
+        html.append(f"<span{title} style='{_CHIP_STYLE}'>{icon}<span>{escape(name)}</span></span>")
 
     return ''.join(html)
-
-
-def _backend_chips(values: dict[str, dict[str, str]]) -> str:
-    return _chips({k: v['available'] == 'yes' for k, v in values.items()})
-
-
-def _bundle_chips(optional: dict[str, list[str]]) -> str:
-    if not optional:
-        return "<span style='color:#57606a'>none</span>"
-
-    return ''.join(
-        f'<span title="{escape(", ".join(deps))}" style=\'{_CHIP_STYLE}\'>'
-        f'<span>{escape(name)}</span></span>'
-        for name, deps in optional.items()
-    )
 
 
 def _link(url: str) -> str:
@@ -255,63 +249,32 @@ class AnnNetInfo:
     tabular_backends: dict[str, dict[str, str]]
     io_modules: dict[str, dict[str, str]]
 
-    def _info(self) -> dict[str, dict[str, Any]]:
+    def _text_rows(self) -> list[tuple[str, str]]:
         urls = self.metadata.get('urls', {})
         version = self.metadata.get('version', _FALLBACK_VERSION)
         license_name = self.metadata.get('license', 'BSD-3-Clause')
 
-        rows: dict[str, dict[str, Any]] = {
-            'annnet_version': {
-                'title': 'Installed version',
-                'message': f'v{version}',
-                'value': version,
-            },
-            'license': {
-                'title': 'License',
-                'message': license_name,
-                'value': license_name,
-            },
-        }
-
+        rows = [('Installed version', f'v{version}'), ('License', license_name)]
         if self.metadata.get('author'):
-            rows['authors'] = {
-                'title': 'Authors',
-                'message': self.metadata['author'],
-                'value': self.metadata['authors'],
-            }
+            rows.append(('Authors', self.metadata['author']))
 
-        sections = {
-            'graph_backends': ('Available graph backends', self.graph_backends),
-            'plot_backends': ('Available plot backends', self.plot_backends),
-            'tabular_backends': ('Available tabular backends', self.tabular_backends),
-            'io_modules': ('Available I/O modules', self.io_modules),
-        }
-
-        for key, (title, values) in sections.items():
-            rows[key] = {
-                'title': title,
-                'message': _section_message(values),
-                'value': values,
-            }
+        rows.extend(
+            [
+                ('Available graph backends', _component_message(self.graph_backends)),
+                ('Available plot backends', _component_message(self.plot_backends)),
+                ('Available tabular backends', _component_message(self.tabular_backends)),
+                ('Available I/O modules', _component_message(self.io_modules)),
+            ]
+        )
 
         for key in ('Repository', 'Documentation'):
             if urls.get(key):
-                rows[f'{key.lower()}_url'] = {
-                    'title': key,
-                    'message': urls[key],
-                    'value': urls[key],
-                }
-
-        rows['installed_path'] = {
-            'title': 'Installed path',
-            'message': str(_PROJECT_ROOT),
-            'value': str(_PROJECT_ROOT),
-        }
-
+                rows.append((key, urls[key]))
+        rows.append(('Installed path', str(_PROJECT_ROOT)))
         return rows
 
     def __str__(self) -> str:
-        return '\n'.join(f'{item["title"]}: {item["message"]}' for item in self._info().values())
+        return '\n'.join(f'{title}: {message}' for title, message in self._text_rows())
 
     __repr__ = __str__
 
@@ -320,8 +283,8 @@ class AnnNetInfo:
         urls = self.metadata.get('urls', {})
         optional = _optional_dependency_bundles(self.metadata)
 
-        graph_default = _first_available(self.graph_backends, GRAPH_BACKENDS)
-        plot_default = _first_available(self.plot_backends, PLOT_BACKENDS)
+        graph_default = _default_available(self.graph_backends, GRAPH_BACKENDS)
+        plot_default = _default_available(self.plot_backends, PLOT_BACKENDS)
 
         rows = [
             ('Version', f'v{escape(str(version))}'),
@@ -335,11 +298,23 @@ class AnnNetInfo:
                 _chips({graph_default: graph_default != 'none'}, icons=False),
             ),
             ('Default plot backend', _chips({plot_default: plot_default != 'none'}, icons=False)),
-            ('Graph backends', _backend_chips(self.graph_backends)),
-            ('Plot backends', _backend_chips(self.plot_backends)),
-            ('Tabular data backends', _backend_chips(self.tabular_backends)),
-            ('I/O modules', _backend_chips(self.io_modules)),
-            ('Installable bundles', _bundle_chips(optional)),
+            (
+                'Graph backends',
+                _chips({k: v['available'] == 'yes' for k, v in self.graph_backends.items()}),
+            ),
+            (
+                'Plot backends',
+                _chips({k: v['available'] == 'yes' for k, v in self.plot_backends.items()}),
+            ),
+            (
+                'Tabular data backends',
+                _chips({k: v['available'] == 'yes' for k, v in self.tabular_backends.items()}),
+            ),
+            (
+                'I/O modules',
+                _chips({k: v['available'] == 'yes' for k, v in self.io_modules.items()}),
+            ),
+            ('Installable bundles', _chips(optional, icons=False, titles=True)),
         ]
 
         table_rows = ''.join(

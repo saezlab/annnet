@@ -127,64 +127,6 @@ def deserialize_edge_layers(data: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def serialize_node_layer_attrs(
-    node_layer_attrs: dict[tuple[str, tuple[str, ...]], dict],
-) -> list[dict]:
-    """Serialize vertex-layer attributes to JSON-safe records."""
-    out = []
-    for (vertex_id, layer_tuple), attrs in node_layer_attrs.items():
-        out.append({'node': vertex_id, 'layer': list(layer_tuple), 'attrs': dict(attrs)})
-    return out
-
-
-def deserialize_node_layer_attrs(data: list[dict]) -> dict[tuple[str, tuple[str, ...]], dict]:
-    """Inverse of :func:`serialize_node_layer_attrs`."""
-    out: dict[tuple[str, tuple[str, ...]], dict] = {}
-    for rec in data:
-        out[(rec['node'], tuple(rec['layer']))] = dict(rec.get('attrs', {}))
-    return out
-
-
-def serialize_slices(slices: dict[str, dict]) -> dict[str, dict]:
-    """Serialize slice records to JSON-safe dictionaries."""
-    out = {}
-    for slice_id, rec in slices.items():
-        out[slice_id] = {
-            'vertices': list(rec.get('vertices', [])),
-            'edges': list(rec.get('edges', [])),
-            'attributes': dict(rec.get('attributes', {})),
-        }
-    return out
-
-
-def deserialize_slices(data: dict[str, dict]) -> dict[str, dict]:
-    """Inverse of :func:`serialize_slices`."""
-    out = {}
-    for slice_id, rec in data.items():
-        out[slice_id] = {
-            'vertices': set(rec.get('vertices', [])),
-            'edges': set(rec.get('edges', [])),
-            'attributes': dict(rec.get('attributes', {})),
-        }
-    return out
-
-
-def serialize_layer_tuple_attrs(layer_attrs: dict[tuple[str, ...], dict]) -> list[dict]:
-    """Serialize layer-tuple attributes to JSON-safe records."""
-    return [
-        {'layer': list(layer_tuple), 'attrs': dict(attrs)}
-        for layer_tuple, attrs in layer_attrs.items()
-    ]
-
-
-def deserialize_layer_tuple_attrs(data: list[dict]) -> dict[tuple[str, ...], dict]:
-    """Inverse of :func:`serialize_layer_tuple_attrs`."""
-    out: dict[tuple[str, ...], dict] = {}
-    for rec in data:
-        out[tuple(rec['layer'])] = dict(rec.get('attrs', {}))
-    return out
-
-
 def serialize_multilayer_manifest(
     graph,
     *,

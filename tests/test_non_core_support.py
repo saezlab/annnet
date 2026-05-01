@@ -68,7 +68,7 @@ def test_optional_component_selection_with_mocked_availability(monkeypatch):
     }
     monkeypatch.setattr(
         optional_components,
-        'is_component_available',
+        '_is_component_available',
         lambda component: component.module == 'present_second',
     )
 
@@ -175,12 +175,6 @@ def test_dataframe_backend_edge_paths_and_backend_detection(monkeypatch):
     assert df_backend.dataframe_upsert_rows(None, [], 'id', backend=backend) is None
     assert df_backend.rename_dataframe_columns(None, {'a': 'b'}) is None
     assert df_backend.rename_dataframe_columns('unchanged', {}) == 'unchanged'
-    assert df_backend._schema_from_df(None) is None
-    assert df_backend._schema_names(None) == []
-    assert df_backend._text_schema(['a', 'b']) == {'a': 'text', 'b': 'text'}
-
-    empty_like_none = df_backend._empty_like(None)
-    assert df_backend.dataframe_to_rows(empty_like_none) == []
 
     appended = df_backend.dataframe_append_rows(None, [{'id': 'new', 'value': 1}], backend=backend)
     assert df_backend.dataframe_to_rows(appended) == [{'id': 'new', 'value': 1}]
@@ -188,8 +182,6 @@ def test_dataframe_backend_edge_paths_and_backend_detection(monkeypatch):
     table = df_backend.dataframe_from_rows(
         [{'id': 'a', 'value': 1}, {'id': 'b', 'value': 2}], backend=backend
     )
-    filtered = df_backend._rows_filter(table, lambda row: row['value'] > 1)
-    assert df_backend.dataframe_to_rows(filtered) == [{'id': 'b', 'value': 2}]
     assert df_backend.dataframe_to_rows(df_backend.dataframe_drop_rows(table, 'id', ['a'])) == [
         {'id': 'b', 'value': 2}
     ]
@@ -242,6 +234,45 @@ def test_dataframe_backend_edge_paths_and_backend_detection(monkeypatch):
     assert df_backend.set_default_dataframe_backend('auto') == 'auto'
 
 
+def test_dataframe_backend_preserves_schema_only_columns_on_rebuilds():
+    backend = df_backend.select_dataframe_backend('auto')
+    base = df_backend.empty_dataframe({'id': 'text', 'notes': 'text'}, backend=backend)
+
+    appended = df_backend.dataframe_append_rows(base, [{'id': 'a'}], backend=backend)
+    assert df_backend.dataframe_columns(appended) == ['id', 'notes']
+    assert df_backend.dataframe_to_rows(appended) == [{'id': 'a', 'notes': None}]
+
+    upserted = df_backend.dataframe_upsert_rows(
+        appended,
+        [{'id': 'a', 'notes': 'kept'}],
+        'id',
+        backend=backend,
+    )
+    assert df_backend.dataframe_columns(upserted) == ['id', 'notes']
+    assert df_backend.dataframe_to_rows(upserted) == [{'id': 'a', 'notes': 'kept'}]
+
+
+def test_dataframe_backend_missing_column_paths_preserve_shape():
+    backend = df_backend.select_dataframe_backend('auto')
+    table = df_backend.empty_dataframe({'id': 'text', 'notes': 'text'}, backend=backend)
+
+    missing_eq = df_backend.dataframe_filter_eq(table, 'missing', 'x')
+    assert df_backend.dataframe_columns(missing_eq) == ['id', 'notes']
+    assert df_backend.dataframe_to_rows(missing_eq) == []
+
+    missing_in = df_backend.dataframe_filter_in(table, 'missing', ['x'])
+    assert df_backend.dataframe_columns(missing_in) == ['id', 'notes']
+    assert df_backend.dataframe_to_rows(missing_in) == []
+
+    clone_ne = df_backend.dataframe_filter_ne(table, 'missing', 'x')
+    assert clone_ne is not table
+    assert df_backend.dataframe_columns(clone_ne) == ['id', 'notes']
+
+    clone_not_in = df_backend.dataframe_filter_not_in(table, 'missing', [])
+    assert clone_not_in is not table
+    assert df_backend.dataframe_columns(clone_not_in) == ['id', 'notes']
+
+
 def test_adapter_utils_serialization_roundtrips(tmp_path):
     supra = ('nodeA', ('layer1', 'layer2'))
     assert (
@@ -269,28 +300,6 @@ def test_adapter_utils_serialization_roundtrips(tmp_path):
         'intra': ('t1', 'bus'),
         'inter': (('t1', 'bus'), ('t2', 'train')),
     }
-
-    nl_attrs = {('A', ('x',)): {'color': 'red'}}
-    assert (
-        serialization_support.deserialize_node_layer_attrs(
-            serialization_support.serialize_node_layer_attrs(nl_attrs)
-        )
-        == nl_attrs
-    )
-
-    slices = {'s1': {'vertices': {'A'}, 'edges': {'e1'}, 'attributes': {'kind': 'test'}}}
-    assert (
-        serialization_support.deserialize_slices(serialization_support.serialize_slices(slices))
-        == slices
-    )
-
-    layer_attrs = {('x', 'y'): {'speed': 10}}
-    assert (
-        serialization_support.deserialize_layer_tuple_attrs(
-            serialization_support.serialize_layer_tuple_attrs(layer_attrs)
-        )
-        == layer_attrs
-    )
 
     assert serialization_support.coerce_coeff_mapping(
         '[["A", 2], {"vertex": "B", "__value": 3}]'
