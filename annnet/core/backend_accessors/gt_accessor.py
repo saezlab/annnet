@@ -104,8 +104,9 @@ class _GTBackendAccessor(_BackendAccessorBase):
         entry = self._cache.get(key)
 
         if not self.cache_enabled or entry is None or entry['version'] != version:
-            from ...adapters.graphtool_adapter import to_graphtool
+            from importlib import import_module
 
+            to_graphtool = import_module('annnet.adapters.graphtool_adapter').to_graphtool
             gtG, manifest = to_graphtool(self._G)
             self._warn_on_loss(manifest)
             self._cache[key] = {'gtG': gtG, 'version': version}

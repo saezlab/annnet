@@ -27,7 +27,6 @@ from ._records import (
     _internal_entity_kind,
 )
 from ._Annotation import AttributesClass, AttributesAccessor
-from .backend_accessors import _GTBackendAccessor, _IGBackendAccessor, _NXBackendAccessor
 from ..algorithms.traversal import Traversal
 from .._support.dataframe_backend import (
     empty_dataframe,
@@ -2813,6 +2812,8 @@ class AnnNet(
         >>> G.nx.shortest_path(G, 'A', 'B')
         """
         if not hasattr(self, '_nx_proxy'):
+            from .backend_accessors.nx_accessor import _NXBackendAccessor
+
             self._nx_proxy = _NXBackendAccessor(self)
         return self._nx_proxy
 
@@ -2828,6 +2829,8 @@ class AnnNet(
             Lazy proxy that converts to igraph only when requested.
         """
         if not hasattr(self, '_ig_proxy'):
+            from .backend_accessors.ig_accessor import _IGBackendAccessor
+
             self._ig_proxy = _IGBackendAccessor(self)
         return self._ig_proxy
 
@@ -2843,6 +2846,8 @@ class AnnNet(
             Lazy proxy that converts to graph-tool only when requested.
         """
         if not hasattr(self, '_gt_proxy'):
+            from .backend_accessors.gt_accessor import _GTBackendAccessor
+
             self._gt_proxy = _GTBackendAccessor(self)
         return self._gt_proxy
 

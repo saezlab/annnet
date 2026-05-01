@@ -347,9 +347,8 @@ class GraphView:
         AnnNet
             Materialized subgraph.
         """
-        from .graph import AnnNet
-
-        subG = AnnNet(directed=self._graph.directed)
+        # Create an empty AnnNet object (no need to import annnet.core.graph)
+        subG = type(self._graph)(directed=self._graph.directed)
 
         vertex_ids = self.vertex_ids
         edge_ids = self.edge_ids
