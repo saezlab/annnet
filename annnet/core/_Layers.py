@@ -1343,7 +1343,7 @@ class LayerAccessor:
         )
         attributes.setdefault('source', 'kivela_layer')
         attributes.setdefault('layer_tuple', tuple(layer_tuple))
-        return self.create_slice_from_operation(slice_id, result, **attributes)
+        return self._G.slices.create_slice_from_operation(slice_id, result, **attributes)
 
     def create_slice_from_layer_union(
         self,
@@ -1381,7 +1381,7 @@ class LayerAccessor:
         )
         attributes.setdefault('source', 'kivela_layer_union')
         attributes.setdefault('layers', [tuple(a) for a in layer_tuples])
-        return self.create_slice_from_operation(slice_id, result, **attributes)
+        return self._G.slices.create_slice_from_operation(slice_id, result, **attributes)
 
     def create_slice_from_layer_intersection(
         self,
@@ -1419,7 +1419,7 @@ class LayerAccessor:
         )
         attributes.setdefault('source', 'kivela_layer_intersection')
         attributes.setdefault('layers', [tuple(a) for a in layer_tuples])
-        return self.create_slice_from_operation(slice_id, result, **attributes)
+        return self._G.slices.create_slice_from_operation(slice_id, result, **attributes)
 
     def create_slice_from_layer_difference(
         self,
@@ -1462,7 +1462,7 @@ class LayerAccessor:
         attributes.setdefault('source', 'kivela_layer_difference')
         attributes.setdefault('layer_a', tuple(layer_a))
         attributes.setdefault('layer_b', tuple(layer_b))
-        return self.create_slice_from_operation(slice_id, result, **attributes)
+        return self._G.slices.create_slice_from_operation(slice_id, result, **attributes)
 
     ## Subgraph
 
