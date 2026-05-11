@@ -2008,7 +2008,7 @@ class AnnNet(
         M = self._matrix
 
         # 1) Binary / vertex-edge edges
-        for eid, rec in list(self._edges.items()):
+        for _eid, rec in list(self._edges.items()):
             if rec.etype == 'hyper':
                 continue  # handled below
             if rec.src is None or rec.tgt is None:

@@ -154,7 +154,7 @@ class AttributesClass:
             if not isinstance(attrs, dict):
                 raise TypeError(f'vertex bulk attrs must be dict, got {type(attrs)} for {vid}')
 
-        for vid, attrs in updates.items():
+        for _vid, attrs in updates.items():
             _check_reserved_collision(self._vertex_RESERVED, attrs, kind='vertex')
 
         clean_updates = {vid: dict(attrs) for vid, attrs in updates.items() if attrs}
@@ -271,7 +271,7 @@ class AttributesClass:
             if not isinstance(attrs, dict):
                 raise TypeError(f'edge bulk attrs must be dict, got {type(attrs)} for {eid}')
 
-        for eid, attrs in updates.items():
+        for _eid, attrs in updates.items():
             _check_reserved_collision(self._EDGE_RESERVED, attrs, kind='edge')
 
         clean_updates = {eid: dict(attrs) for eid, attrs in updates.items() if attrs}

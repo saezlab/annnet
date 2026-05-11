@@ -43,7 +43,7 @@ def test_iter_yields_vertex_ids():
     G = AnnNet(directed=False)
     G.add_vertices(['A', 'B', 'C'])
     assert set(iter(G)) == {'A', 'B', 'C'}
-    assert [v for v in G] == list(G.vertices())
+    assert list(G) == list(G.vertices())
 
 
 def test_contains_checks_vertex_membership():
