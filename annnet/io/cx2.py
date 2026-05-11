@@ -153,6 +153,7 @@ def _jsonify(obj):
 
 def to_cx2(
     G: AnnNet,
+    path=None,
     *,
     export_name='annnet export',
     layer=None,
@@ -171,6 +172,9 @@ def to_cx2(
     ----------
     G : AnnNet
         The graph to export.
+    path : str | os.PathLike, optional
+        If given, the CX2 document is written to this path as JSON. The
+        function still returns the CX2 dict structure for in-memory use.
     export_name : str, default "annnet export"
         Name of the exported network (stored in networkAttributes).
     layer : tuple of str, optional
@@ -698,6 +702,12 @@ def to_cx2(
 
     # Status goes last
     cx2.append({'status': [{'success': True}]})
+
+    if path is not None:
+        import json as _json
+
+        with open(path, 'w', encoding='utf-8') as f:
+            _json.dump(cx2, f, ensure_ascii=False)
 
     return cx2
 

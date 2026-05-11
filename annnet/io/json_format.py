@@ -96,6 +96,14 @@ def _edge_endpoint_sets(rec):
     return src, tgt
 
 
+def _is_json_serializable(value) -> bool:
+    try:
+        json.dumps(value)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 def _attrs_by_id(table, id_col: str, *, public_only: bool = False) -> dict:
     out = {}
     for row in _df_to_rows(table):
@@ -218,6 +226,18 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     except Exception:  # noqa: BLE001
         pass
 
+    # Graph-level metadata (uns / graph_attributes). Serialized only if it
+    # round-trips cleanly through json.dumps; non-serializable values are
+    # kept out of the document rather than crashing the export.
+    try:
+        candidate_uns = dict(getattr(graph, 'uns', {}) or {})
+        json.dumps(candidate_uns)
+        graph_meta = candidate_uns
+    except (TypeError, ValueError):
+        graph_meta = {
+            k: v for k, v in (getattr(graph, 'uns', {}) or {}).items() if _is_json_serializable(v)
+        }
+
     doc = {
         'directed': True,  # node-link convention; per-edge directedness is in edges[*].directed
         'multigraph': True,
@@ -234,6 +254,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
             for e in edges
         ],
         'x-extensions': {
+            'uns': graph_meta,
             'slices': slices,
             'edge_slices': edge_slices,
             'hyperedges': [
@@ -286,6 +307,12 @@ def from_json(path) -> AnnNet:
         doc = json.load(f)
     H = AnnNet()
     ext = doc.get('x-extensions') or {}
+
+    # Restore graph-level metadata (uns).
+    uns = ext.get('uns') or {}
+    if isinstance(uns, dict):
+        H.uns.update(uns)
+
     mm = ext.get('multilayer', {})
     aspects = mm.get('aspects', [])
     elem_layers = mm.get('elem_layers', {})

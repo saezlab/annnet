@@ -174,7 +174,7 @@ def test_sif_from_manifest_restores_hyperedges_slices_and_multilayer(tmp_path):
                 'head': ['A'],
                 'tail': ['B'],
                 'weight': 5.0,
-                'attrs': {'kind': 'complex'},
+                'attrs': {'category': 'complex'},
             }
         },
         'slices': {'s1': {'edges': ['e1'], 'weights': {'e1': 9.0}}},
@@ -249,7 +249,7 @@ def test_json_multilayer_and_malformed_entries_roundtrip(tmp_path):
                 'target': {'kind': 'supra', 'vertex': 'B', 'layer': ['t1']},
                 'directed': True,
                 'weight': 2.0,
-                'kind': 'observed',
+                'category': 'observed',
             },
             {'source': 'skip', 'target': 'missing id'},
         ],

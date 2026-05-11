@@ -293,7 +293,7 @@ def _get_height(df: nw.DataFrame[Any]) -> int:
 
 
 def from_dataframes(
-    nodes: IntoDataFrame | None = None,
+    nodes: IntoDataFrame | dict | None = None,
     edges: IntoDataFrame | None = None,
     hyperedges: IntoDataFrame | None = None,
     slices: IntoDataFrame | None = None,
@@ -338,6 +338,20 @@ def from_dataframes(
         AnnNet instance
 
     """
+    # Accept the dict-of-frames produced by ``to_dataframes`` as a single
+    # positional argument so ``from_dataframes(to_dataframes(G))`` round-trips.
+    if isinstance(nodes, dict):
+        bundle = nodes
+        nodes = bundle.get('nodes')
+        if edges is None:
+            edges = bundle.get('edges')
+        if hyperedges is None:
+            hyperedges = bundle.get('hyperedges')
+        if slices is None:
+            slices = bundle.get('slices')
+        if slice_weights is None:
+            slice_weights = bundle.get('slice_weights')
+
     G = AnnNet(directed=directed)
 
     # 1. Add vertices
