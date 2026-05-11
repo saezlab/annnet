@@ -737,13 +737,26 @@ class ViewsClass:
         Returns
         -------
         DataFrame-like
-            Columns include `slice_id` plus pure attributes.
+            One row per slice (including the default slice), keyed by
+            ``slice_id``. User-set slice attributes appear as additional
+            columns; slices without user attrs still appear, with null
+            cells.
         """
-        df = self.slice_attributes
-        if df is None or 'slice_id' not in dataframe_columns(df):
+        all_slice_ids = list(self.slices.list_slices(include_default=True))
+        attr_df = self.slice_attributes
+
+        attr_rows: dict = {}
+        if attr_df is not None and 'slice_id' in dataframe_columns(attr_df):
+            for row in dataframe_to_rows(attr_df):
+                sid = row.get('slice_id')
+                if sid is not None:
+                    attr_rows[sid] = {k: v for k, v in row.items() if k != 'slice_id'}
+
+        rows = [{'slice_id': sid, **attr_rows.get(sid, {})} for sid in all_slice_ids]
+        if not rows:
             out = empty_dataframe({'slice_id': 'text'})
         else:
-            out = clone_dataframe(df)
+            out = dataframe_from_rows(rows)
         return clone_dataframe(out) if copy else out
 
     def aspects_view(self, copy=True):

@@ -182,16 +182,16 @@ class SliceManager:
 
     # ── queries ───────────────────────────────────────────────────────────────
 
-    def get_slices_dict(self, include_default=False):
+    def get_slices_dict(self, include_default=True):
         G = self._G
         if include_default:
             return G._slices
         return {k: v for k, v in G._slices.items() if k != G._default_slice}
 
-    def list_slices(self, include_default=False):
+    def list_slices(self, include_default=True):
         return list(self.get_slices_dict(include_default=include_default).keys())
 
-    def list(self, include_default=False):
+    def list(self, include_default=True):
         return self.list_slices(include_default=include_default)
 
     def has_slice(self, slice_id):
@@ -367,7 +367,7 @@ class SliceManager:
 
     # ── analytics ─────────────────────────────────────────────────────────────
 
-    def slice_statistics(self, include_default=False):
+    def slice_statistics(self, include_default=True):
         stats = {}
         for sid, data in self.get_slices_dict(include_default=include_default).items():
             stats[sid] = {
@@ -377,7 +377,7 @@ class SliceManager:
             }
         return stats
 
-    def stats(self, include_default=False):
+    def stats(self, include_default=True):
         return self.slice_statistics(include_default=include_default)
 
     def vertex_presence(self, vertex_id, include_default=False):
@@ -558,10 +558,10 @@ class SliceClass:
     def get_active_slice(self):
         return self.slices.get_active_slice()
 
-    def get_slices_dict(self, include_default=False):
+    def get_slices_dict(self, include_default=True):
         return self.slices.get_slices_dict(include_default=include_default)
 
-    def list_slices(self, include_default=False):
+    def list_slices(self, include_default=True):
         return self.slices.list_slices(include_default=include_default)
 
     def has_slice(self, slice_id):
@@ -639,5 +639,5 @@ class SliceClass:
             source_slice_ids, target_slice_id, method, weight_func, **attributes
         )
 
-    def slice_statistics(self, include_default=False):
+    def slice_statistics(self, include_default=True):
         return self.slices.slice_statistics(include_default=include_default)

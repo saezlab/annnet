@@ -146,15 +146,16 @@ class TestNXBackendAccessor(unittest.TestCase):
     def test_degree_centrality(self):
         G = build_small()
         dc = G.nx.degree_centrality(G)
-        self.assertIn(G.idx.entity_to_row('a'), dc)
-        self.assertAlmostEqual(dc[G.idx.entity_to_row('b')], 1.0)
+        # Results are keyed by vertex IDs (the README contract); see P0-7.
+        self.assertIn('a', dc)
+        self.assertAlmostEqual(dc['b'], 1.0)
 
     # ---- coercion of list/tuple/set of vertices ----
 
     def test_vertex_iterable_coercion(self):
         G = build_small()
         res = G.nx.single_source_dijkstra_path_length(G, source='a', weight='weight')
-        self.assertEqual(res[G.idx.entity_to_row('c')], 5.0)
+        self.assertEqual(res['c'], 5.0)
 
         res2 = G.nx.shortest_path(G, source='a', target='c', weight='weight')
         self.assertTrue(

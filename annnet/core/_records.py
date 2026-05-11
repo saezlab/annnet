@@ -99,6 +99,42 @@ class EdgeRecord:
     direction_policy: object  # dict | None
 
 
+class EdgeView(tuple):
+    """Edge view returned by :meth:`AnnNet.get_edge`.
+
+    Iteration / unpacking yields ``(source, target)`` for backward compat
+    with code that already does ``S, T = G.get_edge(j)``. Additional fields
+    are exposed as attributes:
+
+    - ``edge_id`` (str)
+    - ``kind`` ("binary" | "hyper_undirected" | "hyper_directed" |
+      "vertex_edge" | "edge_placeholder")
+    - ``source`` / ``target`` (same as tuple positions 0 / 1)
+    - ``members`` (frozenset of every entity incident to the edge)
+    - ``weight`` (float)
+    - ``directed`` (bool)
+    """
+
+    def __new__(cls, source, target, *, edge_id, kind, members, weight, directed):
+        self = super().__new__(cls, (source, target))
+        self.edge_id = edge_id
+        self.kind = kind
+        self.source = source
+        self.target = target
+        self.members = members
+        self.weight = weight
+        self.directed = directed
+        return self
+
+    def __repr__(self) -> str:
+        return (
+            f'EdgeView(edge_id={self.edge_id!r}, kind={self.kind!r}, '
+            f'source={self.source!r}, target={self.target!r}, '
+            f'members={self.members!r}, weight={self.weight!r}, '
+            f'directed={self.directed!r})'
+        )
+
+
 def _external_entity_kind(kind: str) -> str:
     return 'edge' if kind == 'edge_entity' else kind
 
