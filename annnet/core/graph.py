@@ -17,6 +17,7 @@ from ._records import (
     _EDGE_RESERVED,
     EdgeView,
     EdgeRecord,
+    EdgeType,
     SliceRecord,
     EntityRecord,
     _slice_RESERVED,
