@@ -303,13 +303,28 @@ class Operations:
                     }
                 )
 
-        # new graph prealloc
+        # new graph prealloc — preserve aspects when self is multilayer so
+        # supra-node tuple endpoints remain valid in the new graph.
         G = self.__class__
-        g = G(directed=self.directed, n=len(V), e=len(E))
-        # vertices with attrs
-        va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
-        v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
-        g.add_vertices_bulk(v_rows, slice=g._default_slice)
+        if self._aspects != ('_',):
+            new_aspects = {a: list(self._layers.get(a, [])) for a in self._aspects}
+            g = G(directed=self.directed, n=len(V), e=len(E), aspects=new_aspects)
+            # Place vertices in their original supra-node coordinates.
+            bare_vid_attrs = self._rows_attr_map(
+                self.vertex_attributes, 'vertex_id', {self._bare_vid(v) for v in V}
+            )
+            for node in V:
+                if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
+                    bare_vid, layer_coord = node
+                else:
+                    bare_vid, layer_coord = node, None
+                attrs = bare_vid_attrs.get(bare_vid, {})
+                g.add_vertices(bare_vid, layer=layer_coord, **attrs)
+        else:
+            g = G(directed=self.directed, n=len(V), e=len(E))
+            va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
+            v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
+            g.add_vertices_bulk(v_rows, slice=g._default_slice)
 
         # edges
         if bin_payload:
@@ -319,12 +334,19 @@ class Operations:
 
         # copy slice memberships for retained edges & incident vertices
         for lid, meta in self._slices.items():
-            g.slices.add_slice(lid, **meta['attributes'])
+            if not g.slices.has_slice(lid):
+                g.slices.add_slice(lid, **meta['attributes'])
             kept_edges = set(meta['edges']) & E
             if kept_edges:
                 g.slices.add_edges(lid, kept_edges)
 
         return g
+
+    @staticmethod
+    def _bare_vid(node):
+        if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
+            return node[0]
+        return node
 
     def subgraph(self, vertices) -> AnnNet:
         """Create a vertex-induced subgraph.
@@ -370,7 +392,10 @@ class Operations:
                 slice_specs=slice_specs,
             )
 
-        # collect edges fully inside V
+        # collect edges fully inside V (V can be a set of bare vertex IDs even
+        # when self is multilayer — endpoints are normalized via _bare_vid).
+        bare = self._bare_vid
+
         E_bin, E_hyper_members, E_hyper_dir = [], [], []
         for eid, rec in self._edges.items():
             if rec.col_idx < 0 or rec.src is None:
@@ -378,14 +403,16 @@ class Operations:
             if rec.etype == 'hyper':
                 h = _hyper_def(rec)
                 if h.get('members'):
-                    if set(h['members']).issubset(V):
+                    if {bare(m) for m in h['members']}.issubset(V):
                         E_hyper_members.append(eid)
                 else:
-                    if set(h.get('head', ())).issubset(V) and set(h.get('tail', ())).issubset(V):
+                    if {bare(m) for m in h.get('head', ())}.issubset(V) and {
+                        bare(m) for m in h.get('tail', ())
+                    }.issubset(V):
                         E_hyper_dir.append(eid)
             else:
                 s, t = rec.src, rec.tgt
-                if s is not None and t is not None and s in V and t in V:
+                if s is not None and t is not None and bare(s) in V and bare(t) in V:
                     E_bin.append(eid)
 
         # payloads
@@ -427,12 +454,25 @@ class Operations:
                 }
             )
 
-        # build new graph
+        # build new graph — preserve aspects when self is multilayer so the
+        # supra-node-tuple endpoints in payloads stay valid.
         G = self.__class__
-        g = G(
-            directed=self.directed, n=len(V), e=len(E_bin) + len(E_hyper_members) + len(E_hyper_dir)
-        )
-        g.add_vertices_bulk(v_rows, slice=g._default_slice)
+        edge_count = len(E_bin) + len(E_hyper_members) + len(E_hyper_dir)
+        if self._aspects != ('_',):
+            new_aspects = {a: list(self._layers.get(a, [])) for a in self._aspects}
+            g = G(directed=self.directed, n=len(V), e=edge_count, aspects=new_aspects)
+            # Place each retained vertex back at its original supra-node coords.
+            for vid in V:
+                attrs = va_lookup.get(vid, {})
+                placed = False
+                for ekey in self._vid_to_ekeys.get(vid, []):
+                    g.add_vertices(ekey[0], layer=ekey[1], **attrs)
+                    placed = True
+                if not placed:
+                    g.add_vertices(vid, **attrs)
+        else:
+            g = G(directed=self.directed, n=len(V), e=edge_count)
+            g.add_vertices_bulk(v_rows, slice=g._default_slice)
         if bin_payload:
             g.add_edges_bulk(bin_payload, slice=g._default_slice)
         if hyper_payload:
@@ -440,7 +480,8 @@ class Operations:
 
         # slice memberships restricted to V
         for lid, meta in self._slices.items():
-            g.slices.add_slice(lid, **meta['attributes'])
+            if not g.slices.has_slice(lid):
+                g.slices.add_slice(lid, **meta['attributes'])
             keep = set()
             for eid in meta['edges']:
                 rec = self._edges.get(eid)
@@ -449,16 +490,16 @@ class Operations:
                 if rec.etype == 'hyper':
                     h = _hyper_def(rec)
                     if h.get('members'):
-                        if set(h['members']).issubset(V):
+                        if {bare(m) for m in h['members']}.issubset(V):
                             keep.add(eid)
                     else:
-                        if set(h.get('head', ())).issubset(V) and set(h.get('tail', ())).issubset(
-                            V
-                        ):
+                        if {bare(m) for m in h.get('head', ())}.issubset(V) and {
+                            bare(m) for m in h.get('tail', ())
+                        }.issubset(V):
                             keep.add(eid)
                 else:
                     s, t = rec.src, rec.tgt
-                    if s is not None and t is not None and s in V and t in V:
+                    if s is not None and t is not None and bare(s) in V and bare(t) in V:
                         keep.add(eid)
             if keep:
                 g.slices.add_edges(lid, keep)
@@ -530,6 +571,14 @@ class Operations:
             return Operations.edge_subgraph(self, E)
 
         # Both filters: keep only edges in E whose endpoints (or members) lie in V
+        def _bare_vid(node):
+            # Multilayer endpoints are (vertex_id, layer_coord_tuple); bare vids
+            # are plain strings. Normalize to the underlying vertex ID so V can
+            # be expressed as a set of bare vertex IDs regardless of multilayer.
+            if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
+                return node[0]
+            return node
+
         kept_edges = set()
         kept_vertices = set(V)
         for eid in E:
@@ -539,14 +588,16 @@ class Operations:
             if rec.etype == 'hyper':
                 h = _hyper_def(rec)
                 if h.get('members'):
-                    if set(h['members']).issubset(V):
+                    if {_bare_vid(m) for m in h['members']}.issubset(V):
                         kept_edges.add(eid)
                 else:
-                    if set(h.get('head', ())).issubset(V) and set(h.get('tail', ())).issubset(V):
+                    if {_bare_vid(m) for m in h.get('head', ())}.issubset(V) and {
+                        _bare_vid(m) for m in h.get('tail', ())
+                    }.issubset(V):
                         kept_edges.add(eid)
             else:
                 s, t = rec.src, rec.tgt
-                if s is not None and t is not None and s in V and t in V:
+                if s is not None and t is not None and _bare_vid(s) in V and _bare_vid(t) in V:
                     kept_edges.add(eid)
 
         return Operations.subgraph(Operations.edge_subgraph(self, kept_edges), kept_vertices)

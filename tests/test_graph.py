@@ -519,10 +519,16 @@ class TestErrorPaths(unittest.TestCase):
         placeholder_warnings = [w for w in caught if 'placeholder layer' in str(w.message)]
         self.assertEqual(len(placeholder_warnings), 1)
 
-    def test_add_edge_with_bare_ids_raises_on_multilayer_graph(self):
+    def test_add_edge_with_bare_ids_falls_back_to_placeholder_on_multilayer_graph(self):
+        """Mirror of ``add_vertices``: bare ids → placeholder layer + UserWarning."""
+        import warnings
+
         self.g.layers.set_aspects(['condition', 'time'])
-        with self.assertRaisesRegex(ValueError, 'explicit supra-node endpoints'):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
             self.g.add_edges('a', 'b')
+        msgs = [str(w.message) for w in caught]
+        assert any('placeholder layer' in m for m in msgs), msgs
 
     def test_direct_aspects_property_rebuilds_all_layers_cache(self):
         self.g.aspects = ['condition', 'time']
