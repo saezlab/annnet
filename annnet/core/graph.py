@@ -15,9 +15,8 @@ from ._Slices import SliceManager
 from ._History import History, HistoryAccessor
 from ._records import (
     _EDGE_RESERVED,
-    EdgeRecord,
-    EdgeType,
     EdgeView,
+    EdgeRecord,
     SliceRecord,
     EntityRecord,
     _slice_RESERVED,
@@ -588,10 +587,10 @@ class AnnNet(
 
         slice_ids = list(self._slices.keys())
         if slice_ids:
-            lines.append(f"    slices: {slice_ids}")
+            lines.append(f'    slices: {slice_ids}')
 
         if self._aspects and self._aspects != ('_',):
-            lines.append(f"    aspects: {list(self._aspects)}")
+            lines.append(f'    aspects: {list(self._aspects)}')
 
         def _user_cols(df, id_field: str) -> list[str]:
             try:
@@ -602,15 +601,15 @@ class AnnNet(
 
         obs_cols = _user_cols(self.vertex_attributes, 'vertex_id')
         if obs_cols:
-            lines.append(f"    obs: {obs_cols!r}")
+            lines.append(f'    obs: {obs_cols!r}')
 
         var_cols = _user_cols(self.edge_attributes, 'edge_id')
         if var_cols:
-            lines.append(f"    var: {var_cols!r}")
+            lines.append(f'    var: {var_cols!r}')
 
         uns_keys = list(self.graph_attributes.keys()) if self.graph_attributes else []
         if uns_keys:
-            lines.append(f"    uns: {uns_keys!r}")
+            lines.append(f'    uns: {uns_keys!r}')
 
         return '\n'.join(lines)
 
@@ -1675,9 +1674,7 @@ class AnnNet(
             bare_total = bare_src + bare_tgt
             if bare_total:
                 self._ensure_placeholder_layers_declared()
-                self._warn_placeholder_vertex_assignment(
-                    bare_total, context='add_edges'
-                )
+                self._warn_placeholder_vertex_assignment(bare_total, context='add_edges')
 
         # ── 2. Resolve direction ───────────────────────────────────────────
         if directed is not None:
@@ -2777,18 +2774,14 @@ class AnnNet(
                         seen.add(eid)
                         rec = self._edges.get(eid)
                         if rec is not None and rec.col_idx >= 0:
-                            result.append(
-                                (rec.col_idx, self._edge_tuple_from_record(rec, eid=eid))
-                            )
+                            result.append((rec.col_idx, self._edge_tuple_from_record(rec, eid=eid)))
             if direction in {'out', 'both'}:
                 for eid in self._src_to_edges.get(v, []):
                     if eid not in seen:
                         seen.add(eid)
                         rec = self._edges.get(eid)
                         if rec is not None and rec.col_idx >= 0:
-                            result.append(
-                                (rec.col_idx, self._edge_tuple_from_record(rec, eid=eid))
-                            )
+                            result.append((rec.col_idx, self._edge_tuple_from_record(rec, eid=eid)))
             if direction == 'in':
                 secondary = self._src_to_edges.get(v, [])
             elif direction == 'out':
@@ -2800,9 +2793,7 @@ class AnnNet(
                     seen.add(eid)
                     rec = self._edges.get(eid)
                     if rec is not None and rec.col_idx >= 0:
-                        result.append(
-                            (rec.col_idx, self._edge_tuple_from_record(rec, eid=eid))
-                        )
+                        result.append((rec.col_idx, self._edge_tuple_from_record(rec, eid=eid)))
         return result
 
     @property
@@ -3780,7 +3771,7 @@ class AnnNet(
                 if has_src ^ has_tgt:
                     missing = 'target' if has_src else 'source'
                     raise ValueError(
-                        f"add_edges batch item at index {idx} is missing "
+                        f'add_edges batch item at index {idx} is missing '
                         f"'{missing}' (or its alias '{'tgt' if missing == 'target' else 'src'}'): "
                         f'{it!r}'
                     )
@@ -4435,9 +4426,7 @@ class AnnNet(
             suffix = '' if len(missing) <= 3 else ', ...'
             raise KeyError(f'Unknown edge id(s): {sample}{suffix}')
 
-        to_drop = [
-            eid for eid in edge_ids if eid in self._edges and self._edges[eid].col_idx >= 0
-        ]
+        to_drop = [eid for eid in edge_ids if eid in self._edges and self._edges[eid].col_idx >= 0]
         if not to_drop:
             return
         self._remove_edges_bulk(to_drop)
