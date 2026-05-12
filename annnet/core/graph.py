@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import json
 import time
+from typing import Any
 import warnings
 from collections import defaultdict
-from collections.abc import MutableMapping
+from collections.abc import Iterable, Iterator, MutableMapping
 
 import numpy as np
 import scipy.sparse as sp
@@ -17,7 +20,6 @@ from ._records import (
     _EDGE_RESERVED,
     EdgeView,
     EdgeRecord,
-    EdgeType,
     SliceRecord,
     EntityRecord,
     _slice_RESERVED,
@@ -357,14 +359,14 @@ class AnnNet(
     # Construction
     def __init__(
         self,
-        directed=None,
+        directed: bool | None = None,
         v: int = 0,
         e: int = 0,
-        annotations=None,
-        annotations_backend='polars',
-        aspects: dict | None = None,
-        **kwargs,
-    ):
+        annotations: dict[str, Any] | None = None,
+        annotations_backend: str = 'polars',
+        aspects: dict[str, list[str]] | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Initialize an empty :class:`AnnNet` graph.
 
         Parameters
@@ -618,7 +620,7 @@ class AnnNet(
         """Number of vertices (NetworkX convention)."""
         return self.nv
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         """Iterate over vertex IDs (NetworkX convention)."""
         return iter(self.vertices())
 
@@ -925,7 +927,13 @@ class AnnNet(
 
     # Build graph
 
-    def add_vertices(self, vertices, slice=None, layer=None, **attributes):
+    def add_vertices(
+        self,
+        vertices: str | dict[str, Any] | tuple[str, dict[str, Any]] | Iterable[Any],
+        slice: str | None = None,
+        layer: str | tuple[str, ...] | dict[str, str] | None = None,
+        **attributes: Any,
+    ) -> str | list[str]:
         """Add one vertex or many vertices.
 
         This is the canonical public entry point for vertex creation. Use it
@@ -1036,7 +1044,13 @@ class AnnNet(
                 out.append(it)
         return out
 
-    def add_vertex(self, vertex_id, slice=None, layer=None, **attributes):
+    def add_vertex(
+        self,
+        vertex_id: str,
+        slice: str | None = None,
+        layer: str | tuple[str, ...] | dict[str, str] | None = None,
+        **attributes: Any,
+    ) -> str:
         """Compatibility wrapper for the canonical ``add_vertices`` API."""
         return self._add_vertex_impl(vertex_id, slice=slice, layer=layer, **attributes)
 
@@ -1287,9 +1301,9 @@ class AnnNet(
 
     def add_edges(
         self,
-        *args,
-        **kwargs,
-    ):
+        *args: Any,
+        **kwargs: Any,
+    ) -> str | list[str]:
         """Add one edge, many edges, or hyperedges.
 
         This is the canonical public entry point for all edge creation. It
@@ -1503,19 +1517,19 @@ class AnnNet(
 
     def add_edge(
         self,
-        src=None,
-        tgt=None,
+        src: str | list[str] | dict[str, float] | tuple[str, tuple[str, ...]] | None = None,
+        tgt: str | list[str] | dict[str, float] | tuple[str, tuple[str, ...]] | None = None,
         *,
-        weight=1.0,
-        edge_id=None,
-        directed=None,
-        parallel='update',
-        slice=None,
-        as_entity=False,
-        propagate='none',
-        flexible=None,
-        **attrs,
-    ):
+        weight: float = 1.0,
+        edge_id: str | None = None,
+        directed: bool | None = None,
+        parallel: str = 'update',
+        slice: str | None = None,
+        as_entity: bool = False,
+        propagate: str = 'none',
+        flexible: dict[str, Any] | None = None,
+        **attrs: Any,
+    ) -> str:
         """Compatibility wrapper for the canonical ``add_edges`` API."""
         return self._add_edge_impl(
             src,
@@ -2306,7 +2320,7 @@ class AnnNet(
             ) from None
         return entry[0] if isinstance(entry, tuple) else entry
 
-    def get_edge(self, index: int):
+    def get_edge(self, index: int | str) -> EdgeView:
         """Return an :class:`EdgeView` for the requested edge.
 
         Parameters
@@ -2564,7 +2578,7 @@ class AnnNet(
         csr = self._get_csr()
         return int(csr.indptr[ent.row_idx + 1] - csr.indptr[ent.row_idx])
 
-    def vertices(self):
+    def vertices(self) -> list[str]:
         """Return all vertex IDs.
 
         Returns
@@ -2583,7 +2597,7 @@ class AnnNet(
             if rec.kind == 'vertex'
         ]
 
-    def edges(self):
+    def edges(self) -> list[str]:
         """Return all structural edge IDs.
 
         Returns
@@ -2593,7 +2607,7 @@ class AnnNet(
         """
         return [eid for eid, rec in self._edges.items() if rec.col_idx >= 0]
 
-    def edge_list(self):
+    def edge_list(self) -> list[tuple[str, str, str, float]]:
         """Materialize binary edges as endpoint tuples.
 
         Returns
@@ -2731,7 +2745,11 @@ class AnnNet(
 
     # ── Traversal ────────────────────────────────────────────────────────────
 
-    def incident_edges(self, vertices, direction: str = 'both'):
+    def incident_edges(
+        self,
+        vertices: str | Iterable[str],
+        direction: str = 'both',
+    ) -> list[tuple[int, EdgeView]]:
         """Return edges incident to one or more vertices.
 
         Parameters
@@ -2798,7 +2816,7 @@ class AnnNet(
         return result
 
     @property
-    def nv(self):
+    def nv(self) -> int:
         """Number of stored vertices.
 
         Returns
@@ -2809,7 +2827,7 @@ class AnnNet(
         return sum(1 for r in self._entities.values() if r.kind == 'vertex')
 
     @property
-    def ne(self):
+    def ne(self) -> int:
         """Number of structural edges.
 
         Returns
@@ -2820,7 +2838,7 @@ class AnnNet(
         return len(self._col_to_edge)
 
     @property
-    def num_vertices(self):
+    def num_vertices(self) -> int:
         """Number of stored vertices.
 
         Returns
@@ -2831,7 +2849,7 @@ class AnnNet(
         return self.nv
 
     @property
-    def num_edges(self):
+    def num_edges(self) -> int:
         """Number of structural edges.
 
         Returns
@@ -2842,7 +2860,7 @@ class AnnNet(
         return self.ne
 
     @property
-    def shape(self):
+    def shape(self) -> tuple[int, int]:
         """Graph shape as ``(num_vertices, num_edges)``.
 
         Returns
@@ -2963,7 +2981,7 @@ class AnnNet(
     ## Lazy NetworkX proxy
 
     @property
-    def nx(self):
+    def nx(self) -> _NXBackendAccessor:
         """NetworkX interoperability namespace.
 
         Returns
@@ -2984,7 +3002,7 @@ class AnnNet(
     ## Lazy iGraph proxy
 
     @property
-    def ig(self):
+    def ig(self) -> _IGBackendAccessor:
         """Igraph interoperability namespace.
 
         Returns
@@ -2999,7 +3017,7 @@ class AnnNet(
     ## Lazy AnnNet-tool proxy
 
     @property
-    def gt(self):
+    def gt(self) -> _GTBackendAccessor:
         """graph-tool interoperability namespace.
 
         Returns
@@ -3030,7 +3048,7 @@ class AnnNet(
         return self._matrix
 
     @property
-    def obs(self):
+    def obs(self) -> Any:
         """Notebook-friendly vertex attribute table.
 
         Returns
@@ -3056,7 +3074,7 @@ class AnnNet(
         return self.vertex_attributes
 
     @property
-    def var(self):
+    def var(self) -> Any:
         """Notebook-friendly edge attribute table.
 
         Returns
@@ -3079,7 +3097,7 @@ class AnnNet(
         return self.edge_attributes
 
     @property
-    def uns(self):
+    def uns(self) -> dict[str, Any]:
         """Graph-level unstructured metadata.
 
         Returns
@@ -3090,7 +3108,7 @@ class AnnNet(
         return self.graph_attributes
 
     @property
-    def slices(self):
+    def slices(self) -> SliceManager:
         """Slice operations namespace.
 
         Returns
@@ -3101,16 +3119,16 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.slices.add_slice('baseline')
+        >>> G.slices.add('baseline')
         >>> G.slices.active = 'baseline'
-        >>> G.slices.list_slices()
+        >>> G.slices.list()
         """
         if not hasattr(self, '_slice_manager'):
             self._slice_manager = SliceManager(self)
         return self._slice_manager
 
     @property
-    def attrs(self):
+    def attrs(self) -> AttributesAccessor:
         """Attribute operations namespace.
 
         Returns
@@ -3137,7 +3155,7 @@ class AnnNet(
             return self._attrs_accessor
 
     @property
-    def views(self):
+    def views(self) -> ViewsAccessor:
         """Materialized table namespace.
 
         Returns
@@ -3164,7 +3182,7 @@ class AnnNet(
             return self._views_accessor
 
     @property
-    def ops(self):
+    def ops(self) -> OperationsAccessor:
         """Structural operations namespace.
 
         Returns
@@ -3186,7 +3204,7 @@ class AnnNet(
             return self._ops_accessor
 
     @property
-    def layers(self):
+    def layers(self) -> LayerAccessor:
         """Layer operations namespace.
 
         Returns
@@ -4068,7 +4086,9 @@ class AnnNet(
             - list-shaped ``src`` with no ``tgt`` → undirected hyperedge
               (``src`` is the member set)
             - list-shaped ``src`` and ``tgt`` → directed hyperedge
-              (``src`` is the tail, ``tgt`` is the head)
+              (``src`` is stored in ``rec.src`` and gets the ``+w`` matrix
+              entries; ``tgt`` is stored in ``rec.tgt`` and gets ``-w``,
+              matching the single-edge ``add_edges`` path).
 
             Legacy ``members`` / ``head`` / ``tail`` keys are still accepted
             for internal IO compatibility but should not be used in
@@ -4096,7 +4116,11 @@ class AnnNet(
                 d['edge_directed'] = d.pop('directed')
 
             # ── Normalize user-facing src/tgt to internal members/head/tail ──
-            # New API: src is members (no tgt) or tail (with tgt); tgt is head.
+            # annnet stores rec.src = head (the +w side in the incidence
+            # matrix) and rec.tgt = tail (the -w side). To keep the batch
+            # path consistent with the single-edge path — where the user's
+            # ``src`` ends up in rec.src and gets +w — map user.src → head
+            # and user.tgt → tail here.
             if 'src' in d and 'source' not in d:
                 d['source'] = d.pop('src')
             if 'tgt' in d and 'target' not in d:
@@ -4119,8 +4143,8 @@ class AnnNet(
                 if tgt_list is None:
                     d['members'] = src_list or []
                 else:
-                    d['tail'] = src_list or []
-                    d['head'] = tgt_list
+                    d['head'] = src_list or []
+                    d['tail'] = tgt_list
 
             d.setdefault('weight', default_weight)
             if 'slice' not in d:
@@ -4393,7 +4417,12 @@ class AnnNet(
                 raise ValueError(f'Composite key conflict for {key}: {owner} vs {vid}')
             self._vertex_key_index[key] = vid
 
-    def remove_edges(self, edge_ids, *, errors: str = 'raise'):
+    def remove_edges(
+        self,
+        edge_ids: str | Iterable[str],
+        *,
+        errors: str = 'raise',
+    ) -> None:
         """Remove one edge or many edges.
 
         Parameters
@@ -4432,7 +4461,12 @@ class AnnNet(
             return
         self._remove_edges_bulk(to_drop)
 
-    def remove_vertices(self, vertex_ids, *, errors: str = 'raise'):
+    def remove_vertices(
+        self,
+        vertex_ids: str | tuple[str, tuple[str, ...]] | Iterable[Any],
+        *,
+        errors: str = 'raise',
+    ) -> None:
         """Remove one vertex or many vertices.
 
         Parameters

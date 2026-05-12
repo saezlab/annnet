@@ -63,20 +63,18 @@ def test_directed_hyperedge_view_via_single_edge_path():
     assert view.directed is True
 
 
-def test_directed_hyperedge_view_via_batch_path():
-    """Batch path currently stores src/tgt inverted; covered as a regression
-    guard so the inconsistency is intentional, not silent."""
+def test_directed_hyperedge_view_via_batch_path_matches_single_edge_path():
+    """Batch path now stores src/tgt consistently with the single-edge path
+    (P1-G fix): user's ``src`` ends up in ``rec.src``."""
     G = AnnNet(directed=True)
     G.add_vertices(['A', 'B', 'C', 'D'])
     G.add_edges([{'src': ['A', 'B'], 'tgt': ['C', 'D'], 'edge_id': 'h1'}])
     view = G.get_edge('h1')
     assert view.kind == 'hyper_directed'
+    assert view.source == frozenset(['A', 'B'])
+    assert view.target == frozenset(['C', 'D'])
     assert view.members == frozenset(['A', 'B', 'C', 'D'])
     assert view.directed is True
-    # NOTE: batch path stores head=user.tgt as rec.src and tail=user.src as
-    # rec.tgt. The user-facing ``source`` / ``target`` reflect that internal
-    # state today.
-    assert view.source | view.target == frozenset(['A', 'B', 'C', 'D'])
 
 
 def test_tuple_unpacking_back_compat():

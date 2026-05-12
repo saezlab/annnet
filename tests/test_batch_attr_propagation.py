@@ -81,7 +81,9 @@ def test_add_hyperedges_batch_undirected_via_src_list():
 
 
 def test_add_hyperedges_batch_directed_via_src_tgt_lists():
-    """List-shaped src AND tgt → directed hyperedge (src is tail, tgt is head)."""
+    """List-shaped src AND tgt → directed hyperedge. P1-G: batch path now
+    stores user.src in rec.src and user.tgt in rec.tgt, matching the
+    single-edge path."""
     G = AnnNet(directed=False)
     G.add_vertices(['A', 'B', 'C', 'D'])
     G.add_edges(
@@ -93,9 +95,8 @@ def test_add_hyperedges_batch_directed_via_src_tgt_lists():
     rec = G._edges['h2']
     assert rec.etype == 'hyper'
     assert rec.directed is True
-    # internal record stores head in src, tail in tgt
-    assert set(rec.src) == {'B', 'C', 'D'}
-    assert set(rec.tgt) == {'A'}
+    assert set(rec.src) == {'A'}
+    assert set(rec.tgt) == {'B', 'C', 'D'}
 
 
 def test_add_hyperedges_batch_source_target_aliases():
