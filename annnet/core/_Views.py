@@ -791,6 +791,66 @@ class ViewsClass:
         df = dataframe_from_rows(rows)
         return clone_dataframe(df) if copy else df
 
+    def layers_view(self, copy=True):
+        """Return a read-only table of multi-aspect layers.
+
+        Parameters
+        ----------
+        copy : bool, optional
+            Return a cloned DataFrame.
+
+        Returns
+        -------
+        DataFrame-like
+
+        Notes
+        -----
+        Columns include `layer_tuple`, `layer_id`, aspect columns, layer attributes,
+        and prefixed elementary layer attributes.
+        """
+        if not self.aspects:
+            return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
+
+        if not getattr(self.layers, '_all_layers', ()):
+            return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
+
+        elem_attr_rows = {}
+        if self.layer_attributes is not None and 'layer_id' in dataframe_columns(
+            self.layer_attributes
+        ):
+            for row in dataframe_to_rows(self.layer_attributes):
+                layer_id = row.get('layer_id')
+                if layer_id is None:
+                    continue
+                elem_attr_rows[str(layer_id)] = {k: v for k, v in row.items() if k != 'layer_id'}
+
+        rows = []
+        for aa in self.layers._all_layers:
+            aa = tuple(aa)
+            lid = self.layers.layer_tuple_to_id(aa)
+
+            base = {
+                'layer_tuple': list(aa),
+                'layer_id': lid,
+            }
+
+            for i, aspect in enumerate(self.aspects):
+                base[aspect] = aa[i]
+
+            for k, v in self.layers._layer_attrs.get(aa, {}).items():
+                base[k] = v
+
+            for i, aspect in enumerate(self.aspects):
+                lid_elem = f'{aspect}_{aa[i]}'
+                rdict = elem_attr_rows.get(lid_elem, {})
+                for k, v in rdict.items():
+                    base[f'{aspect}__{k}'] = v
+
+            rows.append(base)
+
+        df = dataframe_from_rows(rows)
+        return clone_dataframe(df) if copy else df
+
 
 class ViewsAccessor:
     """Namespace for materialized graph tables.
@@ -820,57 +880,4 @@ class ViewsAccessor:
         return ViewsClass.layers_view(self._G, *args, **kwargs)
 
     def layers_view(self, copy=True):
-        """Return a read-only table of multi-aspect layers.
-
-        Parameters
-        ----------
-        copy : bool, optional
-            Return a cloned DataFrame.
-
-        Returns
-        -------
-        DataFrame-like
-
-        Notes
-        -----
-        Columns include `layer_tuple`, `layer_id`, aspect columns, layer attributes,
-        and prefixed elementary layer attributes.
-        """
-        # no aspects configured → no layers
-        if not getattr(self, 'aspects', None):
-            return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
-
-        # empty product → no layers
-        if not getattr(self.layers, '_all_layers', ()):
-            return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
-
-        rows = []
-        for aa in self.layers._all_layers:
-            aa = tuple(aa)
-            lid = self.layer_tuple_to_id(aa)
-
-            base = {
-                'layer_tuple': list(aa),
-                'layer_id': lid,
-            }
-
-            # split per-aspect columns
-            for i, a in enumerate(self.aspects):
-                base[a] = aa[i]
-
-            # attach multi-aspect layer metadata
-            for k, v in self.layers._layer_attrs.get(aa, {}).items():
-                base[k] = v
-
-            # attach elementary layer attrs for each aspect (prefixed)
-            # using the canonical elementary id "{aspect}_{label}"
-            for i, a in enumerate(self.aspects):
-                lid_elem = f'{a}_{aa[i]}'
-                rdict = self._row_attrs(self.layer_attributes, 'layer_id', lid_elem) or {}
-                for k, v in rdict.items():
-                    base[f'{a}__{k}'] = v
-
-            rows.append(base)
-
-        df = dataframe_from_rows(rows)
-        return clone_dataframe(df) if copy else df
+        return ViewsClass.layers_view(self._G, copy=copy)
