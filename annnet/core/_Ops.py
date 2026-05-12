@@ -334,8 +334,8 @@ class Operations:
 
         # copy slice memberships for retained edges & incident vertices
         for lid, meta in self._slices.items():
-            if not g.slices.has_slice(lid):
-                g.slices.add_slice(lid, **meta['attributes'])
+            if not g.slices.exists(lid):
+                g.slices.add(lid, **meta['attributes'])
             kept_edges = set(meta['edges']) & E
             if kept_edges:
                 g.slices.add_edges(lid, kept_edges)
@@ -480,8 +480,8 @@ class Operations:
 
         # slice memberships restricted to V
         for lid, meta in self._slices.items():
-            if not g.slices.has_slice(lid):
-                g.slices.add_slice(lid, **meta['attributes'])
+            if not g.slices.exists(lid):
+                g.slices.add(lid, **meta['attributes'])
             keep = set()
             for eid in meta['edges']:
                 rec = self._edges.get(eid)
@@ -710,8 +710,8 @@ class Operations:
 
         G = self.__class__
         g = G(directed=self.directed, n=len(V), e=len(E))
-        g.slices.add_slice(slice_id, **slice_meta['attributes'])
-        g.slices.set_active_slice(slice_id)
+        g.slices.add(slice_id, **slice_meta['attributes'])
+        g.slices.active = slice_id
 
         # vertices with attrs (edge-entities share same table)
         va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)

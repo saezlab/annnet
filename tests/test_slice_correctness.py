@@ -14,7 +14,7 @@ def _build_graph():
     G = AnnNet(directed=True)
     G.add_vertices(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.0)
-    G.slices.add_slice('treated')
+    G.slices.add('treated')
     return G
 
 
@@ -23,10 +23,10 @@ def _build_graph():
 
 def test_list_slices_includes_default():
     G = _build_graph()
-    names = G.slices.list_slices()
+    names = G.slices.list()
     assert 'default' in names
     assert 'treated' in names
-    assert len(names) == G.slices.slice_count()
+    assert len(names) == G.slices.count()
 
 
 def test_get_slices_dict_includes_default():
@@ -38,7 +38,7 @@ def test_get_slices_dict_includes_default():
 
 def test_slice_statistics_includes_default():
     G = _build_graph()
-    stats = G.slices.slice_statistics()
+    stats = G.slices.stats()
     assert 'default' in stats
     assert 'treated' in stats
 
@@ -46,7 +46,7 @@ def test_slice_statistics_includes_default():
 def test_views_slices_populated():
     G = _build_graph()
     df = G.views.slices()
-    assert df.shape[0] == G.slices.slice_count()
+    assert df.shape[0] == G.slices.count()
 
 
 # ── legacy weight shim ────────────────────────────────────────────────────

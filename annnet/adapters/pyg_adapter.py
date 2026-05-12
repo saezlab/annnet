@@ -146,7 +146,7 @@ def to_pyg(
         # Slice mask
         if slice_id is not None:
             try:
-                members = set(graph.slices.get_slice_vertices(slice_id))
+                members = set(graph.slices.vertices(slice_id))
             except Exception:  # noqa: BLE001
                 members = set()
 

@@ -742,7 +742,7 @@ class ViewsClass:
             columns; slices without user attrs still appear, with null
             cells.
         """
-        all_slice_ids = list(self.slices.list_slices(include_default=True))
+        all_slice_ids = list(self.slices.list(include_default=True))
         attr_df = self.slice_attributes
 
         attr_rows: dict = {}

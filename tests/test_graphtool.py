@@ -107,10 +107,10 @@ class TestGraphToolAdapter(unittest.TestCase):
         gtG, manifest = to_graphtool(g)
         g2 = from_graphtool(gtG, manifest)
 
-        slices = list(g2.slices.list_slices(include_default=True))
+        slices = list(g2.slices.list(include_default=True))
         self.assertIn('Lw', slices)
 
-        edges_in_lw = list(g2.slices.get_slice_edges('Lw'))
+        edges_in_lw = list(g2.slices.edges('Lw'))
         self.assertGreater(len(edges_in_lw), 0)
 
         eid = edges_in_lw[0]

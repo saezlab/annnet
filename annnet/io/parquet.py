@@ -304,7 +304,7 @@ def to_parquet(graph: AnnNet, path):
     # slices
     L = []
     try:
-        for lid in graph.slices.list_slices(include_default=True):
+        for lid in graph.slices.list(include_default=True):
             L.append({'slice_id': lid})
     except Exception:  # noqa: BLE001
         pass
@@ -316,8 +316,8 @@ def to_parquet(graph: AnnNet, path):
     # edge_slices
     EL = []
     try:
-        for lid in graph.slices.list_slices(include_default=True):
-            for eid in graph.slices.get_slice_edges(lid):
+        for lid in graph.slices.list(include_default=True):
+            for eid in graph.slices.edges(lid):
                 rec = {'slice_id': lid, 'edge_id': eid}
                 try:
                     w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
@@ -606,8 +606,8 @@ def from_parquet(path) -> AnnNet:
         for rec in _safe_df_to_rows(L):
             lid = rec.get('slice_id')
             try:
-                if lid not in set(H.slices.list_slices(include_default=True)):
-                    H.slices.add_slice(lid)
+                if lid not in set(H.slices.list(include_default=True)):
+                    H.slices.add(lid)
             except Exception:  # noqa: BLE001
                 pass
 

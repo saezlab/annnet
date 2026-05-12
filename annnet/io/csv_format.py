@@ -36,6 +36,7 @@ import re
 import json
 import math
 from typing import Any
+from pathlib import Path
 from collections.abc import Iterable
 
 import numpy as np
@@ -247,7 +248,7 @@ def _detect_schema(df) -> str:
 
 
 def from_csv(
-    path: str,
+    path: str | Path,
     *,
     graph: AnnNet | None = None,
     schema: str = 'auto',
@@ -259,7 +260,7 @@ def from_csv(
     null_values: list[str] | None = None,
     low_memory: bool = True,
     **kwargs: Any,
-):
+) -> AnnNet:
     """Load a CSV and construct/augment an AnnNet.
 
     Parameters
@@ -321,7 +322,7 @@ def from_csv(
 
 
 def from_dataframe(
-    df,
+    df: Any,
     *,
     graph: AnnNet | None = None,
     schema: str = 'auto',
@@ -329,7 +330,7 @@ def from_dataframe(
     default_directed: bool | None = None,
     default_weight: float = 1.0,
     **kwargs: Any,
-):
+) -> AnnNet:
     """Build/augment an AnnNet from a Narwhals-compatible dataframe.
 
     Parameters
@@ -380,7 +381,7 @@ def from_dataframe(
     return G
 
 
-def edges_to_csv(G, path, slice=None):
+def edges_to_csv(G: AnnNet, path: str | Path, slice: str | None = None) -> None:
     """Export the binary edge subgraph to a CSV [Comma-Separated Values] file.
 
     Parameters

@@ -245,7 +245,7 @@ def to_dataframes(
     if include_slices:
         slices_data = []
         try:
-            for lid in graph.slices.list_slices(include_default=True):
+            for lid in graph.slices.list(include_default=True):
                 slice_meta = graph._slices.get(lid, {})
                 for eid in slice_meta.get('edges', []):
                     slices_data.append({'slice_id': lid, 'edge_id': eid})
@@ -483,10 +483,10 @@ def from_dataframes(
                 eid = row['edge_id']
 
                 try:
-                    if lid not in set(G.slices.list_slices(include_default=True)):
-                        G.slices.add_slice(lid)
+                    if lid not in set(G.slices.list(include_default=True)):
+                        G.slices.add(lid)
                 except Exception:  # noqa: BLE001
-                    G.slices.add_slice(lid)
+                    G.slices.add(lid)
 
                 try:
                     G.add_edge_to_slice(lid, eid)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING
+from pathlib import Path
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
@@ -118,7 +119,13 @@ def _attrs_by_id(table, id_col: str, *, public_only: bool = False) -> dict:
     return out
 
 
-def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
+def to_json(
+    graph: AnnNet,
+    path: str | Path,
+    *,
+    public_only: bool = False,
+    indent: int = 0,
+) -> None:
     """Node-link JSON with x-extensions (slices, edge_slices, hyperedges).
 
     Lossless vs your core (IDs, attrs, parallel, hyperedges, slices).
@@ -199,7 +206,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     # slices + per-slice weights
     slices = []
     try:
-        for lid in graph.slices.list_slices(include_default=True):
+        for lid in graph.slices.list(include_default=True):
             slices.append({'slice_id': lid})
     except Exception:  # noqa: BLE001
         pass
@@ -207,9 +214,9 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
     edge_slices = []
     # Collect memberships + weights if available
     try:
-        for lid in graph.slices.list_slices(include_default=True):
+        for lid in graph.slices.list(include_default=True):
             try:
-                for eid in graph.slices.get_slice_edges(lid):
+                for eid in graph.slices.edges(lid):
                     rec = {'slice_id': lid, 'edge_id': eid}
                     try:
                         w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
@@ -299,7 +306,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
         json.dump(doc, f, ensure_ascii=False, indent=indent)
 
 
-def from_json(path) -> AnnNet:
+def from_json(path: str | Path) -> AnnNet:
     """Load AnnNet from node-link JSON + x-extensions (lossless wrt schema above)."""
     from ..core.graph import AnnNet
 
@@ -406,14 +413,14 @@ def from_json(path) -> AnnNet:
         H.attrs.set_edge_attrs_bulk(hyper_attrs_pending)
 
     # slices + edge_slices — bulk
-    known_slices = set(H.slices.list_slices(include_default=True))
+    known_slices = set(H.slices.list(include_default=True))
     for L in ext.get('slices', []):
         lid = L.get('slice_id')
         if lid is None:
             continue
         if lid not in known_slices:
             try:
-                H.slices.add_slice(lid)
+                H.slices.add(lid)
                 known_slices.add(lid)
             except Exception:  # noqa: BLE001
                 pass
@@ -543,15 +550,15 @@ def write_ndjson(graph: AnnNet, dir_path):
     # slices
     with open(f'{dir_path}/slices.ndjson', 'w', encoding='utf-8') as fl:
         try:
-            for lid in graph.slices.list_slices(include_default=True):
+            for lid in graph.slices.list(include_default=True):
                 fl.write(json.dumps({'slice_id': lid}, ensure_ascii=False) + '\n')
         except Exception:  # noqa: BLE001
             pass
 
     with open(f'{dir_path}/edge_slices.ndjson', 'w', encoding='utf-8') as fel:
         try:
-            for lid in graph.slices.list_slices(include_default=True):
-                for eid in graph.slices.get_slice_edges(lid):
+            for lid in graph.slices.list(include_default=True):
+                for eid in graph.slices.edges(lid):
                     rec = {'slice_id': lid, 'edge_id': eid}
                     try:
                         w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)

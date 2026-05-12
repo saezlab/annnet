@@ -48,7 +48,7 @@ def test_set_vertex_attrs_bulk_raises_on_reserved_key():
 
 def test_set_edge_slice_attrs_allows_weight_but_raises_on_others():
     G = _graph_with_edge()
-    G.slices.add_slice('s1')
+    G.slices.add('s1')
     # 'weight' is allowed even though it's reserved structurally
     G.attrs.set_edge_slice_attrs('s1', 'e1', weight=2.0)
     with pytest.raises(ValueError, match='reserved'):

@@ -110,7 +110,13 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
     _write_uns(graph, root / 'uns')
 
 
-def write(graph, path: str | Path, *, compression='zstd', overwrite=False):
+def write(
+    graph: AnnNet,
+    path: str | Path,
+    *,
+    compression: str = 'zstd',
+    overwrite: bool = False,
+) -> None:
     """Write an AnnNet graph to a directory or `.annnet` archive."""
     path = Path(path)
 

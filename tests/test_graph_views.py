@@ -23,7 +23,7 @@ def _build_graph():
     G.attrs.set_edge_attrs('e1', relation='activates')
     G.add_edges('B', 'C', edge_id='e2', weight=3.0)
     G.attrs.set_edge_attrs('e2', relation='inhibits')
-    G.slices.add_slice('sig')
+    G.slices.add('sig')
     G.slices.add_edge_to_slice('sig', 'e1')
     return G
 
@@ -104,7 +104,7 @@ class TestGraphViewSliceFilter(unittest.TestCase):
 
     def test_slice_filter_list(self):
         G = _build_graph()
-        G.slices.add_slice('reg')
+        G.slices.add('reg')
         G.slices.add_edge_to_slice('reg', 'e2')
         G.slices.add_vertex_to_slice('sig', 'A')
         G.slices.add_vertex_to_slice('sig', 'B')

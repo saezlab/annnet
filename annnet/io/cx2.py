@@ -17,6 +17,7 @@ import gzip
 import json
 import base64
 from typing import TYPE_CHECKING, Any
+from pathlib import Path
 
 if TYPE_CHECKING:
     from ..core.graph import AnnNet
@@ -153,13 +154,13 @@ def _jsonify(obj):
 
 def to_cx2(
     G: AnnNet,
-    path=None,
+    path: str | Path | None = None,
     *,
-    export_name='annnet export',
-    layer=None,
-    include_inter=False,
-    include_coupling=False,
-    hyperedges='skip',
+    export_name: str = 'annnet export',
+    layer: tuple[str, ...] | None = None,
+    include_inter: bool = False,
+    include_coupling: bool = False,
+    hyperedges: str = 'skip',
 ) -> list[dict[str, Any]]:
     """
     Convert an AnnNet graph to CX2 compliant JSON format.
@@ -715,7 +716,11 @@ def to_cx2(
 # --- Core Adapter: from_cx2 ---
 
 
-def from_cx2(cx2_data, *, hyperedges='manifest'):
+def from_cx2(
+    cx2_data: str | Path | list[dict[str, Any]],
+    *,
+    hyperedges: str = 'manifest',
+) -> AnnNet:
     """
     Fully robust CX2 - AnnNet importer.
 

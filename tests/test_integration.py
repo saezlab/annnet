@@ -49,9 +49,9 @@ class TestIntegration:
         users = ['Alice', 'Bob', 'Charlie', 'David']
         for u in users:
             G.add_vertices(u)
-        G.slices.add_slice('friendship')
-        G.slices.add_slice('collaboration')
-        G.slices.add_slice('mentorship')
+        G.slices.add('friendship')
+        G.slices.add('collaboration')
+        G.slices.add('mentorship')
         G.add_edges('Alice', 'Bob', edge_id='f1')
         G.slices.add_edge_to_slice('friendship', 'f1')
         G.add_edges('Bob', 'Charlie', edge_id='f2')
@@ -64,7 +64,7 @@ class TestIntegration:
 
         to_json(G, tmpdir_fixture / 'multislice.json')
         G2 = from_json(tmpdir_fixture / 'multislice.json')
-        slices = set(G2.slices.list_slices(include_default=False))
+        slices = set(G2.slices.list(include_default=False))
         assert slices == {'friendship', 'collaboration', 'mentorship'}
-        friendship_edges = set(G2.slices.get_slice_edges('friendship'))
+        friendship_edges = set(G2.slices.edges('friendship'))
         assert 'f1' in friendship_edges and 'f2' in friendship_edges

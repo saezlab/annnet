@@ -47,7 +47,7 @@ class TestJSONAdapter:
         G = complex_graph
         to_json(G, tmpdir_fixture / 'graph.json')
         G2 = from_json(tmpdir_fixture / 'graph.json')
-        slices = set(G2.slices.list_slices(include_default=False))
+        slices = set(G2.slices.list(include_default=False))
         assert 'core' in slices and 'signaling' in slices and 'regulatory' in slices
 
     def test_public_only_filter(self, complex_graph, tmpdir_fixture):

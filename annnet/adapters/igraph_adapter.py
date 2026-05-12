@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ._utils import (
     _rows_like,
@@ -355,13 +355,13 @@ def _coeff_from_obj(obj) -> float:
 
 def to_igraph(
     graph: AnnNet,
-    directed=True,
-    hyperedge_mode='skip',
-    slice=None,
-    slices=None,
-    public_only=False,
-    reify_prefix='he::',
-):
+    directed: bool = True,
+    hyperedge_mode: str = 'skip',
+    slice: str | None = None,
+    slices: list[str] | None = None,
+    public_only: bool = False,
+    reify_prefix: str = 'he::',
+) -> Any:
     """Export AnnNet → (igraph.AnnNet, manifest).
 
     hyperedge_mode: {"skip","expand","reify"}
@@ -445,17 +445,17 @@ def to_igraph(
     # discover slices
     lids = set()
     try:
-        lids.update(list(graph.slices.list_slices(include_default=True)))
+        lids.update(list(graph.slices.list(include_default=True)))
     except Exception:  # noqa: BLE001
         try:
-            lids.update(list(graph.slices.list_slices()))
+            lids.update(list(graph.slices.list()))
         except Exception:  # noqa: BLE001
             pass
 
     slices_section = {lid: [] for lid in lids}
     for lid in list(lids):
         try:
-            eids = list(graph.slices.get_slice_edges(lid))
+            eids = list(graph.slices.edges(lid))
         except Exception:  # noqa: BLE001
             eids = []
         if eids:
@@ -750,8 +750,8 @@ def _ig_collect_reified(
 
 
 def from_igraph(
-    igG,
-    manifest,
+    igG: Any,
+    manifest: dict[str, Any],
     *,
     hyperedge: str = 'none',
     he_node_flag: str = 'is_hyperedge',
@@ -949,11 +949,11 @@ def from_igraph(
             pass
 
     # -------- slices + per-slice overrides --------
-    existing_slices = set(H.slices.list_slices(include_default=True))
+    existing_slices = set(H.slices.list(include_default=True))
     for lid, eids in (manifest.get('slices', {}) or {}).items():
         if lid not in existing_slices:
             try:
-                H.slices.add_slice(lid)
+                H.slices.add(lid)
                 existing_slices.add(lid)
             except Exception:  # noqa: BLE001
                 pass
@@ -963,7 +963,7 @@ def from_igraph(
     for lid, per_edge in (manifest.get('slice_weights', {}) or {}).items():
         if lid not in existing_slices:
             try:
-                H.slices.add_slice(lid)
+                H.slices.add(lid)
                 existing_slices.add(lid)
             except Exception:  # noqa: BLE001
                 pass

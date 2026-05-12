@@ -49,7 +49,7 @@ class TestPlottingWithRealGraph(unittest.TestCase):
         g.add_edges(src=['A', 'B'], tgt=['C'], weight=0.5, interaction=+1)
 
         # Per-slice override for e1
-        g.slices.add_slice('Lw')
+        g.slices.add('Lw')
         g.attrs.set_edge_slice_attrs('Lw', e1, weight=5.0)
 
         self.g = g
