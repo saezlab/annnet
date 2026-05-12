@@ -1159,9 +1159,7 @@ class OperationsAccessor:
         edge_defs = tuple(sorted(edge_defs))
 
         graph_meta = (
-            tuple(sorted(G.graph_attributes.items()))
-            if hasattr(G, 'graph_attributes')
-            else ()
+            tuple(sorted(G.graph_attributes.items())) if hasattr(G, 'graph_attributes') else ()
         )
 
         return hash((vertex_ids, edge_defs, graph_meta))

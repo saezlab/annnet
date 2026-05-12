@@ -75,9 +75,7 @@ def test_hash_ops_unaffected_by_iteration_order() -> None:
 
 def test_views_layers_view_returns_real_rows_on_multilayer_graph() -> None:
     G = AnnNet(directed=True)
-    G.layers.set_aspects(
-        ['condition'], {'condition': ['healthy', 'treated']}
-    )
+    G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
     G.add_vertices(['A'], layer={'condition': 'healthy'})
     df = G.views.layers_view()
     # Two elementary layers should produce two rows.
