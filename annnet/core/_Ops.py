@@ -1146,20 +1146,21 @@ class OperationsAccessor:
         ensure that ordering does not affect the hash.
 
         """
-        vertex_ids = tuple(sorted(self.vertices()))
+        G = self._G
+        vertex_ids = tuple(sorted(G.vertices()))
         edge_defs = []
 
-        for j in range(self.ne):
-            S, T = self.get_edge(j)
-            eid = self._col_to_edge[j]
-            directed = self._is_directed_edge(eid)
+        for j in range(G.ne):
+            S, T = G.get_edge(j)
+            eid = G._col_to_edge[j]
+            directed = G._is_directed_edge(eid)
             edge_defs.append((eid, tuple(sorted(S)), tuple(sorted(T)), directed))
 
         edge_defs = tuple(sorted(edge_defs))
 
         graph_meta = (
-            tuple(sorted(self.graph_attributes.items()))
-            if hasattr(self, 'graph_attributes')
+            tuple(sorted(G.graph_attributes.items()))
+            if hasattr(G, 'graph_attributes')
             else ()
         )
 

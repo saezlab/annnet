@@ -841,7 +841,7 @@ class ViewsAccessor:
             return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
 
         # empty product → no layers
-        if not getattr(self, '_all_layers', ()):
+        if not getattr(self.layers, '_all_layers', ()):
             return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
 
         rows = []
