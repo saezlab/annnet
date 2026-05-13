@@ -15,12 +15,7 @@ class _NXBackendAccessor(_BackendAccessorBase):
     VERTEX_KEYS = {'source', 'target', 'u', 'v', 'vertex', 'vertices', 'nbunch', 'center', 'path'}
 
     def __init__(self, owner: AnnNet):
-        self._G = owner
-        self._cache = {}
-        self.cache_enabled = True
-
-    def clear(self):
-        self._cache.clear()
+        self._init_backend_accessor(owner, cache_attr='_nx_backend_cache')
 
     def peek_vertices(self, k: int = 10):
         nxG = self._get_or_make_nx(
@@ -97,12 +92,7 @@ class _NXBackendAccessor(_BackendAccessorBase):
                     simple=simple,
                     edge_aggs=edge_aggs,
                 )
-                for idx, value in enumerate(args):
-                    if value is self._G:
-                        args[idx] = nxG
-                for key, value in list(kwargs.items()):
-                    if value is self._G:
-                        kwargs[key] = nxG
+                args, kwargs = self._replace_owner_graph(args, kwargs, nxG)
 
             try:
                 sig = inspect.signature(nx_callable)
@@ -145,48 +135,39 @@ class _NXBackendAccessor(_BackendAccessorBase):
         return wrapper
 
     def __dir__(self):
-        import networkx as _nx
-
-        candidates = [
-            _nx,
-            getattr(_nx, 'algorithms', None),
-            getattr(_nx.algorithms, 'community', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'approximation', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'centrality', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'shortest_paths', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'flow', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'components', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'traversal', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'bipartite', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'link_analysis', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx, 'classes', None),
-            getattr(_nx.classes, 'function', None) if hasattr(_nx, 'classes') else None,
-        ]
-        return sorted(set(super().__dir__()) | self._callable_names(*candidates))
+        return sorted(set(super().__dir__()) | self._callable_names(*self._nx_candidates()))
 
     def _resolve_nx_callable(self, name: str):
-        import networkx as _nx
-
-        candidates = [
-            _nx,
-            getattr(_nx, 'algorithms', None),
-            getattr(_nx.algorithms, 'community', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'approximation', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'centrality', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'shortest_paths', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'flow', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'components', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'traversal', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'bipartite', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx.algorithms, 'link_analysis', None) if hasattr(_nx, 'algorithms') else None,
-            getattr(_nx, 'classes', None),
-            getattr(_nx.classes, 'function', None) if hasattr(_nx, 'classes') else None,
-        ]
-        for mod in (candidate for candidate in candidates if candidate is not None):
+        for mod in self._nx_candidates():
             attr = getattr(mod, name, None)
             if callable(attr):
                 return attr
         raise AttributeError(f"networkx has no callable '{name}'")
+
+    def _nx_candidates(self):
+        import networkx as _nx
+
+        algorithms = getattr(_nx, 'algorithms', None)
+        classes = getattr(_nx, 'classes', None)
+        return tuple(
+            candidate
+            for candidate in (
+                _nx,
+                algorithms,
+                getattr(algorithms, 'community', None),
+                getattr(algorithms, 'approximation', None),
+                getattr(algorithms, 'centrality', None),
+                getattr(algorithms, 'shortest_paths', None),
+                getattr(algorithms, 'flow', None),
+                getattr(algorithms, 'components', None),
+                getattr(algorithms, 'traversal', None),
+                getattr(algorithms, 'bipartite', None),
+                getattr(algorithms, 'link_analysis', None),
+                classes,
+                getattr(classes, 'function', None),
+            )
+            if candidate is not None
+        )
 
     def _needed_edge_attrs(self, target, kwargs) -> set:
         needed = set()
@@ -208,51 +189,6 @@ class _NXBackendAccessor(_BackendAccessorBase):
             needed.add(str(kwargs['capacity']))
         return needed
 
-    def _convert_to_nx(
-        self,
-        *,
-        directed: bool,
-        hyperedge_mode: str,
-        slice,
-        slices,
-        needed_attrs: set,
-        simple: bool,
-        edge_aggs: dict | None,
-    ):
-        from ...adapters import networkx_adapter as _gg_nx
-
-        nxG, manifest = _gg_nx.to_nx(
-            self._G,
-            directed=directed,
-            hyperedge_mode=hyperedge_mode,
-            slice=slice,
-            slices=slices,
-            public_only=True,
-        )
-        if needed_attrs:
-            for _, _, _, data in nxG.edges(keys=True, data=True):
-                for key in list(data.keys()):
-                    if key not in needed_attrs:
-                        data.pop(key, None)
-        elif simple:
-            for _, _, _, data in nxG.edges(keys=True, data=True):
-                for key in list(data.keys()):
-                    if key not in ('weight', 'capacity'):
-                        data.pop(key, None)
-        else:
-            for _, _, _, data in nxG.edges(keys=True, data=True):
-                data.clear()
-
-        if simple and nxG.is_multigraph():
-            nxG = self._collapse_multiedges(
-                nxG, directed=directed, aggregations=edge_aggs, needed_attrs=needed_attrs
-            )
-
-        self._warn_on_loss(
-            hyperedge_mode=hyperedge_mode, slice=slice, slices=slices, manifest=manifest
-        )
-        return nxG
-
     def _get_or_make_nx(
         self,
         *,
@@ -264,60 +200,55 @@ class _NXBackendAccessor(_BackendAccessorBase):
         simple: bool,
         edge_aggs: dict | None,
     ):
-        key = (
-            bool(directed),
-            str(hyperedge_mode),
-            self._freeze_cache_value(slices),
+        key = self._cache_key(
+            directed,
+            hyperedge_mode,
+            slices,
             str(slice) if slice is not None else None,
-            self._freeze_cache_value(needed_attrs),
-            bool(simple),
-            self._freeze_cache_value(edge_aggs),
+            needed_attrs,
+            simple,
+            edge_aggs,
         )
-        version = getattr(self._G, '_version', None)
-        entry = self._cache.get(key)
-        if (
-            (not self.cache_enabled)
-            or (entry is None)
-            or (version is not None and entry.get('version') != version)
-        ):
-            nxG = self._convert_to_nx(
+
+        def build():
+            nxG, manifest = self._adapter_export('nx')(
+                self._G,
                 directed=directed,
                 hyperedge_mode=hyperedge_mode,
                 slice=slice,
                 slices=slices,
-                needed_attrs=needed_attrs,
-                simple=simple,
-                edge_aggs=edge_aggs,
+                public_only=True,
             )
-            if self.cache_enabled:
-                self._cache[key] = {'nxG': nxG, 'version': version}
-            return nxG
+            if needed_attrs:
+                for _, _, _, data in nxG.edges(keys=True, data=True):
+                    for name in list(data.keys()):
+                        if name not in needed_attrs:
+                            data.pop(name, None)
+            elif simple:
+                for _, _, _, data in nxG.edges(keys=True, data=True):
+                    for name in list(data.keys()):
+                        if name not in ('weight', 'capacity'):
+                            data.pop(name, None)
+            else:
+                for _, _, _, data in nxG.edges(keys=True, data=True):
+                    data.clear()
+
+            if simple and nxG.is_multigraph():
+                nxG = self._collapse_multiedges(
+                    nxG, directed=directed, aggregations=edge_aggs, needed_attrs=needed_attrs
+                )
+
+            self._warn_on_lossy_conversion(
+                backend_name='NX',
+                hyperedge_mode=hyperedge_mode,
+                slice=slice,
+                slices=slices,
+                manifest=manifest,
+            )
+            return {'nxG': nxG}
+
+        entry, _rebuilt = self._get_or_make_cached(key, build)
         return entry['nxG']
-
-    def _warn_on_loss(self, *, hyperedge_mode, slice, slices, manifest):
-        import warnings
-
-        msgs = []
-        if (
-            any(rec.etype == 'hyper' for rec in self._G._edges.values())
-            and hyperedge_mode != 'expand'
-        ):
-            msgs.append("hyperedges dropped (hyperedge_mode='skip')")
-        slices_dict = getattr(self._G, '_slices', None)
-        if (
-            isinstance(slices_dict, dict)
-            and len(slices_dict) > 1
-            and (slice is None and not slices)
-        ):
-            msgs.append('multiple slices flattened into single NX graph')
-        if manifest is None:
-            msgs.append('no manifest provided; round-trip fidelity not guaranteed')
-        if msgs:
-            warnings.warn(
-                'AnnNet-NX conversion is lossy: ' + '; '.join(msgs) + '.',
-                category=RuntimeWarning,
-                stacklevel=3,
-            )
 
     def _coerce_vertex_id(self, value, nxG, label_field: str | None):
         if isinstance(value, int):
@@ -333,22 +264,19 @@ class _NXBackendAccessor(_BackendAccessorBase):
         return value
 
     def _coerce_vertex_or_iter(self, obj, nxG, label_field: str | None):
-        if isinstance(obj, (list, tuple, set)):
-            coerced = [self._coerce_vertex_id(value, nxG, label_field) for value in obj]
-            return type(obj)(coerced) if not isinstance(obj, set) else set(coerced)
-        return self._coerce_vertex_id(obj, nxG, label_field)
+        return self._coerce_vertex_iterable(
+            obj, lambda value: self._coerce_vertex_id(value, nxG, label_field)
+        )
 
     def _coerce_vertices_in_kwargs(self, kwargs: dict, nxG, label_field: str | None):
-        for key in list(kwargs.keys()):
-            if key in self.VERTEX_KEYS:
-                kwargs[key] = self._coerce_vertex_or_iter(kwargs[key], nxG, label_field)
+        self._coerce_vertex_kwargs(
+            kwargs, lambda obj: self._coerce_vertex_or_iter(obj, nxG, label_field)
+        )
 
     def _coerce_vertices_in_bound(self, bound, nxG, label_field: str | None):
-        for key in list(bound.arguments.keys()):
-            if key in self.VERTEX_KEYS:
-                bound.arguments[key] = self._coerce_vertex_or_iter(
-                    bound.arguments[key], nxG, label_field
-                )
+        self._coerce_vertex_bound(
+            bound, lambda obj: self._coerce_vertex_or_iter(obj, nxG, label_field)
+        )
 
     def _map_output_vertices(self, obj):
         id_to_row, row_to_id = self._vertex_row_maps()
@@ -370,24 +298,6 @@ class _NXBackendAccessor(_BackendAccessorBase):
         H = _nx.DiGraph() if directed else _nx.Graph()
         H.add_nodes_from(nxG.nodes(data=True))
 
-        aggregations = aggregations or {}
-
-        def agg_for(key):
-            agg = aggregations.get(key)
-            if callable(agg):
-                return agg
-            if agg == 'sum':
-                return sum
-            if agg == 'min':
-                return min
-            if agg == 'max':
-                return max
-            if key == 'capacity':
-                return sum
-            if key == 'weight':
-                return min
-            return lambda values: next(iter(values))
-
         buckets = {}
         for u, v, _, data in nxG.edges(keys=True, data=True):
             edge_key = (u, v) if directed else tuple(sorted((u, v)))
@@ -398,6 +308,13 @@ class _NXBackendAccessor(_BackendAccessorBase):
                 entry.setdefault(key, []).append(value)
 
         for (u, v), attrs in buckets.items():
-            H.add_edge(u, v, **{key: agg_for(key)(values) for key, values in attrs.items()})
+            H.add_edge(
+                u,
+                v,
+                **{
+                    key: self._edge_attr_aggregator(key, aggregations)(values)
+                    for key, values in attrs.items()
+                },
+            )
 
         return H

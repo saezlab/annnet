@@ -31,12 +31,7 @@ class _IGBackendAccessor(_BackendAccessorBase):
     }
 
     def __init__(self, owner: AnnNet):
-        self._G = owner
-        self._cache = {}
-        self.cache_enabled = True
-
-    def clear(self):
-        self._cache.clear()
+        self._init_backend_accessor(owner, cache_attr='_ig_backend_cache')
 
     def peek_vertices(self, k: int = 10):
         igG = self._get_or_make_ig(
@@ -106,13 +101,7 @@ class _IGBackendAccessor(_BackendAccessorBase):
                 edge_aggs=edge_aggs,
             )
 
-            args = list(args)
-            for idx, value in enumerate(args):
-                if value is self._G:
-                    args[idx] = igG
-            for key, value in list(kwargs.items()):
-                if value is self._G:
-                    kwargs[key] = igG
+            args, kwargs = self._replace_owner_graph(args, kwargs, igG)
 
             target = getattr(igG, name, None)
             if not callable(target):
@@ -169,34 +158,6 @@ class _IGBackendAccessor(_BackendAccessorBase):
             needed.add(str(kwargs['capacity']))
         return needed
 
-    def _convert_to_ig(
-        self,
-        *,
-        directed: bool,
-        hyperedge_mode: str,
-        slice,
-        slices,
-        needed_attrs: set,
-        simple: bool,
-        edge_aggs: dict | None,
-    ):
-        from ...adapters import igraph_adapter as _gg_ig
-
-        igG, _manifest = _gg_ig.to_igraph(
-            self._G,
-            directed=directed,
-            hyperedge_mode='expand' if str(hyperedge_mode).lower() == 'expand' else 'skip',
-            slice=slice,
-            slices=slices,
-            public_only=True,
-        )
-        self._prune_edge_attributes(igG, needed_attrs)
-        if simple:
-            igG = self._collapse_multiedges(
-                igG, directed=directed, aggregations=edge_aggs, needed_attrs=needed_attrs
-            )
-        return igG
-
     def _get_or_make_ig(
         self,
         *,
@@ -208,60 +169,41 @@ class _IGBackendAccessor(_BackendAccessorBase):
         simple: bool,
         edge_aggs: dict | None,
     ):
-        key = (
-            bool(directed),
-            str(hyperedge_mode),
-            self._freeze_cache_value(slices),
+        key = self._cache_key(
+            directed,
+            hyperedge_mode,
+            slices,
             str(slice) if slice is not None else None,
-            self._freeze_cache_value(needed_attrs),
-            bool(simple),
-            self._freeze_cache_value(edge_aggs),
+            needed_attrs,
+            simple,
+            edge_aggs,
         )
-        version = getattr(self._G, '_version', None)
-        entry = self._cache.get(key)
-        if (
-            (not self.cache_enabled)
-            or (entry is None)
-            or (version is not None and entry.get('version') != version)
-        ):
-            igG = self._convert_to_ig(
+
+        def build():
+            igG, manifest = self._adapter_export('ig')(
+                self._G,
                 directed=directed,
+                hyperedge_mode='expand' if str(hyperedge_mode).lower() == 'expand' else 'skip',
+                slice=slice,
+                slices=slices,
+                public_only=True,
+            )
+            self._prune_edge_attributes(igG, needed_attrs)
+            if simple:
+                igG = self._collapse_multiedges(
+                    igG, directed=directed, aggregations=edge_aggs, needed_attrs=needed_attrs
+                )
+            self._warn_on_lossy_conversion(
+                backend_name='igraph',
                 hyperedge_mode=hyperedge_mode,
                 slice=slice,
                 slices=slices,
-                needed_attrs=needed_attrs,
-                simple=simple,
-                edge_aggs=edge_aggs,
+                manifest=manifest,
             )
-            if self.cache_enabled:
-                self._cache[key] = {'igG': igG, 'version': version}
-            return igG
+            return {'igG': igG}
+
+        entry, _rebuilt = self._get_or_make_cached(key, build)
         return entry['igG']
-
-    def _warn_on_loss(self, *, hyperedge_mode, slice, slices, manifest):
-        import warnings
-
-        msgs = []
-        if (
-            any(rec.etype == 'hyper' for rec in self._G._edges.values())
-            and hyperedge_mode != 'expand'
-        ):
-            msgs.append("hyperedges dropped (hyperedge_mode='skip')")
-        slices_dict = getattr(self._G, '_slices', None)
-        if (
-            isinstance(slices_dict, dict)
-            and len(slices_dict) > 1
-            and (slice is None and not slices)
-        ):
-            msgs.append('multiple slices flattened into single igraph graph')
-        if manifest is None:
-            msgs.append('no manifest provided; round-trip fidelity not guaranteed')
-        if msgs:
-            warnings.warn(
-                'AnnNet-igraph conversion is lossy: ' + '; '.join(msgs) + '.',
-                category=RuntimeWarning,
-                stacklevel=3,
-            )
 
     def _name_to_index_map(self, igG):
         names = igG.vs['name'] if 'name' in igG.vs.attributes() else None
@@ -277,22 +219,19 @@ class _IGBackendAccessor(_BackendAccessorBase):
         return self._name_to_index_map(igG).get(value, value)
 
     def _coerce_vertex_or_iter(self, obj, igG, label_field: str | None):
-        if isinstance(obj, (list, tuple, set)):
-            coerced = [self._coerce_vertex(value, igG, label_field) for value in obj]
-            return type(obj)(coerced) if not isinstance(obj, set) else set(coerced)
-        return self._coerce_vertex(obj, igG, label_field)
+        return self._coerce_vertex_iterable(
+            obj, lambda value: self._coerce_vertex(value, igG, label_field)
+        )
 
     def _coerce_vertices_in_kwargs(self, kwargs: dict, igG, label_field: str | None):
-        for key in list(kwargs.keys()):
-            if key in self.VERTEX_KEYS:
-                kwargs[key] = self._coerce_vertex_or_iter(kwargs[key], igG, label_field)
+        self._coerce_vertex_kwargs(
+            kwargs, lambda obj: self._coerce_vertex_or_iter(obj, igG, label_field)
+        )
 
     def _coerce_vertices_in_bound(self, bound, igG, label_field: str | None):
-        for key in list(bound.arguments.keys()):
-            if key in self.VERTEX_KEYS:
-                bound.arguments[key] = self._coerce_vertex_or_iter(
-                    bound.arguments[key], igG, label_field
-                )
+        self._coerce_vertex_bound(
+            bound, lambda obj: self._coerce_vertex_or_iter(obj, igG, label_field)
+        )
 
     def _prune_edge_attributes(self, igG, needed_attrs: set):
         removable = set(igG.es.attributes()) - set(needed_attrs)
@@ -309,26 +248,6 @@ class _IGBackendAccessor(_BackendAccessorBase):
         if 'name' in igG.vs.attributes():
             H.vs['name'] = igG.vs['name']
 
-        aggregations = aggregations or {}
-
-        def agg_for(key):
-            agg = aggregations.get(key)
-            if callable(agg):
-                return agg
-            if agg == 'sum':
-                return sum
-            if agg == 'min':
-                return min
-            if agg == 'max':
-                return max
-            if agg == 'mean':
-                return lambda values: (sum(values) / len(values)) if values else None
-            if key == 'capacity':
-                return sum
-            if key == 'weight':
-                return min
-            return lambda values: next(iter(values)) if values else None
-
         buckets = {}
         for edge in igG.es:
             u, v = edge.tuple
@@ -343,6 +262,6 @@ class _IGBackendAccessor(_BackendAccessorBase):
         H.add_edges(edges)
         all_attrs = {key for attrs in buckets.values() for key in attrs.keys()}
         for key in all_attrs:
-            agg = agg_for(key)
+            agg = self._edge_attr_aggregator(key, aggregations)
             H.es[key] = [agg(buckets[edge].get(key, [])) for edge in edges]
         return H

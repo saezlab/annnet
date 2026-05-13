@@ -40,9 +40,7 @@ class _GTBackendAccessor(_BackendAccessorBase):
     VERTEX_KEYS = {'source', 'target', 'vertex', 'root', 'u', 'v'}
 
     def __init__(self, owner):
-        self._G = owner
-        self._cache = {}
-        self.cache_enabled = True
+        self._init_backend_accessor(owner, cache_attr='_gt_backend_cache')
 
         # lazy module map (values are callables)
         self._GT_MODULES = {
@@ -61,9 +59,6 @@ class _GTBackendAccessor(_BackendAccessorBase):
 
         # Initialize namespace objects (lazy modules)
         self._namespaces = {name: _GTNamespaceProxy(self, name) for name in self._GT_MODULES.keys()}
-
-    def clear(self):
-        self._cache.clear()
 
     def backend(self):
         return self._get_or_make_gt()
@@ -99,18 +94,16 @@ class _GTBackendAccessor(_BackendAccessorBase):
     # Conversion
 
     def _get_or_make_gt(self):
-        key = ('gt',)
-        version = getattr(self._G, '_version', None)
-        entry = self._cache.get(key)
+        def build():
+            gtG, manifest = self._adapter_export('gt')(self._G)
+            return {'gtG': gtG, 'manifest': manifest}
 
-        if not self.cache_enabled or entry is None or entry['version'] != version:
-            from importlib import import_module
-
-            to_graphtool = import_module('annnet.adapters.graphtool_adapter').to_graphtool
-            gtG, manifest = to_graphtool(self._G)
+        entry, rebuilt = self._get_or_make_cached(('gt',), build)
+        gtG = entry['gtG']
+        manifest = entry['manifest']
+        if rebuilt:
             self._warn_on_loss(manifest)
-            self._cache[key] = {'gtG': gtG, 'version': version}
-        return self._cache[key]['gtG']
+        return gtG
 
     # Vertex coercion
 
@@ -128,51 +121,26 @@ class _GTBackendAccessor(_BackendAccessorBase):
             elif x in vertex_ids:
                 vid = x
             else:
-                vid = self._lookup_vertex_id(label_field, x)
+                vid = self._lookup_vertex_id_by_label(label_field, x) if label_field else None
                 if vid is None:
                     raise ValueError(f"Unknown vertex label '{x}' (label field '{label_field}')")
             idx = id_map[vid]
             return gtG.vertex(idx)
 
-        def map_obj(obj):
-            if isinstance(obj, (list, tuple, set)):
-                items = [map_one(o) for o in obj]
-                if isinstance(obj, tuple):
-                    return tuple(items)
-                if isinstance(obj, set):
-                    return set(items)
-                return items
-            return map_one(obj)
+        map_obj = lambda obj: self._coerce_vertex_iterable(obj, map_one)
 
         # Bound arguments
         if bound:
-            for k in list(bound.arguments):
-                if k in self.VERTEX_KEYS:
-                    bound.arguments[k] = map_obj(bound.arguments[k])
+            self._coerce_vertex_bound(bound, map_obj)
         # Raw kwargs
         else:
-            for k in list(kwargs):
-                if k in self.VERTEX_KEYS:
-                    kwargs[k] = map_obj(kwargs[k])
+            self._coerce_vertex_kwargs(kwargs, map_obj)
 
     def _build_id_map(self, gtG):
         if 'id' not in gtG.vp:
             raise RuntimeError("graph-tool backend missing vertex ID property 'id'")
         vp = gtG.vp['id']
-        out = {}
-        for v in gtG.vertices():
-            out[str(vp[v])] = int(v)
-        return out
-
-    # Label inference
-
-    def _infer_label_field(self):
-        return super()._infer_label_field()
-
-    def _lookup_vertex_id(self, field, val):
-        if field is None:
-            return None
-        return self._lookup_vertex_id_by_label(field, val)
+        return {str(vp[v]): int(v) for v in gtG.vertices()}
 
     # Lossy conversion warnings
 
@@ -243,10 +211,8 @@ class _GTNamespaceProxy:
                 gtG = parent._get_or_make_gt()
 
                 # replace G with gtG
-                args = tuple(gtG if a is parent._G else a for a in args)
-                for k, v in list(kwargs.items()):
-                    if v is parent._G:
-                        kwargs[k] = gtG
+                args, kwargs = parent._replace_owner_graph(args, kwargs, gtG)
+                args = tuple(args)
             elif sig is not None:
                 params = list(sig.parameters.values())
                 if params:

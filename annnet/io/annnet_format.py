@@ -26,7 +26,7 @@ import numpy as np
 import scipy as scipy
 import scipy.sparse as sp
 
-from .._support.metadata import __version__ as ANNNET_VERSION
+from .. import __version__ as ANNNET_VERSION
 from ._common import (
     dataframe_to_rows,
     dataframe_from_rows,
