@@ -21,7 +21,7 @@ def test_dataframe_export_options_and_private_attr_filtering():
     graph._edges['e1'].weight = None
     graph.add_edges(src=['A', 'B'], tgt=['C'], edge_id='h1', weight=2.5, directed=True)
     graph.attrs.set_edge_attrs('h1', pathway='p1', __internal='secret')
-    graph.slices.add_slice('s1')
+    graph.slices.add('s1')
     graph.slices.add_edge_to_slice('s1', 'e1')
     graph.attrs.set_edge_slice_attrs('s1', 'e1', weight=7.0)
 
@@ -82,7 +82,7 @@ def test_from_dataframes_validation_and_slice_weight_edge_cases():
     )
 
     assert 'h1' in graph.hyperedge_definitions
-    assert 'kept' in graph.slices.list_slices(include_default=True)
+    assert 'kept' in graph.slices.list(include_default=True)
     assert graph.attrs.get_effective_edge_weight('e1', slice='kept') == 3.0
 
 
@@ -173,7 +173,7 @@ def test_sif_from_manifest_restores_hyperedges_slices_and_multilayer(tmp_path):
                 'head': ['A'],
                 'tail': ['B'],
                 'weight': 5.0,
-                'attrs': {'kind': 'complex'},
+                'attrs': {'category': 'complex'},
             }
         },
         'slices': {'s1': {'edges': ['e1'], 'weights': {'e1': 9.0}}},
@@ -195,8 +195,8 @@ def test_sif_from_manifest_restores_hyperedges_slices_and_multilayer(tmp_path):
     assert restored._edges['e1'].directed is False
     assert restored._edges['e1'].weight == 2.0
     assert 'h1' in restored.hyperedge_definitions
-    assert 's1' in restored.slices.list_slices(include_default=True)
-    assert 'e1' in restored.slices.get_slice_edges('s1')
+    assert 's1' in restored.slices.list(include_default=True)
+    assert 'e1' in restored.slices.edges('s1')
     assert restored._aspect_attrs['time']['unit'] == 'day'
     assert ('A', ('t1',)) in restored._VM
     assert restored._state_attrs[('A', ('t1',))]['state'] == 'on'
@@ -237,7 +237,7 @@ def test_json_multilayer_and_malformed_entries_roundtrip(tmp_path):
                 'target': {'kind': 'supra', 'vertex': 'B', 'layer': ['t1']},
                 'directed': True,
                 'weight': 2.0,
-                'kind': 'observed',
+                'category': 'observed',
             },
             {'source': 'skip', 'target': 'missing id'},
         ],

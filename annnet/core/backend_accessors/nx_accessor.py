@@ -279,13 +279,15 @@ class _NXBackendAccessor(_BackendAccessorBase):
         )
 
     def _map_output_vertices(self, obj):
-        id_to_row, row_to_id = self._vertex_row_maps()
+        _id_to_row, row_to_id = self._vertex_row_maps()
 
         def map_id(value):
-            if isinstance(value, str):
-                return id_to_row.get(value, value)
-            if isinstance(value, int) and value in row_to_id:
-                return value
+            # NetworkX returns vertex IDs as the backend graph's node values.
+            # Our backend nodes are vertex-ID strings, so strings pass through
+            # unchanged. Integers that NX produced from a relabel-to-int pass
+            # are mapped back to their vertex IDs.
+            if isinstance(value, int) and not isinstance(value, bool) and value in row_to_id:
+                return row_to_id[value]
             return value
 
         return self._map_nested_output(obj, map_id)

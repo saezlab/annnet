@@ -99,11 +99,11 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
             'vertices': sum(1 for r in graph._entities.values() if r.kind == 'vertex'),
             'edges': graph.ne,
             'entities': len(graph._entities),
-            'slices': len(graph.slices.list_slices(include_default=True)),
+            'slices': len(graph.slices.list(include_default=True)),
             'hyperedges': len(graph.hyperedge_definitions),
             'aspects': len(graph.aspects),
         },
-        'slices': list(graph.slices.list_slices(include_default=True)),
+        'slices': list(graph.slices.list(include_default=True)),
         'active_slice': graph._current_slice,
         'default_slice': graph._default_slice,
         'compression': compression,
@@ -131,7 +131,13 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
     _write_uns(graph, root / 'uns')
 
 
-def write(graph, path: str | Path, *, compression='zstd', overwrite=False):
+def write(
+    graph: AnnNet,
+    path: str | Path,
+    *,
+    compression: str = 'zstd',
+    overwrite: bool = False,
+) -> None:
     """Write an AnnNet graph to a directory or `.annnet` archive."""
     path = Path(path)
 
@@ -389,15 +395,15 @@ def _write_slices(graph, path: Path, compression: str):
 
     # Registry: slice identifiers only. Slice attributes live in tables/.
     registry_data = []
-    for slice_id in graph.slices.list_slices(include_default=True):
+    for slice_id in graph.slices.list(include_default=True):
         registry_data.append({'slice_id': slice_id})
     reg_df = _df_from_dict(registry_data)
     dataframe_write_parquet(reg_df, path / 'registry.parquet')
 
     # Vertex memberships: long format
     vertex_members = []
-    for slice_id in graph.slices.list_slices(include_default=True):
-        for vertex_id in graph.slices.get_slice_vertices(slice_id):
+    for slice_id in graph.slices.list(include_default=True):
+        for vertex_id in graph.slices.vertices(slice_id):
             vertex_members.append({'slice_id': slice_id, 'vertex_id': vertex_id})
     vm_df = _df_from_dict(vertex_members)
     dataframe_write_parquet(vm_df, path / 'vertex_memberships.parquet')
@@ -810,11 +816,11 @@ def _load_multilayers(graph, path: Path):
 def _load_slices(graph, path: Path):
     """Reconstruct slice registry and memberships."""
     registry_df = dataframe_read_parquet(path / 'registry.parquet')
-    existing_slices = set(graph.slices.list_slices(include_default=True))
+    existing_slices = set(graph.slices.list(include_default=True))
     for row in dataframe_to_rows(registry_df):
         slice_id = row['slice_id']
         if slice_id not in existing_slices:
-            graph.slices.add_slice(slice_id)
+            graph.slices.add(slice_id)
             existing_slices.add(slice_id)
 
     # Vertex memberships

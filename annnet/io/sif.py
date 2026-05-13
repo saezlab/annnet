@@ -263,8 +263,8 @@ def to_sif(
                 'attrs': attrs,
             }
 
-        for lid in graph.slices.list_slices(include_default=True):
-            edge_ids = list(graph.slices.get_slice_edges(lid))
+        for lid in graph.slices.list(include_default=True):
+            edge_ids = list(graph.slices.edges(lid))
             if not edge_ids:
                 continue
 
@@ -565,12 +565,12 @@ def from_sif(
     # ===== SLICES WITH NO EXCEPTIONS + CACHED SET =====
     if manifest and 'slices' in manifest:
         # Build set once
-        existing_slices = set(H.slices.list_slices(include_default=True))
+        existing_slices = set(H.slices.list(include_default=True))
 
         for lid, slice_info in manifest['slices'].items():
             # Guard instead of exception
             if lid not in existing_slices:
-                H.slices.add_slice(lid)
+                H.slices.add(lid)
                 existing_slices.add(lid)  # Keep cached set in sync
 
             edge_ids = slice_info.get('edges', [])

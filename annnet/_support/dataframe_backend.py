@@ -637,9 +637,10 @@ def polars_upsert_vertices(df, norm: list[tuple]):
     if not keys:
         incoming = pl.DataFrame({'vertex_id': norm_vids})
         if df.height == 0:
-            return incoming
+            return incoming.select(df.columns) if df.columns else incoming
         to_insert = incoming.join(df.select('vertex_id'), on='vertex_id', how='anti')
         if to_insert.height:
+            df, to_insert = _pl_align_schemas(df, to_insert)
             return pl.concat([df, to_insert], how='vertical', rechunk=False)
         return df
 

@@ -118,16 +118,24 @@ G.add_edges([
 
 ### Hyperedge batch
 
+The shape of `src` (and optionally `tgt`) determines hyperedge kind:
+
+- list-shaped `src`, no `tgt` → undirected hyperedge (`src` is the member set)
+- list-shaped `src` and list-shaped `tgt` → directed hyperedge (`src` is the
+  tail, `tgt` is the head)
+
+`source` / `target` are accepted as aliases for `src` / `tgt`.
+
 ```python
 # Undirected
 G.add_edges([
-    {"members": ["A", "B", "C"]},
-    {"members": ["B", "D"], "edge_id": "h2"},
+    {"src": ["A", "B", "C"]},
+    {"src": ["B", "D"], "edge_id": "h2"},
 ])
 
 # Directed (tail → head)
 G.add_edges([
-    {"tail": ["A", "B"], "head": ["C"]},
+    {"src": ["A", "B"], "tgt": ["C"]},
 ])
 ```
 

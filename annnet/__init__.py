@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from importlib.metadata import (
     PackageNotFoundError,
     version as _pkg_version,
 )
+
+# Type-check-time imports: let static analyzers (mypy, pyright) see the real
+# symbols even though the runtime uses the lazy ``__getattr__`` below to avoid
+# eager-import cost. Runtime behaviour is unchanged.
+if TYPE_CHECKING:
+    from annnet.core.graph import AnnNet
+    from annnet.core._records import EdgeType
+    from annnet.algorithms.traversal import Traversal
+
+    Graph = AnnNet
 
 from ._support.metadata import (
     info,
@@ -29,7 +39,7 @@ _lazy_submodules = {
 _lazy_objects: dict[str, tuple[str, str]] = {
     'AnnNet': ('annnet.core.graph', 'AnnNet'),
     'Graph': ('annnet.core.graph', 'AnnNet'),
-    'EdgeType': ('annnet.core.graph', 'EdgeType'),
+    'EdgeType': ('annnet.core._records', 'EdgeType'),
     'Traversal': ('annnet.algorithms.traversal', 'Traversal'),
 }
 

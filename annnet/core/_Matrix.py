@@ -653,6 +653,91 @@ class IndexMapping:
         except (AttributeError, TypeError, ValueError):
             pass
 
+    def _ensure_edge_row(self, edge_id: str) -> None:
+        """INTERNAL: Ensure a row for ``edge_id`` exists in the edge attribute DF."""
+        try:
+            import sys as _sys
+
+            if isinstance(edge_id, str):
+                edge_id = _sys.intern(edge_id)
+        except (AttributeError, TypeError):
+            pass
+
+        df = self.edge_attributes
+
+        try:
+            cached_ids = getattr(self, '_edge_attr_ids', None)
+            cached_df_id = getattr(self, '_edge_attr_df_id', None)
+            if cached_ids is None or cached_df_id != id(df):
+                ids = set()
+                if df is not None and 'edge_id' in dataframe_columns(df):
+                    ids = {row.get('edge_id') for row in dataframe_to_rows(df)}
+                    ids.discard(None)
+                self._edge_attr_ids = ids
+                self._edge_attr_df_id = id(df)
+        except (AttributeError, TypeError, ValueError):
+            self._edge_attr_ids = None
+            self._edge_attr_df_id = None
+
+        ids = getattr(self, '_edge_attr_ids', None)
+        if ids is not None and edge_id in ids:
+            return
+
+        is_empty = dataframe_height(df) == 0
+
+        if is_empty:
+            self.edge_attributes = empty_dataframe({'edge_id': 'text'})
+            self.edge_attributes = dataframe_append_rows(
+                self.edge_attributes,
+                [{'edge_id': edge_id}],
+            )
+        else:
+            row = dict.fromkeys(dataframe_columns(df))
+            row['edge_id'] = edge_id
+            self.edge_attributes = dataframe_append_rows(df, [row])
+
+        try:
+            if isinstance(self._edge_attr_ids, set):
+                self._edge_attr_ids.add(edge_id)
+            else:
+                self._edge_attr_ids = {edge_id}
+            self._edge_attr_df_id = id(self.edge_attributes)
+        except (AttributeError, TypeError, ValueError):
+            pass
+
+    def _ensure_edge_rows_bulk(self, edge_ids) -> None:
+        """INTERNAL: Ensure rows for many edge IDs in one append."""
+        if not edge_ids:
+            return
+        df = self.edge_attributes
+        existing = set()
+        if df is not None and 'edge_id' in dataframe_columns(df):
+            existing = {row.get('edge_id') for row in dataframe_to_rows(df)}
+            existing.discard(None)
+
+        new_ids = [eid for eid in edge_ids if eid not in existing]
+        if not new_ids:
+            return
+
+        is_empty = dataframe_height(df) == 0
+        if is_empty:
+            self.edge_attributes = empty_dataframe({'edge_id': 'text'})
+            df = self.edge_attributes
+            cols = ['edge_id']
+        else:
+            cols = list(dataframe_columns(df))
+
+        rows = []
+        for eid in new_ids:
+            r = dict.fromkeys(cols)
+            r['edge_id'] = eid
+            rows.append(r)
+        self.edge_attributes = dataframe_append_rows(df, rows)
+
+        # Invalidate cached ID set so the next read rebuilds it.
+        self._edge_attr_ids = None
+        self._edge_attr_df_id = None
+
     def _vertex_key_enabled(self) -> bool:
         return bool(self._vertex_key_fields)
 

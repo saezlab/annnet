@@ -2,7 +2,7 @@
   <div class="annnet-kicker">Typed graph data for complex networks</div>
   <h1>annnet</h1>
   <p class="annnet-lead">
-    annnet is a lightweight Python container for heterogeneous graph data. It represents simple graphs, directed and signed networks, hypergraphs, multilayer structures, and edge-entity relations in one model, with typed annotations, named slices, and a native storage format.
+    annnet (Annotated Network) is a unified, high‑expressivity graph platform that brings anndata‑style, annotated containers to networks, multilayer structures, and hypergraphs. It targets systems biology, network biology, omics integration, computational social science, and any domain needing fully flexible graph semantics with modern, stable storage and interoperability.
   </p>
 </div>
 

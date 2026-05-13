@@ -229,7 +229,7 @@ def to_dataframes(
     # 4. Slice membership
     if include_slices:
         slices_data = []
-        for lid in graph.slices.list_slices(include_default=True):
+        for lid in graph.slices.list(include_default=True):
             for eid in graph.slices.edges(lid):
                 slices_data.append({'slice_id': lid, 'edge_id': eid})
 
@@ -261,7 +261,7 @@ def to_dataframes(
 
 
 def from_dataframes(
-    nodes: Any | None = None,
+    nodes: Any | dict | None = None,
     edges: Any | None = None,
     hyperedges: Any | None = None,
     slices: Any | None = None,
@@ -306,6 +306,20 @@ def from_dataframes(
         AnnNet instance
 
     """
+    # Accept the dict-of-frames produced by ``to_dataframes`` as a single
+    # positional argument so ``from_dataframes(to_dataframes(G))`` round-trips.
+    if isinstance(nodes, dict):
+        bundle = nodes
+        nodes = bundle.get('nodes')
+        if edges is None:
+            edges = bundle.get('edges')
+        if hyperedges is None:
+            hyperedges = bundle.get('hyperedges')
+        if slices is None:
+            slices = bundle.get('slices')
+        if slice_weights is None:
+            slice_weights = bundle.get('slice_weights')
+
     G = AnnNet(directed=directed)
 
     # 1. Add vertices
@@ -429,14 +443,14 @@ def from_dataframes(
             ):
                 raise ValueError("slices DataFrame must have 'slice_id' and 'edge_id' columns")
 
-            existing_slices = set(G.slices.list_slices(include_default=True))
+            existing_slices = set(G.slices.list(include_default=True))
             existing_edges = set(G.edge_definitions) | set(G.hyperedge_definitions)
             for row in dataframe_to_rows(slices):
                 lid = row['slice_id']
                 eid = row['edge_id']
 
                 if lid not in existing_slices:
-                    G.slices.add_slice(lid)
+                    G.slices.add(lid)
                     existing_slices.add(lid)
 
                 if eid in existing_edges:
@@ -447,7 +461,7 @@ def from_dataframes(
         if dataframe_height(slice_weights) > 0:
             cols = set(dataframe_columns(slice_weights))
             if {'slice_id', 'edge_id', 'weight'}.issubset(cols):
-                existing_slices = set(G.slices.list_slices(include_default=True))
+                existing_slices = set(G.slices.list(include_default=True))
                 existing_edges = set(G.edge_definitions) | set(G.hyperedge_definitions)
                 for row in dataframe_to_rows(slice_weights):
                     lid = row['slice_id']

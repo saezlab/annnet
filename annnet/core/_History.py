@@ -333,6 +333,16 @@ class History:
         dict
             The stored snapshot with keys ``label``, ``version``,
             ``vertex_ids``, ``edge_ids``, ``slice_ids``.
+
+        Notes
+        -----
+        Snapshots are **write-only memos**: they record the set of vertex,
+        edge, and slice IDs (plus a version counter) so that later calls to
+        :meth:`diff` can highlight what changed. They do **not** capture
+        attribute values, weights, slice membership, or the incidence
+        matrix, and there is no restore operation. To save a fully
+        round-trippable graph use the IO layer (e.g. :func:`io.to_annnet`
+        / :func:`io.to_json`).
         """
         raw = self._current_snapshot()
         name = label if label is not None else f'snap_{len(self._snapshots)}'
@@ -347,14 +357,15 @@ class History:
         self._log_event('snapshot', label=name, version=snap['version'])
         return snap
 
-    def _history_diff_impl(self, a, b=None):
+    def _history_diff_impl(self, a=None, b=None):
         """Compare two graph states and return a :class:`GraphDiff`.
 
         Parameters
         ----------
-        a : str | dict | AnnNet
+        a : str | dict | AnnNet | None, optional
             Reference for the *before* state — a snapshot label, a raw
-            snapshot dict, or another ``AnnNet`` instance.
+            snapshot dict, or another ``AnnNet`` instance. When ``None``
+            (default), the most recent stored snapshot is used.
         b : str | dict | AnnNet | None, optional
             Reference for the *after* state. When ``None`` (default) the
             current graph state is used.
@@ -362,7 +373,19 @@ class History:
         Returns
         -------
         GraphDiff
+
+        Raises
+        ------
+        ValueError
+            If ``a`` is omitted and no snapshots are stored yet.
         """
+        if a is None:
+            if not self._snapshots:
+                raise ValueError(
+                    'history.diff() without arguments needs at least one snapshot; '
+                    'call history.snapshot() first or pass an explicit reference.'
+                )
+            a = self._snapshots[-1]
         snap_a = self._resolve_snapshot(a)
         snap_b = self._resolve_snapshot(b) if b is not None else self._current_snapshot()
         return GraphDiff(snap_a, snap_b)
@@ -408,7 +431,7 @@ class HistoryAccessor:
     def snapshot(self, label=None):
         return self._G._history_snapshot_impl(label=label)
 
-    def diff(self, a, b=None):
+    def diff(self, a=None, b=None):
         return self._G._history_diff_impl(a, b=b)
 
     def list_snapshots(self):

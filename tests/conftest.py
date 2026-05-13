@@ -69,9 +69,9 @@ def complex_graph():
     G.attrs.set_edge_attrs('h2', complex='trimer', stability=0.75)
 
     # slices
-    G.slices.add_slice('core')
-    G.slices.add_slice('signaling')
-    G.slices.add_slice('regulatory')
+    G.slices.add('core')
+    G.slices.add('signaling')
+    G.slices.add('regulatory')
 
     G.slices.add_edge_to_slice('core', 'e1')
     G.slices.add_edge_to_slice('core', 'e2')
@@ -141,8 +141,8 @@ def assert_graphs_equal(G1, G2, check_slices=True, check_hyperedges=True):
     # slices
     if check_slices:
         try:
-            slices1 = set(G1.slices.list_slices(include_default=False))
-            slices2 = set(G2.slices.list_slices(include_default=False))
+            slices1 = set(G1.slices.list(include_default=False))
+            slices2 = set(G2.slices.list(include_default=False))
             assert slices1 == slices2, f'slice sets differ: {slices1} != {slices2}'
         except Exception:
             # Some adapters may not implement slices; let tests control this via flags.
@@ -216,9 +216,9 @@ def build_adapter_graph() -> AnnNet:
     g.add_edges('B', 'C', weight=1.0, directed=False, interaction=-1)
     g.add_edges(src=['A', 'B'], tgt=['C'], weight=0.5, interaction=+1)
 
-    g.slices.add_slice('Lw', region='EMEA')
+    g.slices.add('Lw', region='EMEA')
     g.attrs.set_edge_slice_attrs('Lw', e1, weight=5.0)
-    g.slices.add_slice('L0')
+    g.slices.add('L0')
 
     assert g.ne >= 3
     return g

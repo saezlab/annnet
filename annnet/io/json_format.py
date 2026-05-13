@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING
+from pathlib import Path
 
 from ._common import (
     _rows_to_df,
@@ -42,6 +43,14 @@ def _edge_endpoint_sets(rec):
     return src, tgt
 
 
+def _is_json_serializable(value) -> bool:
+    try:
+        json.dumps(value)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 def _attrs_by_id(table, id_col: str, *, public_only: bool = False) -> dict:
     out = {}
     for row in dataframe_to_rows(table):
@@ -56,7 +65,13 @@ def _attrs_by_id(table, id_col: str, *, public_only: bool = False) -> dict:
     return out
 
 
-def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
+def to_json(
+    graph: AnnNet,
+    path: str | Path,
+    *,
+    public_only: bool = False,
+    indent: int = 0,
+) -> None:
     """Node-link JSON with x-extensions (slices, edge_slices, hyperedges).
 
     Lossless vs your core (IDs, attrs, parallel, hyperedges, slices).
@@ -136,12 +151,12 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
 
     # slices + per-slice weights
     slices = []
-    for lid in graph.slices.list_slices(include_default=True):
+    for lid in graph.slices.list(include_default=True):
         slices.append({'slice_id': lid})
 
     edge_slices = []
-    for lid in graph.slices.list_slices(include_default=True):
-        for eid in graph.slices.get_slice_edges(lid):
+    for lid in graph.slices.list(include_default=True):
+        for eid in graph.slices.edges(lid):
             rec = {'slice_id': lid, 'edge_id': eid}
             try:
                 w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
@@ -150,6 +165,18 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
             if w is not None:
                 rec['weight'] = float(w)
             edge_slices.append(rec)
+
+    # Graph-level metadata (uns / graph_attributes). Serialized only if it
+    # round-trips cleanly through json.dumps; non-serializable values are
+    # kept out of the document rather than crashing the export.
+    try:
+        candidate_uns = dict(getattr(graph, 'uns', {}) or {})
+        json.dumps(candidate_uns)
+        graph_meta = candidate_uns
+    except (TypeError, ValueError):
+        graph_meta = {
+            k: v for k, v in (getattr(graph, 'uns', {}) or {}).items() if _is_json_serializable(v)
+        }
 
     doc = {
         'directed': True,  # node-link convention; per-edge directedness is in edges[*].directed
@@ -167,6 +194,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
             for e in edges
         ],
         'x-extensions': {
+            'uns': graph_meta,
             'slices': slices,
             'edge_slices': edge_slices,
             'hyperedges': [
@@ -201,7 +229,7 @@ def to_json(graph: AnnNet, path, *, public_only: bool = False, indent: int = 0):
         json.dump(doc, f, ensure_ascii=False, indent=indent)
 
 
-def from_json(path) -> AnnNet:
+def from_json(path: str | Path) -> AnnNet:
     """Load AnnNet from node-link JSON + x-extensions (lossless wrt schema above)."""
     from ..core import AnnNet
 
@@ -209,6 +237,12 @@ def from_json(path) -> AnnNet:
         doc = json.load(f)
     H = AnnNet()
     ext = doc.get('x-extensions') or {}
+
+    # Restore graph-level metadata (uns).
+    uns = ext.get('uns') or {}
+    if isinstance(uns, dict):
+        H.uns.update(uns)
+
     mm = ext.get('multilayer', {})
     aspects = mm.get('aspects', [])
     elem_layers = mm.get('elem_layers', {})
@@ -298,13 +332,13 @@ def from_json(path) -> AnnNet:
         H.attrs.set_edge_attrs_bulk(hyper_attrs_pending)
 
     # slices + edge_slices — bulk
-    known_slices = set(H.slices.list_slices(include_default=True))
+    known_slices = set(H.slices.list(include_default=True))
     for L in ext.get('slices', []):
         lid = L.get('slice_id')
         if lid is None:
             continue
         if lid not in known_slices:
-            H.slices.add_slice(lid)
+            H.slices.add(lid)
             known_slices.add(lid)
 
     slice_edges: dict = {}
@@ -401,12 +435,12 @@ def write_ndjson(graph: AnnNet, dir_path):
 
     # slices
     with open(f'{dir_path}/slices.ndjson', 'w', encoding='utf-8') as fl:
-        for lid in graph.slices.list_slices(include_default=True):
+        for lid in graph.slices.list(include_default=True):
             fl.write(json.dumps({'slice_id': lid}, ensure_ascii=False) + '\n')
 
     with open(f'{dir_path}/edge_slices.ndjson', 'w', encoding='utf-8') as fel:
-        for lid in graph.slices.list_slices(include_default=True):
-            for eid in graph.slices.get_slice_edges(lid):
+        for lid in graph.slices.list(include_default=True):
+            for eid in graph.slices.edges(lid):
                 rec = {'slice_id': lid, 'edge_id': eid}
                 try:
                     w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)

@@ -431,7 +431,7 @@ class TestAnnNetIO(unittest.TestCase):
         def _test(use_archive):
             self.G.attrs.set_slice_attrs('slice1', region='EMEA', cohort='A')
             G2, _ = self._roundtrip(use_archive=use_archive)
-            info = G2.slices.get_slice_info('slice1')
+            info = G2.slices.info('slice1')
             self.assertEqual(info['attributes'], {'region': 'EMEA', 'cohort': 'A'})
 
         self._test_both_modes(_test)

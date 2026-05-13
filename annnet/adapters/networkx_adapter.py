@@ -19,7 +19,7 @@ manifest-style graph attributes where possible.
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from contextlib import contextmanager
 
 try:
@@ -211,13 +211,13 @@ def _coeff_from_obj(obj) -> float:
 
 def to_nx(
     graph: AnnNet,
-    directed=True,
-    hyperedge_mode='skip',
-    slice=None,
-    slices=None,
-    public_only=False,
-    reify_prefix='he::',
-):
+    directed: bool = True,
+    hyperedge_mode: str = 'skip',
+    slice: str | None = None,
+    slices: list[str] | None = None,
+    public_only: bool = False,
+    reify_prefix: str = 'he::',
+) -> nx.Graph:
     """Export AnnNet → (networkx.AnnNet, manifest).
 
     Manifest preserves hyperedges with per-endpoint coefficients, slices,
@@ -257,9 +257,11 @@ def to_nx(
     if requested_lids:
         selected_eids = set()
         for lid in requested_lids:
-            if graph.slices.has_slice(lid):
-                for eid in graph.slices.get_slice_edges(lid):
+            try:
+                for eid in graph.slices.edges(lid):
                     selected_eids.add(eid)
+            except Exception:  # noqa: BLE001
+                pass
 
     # Base NX graph (binary edges only)
     nxG = _export_binary_graph(
@@ -462,16 +464,16 @@ def to_nx(
 
 
 def from_nx(
-    nxG,
-    manifest,
+    nxG: nx.Graph,
+    manifest: dict[str, Any],
     *,
-    hyperedge='none',
-    he_node_flag='is_hyperedge',
-    he_id_attr='eid',
-    role_attr='role',
-    coeff_attr='coeff',
-    membership_attr='membership_of',
-    reify_prefix='he::',
+    hyperedge: str = 'none',
+    he_node_flag: str = 'is_hyperedge',
+    he_id_attr: str = 'eid',
+    role_attr: str = 'role',
+    coeff_attr: str = 'coeff',
+    membership_attr: str = 'membership_of',
+    reify_prefix: str = 'he::',
 ) -> AnnNet:
     """Reconstruct a AnnNet from NetworkX graph + manifest.
 
@@ -791,10 +793,22 @@ def _from_nx_without_manifest(
             membership_attr=membership_attr,
         )
         for eid, directed, head_map, tail_map, he_attrs, _he_node in hyperdefs:
+            edge_weight = 1.0
+            if isinstance(he_attrs, dict):
+                try:
+                    edge_weight = float(he_attrs.get('hyper_weight', 1.0))
+                except (TypeError, ValueError):
+                    edge_weight = 1.0
             for x in set(head_map) | set(tail_map):
                 ensure_vertex(x)
             if directed:
-                H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
+                H.add_edges(
+                    src=list(head_map),
+                    tgt=list(tail_map),
+                    edge_id=eid,
+                    directed=True,
+                    weight=edge_weight,
+                )
                 H.attrs.set_edge_attrs(
                     eid,
                     __source_attr={u: {'__value': c} for u, c in head_map.items()},
@@ -802,7 +816,7 @@ def _from_nx_without_manifest(
                 )
             else:
                 members = list(set(head_map) | set(tail_map))
-                H.add_edges(src=members, edge_id=eid, directed=False)
+                H.add_edges(src=members, edge_id=eid, directed=False, weight=edge_weight)
                 H.attrs.set_edge_attrs(
                     eid,
                     __source_attr={u: {'__value': head_map.get(u, 1.0)} for u in members},
@@ -810,7 +824,9 @@ def _from_nx_without_manifest(
                 )
             # copy HE node attrs (minus markers)
             clean_attrs = {
-                k: v for k, v in (he_attrs or {}).items() if k not in {he_node_flag, he_id_attr}
+                k: v
+                for k, v in (he_attrs or {}).items()
+                if k not in {he_node_flag, he_id_attr, 'directed', 'hyper_weight'}
             }
             if clean_attrs:
                 H.attrs.set_edge_attrs(eid, **clean_attrs)

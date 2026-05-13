@@ -62,6 +62,6 @@ tables (`obs`, `var`, `uns`), and backend accessors (`nx`, `ig`, `gt`).
 
 ## EdgeType
 
-::: annnet.core.graph.EdgeType
+::: annnet.core._records.EdgeType
     options:
       show_root_heading: true

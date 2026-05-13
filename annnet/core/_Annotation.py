@@ -26,6 +26,27 @@ _NUMERIC_NW_DTYPES = {
 _NUMERIC_DTYPES = _NUMERIC_NW_DTYPES
 
 
+def _check_reserved_collision(reserved, attrs, *, kind, allow=()):
+    """Raise ``ValueError`` if any reserved key appears in ``attrs``.
+
+    ``reserved`` is the set of structural / signal keys for the relevant
+    table; ``allow`` lets a caller whitelist a subset (e.g. the
+    edge-slice writer keeps ``weight`` even though it is reserved).
+    ``kind`` is a short noun used in the error message (``"edge"``,
+    ``"vertex"``, ``"slice"``, ``"edge-slice"``).
+    """
+    if not attrs:
+        return
+    allow = set(allow)
+    bad = sorted(k for k in attrs if k in reserved and k not in allow)
+    if bad:
+        raise ValueError(
+            f'{kind} attributes use reserved key(s): {bad!r}. '
+            f'These names are part of the structural / dispatch contract; '
+            f'rename your attribute(s) to use a different key.'
+        )
+
+
 class AttributesClass:
     """Attribute accessors and upsert helpers.
 
@@ -70,9 +91,15 @@ class AttributesClass:
         vertex_id : str
             Vertex identifier.
         **attrs
-            Attribute key/value pairs. Structural keys are ignored.
+            Attribute key/value pairs.
+
+        Raises
+        ------
+        ValueError
+            If any key is structurally reserved (e.g. ``vertex_id``).
         """
-        clean = {k: v for k, v in attrs.items() if k not in self._vertex_RESERVED}
+        _check_reserved_collision(self._vertex_RESERVED, attrs, kind='vertex')
+        clean = dict(attrs)
         if not clean:
             return
 
@@ -127,11 +154,10 @@ class AttributesClass:
             if not isinstance(attrs, dict):
                 raise TypeError(f'vertex bulk attrs must be dict, got {type(attrs)} for {vid}')
 
-        clean_updates = {
-            vid: {k: v for k, v in attrs.items() if k not in self._vertex_RESERVED}
-            for vid, attrs in updates.items()
-        }
-        clean_updates = {vid: attrs for vid, attrs in clean_updates.items() if attrs}
+        for _vid, attrs in updates.items():
+            _check_reserved_collision(self._vertex_RESERVED, attrs, kind='vertex')
+
+        clean_updates = {vid: dict(attrs) for vid, attrs in updates.items() if attrs}
 
         if not clean_updates:
             return
@@ -212,10 +238,17 @@ class AttributesClass:
         edge_id : str
             Edge identifier.
         **attrs
-            Attribute key/value pairs. Structural keys are ignored.
+            Attribute key/value pairs.
+
+        Raises
+        ------
+        ValueError
+            If any key is structurally reserved (e.g. ``edge_id``,
+            ``source``, ``target``, ``weight``, ``members``, ``head``,
+            ``tail``, ``flexible``).
         """
-        # keep attributes table pure: strip structural keys
-        clean = {k: v for k, v in attrs.items() if k not in self._EDGE_RESERVED}
+        _check_reserved_collision(self._EDGE_RESERVED, attrs, kind='edge')
+        clean = dict(attrs)
         if clean:
             self.edge_attributes = self._upsert_row(self.edge_attributes, edge_id, clean)
         pol = self.edge_direction_policy.get(edge_id)
@@ -238,11 +271,10 @@ class AttributesClass:
             if not isinstance(attrs, dict):
                 raise TypeError(f'edge bulk attrs must be dict, got {type(attrs)} for {eid}')
 
-        clean_updates = {
-            eid: {k: v for k, v in attrs.items() if k not in self._EDGE_RESERVED}
-            for eid, attrs in updates.items()
-        }
-        clean_updates = {eid: attrs for eid, attrs in clean_updates.items() if attrs}
+        for _eid, attrs in updates.items():
+            _check_reserved_collision(self._EDGE_RESERVED, attrs, kind='edge')
+
+        clean_updates = {eid: dict(attrs) for eid, attrs in updates.items() if attrs}
 
         if not clean_updates:
             return
@@ -294,7 +326,8 @@ class AttributesClass:
         **attrs
             Attribute key/value pairs. Structural keys are ignored.
         """
-        clean = {k: v for k, v in attrs.items() if k not in self._slice_RESERVED}
+        _check_reserved_collision(self._slice_RESERVED, attrs, kind='slice')
+        clean = dict(attrs)
         if clean:
             self.slice_attributes = self._upsert_row(self.slice_attributes, slice_id, clean)
 
@@ -335,10 +368,10 @@ class AttributesClass:
         **attrs
             Attribute key/value pairs. Structural keys are ignored except `weight`.
         """
-        # allow 'weight' through; keep ignoring true structural keys
-        clean = {
-            k: v for k, v in attrs.items() if (k not in self._EDGE_RESERVED) or (k == 'weight')
-        }
+        # 'weight' is the legitimate per-slice override; everything else
+        # reserved must raise so users don't silently lose data.
+        _check_reserved_collision(self._EDGE_RESERVED, attrs, kind='edge-slice', allow=('weight',))
+        clean = dict(attrs)
         if not clean:
             return
 
@@ -426,7 +459,11 @@ class AttributesClass:
         _rec = self._edges.get(edge_id)
         if _rec is None or _rec.col_idx < 0:
             raise KeyError(f'Edge {edge_id} not found')
-        self.set_edge_slice_attrs(slice_id, edge_id, weight=float(weight))
+        # Call the canonical setter on AttributesClass directly. ``self`` is the
+        # graph (from the AttributesAccessor.set_slice_edge_weight shim that
+        # passes ``self._G``), so going through ``self.set_edge_slice_attrs``
+        # would hit the deprecated-attribute barrier.
+        AttributesClass.set_edge_slice_attrs(self, slice_id, edge_id, weight=float(weight))
 
     def get_effective_edge_weight(self, edge_id, slice=None):
         """Resolve the effective weight for an edge, optionally within a slice.
@@ -436,13 +473,17 @@ class AttributesClass:
         edge_id : str
             Edge identifier.
         slice : str, optional
-            If provided, return the slice override if present; otherwise global weight.
+            Slice to read the override from. When omitted, the graph's
+            currently active slice is used. Pass an explicit slice ID to
+            override the active-slice resolution.
 
         Returns
         -------
         float
             Effective weight.
         """
+        if slice is None:
+            slice = self._current_slice
         if slice is not None:
             df = self.edge_slice_attributes
             if df is not None and {'slice_id', 'edge_id', 'weight'} <= set(dataframe_columns(df)):
@@ -791,7 +832,9 @@ class AttributesClass:
 
         # Polars fast-path
         rows = dataframe_to_rows(dataframe_filter_eq(df, 'edge_id', eid))
-        return dict(rows[0]) if rows else {}
+        if not rows:
+            return {}
+        return {k: v for k, v in rows[0].items() if k != 'edge_id' and v is not None}
 
     def get_vertex_attrs(self, vertex) -> dict:
         """Return the full attribute dict for a single vertex.
@@ -809,7 +852,9 @@ class AttributesClass:
         df = self.vertex_attributes
 
         rows = dataframe_to_rows(dataframe_filter_eq(df, 'vertex_id', vertex))
-        return dict(rows[0]) if rows else {}
+        if not rows:
+            return {}
+        return {k: v for k, v in rows[0].items() if k != 'vertex_id' and v is not None}
 
     ## Bulk attributes
 

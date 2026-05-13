@@ -83,7 +83,7 @@ def _register_compartments(G, model, default_slice: str) -> None:
         cid = _call(c, 'getId')
         if not cid or cid == default_slice:
             continue
-        if G.slices.has_slice(cid):
+        if G.slices.exists(cid):
             continue
         attrs = {}
         name = _call(c, 'getName')
@@ -104,7 +104,7 @@ def _register_compartments(G, model, default_slice: str) -> None:
         outside = _call(c, 'getOutside')  # L2 parent compartment
         if outside:
             attrs['outside'] = outside
-        G.slices.add_slice(cid, **attrs)
+        G.slices.add(cid, **attrs)
 
 
 # ── species → vertices ────────────────────────────────────────────────────────
@@ -335,7 +335,7 @@ def _graph_from_sbml_model(
 
     # ── assign reactions to their compartment slices ──────────────────────────
     by_slice: dict[str, list[str]] = {}
-    existing_slices = set(G.slices.list_slices(include_default=True))
+    existing_slices = set(G.slices.list(include_default=True))
     for rid, rxn_slices in rxn_slices_map.items():
         for cid in rxn_slices:
             if cid in existing_slices:

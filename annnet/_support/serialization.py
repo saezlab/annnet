@@ -249,9 +249,9 @@ def restore_multilayer_manifest(
 def collect_slice_manifest(graph, *, requested_lids=None):
     """Collect slice membership and per-slice weights via public APIs."""
     if requested_lids:
-        lids = [lid for lid in requested_lids if graph.slices.has_slice(lid)]
+        lids = [lid for lid in requested_lids if graph.slices.exists(lid)]
     else:
-        lids = list(graph.slices.list_slices(include_default=True))
+        lids = list(graph.slices.list(include_default=True))
 
     slice_attr_rows = dataframe_to_rows(getattr(graph, 'edge_slice_attributes', None))
     for row in slice_attr_rows:
@@ -267,7 +267,7 @@ def collect_slice_manifest(graph, *, requested_lids=None):
     slice_weights = {}
 
     for lid in lids:
-        eids = list(graph.slices.get_slice_edges(lid)) if graph.slices.has_slice(lid) else []
+        eids = list(graph.slices.edges(lid)) if graph.slices.exists(lid) else []
         seen = set(eids)
         for row in slice_attr_rows:
             row_lid = row.get('slice_id', row.get('slice'))
@@ -291,18 +291,18 @@ def collect_slice_manifest(graph, *, requested_lids=None):
 
 def restore_slice_manifest(graph, slices_section: dict, slice_weights: dict):
     """Restore slice membership and weights through public slice/attrs APIs."""
-    known_slices = set(graph.slices.list_slices(include_default=True))
+    known_slices = set(graph.slices.list(include_default=True))
 
     for lid, eids in (slices_section or {}).items():
         if lid not in known_slices:
-            graph.slices.add_slice(lid)
+            graph.slices.add(lid)
             known_slices.add(lid)
         if eids:
             graph.slices.add_edges(lid, eids)
 
     for lid, per_edge in (slice_weights or {}).items():
         if lid not in known_slices:
-            graph.slices.add_slice(lid)
+            graph.slices.add(lid)
             known_slices.add(lid)
         if per_edge:
             graph.attrs.set_edge_slice_attrs_bulk(

@@ -69,7 +69,7 @@ def _build_graph() -> AnnNet:
     # Hyperedge
     g.add_edges(src=['g1', 'g2'], tgt=['p1'], weight=3.0, interaction=+1, edge_id='he1')
 
-    g.slices.add_slice('active_only', region='high_expr')
+    g.slices.add('active_only', region='high_expr')
     g.slices.add_vertex_to_slice('active_only', 'p1')
     g.slices.add_vertex_to_slice('active_only', 'p3')
     g.slices.add_vertex_to_slice('active_only', 'g1')
@@ -80,7 +80,7 @@ def _build_graph() -> AnnNet:
     g.attrs.set_edge_slice_attrs('active_only', e1, weight=5.0)
 
     # Second slice with different membership
-    g.slices.add_slice('druggable')
+    g.slices.add('druggable')
     g.slices.add_vertex_to_slice('druggable', 'd1')
     g.slices.add_vertex_to_slice('druggable', 'p1')
     g.slices.add_vertex_to_slice('druggable', 'p2')

@@ -17,7 +17,7 @@ manifest-style graph attributes where possible.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ._common import (
     _rows_like,
@@ -246,13 +246,13 @@ def _coeff_from_obj(obj) -> float:
 
 def to_igraph(
     graph: AnnNet,
-    directed=True,
-    hyperedge_mode='skip',
-    slice=None,
-    slices=None,
-    public_only=False,
-    reify_prefix='he::',
-):
+    directed: bool = True,
+    hyperedge_mode: str = 'skip',
+    slice: str | None = None,
+    slices: list[str] | None = None,
+    public_only: bool = False,
+    reify_prefix: str = 'he::',
+) -> Any:
     """Export AnnNet → (igraph.AnnNet, manifest).
 
     hyperedge_mode: {"skip","expand","reify"}
@@ -531,8 +531,8 @@ def _ig_collect_reified(
 
 
 def from_igraph(
-    igG,
-    manifest,
+    igG: Any,
+    manifest: dict[str, Any],
     *,
     hyperedge: str = 'none',
     he_node_flag: str = 'is_hyperedge',

@@ -17,6 +17,7 @@ import gzip
 import json
 import base64
 from typing import TYPE_CHECKING, Any
+from pathlib import Path
 from binascii import Error as BinasciiError
 
 from ..core import EntityRecord
@@ -42,10 +43,10 @@ CX_STYLE_KEY = '__cx_style__'
 
 def _serialize_slices_public(graph) -> dict[str, dict]:
     out = {}
-    for slice_id in graph.slices.list_slices(include_default=True):
+    for slice_id in graph.slices.list(include_default=True):
         out[slice_id] = {
-            'vertices': list(graph.slices.get_slice_vertices(slice_id)),
-            'edges': list(graph.slices.get_slice_edges(slice_id)),
+            'vertices': list(graph.slices.vertices(slice_id)),
+            'edges': list(graph.slices.edges(slice_id)),
             'attributes': {},
         }
     return out
@@ -160,12 +161,13 @@ def _jsonify(obj):
 
 def to_cx2(
     G: AnnNet,
+    path: str | Path | None = None,
     *,
-    export_name='annnet export',
-    layer=None,
-    include_inter=False,
-    include_coupling=False,
-    hyperedges='skip',
+    export_name: str = 'annnet export',
+    layer: tuple[str, ...] | None = None,
+    include_inter: bool = False,
+    include_coupling: bool = False,
+    hyperedges: str = 'skip',
 ) -> list[dict[str, Any]]:
     """
     Convert an AnnNet graph to CX2 compliant JSON format.
@@ -178,6 +180,9 @@ def to_cx2(
     ----------
     G : AnnNet
         The graph to export.
+    path : str | os.PathLike, optional
+        If given, the CX2 document is written to this path as JSON. The
+        function still returns the CX2 dict structure for in-memory use.
     export_name : str, default "annnet export"
         Name of the exported network (stored in networkAttributes).
     layer : tuple of str, optional
@@ -696,13 +701,23 @@ def to_cx2(
     # Status goes last
     cx2.append({'status': [{'success': True}]})
 
+    if path is not None:
+        import json as _json
+
+        with open(path, 'w', encoding='utf-8') as f:
+            _json.dump(cx2, f, ensure_ascii=False)
+
     return cx2
 
 
 # --- Core Adapter: from_cx2 ---
 
 
-def from_cx2(cx2_data, *, hyperedges='manifest'):
+def from_cx2(
+    cx2_data: str | Path | list[dict[str, Any]],
+    *,
+    hyperedges: str = 'manifest',
+) -> AnnNet:
     """
     Fully robust CX2 - AnnNet importer.
 
@@ -934,10 +949,10 @@ def from_cx2(cx2_data, *, hyperedges='manifest'):
         # --- Slices ---
         smeta = manifest.get('slices', {})
         if smeta.get('data'):
-            existing_slices = set(G.slices.list_slices(include_default=True))
+            existing_slices = set(G.slices.list(include_default=True))
             for sname, sdata in smeta['data'].items():
                 if sname not in existing_slices:
-                    G.slices.add_slice(sname)
+                    G.slices.add(sname)
                     existing_slices.add(sname)
                 for vid in sdata.get('vertices', []):
                     G.slices.add_vertex_to_slice(sname, vid)

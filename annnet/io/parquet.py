@@ -248,14 +248,14 @@ def to_parquet(graph: AnnNet, path):
     dataframe_write_parquet(edge_df, path / 'edges.parquet')
 
     # slices
-    L = [{'slice_id': lid} for lid in graph.slices.list_slices(include_default=True)]
+    L = [{'slice_id': lid} for lid in graph.slices.list(include_default=True)]
     slices_df = _rows_to_df(L) if L else _empty_table(['slice_id'])
     dataframe_write_parquet(slices_df, path / 'slices.parquet')
 
     # edge_slices
     EL = []
-    for lid in graph.slices.list_slices(include_default=True):
-        for eid in graph.slices.get_slice_edges(lid):
+    for lid in graph.slices.list(include_default=True):
+        for eid in graph.slices.edges(lid):
             rec = {'slice_id': lid, 'edge_id': eid}
             try:
                 w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
@@ -533,11 +533,11 @@ def from_parquet(path) -> AnnNet:
     # Slices
     # -------------------------
     if L is not None:
-        existing_slices = set(H.slices.list_slices(include_default=True))
+        existing_slices = set(H.slices.list(include_default=True))
         for rec in dataframe_to_rows(L):
             lid = rec.get('slice_id')
             if lid is not None and lid not in existing_slices:
-                H.slices.add_slice(lid)
+                H.slices.add(lid)
                 existing_slices.add(lid)
 
     # -------------------------

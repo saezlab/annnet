@@ -206,15 +206,15 @@ class _DummySlices:
     def __init__(self, graph):
         self._graph = graph
 
-    def has_slice(self, slice_id):
+    def exists(self, slice_id):
         return slice_id in self._graph.slice_memberships
 
-    def add_slice(self, slice_id, **attrs):
+    def add(self, slice_id, **attrs):
         self._graph.slice_memberships.setdefault(slice_id, set())
         if attrs:
             self._graph.slice_attrs[slice_id] = dict(attrs)
 
-    def list_slices(self, include_default=False):
+    def list(self, include_default=False):
         return list(self._graph.slice_memberships)
 
     def add_edges(self, slice_id, edge_ids):

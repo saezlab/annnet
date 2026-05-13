@@ -50,12 +50,12 @@ class TestGraphDirAdapter:
         G = complex_graph
         to_parquet(G, tmpdir_fixture / 'graphdir')
         G2 = from_parquet(tmpdir_fixture / 'graphdir')
-        slices1 = set(G.slices.list_slices(include_default=False))
-        slices2 = set(G2.slices.list_slices(include_default=False))
+        slices1 = set(G.slices.list(include_default=False))
+        slices2 = set(G2.slices.list(include_default=False))
         assert slices1 == slices2
         for lid in slices1:
-            edges1 = set(G.slices.get_slice_edges(lid))
-            edges2 = set(G2.slices.get_slice_edges(lid))
+            edges1 = set(G.slices.edges(lid))
+            edges2 = set(G2.slices.edges(lid))
             assert edges1 == edges2
 
     def test_compression(self, complex_graph, tmpdir_fixture):

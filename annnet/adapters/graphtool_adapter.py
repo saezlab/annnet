@@ -45,11 +45,11 @@ if TYPE_CHECKING:
 def _serialize_slice_data(graph: AnnNet) -> dict[str, dict]:
     return {
         slice_id: {
-            'vertices': list(graph.slices.get_slice_vertices(slice_id)),
-            'edges': list(graph.slices.get_slice_edges(slice_id)),
-            'attributes': graph.slices.get_slice_info(slice_id).get('attributes', {}),
+            'vertices': list(graph.slices.vertices(slice_id)),
+            'edges': list(graph.slices.edges(slice_id)),
+            'attributes': graph.slices.info(slice_id).get('attributes', {}),
         }
-        for slice_id in graph.slices.list_slices(include_default=True)
+        for slice_id in graph.slices.list(include_default=True)
     }
 
 
@@ -393,10 +393,10 @@ def from_graphtool(
         G.edge_slice_attributes = _rows_to_df(edge_slice_rows)
 
     if smeta.get('data'):
-        existing_slices = set(G.slices.list_slices(include_default=True))
+        existing_slices = set(G.slices.list(include_default=True))
         for slice_id, info in smeta['data'].items():
             if slice_id not in existing_slices:
-                G.slices.add_slice(slice_id, **(info.get('attributes') or {}))
+                G.slices.add(slice_id, **(info.get('attributes') or {}))
                 existing_slices.add(slice_id)
             for vertex_id in info.get('vertices', []):
                 G.slices.add_vertex_to_slice(slice_id, vertex_id)

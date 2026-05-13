@@ -36,12 +36,29 @@ class LayerAccessor:
             return ()
         return self._aspects
 
-    def list_layers(self, aspect: str | None = None):
+    def list_layers(self, aspect: str | None = None, include_placeholder: bool = False):
+        """Return the user-declared layers, omitting the ``'_'`` placeholder by default.
+
+        Parameters
+        ----------
+        aspect : str | None
+            If given, return a sorted list for that single aspect.
+        include_placeholder : bool, default False
+            Include the synthetic ``'_'`` placeholder layer in the result.
+            Vertices assigned without an explicit ``layer=`` live on this
+            coordinate; most callers want it hidden.
+        """
         if self._aspects == ('_',):
             return {} if aspect is None else []
+
+        def _filter(values):
+            if include_placeholder:
+                return sorted(values)
+            return sorted(v for v in values if v != '_')
+
         if aspect is None:
-            return {k: sorted(v) for k, v in self._layers.items()}
-        return sorted(self._layers.get(aspect, ()))
+            return {k: _filter(v) for k, v in self._layers.items()}
+        return _filter(self._layers.get(aspect, ()))
 
     # ------------------------------------------------------------------
     # State proxies — expose AnnNet backing store to shared implementations
@@ -1154,7 +1171,14 @@ class LayerAccessor:
             layers = rec.ml_layers
 
             if kind in {'intra', 'hyper'}:
+                # Binary intra-layer edges store layers as (Lsrc, Ltgt) where
+                # Lsrc == Ltgt by definition; both must equal aa. Hyperedges
+                # store a single layer tuple.
                 if layers == aa:
+                    E.add(eid)
+                elif (
+                    isinstance(layers, tuple) and len(layers) == 2 and layers[0] == layers[1] == aa
+                ):
                     E.add(eid)
 
             elif kind == 'inter' and include_inter:
@@ -1349,7 +1373,7 @@ class LayerAccessor:
         )
         attributes.setdefault('source', 'kivela_layer')
         attributes.setdefault('layer_tuple', tuple(layer_tuple))
-        return self.create_slice_from_operation(slice_id, result, **attributes)
+        return self._G.slices.create_slice_from_operation(slice_id, result, **attributes)
 
     def create_slice_from_layer_union(
         self,
@@ -1387,7 +1411,7 @@ class LayerAccessor:
         )
         attributes.setdefault('source', 'kivela_layer_union')
         attributes.setdefault('layers', [tuple(a) for a in layer_tuples])
-        return self.create_slice_from_operation(slice_id, result, **attributes)
+        return self._G.slices.create_slice_from_operation(slice_id, result, **attributes)
 
     def create_slice_from_layer_intersection(
         self,
@@ -1425,7 +1449,7 @@ class LayerAccessor:
         )
         attributes.setdefault('source', 'kivela_layer_intersection')
         attributes.setdefault('layers', [tuple(a) for a in layer_tuples])
-        return self.create_slice_from_operation(slice_id, result, **attributes)
+        return self._G.slices.create_slice_from_operation(slice_id, result, **attributes)
 
     def create_slice_from_layer_difference(
         self,
@@ -1468,7 +1492,7 @@ class LayerAccessor:
         attributes.setdefault('source', 'kivela_layer_difference')
         attributes.setdefault('layer_a', tuple(layer_a))
         attributes.setdefault('layer_b', tuple(layer_b))
-        return self.create_slice_from_operation(slice_id, result, **attributes)
+        return self._G.slices.create_slice_from_operation(slice_id, result, **attributes)
 
     ## Subgraph
 

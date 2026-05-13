@@ -12,7 +12,7 @@ For exact APIs used below, see [AnnNet](reference/core/graph.md), [Slices](refer
 import annnet as an
 
 G = an.AnnNet(directed=True)
-G.slices.add_slice("toy")
+G.slices.add("toy")
 G.slices.active = "toy"
 
 for v in ["A", "B", "C", "D"]:

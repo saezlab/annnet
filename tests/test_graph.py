@@ -96,7 +96,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertIsInstance(self.g._slices['default'], SliceRecord)
 
     def test_all_stored_slices_use_slice_record(self):
-        self.g.slices.add_slice('L1')
+        self.g.slices.add('L1')
         self.g.add_vertices('a', slice='L1')
         self.g.add_edges('a', 'b', edge_id='e1', slice='L1')
         self.g.slices.union_create(['default', 'L1'], 'L2')
@@ -177,15 +177,15 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_slices_and_activation_and_propagation(self):
         # add slices
-        self.g.slices.add_slice('L1', purpose='left')
-        self.g.slices.add_slice('L2')
-        self.g.slices.set_active_slice('L1')
-        self.assertEqual(self.g.slices.get_active_slice(), 'L1')
+        self.g.slices.add('L1', purpose='left')
+        self.g.slices.add('L2')
+        self.g.slices.active = 'L1'
+        self.assertEqual(self.g.slices.active, 'L1')
         # add some vertices into current slice
         self.g.add_vertices('A')
         self.g.add_vertices('B')
         # switch slice and add C
-        self.g.slices.set_active_slice('L2')
+        self.g.slices.active = 'L2'
         self.g.add_vertices('C')
         # add edge with propagate=shared (only slices that have both endpoints A,B -> L1)
         e1 = self.g.add_edges(
@@ -202,7 +202,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertIn('A', self.g._slices['L2']['vertices'])  # pulled across
 
     def test_set_and_get_slice_attrs(self):
-        self.g.slices.add_slice('Geo', region='EMEA')
+        self.g.slices.add('Geo', region='EMEA')
         self.assertEqual(self.g.attrs.get_slice_attr('Geo', 'region'), 'EMEA')
         # upsert to new dtype
         self.g.attrs.set_slice_attrs('Geo', region='APAC')
@@ -211,13 +211,13 @@ class TestGraphBasics(unittest.TestCase):
     def test_slice_info_reads_attributes_from_dataframe_ssot(self):
         self.g.add_vertices('v1', slice='Geo')
         self.g.attrs.set_slice_attrs('Geo', region='EMEA')
-        info = self.g.slices.get_slice_info('Geo')
+        info = self.g.slices.info('Geo')
         self.assertEqual(info['attributes'], {'region': 'EMEA'})
 
     def test_add_slice_does_not_mutate_layer_registry(self):
         self.g.layers.set_aspects(['time'])
         self.g.layers.set_elementary_layers({'time': ['t0', 't1']})
-        self.g.slices.add_slice('analysis')
+        self.g.slices.add('analysis')
         self.assertEqual(self.g.layers.list_layers('time'), ['t0', 't1'])
 
     def test_flatten_layers_preserves_pair_index_queries(self):
@@ -246,13 +246,13 @@ class TestGraphBasics(unittest.TestCase):
         self.assertEqual(ids, ['e1'])
 
     def test_subgraph_from_slice_flat_fast_path_preserves_slice_state(self):
-        self.g.slices.add_slice('L1', region='EMEA')
+        self.g.slices.add('L1', region='EMEA')
         eid = self.g.add_edges('u', 'v', edge_id='e1', weight=5.0, slice='L1')
         self.g.attrs.set_edge_slice_attrs('L1', eid, weight=1.25)
 
         out = self.g.subgraph_from_slice('L1', resolve_slice_weights=True)
 
-        self.assertEqual(out.slices.get_active_slice(), 'L1')
+        self.assertEqual(out.slices.active, 'L1')
         self.assertEqual(set(out.vertices()), {'u', 'v'})
         self.assertEqual(set(out.edges()), {'e1'})
         self.assertAlmostEqual(out._edges['e1'].weight, 1.25)
@@ -266,7 +266,7 @@ class TestGraphBasics(unittest.TestCase):
         self.g.attrs.set_vertex_attrs('v1', color='blue')
         eid = self.g.add_edges('v1', 'v2', edge_id='e1')
         self.g.attrs.set_edge_attrs(eid, relation='binds')
-        self.g.slices.add_slice('Lw')
+        self.g.slices.add('Lw')
         self.g.attrs.set_edge_slice_attrs('Lw', eid, weight=2.0)
 
         self.assertEqual(self.g.attrs.get_graph_attribute('source'), 'unit-test')
@@ -277,7 +277,7 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_per_slice_weight_and_effective_weight(self):
         # ensure the slice exists first
-        self.g.slices.add_slice('Lw')
+        self.g.slices.add('Lw')
         # create the edge inside slice "Lw" so per-slice attrs apply
         eid = self.g.add_edges('u', 'v', weight=5.0, slice='Lw')
         # override via edge_slice_attributes table using the EDGE ID (string)
@@ -311,11 +311,11 @@ class TestGraphBasics(unittest.TestCase):
         self.assertNotIn(e2, self.g.edge_to_idx)
 
     def test_remove_slice_and_default_slice_guard(self):
-        self.g.slices.add_slice('Z')
-        self.g.slices.remove_slice('Z')
-        self.assertFalse(self.g.slices.has_slice('Z'))
+        self.g.slices.add('Z')
+        self.g.slices.remove('Z')
+        self.assertFalse(self.g.slices.exists('Z'))
         with self.assertRaises(ValueError):
-            self.g.slices.remove_slice('default')
+            self.g.slices.remove('default')
 
     def test_audit_attributes(self):
         # create mismatch intentionally
@@ -519,10 +519,16 @@ class TestErrorPaths(unittest.TestCase):
         placeholder_warnings = [w for w in caught if 'placeholder layer' in str(w.message)]
         self.assertEqual(len(placeholder_warnings), 1)
 
-    def test_add_edge_with_bare_ids_raises_on_multilayer_graph(self):
+    def test_add_edge_with_bare_ids_falls_back_to_placeholder_on_multilayer_graph(self):
+        """Mirror of ``add_vertices``: bare ids → placeholder layer + UserWarning."""
+        import warnings
+
         self.g.layers.set_aspects(['condition', 'time'])
-        with self.assertRaisesRegex(ValueError, 'explicit supra-node endpoints'):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
             self.g.add_edges('a', 'b')
+        msgs = [str(w.message) for w in caught]
+        assert any('placeholder layer' in m for m in msgs), msgs
 
     def test_direct_aspects_property_rebuilds_all_layers_cache(self):
         self.g.aspects = ['condition', 'time']
@@ -630,7 +636,7 @@ class TestErrorPaths(unittest.TestCase):
 
     def test_remove_default_slice_raises_value_error(self):
         with self.assertRaises(ValueError):
-            self.g.slices.remove_slice('default')
+            self.g.slices.remove('default')
 
 
 if __name__ == '__main__':
