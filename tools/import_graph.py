@@ -27,7 +27,7 @@ import ast
 import csv
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 - used only for fixed-argv Graphviz execution
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -1736,7 +1736,12 @@ def render_svg(dot_file: Path) -> None:
 
     for i, cmd in enumerate(commands, start=1):
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+            )  # nosec B603 - argv is constructed from trusted local paths and a resolved `dot` binary
             if i > 1:
                 print(f"[ok] Rendered {svg_file.name} with Graphviz fallback {i}")
             return

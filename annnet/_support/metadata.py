@@ -175,7 +175,7 @@ def _component_message(values: dict[str, dict[str, str]]) -> str:
 
     return '; '.join(
         f'{name}: {details["available"]}'
-        f'{f" ({details['install']})" if details["available"] == "no" else ""}'
+        f'{" (" + details["install"] + ")" if details["available"] == "no" else ""}'
         for name, details in values.items()
     )
 
