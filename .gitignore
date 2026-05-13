@@ -41,14 +41,6 @@ fabric.properties
 /data/input/custom*
 /data/input/*sh
 
-# Exclude all input files obtainable from GSE, GTEx, TCGS etc
-/data/input/GTEx/
-/data/input/GSE/
-/data/input/KGs/
-/data/input/mouse/
-/data/input/TCGA/
-/data/input/web_Google.txt
-
 # Esclude eventual test plot files
 /tests/*.pdf
 
@@ -78,5 +70,6 @@ benchmarks/
 # cache etc.
 .cache/
 .codex
+.coverage
 *PLAN.md
 _*.md

@@ -26,6 +26,7 @@ import numpy as np
 import scipy as scipy
 import scipy.sparse as sp
 
+from .._support.metadata import __version__ as ANNNET_VERSION
 from ._common import (
     dataframe_to_rows,
     dataframe_from_rows,
@@ -91,7 +92,7 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
         'format': 'annnet',
         'version': '1.0.0',
         'created': datetime.now(UTC).isoformat(),
-        'annnet_version': '0.1.0',
+        'annnet_version': ANNNET_VERSION,
         'graph_version': graph._version,
         'directed': graph.directed,
         'counts': {
@@ -484,7 +485,7 @@ def _write_audit(graph, path: Path, compression: str):
 
     provenance = {
         'created': datetime.now(UTC).isoformat(),
-        'annnet_version': '0.1.0',
+        'annnet_version': ANNNET_VERSION,
         'python_version': sys.version,
         'dependencies': {
             'scipy': scipy.__version__,

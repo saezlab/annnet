@@ -36,7 +36,7 @@ __all__ = [
     '__license__',
 ]
 
-_FALLBACK_VERSION = '0.1.0'
+_FALLBACK_VERSION = 'x.x.x'
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _PYPROJECT_PATH = _PROJECT_ROOT / 'pyproject.toml'
 _OPTIONAL_BUNDLES = {'io', 'backends', 'plot', 'bio', 'storage', 'all', 'dev'}

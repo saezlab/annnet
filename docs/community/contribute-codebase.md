@@ -50,7 +50,7 @@ live under `[dependency-groups]`.
 
 Use the existing groups when possible:
 
-- `dev`: contributor tooling such as Ruff, pre-commit, mypy, twine, and bump2version.
+- `dev`: contributor tooling such as Ruff, pre-commit, mypy, and twine.
 - `tests`: pytest, coverage, and test-only optional runtime dependencies.
 - `docs`: MkDocs and documentation build dependencies.
 
@@ -149,8 +149,7 @@ that the version number is incremented according to the following scheme:
 
 - Increment the patch version number if you make backwards-compatible bug fixes.
 
-The project includes `bump2version` in the development dependency group.
-Usually, versioning is done by the maintainers, so please do not increment
+Version updates are handled by the maintainers. Please do not increment
 versions in pull requests by default.
 
 ## Finding an issue to contribute to
