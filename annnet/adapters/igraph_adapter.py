@@ -505,7 +505,11 @@ def _ig_collect_reified(
             other = names[other_i]
 
             role = e[role_attr] if role_attr in igG.es.attributes() else None
-            coeff = e[coeff_attr] if coeff_attr in igG.es.attributes() else (e.get('__value', 1.0))
+            coeff = (
+                e[coeff_attr]
+                if coeff_attr in igG.es.attributes()
+                else (e['__value'] if '__value' in igG.es.attributes() else 1.0)
+            )
             try:
                 coeff = float(coeff)
                 if math.isnan(coeff):
