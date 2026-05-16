@@ -83,6 +83,7 @@ def _cx2_collect_reified(aspects):
     for he_id, (eid, attrs) in he_nodes.items():
         head_map = {}
         tail_map = {}
+        saw_directed_role = False
 
         for e in edges:
             u = e['s']
@@ -100,20 +101,16 @@ def _cx2_collect_reified(aspects):
 
             if role == 'head':
                 head_map[other] = coeff
+                saw_directed_role = True
             elif role == 'tail':
                 tail_map[other] = coeff
+                saw_directed_role = True
             else:
                 # undirected membership
                 head_map[other] = coeff
                 tail_map[other] = coeff
 
-        # Determine directedness
-        if any(k for k in (head_map or {})) or any(k for k in (tail_map or {})):
-            directed = (
-                True if any(ev.get('role') in ('head', 'tail') for ev in attrs.values()) else False
-            )
-        else:
-            directed = False
+        directed = saw_directed_role and bool(head_map or tail_map)
 
         hyperdefs.append((eid, directed, head_map, tail_map, attrs, he_id))
 
@@ -216,7 +213,7 @@ def to_cx2(
     if layer is not None:
         if not isinstance(layer, tuple):
             raise TypeError(f'layer must be a tuple, got {type(layer).__name__}')
-        G = G.subgraph_from_layer_tuple(
+        G = G.layers.subgraph_from_layer_tuple(
             layer, include_coupling=include_coupling, include_inter=include_inter
         )
 
@@ -1117,7 +1114,7 @@ def from_cx2(
 # -------------------------------------------------- Browser visualzaion Cytoscape.js
 
 
-def show_cx2(
+def show_cx2(  # pragma: no cover  — Flask preview server, not covered in unit tests
     G: AnnNet,
     *,
     export_name='annnet export',

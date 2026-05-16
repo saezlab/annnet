@@ -108,7 +108,11 @@ class AttributesClass:
             old_key = self._current_key_of_vertex(vertex_id)
             # prospective values = old values overridden by incoming clean attrs
             merged = {
-                f: (clean[f] if f in clean else self.get_attr_vertex(vertex_id, f, None))
+                f: (
+                    clean[f]
+                    if f in clean
+                    else AttributesClass.get_attr_vertex(self, vertex_id, f, None)
+                )
                 for f in self._vertex_key_fields
             }
             new_key = self._build_key_from_attrs(merged)
@@ -168,7 +172,11 @@ class AttributesClass:
             new_keys = {}
             for vid, attrs in clean_updates.items():
                 merged = {
-                    f: (attrs[f] if f in attrs else self.get_attr_vertex(vid, f, None))
+                    f: (
+                        attrs[f]
+                        if f in attrs
+                        else AttributesClass.get_attr_vertex(self, vid, f, None)
+                    )
                     for f in self._vertex_key_fields
                 }
                 new_keys[vid] = self._build_key_from_attrs(merged)
@@ -769,8 +777,8 @@ class AttributesClass:
                 tie_case = True
             cond = x > T
         else:
-            xs = self.get_attr_vertex(src, var, None)
-            xt = self.get_attr_vertex(tgt, var, None)
+            xs = AttributesClass.get_attr_vertex(self, src, var, None)
+            xt = AttributesClass.get_attr_vertex(self, tgt, var, None)
             if xs is None or xt is None:
                 return
             if xs == xt:
