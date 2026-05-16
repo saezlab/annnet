@@ -883,7 +883,7 @@ def _ingest_lil(
     if not ncol:
         raise ValueError('LIL ingest: no neighbors column found.')
 
-    attrs_cols = _attr_columns(df, [idcol, ncol, wcol, dcol, lcol])
+    attrs_cols = _attr_columns(df, [c for c in [idcol, ncol, wcol, dcol, lcol] if c])
 
     for row in _rows(df):
         u = _norm(row[idcol])
