@@ -43,6 +43,7 @@ IO_MODULES: dict[str, OptionalComponent] = {
     'parquet': OptionalComponent('pyarrow', 'annnet[parquet]'),
     'zarr': OptionalComponent('zarr', 'annnet[zarr_io]'),
     'sbml': OptionalComponent('lxml', 'annnet[sbml]'),
+    'scverse': OptionalComponent('anndata', 'annnet[scverse]'),
     'omnipath': OptionalComponent('annnet.io.omnipath'),
 }
 

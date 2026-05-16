@@ -17,6 +17,13 @@ _lazy_symbols: dict[str, tuple[str, str]] = {
     # DataFrame
     'to_dataframes': ('annnet.io.dataframes', 'to_dataframes'),
     'from_dataframes': ('annnet.io.dataframes', 'from_dataframes'),
+    # scverse
+    'to_anndata': ('annnet.io.scverse.anndata', 'to_anndata'),
+    'from_anndata': ('annnet.io.scverse.anndata', 'from_anndata'),
+    'to_mudata': ('annnet.io.scverse.mudata', 'to_mudata'),
+    'from_mudata': ('annnet.io.scverse.mudata', 'from_mudata'),
+    'to_spatialdata': ('annnet.io.scverse.spatialdata', 'to_spatialdata'),
+    'from_spatialdata': ('annnet.io.scverse.spatialdata', 'from_spatialdata'),
     # CSV / Excel
     'from_csv': ('annnet.io.csv_format', 'from_csv'),
     'from_dataframe': ('annnet.io.csv_format', 'from_dataframe'),

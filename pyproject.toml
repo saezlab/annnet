@@ -125,6 +125,12 @@ io = [
   "toml>=0.10",     # for metadata loading
 ]
 
+scverse = [
+  "anndata>=0.12",
+  "mudata>=0.3",
+  "spatialdata>=0.2",
+]
+
 storage = [
   "pyarrow>=10",
   "zarr>=2.18",
@@ -149,6 +155,8 @@ all = [
   "cobra>=0.26",
   "toml>=0.10",
   "narwhals>=1.9",
+  "anndata>=0.12",
+  "mudata>=0.3",
   # graphtool is not on PyPI
 ]
 
