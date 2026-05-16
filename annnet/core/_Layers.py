@@ -1199,6 +1199,19 @@ class LayerAccessor:
             return rec.ml_kind or 'hyper'
         return rec.ml_kind
 
+    @staticmethod
+    def _supra_endpoint(endpoint):
+        """Split a binary-edge endpoint into ``(supra_node_key, layer_tuple)``.
+
+        For multilayer binary edges ``rec.src`` and ``rec.tgt`` are stored as
+        ``(vertex_id, layer_tuple)`` supra-node tuples (matching the
+        ``_build_supra_index`` key shape). For flat graphs they are bare
+        vertex ids; this helper returns ``(endpoint, None)`` in that case.
+        """
+        if isinstance(endpoint, tuple) and len(endpoint) == 2 and isinstance(endpoint[1], tuple):
+            return endpoint, endpoint[1]
+        return endpoint, None
+
     ## Layer algebra
 
     def layer_union(
@@ -1666,29 +1679,28 @@ class LayerAccessor:
         for _eid, rec in self._edges.items():
             kind = rec.ml_kind
             if kind == 'intra':
-                L = _to_tuple(rec.ml_layers)
-                if L is None:
+                src_key, La = self._supra_endpoint(rec.src)
+                tgt_key, _ = self._supra_endpoint(rec.tgt)
+                if La is None:
                     continue
-                if layers_t is not None and L not in layers_t:
+                if layers_t is not None and La not in layers_t:
                     continue
-                u, v = rec.src, rec.tgt
-                ru = nl_to_row.get((u, L))
-                rv = nl_to_row.get((v, L))
+                ru = nl_to_row.get(src_key)
+                rv = nl_to_row.get(tgt_key)
                 if ru is None or rv is None:
                     continue
                 w = rec.weight if rec.weight is not None else 1
                 A[ru, rv] = A.get((ru, rv), 0.0) + w
                 A[rv, ru] = A.get((rv, ru), 0.0) + w
             elif kind in {'inter', 'coupling'}:
-                La = _to_tuple(rec.ml_layers[0])
-                Lb = _to_tuple(rec.ml_layers[1])
+                src_key, La = self._supra_endpoint(rec.src)
+                tgt_key, Lb = self._supra_endpoint(rec.tgt)
                 if La is None or Lb is None:
                     continue
                 if layers_t is not None and (La not in layers_t or Lb not in layers_t):
                     continue
-                u, v = rec.src, rec.tgt
-                ru = nl_to_row.get((u, La))
-                rv = nl_to_row.get((v, Lb))
+                ru = nl_to_row.get(src_key)
+                rv = nl_to_row.get(tgt_key)
                 if ru is None or rv is None:
                     continue
                 w = rec.weight if rec.weight is not None else 1
@@ -1795,24 +1807,19 @@ class LayerAccessor:
             # 3a. INTRA binary edge
 
             if kind == 'intra':
-                raw_L = rec.ml_layers
-                if raw_L is None:
+                src_key, L = self._supra_endpoint(rec.src)
+                tgt_key, _ = self._supra_endpoint(rec.tgt)
+                if src_key is None or tgt_key is None:
                     skipped.append(eid)
                     continue
-                L = _to_tuple(raw_L)
                 if L is None:
                     skipped.append(eid)
                     continue
                 if layers_t is not None and L not in layers_t:
                     continue
 
-                u, v = rec.src, rec.tgt
-                if u is None or v is None:
-                    skipped.append(eid)
-                    continue
-
-                ru = nl_to_row.get((u, L))
-                rv = nl_to_row.get((v, L))
+                ru = nl_to_row.get(src_key)
+                rv = nl_to_row.get(tgt_key)
                 if ru is None or rv is None:
                     skipped.append(eid)
                     continue
@@ -1932,13 +1939,14 @@ class LayerAccessor:
                         skipped.append(eid)
                         continue
                 else:
-                    u, v = rec.src, rec.tgt
-                    if u is None or v is None:
+                    src_key, _ = self._supra_endpoint(rec.src)
+                    tgt_key, _ = self._supra_endpoint(rec.tgt)
+                    if src_key is None or tgt_key is None:
                         skipped.append(eid)
                         continue
 
-                    ru = nl_to_row.get((u, La))
-                    rv = nl_to_row.get((v, Lb))
+                    ru = nl_to_row.get(src_key)
+                    rv = nl_to_row.get(tgt_key)
                     if ru is None or rv is None:
                         skipped.append(eid)
                         continue
@@ -2015,12 +2023,12 @@ class LayerAccessor:
             for _eid, rec in self._edges.items():
                 if rec.ml_kind != 'intra':
                     continue
-                L = _to_tuple(rec.ml_layers)
+                src_key, L = self._supra_endpoint(rec.src)
+                tgt_key, _ = self._supra_endpoint(rec.tgt)
                 if L is None or (layers_t is not None and L not in layers_t):
                     continue
-                u, v = rec.src, rec.tgt
-                ru = nl_to_row.get((u, L))
-                rv = nl_to_row.get((v, L))
+                ru = nl_to_row.get(src_key)
+                rv = nl_to_row.get(tgt_key)
                 if ru is None or rv is None:
                     continue
                 w = rec.weight if rec.weight is not None else 1.0
@@ -2033,15 +2041,14 @@ class LayerAccessor:
                 kind = rec.ml_kind
                 if kind not in include_kinds or rec.ml_layers is None:
                     continue
-                La = _to_tuple(rec.ml_layers[0])
-                Lb = _to_tuple(rec.ml_layers[1])
+                src_key, La = self._supra_endpoint(rec.src)
+                tgt_key, Lb = self._supra_endpoint(rec.tgt)
                 if La is None or Lb is None:
                     continue
                 if layers_t is not None and (La not in layers_t or Lb not in layers_t):
                     continue
-                u, v = rec.src, rec.tgt
-                ru = nl_to_row.get((u, La))
-                rv = nl_to_row.get((v, Lb))
+                ru = nl_to_row.get(src_key)
+                rv = nl_to_row.get(tgt_key)
                 if ru is None or rv is None:
                     continue
                 w = rec.weight if rec.weight is not None else 1.0
@@ -2166,11 +2173,10 @@ class LayerAccessor:
         """Internal: add a single coupling edge; return its eid."""
         _lid = lambda t: t[0] if len(self.aspects) == 1 else '×'.join(t)
         eid = f'{u}>{u}@{_lid(La)}~{_lid(Lb)}'
-        self._G.add_edges(u, u, weight=weight, edge_id=eid)
-        rec = self._edges.get(eid)
-        if rec is not None:
-            rec.ml_kind = 'coupling'
-            rec.ml_layers = (La, Lb)
+        # In multilayer mode the bare vertex id is ambiguous (it may live in
+        # multiple layers); use explicit supra-node keys so the edge lands
+        # on the intended (u, La) → (u, Lb) pair.
+        self._G.add_edges((u, La), (u, Lb), weight=weight, edge_id=eid)
         return eid
 
     def add_layer_coupling_pairs(
@@ -2359,15 +2365,17 @@ class LayerAccessor:
         for _eid, rec in self._edges.items():
             if rec.ml_kind != 'intra':
                 continue
-            L = _to_tuple(rec.ml_layers)
+            src_key, L = self._supra_endpoint(rec.src)
+            tgt_key, _ = self._supra_endpoint(rec.tgt)
             if L is None or (layers is not None and L not in set(layers_t)):
                 continue
-            u, v = rec.src, rec.tgt
-            if (u, L) not in nl_to_row or (v, L) not in nl_to_row:
+            if src_key not in nl_to_row or tgt_key not in nl_to_row:
                 continue
+            u_id = src_key[0] if isinstance(src_key, tuple) else src_key
+            v_id = tgt_key[0] if isinstance(tgt_key, tuple) else tgt_key
             w = rec.weight if rec.weight is not None else 1.0
-            ui.extend((vertex_to_i[u], vertex_to_i[v]))
-            vi.extend((vertex_to_i[v], vertex_to_i[u]))
+            ui.extend((vertex_to_i[u_id], vertex_to_i[v_id]))
+            vi.extend((vertex_to_i[v_id], vertex_to_i[u_id]))
             a = layer_to_i[L]
             ai.extend((a, a))
             bi.extend((a, a))
@@ -2378,20 +2386,21 @@ class LayerAccessor:
             kind = rec.ml_kind
             if kind not in {'inter', 'coupling'} or rec.ml_layers is None:
                 continue
-            La = _to_tuple(rec.ml_layers[0])
-            Lb = _to_tuple(rec.ml_layers[1])
+            src_key, La = self._supra_endpoint(rec.src)
+            tgt_key, Lb = self._supra_endpoint(rec.tgt)
             if La is None or Lb is None:
                 continue
             if layers is not None:
                 S = set(layers_t)
                 if La not in S or Lb not in S:
                     continue
-            u, v = rec.src, rec.tgt
-            if (u, La) not in nl_to_row or (v, Lb) not in nl_to_row:
+            if src_key not in nl_to_row or tgt_key not in nl_to_row:
                 continue
+            u_id = src_key[0] if isinstance(src_key, tuple) else src_key
+            v_id = tgt_key[0] if isinstance(tgt_key, tuple) else tgt_key
             w = rec.weight if rec.weight is not None else 1.0
-            ui.extend((vertex_to_i[u], vertex_to_i[v]))
-            vi.extend((vertex_to_i[v], vertex_to_i[u]))
+            ui.extend((vertex_to_i[u_id], vertex_to_i[v_id]))
+            vi.extend((vertex_to_i[v_id], vertex_to_i[u_id]))
             ai.extend((layer_to_i[La], layer_to_i[Lb]))
             bi.extend((layer_to_i[Lb], layer_to_i[La]))
             wv.extend((w, w))
@@ -2522,10 +2531,7 @@ class LayerAccessor:
         A = A_intra.copy()
         if include_inter:
             A = A + A_inter
-        if coupling_scale != 1.0:
-            A = A + (A_coup * (coupling_scale - 1.0))
-        else:
-            A = A + A_coup
+        A = A + A_coup * coupling_scale
         return A.tocsr()
 
     def transition_matrix(self, layers: list[str] | list[tuple] | None = None):
