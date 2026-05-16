@@ -116,6 +116,10 @@ def _export_binary_graph(
             }
         else:
             v_attr = {k: _serialize_value(val) for k, val in v_attr.items()}
+        # igraph reserves the 'name' vertex attribute for vertex IDs;
+        # rename any user attr called 'name' so it doesn't clobber them.
+        if 'name' in v_attr:
+            v_attr['__attr_name'] = v_attr.pop('name')
         processed_vattrs[v] = v_attr
 
     all_vattr_keys = set().union(*processed_vattrs.values()) if processed_vattrs else set()
@@ -833,7 +837,11 @@ def _from_ig_without_manifest(
     names = igG.vs['name'] if 'name' in igG.vs.attributes() else list(range(igG.vcount()))
     for i, vid in enumerate(names):
         ensure_vertex(vid)
-        vattrs = {k: igG.vs[i][k] for k in igG.vs.attributes()}
+        # 'name' in igraph is the vertex-id column, not a user attribute;
+        # '__attr_name' carries the user's original 'name' attr (if any).
+        vattrs = {k: igG.vs[i][k] for k in igG.vs.attributes() if k != 'name'}
+        if '__attr_name' in vattrs:
+            vattrs['name'] = vattrs.pop('__attr_name')
         if vattrs:
             H.attrs.set_vertex_attrs(vid, **vattrs)
 
