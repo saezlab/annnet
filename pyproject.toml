@@ -126,9 +126,10 @@ io = [
 ]
 
 scverse = [
-  "anndata>=0.12",
-  "mudata>=0.3",
-  "spatialdata>=0.2",
+  # anndata 0.12+ dropped Python 3.10; gate the scverse stack to 3.11+
+  "anndata>=0.12; python_version >= '3.11'",
+  "mudata>=0.3; python_version >= '3.11'",
+  "spatialdata>=0.2; python_version >= '3.11'",
 ]
 
 storage = [
@@ -155,8 +156,9 @@ all = [
   "cobra>=0.26",
   "toml>=0.10",
   "narwhals>=1.9",
-  "anndata>=0.12",
-  "mudata>=0.3",
+  # anndata 0.12+ dropped Python 3.10; gate the scverse stack to 3.11+
+  "anndata>=0.12; python_version >= '3.11'",
+  "mudata>=0.3; python_version >= '3.11'",
   # graphtool is not on PyPI
 ]
 

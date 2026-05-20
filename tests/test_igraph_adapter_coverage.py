@@ -121,7 +121,7 @@ def test_export_binary_graph_public_only_strips_double_underscore_attrs() -> Non
     G = AnnNet(directed=True)
     G.add_vertices(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.0)
-    G.attrs.set_vertex_attrs('A', __secret='nope', name='alpha')
+    G.attrs.set_vertex_attrs('A', __secret='nope', name='alpha')  # nosec B106
     out = _export_binary_graph(G, directed=True, skip_hyperedges=True, public_only=True)
     # __secret was stripped; name preserved
     assert '__secret' not in out.vs.attributes()
@@ -164,8 +164,8 @@ def test_to_igraph_reify_with_directed_hyperedge_attaches_head_tail_roles() -> N
 
 def test_to_igraph_with_public_only_strips_underscore_attrs() -> None:
     G = _toy_directed()
-    G.attrs.set_vertex_attrs('A', __secret='nope')
-    G.attrs.set_edge_attrs('e1', __secret='nope')
+    G.attrs.set_vertex_attrs('A', __secret='nope')  # nosec B106
+    G.attrs.set_edge_attrs('e1', __secret='nope')  # nosec B106
     igG, manifest = to_igraph(G, public_only=True)
     # The manifest's vertex_attrs / edge_attrs sections strip __ keys.
     for v_attrs in manifest['vertex_attrs'].values():
