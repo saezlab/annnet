@@ -242,20 +242,22 @@ class History:
         if not self._history:
             return 0
         df = dataframe_from_rows(self._history)
-        p = path.lower()
-        if p.endswith('.parquet'):
+        # Accept both str and pathlib.Path; only the suffix matters for routing.
+        path_str = str(path)
+        suffix = path_str.lower()
+        if suffix.endswith('.parquet'):
             dataframe_write_parquet(df, path)
             return len(self._history)
-        if p.endswith('.ndjson') or p.endswith('.jsonl'):
+        if suffix.endswith('.ndjson') or suffix.endswith('.jsonl'):
             with open(path, 'w', encoding='utf-8') as f:
                 for r in dataframe_to_rows(df):
                     f.write(json.dumps(r, ensure_ascii=False) + '\n')
             return len(self._history)
-        if p.endswith('.json'):
+        if suffix.endswith('.json'):
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(dataframe_to_rows(df), f, ensure_ascii=False)
             return len(self._history)
-        if p.endswith('.csv'):
+        if suffix.endswith('.csv'):
             rows = dataframe_to_rows(df)
             flat_rows = []
             for row in rows:
@@ -269,7 +271,7 @@ class History:
             dataframe_write_csv(dataframe_from_rows(flat_rows), path)
             return len(self._history)
         # Default to Parquet if unknown
-        dataframe_write_parquet(df, path + '.parquet')
+        dataframe_write_parquet(df, path_str + '.parquet')
         return len(self._history)
 
     def enable_history(self, flag: bool = True):

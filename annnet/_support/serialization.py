@@ -140,14 +140,20 @@ def serialize_multilayer_manifest(
         if attrs:
             aspect_attrs[aspect] = attrs
 
+    # Single scan over ``_entities`` instead of calling
+    # ``iter_vertex_layers`` per vertex — that helper does a full V-wide
+    # scan internally, which would make this loop O(V²).
     vm_rows = []
     node_layer_attrs = []
-    for vid in graph.vertices():
-        for layer_tuple in graph.layers.iter_vertex_layers(vid):
-            vm_rows.append({'node': vid, 'layer': list(layer_tuple)})
-            attrs = graph.layers.get_vertex_layer_attrs(vid, layer_tuple)
-            if attrs:
-                node_layer_attrs.append({'node': vid, 'layer': list(layer_tuple), 'attrs': attrs})
+    entities = getattr(graph, '_entities', {}) or {}
+    for (uu, aa), rec in entities.items():
+        if rec.kind != 'vertex':
+            continue
+        layer_tuple = aa
+        vm_rows.append({'node': uu, 'layer': list(layer_tuple)})
+        attrs = graph.layers.get_vertex_layer_attrs(uu, layer_tuple)
+        if attrs:
+            node_layer_attrs.append({'node': uu, 'layer': list(layer_tuple), 'attrs': attrs})
 
     layer_tuple_attrs = []
     for layer_tuple in graph.layers.iter_layers():
@@ -266,6 +272,23 @@ def collect_slice_manifest(graph, *, requested_lids=None):
     slices_section = {}
     slice_weights = {}
 
+    # Snapshot the (slice, edge) → weight map once from slice_attr_rows;
+    # the per-edge ``get_edge_slice_attr`` lookup is O(rows-in-table)
+    # and would make this loop quadratic in edge count.
+    weight_lookup: dict[tuple, float] = {}
+    for row in slice_attr_rows:
+        row_lid = row.get('slice_id', row.get('slice'))
+        row_eid = row.get('edge_id', row.get('edge'))
+        if row_lid is None or row_eid is None:
+            continue
+        w = row.get('weight')
+        if w is None:
+            continue
+        try:
+            weight_lookup[(row_lid, row_eid)] = float(w)
+        except (TypeError, ValueError):
+            continue
+
     for lid in lids:
         eids = list(graph.slices.edges(lid)) if graph.slices.exists(lid) else []
         seen = set(eids)
@@ -280,11 +303,13 @@ def collect_slice_manifest(graph, *, requested_lids=None):
             continue
 
         slices_section[lid] = eids
+        per_slice: dict = {}
         for eid in eids:
-            weight = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
-            if weight is None:
-                continue
-            slice_weights.setdefault(lid, {})[eid] = float(weight)
+            w = weight_lookup.get((lid, eid))
+            if w is not None:
+                per_slice[eid] = w
+        if per_slice:
+            slice_weights[lid] = per_slice
 
     return slices_section, slice_weights
 

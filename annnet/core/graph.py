@@ -2214,72 +2214,19 @@ class AnnNet(
         KeyError
             If the vertex is not found.
 
-        Notes
-        -----
-        Rebuilds entity indexing and shrinks the incidence matrix accordingly.
-
         See Also
         --------
         remove_vertices : Remove one or more vertices through the compact
             public API.
         """
+        # Single shrink + index shift via the bulk path. Doing it per call
+        # used to be O(M+V) per vertex (per-incident-edge remove_edge,
+        # then a full matrix row-shift); routing through the bulk path
+        # collapses that into a single pass.
         ekey = self._resolve_entity_key(vertex_id)
         if ekey not in self._entities:
             raise KeyError(f'vertex {vertex_id!r} not found')
-
-        entity_idx = self._entities[ekey].row_idx
-
-        # Collect all incident edges in one pass over _edges
-        edges_to_remove = set()
-        for eid, rec in list(self._edges.items()):
-            if rec.etype == 'hyper':
-                # src is frozenset(head or members), tgt is frozenset(tail) or None
-                if vertex_id in rec.src or (rec.tgt is not None and vertex_id in rec.tgt):
-                    edges_to_remove.add(eid)
-            else:
-                if rec.src == vertex_id or rec.tgt == vertex_id:
-                    edges_to_remove.add(eid)
-
-        for eid in edges_to_remove:
-            self.remove_edge(eid)
-
-        # Row removal without CSR: rebuild DOK with rows-1 and shift indices
-        M_old = self._matrix
-        rows, cols = M_old.shape
-        new_rows = rows - 1
-        M_new = sp.dok_matrix((new_rows, cols), dtype=M_old.dtype)
-        for (r, c), v in M_old.items():
-            if r == entity_idx:
-                continue
-            elif r > entity_idx:
-                M_new[r - 1, c] = v
-            else:
-                M_new[r, c] = v
-        self._matrix = M_new
-        self._invalidate_sparse_caches()
-
-        # Update entity mappings
-        self._remove_entity_record(ekey)
-
-        # Shift row indices for all entities after the removed row
-        num_entities = len(self._entities) + 1  # before deletion
-        for old_r in range(entity_idx + 1, num_entities):
-            ent_id = self._row_to_entity.pop(old_r)
-            self._row_to_entity[old_r - 1] = ent_id
-            self._entities[ent_id].row_idx = old_r - 1
-
-        # Remove from vertex attributes DataFrame
-        va = self.vertex_attributes
-        if va is not None and hasattr(va, 'columns'):
-            is_empty = (getattr(va, 'height', None) == 0) or (
-                hasattr(va, '__len__') and len(va) == 0
-            )
-            if (not is_empty) and ('vertex_id' in list(va.columns)):
-                self.vertex_attributes = _df_filter_not_equal(va, 'vertex_id', vertex_id)
-
-        # Remove from per-slice membership
-        for slice_data in self._slices.values():
-            slice_data['vertices'].discard(vertex_id)
+        self._remove_vertices_bulk([vertex_id])
 
     def remove_orphans(self):
         """Remove all vertices with no incident edges from the AnnNet graph."""

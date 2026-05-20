@@ -965,15 +965,18 @@ class LayerAccessor:
         # Rebuild DF; Polars will infer schema and fill missing values with nulls
         self.layer_attributes = build_dataframe_from_rows(new_rows)
 
-    def set_elementary_layer_attrs(self, aspect: str, label: str, **attrs):
+    def set_elementary_layer_attrs(self, aspect: str, label: str, /, **attrs):
         """Attach attributes to an elementary Kivela layer.
+
+        ``aspect`` and ``label`` are positional-only so user attribute
+        keys (including ``label=``) are passed through verbatim.
 
         Parameters
         ----------
         aspect : str
-            Aspect identifier.
+            Aspect identifier (positional-only).
         label : str
-            Elementary layer label.
+            Elementary layer label (positional-only).
         **attrs
             Key-value metadata to store.
 
