@@ -57,15 +57,24 @@ class _IGBackendAccessor(_BackendAccessorBase):
         simple: bool = False,
         edge_aggs: dict | None = None,
     ):
-        return self._get_or_make_ig(
+        igG = self._get_or_make_ig(
             directed=directed,
             hyperedge_mode=hyperedge_mode,
             slice=slice,
             slices=slices,
-            needed_attrs=needed_attrs or set(),
+            needed_attrs=set(),
             simple=simple,
             edge_aggs=edge_aggs,
         )
+        if needed_attrs is not None:
+            # Explicit user slim request — return a copy so the cached
+            # full-attr graph stays reusable for other algorithms.
+            igG = igG.copy()
+            keep = set(needed_attrs)
+            for attr in list(igG.es.attributes()):
+                if attr not in keep:
+                    del igG.es[attr]
+        return igG
 
     def __getattr__(self, name: str):
         def wrapper(*args, **kwargs):
@@ -169,12 +178,13 @@ class _IGBackendAccessor(_BackendAccessorBase):
         simple: bool,
         edge_aggs: dict | None,
     ):
+        # Keep all edge attrs on the cached graph so any algorithm can reuse
+        # the same entry; ``needed_attrs`` no longer fragments the cache.
         key = self._cache_key(
             directed,
             hyperedge_mode,
             slices,
             str(slice) if slice is not None else None,
-            needed_attrs,
             simple,
             edge_aggs,
         )
@@ -188,7 +198,6 @@ class _IGBackendAccessor(_BackendAccessorBase):
                 slices=slices,
                 public_only=True,
             )
-            self._prune_edge_attributes(igG, needed_attrs)
             if simple:
                 igG = self._collapse_multiedges(
                     igG, directed=directed, aggregations=edge_aggs, needed_attrs=needed_attrs

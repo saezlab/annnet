@@ -597,17 +597,20 @@ def from_nx(
             deserialize_edge_layers=deserialize_edge_layers,
         )
 
-    # BATCH ATTRIBUTES
+    # BATCH ATTRIBUTES — bulk reattach. Per-call set_*_attrs is O(N) and
+    # also leads to incremental schema drift (a column inferred as String
+    # from the first incoming row may then reject Int64 values from a
+    # later row); bulk inference avoids both.
     with _time('attrs', timings):
         if vertex_attrs_cache:
-            for vid, attrs in vertex_attrs_cache.items():
-                if attrs:
-                    H.attrs.set_vertex_attrs(vid, **attrs)
+            v_updates = {vid: a for vid, a in vertex_attrs_cache.items() if a}
+            if v_updates:
+                H.attrs.set_vertex_attrs_bulk(v_updates)
 
         if edge_attrs_cache:
-            for eid, attrs in edge_attrs_cache.items():
-                if attrs:
-                    H.attrs.set_edge_attrs(eid, **attrs)
+            e_updates = {eid: a for eid, a in edge_attrs_cache.items() if a}
+            if e_updates:
+                H.attrs.set_edge_attrs_bulk(e_updates)
 
     if hyperedge == 'reified':
         with _time('reified', timings):

@@ -1,5 +1,4 @@
-"""Coverage tests for ``annnet/io/cx2.py``.
-"""
+"""Coverage tests for ``annnet/io/cx2.py``."""
 
 from __future__ import annotations
 

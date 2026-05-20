@@ -47,15 +47,28 @@ class _NXBackendAccessor(_BackendAccessorBase):
         simple: bool = False,
         edge_aggs: dict | None = None,
     ):
-        return self._get_or_make_nx(
+        nxG = self._get_or_make_nx(
             directed=directed,
             hyperedge_mode=hyperedge_mode,
             slice=slice,
             slices=slices,
-            needed_attrs=needed_attrs or set(),
+            needed_attrs=set(),
             simple=simple,
             edge_aggs=edge_aggs,
         )
+        if needed_attrs is not None:
+            # Explicit user request: return a slimmed copy (don't mutate
+            # the cached graph that other algorithms may want full).
+            import networkx as _nx
+
+            nxG = nxG.copy()
+            keep = set(needed_attrs)
+            for _, _, _, data in nxG.edges(keys=True, data=True):
+                for name in list(data.keys()):
+                    if name not in keep:
+                        data.pop(name, None)
+            _ = _nx  # keep import side-effect explicit
+        return nxG
 
     def __getattr__(self, name: str):
         nx_callable = self._resolve_nx_callable(name)
@@ -200,12 +213,16 @@ class _NXBackendAccessor(_BackendAccessorBase):
         simple: bool,
         edge_aggs: dict | None,
     ):
+        # Don't fragment the cache by ``needed_attrs`` — we now keep all
+        # edge attributes on the cached graph so any algorithm can reuse
+        # the same entry. Stripping is only kept for ``simple=True`` because
+        # it also collapses parallel edges and the simplification is
+        # semantically distinct.
         key = self._cache_key(
             directed,
             hyperedge_mode,
             slices,
             str(slice) if slice is not None else None,
-            needed_attrs,
             simple,
             edge_aggs,
         )
@@ -219,24 +236,18 @@ class _NXBackendAccessor(_BackendAccessorBase):
                 slices=slices,
                 public_only=True,
             )
-            if needed_attrs:
-                for _, _, _, data in nxG.edges(keys=True, data=True):
-                    for name in list(data.keys()):
-                        if name not in needed_attrs:
-                            data.pop(name, None)
-            elif simple:
+            if simple:
                 for _, _, _, data in nxG.edges(keys=True, data=True):
                     for name in list(data.keys()):
                         if name not in ('weight', 'capacity'):
                             data.pop(name, None)
-            else:
-                for _, _, _, data in nxG.edges(keys=True, data=True):
-                    data.clear()
-
-            if simple and nxG.is_multigraph():
-                nxG = self._collapse_multiedges(
-                    nxG, directed=directed, aggregations=edge_aggs, needed_attrs=needed_attrs
-                )
+                if nxG.is_multigraph():
+                    nxG = self._collapse_multiedges(
+                        nxG,
+                        directed=directed,
+                        aggregations=edge_aggs,
+                        needed_attrs=needed_attrs,
+                    )
 
             self._warn_on_lossy_conversion(
                 backend_name='NX',
