@@ -154,16 +154,31 @@ def to_json(
     for lid in graph.slices.list(include_default=True):
         slices.append({'slice_id': lid})
 
+    # Snapshot per-slice weights once — per-edge get_edge_slice_attr is
+    # O(rows-in-table) and would make this loop quadratic in edge count.
+    _slice_weight_map: dict[tuple[str, str], float] = {}
+    _esa = getattr(graph, 'edge_slice_attributes', None)
+    if _esa is not None:
+        for _row in dataframe_to_rows(_esa):
+            _w_val = _row.get('weight')
+            if _w_val is None:
+                continue
+            _lid = _row.get('slice_id')
+            _eid = _row.get('edge_id')
+            if _lid is None or _eid is None:
+                continue
+            try:
+                _slice_weight_map[(_lid, _eid)] = float(_w_val)
+            except (TypeError, ValueError):
+                continue
+
     edge_slices = []
     for lid in graph.slices.list(include_default=True):
         for eid in graph.slices.edges(lid):
             rec = {'slice_id': lid, 'edge_id': eid}
-            try:
-                w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
-            except TypeError:
-                w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
+            w = _slice_weight_map.get((lid, eid))
             if w is not None:
-                rec['weight'] = float(w)
+                rec['weight'] = w
             edge_slices.append(rec)
 
     # Graph-level metadata (uns / graph_attributes). Serialized only if it
@@ -352,15 +367,21 @@ def from_json(path: str | Path) -> AnnNet:
         if 'weight' in EL:
             slice_weights[(lid, eid)] = float(EL['weight'])
     known_edges = set(H.edge_definitions) | set(H.hyperedge_definitions)
+    # Bulk-add edges to slices.
     for lid, eids in slice_edges.items():
         if lid not in known_slices:
             continue
-        for eid in eids:
-            if eid in known_edges:
-                H.slices.add_edge_to_slice(lid, eid)
+        valid = [eid for eid in eids if eid in known_edges]
+        if valid:
+            H.slices.add_edges(lid, valid)
+    # Bulk-apply per-slice weight overrides per slice (per-call would
+    # rebuild the edge_slice_attributes dataframe each time).
+    weights_by_slice: dict = {}
     for (lid, eid), w in slice_weights.items():
         if lid in known_slices and eid in known_edges:
-            H.attrs.set_edge_slice_attrs(lid, eid, weight=w)
+            weights_by_slice.setdefault(lid, {})[eid] = {'weight': w}
+    for lid, mp in weights_by_slice.items():
+        H.attrs.set_edge_slice_attrs_bulk(lid, mp)
 
     restore_multilayer_manifest(
         H,
@@ -369,8 +390,7 @@ def from_json(path: str | Path) -> AnnNet:
         deserialize_edge_layers=deserialize_edge_layers,
     )
     if vertex_attrs_pending:
-        for vid, attrs in vertex_attrs_pending.items():
-            H.attrs.set_vertex_attrs(vid, **attrs)
+        H.attrs.set_vertex_attrs_bulk(vertex_attrs_pending)
 
     return H
 
@@ -438,14 +458,28 @@ def write_ndjson(graph: AnnNet, dir_path):
         for lid in graph.slices.list(include_default=True):
             fl.write(json.dumps({'slice_id': lid}, ensure_ascii=False) + '\n')
 
+    # Snapshot per-slice weights once (per-edge lookup is O(N)).
+    _slice_weight_map: dict[tuple[str, str], float] = {}
+    _esa = getattr(graph, 'edge_slice_attributes', None)
+    if _esa is not None:
+        for _row in dataframe_to_rows(_esa):
+            _w_val = _row.get('weight')
+            if _w_val is None:
+                continue
+            _lid = _row.get('slice_id')
+            _eid = _row.get('edge_id')
+            if _lid is None or _eid is None:
+                continue
+            try:
+                _slice_weight_map[(_lid, _eid)] = float(_w_val)
+            except (TypeError, ValueError):
+                continue
+
     with open(f'{dir_path}/edge_slices.ndjson', 'w', encoding='utf-8') as fel:
         for lid in graph.slices.list(include_default=True):
             for eid in graph.slices.edges(lid):
                 rec = {'slice_id': lid, 'edge_id': eid}
-                try:
-                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
-                except TypeError:
-                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
+                w = _slice_weight_map.get((lid, eid))
                 if w is not None:
-                    rec['weight'] = float(w)
+                    rec['weight'] = w
                 fel.write(json.dumps(rec, ensure_ascii=False) + '\n')

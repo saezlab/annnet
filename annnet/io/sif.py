@@ -263,20 +263,35 @@ def to_sif(
                 'attrs': attrs,
             }
 
+        # Snapshot per-slice weights once (per-edge get_edge_slice_attr is O(N)).
+        _slice_weight_map: dict[tuple[str, str], float] = {}
+        _esa = getattr(graph, 'edge_slice_attributes', None)
+        if _esa is not None:
+            from ._common import dataframe_to_rows as _df_rows
+
+            for _row in _df_rows(_esa):
+                _w_val = _row.get('weight')
+                if _w_val is None:
+                    continue
+                _lid = _row.get('slice_id')
+                _eid = _row.get('edge_id')
+                if _lid is None or _eid is None:
+                    continue
+                try:
+                    _slice_weight_map[(_lid, _eid)] = float(_w_val)
+                except (TypeError, ValueError):
+                    continue
+
         for lid in graph.slices.list(include_default=True):
             edge_ids = list(graph.slices.edges(lid))
             if not edge_ids:
                 continue
 
             slice_info = {'edges': edge_ids, 'weights': {}}
-
             for eid in edge_ids:
-                try:
-                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
-                except TypeError:
-                    w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
+                w = _slice_weight_map.get((lid, eid))
                 if w is not None:
-                    slice_info['weights'][eid] = float(w)
+                    slice_info['weights'][eid] = w
 
             manifest['slices'][str(lid)] = slice_info
 

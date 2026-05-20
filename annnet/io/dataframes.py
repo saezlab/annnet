@@ -435,40 +435,40 @@ def from_dataframes(
                     if row:
                         G.attrs.set_edge_attrs(eid, **row)
 
-    # 4. Add slice memberships
-    if slices is not None:
-        if dataframe_height(slices) > 0:
-            if 'slice_id' not in dataframe_columns(slices) or 'edge_id' not in dataframe_columns(
-                slices
-            ):
-                raise ValueError("slices DataFrame must have 'slice_id' and 'edge_id' columns")
+    # 4. Add slice memberships (bulk per slice — per-row was O(rows) graph ops)
+    if slices is not None and dataframe_height(slices) > 0:
+        if 'slice_id' not in dataframe_columns(slices) or 'edge_id' not in dataframe_columns(
+            slices
+        ):
+            raise ValueError("slices DataFrame must have 'slice_id' and 'edge_id' columns")
 
+        existing_slices = set(G.slices.list(include_default=True))
+        existing_edges = set(G.edge_definitions) | set(G.hyperedge_definitions)
+        by_slice: dict = {}
+        for row in dataframe_to_rows(slices):
+            lid = row['slice_id']
+            eid = row['edge_id']
+            if lid not in existing_slices:
+                G.slices.add(lid)
+                existing_slices.add(lid)
+            if eid in existing_edges:
+                by_slice.setdefault(lid, []).append(eid)
+        for lid, eids in by_slice.items():
+            G.slices.add_edges(lid, eids)
+
+    # 5. Add per-slice weights (bulk per slice)
+    if slice_weights is not None and dataframe_height(slice_weights) > 0:
+        cols = set(dataframe_columns(slice_weights))
+        if {'slice_id', 'edge_id', 'weight'}.issubset(cols):
             existing_slices = set(G.slices.list(include_default=True))
             existing_edges = set(G.edge_definitions) | set(G.hyperedge_definitions)
-            for row in dataframe_to_rows(slices):
+            weights_by_slice: dict = {}
+            for row in dataframe_to_rows(slice_weights):
                 lid = row['slice_id']
                 eid = row['edge_id']
-
-                if lid not in existing_slices:
-                    G.slices.add(lid)
-                    existing_slices.add(lid)
-
-                if eid in existing_edges:
-                    G.slices.add_edge_to_slice(lid, eid)
-
-    # 5. Add per-slice weights
-    if slice_weights is not None:
-        if dataframe_height(slice_weights) > 0:
-            cols = set(dataframe_columns(slice_weights))
-            if {'slice_id', 'edge_id', 'weight'}.issubset(cols):
-                existing_slices = set(G.slices.list(include_default=True))
-                existing_edges = set(G.edge_definitions) | set(G.hyperedge_definitions)
-                for row in dataframe_to_rows(slice_weights):
-                    lid = row['slice_id']
-                    eid = row['edge_id']
-                    weight = row['weight']
-
-                    if lid in existing_slices and eid in existing_edges:
-                        G.attrs.set_edge_slice_attrs(lid, eid, weight=weight)
+                if lid in existing_slices and eid in existing_edges:
+                    weights_by_slice.setdefault(lid, {})[eid] = {'weight': row['weight']}
+            for lid, mp in weights_by_slice.items():
+                G.attrs.set_edge_slice_attrs_bulk(lid, mp)
 
     return G

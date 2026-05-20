@@ -623,6 +623,16 @@ def _ingest_edge_list(
 
     reserved_now = {src, dst, wcol, dcol, lcol, ecol}
     attrs_cols = _attr_columns(df, [c for c in reserved_now if c])
+    weight_slice_cols = [
+        (c, c.partition(':')[2]) for c in _columns(df) if c.lower().startswith('weight:')
+    ]
+
+    # Single-pass scan: bucket vertex IDs, edge rows, and per-slice weight
+    # overrides. Bulk-apply at the end — per-row add_vertices/add_edges +
+    # set_edge_slice_attrs would be O(N) graph operations.
+    unique_vertices: set = set()
+    edge_rows: list = []
+    slice_weight_overrides: dict = {}  # {slice_id: {(u, v, slice_id): weight}}
 
     for row in _rows(df):
         u = _norm(row[src])
@@ -642,43 +652,69 @@ def _ingest_edge_list(
             _split_slices(row[lcol]) if lcol else ([] if default_slice is None else [default_slice])
         )
 
-        # attributes for the edge (pure)
         pure_attrs = {k: row[k] for k in attrs_cols if row[k] is not None}
 
-        # ensure vertices
-        G.add_vertices(u)
-        G.add_vertices(v)
+        unique_vertices.add(u)
+        unique_vertices.add(v)
 
-        # create edge per slice (or default)
         if not slices:
-            eid = G.add_edges(
-                u,
-                v,
-                directed=directed,
-                weight=w,
-                slice=default_slice,
-                propagate='none',
-                **pure_attrs,
+            edge_rows.append(
+                {
+                    'source': u,
+                    'target': v,
+                    'edge_directed': directed,
+                    'weight': w,
+                    'slice': default_slice,
+                    'attributes': pure_attrs,
+                }
             )
         else:
-            eid = None
             for L in slices:
-                eid = G.add_edges(
-                    u, v, directed=directed, weight=w, slice=L, propagate='none', **pure_attrs
+                edge_rows.append(
+                    {
+                        'source': u,
+                        'target': v,
+                        'edge_directed': directed,
+                        'weight': w,
+                        'slice': L,
+                        'attributes': pure_attrs,
+                    }
                 )
-                # per-slice override columns like weight:slice
-                for c in _columns(df):
-                    if c.lower().startswith('weight:'):
-                        _, _, suffix = c.partition(':')
-                        if suffix == L and row[c] is not None:
-                            try:
-                                G.attrs.set_edge_slice_attrs(L, eid, weight=float(row[c]))  # type: ignore[arg-type]
-                            except (KeyError, TypeError, ValueError):
-                                pass
-        # explicit edge id mapping if present
-        if ecol and eid is not None and row[ecol]:
-            # no-op for now (edge ids are internal); could add alias map here if your graph supports it
-            pass
+                for col_name, suffix in weight_slice_cols:
+                    if suffix == L and row[col_name] is not None:
+                        try:
+                            slice_weight_overrides.setdefault(L, []).append(
+                                (u, v, float(row[col_name]))
+                            )
+                        except (TypeError, ValueError):
+                            pass
+
+    if unique_vertices:
+        G.add_vertices(sorted(unique_vertices))
+
+    if edge_rows:
+        added_eids = G.add_edges_bulk(edge_rows)
+    else:
+        added_eids = []
+
+    # Bulk-attach per-slice weight overrides if any were collected.
+    if slice_weight_overrides and added_eids:
+        # Map (u, v, slice) -> eid for the rows we just added.
+        slice_eid_index: dict = {}
+        for entry, eid in zip(edge_rows, added_eids, strict=False):
+            key = (entry['source'], entry['target'], entry.get('slice'))
+            slice_eid_index[key] = eid
+        for L, items in slice_weight_overrides.items():
+            attrs_for_slice = {}
+            for u, v, w_val in items:
+                eid = slice_eid_index.get((u, v, L))
+                if eid is not None:
+                    attrs_for_slice[eid] = {'weight': w_val}
+            if attrs_for_slice:
+                try:
+                    G.attrs.set_edge_slice_attrs_bulk(L, attrs_for_slice)
+                except (KeyError, TypeError, ValueError):
+                    pass
 
 
 def _ingest_hyperedge(

@@ -131,12 +131,33 @@ def from_graphml(path, *, hyperedge='reified'):
 
 
 def to_gexf(graph: AnnNet, path, *, directed=True, hyperedge_mode='reify', public_only=False):
-    """Export an AnnNet graph to GEXF via NetworkX."""
-    G, _m = to_nx(graph, directed=directed, hyperedge_mode=hyperedge_mode, public_only=public_only)
+    """Export an AnnNet graph to GEXF via NetworkX.
+
+    GEXF (like GraphML) cannot encode ``None`` attribute values; the same
+    sanitiser used for GraphML is applied here. A sidecar manifest is also
+    written so ``from_gexf`` can round-trip losslessly.
+    """
+    G, manifest = to_nx(
+        graph, directed=directed, hyperedge_mode=hyperedge_mode, public_only=public_only
+    )
+    _sanitize_graphml_inplace(G)
     nx.write_gexf(G, path)
+    mpath = str(path) + '.manifest.json'
+    with open(mpath, 'w', encoding='utf-8') as f:
+        json.dump(manifest, f, ensure_ascii=False)
 
 
 def from_gexf(path, *, hyperedge='reified') -> AnnNet:
-    """Import a GEXF graph through NetworkX."""
+    """Import a GEXF graph through NetworkX.
+
+    Uses the sidecar manifest written by ``to_gexf`` when present (lossless
+    round-trip); otherwise falls back to a best-effort import.
+    """
     G = nx.read_gexf(path)
+    _restore_types_graphml_inplace(G)
+    mpath = str(path) + '.manifest.json'
+    if os.path.exists(mpath):
+        with open(mpath, encoding='utf-8') as f:
+            manifest = json.load(f)
+        return from_nx(G, manifest, hyperedge=('reified' if hyperedge == 'reified' else 'none'))
     return from_nx_without_manifest(G, hyperedge=('reified' if hyperedge == 'reified' else 'none'))

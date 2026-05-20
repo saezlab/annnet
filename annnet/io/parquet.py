@@ -148,6 +148,28 @@ def to_parquet(graph: AnnNet, path):
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
 
+    # Snapshot the per-edge properties once. These properties rebuild a
+    # fresh dict from ``graph._edges`` on every read; without snapshots
+    # the inner loops below would call them per-edge, making to_parquet
+    # quadratic in the edge count.
+    _edge_directed = dict(getattr(graph, 'edge_directed', {}) or {})
+    _edge_weights = dict(getattr(graph, 'edge_weights', {}) or {})
+    _hyper_defs = dict(getattr(graph, 'hyperedge_definitions', {}) or {})
+
+    def _is_dir(eid: str) -> bool:
+        if eid in _edge_directed:
+            return bool(_edge_directed[eid])
+        if eid in _hyper_defs:
+            info = _hyper_defs[eid]
+            S = set(info.get('head', info.get('members', [])))
+            T = set(info.get('tail', info.get('members', [])))
+            return False if S == T else False
+        return True
+
+    def _w(eid: str) -> float:
+        w = _edge_weights.get(eid)
+        return 1.0 if w is None else float(w)
+
     # vertices
     v_attr_map = _build_attr_map(getattr(graph, 'vertex_attributes', None), 'vertex_id')
     v_rows = []
@@ -163,14 +185,14 @@ def to_parquet(graph: AnnNet, path):
     # edges
     e_attr_map = _build_attr_map(getattr(graph, 'edge_attributes', None), 'edge_id')
     e_rows = []
-    for eid, info in graph.hyperedge_definitions.items():
+    for eid, info in _hyper_defs.items():
         S = set(info.get('head', info.get('members', [])))
         T = set(info.get('tail', info.get('members', [])))
         row = {
             'edge_id': eid,
             'kind': 'hyper',
-            'directed': bool(_is_directed_eid(graph, eid)),
-            'weight': _edge_weight(graph, eid),
+            'directed': bool(_is_dir(eid)),
+            'weight': _w(eid),
         }
         attrs = e_attr_map.get(eid)
         if attrs:
@@ -212,8 +234,8 @@ def to_parquet(graph: AnnNet, path):
         row = {
             'edge_id': eid,
             'kind': 'binary',
-            'directed': bool(_is_directed_eid(graph, eid)),
-            'weight': _edge_weight(graph, eid),
+            'directed': bool(_is_dir(eid)),
+            'weight': _w(eid),
             'source': json.dumps(serialize_endpoint(src), ensure_ascii=False),
             'target': json.dumps(serialize_endpoint(tgt), ensure_ascii=False),
         }
@@ -252,17 +274,29 @@ def to_parquet(graph: AnnNet, path):
     slices_df = _rows_to_df(L) if L else _empty_table(['slice_id'])
     dataframe_write_parquet(slices_df, path / 'slices.parquet')
 
-    # edge_slices
+    # edge_slices — snapshot the edge_slice_attributes table once instead
+    # of calling get_edge_slice_attr per (slice, edge) pair (each call is
+    # O(rows-in-table)).
+    _slice_weight_map: dict[tuple[str, str], float] = {}
+    _esa = getattr(graph, 'edge_slice_attributes', None)
+    if _esa is not None:
+        for _row in dataframe_to_rows(_esa):
+            _w_val = _row.get('weight')
+            if _w_val is None:
+                continue
+            _lid = _row.get('slice_id')
+            _eid = _row.get('edge_id')
+            if _lid is None or _eid is None:
+                continue
+            _slice_weight_map[(_lid, _eid)] = float(_w_val)
+
     EL = []
     for lid in graph.slices.list(include_default=True):
         for eid in graph.slices.edges(lid):
             rec = {'slice_id': lid, 'edge_id': eid}
-            try:
-                w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight', default=None)
-            except TypeError:
-                w = graph.attrs.get_edge_slice_attr(lid, eid, 'weight')
+            w = _slice_weight_map.get((lid, eid))
             if w is not None:
-                rec['weight'] = float(w)
+                rec['weight'] = w
             EL.append(rec)
     edge_slices_df = _rows_to_df(EL) if EL else _empty_table(['slice_id', 'edge_id', 'weight'])
     dataframe_write_parquet(edge_slices_df, path / 'edge_slices.parquet')
@@ -364,8 +398,8 @@ def from_parquet(path) -> AnnNet:
         )
         H.add_edges_bulk(edge_rows)
 
-        # Remaining edge attrs (vectorized -> rows, but small)
-        # Drop structural columns before attaching attrs
+        # Remaining edge attrs (bulk reattach — per-row set_edge_attrs would
+        # rebuild the edge-attribute dataframe on every call).
         drop_cols = {
             'edge_id',
             'kind',
@@ -377,12 +411,17 @@ def from_parquet(path) -> AnnNet:
             'tail',
             'members',
         }
+        extra_binary_attrs: dict = {}
         for rec in dataframe_to_rows(binary):
             eid = rec.get('edge_id')
+            if eid is None:
+                continue
             attrs = {k: v for k, v in rec.items() if k not in drop_cols}
             attrs = _strip_nulls(attrs)
             if attrs:
-                H.attrs.set_edge_attrs(eid, **attrs)
+                extra_binary_attrs[eid] = attrs
+        if extra_binary_attrs:
+            H.attrs.set_edge_attrs_bulk(extra_binary_attrs)
 
     else:
         # Fallback path (still bulk, but from Python rows)
@@ -558,9 +597,13 @@ def from_parquet(path) -> AnnNet:
         for lid, eids in by_slice.items():
             H.slices.add_edges(lid, eids)
 
+        # Bulk per-slice weight reattach — per-(slice,edge) set_edge_slice_attrs
+        # would rebuild the edge_slice_attributes dataframe per call.
         for lid, mp in slice_weights.items():
-            for eid, w in mp.items():
-                H.attrs.set_edge_slice_attrs(lid, eid, weight=w)
+            if mp:
+                H.attrs.set_edge_slice_attrs_bulk(
+                    lid, {eid: {'weight': w} for eid, w in mp.items()}
+                )
 
     # -------------------------
     # Manifest (unchanged)

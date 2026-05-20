@@ -279,15 +279,21 @@ def add_vertices_from_obs(graph, obs: pd.DataFrame) -> None:
             for aspect in aspects
         }
         graph.layers.set_aspects(aspects, elem_layers)
+        # Bucket vertices by layer tuple, then bulk-add per group —
+        # per-row add_vertices is O(rows) graph mutations.
+        by_layer: dict[tuple, list[str]] = {}
         for obs_name, row in obs.iterrows():
             vertex_id = row.get(_OBS_VERTEX_ID_COL, obs_name)
             layer = tuple(str(row[f'{_OBS_LAYER_PREFIX}{aspect}']) for aspect in aspects)
-            graph.add_vertices(str(vertex_id), layer=layer)
+            by_layer.setdefault(layer, []).append(str(vertex_id))
+        for layer, vids in by_layer.items():
+            graph.add_vertices(vids, layer=layer)
         return
 
-    for obs_name, row in obs.iterrows():
-        vertex_id = row.get(_OBS_VERTEX_ID_COL, obs_name)
-        graph.add_vertices(str(vertex_id))
+    # Flat graph: one bulk call.
+    vids = [str(row.get(_OBS_VERTEX_ID_COL, obs_name)) for obs_name, row in obs.iterrows()]
+    if vids:
+        graph.add_vertices(vids)
 
 
 def restore_multilayer(graph, manifest: dict[str, Any]) -> None:
@@ -385,7 +391,16 @@ def restore_vertices_from_obs_attrs(graph, obs: pd.DataFrame) -> None:
 
 
 def add_edges_from_var(graph, var: pd.DataFrame) -> None:
-    """Restore AnnNet edges from AnnData.var structural columns."""
+    """Restore AnnNet edges from AnnData.var structural columns.
+
+    Buckets rows by edge kind (binary, undirected-hyper, directed-hyper)
+    and bulk-adds each bucket — per-row ``add_edges`` is O(rows) graph
+    mutations.
+    """
+    binary_rows: list = []
+    undirected_hyper_rows: list = []
+    directed_hyper_rows: list = []
+
     for edge_id, row in var.iterrows():
         weight = row.get('weight', 1.0)
         weight = 1.0 if is_nullish(weight) else float(weight)
@@ -394,16 +409,25 @@ def add_edges_from_var(graph, var: pd.DataFrame) -> None:
 
         if not is_nullish(row.get('members')):
             members = _decode_endpoint_seq(row.get('members'))
-            graph.add_edges(src=members, edge_id=str(edge_id), directed=False, weight=weight)
+            undirected_hyper_rows.append(
+                {
+                    'members': members,
+                    'edge_id': str(edge_id),
+                    'edge_directed': False,
+                    'weight': weight,
+                }
+            )
         elif not is_nullish(row.get('head')) or not is_nullish(row.get('tail')):
             head = _decode_endpoint_seq(row.get('head'))
             tail = _decode_endpoint_seq(row.get('tail'))
-            graph.add_edges(
-                src=head,
-                tgt=tail,
-                edge_id=str(edge_id),
-                directed=True if directed is None else directed,
-                weight=weight,
+            directed_hyper_rows.append(
+                {
+                    'head': head,
+                    'tail': tail,
+                    'edge_id': str(edge_id),
+                    'edge_directed': True if directed is None else directed,
+                    'weight': weight,
+                }
             )
         else:
             source = _decode_endpoint_cell(row.get('source'))
@@ -412,10 +436,22 @@ def add_edges_from_var(graph, var: pd.DataFrame) -> None:
                 raise ValueError(
                     f'Cannot restore edge {edge_id!r} from AnnData.var: missing source/target.'
                 )
-            kwargs = {'edge_id': str(edge_id), 'weight': weight}
+            entry = {
+                'source': source,
+                'target': target,
+                'edge_id': str(edge_id),
+                'weight': weight,
+            }
             if directed is not None:
-                kwargs['directed'] = directed
-            graph.add_edges(source, target, **kwargs)
+                entry['edge_directed'] = directed
+            binary_rows.append(entry)
+
+    if binary_rows:
+        graph.add_edges_bulk(binary_rows)
+    if undirected_hyper_rows:
+        graph.add_hyperedges_bulk(undirected_hyper_rows)
+    if directed_hyper_rows:
+        graph.add_hyperedges_bulk(directed_hyper_rows)
 
 
 def restore_edge_attrs_from_var(graph, var: pd.DataFrame) -> None:
