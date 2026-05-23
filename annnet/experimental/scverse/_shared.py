@@ -10,7 +10,7 @@ from typing import Any
 from scipy import sparse
 import pandas as pd
 
-from .._common import (
+from annnet.io._common import (
     dataframe_to_rows,
     serialize_endpoint,
     dataframe_from_rows,
