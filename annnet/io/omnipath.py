@@ -11,6 +11,7 @@ the implementation does not depend directly on a specific dataframe library.
 
 import time
 
+import narwhals as nw
 import numpy as np
 
 from ..core import AnnNet
@@ -372,15 +373,34 @@ def from_omnipath(
     )
 
     t_dicts0 = time.perf_counter()
-    rows = dataframe_to_rows(df)
+    # Try to iterate the dataframe lazily via narwhals. dataframe_to_rows() in _common
+    # materialises the entire dataframe as list[dict] -- fine for 100k rows but blows up
+    # for dataset='all' / 'posttranslational' (millions of rows) when combined with the
+    # bulk list being built below. Streaming via iter_rows keeps peak memory ~constant.
+    edge_attr_set = set(edge_attr_cols)
+    try:
+        df_nw = nw.from_native(df, eager_only=True, pass_through=False)
+        row_iter = df_nw.iter_rows(named=True)
+        # narwhals iter_rows is a generator; I can't get a row count up front without
+        # walking it, so use the dataframe height instead.
+        rows_height = df_nw.shape[0]
+        streaming = True
+    except Exception:  # noqa: BLE001
+        # Backend doesn't speak narwhals -> fall back to the eager path.
+        rows = dataframe_to_rows(df)
+        row_iter = iter(rows)
+        rows_height = len(rows)
+        streaming = False
     print(
-        f'[timing] to_rows:              {time.perf_counter() - t_dicts0:.3f}s  ({len(rows)} rows)'
+        f'[timing] to_rows setup:        {time.perf_counter() - t_dicts0:.3f}s  '
+        f'({rows_height} rows, streaming={streaming})'
     )
 
     # bulk list build
     t_bulk0 = time.perf_counter()
     bulk = []
-    for row in rows:
+    bulk_append = bulk.append  # local-name lookup, tighter inner loop
+    for row in row_iter:
         s = row.get(source_col)
         t = row.get(target_col)
         if dropna and (_is_null(s) or _is_null(t)):
@@ -405,7 +425,15 @@ def from_omnipath(
             if not _is_null(s_raw):
                 edge_slice = str(s_raw)
 
-        bulk.append(
+        # Only build the attributes dict if there's anything to put in it.
+        # Empty edge_attr_cols is a common "structure-only" code path and
+        # the comprehension cost adds up over millions of edges.
+        if edge_attr_set:
+            attributes = {c: row.get(c) for c in edge_attr_cols if c in row}
+        else:
+            attributes = {}
+
+        bulk_append(
             {
                 'source': str(s),
                 'target': str(t),
@@ -413,7 +441,7 @@ def from_omnipath(
                 'edge_id': eid,
                 'edge_directed': edge_dir,
                 'slice': edge_slice,
-                'attributes': {c: row.get(c) for c in edge_attr_cols if c in row},
+                'attributes': attributes,
             }
         )
 
@@ -437,24 +465,74 @@ def from_omnipath(
     # vertex annotations
     if load_vertex_annotations:
         ann_raw = None
+        # True when ann_raw is already the (gene, attr_key, joined) aggregated frame
+        # produced by the lazy scan -- the downstream block then skips straight to the pivot.
+        ann_pre_aggregated = False
 
-        # 1) caller passed a pre-loaded DF directly
+        # Set-dedup the vids and source filter once so both the lazy and eager paths use the same lists.
+        _vids_set = set(all_vids)
+        _source_filter_set = (
+            set(vertex_annotation_sources) if vertex_annotation_sources is not None else None
+        )
+
+        def _scan_and_aggregate(path):
+            """Lazy Polars scan + pushed-down filter + streaming group_by.
+
+            Used for the cache-hit and download-then-write-to-disk paths so the 217 MB
+            gzip never gets fully decompressed into RAM -- only filtered rows do.
+            Returns the aggregated Polars DataFrame: (genesymbol, attr_key, joined).
+            """
+            import polars as pl
+
+            lf = pl.scan_csv(path, separator='\t', has_header=True)
+
+            f_expr = (
+                pl.col('genesymbol').is_in(list(_vids_set))
+                & pl.col('source').is_not_null()
+                & pl.col('label').is_not_null()
+                & pl.col('value').is_not_null()
+            )
+            if _source_filter_set is not None:
+                f_expr = f_expr & pl.col('source').is_in(list(_source_filter_set))
+
+            return (
+                lf.filter(f_expr)
+                .select(
+                    [
+                        pl.col('genesymbol'),
+                        (pl.col('source') + pl.lit(':') + pl.col('label')).alias('attr_key'),
+                        pl.col('value').cast(pl.Utf8),
+                    ]
+                )
+                .group_by(['genesymbol', 'attr_key'])
+                .agg(pl.col('value').unique().sort().str.join(';').alias('joined'))
+                .collect(streaming=True)
+            )
+
+        # 1) caller passed a pre-loaded DF directly -- can't push down, hand to eager path
         if vertex_annotations_df is not None:
             ann_raw = vertex_annotations_df
 
-        # 2) caller passed a local file path
+        # 2) caller passed a local file path -- try lazy scan, fall back to eager read
         elif vertex_annotations_path is not None:
             try:
-                ann_raw = dataframe_read_tsv(vertex_annotations_path, backend=annotations_backend)
+                ann_raw = _scan_and_aggregate(vertex_annotations_path)
+                ann_pre_aggregated = True
+                print(
+                    f'[vertex annotations] streamed from path: {vertex_annotations_path}  '
+                    f'rows={ann_raw.height}'
+                )
             except Exception as e:  # noqa: BLE001
-                print(f'[warning] vertex_annotations_path failed: {e}')
+                print(f'[warning] lazy scan of {vertex_annotations_path} failed ({e}); falling back to eager read')
+                try:
+                    ann_raw = dataframe_read_tsv(vertex_annotations_path, backend=annotations_backend)
+                except Exception as e2:  # noqa: BLE001
+                    print(f'[warning] vertex_annotations_path failed: {e2}')
 
         # 3) check cache first, then download from OmniPath archive
         else:
             try:
-                import io
                 import os
-
                 import requests as _requests
 
                 _ANN_URL = (
@@ -465,68 +543,115 @@ def from_omnipath(
                 )
 
                 if os.path.exists(_cache_path):
-                    print(f'[vertex annotations] loading from cache: {_cache_path}')
+                    print(f'[vertex annotations] loading from cache (lazy scan + pushdown): {_cache_path}')
                     t_ann = time.perf_counter()
-                    ann_raw = dataframe_read_tsv(_cache_path, backend=annotations_backend)
+                    ann_raw = _scan_and_aggregate(_cache_path)
+                    ann_pre_aggregated = True
                     print(
-                        f'[vertex annotations] loaded in {time.perf_counter() - t_ann:.1f}s  rows={dataframe_height(ann_raw)}'
+                        f'[vertex annotations] streamed + aggregated in '
+                        f'{time.perf_counter() - t_ann:.1f}s  rows={ann_raw.height}'
                     )
                 else:
                     print(
                         '[vertex annotations] downloading from OmniPath archive (~114MB, one-time)...'
                     )
                     t_ann = time.perf_counter()
-                    resp = _requests.get(
-                        _ANN_URL,
-                        stream=True,
-                        timeout=(5, 60),  # (connect_timeout, read_timeout)
-                    )
+                    # Stream the download straight to disk -- the previous code read
+                    # resp.content into memory AND then re-fed it via BytesIO, doubling RAM.
+                    resp = _requests.get(_ANN_URL, stream=True, timeout=(5, 60))
                     resp.raise_for_status()
                     os.makedirs(os.path.dirname(_cache_path), exist_ok=True)
                     with open(_cache_path, 'wb') as _f:
-                        _f.write(resp.content)
-                    ann_raw = dataframe_read_tsv(
-                        io.BytesIO(resp.content), backend=annotations_backend
-                    )
+                        for chunk in resp.iter_content(chunk_size=1 << 20):  # 1 MB chunks
+                            if chunk:
+                                _f.write(chunk)
                     print(
-                        f'[vertex annotations] downloaded + cached in {time.perf_counter() - t_ann:.1f}s  → {_cache_path}'
+                        f'[vertex annotations] downloaded + cached in '
+                        f'{time.perf_counter() - t_ann:.1f}s  → {_cache_path}'
+                    )
+                    # Now run the same lazy aggregate against the file on disk.
+                    t_ann2 = time.perf_counter()
+                    ann_raw = _scan_and_aggregate(_cache_path)
+                    ann_pre_aggregated = True
+                    print(
+                        f'[vertex annotations] streamed + aggregated in '
+                        f'{time.perf_counter() - t_ann2:.1f}s  rows={ann_raw.height}'
                     )
             except Exception as e:  # noqa: BLE001
                 print(f'[warning] vertex annotations download failed: {e}')
 
         if ann_raw is not None:
             try:
-                vids_set = set(all_vids)
-                source_filter = (
-                    set(vertex_annotation_sources)
-                    if vertex_annotation_sources is not None
-                    else None
-                )
+                vids_set = _vids_set  # reuse the set built above
 
-                # Pivot in Python rows: one row per gene, one column per source:label.
-                grouped: dict[str, dict[str, set[str]]] = {}
-                for row in dataframe_to_rows(ann_raw):
-                    gene = row.get('genesymbol')
-                    source = row.get('source')
-                    label = row.get('label')
-                    value = row.get('value')
+                if ann_pre_aggregated:
+                    # Already (genesymbol, attr_key, joined) from the lazy scan path.
+                    # Skip the filter+group_by; go straight to the pivot.
+                    ann_agg = nw.from_native(ann_raw, eager_only=True, pass_through=False)
+                    print(
+                        f'[vertex annotations] using pre-aggregated frame: '
+                        f'{ann_agg.shape[0]:,} (gene, attr) pairs'
+                    )
+                else:
+                    # Eager path: caller passed an already-loaded DataFrame (or the lazy scan
+                    # fell back). Do the filter + aggregate via narwhals here.
+                    source_filter = (
+                        list(_source_filter_set) if _source_filter_set is not None else None
+                    )
+
+                    t_filter = time.perf_counter()
+                    ann_nw = nw.from_native(ann_raw, eager_only=True, pass_through=False)
+
+                    expr = (
+                        nw.col('genesymbol').is_in(list(vids_set))
+                        & ~nw.col('source').is_null()
+                        & ~nw.col('label').is_null()
+                        & ~nw.col('value').is_null()
+                    )
+                    if source_filter is not None:
+                        expr = expr & nw.col('source').is_in(source_filter)
+
+                    ann_agg = (
+                        ann_nw.filter(expr)
+                        .select(
+                            [
+                                nw.col('genesymbol'),
+                                (nw.col('source') + nw.lit(':') + nw.col('label')).alias('attr_key'),
+                                nw.col('value').cast(nw.String),
+                            ]
+                        )
+                        .group_by(['genesymbol', 'attr_key'])
+                        .agg(nw.col('value').unique().sort().str.join(';').alias('joined'))
+                    )
+                    print(
+                        f'[vertex annotations] aggregated to {ann_agg.shape[0]:,} (gene, attr) pairs '
+                        f'in {time.perf_counter() - t_filter:.1f}s'
+                    )
+
+                # Pivot the small aggregated frame -> (gene, {attr_key: joined}).
+                # n_genes * n_attr_keys, bounded by graph size, not by raw annotation rows.
+                t_pivot = time.perf_counter()
+                grouped: dict[str, dict[str, str]] = {}
+                for row in ann_agg.iter_rows(named=True):
+                    gene = row['genesymbol']
                     if gene not in vids_set:
                         continue
-                    if source_filter is not None and source not in source_filter:
-                        continue
-                    if source is None or label is None or value is None:
-                        continue
-                    attr_key = f'{source}:{label}'
-                    grouped.setdefault(gene, {}).setdefault(attr_key, set()).add(str(value))
-
-                G.add_vertices_bulk(
-                    [
-                        (gene, {key: ';'.join(sorted(values)) for key, values in attrs.items()})
-                        for gene, attrs in grouped.items()
-                        if G._resolve_entity_key(gene) in G._entities
-                    ]
+                    grouped.setdefault(gene, {})[row['attr_key']] = row['joined']
+                print(
+                    f'[vertex annotations] pivoted in {time.perf_counter() - t_pivot:.1f}s'
                 )
-                print(f'[vertex annotations] loaded  rows={len(grouped)}')
+
+                t_load = time.perf_counter()
+                payload = [
+                    (gene, attrs)
+                    for gene, attrs in grouped.items()
+                    if G._resolve_entity_key(gene) in G._entities
+                ]
+                G.add_vertices_bulk(payload)
+                print(
+                    f'[vertex annotations] loaded {len(payload)} vertices '
+                    f'in {time.perf_counter() - t_load:.1f}s'
+                )
             except Exception as e:  # noqa: BLE001
                 print(f'[warning] vertex annotation pivot/load failed: {e}')
 
