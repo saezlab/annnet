@@ -392,7 +392,7 @@ class TestAnnNetIO(unittest.TestCase):
 
             G = AnnNet(directed=True)
 
-            G.add_vertices_bulk({'vertex_id': f'v{i}'} for i in range(n_vertices))
+            G.add_vertices({'vertex_id': f'v{i}'} for i in range(n_vertices))
 
             bulk = []
             for i in range(n_edges):
@@ -405,7 +405,7 @@ class TestAnnNetIO(unittest.TestCase):
                     }
                 )
 
-            eids = G.add_edges_bulk(bulk)
+            eids = G.add_edges(bulk)
 
             if use_archive:
                 out_path = Path(self.tmpdir) / 'large_graph.annnet'

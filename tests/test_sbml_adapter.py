@@ -137,7 +137,7 @@ class DummyGraph:
         self.attrs = _DummyAttrs(self)
         self.slices = _DummySlices(self)
 
-    def add_vertices_bulk(self, ids, slice=None):
+    def _add_vertices_bulk(self, ids, slice=None):
         self.vertices.update(ids)
 
     def add_hyperedges_bulk(self, hyperedges, *, slice=None):

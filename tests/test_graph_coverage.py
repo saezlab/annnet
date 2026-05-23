@@ -279,7 +279,7 @@ def test_remove_vertices_bulk_removes_each() -> None:
 def test_add_edges_to_slice_bulk_adds_edges_and_endpoint_vertices() -> None:
     G = _toy()
     G.slices.add('s1')
-    G.add_edges_to_slice_bulk('s1', ['e1', 'e2'])
+    G._add_edges_to_slice_bulk('s1', ['e1', 'e2'])
     assert {'e1', 'e2'}.issubset(G.slices.edges('s1'))
     # endpoint vertices for the added edges land in the slice too.
     assert {'A', 'B', 'C'}.issubset(G.slices.vertices('s1'))
@@ -288,7 +288,7 @@ def test_add_edges_to_slice_bulk_adds_edges_and_endpoint_vertices() -> None:
 def test_add_edges_to_slice_bulk_skips_unknown_edges() -> None:
     G = _toy()
     G.slices.add('s1')
-    G.add_edges_to_slice_bulk('s1', ['e1', 'no-such-edge'])
+    G._add_edges_to_slice_bulk('s1', ['e1', 'no-such-edge'])
     # only e1 added
     assert 'e1' in G.slices.edges('s1')
 
@@ -434,7 +434,7 @@ def test_add_vertices_bulk_returns_ids_in_input_order() -> None:
         ('D', {}),
         'E',
     ]
-    out = G.add_vertices_bulk(items)
+    out = G._add_vertices_bulk(items)
     assert out == ['A', 'B', 'C', 'D', 'E']
 
 

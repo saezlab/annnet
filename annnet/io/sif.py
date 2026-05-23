@@ -497,7 +497,7 @@ def from_sif(
     # ===== BULK ADD VERTICES =====
     if vertex_data:
         vertices_bulk = list(vertex_data.items())
-        H.add_vertices_bulk(vertices_bulk)
+        H._add_vertices_bulk(vertices_bulk)
 
     # ===== BULK ADD EDGES WITH FAST HASHING + DELAYED EXPANSION =====
     if manifest and 'binary_edges' in manifest:
@@ -552,7 +552,7 @@ def from_sif(
         )
 
     if edges_raw:  # Check original list, not generator
-        H.add_edges_bulk(edges_bulk, default_weight=1.0, default_edge_directed=directed)
+        H._add_edges_bulk(edges_bulk, default_weight=1.0, default_edge_directed=directed)
 
     # ===== HYPEREDGES =====
     if manifest and 'hyperedges' in manifest:

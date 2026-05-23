@@ -513,7 +513,7 @@ def from_nx(
 
     # BULK INSERT VERTICES ONCE
     if known_vertices:
-        H.add_vertices_bulk([{'vertex_id': v} for v in known_vertices])
+        H._add_vertices_bulk([{'vertex_id': v} for v in known_vertices])
 
     regular_edges_bulk = []
     hyperedges_bulk = []
@@ -576,7 +576,7 @@ def from_nx(
 
         # SINGLE BULK CALL FOR REGULAR EDGES
         if regular_edges_bulk:
-            H.add_edges_bulk(regular_edges_bulk, default_edge_directed=True)
+            H._add_edges_bulk(regular_edges_bulk, default_edge_directed=True)
 
         # SINGLE BULK CALL FOR HYPEREDGES
         if hyperedges_bulk:

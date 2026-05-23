@@ -512,7 +512,7 @@ class TestErrorPaths(unittest.TestCase):
         self.g.layers.set_aspects(['condition', 'time'])
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always')
-            self.g.add_vertices_bulk(['v1', 'v2', 'v3'])
+            self.g._add_vertices_bulk(['v1', 'v2', 'v3'])
         self.assertIn(('v1', ('_', '_')), self.g._entities)
         self.assertIn(('v2', ('_', '_')), self.g._entities)
         self.assertIn(('v3', ('_', '_')), self.g._entities)

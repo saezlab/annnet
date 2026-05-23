@@ -162,7 +162,7 @@ def from_omnipath(
 
     See Also
     --------
-    AnnNet, AnnNet.add_edges_bulk, AnnNet.add_vertices_bulk
+    AnnNet, AnnNet.add_edges, AnnNet.add_vertices
 
     Examples
     --------
@@ -449,10 +449,10 @@ def from_omnipath(
         f'[timing] bulk list build:      {time.perf_counter() - t_bulk0:.3f}s  ({len(bulk)} edges)'
     )
 
-    # add_edges_bulk
+    # bulk edge insert
     t_aeb0 = time.perf_counter()
-    G.add_edges_bulk(bulk)
-    print(f'[timing] add_edges_bulk:       {time.perf_counter() - t_aeb0:.3f}s')
+    G._add_edges_bulk(bulk)
+    print(f'[timing] add_edges:            {time.perf_counter() - t_aeb0:.3f}s')
 
     G._history_enabled = True
 
@@ -460,7 +460,7 @@ def from_omnipath(
 
     # vertex table: register all vertices
     all_vids = [vid for vid, t in G.entity_types.items() if t == 'vertex']
-    G.add_vertices_bulk(all_vids)
+    G._add_vertices_bulk(all_vids)
 
     # vertex annotations
     if load_vertex_annotations:
@@ -654,7 +654,7 @@ def from_omnipath(
                     for gene, attrs in grouped.items()
                     if G._resolve_entity_key(gene) in G._entities
                 ]
-                G.add_vertices_bulk(payload)
+                G._add_vertices_bulk(payload)
                 print(
                     f'[vertex annotations] loaded {len(payload)} vertices '
                     f'in {time.perf_counter() - t_load:.1f}s'

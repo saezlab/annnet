@@ -687,7 +687,7 @@ def from_igraph(
 
     # Add vertices now (no he:: nodes will be included since they aren't in the manifest)
     if vertex_ids:
-        H.add_vertices_bulk([{'vertex_id': v} for v in vertex_ids])
+        H._add_vertices_bulk([{'vertex_id': v} for v in vertex_ids])
 
     # -------- edges/hyperedges (from manifest = SSOT) --------
     edge_directed_cache = manifest.get('edge_directed', {}) or {}
@@ -739,7 +739,7 @@ def from_igraph(
                     )
 
     if regular_edges_bulk:
-        H.add_edges_bulk(regular_edges_bulk, default_edge_directed=True)
+        H._add_edges_bulk(regular_edges_bulk, default_edge_directed=True)
     if hyperedges_bulk:
         H.add_hyperedges_bulk(hyperedges_bulk)
 

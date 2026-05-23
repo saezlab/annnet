@@ -324,11 +324,11 @@ class Operations:
             g = G(directed=self.directed, n=len(V), e=len(E))
             va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
             v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
-            g.add_vertices_bulk(v_rows, slice=g._default_slice)
+            g._add_vertices_bulk(v_rows, slice=g._default_slice)
 
         # edges
         if bin_payload:
-            g.add_edges_bulk(bin_payload, slice=g._default_slice)
+            g._add_edges_bulk(bin_payload, slice=g._default_slice)
         if hyper_payload:
             g.add_edges(hyper_payload, slice=g._default_slice)
 
@@ -472,9 +472,9 @@ class Operations:
                     g.add_vertices(vid, **attrs)
         else:
             g = G(directed=self.directed, n=len(V), e=edge_count)
-            g.add_vertices_bulk(v_rows, slice=g._default_slice)
+            g._add_vertices_bulk(v_rows, slice=g._default_slice)
         if bin_payload:
-            g.add_edges_bulk(bin_payload, slice=g._default_slice)
+            g._add_edges_bulk(bin_payload, slice=g._default_slice)
         if hyper_payload:
             g.add_edges(hyper_payload, slice=g._default_slice)
 
@@ -716,7 +716,7 @@ class Operations:
         # vertices with attrs (edge-entities share same table)
         va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
         v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
-        g.add_vertices_bulk(v_rows, slice=slice_id)
+        g._add_vertices_bulk(v_rows, slice=slice_id)
 
         # edge attrs
         e_attrs = self._rows_attr_map(self.edge_attributes, 'edge_id', E)
@@ -778,7 +778,7 @@ class Operations:
                 )
 
         if bin_payload:
-            g.add_edges_bulk(bin_payload, slice=slice_id)
+            g._add_edges_bulk(bin_payload, slice=slice_id)
         if hyper_payload:
             g.add_edges(hyper_payload, slice=slice_id)
 

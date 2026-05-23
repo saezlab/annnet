@@ -368,11 +368,11 @@ class LayerAccessor:
     def set_vertex_attrs(self, vid, **kw):
         return self._G.attrs.set_vertex_attrs(vid, **kw)
 
-    def add_edges_bulk(self, edges, **kw):
-        return self._G.add_edges_bulk(edges, **kw)
+    def _add_edges_bulk(self, edges, **kw):
+        return self._G._add_edges_bulk(edges, **kw)
 
-    def add_vertices_bulk(self, verts, **kw):
-        return self._G.add_vertices_bulk(verts, **kw)
+    def _add_vertices_bulk(self, verts, **kw):
+        return self._G._add_vertices_bulk(verts, **kw)
 
     ## Aspects & layers
 

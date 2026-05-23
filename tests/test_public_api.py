@@ -145,6 +145,7 @@ class TestPublicAPI:
             'add_edge',
             'add_edges_bulk',
             'add_vertices_bulk',
+            'add_edges_to_slice_bulk',
             'vertices_view',
             'edges_view',
             'set_aspects',

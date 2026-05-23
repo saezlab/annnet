@@ -33,8 +33,8 @@ warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
 
 
 def _ensure_vertices(G, vertices: Iterable[str], slice: str | None) -> None:
-    # `add_vertices_bulk` exists and handles missing vertices efficiently.
-    G.add_vertices_bulk(list(vertices), slice=slice)
+    # Internal bulk vertex insertion handles missing vertices efficiently.
+    G._add_vertices_bulk(list(vertices), slice=slice)
 
 
 BOUNDARY_SOURCE = '__BOUNDARY_SOURCE__'
@@ -42,8 +42,8 @@ BOUNDARY_SINK = '__BOUNDARY_SINK__'
 
 
 def _ensure_boundary_vertices(G, slice: str):
-    # idempotent – AnnNet.add_vertices_bulk ignores existing ids
-    G.add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
+    # Idempotent internal vertex insertion ignores existing ids.
+    G._add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
 
 
 def _graph_from_stoich(
@@ -58,7 +58,7 @@ def _graph_from_stoich(
     G = AnnNet(directed=True) if graph is None else graph
 
     # Ensure all species + boundary placeholders exist
-    G.add_vertices_bulk(list(metabolite_ids), slice=slice)
+    G._add_vertices_bulk(list(metabolite_ids), slice=slice)
     _ensure_boundary_vertices(G, slice)
 
     m, n = S.shape

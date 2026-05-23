@@ -447,7 +447,7 @@ def add_edges_from_var(graph, var: pd.DataFrame) -> None:
             binary_rows.append(entry)
 
     if binary_rows:
-        graph.add_edges_bulk(binary_rows)
+        graph._add_edges_bulk(binary_rows)
     if undirected_hyper_rows:
         graph.add_hyperedges_bulk(undirected_hyper_rows)
     if directed_hyper_rows:

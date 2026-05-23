@@ -1035,10 +1035,11 @@ def from_cx2(
 
     # Single bulk vertex insert (registers entities; also upserts layout coords in manifest mode)
     if vertex_bulk_data:
-        G.add_vertices_bulk(vertex_bulk_data)
+        G._add_vertices_bulk(vertex_bulk_data)
 
     if _manifest_mode:
-        # Manifest already set the full vertex_attributes; add_vertices_bulk has upserted any
+        # Manifest already set the full vertex_attributes; the internal bulk
+        # insert has upserted any
         # new layout coords into it.  Just fix the column name if needed.
         cols = set(dataframe_columns(G.vertex_attributes))
         if 'vertex_id' not in cols and 'id' in cols:
@@ -1096,7 +1097,7 @@ def from_cx2(
 
     # Single bulk edge insert
     if edge_bulk_data:
-        G.add_edges_bulk(edge_bulk_data)
+        G._add_edges_bulk(edge_bulk_data)
 
     if not _manifest_mode:
         enorm = _normalize_rows(list(emap.values()))

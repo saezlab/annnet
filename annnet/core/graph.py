@@ -1033,7 +1033,7 @@ class AnnNet(
                 vertex_id = vertices
                 attrs = {}
             attrs.update(attributes)
-            return self._add_vertex_impl(vertex_id, slice=slice, layer=layer, **attrs)
+            return self._add_vertex(vertex_id, slice=slice, layer=layer, **attrs)
 
         items = list(vertices)
         self._add_vertices_batch(items, layer=layer, slice=slice, default_attrs=attributes or None)
@@ -1052,17 +1052,7 @@ class AnnNet(
                 out.append(it)
         return out
 
-    def add_vertex(
-        self,
-        vertex_id: str,
-        slice: str | None = None,
-        layer: str | tuple[str, ...] | dict[str, str] | None = None,
-        **attributes: Any,
-    ) -> str:
-        """Compatibility wrapper for the canonical ``add_vertices`` API."""
-        return self._add_vertex_impl(vertex_id, slice=slice, layer=layer, **attributes)
-
-    def add_vertices_bulk(self, vertices, *, layer=None, slice=None):
+    def _add_vertices_bulk(self, vertices, *, layer=None, slice=None):
         """Hidden compatibility shim for legacy internal bulk insertion."""
         items = list(vertices)
         self._add_vertices_batch(items, layer=layer, slice=slice)
@@ -1081,7 +1071,7 @@ class AnnNet(
                 out.append(it)
         return out
 
-    def _add_vertex_impl(self, vertex_id, slice=None, layer=None, **attributes):
+    def _add_vertex(self, vertex_id, slice=None, layer=None, **attributes):
         """Add or update a vertex.
 
         Parameters
@@ -1521,39 +1511,9 @@ class AnnNet(
                     )
             return out
 
-        return self._add_edge_impl(*args, **kwargs)
+        return self._add_edge(*args, **kwargs)
 
-    def add_edge(
-        self,
-        src: str | list[str] | dict[str, float] | tuple[str, tuple[str, ...]] | None = None,
-        tgt: str | list[str] | dict[str, float] | tuple[str, tuple[str, ...]] | None = None,
-        *,
-        weight: float = 1.0,
-        edge_id: str | None = None,
-        directed: bool | None = None,
-        parallel: str = 'update',
-        slice: str | None = None,
-        as_entity: bool = False,
-        propagate: str = 'none',
-        flexible: dict[str, Any] | None = None,
-        **attrs: Any,
-    ) -> str:
-        """Compatibility wrapper for the canonical ``add_edges`` API."""
-        return self._add_edge_impl(
-            src,
-            tgt,
-            weight=weight,
-            edge_id=edge_id,
-            directed=directed,
-            parallel=parallel,
-            slice=slice,
-            as_entity=as_entity,
-            propagate=propagate,
-            flexible=flexible,
-            **attrs,
-        )
-
-    def add_edges_bulk(
+    def _add_edges_bulk(
         self,
         edges,
         *,
@@ -1577,7 +1537,7 @@ class AnnNet(
             default_edge_directed=default_edge_directed,
         )
 
-    def _add_edge_impl(
+    def _add_edge(
         self,
         src=None,
         tgt=None,
@@ -1763,9 +1723,9 @@ class AnnNet(
             ekey = self._resolve_entity_key(node)
             if ekey not in _ent:
                 if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
-                    self._add_vertex_impl(node[0], layer=node[1], slice=slice)
+                    self._add_vertex(node[0], layer=node[1], slice=slice)
                 else:
-                    self._add_vertex_impl(node, slice=slice)
+                    self._add_vertex(node, slice=slice)
 
         self._grow_rows_to(len(_ent))
 
@@ -2869,7 +2829,7 @@ class AnnNet(
         # Create new vertex
         vid = self._gen_vertex_id_from_key(key)
         # No need to pre-check entity_to_idx here; ids are namespaced by 'cid:' prefix
-        self._add_vertex_impl(vid, slice=slice, **attrs)
+        self._add_vertex(vid, slice=slice, **attrs)
 
         # Index ownership
         self._vertex_key_index[key] = vid
@@ -4338,7 +4298,7 @@ class AnnNet(
 
         L['vertices'].update(verts)
 
-    def add_edges_to_slice_bulk(self, slice_id, edge_ids):
+    def _add_edges_to_slice_bulk(self, slice_id, edge_ids):
         """Hidden compatibility shim for legacy internal slice edge attachment."""
         return self._add_edges_to_slice_batch(slice_id, edge_ids)
 

@@ -693,7 +693,7 @@ def _ingest_edge_list(
         G.add_vertices(sorted(unique_vertices))
 
     if edge_rows:
-        added_eids = G.add_edges_bulk(edge_rows)
+        added_eids = G._add_edges_bulk(edge_rows)
     else:
         added_eids = []
 

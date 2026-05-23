@@ -47,7 +47,7 @@ def _isset(obj, setter_name: str) -> bool:
 
 
 def _ensure_boundary_vertices(G, slice: str) -> None:
-    G.add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
+    G._add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
 
 
 # ── SBML reader ───────────────────────────────────────────────────────────────
@@ -156,7 +156,7 @@ def _register_species(G, model, default_slice: str) -> dict[str, str]:
         by_slice.setdefault(target, []).append((sid, attrs) if attrs else sid)
 
     for target_slice, items in by_slice.items():
-        G.add_vertices_bulk(items, slice=target_slice)
+        G._add_vertices_bulk(items, slice=target_slice)
 
     return sid_to_compartment
 

@@ -287,11 +287,11 @@ def from_json(path: str | Path) -> AnnNet:
             row.update({k: v for k, v in nd.items() if k != 'id'})
             vertex_dicts.append(row)
         if vertex_dicts:
-            H.add_vertices_bulk(vertex_dicts)
+            H._add_vertices_bulk(vertex_dicts)
 
     # edges (binary)
-    # Multilayer graphs use supra-node tuples as endpoints — add_edges_bulk is flat-only,
-    # so fall back to scalar add_edge for multilayer.
+    # Multilayer graphs use supra-node tuples as endpoints — the internal
+    # bulk edge helper is flat-only, so fall back to scalar insertion.
     edge_dicts = []
     for e in doc.get('edges', []):
         eid = e.get('id')
@@ -317,7 +317,7 @@ def from_json(path: str | Path) -> AnnNet:
                 entry['attributes'] = attrs
             edge_dicts.append(entry)
     if edge_dicts:
-        H.add_edges_bulk(edge_dicts)
+        H._add_edges_bulk(edge_dicts)
 
     # hyperedges — bulk insert
     hyper_dicts = []

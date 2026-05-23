@@ -25,7 +25,7 @@ class FakeAnnNet:
         self.added_edges = None
         self.added_vertices_calls = []
 
-    def add_edges_bulk(self, bulk):
+    def _add_edges_bulk(self, bulk):
         self.added_edges = bulk
         verts = set()
         for edge in bulk:
@@ -36,7 +36,7 @@ class FakeAnnNet:
         self._num_entities = len([k for k, v in self.entity_types.items() if v == 'vertex'])
         self._num_edges = len(bulk)
 
-    def add_vertices_bulk(self, items):
+    def _add_vertices_bulk(self, items):
         self.added_vertices_calls.append(items)
         for item in items:
             if isinstance(item, tuple):
@@ -867,7 +867,7 @@ def test_prints_timing_lines(capsys):
     assert '[timing] fetch/receive df:' in out
     assert '[timing] column resolution:' in out
     assert '[timing] AnnNet init:' in out
-    assert '[timing] to_rows:' in out
+    assert '[timing] to_rows setup:' in out
     assert '[timing] bulk list build:' in out
-    assert '[timing] add_edges_bulk:' in out
+    assert '[timing] add_edges:' in out
     assert 'vertices=' in out

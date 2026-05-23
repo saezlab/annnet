@@ -222,7 +222,7 @@ def restore_multilayer_manifest(
         if vid is None or not layer_tuple:
             continue
         if not graph.layers.has_presence(vid, layer_tuple):
-            graph.add_vertices_bulk([vid], layer=layer_tuple)
+            graph._add_vertices_bulk([vid], layer=layer_tuple)
 
     for eid, kind in manifest.get('edge_kind', {}).items():
         if graph.has_edge(edge_id=eid):

@@ -328,7 +328,7 @@ def from_dataframes(
             if 'vertex_id' not in dataframe_columns(nodes):
                 raise ValueError("nodes DataFrame must have 'vertex_id' column")
 
-            G.add_vertices_bulk(dataframe_to_rows(nodes))
+            G._add_vertices_bulk(dataframe_to_rows(nodes))
 
     # 2. Add binary edges
     if edges is not None:
@@ -357,7 +357,7 @@ def from_dataframes(
                     }
                 )
 
-            G.add_edges_bulk(edge_rows)
+            G._add_edges_bulk(edge_rows)
 
     # 3. Add hyperedges
     if hyperedges is not None:

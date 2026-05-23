@@ -344,7 +344,7 @@ def from_parquet(path) -> AnnNet:
     for rec in dataframe_to_rows(V):
         v_rows.append(dict(rec))
     if v_rows:
-        H.add_vertices_bulk(v_rows)
+        H._add_vertices_bulk(v_rows)
 
     # -------------------------
     # Edges (bulk, columnar)
@@ -396,7 +396,7 @@ def from_parquet(path) -> AnnNet:
             for u, v, eid, d, w in zip(src, dst, eids, directed, weights, strict=False)
             if u is not None and v is not None
         )
-        H.add_edges_bulk(edge_rows)
+        H._add_edges_bulk(edge_rows)
 
         # Remaining edge attrs (bulk reattach — per-row set_edge_attrs would
         # rebuild the edge-attribute dataframe on every call).
@@ -446,7 +446,7 @@ def from_parquet(path) -> AnnNet:
                 extra_attrs[eid] = attrs
 
         if edge_rows:
-            H.add_edges_bulk(edge_rows)
+            H._add_edges_bulk(edge_rows)
             if extra_attrs:
                 H.attrs.set_edge_attrs_bulk(extra_attrs)
 

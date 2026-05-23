@@ -31,7 +31,7 @@ from tests.test_sbml_adapter import (
 class DummyGraph(BaseDummyGraph):
     """Coverage-test variant that tolerates ``(sid, attrs)`` tuples."""
 
-    def add_vertices_bulk(self, ids, slice=None):
+    def _add_vertices_bulk(self, ids, slice=None):
         for item in ids:
             if isinstance(item, tuple):
                 self.vertices.add(item[0])
