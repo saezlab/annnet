@@ -11,8 +11,8 @@ the implementation does not depend directly on a specific dataframe library.
 
 import time
 
-import narwhals as nw
 import numpy as np
+import narwhals as nw
 
 from ..core import AnnNet
 from ._common import (
@@ -523,9 +523,13 @@ def from_omnipath(
                     f'rows={ann_raw.height}'
                 )
             except Exception as e:  # noqa: BLE001
-                print(f'[warning] lazy scan of {vertex_annotations_path} failed ({e}); falling back to eager read')
+                print(
+                    f'[warning] lazy scan of {vertex_annotations_path} failed ({e}); falling back to eager read'
+                )
                 try:
-                    ann_raw = dataframe_read_tsv(vertex_annotations_path, backend=annotations_backend)
+                    ann_raw = dataframe_read_tsv(
+                        vertex_annotations_path, backend=annotations_backend
+                    )
                 except Exception as e2:  # noqa: BLE001
                     print(f'[warning] vertex_annotations_path failed: {e2}')
 
@@ -533,6 +537,7 @@ def from_omnipath(
         else:
             try:
                 import os
+
                 import requests as _requests
 
                 _ANN_URL = (
@@ -543,7 +548,9 @@ def from_omnipath(
                 )
 
                 if os.path.exists(_cache_path):
-                    print(f'[vertex annotations] loading from cache (lazy scan + pushdown): {_cache_path}')
+                    print(
+                        f'[vertex annotations] loading from cache (lazy scan + pushdown): {_cache_path}'
+                    )
                     t_ann = time.perf_counter()
                     ann_raw = _scan_and_aggregate(_cache_path)
                     ann_pre_aggregated = True
@@ -616,7 +623,9 @@ def from_omnipath(
                         .select(
                             [
                                 nw.col('genesymbol'),
-                                (nw.col('source') + nw.lit(':') + nw.col('label')).alias('attr_key'),
+                                (nw.col('source') + nw.lit(':') + nw.col('label')).alias(
+                                    'attr_key'
+                                ),
                                 nw.col('value').cast(nw.String),
                             ]
                         )
@@ -637,9 +646,7 @@ def from_omnipath(
                     if gene not in vids_set:
                         continue
                     grouped.setdefault(gene, {})[row['attr_key']] = row['joined']
-                print(
-                    f'[vertex annotations] pivoted in {time.perf_counter() - t_pivot:.1f}s'
-                )
+                print(f'[vertex annotations] pivoted in {time.perf_counter() - t_pivot:.1f}s')
 
                 t_load = time.perf_counter()
                 payload = [
