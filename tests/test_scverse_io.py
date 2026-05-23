@@ -4,7 +4,7 @@ import pytest
 from scipy import sparse
 
 from annnet import AnnNet
-from annnet.io.scverse import (
+from annnet.experimental.scverse import (
     from_anndata,
     from_mudata,
     from_spatialdata,
