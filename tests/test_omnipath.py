@@ -2,18 +2,30 @@
 
 from __future__ import annotations
 
-import io
 import sys
 import types
 
 import numpy as np
 import pandas as pd
+
+import polars  # noqa: F401
 import pytest
 
 import annnet.io.omnipath as mod
 
 
+# ---------------------------------------------------------------------------
+# Fakes & fixtures
+# ---------------------------------------------------------------------------
+
+
 class FakeAnnNet:
+    """Stand-in for AnnNet.
+
+    Mirrors the real class's bulk-insert API (private names with leading
+    underscore -- see annnet/core/_Layers.py and annnet/core/graph.py).
+    """
+
     def __init__(self, *args, **kwargs):
         self.init_args = args
         self.init_kwargs = kwargs
@@ -39,10 +51,7 @@ class FakeAnnNet:
     def _add_vertices_bulk(self, items):
         self.added_vertices_calls.append(items)
         for item in items:
-            if isinstance(item, tuple):
-                vid = item[0]
-            else:
-                vid = item
+            vid = item[0] if isinstance(item, tuple) else item
             self._entities.add(vid)
             self.entity_types[vid] = 'vertex'
         self._num_entities = len([k for k, v in self.entity_types.items() if v == 'vertex'])
@@ -69,6 +78,11 @@ def edge_df():
             'evidence': ['lit', 'screen'],
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# Edge-build behavior
+# ---------------------------------------------------------------------------
 
 
 def test_builds_from_dataframe_and_infers_columns(edge_df):
@@ -103,7 +117,6 @@ def test_builds_from_dataframe_and_infers_columns(edge_df):
         },
     ]
 
-    # First vertex call is registration of all discovered vertices.
     assert len(g.added_vertices_calls) == 1
     registered = set(g.added_vertices_calls[0])
     assert registered == {'EGFR', 'STAT3', 'TP53', 'MDM2'}
@@ -143,10 +156,7 @@ def test_uses_explicit_source_and_target_columns():
 def test_raises_when_source_target_cannot_be_inferred():
     df = pd.DataFrame({'a': ['x'], 'b': ['y']})
 
-    with pytest.raises(
-        ValueError,
-        match='Could not infer source/target columns',
-    ):
+    with pytest.raises(ValueError, match='Could not infer source/target columns'):
         mod.from_omnipath(df=df, load_vertex_annotations=False)
 
 
@@ -176,12 +186,7 @@ def test_dropna_true_silently_drops_rows():
 
 
 def test_dropna_false_raises_on_first_null_endpoint():
-    df = pd.DataFrame(
-        {
-            'source': ['A', None],
-            'target': ['B', 'C'],
-        }
-    )
+    df = pd.DataFrame({'source': ['A', None], 'target': ['B', 'C']})
 
     with pytest.raises(ValueError, match='Found null source/target with dropna=False'):
         mod.from_omnipath(df=df, dropna=False, load_vertex_annotations=False)
@@ -217,19 +222,9 @@ def test_dropna_false_raises_on_first_null_endpoint():
     ],
 )
 def test_directed_value_coercion(raw, default_directed, expected):
-    df = pd.DataFrame(
-        {
-            'source': ['A'],
-            'target': ['B'],
-            'is_directed': [raw],
-        }
-    )
+    df = pd.DataFrame({'source': ['A'], 'target': ['B'], 'is_directed': [raw]})
 
-    g = mod.from_omnipath(
-        df=df,
-        default_directed=default_directed,
-        load_vertex_annotations=False,
-    )
+    g = mod.from_omnipath(df=df, default_directed=default_directed, load_vertex_annotations=False)
 
     assert g.added_edges[0]['edge_directed'] is expected
 
@@ -246,7 +241,6 @@ def test_missing_directed_column_falls_back_to_default():
 
 def test_weight_defaults_to_1_when_missing():
     df = pd.DataFrame({'source': ['A'], 'target': ['B']})
-
     g = mod.from_omnipath(df=df, load_vertex_annotations=False)
     assert g.added_edges[0]['weight'] == 1.0
 
@@ -265,14 +259,7 @@ def test_weight_defaults_to_1_when_null():
 
 
 def test_weight_is_cast_to_float():
-    df = pd.DataFrame(
-        {
-            'source': ['A'],
-            'target': ['B'],
-            'weight': ['3.25'],
-        }
-    )
-
+    df = pd.DataFrame({'source': ['A'], 'target': ['B'], 'weight': ['3.25']})
     g = mod.from_omnipath(df=df, load_vertex_annotations=False)
     assert g.added_edges[0]['weight'] == 3.25
 
@@ -291,14 +278,7 @@ def test_edge_id_is_stringified_and_null_becomes_none():
 
 
 def test_edge_id_preserves_non_integral_float():
-    df = pd.DataFrame(
-        {
-            'source': ['A'],
-            'target': ['B'],
-            'edge_id': [101.5],
-        }
-    )
-
+    df = pd.DataFrame({'source': ['A'], 'target': ['B'], 'edge_id': [101.5]})
     g = mod.from_omnipath(df=df, load_vertex_annotations=False)
     assert [edge['edge_id'] for edge in g.added_edges] == ['101.5']
 
@@ -318,19 +298,14 @@ def test_slice_column_overrides_global_slice():
 
 def test_global_slice_used_when_no_slice_column():
     df = pd.DataFrame({'source': ['A'], 'target': ['B']})
-
     g = mod.from_omnipath(df=df, slice='global', load_vertex_annotations=False)
     assert g.added_edges[0]['slice'] == 'global'
 
 
 def test_edge_attr_cols_none_excludes_structural_fields(edge_df):
     g = mod.from_omnipath(df=edge_df, load_vertex_annotations=False)
-
-    attrs0 = g.added_edges[0]['attributes']
-    attrs1 = g.added_edges[1]['attributes']
-
-    assert attrs0 == {'evidence': 'lit'}
-    assert attrs1 == {'evidence': 'screen'}
+    assert g.added_edges[0]['attributes'] == {'evidence': 'lit'}
+    assert g.added_edges[1]['attributes'] == {'evidence': 'screen'}
 
 
 def test_edge_attr_cols_empty_skips_attributes(edge_df):
@@ -351,59 +326,40 @@ def test_edge_attr_cols_subset_uses_only_requested_columns():
     )
 
     g = mod.from_omnipath(
-        df=df,
-        edge_attr_cols=['foo', 'baz', 'missing'],
-        load_vertex_annotations=False,
+        df=df, edge_attr_cols=['foo', 'baz', 'missing'], load_vertex_annotations=False
     )
 
     assert g.added_edges[0]['attributes'] == {'foo': 1, 'baz': 3}
 
 
 def test_registers_vertices_after_adding_edges():
-    df = pd.DataFrame(
-        {
-            'source': ['A', 'A', 'B'],
-            'target': ['B', 'C', 'D'],
-        }
-    )
-
+    df = pd.DataFrame({'source': ['A', 'A', 'B'], 'target': ['B', 'C', 'D']})
     g = mod.from_omnipath(df=df, load_vertex_annotations=False)
-
     assert len(g.added_vertices_calls) == 1
     assert set(g.added_vertices_calls[0]) == {'A', 'B', 'C', 'D'}
 
 
 def test_graph_kwargs_are_forwarded():
     df = pd.DataFrame({'source': ['A'], 'target': ['B']})
-
-    g = mod.from_omnipath(
-        df=df,
-        load_vertex_annotations=False,
-        custom_flag=123,
-        another='x',
-    )
-
+    g = mod.from_omnipath(df=df, load_vertex_annotations=False, custom_flag=123, another='x')
     assert g.init_kwargs['custom_flag'] == 123
     assert g.init_kwargs['another'] == 'x'
 
 
+# ---------------------------------------------------------------------------
+# Annotation behavior (the small-DF eager path, vertex_annotations_df=...)
+# ---------------------------------------------------------------------------
+
+
 def test_load_vertex_annotations_false_skips_all_annotation_loading():
     df = pd.DataFrame({'source': ['A'], 'target': ['B']})
-
     g = mod.from_omnipath(df=df, load_vertex_annotations=False)
-
-    # Only vertex registration call should happen.
     assert len(g.added_vertices_calls) == 1
     assert set(g.added_vertices_calls[0]) == {'A', 'B'}
 
 
 def test_vertex_annotations_df_is_loaded_and_pivoted():
-    edges = pd.DataFrame(
-        {
-            'source': ['EGFR', 'TP53'],
-            'target': ['STAT3', 'MDM2'],
-        }
-    )
+    edges = pd.DataFrame({'source': ['EGFR', 'TP53'], 'target': ['STAT3', 'MDM2']})
     ann = pd.DataFrame(
         [
             {'genesymbol': 'EGFR', 'source': 'HGNC', 'label': 'family', 'value': 'RTK'},
@@ -420,17 +376,10 @@ def test_vertex_annotations_df_is_loaded_and_pivoted():
     g = mod.from_omnipath(df=edges, vertex_annotations_df=ann)
 
     assert len(g.added_vertices_calls) == 2
-    annotated = g.added_vertices_calls[1]
-
-    got = dict(annotated)
+    got = dict(g.added_vertices_calls[1])
     assert got == {
-        'EGFR': {
-            'HGNC:family': 'RTK',
-            'HGNC:name': 'EGFR',
-        },
-        'TP53': {
-            'IntOGen:driver': 'yes',
-        },
+        'EGFR': {'HGNC:family': 'RTK', 'HGNC:name': 'EGFR'},
+        'TP53': {'IntOGen:driver': 'yes'},
     }
 
 
@@ -444,212 +393,26 @@ def test_vertex_annotation_sources_filter_is_applied():
         ]
     )
 
-    g = mod.from_omnipath(
-        df=edges,
-        vertex_annotations_df=ann,
-        vertex_annotation_sources=['HGNC'],
-    )
-
-    annotated = dict(g.added_vertices_calls[1])
-    assert annotated == {
-        'EGFR': {'HGNC:family': 'RTK'},
-    }
-
-
-def test_vertex_annotations_path_uses_read_tsv(monkeypatch, tmp_path):
-    edges = pd.DataFrame({'source': ['EGFR'], 'target': ['TP53']})
-    ann = pd.DataFrame(
-        [
-            {'genesymbol': 'EGFR', 'source': 'HGNC', 'label': 'family', 'value': 'RTK'},
-        ]
-    )
-    ann_path = tmp_path / 'ann.tsv'
-
-    seen = {}
-
-    def fake_read_csv(path, sep='\t'):
-        seen['path'] = path
-        seen['sep'] = sep
-        return ann
-
-    monkeypatch.setattr(pd, 'read_csv', fake_read_csv)
-
-    g = mod.from_omnipath(
-        df=edges,
-        vertex_annotations_path=str(ann_path),
-        annotations_backend='pandas',
-    )
-
-    assert seen['path'] == str(ann_path)
-    assert seen['sep'] == '\t'
+    g = mod.from_omnipath(df=edges, vertex_annotations_df=ann, vertex_annotation_sources=['HGNC'])
 
     annotated = dict(g.added_vertices_calls[1])
     assert annotated == {'EGFR': {'HGNC:family': 'RTK'}}
-
-
-def test_vertex_annotations_path_failure_warns_and_continues(monkeypatch, capsys, tmp_path):
-    edges = pd.DataFrame({'source': ['A'], 'target': ['B']})
-    missing_path = tmp_path / 'missing.tsv'
-
-    def boom(*args, **kwargs):
-        raise OSError('bad file')
-
-    monkeypatch.setattr(pd, 'read_csv', boom)
-
-    g = mod.from_omnipath(
-        df=edges,
-        vertex_annotations_path=str(missing_path),
-        annotations_backend='pandas',
-    )
-    captured = capsys.readouterr()
-
-    assert '[warning] vertex_annotations_path failed:' in captured.out
-    assert len(g.added_vertices_calls) == 1
-
-
-def test_cached_annotation_path_is_used(monkeypatch):
-    edges = pd.DataFrame({'source': ['EGFR'], 'target': ['TP53']})
-    ann = pd.DataFrame(
-        [{'genesymbol': 'EGFR', 'source': 'HGNC', 'label': 'family', 'value': 'RTK'}]
-    )
-
-    monkeypatch.setitem(sys.modules, 'requests', types.SimpleNamespace())
-
-    fake_os = types.SimpleNamespace(
-        path=types.SimpleNamespace(
-            exists=lambda p: True,
-            join=lambda *parts: '/'.join(parts),
-            expanduser=lambda p: '/home/test',
-            dirname=lambda p: '/home/test/.cache/annnet',
-        ),
-        makedirs=lambda *args, **kwargs: None,
-    )
-
-    monkeypatch.setitem(sys.modules, 'os', fake_os)
-
-    seen = {}
-
-    def fake_read_tsv(path, *, backend='auto'):
-        seen['path'] = path
-        seen['backend'] = backend
-        return ann
-
-    monkeypatch.setattr(mod, 'dataframe_read_tsv', fake_read_tsv)
-
-    g = mod.from_omnipath(df=edges, annotations_backend='pandas')
-
-    assert seen['path'].endswith('/home/test/.cache/annnet/omnipath_annotations.tsv.gz')
-    assert seen['backend'] == 'pandas'
-
-    annotated = dict(g.added_vertices_calls[1])
-    assert annotated == {'EGFR': {'HGNC:family': 'RTK'}}
-
-
-def test_download_annotation_path_is_used_when_cache_missing(monkeypatch):
-    edges = pd.DataFrame({'source': ['EGFR'], 'target': ['TP53']})
-    ann = pd.DataFrame(
-        [{'genesymbol': 'EGFR', 'source': 'HGNC', 'label': 'family', 'value': 'RTK'}]
-    )
-
-    writes = {}
-    seen = {}
-
-    class FakeResp:
-        content = b'dummy gz bytes'
-
-        def raise_for_status(self):
-            return None
-
-    class DummyFile(io.BytesIO):
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            writes['data'] = self.getvalue()
-            return False
-
-    def fake_open(path, mode):
-        writes['path'] = path
-        writes['mode'] = mode
-        return DummyFile()
-
-    fake_requests = types.SimpleNamespace(get=lambda *args, **kwargs: FakeResp())
-
-    fake_os = types.SimpleNamespace(
-        path=types.SimpleNamespace(
-            exists=lambda p: False,
-            join=lambda *parts: '/'.join(parts),
-            expanduser=lambda p: '/home/test',
-            dirname=lambda p: '/home/test/.cache/annnet',
-        ),
-        makedirs=lambda *args, **kwargs: None,
-    )
-
-    monkeypatch.setitem(sys.modules, 'requests', fake_requests)
-    monkeypatch.setitem(sys.modules, 'os', fake_os)
-    monkeypatch.setattr(mod, 'dataframe_height', lambda df: len(df))
-
-    def fake_read_tsv(source, *, backend='auto'):
-        assert isinstance(source, io.BytesIO)
-        seen['backend'] = backend
-        return ann
-
-    monkeypatch.setattr(mod, 'dataframe_read_tsv', fake_read_tsv)
-    monkeypatch.setattr('builtins.open', fake_open)
-
-    g = mod.from_omnipath(df=edges, annotations_backend='pandas')
-
-    assert writes['mode'] == 'wb'
-    assert writes['path'].endswith('/home/test/.cache/annnet/omnipath_annotations.tsv.gz')
-    assert writes['data'] == b'dummy gz bytes'
-    assert seen['backend'] == 'pandas'
-
-    annotated = dict(g.added_vertices_calls[1])
-    assert annotated == {'EGFR': {'HGNC:family': 'RTK'}}
-
-
-def test_annotation_download_failure_warns_and_continues(monkeypatch, capsys):
-    edges = pd.DataFrame({'source': ['A'], 'target': ['B']})
-
-    class BoomRequests:
-        @staticmethod
-        def get(*args, **kwargs):
-            raise RuntimeError('network down')
-
-    fake_os = types.SimpleNamespace(
-        path=types.SimpleNamespace(
-            exists=lambda p: False,
-            join=lambda *parts: '/'.join(parts),
-            expanduser=lambda p: '/home/test',
-            dirname=lambda p: '/home/test/.cache/annnet',
-        ),
-        makedirs=lambda *args, **kwargs: None,
-    )
-
-    monkeypatch.setitem(sys.modules, 'requests', BoomRequests)
-    monkeypatch.setitem(sys.modules, 'os', fake_os)
-
-    g = mod.from_omnipath(df=edges)
-    captured = capsys.readouterr()
-
-    assert '[warning] vertex annotations download failed:' in captured.out
-    assert len(g.added_vertices_calls) == 1
 
 
 def test_annotation_pivot_failure_warns_and_continues(monkeypatch, capsys):
     edges = pd.DataFrame({'source': ['A'], 'target': ['B']})
     ann = pd.DataFrame([{'genesymbol': 'A', 'source': 'HGNC', 'label': 'x', 'value': 'y'}])
 
-    real_dataframe_to_rows = mod.dataframe_to_rows
+    real = FakeAnnNet._add_vertices_bulk
     calls = {'n': 0}
 
-    def flaky_dataframe_to_rows(df):
+    def flaky(self, items):
         calls['n'] += 1
         if calls['n'] == 1:
-            return real_dataframe_to_rows(df)
+            return real(self, items)
         raise RuntimeError('pivot failed')
 
-    monkeypatch.setattr(mod, 'dataframe_to_rows', flaky_dataframe_to_rows)
+    monkeypatch.setattr(FakeAnnNet, '_add_vertices_bulk', flaky)
 
     g = mod.from_omnipath(df=edges, vertex_annotations_df=ann)
     captured = capsys.readouterr()
@@ -677,11 +440,287 @@ def test_annotation_rows_require_existing_resolved_entity():
 
         g = mod.from_omnipath(df=edges, vertex_annotations_df=ann)
 
-        # Because _resolve_entity_key returns keys not present in _entities, the filtered list is empty.
+        # _resolve_entity_key returns keys not present in _entities -> filtered to empty.
         assert len(g.added_vertices_calls) == 2
         assert g.added_vertices_calls[1] == []
     finally:
         monkeypatch.undo()
+
+
+# ---------------------------------------------------------------------------
+# Annotation cache + download: lazy scan_csv contract
+# ---------------------------------------------------------------------------
+
+
+def _install_fake_filesystem(monkeypatch, *, cache_exists: bool):
+    fake_os = types.SimpleNamespace(
+        path=types.SimpleNamespace(
+            exists=lambda p: cache_exists,
+            join=lambda *parts: '/'.join(parts),
+            expanduser=lambda p: '/home/test',
+            dirname=lambda p: '/home/test/.cache/annnet',
+        ),
+        makedirs=lambda *args, **kwargs: None,
+    )
+    monkeypatch.setitem(sys.modules, 'os', fake_os)
+    return fake_os
+
+
+def _install_fake_polars(monkeypatch, *, ann_rows):
+    """Patch the *real* polars module's `scan_csv` to return a fake LazyFrame.
+
+    Earlier versions replaced sys.modules['polars'] wholesale, which broke
+    narwhals's isinstance(obj, pl.DataFrame) check during the initial
+    dataframe_columns() call. By monkey-patching only the scan_csv entry point,
+    the rest of polars stays intact for narwhals, while we still observe and
+    intercept the lazy-scan path inside the loader.
+
+    Returns an `observations` dict so tests can assert which path was used.
+    """
+    real_pl = sys.modules['polars']
+
+    observations: dict = {'scan_csv_paths': [], 'streaming': False, 'eager_read': False}
+
+    class _FakeAggregated:
+        """Mimics enough of a Polars DataFrame for the post-collect path."""
+
+        def __init__(self, rows):
+            self._rows = rows
+            self.height = len(rows)
+
+        @property
+        def shape(self):
+            return (len(self._rows), 3)
+
+        def iter_rows(self, named=True):
+            return iter(self._rows)
+
+    class _FakeLazyPlan:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def filter(self, _expr):
+            return self
+
+        def select(self, _exprs):
+            return self
+
+        def group_by(self, _keys):
+            return self
+
+        def agg(self, _expr):
+            return self
+
+        def collect(self, streaming=False):
+            observations['streaming'] = bool(streaming)
+            # Return a *real* polars DataFrame so narwhals can wrap it normally.
+            return (
+                real_pl.DataFrame(self._rows)
+                if self._rows
+                else real_pl.DataFrame(
+                    schema={
+                        'genesymbol': real_pl.Utf8,
+                        'attr_key': real_pl.Utf8,
+                        'joined': real_pl.Utf8,
+                    }
+                )
+            )
+
+    def _fake_scan_csv(path, *args, **kwargs):
+        observations['scan_csv_paths'].append(path)
+        agg: dict = {}
+        for r in ann_rows:
+            gene = r.get('genesymbol')
+            src = r.get('source')
+            lbl = r.get('label')
+            val = r.get('value')
+            if gene is None or src is None or lbl is None or val is None:
+                continue
+            agg.setdefault((gene, f'{src}:{lbl}'), set()).add(str(val))
+
+        plan_rows = [
+            {'genesymbol': gene, 'attr_key': key, 'joined': ';'.join(sorted(values))}
+            for (gene, key), values in agg.items()
+        ]
+        return _FakeLazyPlan(plan_rows)
+
+    monkeypatch.setattr(real_pl, 'scan_csv', _fake_scan_csv)
+
+    # Belt-and-braces: if anything tries the eager loader, blow up loudly.
+    def _eager_boom(*_a, **_kw):
+        observations['eager_read'] = True
+        raise AssertionError(
+            'dataframe_read_tsv must not be called on the annotation cache; '
+            'use lazy pl.scan_csv with filter pushdown instead'
+        )
+
+    monkeypatch.setattr(mod, 'dataframe_read_tsv', _eager_boom)
+    return observations
+
+
+def test_cached_annotation_path_uses_lazy_scan(monkeypatch):
+    """Cache-hit path scans lazily with streaming collect. Regression guard:
+    if this ever calls dataframe_read_tsv, the OOM crash on the real 217MB
+    .tsv.gz returns."""
+    edges = pd.DataFrame({'source': ['EGFR'], 'target': ['TP53']})
+    ann_rows = [{'genesymbol': 'EGFR', 'source': 'HGNC', 'label': 'family', 'value': 'RTK'}]
+
+    monkeypatch.setitem(sys.modules, 'requests', types.SimpleNamespace())
+    _install_fake_filesystem(monkeypatch, cache_exists=True)
+    obs = _install_fake_polars(monkeypatch, ann_rows=ann_rows)
+
+    g = mod.from_omnipath(df=edges, annotations_backend='polars')
+
+    assert obs['eager_read'] is False
+    assert obs['streaming'] is True
+    assert len(obs['scan_csv_paths']) == 1
+    assert obs['scan_csv_paths'][0].endswith('/home/test/.cache/annnet/omnipath_annotations.tsv.gz')
+
+    annotated = dict(g.added_vertices_calls[1])
+    assert annotated == {'EGFR': {'HGNC:family': 'RTK'}}
+
+
+def test_download_annotation_path_streams_to_disk_then_lazy_scans(monkeypatch):
+    """Cache-miss path: stream response chunks straight to disk via
+    iter_content, then lazy-scan the just-written file. The old code did
+    BytesIO(resp.content) which holds the full payload in RAM in addition
+    to the disk write."""
+    edges = pd.DataFrame({'source': ['EGFR'], 'target': ['TP53']})
+    ann_rows = [{'genesymbol': 'EGFR', 'source': 'HGNC', 'label': 'family', 'value': 'RTK'}]
+
+    writes: dict = {}
+    content_accessed = {'count': 0}
+
+    class FakeResp:
+        @property
+        def content(self):
+            content_accessed['count'] += 1
+            return b'should-not-be-read'
+
+        def raise_for_status(self):
+            return None
+
+        def iter_content(self, chunk_size=1):
+            yield b'chunk-1'
+            yield b'chunk-2'
+
+    class DummyFile:
+        def __init__(self):
+            self._buf = bytearray()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            writes['data'] = bytes(self._buf)
+            return False
+
+        def write(self, b):
+            self._buf.extend(b)
+
+    def fake_open(path, mode):
+        writes['path'] = path
+        writes['mode'] = mode
+        return DummyFile()
+
+    fake_requests = types.SimpleNamespace(get=lambda *args, **kwargs: FakeResp())
+
+    monkeypatch.setitem(sys.modules, 'requests', fake_requests)
+    _install_fake_filesystem(monkeypatch, cache_exists=False)
+    obs = _install_fake_polars(monkeypatch, ann_rows=ann_rows)
+    monkeypatch.setattr('builtins.open', fake_open)
+
+    g = mod.from_omnipath(df=edges, annotations_backend='polars')
+
+    # Streamed to disk, not buffered through resp.content.
+    assert writes['mode'] == 'wb'
+    assert writes['path'].endswith('/home/test/.cache/annnet/omnipath_annotations.tsv.gz')
+    assert writes['data'] == b'chunk-1chunk-2'
+    assert content_accessed['count'] == 0, (
+        'resp.content must not be accessed; the download must stream via iter_content'
+    )
+
+    # Then lazy-scanned from the file we just wrote, with streaming collect.
+    assert obs['eager_read'] is False
+    assert obs['streaming'] is True
+    assert len(obs['scan_csv_paths']) == 1
+    assert obs['scan_csv_paths'][0].endswith('/home/test/.cache/annnet/omnipath_annotations.tsv.gz')
+
+    annotated = dict(g.added_vertices_calls[1])
+    assert annotated == {'EGFR': {'HGNC:family': 'RTK'}}
+
+
+def test_annotation_download_failure_warns_and_continues(monkeypatch, capsys):
+    edges = pd.DataFrame({'source': ['A'], 'target': ['B']})
+
+    class BoomRequests:
+        @staticmethod
+        def get(*args, **kwargs):
+            raise RuntimeError('network down')
+
+    monkeypatch.setitem(sys.modules, 'requests', BoomRequests)
+    _install_fake_filesystem(monkeypatch, cache_exists=False)
+
+    g = mod.from_omnipath(df=edges)
+    captured = capsys.readouterr()
+
+    assert '[warning] vertex annotations download failed:' in captured.out
+    assert len(g.added_vertices_calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# vertex_annotations_path: lazy scan first, fall back to dataframe_read_tsv
+# ---------------------------------------------------------------------------
+
+
+def test_vertex_annotations_path_uses_lazy_scan(monkeypatch, tmp_path):
+    edges = pd.DataFrame({'source': ['EGFR'], 'target': ['TP53']})
+    ann_rows = [{'genesymbol': 'EGFR', 'source': 'HGNC', 'label': 'family', 'value': 'RTK'}]
+    ann_path = tmp_path / 'ann.tsv'
+    ann_path.write_text('')  # presence only; the fake scanner reads ann_rows
+
+    obs = _install_fake_polars(monkeypatch, ann_rows=ann_rows)
+
+    g = mod.from_omnipath(
+        df=edges, vertex_annotations_path=str(ann_path), annotations_backend='polars'
+    )
+
+    assert obs['streaming'] is True
+    assert obs['scan_csv_paths'] == [str(ann_path)]
+
+    annotated = dict(g.added_vertices_calls[1])
+    assert annotated == {'EGFR': {'HGNC:family': 'RTK'}}
+
+
+def test_vertex_annotations_path_failure_warns_and_continues(monkeypatch, capsys, tmp_path):
+    edges = pd.DataFrame({'source': ['A'], 'target': ['B']})
+    missing_path = tmp_path / 'missing.tsv'
+
+    # Make both the lazy scan and the eager fallback fail. Get polars from
+    # sys.modules to avoid re-triggering polars __init__ if `os` was faked.
+    real_pl = sys.modules['polars']
+
+    def boom_scan(*args, **kwargs):
+        raise OSError('bad scan')
+
+    def boom_read(*args, **kwargs):
+        raise OSError('bad file')
+
+    monkeypatch.setattr(real_pl, 'scan_csv', boom_scan)
+    monkeypatch.setattr(mod, 'dataframe_read_tsv', boom_read)
+
+    g = mod.from_omnipath(
+        df=edges, vertex_annotations_path=str(missing_path), annotations_backend='pandas'
+    )
+    captured = capsys.readouterr()
+
+    assert '[warning] vertex_annotations_path failed:' in captured.out
+    assert len(g.added_vertices_calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# Dataset dispatch
+# ---------------------------------------------------------------------------
 
 
 def install_fake_omnipath(monkeypatch, returned_df):
@@ -779,10 +818,7 @@ def test_dataset_dispatch_posttranslational_passes_exclude_only(monkeypatch):
         load_vertex_annotations=False,
     )
 
-    assert calls['PostTranslational'] == {
-        'exclude': ['y'],
-        'organism': 'mouse',
-    }
+    assert calls['PostTranslational'] == {'exclude': ['y'], 'organism': 'mouse'}
 
 
 def test_dataset_name_is_normalized(monkeypatch):
@@ -858,9 +894,13 @@ def test_common_alternate_column_names_are_detected():
     ]
 
 
+# ---------------------------------------------------------------------------
+# Timing output
+# ---------------------------------------------------------------------------
+
+
 def test_prints_timing_lines(capsys):
     df = pd.DataFrame({'source': ['A'], 'target': ['B']})
-
     mod.from_omnipath(df=df, load_vertex_annotations=False)
     out = capsys.readouterr().out
 
@@ -869,5 +909,5 @@ def test_prints_timing_lines(capsys):
     assert '[timing] AnnNet init:' in out
     assert '[timing] to_rows setup:' in out
     assert '[timing] bulk list build:' in out
-    assert '[timing] add_edges:' in out
+    assert '[timing] add_edges_bulk:' in out
     assert 'vertices=' in out

@@ -162,7 +162,7 @@ def from_omnipath(
 
     See Also
     --------
-    AnnNet, AnnNet.add_edges, AnnNet.add_vertices
+    AnnNet, AnnNet._add_edges_bulk, AnnNet._add_vertices_bulk
 
     Examples
     --------
@@ -449,10 +449,10 @@ def from_omnipath(
         f'[timing] bulk list build:      {time.perf_counter() - t_bulk0:.3f}s  ({len(bulk)} edges)'
     )
 
-    # bulk edge insert
+    # bulk edge insert (private API on AnnNet)
     t_aeb0 = time.perf_counter()
     G._add_edges_bulk(bulk)
-    print(f'[timing] add_edges:            {time.perf_counter() - t_aeb0:.3f}s')
+    print(f'[timing] add_edges_bulk:       {time.perf_counter() - t_aeb0:.3f}s')
 
     G._history_enabled = True
 
@@ -618,27 +618,39 @@ def from_omnipath(
                     if source_filter is not None:
                         expr = expr & nw.col('source').is_in(source_filter)
 
-                    ann_agg = (
-                        ann_nw.filter(expr)
-                        .select(
-                            [
-                                nw.col('genesymbol'),
-                                (nw.col('source') + nw.lit(':') + nw.col('label')).alias(
-                                    'attr_key'
-                                ),
-                                nw.col('value').cast(nw.String),
-                            ]
-                        )
-                        .group_by(['genesymbol', 'attr_key'])
-                        .agg(nw.col('value').unique().sort().str.join(';').alias('joined'))
+                    ann_filtered = ann_nw.filter(expr).select(
+                        [
+                            nw.col('genesymbol'),
+                            nw.col('source'),
+                            nw.col('label'),
+                            nw.col('value').cast(nw.String),
+                        ]
                     )
+                    grouped_py: dict[tuple[str, str], set[str]] = {}
+                    for r in ann_filtered.iter_rows(named=True):
+                        key = (r['genesymbol'], f'{r["source"]}:{r["label"]}')
+                        grouped_py.setdefault(key, set()).add(str(r['value']))
+                    ann_agg_rows = [
+                        {'genesymbol': g, 'attr_key': k, 'joined': ';'.join(sorted(v))}
+                        for (g, k), v in grouped_py.items()
+                    ]
+
+                    # Stash a tiny iter_rows-shaped object so the pivot loop below is uniform.
+                    class _PyAgg:
+                        def __init__(self, rows):
+                            self._rows = rows
+                            self.shape = (len(rows), 3)
+
+                        def iter_rows(self, named=True):
+                            return iter(self._rows)
+
+                    ann_agg = _PyAgg(ann_agg_rows)
                     print(
                         f'[vertex annotations] aggregated to {ann_agg.shape[0]:,} (gene, attr) pairs '
                         f'in {time.perf_counter() - t_filter:.1f}s'
                     )
 
                 # Pivot the small aggregated frame -> (gene, {attr_key: joined}).
-                # n_genes * n_attr_keys, bounded by graph size, not by raw annotation rows.
                 t_pivot = time.perf_counter()
                 grouped: dict[str, dict[str, str]] = {}
                 for row in ann_agg.iter_rows(named=True):
