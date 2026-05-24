@@ -1541,7 +1541,97 @@ class LayerAccessor:
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
-        return self._G.ops.extract_subgraph(vertices=V, edges=E)
+
+        from ._Ops import _hyper_def, Operations
+
+        G_src = self._G
+        G_cls = G_src.__class__
+        new_aspects = {a: list(G_src._layers.get(a, [])) for a in G_src._aspects}
+        g = G_cls(
+            directed=G_src.directed,
+            n=len(V),
+            e=len(E),
+            aspects=new_aspects,
+        )
+
+        va_lookup = Operations._rows_attr_map(
+            G_src, G_src.vertex_attributes, 'vertex_id', V
+        )
+        for vid in V:
+            g.add_vertices(vid, layer=aa, **va_lookup.get(vid, {}))
+
+        if include_inter or include_coupling:
+            extra_endpoints: set = set()
+            for eid in E:
+                rec = G_src._edges.get(eid)
+                if rec is None or rec.etype == 'hyper':
+                    continue
+                for ep in (rec.src, rec.tgt):
+                    if (
+                        isinstance(ep, tuple)
+                        and len(ep) == 2
+                        and isinstance(ep[1], tuple)
+                        and ep[1] != aa
+                    ):
+                        extra_endpoints.add(ep)
+            extra_bare = {bare for (bare, _) in extra_endpoints}
+            extra_attrs = Operations._rows_attr_map(
+                G_src, G_src.vertex_attributes, 'vertex_id', extra_bare
+            )
+            for bare_vid, coord in extra_endpoints:
+                g.add_vertices(bare_vid, layer=coord, **extra_attrs.get(bare_vid, {}))
+
+        default_dir = True if G_src.directed is None else G_src.directed
+        bin_payload, hyper_payload = [], []
+        for eid in E:
+            rec = G_src._edges.get(eid)
+            if rec is None or rec.col_idx < 0:
+                continue
+            if rec.etype == 'hyper':
+                h = _hyper_def(rec)
+                if h.get('members'):
+                    hyper_payload.append(
+                        {
+                            'members': list(h['members']),
+                            'edge_id': eid,
+                            'weight': rec.weight,
+                        }
+                    )
+                else:
+                    hyper_payload.append(
+                        {
+                            'head': list(h.get('head', ())),
+                            'tail': list(h.get('tail', ())),
+                            'edge_id': eid,
+                            'weight': rec.weight,
+                        }
+                    )
+            else:
+                bin_payload.append(
+                    {
+                        'source': rec.src,
+                        'target': rec.tgt,
+                        'edge_id': eid,
+                        'edge_type': rec.etype,
+                        'edge_directed': rec.directed
+                        if rec.directed is not None
+                        else default_dir,
+                        'weight': rec.weight,
+                    }
+                )
+        if bin_payload:
+            g._add_edges_bulk(bin_payload, slice=g._default_slice)
+        if hyper_payload:
+            g.add_edges(hyper_payload, slice=g._default_slice)
+
+        for lid, meta in G_src._slices.items():
+            if not g.slices.exists(lid):
+                g.slices.add(lid, **meta['attributes'])
+            kept = set(meta['edges']) & E
+            if kept:
+                g.slices.add_edges(lid, kept)
+
+        return g
 
     def subgraph_from_layer_union(
         self,

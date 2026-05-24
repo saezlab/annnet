@@ -3876,8 +3876,12 @@ class AnnNet(
             ml_kind = None
             ml_layers = None
             if (
-                isinstance(s, tuple) and len(s) == 2 and isinstance(s[1], tuple)
-                and isinstance(t, tuple) and len(t) == 2 and isinstance(t[1], tuple)
+                isinstance(s, tuple)
+                and len(s) == 2
+                and isinstance(s[1], tuple)
+                and isinstance(t, tuple)
+                and len(t) == 2
+                and isinstance(t[1], tuple)
             ):
                 ml_kind = self._infer_ml_kind(s, t)
                 ml_layers = (s[1], t[1])
