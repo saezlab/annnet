@@ -1440,21 +1440,37 @@ class AnnNet(
                 unexpected = ', '.join(sorted(kwargs))
                 raise TypeError(f'Unexpected keyword arguments for batch add_edges: {unexpected}')
 
+            def _is_multilayer_endpoint(v):
+                # Multilayer binary endpoint: (vertex_id, layer_coord)
+                # where layer_coord is itself a tuple. Must not be confused
+                # with hyperedge member-lists like ("A", "B", "C").
+                return (
+                    isinstance(v, tuple)
+                    and len(v) == 2
+                    and isinstance(v[0], str)
+                    and isinstance(v[1], tuple)
+                )
+
             def _is_hyper_item(item):
                 if not isinstance(item, dict):
                     return False
                 # Internal/IO compat: legacy members/head/tail keys still mark a hyperedge.
                 if any(k in item for k in ('members', 'head', 'tail')):
                     return True
-                # User-facing rule: a list-shaped src or tgt means hyperedge.
+                # User-facing rule: a list-shaped src or tgt means hyperedge,
+                # UNLESS the value is a (vid, layer_coord) multilayer endpoint.
                 src_val = item.get('src', item.get('source'))
                 tgt_val = item.get('tgt', item.get('target'))
-                if isinstance(src_val, (list, tuple, set, frozenset)) and not isinstance(
-                    src_val, str
+                if (
+                    isinstance(src_val, (list, tuple, set, frozenset))
+                    and not isinstance(src_val, str)
+                    and not _is_multilayer_endpoint(src_val)
                 ):
                     return True
-                if isinstance(tgt_val, (list, tuple, set, frozenset)) and not isinstance(
-                    tgt_val, str
+                if (
+                    isinstance(tgt_val, (list, tuple, set, frozenset))
+                    and not isinstance(tgt_val, str)
+                    and not _is_multilayer_endpoint(tgt_val)
                 ):
                     return True
                 return False
@@ -3856,6 +3872,16 @@ class AnnNet(
             t_idx = endpoint_cache[t]
             fw = _m_dtype(w)
 
+            # Multilayer endpoint detection — mirrors the singular _add_edge_impl
+            ml_kind = None
+            ml_layers = None
+            if (
+                isinstance(s, tuple) and len(s) == 2 and isinstance(s[1], tuple)
+                and isinstance(t, tuple) and len(t) == 2 and isinstance(t[1], tuple)
+            ):
+                ml_kind = self._infer_ml_kind(s, t)
+                ml_layers = (s[1], t[1])
+
             if edge_id in self._edges and self._edges[edge_id].col_idx >= 0:
                 rec = self._edges[edge_id]
                 col = rec.col_idx
@@ -3876,6 +3902,8 @@ class AnnNet(
                 rec.tgt = t
                 rec.weight = w
                 rec.directed = is_dir
+                rec.ml_kind = ml_kind
+                rec.ml_layers = ml_layers
                 if (old_s, old_t) != (s, t):
                     self._unindex_edge_pair(edge_id, old_s, old_t)
                     for _old, _new, _index in (
@@ -3904,6 +3932,8 @@ class AnnNet(
                     rec.directed = is_dir
                     rec.etype = 'binary'
                     rec.col_idx = col
+                    rec.ml_kind = ml_kind
+                    rec.ml_layers = ml_layers
                 else:
                     self._edges[edge_id] = EdgeRecord(
                         src=s,
@@ -3912,8 +3942,8 @@ class AnnNet(
                         directed=is_dir,
                         etype='binary',
                         col_idx=col,
-                        ml_kind=None,
-                        ml_layers=None,
+                        ml_kind=ml_kind,
+                        ml_layers=ml_layers,
                         direction_policy=None,
                     )
                 _M_writes[(s_idx, col)] = fw
