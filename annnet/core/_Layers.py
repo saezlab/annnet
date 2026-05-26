@@ -1592,9 +1592,7 @@ class LayerAccessor:
             aspects=new_aspects,
         )
 
-        va_lookup = Operations._rows_attr_map(
-            G_src, G_src.vertex_attributes, 'vertex_id', V
-        )
+        va_lookup = Operations._rows_attr_map(G_src, G_src.vertex_attributes, 'vertex_id', V)
         v_rows = [{'vertex_id': vid, **va_lookup.get(vid, {})} for vid in V]
         if v_rows:
             g._add_vertices_bulk(v_rows, layer=aa, slice=g._default_slice)
