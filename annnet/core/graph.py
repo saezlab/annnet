@@ -3958,13 +3958,17 @@ class AnnNet(
                 self._index_edge_pair(edge_id, s, t)
 
             if slice_local is not None:
+                # Slice membership tracks bare vertex ids; mirror the singular
+                # path's normalization for multilayer (vid, layer_coord) endpoints.
+                s_bare = s[0] if isinstance(s, tuple) else s
+                t_bare = t[0] if isinstance(t, tuple) else t
                 _lst = _slice_eids.get(slice_local)
                 if _lst is None:
                     _slice_eids[slice_local] = [edge_id]
-                    _slice_vids[slice_local] = [s, t]
+                    _slice_vids[slice_local] = [s_bare, t_bare]
                 else:
                     _lst.append(edge_id)
-                    _slice_vids[slice_local].extend((s, t))
+                    _slice_vids[slice_local].extend((s_bare, t_bare))
                 if slice_w is not None:
                     _slice_weights.append((slice_local, edge_id, float(slice_w)))
 

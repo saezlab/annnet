@@ -169,19 +169,27 @@ class SliceManager:
             return
 
         data['edges'].update(add_edges)
+
+        def _bare(v):
+            # Multilayer endpoints are (vid, layer_coord_tuple); slice membership
+            # tracks bare vids only (consistent with the singular add_edge path).
+            if isinstance(v, tuple) and len(v) == 2 and isinstance(v[1], tuple):
+                return v[0]
+            return v
+
         verts: set[str] = set()
         for eid in add_edges:
             rec = G._edges[eid]
             if rec.etype == 'hyper':
                 if rec.src is not None:
-                    verts.update(rec.src)
+                    verts.update(_bare(m) for m in rec.src)
                 if rec.tgt is not None:
-                    verts.update(rec.tgt)
+                    verts.update(_bare(m) for m in rec.tgt)
             else:
                 if rec.src is not None:
-                    verts.add(rec.src)
+                    verts.add(_bare(rec.src))
                 if rec.tgt is not None:
-                    verts.add(rec.tgt)
+                    verts.add(_bare(rec.tgt))
         data['vertices'].update(verts)
 
     # ── active slice ──────────────────────────────────────────────────────────
