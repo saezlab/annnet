@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-import tarfile
 import urllib.request
+import zipfile
 from enum import Enum
 from pathlib import Path
 from unittest.mock import Mock
@@ -336,8 +336,10 @@ def test_archive_utils_roundtrip_and_invalid_archive(tmp_path):
     src = tmp_path / 'graph.annnet'
     src.mkdir()
     (src / 'manifest.json').write_text('{"format": "annnet"}')
-    archive = tmp_path / 'graph.tar.gz'
+    archive = tmp_path / 'graph.annnet'
 
+    # write_archive currently overwrites the target; use a separate file path
+    archive = tmp_path / 'archive.annnet'
     _write_archive(src, archive)
     extract_dir = tmp_path / 'extract'
     extract_dir.mkdir()
@@ -345,12 +347,10 @@ def test_archive_utils_roundtrip_and_invalid_archive(tmp_path):
     assert root.name == src.name
     assert (root / 'manifest.json').read_text() == '{"format": "annnet"}'
 
-    bad_archive = tmp_path / 'bad.tar.gz'
-    with tarfile.open(bad_archive, 'w:gz') as tar:
-        for name in ['a', 'b']:
-            folder = tmp_path / name
-            folder.mkdir()
-            tar.add(folder, arcname=name)
+    bad_archive = tmp_path / 'bad.annnet'
+    with zipfile.ZipFile(bad_archive, mode='w', compression=zipfile.ZIP_STORED) as zf:
+        zf.writestr('a/manifest.json', '{}')
+        zf.writestr('b/manifest.json', '{}')
     bad_extract = tmp_path / 'bad_extract'
     bad_extract.mkdir()
     with pytest.raises(ValueError, match='expected single root'):

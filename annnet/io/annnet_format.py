@@ -29,8 +29,8 @@ import scipy.sparse as sp
 from .. import __version__ as ANNNET_VERSION
 from ._common import (
     dataframe_to_rows,
-    dataframe_iter_rows,
     dataframe_from_rows,
+    dataframe_iter_rows,
     serialize_edge_layers,
     collect_slice_manifest,
     dataframe_from_columns,
@@ -55,6 +55,104 @@ def _df_from_dict(data: dict):
 
 
 ANNNET_EXT = 'graph.annnet'
+
+
+class _LayerDict:
+    """Bidirectional int <-> layer-tuple mapping used by v2 parquet tables.
+
+    Reserves id 0 for the placeholder layer ``('_',)`` so flat-graph rows
+    that need a "no layer" sentinel land in a stable slot. Other layers get
+    ids in first-seen order.
+    """
+
+    __slots__ = ('id_to_layer', 'layer_to_id')
+
+    def __init__(self):
+        self.id_to_layer: list[tuple] = []
+        self.layer_to_id: dict[tuple, int] = {}
+        self.intern(('_',))
+
+    def intern(self, layer: tuple | None) -> int:
+        if layer is None:
+            return 0
+        if not isinstance(layer, tuple):
+            layer = tuple(layer)
+        existing = self.layer_to_id.get(layer)
+        if existing is not None:
+            return existing
+        new_id = len(self.id_to_layer)
+        self.id_to_layer.append(layer)
+        self.layer_to_id[layer] = new_id
+        return new_id
+
+    def get_id(self, layer: tuple | None) -> int | None:
+        if layer is None:
+            return None
+        if not isinstance(layer, tuple):
+            layer = tuple(layer)
+        return self.layer_to_id.get(layer)
+
+    def get_layer(self, layer_id: int | None) -> tuple | None:
+        if layer_id is None:
+            return None
+        return self.id_to_layer[int(layer_id)]
+
+    def to_json(self) -> dict:
+        return {'layers': [list(t) for t in self.id_to_layer]}
+
+    @classmethod
+    def from_json(cls, data: dict) -> _LayerDict:
+        self = cls.__new__(cls)
+        self.id_to_layer = [tuple(layer) for layer in data.get('layers', [['_']])]
+        if not self.id_to_layer:
+            self.id_to_layer = [('_',)]
+        self.layer_to_id = {layer: i for i, layer in enumerate(self.id_to_layer)}
+        return self
+
+
+def _build_layer_dict(graph) -> _LayerDict:
+    """Walk graph state and intern every layer tuple that appears."""
+    ld = _LayerDict()
+
+    # 1. Entity index — the canonical source of layer coords
+    for _vid, coord in graph._entities.keys():
+        ld.intern(coord)
+
+    # 2. Multilayer endpoints in binary edges
+    for rec in graph._edges.values():
+        for ep in (rec.src, rec.tgt):
+            if (
+                isinstance(ep, tuple)
+                and len(ep) == 2
+                and isinstance(ep[0], str)
+                and isinstance(ep[1], tuple)
+            ):
+                ld.intern(ep[1])
+
+    # 3. ml_layers stored on edges (intra: single tuple; inter/coupling: (a,b))
+    for rec in graph._edges.values():
+        ml = rec.ml_layers
+        if ml is None:
+            continue
+        if isinstance(ml, tuple) and ml and isinstance(ml[0], tuple):
+            ld.intern(ml[0])
+            ld.intern(ml[1])
+        elif isinstance(ml, tuple):
+            ld.intern(ml)
+
+    # 4. Per-(vertex, layer) attribute keys
+    for key in getattr(graph, '_state_attrs', {}).keys():
+        if isinstance(key, tuple) and len(key) == 2 and isinstance(key[1], tuple):
+            ld.intern(key[1])
+
+    # 5. Tuple-layer attribute keys
+    try:
+        for layer in graph.layers._layer_attrs.keys():
+            ld.intern(layer)
+    except AttributeError:
+        pass
+
+    return ld
 
 
 def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
@@ -91,7 +189,6 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
     # 1. Write manifest
     manifest = {
         'format': 'annnet',
-        'version': '1.0.0',
         'created': datetime.now(UTC).isoformat(),
         'annnet_version': ANNNET_VERSION,
         'graph_version': graph._version,
@@ -113,17 +210,21 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
     }
     (root / 'manifest.json').write_text(json.dumps(manifest, indent=2))
 
-    # 2. Write structure/ (topology)
-    _write_structure(graph, root / 'structure', compression)
+    # Build the layer dictionary once; every per-section writer that stores
+    # layer coordinates references the same integer ids.
+    layer_dict = _build_layer_dict(graph)
+
+    # 2. Write structure/ (topology + layer dict)
+    _write_structure(graph, root / 'structure', compression, layer_dict)
 
     # 3. Write tables/ (Polars > Parquet)
     _write_tables(graph, root / 'tables', compression)
 
     # 4. Write layers/ (Kivela Multilayer structures)
-    _write_multilayers(graph, root / 'layers', compression)
+    _write_multilayers(graph, root / 'layers', compression, layer_dict)
 
     # 5. Write slices/
-    _write_slices(graph, root / 'slices', compression)
+    _write_slices(graph, root / 'slices', compression, layer_dict)
 
     # 6. Write audit/
     _write_audit(graph, root / 'audit', compression)
@@ -159,56 +260,62 @@ def write(
     return _write_dir(graph, path, compression=compression, overwrite=overwrite)
 
 
-def _write_structure(graph, path: Path, compression: str):
-    """Write sparse incidence matrix + all index mappings."""
+def _write_structure(graph, path: Path, compression: str, layer_dict: _LayerDict):
+    """Write sparse incidence matrix, layer dictionary, and merged edge tables.
+
+    v2 layout:
+      structure/
+        incidence.zarr           — sparse incidence
+        layer_dict.json          — id -> tuple[str, ...] mapping
+        entity_index.parquet     — (entity_id, layer_id, idx, type)
+        edges.parquet            — merged per-edge metadata + endpoints
+        hyperedge_definitions.parquet — members / head / tail for hyperedges
+    """
+    import json
+
     import zarr
 
     path.mkdir(parents=True, exist_ok=True)
 
-    # Convert DOK > COO for efficient storage
+    # 1. Layer dictionary — read first on load, before any layer_id consumer
+    (path / 'layer_dict.json').write_text(json.dumps(layer_dict.to_json()))
+
+    # 2. Sparse incidence matrix (Zarr)
     coo = graph._matrix.tocoo()
-
-    # Write incidence matrix as Zarr (chunked, compressed)
-    inc_path = path / 'incidence.zarr'
-
-    # Zarr v3 compatibility
-    import numpy as np
-
-    root = zarr.open_group(str(inc_path), mode='w')
+    root = zarr.open_group(str(path / 'incidence.zarr'), mode='w')
 
     from zarr.codecs import BloscCname, BloscCodec, BloscShuffle
 
     codec = BloscCodec(cname=BloscCname.zstd, clevel=5, shuffle=BloscShuffle.shuffle)
-
     row = np.asarray(coo.row, dtype=np.int32)
     col = np.asarray(coo.col, dtype=np.int32)
     dat = np.asarray(coo.data, dtype=np.float32)
-
     root.create_array('row', data=row, chunks=(10000,), compressors=[codec])
     root.create_array('col', data=col, chunks=(10000,), compressors=[codec])
     root.create_array('data', data=dat, chunks=(10000,), compressors=[codec])
     root.attrs['shape'] = coo.shape
 
-    # Write all index mappings as Parquet
-    def dict_to_parquet(d: dict, filepath: Path, id_name: str, val_name: str):
-        df = _df_from_dict({id_name: list(d.keys()), val_name: list(d.values())})
-        dataframe_write_parquet(df, filepath)
-
+    # 3. Entity index — layer expressed as int32 id into layer_dict
     ent_ids: list = []
-    ent_layers: list = []
+    ent_layer_ids: list = []
     ent_idxs: list = []
     ent_types: list = []
     for ekey, rec in graph._entities.items():
         ent_ids.append(ekey[0])
-        ent_layers.append(list(ekey[1]))
+        ent_layer_ids.append(layer_dict.intern(ekey[1]))
         ent_idxs.append(rec.row_idx)
         ent_types.append(rec.kind)
     dataframe_write_parquet(
         dataframe_from_columns(
-            {'entity_id': ent_ids, 'layer': ent_layers, 'idx': ent_idxs, 'type': ent_types},
+            {
+                'entity_id': ent_ids,
+                'layer_id': ent_layer_ids,
+                'idx': ent_idxs,
+                'type': ent_types,
+            },
             schema={
                 'entity_id': 'text',
-                'layer': 'list_text',
+                'layer_id': 'int',
                 'idx': 'int',
                 'type': 'text',
             },
@@ -216,81 +323,100 @@ def _write_structure(graph, path: Path, compression: str):
         path / 'entity_index.parquet',
     )
 
-    # Derive entity dicts from _entities / _row_to_entity.
-    # These legacy tables remain for compatibility, while entity_index.parquet
-    # preserves full multilayer coordinates.
-    def _eid_str(eid):
-        return eid[0] if isinstance(eid, tuple) else eid
-
-    entity_to_idx = {_eid_str(eid): r.row_idx for eid, r in graph._entities.items()}
-    idx_to_entity = {idx: _eid_str(eid) for idx, eid in graph._row_to_entity.items()}
-    entity_types = {_eid_str(eid): r.kind for eid, r in graph._entities.items()}
-
-    # Derive edge index dicts from _edges / _col_to_edge
-    edge_to_idx = {eid: rec.col_idx for eid, rec in graph._edges.items() if rec.col_idx >= 0}
-    idx_to_edge = dict(graph._col_to_edge)
-    edge_weights = {eid: rec.weight for eid, rec in graph._edges.items()}
-    edge_directed = {
-        eid: rec.directed for eid, rec in graph._edges.items() if rec.directed is not None
-    }
-    edge_kind = {eid: rec.etype for eid, rec in graph._edges.items()}
-
-    dict_to_parquet(entity_to_idx, path / 'entity_to_idx.parquet', 'entity_id', 'idx')
-    dict_to_parquet(idx_to_entity, path / 'idx_to_entity.parquet', 'idx', 'entity_id')
-    dict_to_parquet(entity_types, path / 'entity_types.parquet', 'entity_id', 'type')
-    dict_to_parquet(edge_to_idx, path / 'edge_to_idx.parquet', 'edge_id', 'idx')
-    dict_to_parquet(idx_to_edge, path / 'idx_to_edge.parquet', 'idx', 'edge_id')
-    dict_to_parquet(edge_weights, path / 'edge_weights.parquet', 'edge_id', 'weight')
-    dict_to_parquet(edge_directed, path / 'edge_directed.parquet', 'edge_id', 'directed')
-    dict_to_parquet(edge_kind, path / 'edge_kind.parquet', 'edge_id', 'kind')
-
-    # Edge definitions (binary + vertex_edge only; no hyper)
-    bin_edges = {
-        eid: rec
-        for eid, rec in graph._edges.items()
-        if rec.etype != 'hyper' and rec.src is not None
-    }
+    # 4. Merged edges.parquet — every edge gets one row
+    #    Binary edges have source/target set; hyperedges have them null
+    #    (their members live in hyperedge_definitions.parquet).
+    #    Null-endpoint edge-entities also have source/target null.
     default_dir = True if graph.directed is None else graph.directed
 
     def _split_endpoint(ep):
-        # Multilayer endpoint: (vid, layer_coord_tuple)
         if (
             isinstance(ep, tuple)
             and len(ep) == 2
             and isinstance(ep[0], str)
             and isinstance(ep[1], tuple)
         ):
-            return ep[0], list(ep[1])
-        # Plain endpoint: bare vertex id
+            return ep[0], layer_dict.intern(ep[1])
+        if ep is None:
+            return None, None
         return ep, None
 
-    eids_b = list(bin_edges.keys())
-    src_ids, src_layers, tgt_ids, tgt_layers, etypes = [], [], [], [], []
-    for rec in bin_edges.values():
-        sid, slay = _split_endpoint(rec.src)
-        tid, tlay = _split_endpoint(rec.tgt)
-        src_ids.append(sid)
-        src_layers.append(slay)
-        tgt_ids.append(tid)
-        tgt_layers.append(tlay)
-        etypes.append(
-            'DIRECTED'
-            if (rec.directed if rec.directed is not None else default_dir)
-            else 'UNDIRECTED'
-        )
-    edge_def_df = _df_from_dict(
-        {
-            'edge_id': eids_b,
-            'source': src_ids,
-            'source_layer': src_layers,
-            'target': tgt_ids,
-            'target_layer': tgt_layers,
-            'edge_type': etypes,
-        }
-    )
-    dataframe_write_parquet(edge_def_df, path / 'edge_definitions.parquet')
+    e_eids: list = []
+    e_col_idxs: list = []
+    e_weights: list = []
+    e_directed: list = []
+    e_kinds: list = []
+    e_edge_types: list = []
+    e_sources: list = []
+    e_source_layer_ids: list = []
+    e_targets: list = []
+    e_target_layer_ids: list = []
+    e_ml_kinds: list = []
 
-    # Hyperedge definitions
+    for eid, rec in graph._edges.items():
+        e_eids.append(eid)
+        e_col_idxs.append(int(rec.col_idx))
+        e_weights.append(float(rec.weight) if rec.weight is not None else 1.0)
+        e_directed.append(rec.directed)
+        e_kinds.append(rec.etype)
+        e_ml_kinds.append(rec.ml_kind)
+
+        if rec.etype == 'hyper' or rec.src is None or isinstance(rec.src, (frozenset, set)):
+            # Hyperedge or null placeholder; endpoints live elsewhere / are absent.
+            e_sources.append(None)
+            e_source_layer_ids.append(None)
+            e_targets.append(None)
+            e_target_layer_ids.append(None)
+            if rec.etype != 'hyper':
+                e_edge_types.append(None)
+            else:
+                e_edge_types.append(None)
+        else:
+            sid, slay = _split_endpoint(rec.src)
+            tid, tlay = _split_endpoint(rec.tgt)
+            e_sources.append(sid)
+            e_source_layer_ids.append(slay)
+            e_targets.append(tid)
+            e_target_layer_ids.append(tlay)
+            e_edge_types.append(
+                'DIRECTED'
+                if (rec.directed if rec.directed is not None else default_dir)
+                else 'UNDIRECTED'
+            )
+
+    dataframe_write_parquet(
+        dataframe_from_columns(
+            {
+                'edge_id': e_eids,
+                'col_idx': e_col_idxs,
+                'weight': e_weights,
+                'directed': e_directed,
+                'kind': e_kinds,
+                'edge_type': e_edge_types,
+                'source': e_sources,
+                'source_layer_id': e_source_layer_ids,
+                'target': e_targets,
+                'target_layer_id': e_target_layer_ids,
+                'ml_kind': e_ml_kinds,
+            },
+            schema={
+                'edge_id': 'text',
+                'col_idx': 'int',
+                'weight': 'float',
+                'directed': 'bool',
+                'kind': 'text',
+                'edge_type': 'text',
+                'source': 'text',
+                'source_layer_id': 'int',
+                'target': 'text',
+                'target_layer_id': 'int',
+                'ml_kind': 'text',
+            },
+        ),
+        path / 'edges.parquet',
+    )
+
+    # 5. Hyperedge definitions (members / head / tail). Same schema as v1.
     hyper_edges = {eid: rec for eid, rec in graph._edges.items() if rec.etype == 'hyper'}
     if hyper_edges:
         eids, dirs, mems, heads, tails = [], [], [], [], []
@@ -306,7 +432,6 @@ def _write_structure(graph, path: Path, compression: str):
                 heads.append(None)
                 tails.append(None)
                 mems.append(sorted(map(str, rec.src)))
-
         hyper_df = _df_from_dict(
             {'edge_id': eids, 'directed': dirs, 'members': mems, 'head': heads, 'tail': tails}
         )
@@ -322,11 +447,10 @@ def _write_tables(graph, path: Path, compression: str):
     dataframe_write_parquet(graph.edge_slice_attributes, path / 'edge_slice_attributes.parquet')
 
 
-def _write_multilayers(graph, path: Path, compression: str):
-    """Write Kivela multilayer structures to disk."""
+def _write_multilayers(graph, path: Path, compression: str, layer_dict: _LayerDict):
+    """Write Kivela multilayer structures with integer-encoded layer ids."""
     import json
 
-    # If no aspects are defined, skip creating the folder
     if not graph.aspects:
         return
 
@@ -338,98 +462,104 @@ def _write_multilayers(graph, path: Path, compression: str):
         serialize_edge_layers=serialize_edge_layers,
     )
 
-    # 1. Metadata: Aspects & Elementary definitions
-    metadata = {
-        'aspects': multilayer['aspects'],
-        'elem_layers': multilayer['elem_layers'],
-    }
-    (path / 'metadata.json').write_text(json.dumps(metadata, indent=2))
-
-    # 2. Vertex Presence (V_M) — column-oriented build with explicit schema
-    # so polars uses typed Series constructors instead of per-element inference.
-    vm_rows = multilayer.get('VM', [])
-    vm_vids: list = []
-    vm_layers: list = []
-    for row in vm_rows:
-        vm_vids.append(row.get('node') or row.get('vertex_id'))
-        vm_layers.append(row.get('layer', []))
-    vm_df = dataframe_from_columns(
-        {'vertex_id': vm_vids, 'layer': vm_layers},
-        schema={'vertex_id': 'text', 'layer': 'list_text'},
+    # 1. Metadata: Aspects & elementary layer values
+    (path / 'metadata.json').write_text(
+        json.dumps(
+            {
+                'aspects': multilayer['aspects'],
+                'elem_layers': multilayer['elem_layers'],
+            },
+            indent=2,
+        )
     )
-    dataframe_write_parquet(vm_df, path / 'vertex_presence.parquet')
 
-    # 3. Edge Layers
-    # Logic: Intra edges have 1 layer tuple. Inter/Coupling have 2.
-    # We flatten this to columns: edge_id, layer_1, layer_2 (nullable)
-    eids, l1s, l2s = [], [], []
+    # 2. Vertex presence: (vertex_id, layer_id)
+    vm_vids: list = []
+    vm_layer_ids: list = []
+    for row in multilayer.get('VM', []):
+        vm_vids.append(row.get('node') or row.get('vertex_id'))
+        vm_layer_ids.append(layer_dict.intern(tuple(row.get('layer') or ())))
+    dataframe_write_parquet(
+        dataframe_from_columns(
+            {'vertex_id': vm_vids, 'layer_id': vm_layer_ids},
+            schema={'vertex_id': 'text', 'layer_id': 'int'},
+        ),
+        path / 'vertex_presence.parquet',
+    )
+
+    # 3. Edge layers: layer_1_id (always set), layer_2_id (set for inter/coupling).
+    #    Drops the v1 edge_ml_kind.parquet — ml_kind is now in structure/edges.parquet.
+    eids: list = []
+    l1_ids: list = []
+    l2_ids: list = []
     for eid, layers in deserialize_edge_layers(multilayer.get('edge_layers', {})).items():
         eids.append(eid)
         if isinstance(layers, tuple) and layers and isinstance(layers[0], tuple):
-            # Case: Inter/Coupling -> ((a,b), (c,d))
-            l1s.append(list(layers[0]))
-            l2s.append(list(layers[1]))
+            l1_ids.append(layer_dict.intern(layers[0]))
+            l2_ids.append(layer_dict.intern(layers[1]))
         else:
-            # Case: Intra -> (a,b)
-            l1s.append(list(layers))
-            l2s.append(None)
+            l1_ids.append(layer_dict.intern(tuple(layers)))
+            l2_ids.append(None)
+    dataframe_write_parquet(
+        dataframe_from_columns(
+            {'edge_id': eids, 'layer_1_id': l1_ids, 'layer_2_id': l2_ids},
+            schema={'edge_id': 'text', 'layer_1_id': 'int', 'layer_2_id': 'int'},
+        ),
+        path / 'edge_layers.parquet',
+    )
 
-    el_df = _df_from_dict({'edge_id': eids, 'layer_1': l1s, 'layer_2': l2s})
-    dataframe_write_parquet(el_df, path / 'edge_layers.parquet')
-
-    # 3b. Multilayer edge kind ("intra"/"inter"/"coupling") — separate from structural etype
-    if multilayer.get('edge_kind'):
-        ek_df = _df_from_dict(
-            {
-                'edge_id': list(multilayer['edge_kind'].keys()),
-                'ml_kind': list(multilayer['edge_kind'].values()),
-            }
-        )
-        dataframe_write_parquet(ek_df, path / 'edge_ml_kind.parquet')
-
-    # 4. Attributes (Specific Layer Stores)
-
-    # 4a. Elementary Layer Attributes (Already a DataFrame in graph.py)
+    # 4a. Elementary layer attributes (table built upstream in graph.py)
     layer_attr_rows = multilayer.get('layer_attributes', [])
     if layer_attr_rows:
         dataframe_write_parquet(
             _df_from_dict(layer_attr_rows), path / 'elem_layer_attributes.parquet'
         )
 
-    # 4b. Aspect Attributes (Dict -> JSON)
+    # 4b. Aspect attributes (small, JSON)
     if multilayer.get('aspect_attrs'):
         (path / 'aspect_attributes.json').write_text(
             json.dumps(multilayer['aspect_attrs'], indent=2)
         )
 
-    # 4c. Tuple Layer Attributes (Dict -> Parquet due to complex keys)
+    # 4c. Tuple layer attributes: (layer_id, attributes_json)
     if multilayer.get('layer_tuple_attrs'):
-        la_layers: list = []
+        la_layer_ids: list = []
         la_attrs_json: list = []
         for row in multilayer['layer_tuple_attrs']:
-            la_layers.append(row['layer'])
+            la_layer_ids.append(layer_dict.intern(tuple(row['layer'])))
             la_attrs_json.append(json.dumps(row.get('attrs') or row.get('attributes') or {}))
-        la_df = _df_from_dict({'layer': la_layers, 'attributes': la_attrs_json})
-        dataframe_write_parquet(la_df, path / 'tuple_layer_attributes.parquet')
+        dataframe_write_parquet(
+            dataframe_from_columns(
+                {'layer_id': la_layer_ids, 'attributes': la_attrs_json},
+                schema={'layer_id': 'int', 'attributes': 'text'},
+            ),
+            path / 'tuple_layer_attributes.parquet',
+        )
 
-    # 4d. Vertex-Layer Attributes
+    # 4d. Vertex-layer attributes: (vertex_id, layer_id, attributes_json)
     if multilayer.get('node_layer_attrs'):
         vla_vids: list = []
-        vla_layers: list = []
+        vla_layer_ids: list = []
         vla_attrs_json: list = []
         for row in multilayer['node_layer_attrs']:
             vla_vids.append(row.get('node') or row.get('vertex_id'))
-            vla_layers.append(row.get('layer', []))
+            vla_layer_ids.append(layer_dict.intern(tuple(row.get('layer') or ())))
             vla_attrs_json.append(json.dumps(row.get('attrs') or row.get('attributes') or {}))
-        vla_df = dataframe_from_columns(
-            {'vertex_id': vla_vids, 'layer': vla_layers, 'attributes': vla_attrs_json},
-            schema={'vertex_id': 'text', 'layer': 'list_text', 'attributes': 'text'},
+        dataframe_write_parquet(
+            dataframe_from_columns(
+                {
+                    'vertex_id': vla_vids,
+                    'layer_id': vla_layer_ids,
+                    'attributes': vla_attrs_json,
+                },
+                schema={'vertex_id': 'text', 'layer_id': 'int', 'attributes': 'text'},
+            ),
+            path / 'vertex_layer_attributes.parquet',
         )
-        dataframe_write_parquet(vla_df, path / 'vertex_layer_attributes.parquet')
 
 
-def _write_slices(graph, path: Path, compression: str):
-    """Write slice registry and memberships."""
+def _write_slices(graph, path: Path, compression: str, layer_dict: _LayerDict):
+    """Write slice registry and memberships (multilayer-aware via layer_id)."""
     path.mkdir(parents=True, exist_ok=True)
 
     slice_membership, slice_weights = collect_slice_manifest(graph)
@@ -441,9 +571,9 @@ def _write_slices(graph, path: Path, compression: str):
     reg_df = _df_from_dict(registry_data)
     dataframe_write_parquet(reg_df, path / 'registry.parquet')
 
-    # Vertex memberships: long format.
+    # Vertex memberships: (slice_id, vertex_id, vertex_layer_id).
     # vertex ids may be bare strings or multilayer (vid, layer_coord) tuples;
-    # split into vertex_id + vertex_layer columns for a uniform parquet schema.
+    # encode layer as int id for a uniform parquet schema.
     def _split_vid(vid):
         if (
             isinstance(vid, tuple)
@@ -451,18 +581,22 @@ def _write_slices(graph, path: Path, compression: str):
             and isinstance(vid[0], str)
             and isinstance(vid[1], tuple)
         ):
-            return vid[0], list(vid[1])
+            return vid[0], layer_dict.intern(vid[1])
         return vid, None
 
-    vertex_members = []
+    s_slice_ids: list = []
+    s_vids: list = []
+    s_layer_ids: list = []
     for slice_id in graph.slices.list(include_default=True):
         for vertex_id in graph.slices.vertices(slice_id):
-            bare, layer = _split_vid(vertex_id)
-            vertex_members.append({'slice_id': slice_id, 'vertex_id': bare, 'vertex_layer': layer})
-    if vertex_members:
-        vm_df = _df_from_dict(vertex_members)
-    else:
-        vm_df = _df_from_dict({'slice_id': [], 'vertex_id': [], 'vertex_layer': []})
+            bare, lid = _split_vid(vertex_id)
+            s_slice_ids.append(slice_id)
+            s_vids.append(bare)
+            s_layer_ids.append(lid)
+    vm_df = dataframe_from_columns(
+        {'slice_id': s_slice_ids, 'vertex_id': s_vids, 'vertex_layer_id': s_layer_ids},
+        schema={'slice_id': 'text', 'vertex_id': 'text', 'vertex_layer_id': 'int'},
+    )
     dataframe_write_parquet(vm_df, path / 'vertex_memberships.parquet')
 
     # Edge memberships with weights
@@ -615,17 +749,26 @@ def read(path: str | Path, *, lazy: bool = False) -> AnnNet:
     G = AnnNet(directed=manifest['directed'])
     G._version = manifest['graph_version']
 
+    # Load the layer dictionary up front; both structure and multilayer
+    # sections reference its integer ids.
+    structure_dir = root / 'structure'
+    layer_dict_path = structure_dir / 'layer_dict.json'
+    if layer_dict_path.exists():
+        layer_dict = _LayerDict.from_json(json.loads(layer_dict_path.read_text()))
+    else:
+        layer_dict = _LayerDict()
+
     # 3. Load structure
-    _load_structure(G, root / 'structure', lazy=lazy)
+    _load_structure(G, structure_dir, lazy=lazy, layer_dict=layer_dict)
 
     # 4. Load tables
     _load_tables(G, root / 'tables')
 
     # 5. Load layers (Kivela)
-    _load_multilayers(G, root / 'layers')
+    _load_multilayers(G, root / 'layers', layer_dict=layer_dict)
 
     # 6. Load slices
-    _load_slices(G, root / 'slices')
+    _load_slices(G, root / 'slices', layer_dict=layer_dict)
 
     # 7. Load audit
     _load_audit(G, root / 'audit')
@@ -640,17 +783,15 @@ def read(path: str | Path, *, lazy: bool = False) -> AnnNet:
     return G
 
 
-def _load_structure(graph, path: Path, lazy: bool):
-    """Load sparse matrix and index mappings."""
+def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
+    """Load incidence matrix, entity index, and merged edges from v2 layout."""
     import zarr
 
-    # Load incidence matrix
+    # 1. Sparse incidence matrix (Zarr)
     try:
-        # Zarr v2
         inc_store = zarr.DirectoryStore(str(path / 'incidence.zarr'))
         inc_root = zarr.group(store=inc_store)
     except AttributeError:
-        # Zarr v3
         inc_root = zarr.open_group(str(path / 'incidence.zarr'), mode='r')
 
     row = inc_root['row'][:]
@@ -658,102 +799,97 @@ def _load_structure(graph, path: Path, lazy: bool):
     data = inc_root['data'][:]
     shape = tuple(inc_root.attrs['shape'])
 
-    # Reconstruct as DOK for mutability
     coo = sp.coo_matrix((data, (row, col)), shape=shape, dtype=np.float32)
     graph._matrix = coo.todok()
 
-    # Load index mappings
-    def parquet_to_dict(filepath: Path, key_col: str, val_col: str) -> dict:
-        df = dataframe_read_parquet(filepath)
-        return {row[key_col]: row[val_col] for row in dataframe_to_rows(df)}
-
     from annnet.core._records import EdgeRecord, EntityRecord
 
-    # Build _entities and _row_to_entity from Parquet. Prefer the newer
-    # entity_index.parquet which preserves multilayer coordinates exactly.
-    entity_index_path = path / 'entity_index.parquet'
-    if entity_index_path.exists():
-        graph._entities = {}
-        graph._row_to_entity = {}
-        for row in dataframe_iter_rows(dataframe_read_parquet(entity_index_path)):
-            ekey = (row['entity_id'], tuple(row.get('layer') or ['_']))
-            rec = EntityRecord(row_idx=int(row['idx']), kind=row.get('type', 'vertex'))
-            graph._entities[ekey] = rec
-            graph._row_to_entity[rec.row_idx] = ekey
-        graph._rebuild_entity_indexes()
-    else:
-        entity_to_idx = parquet_to_dict(path / 'entity_to_idx.parquet', 'entity_id', 'idx')
-        entity_types = parquet_to_dict(path / 'entity_types.parquet', 'entity_id', 'type')
-        raw_idx_to_entity = parquet_to_dict(path / 'idx_to_entity.parquet', 'idx', 'entity_id')
-        graph._row_to_entity = {int(k): (v, ('_',)) for k, v in raw_idx_to_entity.items()}
-        graph._entities = {
-            (eid, ('_',)): EntityRecord(row_idx=int(idx), kind=entity_types.get(eid, 'vertex'))
-            for eid, idx in entity_to_idx.items()
-        }
-        graph._rebuild_entity_indexes()
+    # 2. Entity index — translate layer_id back to tuple coords
+    graph._entities = {}
+    graph._row_to_entity = {}
+    for ent_row in dataframe_iter_rows(dataframe_read_parquet(path / 'entity_index.parquet')):
+        layer_tuple = layer_dict.get_layer(ent_row['layer_id']) or ('_',)
+        ekey = (ent_row['entity_id'], layer_tuple)
+        rec = EntityRecord(row_idx=int(ent_row['idx']), kind=ent_row.get('type', 'vertex'))
+        graph._entities[ekey] = rec
+        graph._row_to_entity[rec.row_idx] = ekey
+    graph._rebuild_entity_indexes()
 
-    # Load per-edge metadata for reconstruction
-    edge_to_idx = parquet_to_dict(path / 'edge_to_idx.parquet', 'edge_id', 'idx')
-    graph._col_to_edge = parquet_to_dict(path / 'idx_to_edge.parquet', 'idx', 'edge_id')
-    edge_weights = parquet_to_dict(path / 'edge_weights.parquet', 'edge_id', 'weight')
-    edge_directed = parquet_to_dict(path / 'edge_directed.parquet', 'edge_id', 'directed')
-    edge_kind = parquet_to_dict(path / 'edge_kind.parquet', 'edge_id', 'kind')
-
-    # Reconstruct _edges from edge_definitions + hyperedge_definitions
+    # 3. Edges — merged metadata + endpoint table
     graph._edges = {}
+    graph._col_to_edge = {}
 
-    edge_def_df = dataframe_read_parquet(path / 'edge_definitions.parquet')
-
-    def _reassemble_endpoint(vid, layer):
-        if layer is None:
+    def _reassemble_endpoint(vid, layer_id):
+        if vid is None:
+            return None
+        if layer_id is None:
             return vid
-        return (vid, tuple(layer))
+        layer_tuple = layer_dict.get_layer(int(layer_id))
+        return (vid, layer_tuple) if layer_tuple is not None else vid
 
-    for row in dataframe_to_rows(edge_def_df):
-        eid = row['edge_id']
-        etype = edge_kind.get(eid, 'binary')
-        src = _reassemble_endpoint(row['source'], row.get('source_layer'))
-        tgt = _reassemble_endpoint(row['target'], row.get('target_layer'))
-        graph._edges[eid] = EdgeRecord(
-            src=src,
-            tgt=tgt,
-            weight=float(edge_weights.get(eid, 1.0)),
-            directed=edge_directed.get(eid),
-            etype=etype,
-            col_idx=int(edge_to_idx.get(eid, -1)),
-            ml_kind=None,
-            ml_layers=None,
-            direction_policy=None,
-        )
+    binary_specs: list = []  # (eid, col_idx)
+    for er in dataframe_iter_rows(dataframe_read_parquet(path / 'edges.parquet')):
+        eid = er['edge_id']
+        col_idx = int(er['col_idx'])
+        w = er.get('weight')
+        weight = float(w) if w is not None else 1.0
+        directed = er.get('directed')
+        kind = er.get('kind') or 'binary'
+        ml_kind = er.get('ml_kind')
 
-    hyper_path = path / 'hyperedge_definitions.parquet'
-    if hyper_path.exists():
-        hyper_df = dataframe_read_parquet(hyper_path)
-        for row in dataframe_to_rows(hyper_df):
-            eid = row['edge_id']
-            is_dir = bool(row.get('directed', False))
-            head = row.get('head') or []
-            tail = row.get('tail') or []
-            members = row.get('members') or []
-            if is_dir:
-                src = frozenset(head)
-                tgt = frozenset(tail)
-            else:
-                src = frozenset(members)
-                tgt = None
+        if kind == 'hyper':
+            # Endpoints come from hyperedge_definitions.parquet; populate later.
             graph._edges[eid] = EdgeRecord(
-                src=src,
-                tgt=tgt,
-                weight=float(edge_weights.get(eid, 1.0)),
-                directed=is_dir,
+                src=None,
+                tgt=None,
+                weight=weight,
+                directed=directed,
                 etype='hyper',
-                col_idx=int(edge_to_idx.get(eid, -1)),
-                ml_kind=None,
+                col_idx=col_idx,
+                ml_kind=ml_kind,
                 ml_layers=None,
                 direction_policy=None,
             )
+        else:
+            src = _reassemble_endpoint(er.get('source'), er.get('source_layer_id'))
+            tgt = _reassemble_endpoint(er.get('target'), er.get('target_layer_id'))
+            graph._edges[eid] = EdgeRecord(
+                src=src,
+                tgt=tgt,
+                weight=weight,
+                directed=directed,
+                etype=kind,
+                col_idx=col_idx,
+                ml_kind=ml_kind,
+                ml_layers=None,
+                direction_policy=None,
+            )
+            if col_idx >= 0:
+                binary_specs.append((eid, col_idx))
+        if col_idx >= 0:
+            graph._col_to_edge[col_idx] = eid
 
-    # Rebuild adjacency indices from _edges
+    # 4. Hyperedge member / head / tail
+    hyper_path = path / 'hyperedge_definitions.parquet'
+    if hyper_path.exists():
+        for hrow in dataframe_iter_rows(dataframe_read_parquet(hyper_path)):
+            eid = hrow['edge_id']
+            rec = graph._edges.get(eid)
+            if rec is None:
+                continue
+            is_dir = bool(hrow.get('directed', False))
+            head = hrow.get('head') or []
+            tail = hrow.get('tail') or []
+            members = hrow.get('members') or []
+            if is_dir:
+                rec.src = frozenset(head)
+                rec.tgt = frozenset(tail)
+            else:
+                rec.src = frozenset(members)
+                rec.tgt = None
+            rec.directed = is_dir
+
+    # 5. Rebuild adjacency indices from _edges
     graph._adj = {}
     graph._src_to_edges = {}
     graph._tgt_to_edges = {}
@@ -773,11 +909,10 @@ def _load_tables(graph, path: Path):
     graph.edge_slice_attributes = dataframe_read_parquet(path / 'edge_slice_attributes.parquet')
 
 
-def _load_multilayers(graph, path: Path):
-    """Load Kivela multilayer structures."""
+def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
+    """Load Kivela multilayer structures from v2 layout (int layer ids)."""
     import json
 
-    # Graceful exit if this is a legacy graph without layers
     if not path.exists() or not (path / 'metadata.json').exists():
         return
 
@@ -787,7 +922,6 @@ def _load_multilayers(graph, path: Path):
         if rec.kind == 'vertex' and coord == ('_',)
     }
 
-    # 1. Metadata
     metadata = json.loads((path / 'metadata.json').read_text())
     multilayer = {
         'aspects': metadata.get('aspects', []),
@@ -801,12 +935,14 @@ def _load_multilayers(graph, path: Path):
         'layer_attributes': [],
     }
 
-    # Use iter_rows for the wide tables — avoids materializing a full
-    # list[dict] just to feed the manifest pass that immediately re-iterates.
+    def _layer_list(layer_id):
+        t = layer_dict.get_layer(layer_id) if layer_id is not None else None
+        return list(t) if t is not None else []
+
     if (path / 'vertex_presence.parquet').exists():
         vm_df = dataframe_read_parquet(path / 'vertex_presence.parquet')
         multilayer['VM'] = [
-            {'node': row['vertex_id'], 'layer': row['layer']}
+            {'node': row['vertex_id'], 'layer': _layer_list(row['layer_id'])}
             for row in dataframe_iter_rows(vm_df)
         ]
 
@@ -814,17 +950,20 @@ def _load_multilayers(graph, path: Path):
         el_df = dataframe_read_parquet(path / 'edge_layers.parquet')
         raw = {}
         for row in dataframe_iter_rows(el_df):
-            if row['layer_2'] is None:
-                raw[row['edge_id']] = tuple(row['layer_1'])
+            l1 = layer_dict.get_layer(row['layer_1_id'])
+            l2_id = row.get('layer_2_id')
+            if l2_id is None:
+                raw[row['edge_id']] = l1
             else:
-                raw[row['edge_id']] = (tuple(row['layer_1']), tuple(row['layer_2']))
+                raw[row['edge_id']] = (l1, layer_dict.get_layer(l2_id))
         multilayer['edge_layers'] = serialize_edge_layers(raw)
 
-    if (path / 'edge_ml_kind.parquet').exists():
-        ek_df = dataframe_read_parquet(path / 'edge_ml_kind.parquet')
-        multilayer['edge_kind'] = {
-            row['edge_id']: row['ml_kind'] for row in dataframe_iter_rows(ek_df)
-        }
+    # ml_kind ("intra"/"inter"/"coupling") was already loaded onto EdgeRecord
+    # by _load_structure from edges.parquet — rebuild the manifest map here so
+    # restore_multilayer_manifest can hand it back to the graph state machine.
+    multilayer['edge_kind'] = {
+        eid: rec.ml_kind for eid, rec in graph._edges.items() if rec.ml_kind is not None
+    }
 
     if (path / 'elem_layer_attributes.parquet').exists():
         multilayer['layer_attributes'] = dataframe_to_rows(
@@ -837,7 +976,10 @@ def _load_multilayers(graph, path: Path):
     if (path / 'tuple_layer_attributes.parquet').exists():
         la_df = dataframe_read_parquet(path / 'tuple_layer_attributes.parquet')
         multilayer['layer_tuple_attrs'] = [
-            {'layer': row['layer'], 'attrs': json.loads(row['attributes'])}
+            {
+                'layer': _layer_list(row['layer_id']),
+                'attrs': json.loads(row['attributes']),
+            }
             for row in dataframe_iter_rows(la_df)
         ]
 
@@ -846,7 +988,7 @@ def _load_multilayers(graph, path: Path):
         multilayer['node_layer_attrs'] = [
             {
                 'node': row['vertex_id'],
-                'layer': row['layer'],
+                'layer': _layer_list(row['layer_id']),
                 'attrs': json.loads(row['attributes']),
             }
             for row in dataframe_iter_rows(vla_df)
@@ -881,22 +1023,26 @@ def _load_multilayers(graph, path: Path):
         graph._rebuild_entity_indexes()
 
 
-def _load_slices(graph, path: Path):
-    """Reconstruct slice registry and memberships."""
+def _load_slices(graph, path: Path, layer_dict: _LayerDict):
+    """Reconstruct slice registry and memberships from v2 layout."""
     registry_df = dataframe_read_parquet(path / 'registry.parquet')
     existing_slices = set(graph.slices.list(include_default=True))
-    for row in dataframe_to_rows(registry_df):
+    for row in dataframe_iter_rows(registry_df):
         slice_id = row['slice_id']
         if slice_id not in existing_slices:
             graph.slices.add(slice_id)
             existing_slices.add(slice_id)
 
-    # Vertex memberships
+    # Vertex memberships (vertex_layer_id may be null for bare-vid memberships)
     vertex_df = dataframe_read_parquet(path / 'vertex_memberships.parquet')
-    for row in dataframe_to_rows(vertex_df):
+    for row in dataframe_iter_rows(vertex_df):
         bare = row['vertex_id']
-        layer = row.get('vertex_layer')
-        vertex_id = (bare, tuple(layer)) if layer is not None else bare
+        layer_id = row.get('vertex_layer_id')
+        if layer_id is None:
+            vertex_id = bare
+        else:
+            layer_tuple = layer_dict.get_layer(int(layer_id))
+            vertex_id = (bare, layer_tuple) if layer_tuple is not None else bare
         if not graph.has_vertex(bare):
             continue
         graph.slices.add_vertex_to_slice(row['slice_id'], vertex_id)
