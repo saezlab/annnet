@@ -239,17 +239,41 @@ def _write_structure(graph, path: Path, compression: str):
         if rec.etype != 'hyper' and rec.src is not None
     }
     default_dir = True if graph.directed is None else graph.directed
+
+    def _split_endpoint(ep):
+        # Multilayer endpoint: (vid, layer_coord_tuple)
+        if (
+            isinstance(ep, tuple)
+            and len(ep) == 2
+            and isinstance(ep[0], str)
+            and isinstance(ep[1], tuple)
+        ):
+            return ep[0], list(ep[1])
+        # Plain endpoint: bare vertex id
+        return ep, None
+
+    eids_b = list(bin_edges.keys())
+    src_ids, src_layers, tgt_ids, tgt_layers, etypes = [], [], [], [], []
+    for rec in bin_edges.values():
+        sid, slay = _split_endpoint(rec.src)
+        tid, tlay = _split_endpoint(rec.tgt)
+        src_ids.append(sid)
+        src_layers.append(slay)
+        tgt_ids.append(tid)
+        tgt_layers.append(tlay)
+        etypes.append(
+            'DIRECTED'
+            if (rec.directed if rec.directed is not None else default_dir)
+            else 'UNDIRECTED'
+        )
     edge_def_df = _df_from_dict(
         {
-            'edge_id': list(bin_edges.keys()),
-            'source': [rec.src for rec in bin_edges.values()],
-            'target': [rec.tgt for rec in bin_edges.values()],
-            'edge_type': [
-                'DIRECTED'
-                if (rec.directed if rec.directed is not None else default_dir)
-                else 'UNDIRECTED'
-                for rec in bin_edges.values()
-            ],
+            'edge_id': eids_b,
+            'source': src_ids,
+            'source_layer': src_layers,
+            'target': tgt_ids,
+            'target_layer': tgt_layers,
+            'edge_type': etypes,
         }
     )
     dataframe_write_parquet(edge_def_df, path / 'edge_definitions.parquet')
@@ -400,12 +424,28 @@ def _write_slices(graph, path: Path, compression: str):
     reg_df = _df_from_dict(registry_data)
     dataframe_write_parquet(reg_df, path / 'registry.parquet')
 
-    # Vertex memberships: long format
+    # Vertex memberships: long format.
+    # vertex ids may be bare strings or multilayer (vid, layer_coord) tuples;
+    # split into vertex_id + vertex_layer columns for a uniform parquet schema.
+    def _split_vid(vid):
+        if (
+            isinstance(vid, tuple)
+            and len(vid) == 2
+            and isinstance(vid[0], str)
+            and isinstance(vid[1], tuple)
+        ):
+            return vid[0], list(vid[1])
+        return vid, None
+
     vertex_members = []
     for slice_id in graph.slices.list(include_default=True):
         for vertex_id in graph.slices.vertices(slice_id):
-            vertex_members.append({'slice_id': slice_id, 'vertex_id': vertex_id})
-    vm_df = _df_from_dict(vertex_members)
+            bare, layer = _split_vid(vertex_id)
+            vertex_members.append({'slice_id': slice_id, 'vertex_id': bare, 'vertex_layer': layer})
+    if vertex_members:
+        vm_df = _df_from_dict(vertex_members)
+    else:
+        vm_df = _df_from_dict({'slice_id': [], 'vertex_id': [], 'vertex_layer': []})
     dataframe_write_parquet(vm_df, path / 'vertex_memberships.parquet')
 
     # Edge memberships with weights
@@ -646,12 +686,20 @@ def _load_structure(graph, path: Path, lazy: bool):
     graph._edges = {}
 
     edge_def_df = dataframe_read_parquet(path / 'edge_definitions.parquet')
+
+    def _reassemble_endpoint(vid, layer):
+        if layer is None:
+            return vid
+        return (vid, tuple(layer))
+
     for row in dataframe_to_rows(edge_def_df):
         eid = row['edge_id']
         etype = edge_kind.get(eid, 'binary')
+        src = _reassemble_endpoint(row['source'], row.get('source_layer'))
+        tgt = _reassemble_endpoint(row['target'], row.get('target_layer'))
         graph._edges[eid] = EdgeRecord(
-            src=row['source'],
-            tgt=row['target'],
+            src=src,
+            tgt=tgt,
             weight=float(edge_weights.get(eid, 1.0)),
             directed=edge_directed.get(eid),
             etype=etype,
@@ -826,8 +874,10 @@ def _load_slices(graph, path: Path):
     # Vertex memberships
     vertex_df = dataframe_read_parquet(path / 'vertex_memberships.parquet')
     for row in dataframe_to_rows(vertex_df):
-        vertex_id = row['vertex_id']
-        if not graph.has_vertex(vertex_id):
+        bare = row['vertex_id']
+        layer = row.get('vertex_layer')
+        vertex_id = (bare, tuple(layer)) if layer is not None else bare
+        if not graph.has_vertex(bare):
             continue
         graph.slices.add_vertex_to_slice(row['slice_id'], vertex_id)
 
