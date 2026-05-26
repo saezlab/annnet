@@ -2315,7 +2315,7 @@ class LayerAccessor:
 
     def _add_coupling_edges_bulk(
         self,
-        triples: 'list[tuple[str, tuple, tuple]]',
+        triples: list[tuple[str, tuple, tuple]],
         weight: float,
     ) -> int:
         """Insert a batch of coupling edges via the bulk edge path."""
