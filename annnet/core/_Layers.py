@@ -1542,7 +1542,7 @@ class LayerAccessor:
             include_coupling=include_coupling,
         )
 
-        from ._Ops import _hyper_def, Operations
+        from ._Ops import Operations, _hyper_def
 
         G_src = self._G
         G_cls = G_src.__class__
@@ -1557,8 +1557,9 @@ class LayerAccessor:
         va_lookup = Operations._rows_attr_map(
             G_src, G_src.vertex_attributes, 'vertex_id', V
         )
-        for vid in V:
-            g.add_vertices(vid, layer=aa, **va_lookup.get(vid, {}))
+        v_rows = [{'vertex_id': vid, **va_lookup.get(vid, {})} for vid in V]
+        if v_rows:
+            g._add_vertices_bulk(v_rows, layer=aa, slice=g._default_slice)
 
         if include_inter or include_coupling:
             extra_endpoints: set = set()
@@ -1578,8 +1579,14 @@ class LayerAccessor:
             extra_attrs = Operations._rows_attr_map(
                 G_src, G_src.vertex_attributes, 'vertex_id', extra_bare
             )
+            # Group by layer coord so each call is one bulk insert.
+            by_coord: dict = {}
             for bare_vid, coord in extra_endpoints:
-                g.add_vertices(bare_vid, layer=coord, **extra_attrs.get(bare_vid, {}))
+                by_coord.setdefault(coord, []).append(
+                    {'vertex_id': bare_vid, **extra_attrs.get(bare_vid, {})}
+                )
+            for coord, rows in by_coord.items():
+                g._add_vertices_bulk(rows, layer=coord, slice=g._default_slice)
 
         default_dir = True if G_src.directed is None else G_src.directed
         bin_payload, hyper_payload = [], []
@@ -1613,9 +1620,7 @@ class LayerAccessor:
                         'target': rec.tgt,
                         'edge_id': eid,
                         'edge_type': rec.etype,
-                        'edge_directed': rec.directed
-                        if rec.directed is not None
-                        else default_dir,
+                        'edge_directed': rec.directed if rec.directed is not None else default_dir,
                         'weight': rec.weight,
                     }
                 )
