@@ -3987,9 +3987,13 @@ class AnnNet(
             out_ids.append(edge_id)
 
         for key in _M_zero_keys:
-            dict.pop(M, key, None)
+            try:
+                del M[key]
+            except (KeyError, IndexError):
+                pass
         if _M_writes:
-            dict.update(M, _M_writes)
+            for (r, c), v in _M_writes.items():
+                M[r, c] = v
             self._invalidate_sparse_caches()
 
         for sid, eids in _slice_eids.items():
@@ -4498,9 +4502,10 @@ class AnnNet(
         M_old = self._matrix
         rows, _cols = M_old.shape
         M_new = sp.dok_matrix((rows, new_cols), dtype=M_old.dtype)
-        new_data = {(r, old_to_new[c]): v for (r, c), v in M_old.items() if c in old_to_new}
-        if new_data:
-            dict.update(M_new, new_data)
+        for (r, c), v in M_old.items():
+            mapped = old_to_new.get(c)
+            if mapped is not None:
+                M_new[r, mapped] = v
         self._matrix = M_new
         self._invalidate_sparse_caches()
 
@@ -4585,9 +4590,10 @@ class AnnNet(
         M_old = self._matrix
         _rows, cols = M_old.shape
         M_new = sp.dok_matrix((new_rows, cols), dtype=M_old.dtype)
-        new_data = {(old_to_new[r], c): v for (r, c), v in M_old.items() if r in old_to_new}
-        if new_data:
-            dict.update(M_new, new_data)
+        for (r, c), v in M_old.items():
+            mapped = old_to_new.get(r)
+            if mapped is not None:
+                M_new[mapped, c] = v
         self._matrix = M_new
         self._invalidate_sparse_caches()
 

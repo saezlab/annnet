@@ -575,16 +575,20 @@ class LayerAccessor:
             vertex_ids = sorted(
                 {ekey[0] for ekey, rec in self._entities.items() if rec.kind == 'vertex'}
             )
-            for vid in vertex_ids:
-                flat.add_vertices(vid)
+            if vertex_ids:
+                flat._add_vertices_bulk([{'vertex_id': v} for v in vertex_ids])
 
             edge_entity_ids = sorted(
                 {ekey[0] for ekey, rec in self._entities.items() if rec.kind == 'edge_entity'}
             )
             edge_entity_id_set = set(edge_entity_ids)
-            for eid in edge_entity_ids:
-                if flat._resolve_entity_key(eid) not in flat._entities:
-                    flat.add_edges(edge_id=eid, as_entity=True)
+            ent_placeholder_specs = [
+                {'edge_id': eid}
+                for eid in edge_entity_ids
+                if flat._resolve_entity_key(eid) not in flat._entities
+            ]
+            if ent_placeholder_specs:
+                flat._add_edges_bulk(ent_placeholder_specs, as_entity=True)
 
             edge_items = sorted(
                 self._edges.items(),
@@ -594,34 +598,68 @@ class LayerAccessor:
                     item[0],
                 ),
             )
+
+            null_ent_specs: list[dict] = []
+            bin_specs: list[dict] = []
+            bin_entity_specs: list[dict] = []
+            hyper_specs: list[dict] = []
+            direction_policies: dict = {}
+
             for eid, rec in edge_items:
                 if rec.col_idx < 0 and rec.src is None and rec.tgt is None:
                     if eid not in flat._edges:
-                        flat.add_edges(edge_id=eid, as_entity=True)
+                        null_ent_specs.append({'edge_id': eid})
                     continue
 
                 if rec.etype == 'hyper':
                     src = _project_members(rec.src) or []
                     tgt = _project_members(rec.tgt) if rec.tgt is not None else None
-                    flat.add_edges(
-                        src=src,
-                        tgt=tgt,
-                        edge_id=eid,
-                        weight=rec.weight,
-                        directed=rec.directed,
-                    )
+                    if tgt is None:
+                        hyper_specs.append(
+                            {
+                                'members': src,
+                                'edge_id': eid,
+                                'weight': rec.weight,
+                            }
+                        )
+                    else:
+                        hyper_specs.append(
+                            {
+                                'head': src,
+                                'tail': tgt,
+                                'edge_id': eid,
+                                'weight': rec.weight,
+                            }
+                        )
                 else:
-                    flat.add_edges(
-                        _project_node(rec.src),
-                        _project_node(rec.tgt),
-                        edge_id=eid,
-                        weight=rec.weight,
-                        directed=rec.directed,
-                        as_entity=(eid in edge_entity_id_set),
-                    )
+                    spec = {
+                        'source': _project_node(rec.src),
+                        'target': _project_node(rec.tgt),
+                        'edge_id': eid,
+                        'weight': rec.weight,
+                        'edge_directed': rec.directed,
+                    }
+                    if eid in edge_entity_id_set:
+                        bin_entity_specs.append(spec)
+                    else:
+                        bin_specs.append(spec)
+
+                if rec.direction_policy is not None:
+                    direction_policies[eid] = rec.direction_policy
+
+            if null_ent_specs:
+                flat._add_edges_bulk(null_ent_specs, as_entity=True)
+            if bin_specs:
+                flat._add_edges_bulk(bin_specs)
+            if bin_entity_specs:
+                flat._add_edges_bulk(bin_entity_specs, as_entity=True)
+            if hyper_specs:
+                flat.add_edges(hyper_specs)
+
+            for eid, policy in direction_policies.items():
                 flat_rec = flat._edges.get(eid)
-                if flat_rec is not None and rec.direction_policy is not None:
-                    flat_rec.direction_policy = copy.deepcopy(rec.direction_policy)
+                if flat_rec is not None:
+                    flat_rec.direction_policy = copy.deepcopy(policy)
 
             flat.slice_edge_weights = {
                 lid: dict(weights) for lid, weights in self.slice_edge_weights.items()
@@ -2267,15 +2305,33 @@ class LayerAccessor:
                 return False
         return True
 
-    def _add_coupling_edge(self, u: str, La: tuple, Lb: tuple, weight: float = 1.0) -> str:
-        """Internal: add a single coupling edge; return its eid."""
+    def _coupling_edge_spec(self, u: str, La: tuple, Lb: tuple, weight: float) -> dict:
+        """Build the edge-spec dict for a single coupling edge ``(u@La)→(u@Lb)``."""
         _lid = lambda t: t[0] if len(self.aspects) == 1 else '×'.join(t)
-        eid = f'{u}>{u}@{_lid(La)}~{_lid(Lb)}'
-        # In multilayer mode the bare vertex id is ambiguous (it may live in
-        # multiple layers); use explicit supra-node keys so the edge lands
-        # on the intended (u, La) → (u, Lb) pair.
-        self._G.add_edges((u, La), (u, Lb), weight=weight, edge_id=eid)
-        return eid
+        return {
+            'source': (u, La),
+            'target': (u, Lb),
+            'weight': weight,
+            'edge_id': f'{u}>{u}@{_lid(La)}~{_lid(Lb)}',
+        }
+
+    def _add_coupling_edges_bulk(
+        self,
+        triples: 'list[tuple[str, tuple, tuple]]',
+        weight: float,
+    ) -> int:
+        """Insert a batch of coupling edges via the bulk edge path."""
+        if not triples:
+            return 0
+        specs = [self._coupling_edge_spec(u, La, Lb, weight) for (u, La, Lb) in triples]
+        self._G._add_edges_bulk(specs)
+        return len(specs)
+
+    def _add_coupling_edge(self, u: str, La: tuple, Lb: tuple, weight: float = 1.0) -> str:
+        """Backward-compat singular shim; prefer ``_add_coupling_edges_bulk``."""
+        spec = self._coupling_edge_spec(u, La, Lb, weight)
+        self._G._add_edges_bulk([spec])
+        return spec['edge_id']
 
     def add_layer_coupling_pairs(
         self, layer_pairs: list[tuple[tuple[str, ...], tuple[str, ...]]], *, weight: float = 1.0
@@ -2294,7 +2350,6 @@ class LayerAccessor:
         int
             Number of edges added.
         """
-        added = 0
         # normalize to tuples, validate once
         norm_pairs = []
         for La, Lb in layer_pairs:
@@ -2308,13 +2363,13 @@ class LayerAccessor:
         for (u, aa), rec in self._entities.items():
             if rec.kind == 'vertex':
                 layer_to_vertices.setdefault(aa, set()).add(u)
+        triples: list[tuple[str, tuple, tuple]] = []
         for La, Lb in norm_pairs:
             Ua = layer_to_vertices.get(La, set())
             Ub = layer_to_vertices.get(Lb, set())
             for u in Ua & Ub:
-                self._add_coupling_edge(u, La, Lb, weight)
-                added += 1
-        return added
+                triples.append((u, La, Lb))
+        return self._add_coupling_edges_bulk(triples, weight)
 
     def add_categorical_coupling(
         self, aspect: str, groups: list[list[str]], *, weight: float = 1.0
@@ -2336,7 +2391,6 @@ class LayerAccessor:
             Number of edges added.
         """
         ai = self._aspect_index(aspect)
-        added = 0
         # Map: (u, other_aspects_tuple) -> {elem_on_aspect: full_layer_tuple}
         buckets = {}
         for (u, aa), rec in self._entities.items():
@@ -2344,6 +2398,7 @@ class LayerAccessor:
                 continue
             other = aa[:ai] + aa[ai + 1 :]
             buckets.setdefault((u, other), {}).setdefault(aa[ai], aa)
+        triples: list[tuple[str, tuple, tuple]] = []
         for grp in groups:
             gset = set(grp)
             for (u, _other), mapping in buckets.items():
@@ -2352,9 +2407,8 @@ class LayerAccessor:
                 if len(layers) < 2:
                     continue
                 for La, Lb in itertools.combinations(sorted(layers), 2):
-                    self._add_coupling_edge(u, La, Lb, weight)
-                    added += 1
-        return added
+                    triples.append((u, La, Lb))
+        return self._add_coupling_edges_bulk(triples, weight)
 
     def add_diagonal_coupling_filter(
         self, layer_filter: dict[str, set], *, weight: float = 1.0
@@ -2373,19 +2427,18 @@ class LayerAccessor:
         int
             Number of edges added.
         """
-        added = 0
         # collect per vertex the matching layers actually present
         per_u = {}
         for (u, aa), rec in self._entities.items():
             if rec.kind == 'vertex' and self._layer_matches_filter(aa, layer_filter):
                 per_u.setdefault(u, []).append(aa)
+        triples: list[tuple[str, tuple, tuple]] = []
         for u, layers in per_u.items():
             if len(layers) < 2:
                 continue
             for La, Lb in itertools.combinations(sorted(layers), 2):
-                self._add_coupling_edge(u, La, Lb, weight)
-                added += 1
-        return added
+                triples.append((u, La, Lb))
+        return self._add_coupling_edges_bulk(triples, weight)
 
     ## Tensor view & flattening map
 
