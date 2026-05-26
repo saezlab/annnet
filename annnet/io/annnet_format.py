@@ -29,6 +29,7 @@ import scipy.sparse as sp
 from .. import __version__ as ANNNET_VERSION
 from ._common import (
     dataframe_to_rows,
+    dataframe_iter_rows,
     dataframe_from_rows,
     serialize_edge_layers,
     collect_slice_manifest,
@@ -193,16 +194,27 @@ def _write_structure(graph, path: Path, compression: str):
         df = _df_from_dict({id_name: list(d.keys()), val_name: list(d.values())})
         dataframe_write_parquet(df, filepath)
 
-    entity_rows = [
-        {
-            'entity_id': ekey[0],
-            'layer': list(ekey[1]),
-            'idx': rec.row_idx,
-            'type': rec.kind,
-        }
-        for ekey, rec in graph._entities.items()
-    ]
-    dataframe_write_parquet(_df_from_dict(entity_rows), path / 'entity_index.parquet')
+    ent_ids: list = []
+    ent_layers: list = []
+    ent_idxs: list = []
+    ent_types: list = []
+    for ekey, rec in graph._entities.items():
+        ent_ids.append(ekey[0])
+        ent_layers.append(list(ekey[1]))
+        ent_idxs.append(rec.row_idx)
+        ent_types.append(rec.kind)
+    dataframe_write_parquet(
+        dataframe_from_columns(
+            {'entity_id': ent_ids, 'layer': ent_layers, 'idx': ent_idxs, 'type': ent_types},
+            schema={
+                'entity_id': 'text',
+                'layer': 'list_text',
+                'idx': 'int',
+                'type': 'text',
+            },
+        ),
+        path / 'entity_index.parquet',
+    )
 
     # Derive entity dicts from _entities / _row_to_entity.
     # These legacy tables remain for compatibility, while entity_index.parquet
@@ -333,13 +345,18 @@ def _write_multilayers(graph, path: Path, compression: str):
     }
     (path / 'metadata.json').write_text(json.dumps(metadata, indent=2))
 
-    # 2. Vertex Presence (V_M)
-    vm_data = [
-        {'vertex_id': row.get('node') or row.get('vertex_id'), 'layer': row.get('layer', [])}
-        for row in multilayer.get('VM', [])
-    ]
-
-    vm_df = _df_from_dict(vm_data if vm_data else {'vertex_id': [], 'layer': []})
+    # 2. Vertex Presence (V_M) — column-oriented build with explicit schema
+    # so polars uses typed Series constructors instead of per-element inference.
+    vm_rows = multilayer.get('VM', [])
+    vm_vids: list = []
+    vm_layers: list = []
+    for row in vm_rows:
+        vm_vids.append(row.get('node') or row.get('vertex_id'))
+        vm_layers.append(row.get('layer', []))
+    vm_df = dataframe_from_columns(
+        {'vertex_id': vm_vids, 'layer': vm_layers},
+        schema={'vertex_id': 'text', 'layer': 'list_text'},
+    )
     dataframe_write_parquet(vm_df, path / 'vertex_presence.parquet')
 
     # 3. Edge Layers
@@ -387,27 +404,27 @@ def _write_multilayers(graph, path: Path, compression: str):
 
     # 4c. Tuple Layer Attributes (Dict -> Parquet due to complex keys)
     if multilayer.get('layer_tuple_attrs'):
-        la_data = [
-            {
-                'layer': row['layer'],
-                'attributes': json.dumps(row.get('attrs') or row.get('attributes') or {}),
-            }
-            for row in multilayer['layer_tuple_attrs']
-        ]
-        la_df = _df_from_dict(la_data)
+        la_layers: list = []
+        la_attrs_json: list = []
+        for row in multilayer['layer_tuple_attrs']:
+            la_layers.append(row['layer'])
+            la_attrs_json.append(json.dumps(row.get('attrs') or row.get('attributes') or {}))
+        la_df = _df_from_dict({'layer': la_layers, 'attributes': la_attrs_json})
         dataframe_write_parquet(la_df, path / 'tuple_layer_attributes.parquet')
 
     # 4d. Vertex-Layer Attributes
     if multilayer.get('node_layer_attrs'):
-        vla_data = [
-            {
-                'vertex_id': row.get('node') or row.get('vertex_id'),
-                'layer': row.get('layer', []),
-                'attributes': json.dumps(row.get('attrs') or row.get('attributes') or {}),
-            }
-            for row in multilayer['node_layer_attrs']
-        ]
-        vla_df = _df_from_dict(vla_data)
+        vla_vids: list = []
+        vla_layers: list = []
+        vla_attrs_json: list = []
+        for row in multilayer['node_layer_attrs']:
+            vla_vids.append(row.get('node') or row.get('vertex_id'))
+            vla_layers.append(row.get('layer', []))
+            vla_attrs_json.append(json.dumps(row.get('attrs') or row.get('attributes') or {}))
+        vla_df = dataframe_from_columns(
+            {'vertex_id': vla_vids, 'layer': vla_layers, 'attributes': vla_attrs_json},
+            schema={'vertex_id': 'text', 'layer': 'list_text', 'attributes': 'text'},
+        )
         dataframe_write_parquet(vla_df, path / 'vertex_layer_attributes.parquet')
 
 
@@ -658,7 +675,7 @@ def _load_structure(graph, path: Path, lazy: bool):
     if entity_index_path.exists():
         graph._entities = {}
         graph._row_to_entity = {}
-        for row in dataframe_to_rows(dataframe_read_parquet(entity_index_path)):
+        for row in dataframe_iter_rows(dataframe_read_parquet(entity_index_path)):
             ekey = (row['entity_id'], tuple(row.get('layer') or ['_']))
             rec = EntityRecord(row_idx=int(row['idx']), kind=row.get('type', 'vertex'))
             graph._entities[ekey] = rec
@@ -784,16 +801,19 @@ def _load_multilayers(graph, path: Path):
         'layer_attributes': [],
     }
 
+    # Use iter_rows for the wide tables — avoids materializing a full
+    # list[dict] just to feed the manifest pass that immediately re-iterates.
     if (path / 'vertex_presence.parquet').exists():
         vm_df = dataframe_read_parquet(path / 'vertex_presence.parquet')
         multilayer['VM'] = [
-            {'node': row['vertex_id'], 'layer': row['layer']} for row in dataframe_to_rows(vm_df)
+            {'node': row['vertex_id'], 'layer': row['layer']}
+            for row in dataframe_iter_rows(vm_df)
         ]
 
     if (path / 'edge_layers.parquet').exists():
         el_df = dataframe_read_parquet(path / 'edge_layers.parquet')
         raw = {}
-        for row in dataframe_to_rows(el_df):
+        for row in dataframe_iter_rows(el_df):
             if row['layer_2'] is None:
                 raw[row['edge_id']] = tuple(row['layer_1'])
             else:
@@ -803,7 +823,7 @@ def _load_multilayers(graph, path: Path):
     if (path / 'edge_ml_kind.parquet').exists():
         ek_df = dataframe_read_parquet(path / 'edge_ml_kind.parquet')
         multilayer['edge_kind'] = {
-            row['edge_id']: row['ml_kind'] for row in dataframe_to_rows(ek_df)
+            row['edge_id']: row['ml_kind'] for row in dataframe_iter_rows(ek_df)
         }
 
     if (path / 'elem_layer_attributes.parquet').exists():
@@ -818,7 +838,7 @@ def _load_multilayers(graph, path: Path):
         la_df = dataframe_read_parquet(path / 'tuple_layer_attributes.parquet')
         multilayer['layer_tuple_attrs'] = [
             {'layer': row['layer'], 'attrs': json.loads(row['attributes'])}
-            for row in dataframe_to_rows(la_df)
+            for row in dataframe_iter_rows(la_df)
         ]
 
     if (path / 'vertex_layer_attributes.parquet').exists():
@@ -829,7 +849,7 @@ def _load_multilayers(graph, path: Path):
                 'layer': row['layer'],
                 'attrs': json.loads(row['attributes']),
             }
-            for row in dataframe_to_rows(vla_df)
+            for row in dataframe_iter_rows(vla_df)
         ]
 
     restore_multilayer_manifest(

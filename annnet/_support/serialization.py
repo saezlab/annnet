@@ -216,13 +216,34 @@ def restore_multilayer_manifest(
         if attrs:
             graph.layers.set_aspect_attrs(aspect, **attrs)
 
+    # VM rows: group by normalized layer_tuple, then one bulk insert per layer.
+    # Cache _normalize_layer_tuple results — the same raw layer recurs many times.
+    _norm_cache: dict = {}
+
+    def _norm_cached(raw):
+        # raw lists/tuples are unhashable as-is; hash by tuple form
+        key = tuple(raw) if isinstance(raw, (list, tuple)) else raw
+        cached = _norm_cache.get(key)
+        if cached is not None:
+            return cached
+        result = _normalize_layer_tuple(raw)
+        _norm_cache[key] = result
+        return result
+
+    vm_by_layer: dict = {}
     for row in manifest.get('VM', []):
         vid = row.get('vertex_id') or row.get('node')
-        layer_tuple = _normalize_layer_tuple(row.get('layer'))
+        layer_tuple = _norm_cached(row.get('layer'))
         if vid is None or not layer_tuple:
             continue
-        if not graph.layers.has_presence(vid, layer_tuple):
-            graph._add_vertices_bulk([vid], layer=layer_tuple)
+        vm_by_layer.setdefault(layer_tuple, []).append(vid)
+
+    entities = graph._entities
+    for layer_tuple, vids in vm_by_layer.items():
+        # Filter to missing vids without paying _validate_layer_tuple per vid
+        missing = [v for v in vids if (v, layer_tuple) not in entities]
+        if missing:
+            graph._add_vertices_bulk(missing, layer=layer_tuple)
 
     for eid, kind in manifest.get('edge_kind', {}).items():
         if graph.has_edge(edge_id=eid):
@@ -232,14 +253,22 @@ def restore_multilayer_manifest(
     if edge_layers:
         graph.edge_layers.update(edge_layers)
 
+    # node_layer_attrs: write directly into _state_attrs (presence already enforced
+    # by the VM pass above) — avoids 40k+ public-API calls each redoing validation.
+    state_attrs = graph._state_attrs
     for row in manifest.get('node_layer_attrs', []):
         vid = row.get('vertex_id') or row.get('node')
-        layer_tuple = _normalize_layer_tuple(row.get('layer'))
+        layer_tuple = _norm_cached(row.get('layer'))
         attrs = row.get('attributes') or row.get('attrs') or {}
         if vid is None or not layer_tuple or not attrs:
             continue
-        if graph.layers.has_presence(vid, layer_tuple):
-            graph.layers.set_vertex_layer_attrs(vid, layer_tuple, **attrs)
+        if (vid, layer_tuple) not in entities:
+            continue
+        bucket = state_attrs.get((vid, layer_tuple))
+        if bucket is None:
+            state_attrs[(vid, layer_tuple)] = dict(attrs)
+        else:
+            bucket.update(attrs)
 
     for row in manifest.get('layer_tuple_attrs', []):
         layer_tuple = _normalize_layer_tuple(row.get('layer'))

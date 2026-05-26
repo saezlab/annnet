@@ -105,6 +105,28 @@ def dataframe_to_rows(df) -> list[dict[str, Any]]:
     return [dict(row) for row in _to_nw(df).rows(named=True)]
 
 
+def dataframe_iter_rows(df):
+    """Yield rows as dicts without materializing the full list.
+
+    Prefer this over :func:`dataframe_to_rows` for one-pass consumption of
+    large tables; avoids building the intermediate ``list[dict]``.
+    """
+    if df is None:
+        return
+    # Try the native polars iter_rows fast path first (avoids the per-row dict
+    # rewrap that narwhals' rows() incurs).
+    native = df
+    try:
+        import polars as _pl
+
+        if isinstance(native, _pl.DataFrame):
+            yield from native.iter_rows(named=True)
+            return
+    except ImportError:
+        pass
+    yield from _to_nw(df).iter_rows(named=True)
+
+
 def dataframe_height(df) -> int:
     """Return the row count for a dataframe-like object."""
     if df is None:
