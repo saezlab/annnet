@@ -35,7 +35,7 @@ def _build_multilayer_graph() -> AnnNet:
 def test_to_anndata_roundtrip_complex_graph(complex_graph):
     adata = to_anndata(complex_graph)
 
-    assert adata.n_obs == complex_graph.nv
+    assert adata.n_obs == complex_graph.nv_supra
     assert adata.n_vars == complex_graph.ne
     assert sparse.issparse(adata.X)
     assert '__annnet__' in adata.uns

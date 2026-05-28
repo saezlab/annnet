@@ -13,7 +13,7 @@ from annnet.core.graph import AnnNet
 def test_obs_row_count_matches_nv():
     G = AnnNet(directed=False)
     G.add_vertices(['A', 'B', 'C'])
-    assert G.obs.shape[0] == G.nv == 3
+    assert G.obs.shape[0] == G.nv_supra == 3
 
 
 def test_var_row_count_matches_ne_after_binary_edges_with_no_attrs():

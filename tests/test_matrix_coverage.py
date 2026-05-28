@@ -213,7 +213,7 @@ def test_idx_count_helpers_match_graph_shape() -> None:
     G = _build_graph()
     assert G.idx.edge_count() == G.ne
     assert G.idx.entity_count() == len(G._entities)
-    assert G.idx.vertex_count() == G.nv
+    assert G.idx.vertex_count() == G.nv_supra
 
 
 def test_idx_stats_includes_vertex_and_edge_entity_counts() -> None:

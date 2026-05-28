@@ -229,11 +229,15 @@ class AnnNet(
         'incident_edges',
         'num_vertices',
         'num_edges',
+        'num_supra_vertices',
         'nv',
         'ne',
+        'nv_supra',
         'number_of_vertices',
         'number_of_edges',
         'shape',
+        'supra_shape',
+        'supra_vertices',
         'V',
         'E',
         'obs',
@@ -592,7 +596,7 @@ class AnnNet(
     def __repr__(self) -> str:
         """Anndata-style multi-line summary."""
         lines = [
-            f'AnnNet object with n_vertices × n_edges = {self.nv} × {self.ne}',
+            f'AnnNet object with n_vertices × n_edges = {self.num_vertices} × {self.ne}',
             f'    directed: {self.directed}',
         ]
 
@@ -602,6 +606,7 @@ class AnnNet(
 
         if self._aspects and self._aspects != ('_',):
             lines.append(f'    aspects: {list(self._aspects)}')
+            lines.append(f'    supra_nodes (vertex × layer rows): {self.nv_supra}')
 
         def _user_cols(df, id_field: str) -> list[str]:
             try:
@@ -625,8 +630,8 @@ class AnnNet(
         return '\n'.join(lines)
 
     def __len__(self) -> int:
-        """Number of vertices (NetworkX convention)."""
-        return self.nv
+        """Number of unique vertices (NetworkX convention)."""
+        return self.num_vertices
 
     def __iter__(self) -> Iterator[str]:
         """Iterate over vertex IDs (NetworkX convention)."""
@@ -2247,7 +2252,7 @@ class AnnNet(
         except KeyError:
             raise KeyError(
                 f'No vertex at row index {index}; valid range is '
-                f'[0, {self.nv}). Use G.vertices() to list vertex IDs.'
+                f'[0, {self.nv_supra}). Use G.vertices() to list vertex IDs.'
             ) from None
         return entry[0] if isinstance(entry, tuple) else entry
 
@@ -2510,22 +2515,48 @@ class AnnNet(
         return int(csr.indptr[ent.row_idx + 1] - csr.indptr[ent.row_idx])
 
     def vertices(self) -> list[str]:
-        """Return all vertex IDs.
+        """Return unique vertex IDs (one per vertex, deduplicated across layers).
 
         Returns
         -------
         list[str]
-            Vertex identifiers, excluding edge-entities.
+            Distinct vertex identifiers, excluding edge-entities. In a
+            multilayer graph each vertex appears exactly once regardless of
+            how many elementary layers it inhabits.
 
-        Notes
-        -----
-        In multilayer graphs, the returned IDs are bare vertex IDs. Use
-        ``G.idx`` or layer-specific methods when layer coordinates are needed.
+        See Also
+        --------
+        supra_vertices : ``(vertex_id, layer_coord)`` pairs (one per row of
+            the supra-incidence matrix).
+        """
+        seen: set[str] = set()
+        out: list[str] = []
+        for eid, rec in self._entities.items():
+            if rec.kind != 'vertex':
+                continue
+            vid = eid[0] if isinstance(eid, tuple) else eid
+            if vid not in seen:
+                seen.add(vid)
+                out.append(vid)
+        return out
+
+    def supra_vertices(self) -> list[tuple[str, tuple[str, ...]]]:
+        """Return all ``(vertex_id, layer_coord)`` supra-nodes.
+
+        Returns
+        -------
+        list[tuple[str, tuple[str, ...]]]
+            One entry per row of the supra-incidence matrix. In flat graphs
+            the layer coordinate is the sentinel ``('_',)``.
+
+        See Also
+        --------
+        vertices : unique vertex IDs (one per vertex regardless of layer).
         """
         return [
-            eid[0] if isinstance(eid, tuple) else eid
+            eid
             for eid, rec in self._entities.items()
-            if rec.kind == 'vertex'
+            if rec.kind == 'vertex' and isinstance(eid, tuple)
         ]
 
     def edges(self) -> list[str]:
@@ -2747,15 +2778,30 @@ class AnnNet(
         return result
 
     @property
-    def nv(self) -> int:
-        """Number of stored vertices.
+    def nv_supra(self) -> int:
+        """Number of supra-nodes (rows of the supra-incidence matrix).
 
         Returns
         -------
         int
-            Count of entities whose internal kind is ``"vertex"``.
+            Count of entities whose internal kind is ``"vertex"`` — one per
+            ``(vertex_id, layer_coord)`` pair. In a flat graph this equals
+            :attr:`nv`; in a multilayer graph it equals the sum over vertices
+            of the number of layers each vertex inhabits.
         """
         return sum(1 for r in self._entities.values() if r.kind == 'vertex')
+
+    @property
+    def nv(self) -> int:
+        """Number of unique vertices (deduplicated across layers).
+
+        Returns
+        -------
+        int
+            Distinct vertex IDs, ignoring layer multiplicity. Use
+            :attr:`nv_supra` for the supra-incidence row count.
+        """
+        return len(self._V)
 
     @property
     def ne(self) -> int:
@@ -2770,14 +2816,26 @@ class AnnNet(
 
     @property
     def num_vertices(self) -> int:
-        """Number of stored vertices.
+        """Number of unique vertices.
 
         Returns
         -------
         int
-            Same value as :attr:`nv`.
+            Same value as :attr:`nv`. Use :attr:`num_supra_vertices` for the
+            supra-incidence row count.
         """
         return self.nv
+
+    @property
+    def num_supra_vertices(self) -> int:
+        """Number of supra-nodes (rows of the supra-incidence matrix).
+
+        Returns
+        -------
+        int
+            Same value as :attr:`nv_supra`.
+        """
+        return self.nv_supra
 
     @property
     def num_edges(self) -> int:
@@ -2797,9 +2855,21 @@ class AnnNet(
         Returns
         -------
         tuple[int, int]
-            Vertex and edge counts.
+            Unique vertex count and edge count. Use :attr:`supra_shape` for
+            ``(nv_supra, ne)``.
         """
-        return (self.nv, self.ne)
+        return (self.num_vertices, self.ne)
+
+    @property
+    def supra_shape(self) -> tuple[int, int]:
+        """Supra-matrix shape as ``(nv_supra, num_edges)``.
+
+        Returns
+        -------
+        tuple[int, int]
+            Supra-incidence row count and edge count.
+        """
+        return (self.nv_supra, self.ne)
 
     def get_or_create_vertex_by_attrs(self, slice=None, **attrs) -> str:
         """Return vertex ID for the given composite-key attributes.
