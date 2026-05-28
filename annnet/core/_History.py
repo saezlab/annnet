@@ -7,7 +7,6 @@ from functools import wraps
 import numpy as np
 
 from .._support.dataframe_backend import (
-    dataframe_to_rows,
     dataframe_from_rows,
     dataframe_write_csv,
     dataframe_write_parquet,
@@ -241,34 +240,41 @@ class History:
         """
         if not self._history:
             return 0
-        df = dataframe_from_rows(self._history)
         # Accept both str and pathlib.Path; only the suffix matters for routing.
         path_str = str(path)
         suffix = path_str.lower()
-        if suffix.endswith('.parquet'):
-            dataframe_write_parquet(df, path)
-            return len(self._history)
+
+        # JSON paths don't need a tabular round-trip — dump rows directly so
+        # heterogeneous cells (e.g. a column that holds a str in some rows and
+        # a list[str] in others) don't trip polars dtype inference.
         if suffix.endswith('.ndjson') or suffix.endswith('.jsonl'):
             with open(path, 'w', encoding='utf-8') as f:
-                for r in dataframe_to_rows(df):
-                    f.write(json.dumps(r, ensure_ascii=False) + '\n')
+                for r in self._history:
+                    f.write(json.dumps(self._jsonify(r), ensure_ascii=False) + '\n')
             return len(self._history)
         if suffix.endswith('.json'):
             with open(path, 'w', encoding='utf-8') as f:
-                json.dump(dataframe_to_rows(df), f, ensure_ascii=False)
+                json.dump([self._jsonify(r) for r in self._history], f, ensure_ascii=False)
+            return len(self._history)
+
+        # Tabular paths (parquet/csv): stringify list/dict/set cells before
+        # building the DataFrame so polars sees uniform String columns.
+        def _flatten_row(row):
+            flat = {}
+            for key, value in row.items():
+                if isinstance(value, (dict, list, tuple, set, frozenset)):
+                    flat[key] = json.dumps(self._jsonify(value), ensure_ascii=False)
+                else:
+                    flat[key] = value
+            return flat
+
+        flat_rows = [_flatten_row(r) for r in self._history]
+        df = dataframe_from_rows(flat_rows)
+        if suffix.endswith('.parquet'):
+            dataframe_write_parquet(df, path)
             return len(self._history)
         if suffix.endswith('.csv'):
-            rows = dataframe_to_rows(df)
-            flat_rows = []
-            for row in rows:
-                flat_row = {}
-                for key, value in row.items():
-                    if isinstance(value, (dict, list, tuple, set, frozenset)):
-                        flat_row[key] = json.dumps(self._jsonify(value), ensure_ascii=False)
-                    else:
-                        flat_row[key] = value
-                flat_rows.append(flat_row)
-            dataframe_write_csv(dataframe_from_rows(flat_rows), path)
+            dataframe_write_csv(df, path)
             return len(self._history)
         # Default to Parquet if unknown
         dataframe_write_parquet(df, path_str + '.parquet')
