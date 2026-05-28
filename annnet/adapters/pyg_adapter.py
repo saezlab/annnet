@@ -87,6 +87,34 @@ def _endpoint_coeff(graph: AnnNet, edge_id: str, key: str, endpoint) -> float:
     return float(coeff_map.get(endpoint, {}).get('__value', 1.0))
 
 
+def _edge_weight_lookup(weights: dict, edge_id: str) -> float:
+    """Cached-dict variant of :func:`_edge_weight` for tight loops."""
+    w = weights.get(edge_id)
+    return 1.0 if w is None else float(w)
+
+
+def _endpoint_coeff_from_map(coeff_map, endpoint) -> float:
+    """Cached-map variant of :func:`_endpoint_coeff` for tight loops."""
+    if not coeff_map:
+        return 1.0
+    return float(coeff_map.get(endpoint, {}).get('__value', 1.0))
+
+
+def _flush_edge_buckets(data, buckets, device):
+    """Write batched edges out to HeteroData in one tensor build per etype."""
+    for etype, bucket in buckets.items():
+        src_list = bucket['src']
+        if src_list:
+            edge_index = torch.tensor([src_list, bucket['tgt']], dtype=torch.long, device=device)
+            edge_weight = torch.tensor(bucket['w'], dtype=torch.float32, device=device)
+        else:
+            edge_index = torch.empty((2, 0), dtype=torch.long, device=device)
+            edge_weight = torch.empty((0,), dtype=torch.float32, device=device)
+        data[etype].edge_index = edge_index
+        if bucket.get('emit_weight', True):
+            data[etype].edge_weight = edge_weight
+
+
 def to_pyg(
     graph: AnnNet,
     node_features: dict[str, list[str]] | None = None,
@@ -181,7 +209,25 @@ def to_pyg(
             mask = np.array([v in members for v in vids], dtype=bool)
             data[kind][f'{slice_id}_mask'] = torch.from_numpy(mask).to(device)
 
-    # Process binary edges
+    # Cache hot-path lookups once per to_pyg call (each was an O(E)
+    # rebuild on every previous access).
+    edge_weights_cache = dict(graph.edge_weights)
+    edge_attr_cols: set[str] = set()
+    try:
+        from .._support.dataframe_backend import dataframe_columns  # local to avoid hard dep
+
+        edge_attr_cols = set(dataframe_columns(graph.edge_attributes) or ())
+    except Exception:  # noqa: BLE001
+        edge_attr_cols = set()
+    has_stoich = '__source_attr' in edge_attr_cols or '__target_attr' in edge_attr_cols
+
+    node_index = manifest['node_index']
+
+    # Batch binary edges into per-etype Python lists, then build tensors
+    # ONCE per etype. The previous per-edge torch.cat made this O(E^2)
+    # in tensor-copy traffic.
+    edge_buckets: dict[tuple, dict] = {}
+
     for eid, (src, tgt, _etype) in graph.edge_definitions.items():
         u_str = str(src)
         v_str = str(tgt)
@@ -192,40 +238,54 @@ def to_pyg(
         uk = u_row.get('kind', 'default')
         vk = v_row.get('kind', 'default')
 
-        if uk not in manifest['node_index'] or vk not in manifest['node_index']:
+        if uk not in node_index or vk not in node_index:
             continue
 
-        ui = manifest['node_index'][uk].get(u_str)
-        vi = manifest['node_index'][vk].get(v_str)
-
+        ui = node_index[uk].get(u_str)
+        vi = node_index[vk].get(v_str)
         if ui is None or vi is None:
             continue
 
         etype = (uk, 'edge', vk)
+        bucket = edge_buckets.get(etype)
+        if bucket is None:
+            bucket = {'src': [], 'tgt': [], 'w': [], 'emit_weight': True}
+            edge_buckets[etype] = bucket
 
-        if etype not in data.edge_types:
-            data[etype].edge_index = torch.empty((2, 0), dtype=torch.long, device=device)
-            data[etype].edge_weight = torch.empty((0,), dtype=torch.float32, device=device)
+        bucket['src'].append(ui)
+        bucket['tgt'].append(vi)
 
-        edge_idx = torch.tensor([[ui], [vi]], dtype=torch.long, device=device)
-        data[etype].edge_index = torch.cat([data[etype].edge_index, edge_idx], dim=1)
+        w = _edge_weight_lookup(edge_weights_cache, eid)
+        if has_stoich:
+            w *= _endpoint_coeff(graph, eid, '__source_attr', src)
+            w *= _endpoint_coeff(graph, eid, '__target_attr', tgt)
+        bucket['w'].append(w)
 
-        w = _edge_weight(graph, eid)
-        w *= _endpoint_coeff(graph, eid, '__source_attr', src)
-        w *= _endpoint_coeff(graph, eid, '__target_attr', tgt)
-
-        ew = torch.tensor([w], dtype=torch.float32, device=device)
-        data[etype].edge_weight = torch.cat([data[etype].edge_weight, ew])
-
-    # Process hyperedges separately; they are no longer exposed via edge_definitions.
+    # Hyperedges share the same bucket dict so expand-mode contributions
+    # (which can hit the same etype as binary edges) are concatenated, not
+    # overwritten. Reify-mode hits a disjoint 'member_of' etype.
     if hyperedge_mode != 'skip':
-        for eid, spec in graph.hyperedge_definitions.items():
-            if hyperedge_mode == 'reify':
-                _process_hyperedge_reify(graph, eid, spec, data, manifest, device, v_attrs_map)
-            elif hyperedge_mode == 'expand':
-                _process_hyperedge_expand(
-                    graph, eid, spec, data, manifest, device, v_attrs_map, e_attrs_map
+        if hyperedge_mode == 'reify':
+            for eid, spec in graph.hyperedge_definitions.items():
+                _process_hyperedge_reify(
+                    graph, eid, spec, data, manifest, device, v_attrs_map, edge_buckets
                 )
+        elif hyperedge_mode == 'expand':
+            for eid, spec in graph.hyperedge_definitions.items():
+                _process_hyperedge_expand(
+                    graph,
+                    eid,
+                    spec,
+                    data,
+                    manifest,
+                    device,
+                    v_attrs_map,
+                    e_attrs_map,
+                    edge_buckets,
+                    edge_weights_cache,
+                )
+
+    _flush_edge_buckets(data, edge_buckets, device)
 
     # Edge features
     if edge_features:
@@ -252,8 +312,9 @@ def _process_hyperedge_reify(
     manifest: dict,
     device: str,
     v_attrs_map: dict,
+    buckets: dict[tuple, dict],
 ):
-    """Reify hyperedge as virtual hypernode."""
+    """Reify hyperedge as virtual hypernode, batching emitted edges into ``buckets``."""
     if 'hypernode' not in data.node_types:
         data['hypernode'].num_nodes = 0
 
@@ -267,25 +328,25 @@ def _process_hyperedge_reify(
     else:
         members = set(spec.get('members', []))
 
+    node_index = manifest['node_index']
     for u in members:
         u_str = str(u)
         u_row = v_attrs_map.get(u_str, {})
         uk = u_row.get('kind', 'default')
 
-        if uk not in manifest['node_index']:
+        if uk not in node_index:
             continue
-
-        ui = manifest['node_index'][uk].get(u_str)
+        ui = node_index[uk].get(u_str)
         if ui is None:
             continue
 
         etype = (uk, 'member_of', 'hypernode')
-
-        if etype not in data.edge_types:
-            data[etype].edge_index = torch.empty((2, 0), dtype=torch.long, device=device)
-
-        edge_idx = torch.tensor([[ui], [he_idx]], dtype=torch.long, device=device)
-        data[etype].edge_index = torch.cat([data[etype].edge_index, edge_idx], dim=1)
+        bucket = buckets.get(etype)
+        if bucket is None:
+            bucket = {'src': [], 'tgt': [], 'w': [], 'emit_weight': False}
+            buckets[etype] = bucket
+        bucket['src'].append(ui)
+        bucket['tgt'].append(he_idx)
 
 
 def _process_hyperedge_expand(
@@ -297,72 +358,71 @@ def _process_hyperedge_expand(
     device: str,
     v_attrs_map: dict,
     e_attrs_map: dict,
+    buckets: dict[tuple, dict],
+    edge_weights_cache: dict,
 ):
-    """Expand hyperedge into pairwise edges."""
+    """Expand hyperedge into pairwise edges, batched into ``buckets``."""
     directed = bool(spec.get('directed', False))
 
     if directed:
         S = set(spec.get('head', []))
         T = set(spec.get('tail', []))
-
         for t in T:
             for s in S:
                 _add_expanded_edge(
-                    graph, eid, str(t), str(s), data, manifest, device, v_attrs_map, e_attrs_map
+                    eid,
+                    str(t),
+                    str(s),
+                    manifest,
+                    v_attrs_map,
+                    buckets,
+                    edge_weights_cache,
                 )
     else:
         members = list(spec.get('members', []))
         for i in range(len(members)):
             for j in range(i + 1, len(members)):
                 _add_expanded_edge(
-                    graph,
                     eid,
                     str(members[i]),
                     str(members[j]),
-                    data,
                     manifest,
-                    device,
                     v_attrs_map,
-                    e_attrs_map,
+                    buckets,
+                    edge_weights_cache,
                 )
 
 
 def _add_expanded_edge(
-    graph: AnnNet,
     eid: str,
     u_str: str,
     v_str: str,
-    data: HeteroData,
     manifest: dict,
-    device: str,
     v_attrs_map: dict,
-    e_attrs_map: dict,
+    buckets: dict[tuple, dict],
+    edge_weights_cache: dict,
 ):
-    """Add single expanded edge from hyperedge."""
+    """Batch a single expanded pairwise edge from a hyperedge."""
     u_row = v_attrs_map.get(u_str, {})
     v_row = v_attrs_map.get(v_str, {})
 
     uk = u_row.get('kind', 'default')
     vk = v_row.get('kind', 'default')
 
-    if uk not in manifest['node_index'] or vk not in manifest['node_index']:
+    node_index = manifest['node_index']
+    if uk not in node_index or vk not in node_index:
         return
 
-    ui = manifest['node_index'][uk].get(u_str)
-    vi = manifest['node_index'][vk].get(v_str)
-
+    ui = node_index[uk].get(u_str)
+    vi = node_index[vk].get(v_str)
     if ui is None or vi is None:
         return
 
     etype = (uk, 'edge', vk)
-
-    if etype not in data.edge_types:
-        data[etype].edge_index = torch.empty((2, 0), dtype=torch.long, device=device)
-        data[etype].edge_weight = torch.empty((0,), dtype=torch.float32, device=device)
-
-    edge_idx = torch.tensor([[ui], [vi]], dtype=torch.long, device=device)
-    data[etype].edge_index = torch.cat([data[etype].edge_index, edge_idx], dim=1)
-
-    w = _edge_weight(graph, eid)
-    ew = torch.tensor([w], dtype=torch.float32, device=device)
-    data[etype].edge_weight = torch.cat([data[etype].edge_weight, ew])
+    bucket = buckets.get(etype)
+    if bucket is None:
+        bucket = {'src': [], 'tgt': [], 'w': [], 'emit_weight': True}
+        buckets[etype] = bucket
+    bucket['src'].append(ui)
+    bucket['tgt'].append(vi)
+    bucket['w'].append(_edge_weight_lookup(edge_weights_cache, eid))
