@@ -289,10 +289,11 @@ def from_json(path: str | Path) -> AnnNet:
         if vertex_dicts:
             H._add_vertices_bulk(vertex_dicts)
 
-    # edges (binary)
-    # Multilayer graphs use supra-node tuples as endpoints — the internal
-    # bulk edge helper is flat-only, so fall back to scalar insertion.
+    # edges (binary) — bulk path supports both flat IDs and supra-node tuples.
+    # `_add_edges_batch` builds the endpoint cache by detecting
+    # `(vid, layer_coord)` shapes, so multilayer endpoints work unchanged.
     edge_dicts = []
+    edge_attrs_pending: dict = {}
     for e in doc.get('edges', []):
         eid = e.get('id')
         u = deserialize_endpoint(e.get('source'))
@@ -306,18 +307,20 @@ def from_json(path: str | Path) -> AnnNet:
             for k, val in e.items()
             if k not in {'id', 'source', 'target', 'directed', 'weight'}
         }
-        if aspects:
-            # supra-node endpoints: must use scalar add_edges
-            H.add_edges(u, v, edge_id=eid, directed=directed, weight=float(w), parallel='parallel')
-            if attrs:
-                H.attrs.set_edge_attrs(eid, **attrs)
-        else:
-            entry = {'source': u, 'target': v, 'edge_id': eid, 'directed': directed, 'weight': w}
-            if attrs:
-                entry['attributes'] = attrs
-            edge_dicts.append(entry)
+        entry = {
+            'source': u,
+            'target': v,
+            'edge_id': eid,
+            'edge_directed': directed,
+            'weight': float(w),
+        }
+        edge_dicts.append(entry)
+        if attrs:
+            edge_attrs_pending[eid] = attrs
     if edge_dicts:
         H._add_edges_bulk(edge_dicts)
+    if edge_attrs_pending:
+        H.attrs.set_edge_attrs_bulk(edge_attrs_pending)
 
     # hyperedges — bulk insert
     hyper_dicts = []

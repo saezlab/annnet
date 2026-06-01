@@ -804,16 +804,54 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
 
     from annnet.core._records import EdgeRecord, EntityRecord
 
-    # 2. Entity index — translate layer_id back to tuple coords
+    # 2. Entity index — translate layer_id back to tuple coords.
+    # Read columns once and iterate via zip over arrays instead of yielding
+    # one dict per row + a second pass over `_rebuild_entity_indexes`. At UC1
+    # scale (~1.87M supra-nodes) the previous code spent most of read() on
+    # this loop.
     graph._entities = {}
     graph._row_to_entity = {}
-    for ent_row in dataframe_iter_rows(dataframe_read_parquet(path / 'entity_index.parquet')):
-        layer_tuple = layer_dict.get_layer(ent_row['layer_id']) or ('_',)
-        ekey = (ent_row['entity_id'], layer_tuple)
-        rec = EntityRecord(row_idx=int(ent_row['idx']), kind=ent_row.get('type', 'vertex'))
+    graph._vid_to_ekeys = {}
+    ent_df = dataframe_read_parquet(path / 'entity_index.parquet')
+    try:
+        # Polars fast path — direct column access, no per-row dicts.
+        import polars as _pl  # noqa: PLC0415
+
+        if isinstance(ent_df, _pl.DataFrame):
+            ent_ids_col = ent_df['entity_id'].to_list()
+            ent_layer_col = ent_df['layer_id'].to_list()
+            ent_idx_col = ent_df['idx'].to_list()
+            ent_type_col = (
+                ent_df['type'].to_list() if 'type' in ent_df.columns else None
+            )
+        else:
+            raise TypeError('not polars')
+    except (ImportError, TypeError):
+        # Generic backend: fall back to a single iter_rows pass.
+        ent_ids_col, ent_layer_col, ent_idx_col, ent_type_col = [], [], [], []
+        for r in dataframe_iter_rows(ent_df):
+            ent_ids_col.append(r['entity_id'])
+            ent_layer_col.append(r['layer_id'])
+            ent_idx_col.append(r['idx'])
+            ent_type_col.append(r.get('type', 'vertex'))
+
+    layer_cache: dict = {}  # layer_id -> tuple
+    placeholder = ('_',)
+
+    for vid, lid, idx, kind in zip(ent_ids_col, ent_layer_col, ent_idx_col, ent_type_col or [None] * len(ent_ids_col), strict=False):
+        layer_tuple = layer_cache.get(lid)
+        if layer_tuple is None:
+            layer_tuple = layer_dict.get_layer(lid) or placeholder
+            layer_cache[lid] = layer_tuple
+        ekey = (vid, layer_tuple)
+        rec = EntityRecord(row_idx=int(idx), kind=kind or 'vertex')
         graph._entities[ekey] = rec
         graph._row_to_entity[rec.row_idx] = ekey
-    graph._rebuild_entity_indexes()
+        bucket = graph._vid_to_ekeys.get(vid)
+        if bucket is None:
+            graph._vid_to_ekeys[vid] = [ekey]
+        else:
+            bucket.append(ekey)
 
     # 3. Edges — merged metadata + endpoint table
     graph._edges = {}
@@ -916,6 +954,7 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
     if not path.exists() or not (path / 'metadata.json').exists():
         return
 
+    _UNSET = object()  # sentinel for cache miss
     legacy_flat_vertices = {
         vertex_id
         for (vertex_id, coord), rec in graph._entities.items()
@@ -935,15 +974,40 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
         'layer_attributes': [],
     }
 
+    # Cache resolved layer_id -> [list] coercions; at UC1 scale layer IDs
+    # repeat ~1.87M times across vertex_presence rows but only ~100 distinct
+    # values, so caching turns a per-row tuple-to-list copy into a dict hit.
+    _layer_list_cache: dict = {}
+
     def _layer_list(layer_id):
+        cached = _layer_list_cache.get(layer_id, _UNSET)
+        if cached is not _UNSET:
+            return cached
         t = layer_dict.get_layer(layer_id) if layer_id is not None else None
-        return list(t) if t is not None else []
+        out = list(t) if t is not None else []
+        _layer_list_cache[layer_id] = out
+        return out
 
     if (path / 'vertex_presence.parquet').exists():
         vm_df = dataframe_read_parquet(path / 'vertex_presence.parquet')
+        # Read columns once and zip, avoiding the per-row dict allocation
+        # that `dataframe_iter_rows` produces.
+        try:
+            import polars as _pl  # noqa: PLC0415
+
+            if isinstance(vm_df, _pl.DataFrame):
+                vids = vm_df['vertex_id'].to_list()
+                lids = vm_df['layer_id'].to_list()
+            else:
+                raise TypeError('not polars')
+        except (ImportError, TypeError):
+            vids, lids = [], []
+            for r in dataframe_iter_rows(vm_df):
+                vids.append(r['vertex_id'])
+                lids.append(r['layer_id'])
         multilayer['VM'] = [
-            {'node': row['vertex_id'], 'layer': _layer_list(row['layer_id'])}
-            for row in dataframe_iter_rows(vm_df)
+            {'node': vid, 'layer': _layer_list(lid)}
+            for vid, lid in zip(vids, lids, strict=False)
         ]
 
     if (path / 'edge_layers.parquet').exists():

@@ -723,7 +723,13 @@ def _ingest_hyperedge(
     default_slice: str | None,
     default_weight: float,
 ):
-    """Parse hyperedge tables (members OR head/tail)."""
+    """Parse hyperedge tables (members OR head/tail).
+
+    Bulk-collects vertices and hyperedge specs into Python lists, then issues
+    one `_add_vertices_bulk` + one `add_hyperedges_bulk` call. Previously the
+    per-member `G.add_vertices(ent)` + per-slice `G.add_edges(...)` made this
+    O(N×M) in dataframe-concat work.
+    """
     mcol = _pick_first(df, MEMBERS_COLS)
     hcol = _pick_first(df, HEAD_COLS)
     tcol = _pick_first(df, TAIL_COLS)
@@ -738,40 +744,70 @@ def _ingest_hyperedge(
 
     attrs_cols = _attr_columns(df, [c for c in [mcol, hcol, tcol, wcol, lcol] if c])
 
+    unique_vertices: set = set()
+    hyperedges_bulk: list = []
+    attrs_pending: dict = {}
+
     for row in _rows(df):
         weight = (
             float(row[wcol])
             if (wcol and row[wcol] is not None and str(row[wcol]).strip() != '')
             else default_weight
         )
-        slice = (
+        slices = (
             _split_slices(row[lcol]) if lcol else ([] if default_slice is None else [default_slice])
         )
-        if not slice:
-            slice = [default_slice] if default_slice else [None]
+        if not slices:
+            slices = [default_slice] if default_slice else [None]
 
         pure_attrs = {k: row[k] for k in attrs_cols if row[k] is not None}
 
         if mcol:
-            members = _split_set(row[mcol])
-            for ent in members:
-                G.add_vertices(ent)
-            for L in slice:
-                G.add_edges(src=list(members), slice=L, directed=False, weight=weight, **pure_attrs)
+            members = list(_split_set(row[mcol]))
+            unique_vertices.update(members)
+            for L in slices:
+                spec = {
+                    'members': members,
+                    'edge_directed': False,
+                    'weight': weight,
+                }
+                if L is not None:
+                    spec['slice'] = L
+                hyperedges_bulk.append(spec)
+                # `add_hyperedges_bulk` assigns auto-edge_id post-insert; capture
+                # attrs to apply once we know the eids. We tag the spec to
+                # match returned eids by index below.
         else:
-            head = _split_set(row[hcol]) if hcol else set()
-            tail = _split_set(row[tcol]) if tcol else set()
-            for ent in head | tail:
-                G.add_vertices(ent)
-            for L in slice:
-                G.add_edges(
-                    src=list(head),
-                    tgt=list(tail),
-                    slice=L,
-                    directed=True,
-                    weight=weight,
-                    **pure_attrs,
-                )
+            head = list(_split_set(row[hcol])) if hcol else []
+            tail = list(_split_set(row[tcol])) if tcol else []
+            unique_vertices.update(head)
+            unique_vertices.update(tail)
+            for L in slices:
+                spec = {
+                    'head': head,
+                    'tail': tail,
+                    'edge_directed': True,
+                    'weight': weight,
+                }
+                if L is not None:
+                    spec['slice'] = L
+                hyperedges_bulk.append(spec)
+
+        # Track which spec indices need attrs, paired in insertion order.
+        if pure_attrs:
+            attrs_pending[len(hyperedges_bulk) - 1] = pure_attrs
+
+    if unique_vertices:
+        G._add_vertices_bulk([{'vertex_id': v} for v in sorted(unique_vertices)])
+    if hyperedges_bulk:
+        added_eids = G.add_hyperedges_bulk(hyperedges_bulk)
+        if attrs_pending and added_eids:
+            attrs_to_apply: dict = {}
+            for spec_idx, pa in attrs_pending.items():
+                if 0 <= spec_idx < len(added_eids):
+                    attrs_to_apply[added_eids[spec_idx]] = pa
+            if attrs_to_apply:
+                G.attrs.set_edge_attrs_bulk(attrs_to_apply)
 
 
 def _ingest_incidence(
@@ -788,57 +824,62 @@ def _ingest_incidence(
         columns = _columns(df)
         idcol = columns[0]
 
-    # Create / ensure all vertices
+    # Create / ensure all vertices — bulk
     id_values = dataframe_column_values(df, idcol)
-    for nid in id_values:
-        nid_s = _norm(nid)
-        if nid_s:
-            G.add_vertices(nid_s)
+    vertices_bulk = [_norm(nid) for nid in id_values if _norm(nid)]
+    if vertices_bulk:
+        G._add_vertices_bulk([{'vertex_id': v} for v in vertices_bulk])
 
-    # Each remaining column is an edge column; determine kind per column
+    # Each remaining column is an edge column; determine kind per column.
+    # Collect binary edges + hyperedges into bulk buckets, then issue one
+    # `_add_edges_bulk` + one `add_hyperedges_bulk` at the end.
+    binary_edges_bulk: list = []
+    hyperedges_bulk: list = []
+
     for edge_col in columns[1:]:
         if not _is_numeric_column(df, edge_col):
-            # skip non-numeric columns (attribute table?)
             continue
         values = dataframe_column_values(df, edge_col)
-        # collect nonzero indices
         nz_idx: list[int] = [i for i, v in enumerate(values) if float(v or 0) != 0.0]
         if not nz_idx:
             continue
-        # map row index -> entity id
         ents = [_norm(id_values[i]) for i in nz_idx]
         vals = [float(values[i]) for i in nz_idx]
 
         pos = [ents[i] for i, x in enumerate(vals) if x > 0]
         neg = [ents[i] for i, x in enumerate(vals) if x < 0]
 
-        # Determine kind
         if len(pos) == 1 and len(neg) == 1:
-            # directed binary
-            G.add_edges(
-                pos[0],
-                neg[0],
-                directed=True,
-                weight=abs(vals[0]) if len(vals) >= 1 else default_weight,
-                slice=default_slice,
-            )
+            binary_edges_bulk.append({
+                'source': pos[0],
+                'target': neg[0],
+                'edge_directed': True,
+                'weight': abs(vals[0]) if vals else default_weight,
+                'slice': default_slice,
+            })
         elif len(pos) == 2 and len(neg) == 0:
-            # undirected binary (two + entries)
-            G.add_edges(
-                pos[0],
-                pos[1],
-                directed=False,
-                weight=abs(vals[0]) if len(vals) >= 1 else default_weight,
-                slice=default_slice,
-            )
+            binary_edges_bulk.append({
+                'source': pos[0],
+                'target': pos[1],
+                'edge_directed': False,
+                'weight': abs(vals[0]) if vals else default_weight,
+                'slice': default_slice,
+            })
         else:
-            # hyperedge
+            spec = {'edge_directed': bool(neg and pos), 'weight': 1.0}
+            if default_slice is not None:
+                spec['slice'] = default_slice
             if neg and pos:
-                G.add_edges(
-                    src=list(pos), tgt=list(neg), directed=True, weight=1.0, slice=default_slice
-                )
+                spec['head'] = list(pos)
+                spec['tail'] = list(neg)
             else:
-                G.add_edges(src=list(pos or neg), directed=False, weight=1.0, slice=default_slice)
+                spec['members'] = list(pos or neg)
+            hyperedges_bulk.append(spec)
+
+    if binary_edges_bulk:
+        G._add_edges_bulk(binary_edges_bulk)
+    if hyperedges_bulk:
+        G.add_hyperedges_bulk(hyperedges_bulk)
 
 
 def _ingest_adjacency(
@@ -861,9 +902,10 @@ def _ingest_adjacency(
         row_labels = [str(i) for i in range(dataframe_height(df))]
         mat_cols = columns
 
-    # Ensure all vertices exist
-    for nid in row_labels:
-        G.add_vertices(nid)
+    # Ensure all vertices exist — bulk
+    vertices_bulk = [v for v in row_labels if v]
+    if vertices_bulk:
+        G._add_vertices_bulk([{'vertex_id': v} for v in vertices_bulk])
     for c in mat_cols:
         if not _is_numeric_column(df, c):
             raise ValueError('Adjacency ingest: non-numeric column detected in matrix region.')
@@ -873,7 +915,6 @@ def _ingest_adjacency(
     if len(row_labels) != len(mat_cols):
         raise ValueError('Adjacency ingest: number of rows must equal number of columns.')
 
-    # Map col index -> vertex id
     col_ids = [_norm(c) for c in mat_cols]
 
     directed = default_directed
@@ -881,25 +922,29 @@ def _ingest_adjacency(
         sym = np.allclose(A, A.T, atol=1e-12, equal_nan=True)
         directed = not sym
 
+    # Bulk-collect edges from the adjacency matrix using numpy's nonzero index
+    # — previously this was a Python double-loop calling `G.add_edges` per cell
+    # (O(n^2) at adjacency-matrix scale).
+    edges_bulk: list = []
     n = len(row_labels)
-    for i in range(n):
-        for j in range(n):
-            w = A[i, j]
-            if not w or (isinstance(w, float) and math.isclose(w, 0.0)):
-                continue
-            u = row_labels[i]
-            v = col_ids[j]
-            if not directed:
-                # Only use one triangle to avoid duplicates
-                if j < i:
-                    continue
-                if i == j:
-                    continue  # ignore self-loops from diagonal in undirected mode
-                G.add_edges(u, v, directed=False, weight=float(w), slice=default_slice)
-            else:
-                if i == j:
-                    continue  # ignore self-loops by default; adjust if desired
-                G.add_edges(u, v, directed=True, weight=float(w), slice=default_slice)
+    rows_nz, cols_nz = np.nonzero(A)
+    for i, j in zip(rows_nz.tolist(), cols_nz.tolist(), strict=False):
+        w = A[i, j]
+        if isinstance(w, float) and math.isclose(w, 0.0):
+            continue
+        if i == j:
+            continue  # ignore self-loops by default
+        if not directed and j < i:
+            continue  # one triangle only
+        edges_bulk.append({
+            'source': row_labels[i],
+            'target': col_ids[j],
+            'edge_directed': bool(directed),
+            'weight': float(w),
+            'slice': default_slice,
+        })
+    if edges_bulk:
+        G._add_edges_bulk(edges_bulk)
 
 
 def _ingest_lil(
@@ -921,11 +966,17 @@ def _ingest_lil(
 
     attrs_cols = _attr_columns(df, [c for c in [idcol, ncol, wcol, dcol, lcol] if c])
 
+    # Bulk-collect vertices and edges; previously per-vertex `add_vertices`
+    # and per-(neighbour × slice) `add_edges` made this O(N) graph ops.
+    unique_vertices: set = set()
+    edge_rows: list = []
+    attrs_pending: dict = {}  # spec_idx -> attrs
+
     for row in _rows(df):
         u = _norm(row[idcol])
         if not u:
             continue
-        G.add_vertices(u)
+        unique_vertices.add(u)
         nbrs = _split_set(row[ncol])
         w_default = (
             float(row[wcol])
@@ -942,11 +993,37 @@ def _ingest_lil(
         for v in nbrs:
             if not v:
                 continue
-            G.add_vertices(v)
+            unique_vertices.add(v)
             if not slices:
-                G.add_edges(
-                    u, v, directed=directed, weight=w_default, slice=default_slice, **pure_attrs
-                )
+                edge_rows.append({
+                    'source': u,
+                    'target': v,
+                    'edge_directed': directed,
+                    'weight': w_default,
+                    'slice': default_slice,
+                })
+                if pure_attrs:
+                    attrs_pending[len(edge_rows) - 1] = pure_attrs
             else:
                 for L in slices:
-                    G.add_edges(u, v, directed=directed, weight=w_default, slice=L, **pure_attrs)
+                    edge_rows.append({
+                        'source': u,
+                        'target': v,
+                        'edge_directed': directed,
+                        'weight': w_default,
+                        'slice': L,
+                    })
+                    if pure_attrs:
+                        attrs_pending[len(edge_rows) - 1] = pure_attrs
+
+    if unique_vertices:
+        G._add_vertices_bulk([{'vertex_id': v} for v in sorted(unique_vertices)])
+    if edge_rows:
+        added_eids = G._add_edges_bulk(edge_rows)
+        if attrs_pending and added_eids:
+            attrs_to_apply: dict = {}
+            for idx, pa in attrs_pending.items():
+                if 0 <= idx < len(added_eids):
+                    attrs_to_apply[added_eids[idx]] = pa
+            if attrs_to_apply:
+                G.attrs.set_edge_attrs_bulk(attrs_to_apply)

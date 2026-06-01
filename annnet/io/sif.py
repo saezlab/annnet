@@ -150,7 +150,16 @@ def to_sif(
     )
 
     if path:
-        edge_attr_map = _build_edge_attr_map(graph)
+        edge_attr_map = _build_edge_attr_map(graph) or {}
+
+        # Snapshot per-edge directedness / weight maps ONCE for the lossless
+        # branch. Previously each edge called `graph.edge_directed[eid]` /
+        # `graph.edge_weights[eid]` which rebuild full dicts on every access
+        # (O(E^2)). Same trap as PyG / NetworkX.
+        if lossless:
+            edge_directed_map = dict(getattr(graph, 'edge_directed', {}) or {})
+            edge_weights_map = dict(getattr(graph, 'edge_weights', {}) or {})
+            default_directed = True if graph.directed is None else bool(graph.directed)
 
         with open(path, 'w', encoding='utf-8') as f:
             for eid, (src, tgt, _etype) in graph.edge_definitions.items():
@@ -166,17 +175,20 @@ def to_sif(
                 ):
                     continue
 
-                if edge_attr_map is not None:
-                    all_attrs = edge_attr_map.get(eid, {})
-                else:
-                    all_attrs = _get_all_edge_attrs(graph, eid)
+                # When edge_attr_map is empty, the fallback `_get_all_edge_attrs`
+                # used to scan the entire edge_attributes dataframe per edge —
+                # quadratic and pointless (an empty map means nothing to find).
+                all_attrs = edge_attr_map.get(eid, {})
                 rel = all_attrs.get(relation_attr, default_relation)
 
                 f.write(f'{src_str}\t{rel}\t{tgt_str}\n')
 
                 if lossless:
-                    directed = _get_edge_directed(graph, eid)
-                    weight = _get_edge_weight(graph, eid, 1.0)
+                    if eid in edge_directed_map:
+                        directed = bool(edge_directed_map[eid])
+                    else:
+                        directed = default_directed
+                    weight = float(edge_weights_map.get(eid, 1.0))
 
                     manifest['binary_edges'][eid] = {
                         'source': src_str,
