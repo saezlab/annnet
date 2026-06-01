@@ -59,6 +59,40 @@ class TestIgraphAdapter(unittest.TestCase):
         )
 
     @unittest.skipUnless(HAS_IG, 'python-igraph not installed')
+    def test_from_ig_without_manifest_scales(self):
+        """Regression guard: ``_from_ig_without_manifest`` previously did
+        per-vertex / per-edge inserts (O(N²) dataframe-concat). After the
+        bulk-batch fix, 10K-edge bare imports must finish in well under 10s.
+        """
+        import random
+        import time
+
+        from annnet import AnnNet
+        from annnet.adapters.igraph_adapter import (
+            _from_ig_without_manifest,
+            to_igraph,
+        )
+
+        rng = random.Random(7)
+        N, E = 2000, 10_000
+        G = AnnNet(directed=True)
+        G.add_vertices([f'v{i}' for i in range(N)])
+        G.add_edges(
+            [(f'v{rng.randrange(N)}', f'v{rng.randrange(N)}') for _ in range(E)]
+        )
+        igG, _ = to_igraph(G)
+
+        t0 = time.perf_counter()
+        H = _from_ig_without_manifest(igG)
+        elapsed = time.perf_counter() - t0
+
+        self.assertEqual(H.num_vertices, N)
+        self.assertEqual(H.num_edges, E)
+        self.assertLess(
+            elapsed, 10.0,
+            f'_from_ig_without_manifest took {elapsed:.1f}s; expected <10s',
+        )
+
     def test_to_igraph_labels_and_attrs(self):
         from annnet.adapters.igraph_adapter import to_igraph
 

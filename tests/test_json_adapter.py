@@ -59,6 +59,43 @@ class TestJSONAdapter:
         attrs_a = G2.attrs.get_vertex_attrs('A') or {}
         assert '__secret' not in attrs_a
 
+    def test_from_json_multilayer_scales(self, tmpdir_fixture):
+        """Regression guard: the multilayer branch of ``from_json`` previously
+        fell back to per-edge ``H.add_edges(...)`` (the bulk path was thought
+        not to support supra-node endpoints). The bulk path *does* support
+        them, so 50K-edge multilayer imports must run in well under 10s.
+        """
+        import random
+        import time
+
+        from annnet import AnnNet
+
+        rng = random.Random(7)
+        N, n_layers, E = 4000, 30, 50_000
+        G = AnnNet(directed=True)
+        lids = [f'L{i}' for i in range(n_layers)]
+        G.layers.set_aspects(['cond'], {'cond': lids})
+        vids = [f'v{i}' for i in range(N)]
+        for lid in lids:
+            G.add_vertices(vids, layer=(lid,))
+        G.add_edges([
+            (
+                (f'v{rng.randrange(N)}', (lids[rng.randrange(n_layers)],)),
+                (f'v{rng.randrange(N)}', (lids[rng.randrange(n_layers)],)),
+            )
+            for _ in range(E)
+        ])
+
+        path = tmpdir_fixture / 'multilayer.json'
+        to_json(G, path)
+        t0 = time.perf_counter()
+        H = from_json(path)
+        elapsed = time.perf_counter() - t0
+
+        assert H.num_edges == E
+        assert H.nv_supra == G.nv_supra
+        assert elapsed < 10.0, f'from_json multilayer took {elapsed:.1f}s; expected <10s'
+
     def test_ndjson_format(self, complex_graph, tmpdir_fixture):
         G = complex_graph
         write_ndjson(G, tmpdir_fixture / 'ndjson_dir')

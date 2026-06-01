@@ -140,6 +140,44 @@ class TestCSVIO(unittest.TestCase):
         ev = G4.views.edges()
         self.assertEqual(ev.shape[0], 2)
 
+    def test_csv_ingest_paths_scale(self):
+        """Regression guard: the adjacency / LIL / incidence / hyperedge
+        ingest paths used to call ``G.add_vertices(...)`` / ``G.add_edges(...)``
+        per cell / per neighbour / per row. After the bulk-batch refactor a
+        1000×1000 adjacency ingest must complete in under 30s (was minutes).
+        """
+        import random
+        import time
+        import tempfile
+        import os
+
+        import numpy as np
+        import pandas as pd
+
+        rng = random.Random(7)
+        N = 1000
+        A = np.zeros((N, N))
+        for _ in range(20_000):
+            A[rng.randrange(N), rng.randrange(N)] = rng.uniform(-1, 1)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            df = pd.DataFrame(
+                A,
+                index=[f'v{i}' for i in range(N)],
+                columns=[f'v{i}' for i in range(N)],
+            )
+            df.index.name = 'id'
+            adj_path = os.path.join(tmp, 'adj.csv')
+            df.to_csv(adj_path)
+            t0 = time.perf_counter()
+            G = csv_format.from_csv(adj_path)
+            elapsed = time.perf_counter() - t0
+            self.assertGreater(G.num_edges, 1000)
+            self.assertLess(
+                elapsed, 30.0,
+                f'adjacency ingest took {elapsed:.1f}s; expected <30s',
+            )
+
     def test_bad_schema_rejection(self):
         # Build a bogus CSV lacking source/target/members to ensure a hard failure
         bad_buf = io.StringIO()
