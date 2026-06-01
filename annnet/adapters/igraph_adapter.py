@@ -308,7 +308,8 @@ def to_igraph(
         # edge attrs (filtered for public_only)
         eattr_full = _raw_edge_attrs.get(eid, {})
         eattr_filtered = {
-            k: val for k, val in eattr_full.items()
+            k: val
+            for k, val in eattr_full.items()
             if not public_only or not str(k).startswith('__')
         }
         eattr = _attrs_to_dict(eattr_filtered)
@@ -342,13 +343,9 @@ def to_igraph(
         # weight + directedness
         if rec.weight is not None:
             base_weights[eid] = float(rec.weight)
-        edge_directed_dict[eid] = (
-            bool(rec.directed) if rec.directed is not None else default_dir
-        )
+        edge_directed_dict[eid] = bool(rec.directed) if rec.directed is not None else default_dir
 
     # ---------- slices + per-slice weights for manifest ----------
-    all_eids = list(manifest_edges.keys())
-
     requested_lids = set()
     if slice is not None:
         requested_lids.update([slice] if isinstance(slice, str) else list(slice))
@@ -855,7 +852,9 @@ def _from_ig_without_manifest(
 
     for i, vid in enumerate(names):
         _add_vertex(vid)
-        vattrs = {k: user_vattr_cols[k][i] for k in user_vattr_keys if user_vattr_cols[k][i] is not None}
+        vattrs = {
+            k: user_vattr_cols[k][i] for k in user_vattr_keys if user_vattr_cols[k][i] is not None
+        }
         if '__attr_name' in vattrs:
             vattrs['name'] = vattrs.pop('__attr_name')
         if vattrs:

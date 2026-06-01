@@ -77,9 +77,7 @@ class TestIgraphAdapter(unittest.TestCase):
         N, E = 2000, 10_000
         G = AnnNet(directed=True)
         G.add_vertices([f'v{i}' for i in range(N)])
-        G.add_edges(
-            [(f'v{rng.randrange(N)}', f'v{rng.randrange(N)}') for _ in range(E)]
-        )
+        G.add_edges([(f'v{rng.randrange(N)}', f'v{rng.randrange(N)}') for _ in range(E)])
         igG, _ = to_igraph(G)
 
         t0 = time.perf_counter()
@@ -89,7 +87,8 @@ class TestIgraphAdapter(unittest.TestCase):
         self.assertEqual(H.num_vertices, N)
         self.assertEqual(H.num_edges, E)
         self.assertLess(
-            elapsed, 10.0,
+            elapsed,
+            10.0,
             f'_from_ig_without_manifest took {elapsed:.1f}s; expected <10s',
         )
 

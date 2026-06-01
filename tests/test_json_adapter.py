@@ -78,13 +78,15 @@ class TestJSONAdapter:
         vids = [f'v{i}' for i in range(N)]
         for lid in lids:
             G.add_vertices(vids, layer=(lid,))
-        G.add_edges([
-            (
-                (f'v{rng.randrange(N)}', (lids[rng.randrange(n_layers)],)),
-                (f'v{rng.randrange(N)}', (lids[rng.randrange(n_layers)],)),
-            )
-            for _ in range(E)
-        ])
+        G.add_edges(
+            [
+                (
+                    (f'v{rng.randrange(N)}', (lids[rng.randrange(n_layers)],)),
+                    (f'v{rng.randrange(N)}', (lids[rng.randrange(n_layers)],)),
+                )
+                for _ in range(E)
+            ]
+        )
 
         path = tmpdir_fixture / 'multilayer.json'
         to_json(G, path)

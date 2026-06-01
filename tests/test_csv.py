@@ -174,7 +174,8 @@ class TestCSVIO(unittest.TestCase):
             elapsed = time.perf_counter() - t0
             self.assertGreater(G.num_edges, 1000)
             self.assertLess(
-                elapsed, 30.0,
+                elapsed,
+                30.0,
                 f'adjacency ingest took {elapsed:.1f}s; expected <30s',
             )
 

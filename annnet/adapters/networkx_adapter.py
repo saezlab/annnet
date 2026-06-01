@@ -335,9 +335,7 @@ def to_nx(
 
         if rec.weight is not None:
             weights_map[eid] = float(rec.weight)
-        edge_directed_dict[eid] = (
-            bool(rec.directed) if rec.directed is not None else default_dir
-        )
+        edge_directed_dict[eid] = bool(rec.directed) if rec.directed is not None else default_dir
 
     # Base NX graph (binary edges only) — reuse the precomputed directedness map
     # so `_export_binary_graph` skips the polars-backed `_is_directed_eid` probe.
@@ -349,7 +347,6 @@ def to_nx(
         edge_directed_map=edge_directed_dict,
     )
 
-    all_eids = list(manifest_edges.keys())
     slices_section, slice_weights = collect_slice_manifest(
         graph,
         requested_lids=(list(requested_lids) if requested_lids else None),

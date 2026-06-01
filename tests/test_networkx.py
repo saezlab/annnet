@@ -176,9 +176,7 @@ class TestNetworkXAdapter(unittest.TestCase):
         N, E = 2000, 10_000
         G = AnnNet(directed=True)
         G.add_vertices([f'v{i}' for i in range(N)])
-        G.add_edges(
-            [(f'v{rng.randrange(N)}', f'v{rng.randrange(N)}') for _ in range(E)]
-        )
+        G.add_edges([(f'v{rng.randrange(N)}', f'v{rng.randrange(N)}') for _ in range(E)])
         nxG, _ = to_nx(G, directed=True, hyperedge_mode='skip')
 
         t0 = time.perf_counter()
@@ -188,7 +186,9 @@ class TestNetworkXAdapter(unittest.TestCase):
         self.assertEqual(H.num_vertices, N)
         self.assertEqual(H.num_edges, E)
         # Generous upper bound — pre-fix was ~75s for 10K edges on the same box.
-        self.assertLess(elapsed, 10.0, f'from_nx_without_manifest took {elapsed:.1f}s; expected <10s')
+        self.assertLess(
+            elapsed, 10.0, f'from_nx_without_manifest took {elapsed:.1f}s; expected <10s'
+        )
 
     def test_graph_type_matches_directed_flag(self):
         """Sanity check: directed=True should yield a directed MultiGraph; directed=False an undirected MultiGraph."""

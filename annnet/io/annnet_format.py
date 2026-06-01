@@ -815,15 +815,13 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
     ent_df = dataframe_read_parquet(path / 'entity_index.parquet')
     try:
         # Polars fast path — direct column access, no per-row dicts.
-        import polars as _pl  # noqa: PLC0415
+        import polars as _pl
 
         if isinstance(ent_df, _pl.DataFrame):
             ent_ids_col = ent_df['entity_id'].to_list()
             ent_layer_col = ent_df['layer_id'].to_list()
             ent_idx_col = ent_df['idx'].to_list()
-            ent_type_col = (
-                ent_df['type'].to_list() if 'type' in ent_df.columns else None
-            )
+            ent_type_col = ent_df['type'].to_list() if 'type' in ent_df.columns else None
         else:
             raise TypeError('not polars')
     except (ImportError, TypeError):
@@ -838,7 +836,13 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
     layer_cache: dict = {}  # layer_id -> tuple
     placeholder = ('_',)
 
-    for vid, lid, idx, kind in zip(ent_ids_col, ent_layer_col, ent_idx_col, ent_type_col or [None] * len(ent_ids_col), strict=False):
+    for vid, lid, idx, kind in zip(
+        ent_ids_col,
+        ent_layer_col,
+        ent_idx_col,
+        ent_type_col or [None] * len(ent_ids_col),
+        strict=False,
+    ):
         layer_tuple = layer_cache.get(lid)
         if layer_tuple is None:
             layer_tuple = layer_dict.get_layer(lid) or placeholder
@@ -993,7 +997,7 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
         # Read columns once and zip, avoiding the per-row dict allocation
         # that `dataframe_iter_rows` produces.
         try:
-            import polars as _pl  # noqa: PLC0415
+            import polars as _pl
 
             if isinstance(vm_df, _pl.DataFrame):
                 vids = vm_df['vertex_id'].to_list()
@@ -1006,8 +1010,7 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
                 vids.append(r['vertex_id'])
                 lids.append(r['layer_id'])
         multilayer['VM'] = [
-            {'node': vid, 'layer': _layer_list(lid)}
-            for vid, lid in zip(vids, lids, strict=False)
+            {'node': vid, 'layer': _layer_list(lid)} for vid, lid in zip(vids, lids, strict=False)
         ]
 
     if (path / 'edge_layers.parquet').exists():

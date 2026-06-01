@@ -850,21 +850,25 @@ def _ingest_incidence(
         neg = [ents[i] for i, x in enumerate(vals) if x < 0]
 
         if len(pos) == 1 and len(neg) == 1:
-            binary_edges_bulk.append({
-                'source': pos[0],
-                'target': neg[0],
-                'edge_directed': True,
-                'weight': abs(vals[0]) if vals else default_weight,
-                'slice': default_slice,
-            })
+            binary_edges_bulk.append(
+                {
+                    'source': pos[0],
+                    'target': neg[0],
+                    'edge_directed': True,
+                    'weight': abs(vals[0]) if vals else default_weight,
+                    'slice': default_slice,
+                }
+            )
         elif len(pos) == 2 and len(neg) == 0:
-            binary_edges_bulk.append({
-                'source': pos[0],
-                'target': pos[1],
-                'edge_directed': False,
-                'weight': abs(vals[0]) if vals else default_weight,
-                'slice': default_slice,
-            })
+            binary_edges_bulk.append(
+                {
+                    'source': pos[0],
+                    'target': pos[1],
+                    'edge_directed': False,
+                    'weight': abs(vals[0]) if vals else default_weight,
+                    'slice': default_slice,
+                }
+            )
         else:
             spec = {'edge_directed': bool(neg and pos), 'weight': 1.0}
             if default_slice is not None:
@@ -926,7 +930,6 @@ def _ingest_adjacency(
     # — previously this was a Python double-loop calling `G.add_edges` per cell
     # (O(n^2) at adjacency-matrix scale).
     edges_bulk: list = []
-    n = len(row_labels)
     rows_nz, cols_nz = np.nonzero(A)
     for i, j in zip(rows_nz.tolist(), cols_nz.tolist(), strict=False):
         w = A[i, j]
@@ -936,13 +939,15 @@ def _ingest_adjacency(
             continue  # ignore self-loops by default
         if not directed and j < i:
             continue  # one triangle only
-        edges_bulk.append({
-            'source': row_labels[i],
-            'target': col_ids[j],
-            'edge_directed': bool(directed),
-            'weight': float(w),
-            'slice': default_slice,
-        })
+        edges_bulk.append(
+            {
+                'source': row_labels[i],
+                'target': col_ids[j],
+                'edge_directed': bool(directed),
+                'weight': float(w),
+                'slice': default_slice,
+            }
+        )
     if edges_bulk:
         G._add_edges_bulk(edges_bulk)
 
@@ -995,24 +1000,28 @@ def _ingest_lil(
                 continue
             unique_vertices.add(v)
             if not slices:
-                edge_rows.append({
-                    'source': u,
-                    'target': v,
-                    'edge_directed': directed,
-                    'weight': w_default,
-                    'slice': default_slice,
-                })
-                if pure_attrs:
-                    attrs_pending[len(edge_rows) - 1] = pure_attrs
-            else:
-                for L in slices:
-                    edge_rows.append({
+                edge_rows.append(
+                    {
                         'source': u,
                         'target': v,
                         'edge_directed': directed,
                         'weight': w_default,
-                        'slice': L,
-                    })
+                        'slice': default_slice,
+                    }
+                )
+                if pure_attrs:
+                    attrs_pending[len(edge_rows) - 1] = pure_attrs
+            else:
+                for L in slices:
+                    edge_rows.append(
+                        {
+                            'source': u,
+                            'target': v,
+                            'edge_directed': directed,
+                            'weight': w_default,
+                            'slice': L,
+                        }
+                    )
                     if pure_attrs:
                         attrs_pending[len(edge_rows) - 1] = pure_attrs
 
