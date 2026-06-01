@@ -68,6 +68,7 @@ def _export_binary_graph(
     directed: bool = True,
     skip_hyperedges: bool = True,
     public_only: bool = False,
+    edge_directed_map: dict | None = None,
 ):
     """Export AnnNet to NetworkX Multi(Di)Graph without manifest.
 
@@ -147,7 +148,11 @@ def _export_binary_graph(
         else:
             e_attr['__weight'] = weight
 
-        is_dir = _is_directed_eid(graph, eid)
+        is_dir = (
+            edge_directed_map[eid]
+            if edge_directed_map is not None and eid in edge_directed_map
+            else _is_directed_eid(graph, eid)
+        )
         members = S | T
 
         if not is_hyper and len(members) <= 2:
@@ -263,14 +268,6 @@ def to_nx(
             except Exception:  # noqa: BLE001
                 pass
 
-    # Base NX graph (binary edges only)
-    nxG = _export_binary_graph(
-        graph,
-        directed=directed,
-        skip_hyperedges=(hyperedge_mode in ('skip', 'reify')),
-        public_only=public_only,
-    )
-
     # HOIST LOOKUPS
     vertex_attributes_df = graph.vertex_attributes
     edge_attributes_df = graph.edge_attributes
@@ -301,8 +298,13 @@ def to_nx(
             attrs = {k: v for k, v in attrs.items() if not str(k).startswith('__')}
         edge_attrs[eid] = _attrs_to_dict(attrs)
 
-    # Edge topology snapshot - BATCH BUILD
-    manifest_edges = {}
+    # Single pass over edge records: build manifest_edges, weights_map, and
+    # edge_directed_dict together. Previously this was 3 separate iterations.
+    manifest_edges: dict = {}
+    weights_map: dict = {}
+    edge_directed_dict: dict = {}
+    default_dir = True if graph.directed is None else bool(graph.directed)
+
     for eid, rec in _iter_edge_records(graph):
         is_hyper = rec.etype == 'hyper'
         if is_hyper:
@@ -331,10 +333,21 @@ def to_nx(
             tail_map = endpoint_coeff_map(eattr, '__target_attr', T)
             manifest_edges[eid] = (head_map, tail_map, 'hyper')
 
-    # Baseline edge weights
-    weights_map = {
-        eid: float(rec.weight) for eid, rec in _iter_edge_records(graph) if rec.weight is not None
-    }
+        if rec.weight is not None:
+            weights_map[eid] = float(rec.weight)
+        edge_directed_dict[eid] = (
+            bool(rec.directed) if rec.directed is not None else default_dir
+        )
+
+    # Base NX graph (binary edges only) — reuse the precomputed directedness map
+    # so `_export_binary_graph` skips the polars-backed `_is_directed_eid` probe.
+    nxG = _export_binary_graph(
+        graph,
+        directed=directed,
+        skip_hyperedges=(hyperedge_mode in ('skip', 'reify')),
+        public_only=public_only,
+        edge_directed_map=edge_directed_dict,
+    )
 
     all_eids = list(manifest_edges.keys())
     slices_section, slice_weights = collect_slice_manifest(
@@ -369,18 +382,19 @@ def to_nx(
             he_id = f'{reify_prefix}{eid}'
 
             he_attrs = _public(edge_attrs.get(eid, {}))
+            he_directed_flag = edge_directed_dict.get(eid, True)
             he_attrs.update(
                 {
                     'is_hyperedge': True,
                     'eid': eid,
-                    'directed': bool(_is_directed_eid(graph, eid)),
+                    'directed': bool(he_directed_flag),
                     'hyper_weight': float(weights_map.get(eid, 1.0)),
                 }
             )
 
             he_nodes_to_add.append((he_id, he_attrs))
 
-            if _is_directed_eid(graph, eid):
+            if he_directed_flag:
                 for u, coeff in (tail_map or {}).items():
                     membership_edges_to_add.append(
                         (
@@ -440,9 +454,6 @@ def to_nx(
 
         for u, v, key, attrs in membership_edges_to_add:
             nxG.add_edge(u, v, key=key, **attrs)
-
-    # BUILD EDGE_DIRECTED DICT ONCE
-    edge_directed_dict = {eid: bool(_is_directed_eid(graph, eid)) for eid in all_eids}
 
     manifest = {
         'edges': manifest_edges,
@@ -758,34 +769,45 @@ def _from_nx_without_manifest(
 ):
     """Best-effort import from a bare NetworkX graph (no manifest).
 
+    Bulk-batched: collect vertices, edges, and attributes into lists, then
+    issue exactly one bulk insert call per kind. Previous per-vertex /
+    per-edge inserts were O(N²) in dataframe-concat work and timed out at
+    medium scale (85K edges → 600s+).
+
     hyperedge: "none" (default) | "reified"
-      When "reified", detect hyperedge nodes + membership edges and rebuild true hyperedges.
+      When "reified", detect hyperedge nodes + membership edges and rebuild
+      true hyperedges.
     """
 
     from ..core import AnnNet
 
     H = AnnNet()
-    known_vertices = set()
 
-    def ensure_vertex(vertex_id):
-        if vertex_id in known_vertices:
-            return
-        H.add_vertices(vertex_id)
-        known_vertices.add(vertex_id)
+    # 1) Collect vertices + their attrs (skip HE nodes if reified)
+    vertex_buf: list[str] = []
+    vertex_seen: set = set()
+    vertex_attrs_buf: dict[str, dict] = {}
 
-    # 1) Nodes + node attributes (verbatim, but skip HE nodes if reified)
+    def _add_vertex(v):
+        if v not in vertex_seen:
+            vertex_seen.add(v)
+            vertex_buf.append(v)
+
     for v, d in nxG.nodes(data=True):
         if hyperedge == 'reified':
             if bool((d or {}).get(he_node_flag, False)):
                 continue
             if isinstance(v, str) and str(v).startswith(reify_prefix):
                 continue
-        ensure_vertex(v)
+        _add_vertex(v)
         if d:
-            H.attrs.set_vertex_attrs(v, **dict(d))
+            vertex_attrs_buf[v] = dict(d)
 
     # 2) Optionally collect reified hyperedges
-    membership_edges = set()
+    membership_edges: set = set()
+    hyperedges_bulk: list[dict] = []
+    hyperedge_attrs_buf: dict[str, dict] = {}
+
     if hyperedge == 'reified':
         hyperdefs, membership_edges = _nx_collect_reified_optimized(
             nxG,
@@ -803,38 +825,45 @@ def _from_nx_without_manifest(
                 except (TypeError, ValueError):
                     edge_weight = 1.0
             for x in set(head_map) | set(tail_map):
-                ensure_vertex(x)
+                _add_vertex(x)
+
+            attrs = {}
             if directed:
-                H.add_edges(
-                    src=list(head_map),
-                    tgt=list(tail_map),
-                    edge_id=eid,
-                    directed=True,
-                    weight=edge_weight,
-                )
-                H.attrs.set_edge_attrs(
-                    eid,
-                    __source_attr={u: {'__value': c} for u, c in head_map.items()},
-                    __target_attr={v: {'__value': c} for v, c in tail_map.items()},
+                attrs['__source_attr'] = {u: {'__value': c} for u, c in head_map.items()}
+                attrs['__target_attr'] = {v: {'__value': c} for v, c in tail_map.items()}
+                hyperedges_bulk.append(
+                    {
+                        'head': list(head_map),
+                        'tail': list(tail_map),
+                        'edge_id': eid,
+                        'edge_directed': True,
+                        'weight': edge_weight,
+                        'attributes': attrs,
+                    }
                 )
             else:
                 members = list(set(head_map) | set(tail_map))
-                H.add_edges(src=members, edge_id=eid, directed=False, weight=edge_weight)
-                H.attrs.set_edge_attrs(
-                    eid,
-                    __source_attr={u: {'__value': head_map.get(u, 1.0)} for u in members},
-                    __target_attr={v: {'__value': tail_map.get(v, 1.0)} for v in members},
+                attrs['__source_attr'] = {u: {'__value': head_map.get(u, 1.0)} for u in members}
+                attrs['__target_attr'] = {v: {'__value': tail_map.get(v, 1.0)} for v in members}
+                hyperedges_bulk.append(
+                    {
+                        'members': members,
+                        'edge_id': eid,
+                        'edge_directed': False,
+                        'weight': edge_weight,
+                        'attributes': attrs,
+                    }
                 )
-            # copy HE node attrs (minus markers)
+
             clean_attrs = {
                 k: v
                 for k, v in (he_attrs or {}).items()
                 if k not in {he_node_flag, he_id_attr, 'directed', 'hyper_weight'}
             }
             if clean_attrs:
-                H.attrs.set_edge_attrs(eid, **clean_attrs)
+                hyperedge_attrs_buf[eid] = clean_attrs
 
-    # 3) Binary edges (skip membership edges if we consumed them above)
+    # 3) Collect binary edges (skip membership edges consumed by reify)
     is_multi = nxG.is_multigraph()
     is_dir = nxG.is_directed()
     if is_multi:
@@ -848,11 +877,14 @@ def _from_nx_without_manifest(
         def EK(u, v, k):
             return (u, v, None)
 
+    binary_edges_bulk: list[dict] = []
+    edge_attrs_buf: dict[str, dict] = {}
     seen_auto = 0
     for u, v, key, d in iterator:
         if hyperedge == 'reified' and EK(u, v, key) in membership_edges:
-            continue  # this edge was a membership edge; skip importing as binary
+            continue
 
+        d = d or {}
         eid = (d.get('eid') if isinstance(d, dict) else None) or (key if key is not None else None)
         if eid is None:
             seen_auto += 1
@@ -860,16 +892,41 @@ def _from_nx_without_manifest(
 
         e_directed = bool(d.get('directed', is_dir))
         w = d.get('weight', d.get('__weight', 1.0))
-        ensure_vertex(u)
-        ensure_vertex(v)
-        H.add_edges(u, v, edge_id=eid, directed=e_directed, weight=float(w))
+        _add_vertex(u)
+        _add_vertex(v)
+
+        binary_edges_bulk.append(
+            {
+                'source': u,
+                'target': v,
+                'edge_id': eid,
+                'edge_directed': e_directed,
+                'weight': float(w),
+            }
+        )
 
         if isinstance(d, dict) and d:
             clean = dict(d)
             for k in ('eid', 'id', 'key', 'weight', '__weight', 'directed'):
                 clean.pop(k, None)
             if clean:
-                H.attrs.set_edge_attrs(eid, **clean)
+                edge_attrs_buf[eid] = clean
+
+    # 4) BULK INSERTS — one call per kind. This is what the manifest path
+    # already does; the bare path was previously calling add_vertices /
+    # add_edges / set_*_attrs once per element.
+    if vertex_buf:
+        H._add_vertices_bulk([{'vertex_id': v} for v in vertex_buf])
+    if binary_edges_bulk:
+        H._add_edges_bulk(binary_edges_bulk, default_edge_directed=is_dir)
+    if hyperedges_bulk:
+        H.add_hyperedges_bulk(hyperedges_bulk)
+    if vertex_attrs_buf:
+        H.attrs.set_vertex_attrs_bulk(vertex_attrs_buf)
+    if edge_attrs_buf or hyperedge_attrs_buf:
+        merged_edge_attrs = {**edge_attrs_buf, **hyperedge_attrs_buf}
+        H.attrs.set_edge_attrs_bulk(merged_edge_attrs)
+
     return H
 
 

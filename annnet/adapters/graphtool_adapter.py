@@ -86,7 +86,8 @@ def to_graphtool(
     directed = bool(G.directed) if G.directed is not None else True
     gtG = gt.Graph(directed=directed)
 
-    # 2) vertices (only type 'vertex')
+    # 2) vertices (only type 'vertex') — list materialised once and reused
+    # for the manifest's 'vertices.types' section too.
     vmap = {}  # annnet_id -> gt.Vertex
     vp_id = gtG.new_vertex_property('string')
 
@@ -103,55 +104,85 @@ def to_graphtool(
     ep_id = gtG.new_edge_property('string')
     ep_w = gtG.new_edge_property('double')
 
-    # Prepare edge attribute properties if edge_attributes exists
-    edge_props = {}
+    # Pre-load edge_attributes as a dict[eid -> dict] in one pass, instead of
+    # a per-edge polars filter (the previous implementation called
+    # `G.edge_attributes.filter(...)` once per edge — catastrophic at scale).
+    edge_attr_rows: dict[str, dict] = {}
+    edge_attr_cols: list[str] = []
     if (
         hasattr(G, 'edge_attributes')
         and G.edge_attributes is not None
         and G.edge_attributes.height > 0
     ):
-        for col in G.edge_attributes.columns:
-            if col in ('edge_id', 'id', edge_id_property, weight_property):
-                continue
-            # Infer type from first non-null value
-            sample = G.edge_attributes[col].drop_nulls()
-            if len(sample) > 0:
-                first_val = sample[0]
-                if isinstance(first_val, (int, bool)):
-                    edge_props[col] = gtG.new_edge_property('int')
-                elif isinstance(first_val, float):
-                    edge_props[col] = gtG.new_edge_property('double')
-                else:
-                    edge_props[col] = gtG.new_edge_property('string')
+        ea_id_col = 'edge_id' if 'edge_id' in G.edge_attributes.columns else 'id'
+        skip_cols = {'edge_id', 'id', edge_id_property, weight_property}
+        edge_attr_cols = [c for c in G.edge_attributes.columns if c not in skip_cols]
+        for row in dataframe_to_rows(G.edge_attributes):
+            rid = row.get(ea_id_col)
+            if rid is not None:
+                edge_attr_rows[str(rid)] = row
+
+    # Prepare typed edge properties (typed by first non-null sample)
+    edge_props = {}
+    for col in edge_attr_cols:
+        sample = G.edge_attributes[col].drop_nulls()
+        if len(sample) > 0:
+            first_val = sample[0]
+            if isinstance(first_val, (int, bool)):
+                edge_props[col] = gtG.new_edge_property('int')
+            elif isinstance(first_val, float):
+                edge_props[col] = gtG.new_edge_property('double')
+            else:
+                edge_props[col] = gtG.new_edge_property('string')
+
+    # Single pass over edge records: build the graph_tool edges AND every
+    # manifest section that depends on edge records (definitions, weights,
+    # directed, hyperedges). Previously this was 5 separate passes.
+    edges_definitions: dict = {}
+    edges_weights: dict = {}
+    edge_directed: dict = {}
+    hyperedges: dict = {}
 
     for eid, rec in _iter_edge_records(G):
-        if rec.col_idx < 0 or rec.etype == 'hyper':
+        if rec.col_idx < 0:
             continue
+
+        if rec.etype == 'hyper':
+            hyperedges[eid] = (
+                {'directed': True, 'head': list(rec.src or []), 'tail': list(rec.tgt or [])}
+                if rec.tgt is not None
+                else {'directed': False, 'members': list(rec.src or [])}
+            )
+            if rec.directed is not None:
+                edge_directed[eid] = bool(rec.directed)
+            if rec.weight is not None:
+                edges_weights[eid] = rec.weight
+            continue
+
+        # binary edge → also lands in gt graph and manifest 'definitions'
+        edges_definitions[eid] = (rec.src, rec.tgt, rec.etype)
+        if rec.directed is not None:
+            edge_directed[eid] = bool(rec.directed)
+        if rec.weight is not None:
+            edges_weights[eid] = rec.weight
+
         u, v = _project_vertex_id(rec.src), _project_vertex_id(rec.tgt)
         if u not in vmap or v not in vmap:
-            # not a pure vertex-vertex edge; hyperedge/hybrid -> only in manifest
             continue
 
         e = gtG.add_edge(vmap[u], vmap[v])
         ep_id[e] = str(eid)
         ep_w[e] = float(1.0 if rec.weight is None else rec.weight)
 
-        # Set additional edge properties from edge_attributes
-        if edge_props and hasattr(G, 'edge_attributes'):
-            id_col = 'edge_id' if 'edge_id' in G.edge_attributes.columns else 'id'
-            if id_col in G.edge_attributes.columns:
-                row = G.edge_attributes.filter(G.edge_attributes[id_col] == eid)
-                if row.height > 0:
-                    for col, prop in edge_props.items():
-                        if col in row.columns:
-                            val = row[col][0]
-                            if val is not None:
-                                prop[e] = val
+        eattr = edge_attr_rows.get(eid)
+        if eattr and edge_props:
+            for col, prop in edge_props.items():
+                val = eattr.get(col)
+                if val is not None:
+                    prop[e] = val
 
     gtG.ep[edge_id_property] = ep_id
     gtG.ep[weight_property] = ep_w
-
-    # Register additional edge properties
     for col, prop in edge_props.items():
         gtG.ep[col] = prop
 
@@ -167,21 +198,6 @@ def to_graphtool(
     slices_data = _serialize_slice_data(G)
     slice_membership, slice_weights = collect_slice_manifest(G)
 
-    # 6) hyperedges and direction info
-    hyperedges = {
-        eid: (
-            {'directed': True, 'head': list(rec.src or []), 'tail': list(rec.tgt or [])}
-            if rec.tgt is not None
-            else {'directed': False, 'members': list(rec.src or [])}
-        )
-        for eid, rec in _iter_edge_records(G)
-        if rec.col_idx >= 0 and rec.etype == 'hyper'
-    }
-    edge_directed = {
-        eid: bool(rec.directed)
-        for eid, rec in _iter_edge_records(G)
-        if rec.col_idx >= 0 and rec.directed is not None
-    }
     edge_direction_policy = dict(getattr(G, 'edge_direction_policy', {}))
 
     multilayer_manifest = serialize_multilayer_manifest(
@@ -190,7 +206,7 @@ def to_graphtool(
         serialize_edge_layers=serialize_edge_layers,
     )
 
-    # 8) build manifest
+    # 8) build manifest — all dicts already computed in the single pass above
     manifest = {
         'version': 1,
         'graph': {
@@ -198,20 +214,12 @@ def to_graphtool(
             'attributes': dict(getattr(G, 'graph_attributes', {})),
         },
         'vertices': {
-            'types': dict.fromkeys(_iter_vertex_ids(G), 'vertex'),
+            'types': dict.fromkeys(vertex_ids, 'vertex'),
             'attributes': vert_rows,
         },
         'edges': {
-            'definitions': {
-                eid: (rec.src, rec.tgt, rec.etype)
-                for eid, rec in _iter_edge_records(G)
-                if rec.col_idx >= 0 and rec.etype != 'hyper'
-            },
-            'weights': {
-                eid: rec.weight
-                for eid, rec in _iter_edge_records(G)
-                if rec.col_idx >= 0 and rec.weight is not None
-            },
+            'definitions': edges_definitions,
+            'weights': edges_weights,
             'directed': edge_directed,
             'direction_policy': edge_direction_policy,
             'hyperedges': hyperedges,
@@ -276,28 +284,33 @@ def from_graphtool(
     directed = bool(gtG.is_directed())
     G = AnnNet(directed=directed)
 
-    # 1) vertices
+    # 1) vertices — bulk collect, single insert
     vp = gtG.vp.get(vertex_id_property, None)
     v_to_id: dict[Any, str] = {}
-
+    vertex_buf: list[str] = []
     for v in gtG.vertices():
-        if vp is not None:
-            vid = str(vp[v])
-        else:
-            vid = str(int(v))  # fallback: numeric id
-        G.add_vertices(vid)
+        vid = str(vp[v]) if vp is not None else str(int(v))
         v_to_id[v] = vid
+        vertex_buf.append(vid)
+    if vertex_buf:
+        G._add_vertices_bulk([{'vertex_id': v} for v in vertex_buf])
 
-    # 2) edges
+    # 2) edges — bulk collect, single insert
     ep_id = gtG.ep.get(edge_id_property, None)
     ep_w = gtG.ep.get(weight_property, None)
 
+    edges_bulk: list[dict] = []
     for e in gtG.edges():
         u = v_to_id[e.source()]
         v = v_to_id[e.target()]
         eid = str(ep_id[e]) if ep_id is not None else None
         w = float(ep_w[e]) if ep_w is not None else 1.0
-        G.add_edges(u, v, edge_id=eid, weight=w)
+        payload = {'source': u, 'target': v, 'weight': w}
+        if eid is not None:
+            payload['edge_id'] = eid
+        edges_bulk.append(payload)
+    if edges_bulk:
+        G._add_edges_bulk(edges_bulk, default_edge_directed=directed)
 
     # 3) no manifest -> projected graph only
     if manifest is None:
