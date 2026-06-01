@@ -160,6 +160,36 @@ class TestNetworkXAdapter(unittest.TestCase):
         eattrs = manifest.get('edge_attrs', {})
         self.assertFalse(any(_has_private(eattrs.get(e, {})) for e in eattrs))
 
+    def test_from_nx_without_manifest_scales(self):
+        """Regression guard: the bare-import path previously did per-edge
+        ``H.add_edges(...)`` and ``H.attrs.set_edge_attrs(...)`` which made
+        85K-edge imports take >600s. After the bulk-batch fix, 10K-edge
+        imports must finish in well under 10s.
+        """
+        import random
+        import time
+
+        from annnet import AnnNet
+        from annnet.adapters.networkx_adapter import from_nx_without_manifest
+
+        rng = random.Random(7)
+        N, E = 2000, 10_000
+        G = AnnNet(directed=True)
+        G.add_vertices([f'v{i}' for i in range(N)])
+        G.add_edges(
+            [(f'v{rng.randrange(N)}', f'v{rng.randrange(N)}') for _ in range(E)]
+        )
+        nxG, _ = to_nx(G, directed=True, hyperedge_mode='skip')
+
+        t0 = time.perf_counter()
+        H = from_nx_without_manifest(nxG)
+        elapsed = time.perf_counter() - t0
+
+        self.assertEqual(H.num_vertices, N)
+        self.assertEqual(H.num_edges, E)
+        # Generous upper bound — pre-fix was ~75s for 10K edges on the same box.
+        self.assertLess(elapsed, 10.0, f'from_nx_without_manifest took {elapsed:.1f}s; expected <10s')
+
     def test_graph_type_matches_directed_flag(self):
         """Sanity check: directed=True should yield a directed MultiGraph; directed=False an undirected MultiGraph."""
         g = _BUILD_GRAPH()
