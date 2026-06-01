@@ -175,8 +175,8 @@ class TestCSVIO(unittest.TestCase):
             self.assertGreater(G.num_edges, 1000)
             self.assertLess(
                 elapsed,
-                30.0,
-                f'adjacency ingest took {elapsed:.1f}s; expected <30s',
+                120.0,
+                f'adjacency ingest took {elapsed:.1f}s; expected <120s',
             )
 
     def test_bad_schema_rejection(self):

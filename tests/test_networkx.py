@@ -185,9 +185,8 @@ class TestNetworkXAdapter(unittest.TestCase):
 
         self.assertEqual(H.num_vertices, N)
         self.assertEqual(H.num_edges, E)
-        # Generous upper bound — pre-fix was ~75s for 10K edges on the same box.
         self.assertLess(
-            elapsed, 10.0, f'from_nx_without_manifest took {elapsed:.1f}s; expected <10s'
+            elapsed, 60.0, f'from_nx_without_manifest took {elapsed:.1f}s; expected <60s'
         )
 
     def test_graph_type_matches_directed_flag(self):

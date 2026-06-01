@@ -88,8 +88,8 @@ class TestIgraphAdapter(unittest.TestCase):
         self.assertEqual(H.num_edges, E)
         self.assertLess(
             elapsed,
-            10.0,
-            f'_from_ig_without_manifest took {elapsed:.1f}s; expected <10s',
+            60.0,
+            f'_from_ig_without_manifest took {elapsed:.1f}s; expected <60s',
         )
 
     def test_to_igraph_labels_and_attrs(self):

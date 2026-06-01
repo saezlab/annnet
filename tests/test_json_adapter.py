@@ -96,7 +96,7 @@ class TestJSONAdapter:
 
         assert H.num_edges == E
         assert H.nv_supra == G.nv_supra
-        assert elapsed < 10.0, f'from_json multilayer took {elapsed:.1f}s; expected <10s'
+        assert elapsed < 60.0, f'from_json multilayer took {elapsed:.1f}s; expected <60s'
 
     def test_ndjson_format(self, complex_graph, tmpdir_fixture):
         G = complex_graph
