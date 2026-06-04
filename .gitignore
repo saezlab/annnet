@@ -71,5 +71,9 @@ benchmarks/
 .cache/
 .codex
 .coverage
+
+# plans, refactoring, guides
 *PLAN.md
 _*.md
+_repo_analysis/*
+.importscope*
