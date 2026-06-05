@@ -46,6 +46,7 @@ def _export_binary_graph(
     directed: bool = True,
     skip_hyperedges: bool = True,
     public_only: bool = False,
+    slice_filter: set[str] | None = None,
 ):
     """Export AnnNet to igraph.AnnNet without manifest.
 
@@ -73,13 +74,37 @@ def _export_binary_graph(
     """
     import igraph as ig
 
+    # When a slice filter is active we restrict to vertices that belong to
+    # the slice AND to edges in the slice. Without this, callers that ask
+    # for `slice='signaling'` get the full vertex set with only the slice's
+    # edges, which yields a degenerate "signaling subgraph" full of
+    # singleton vertices from every other compartment/layer.
+    slice_vertex_set: set[str] | None = None
+    slice_edge_set: set[str] | None = None
+    if slice_filter:
+        slice_vertex_set = set()
+        slice_edge_set = set()
+        for lid in slice_filter:
+            try:
+                slice_vertex_set.update(graph.slices.vertices(lid))
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                slice_edge_set.update(graph.slices.edges(lid))
+            except Exception:  # noqa: BLE001
+                pass
+
     # Build the vertex universe robustly
     # Start with declared vertices
     base_vertices = set(graph.vertices())
+    if slice_vertex_set is not None:
+        base_vertices &= slice_vertex_set
 
     # Ensure endpoints that appear in edges are also included
     endpoints = set()
-    for _eid, rec in _iter_edge_records(graph):
+    for eid, rec in _iter_edge_records(graph):
+        if slice_edge_set is not None and eid not in slice_edge_set:
+            continue
         if rec.etype == 'hyper':
             S, T = set(rec.src or []), set(rec.tgt or [])
         else:
@@ -87,6 +112,8 @@ def _export_binary_graph(
             T = set() if rec.tgt is None else {rec.tgt}
         endpoints.update(S)
         endpoints.update(T)
+    if slice_vertex_set is not None:
+        endpoints &= slice_vertex_set
 
     vertices = list(dict.fromkeys(list(base_vertices) + list(endpoints)))  # stable order
     vidx = {v: i for i, v in enumerate(vertices)}
@@ -149,6 +176,8 @@ def _export_binary_graph(
     edge_payloads = []  # list of dicts, parallel to edge_tuples
 
     for eid, rec in _iter_edge_records(graph):
+        if slice_edge_set is not None and eid not in slice_edge_set:
+            continue
         if rec.etype == 'hyper':
             S, T = set(rec.src or []), set(rec.tgt or [])
         else:
@@ -266,11 +295,20 @@ def to_igraph(
     """
     # -------------- base igraph build (binary edges only) --------------
     # For "reify" we start with hyperedges skipped, then add them as nodes+membership edges.
+    _slice_filter_for_export: set[str] | None = None
+    if slice is not None:
+        _slice_filter_for_export = set([slice] if isinstance(slice, str) else list(slice))
+    if slices is not None:
+        if _slice_filter_for_export is None:
+            _slice_filter_for_export = set()
+        _slice_filter_for_export.update(slices)
+
     igG = _export_binary_graph(
         graph,
         directed=directed,
         skip_hyperedges=(hyperedge_mode in ('skip', 'reify')),
         public_only=public_only,
+        slice_filter=_slice_filter_for_export,
     )
 
     # -------------- collect vertex/edge attrs for manifest --------------
