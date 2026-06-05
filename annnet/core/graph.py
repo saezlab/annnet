@@ -4107,6 +4107,7 @@ class AnnNet(
         slice=None,
         default_weight=1.0,
         default_edge_directed=None,
+        layer=None,
     ):
         """Add many hyperedges in one pass.
 
@@ -4215,22 +4216,55 @@ class AnnNet(
         except Exception:  # noqa: BLE001
             pass
 
-        all_verts: set = set()
-        for d in items:
-            if 'members' in d and d['members'] is not None:
-                all_verts.update(d['members'])
-            else:
-                all_verts.update(d.get('head', []))
-                all_verts.update(d.get('tail', []))
+        # Per-hyperedge layer override; falls back to batch-level `layer`.
+        # A member endpoint may also be a (vid, layer_coord) tuple, in which
+        # case it carries its own coord and the layer parameter is ignored.
+        def _member_layer(d):
+            return d.get('layer', layer)
 
-        for u in all_verts:
+        def _resolve_member_key(u, layer_for_d):
+            if isinstance(u, tuple) and len(u) == 2 and isinstance(u[1], tuple):
+                # Pre-keyed (vid, layer_coord) endpoint.
+                vid = u[0]
+                coord = self._make_layer_coord(u[1])
+                return vid, coord
+            # Bare string vid: place into layer_for_d if given, else fall
+            # through to the existing placeholder/single-match resolution.
+            if layer_for_d is not None and self._aspects != ('_',):
+                coord = self._make_layer_coord(layer_for_d)
+                return u, coord
+            # No layer hint. If the vid already lives in exactly one real
+            # layer (i.e. it was previously inserted), reuse that coord
+            # instead of forking a placeholder copy — this is what previously
+            # produced the "Ambiguous bare vertex_id" failures.
+            if self._aspects != ('_',):
+                ekeys = self._vid_to_ekeys.get(u, ())
+                real_keys = [k for k in ekeys if k[1] != self._placeholder_layer_coord()]
+                if len(real_keys) == 1:
+                    return u, real_keys[0][1]
             coord = self._resolve_vertex_insert_coord(
                 None, vertex_ids=u, context='_add_hyperedges_batch'
             )
-            ekey = (u, coord)
-            if ekey not in self._entities:
-                idx = len(self._entities)
-                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
+            return u, coord
+
+        # Resolve every member endpoint up-front and stash the resolved keys
+        # back onto each item so the matrix-write loop below doesn't need to
+        # re-resolve.
+        for d in items:
+            layer_for_d = _member_layer(d)
+            if 'members' in d and d['members'] is not None:
+                d['_resolved_members'] = [_resolve_member_key(u, layer_for_d) for u in d['members']]
+            else:
+                d['_resolved_head'] = [_resolve_member_key(u, layer_for_d) for u in d.get('head', [])]
+                d['_resolved_tail'] = [_resolve_member_key(u, layer_for_d) for u in d.get('tail', [])]
+
+        for d in items:
+            for ekey in (
+                d.get('_resolved_members') or []
+            ) + (d.get('_resolved_head') or []) + (d.get('_resolved_tail') or []):
+                if ekey not in self._entities:
+                    idx = len(self._entities)
+                    self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
 
         self._grow_rows_to(len(self._entities))
 
@@ -4302,31 +4336,38 @@ class AnnNet(
                 )
                 self._edges[e_id] = rec
 
+            resolved_members = d.get('_resolved_members')
+            resolved_head = d.get('_resolved_head')
+            resolved_tail = d.get('_resolved_tail')
+
+            def _row_of(ekey):
+                return self._entities[ekey].row_idx
+
             fw = _m_dtype(w)
             if members is not None:
                 if _m_fast_set is not None:
-                    for u in members:
-                        _m_fast_set(self._entity_row(u), col, fw)
+                    for ekey in resolved_members:
+                        _m_fast_set(_row_of(ekey), col, fw)
                 else:
-                    for u in members:
-                        M[self._entity_row(u), col] = fw
-                rec.src = frozenset(members)
+                    for ekey in resolved_members:
+                        M[_row_of(ekey), col] = fw
+                rec.src = frozenset(ekey[0] for ekey in resolved_members)
                 rec.tgt = None
                 rec.directed = False
             else:
                 neg_fw = _m_dtype(-w)
                 if _m_fast_set is not None:
-                    for u in head:
-                        _m_fast_set(self._entity_row(u), col, fw)
-                    for v in tail:
-                        _m_fast_set(self._entity_row(v), col, neg_fw)
+                    for ekey in resolved_head:
+                        _m_fast_set(_row_of(ekey), col, fw)
+                    for ekey in resolved_tail:
+                        _m_fast_set(_row_of(ekey), col, neg_fw)
                 else:
-                    for u in head:
-                        M[self._entity_row(u), col] = fw
-                    for v in tail:
-                        M[self._entity_row(v), col] = neg_fw
-                rec.src = frozenset(head)
-                rec.tgt = frozenset(tail)
+                    for ekey in resolved_head:
+                        M[_row_of(ekey), col] = fw
+                    for ekey in resolved_tail:
+                        M[_row_of(ekey), col] = neg_fw
+                rec.src = frozenset(ekey[0] for ekey in resolved_head)
+                rec.tgt = frozenset(ekey[0] for ekey in resolved_tail)
                 rec.directed = True
 
             rec.weight = w
@@ -4336,11 +4377,12 @@ class AnnNet(
                 if slice_local not in slices:
                     slices[slice_local] = SliceRecord()
                 slices[slice_local]['edges'].add(e_id)
-                if members is not None:
-                    slices[slice_local]['vertices'].update(members)
+                # Slice membership tracks bare vids, not (vid, layer) keys.
+                if resolved_members is not None:
+                    slices[slice_local]['vertices'].update(k[0] for k in resolved_members)
                 else:
-                    slices[slice_local]['vertices'].update(head)
-                    slices[slice_local]['vertices'].update(tail)
+                    slices[slice_local]['vertices'].update(k[0] for k in resolved_head)
+                    slices[slice_local]['vertices'].update(k[0] for k in resolved_tail)
 
             sub_attrs = d.get('attributes') or d.get('attrs') or {}
             flat_attrs = {k: v for k, v in d.items() if k not in _HYPER_BATCH_RESERVED_KEYS}
