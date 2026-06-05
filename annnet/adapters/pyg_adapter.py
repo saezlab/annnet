@@ -228,9 +228,17 @@ def to_pyg(
     # in tensor-copy traffic.
     edge_buckets: dict[tuple, dict] = {}
 
+    def _bare(endpoint):
+        # Multilayer endpoints are (vid, layer_coord) tuples; collapse to
+        # bare vid for kind / attribute lookups (kind is per vertex_id,
+        # not per supra-node).
+        if isinstance(endpoint, tuple) and len(endpoint) == 2 and isinstance(endpoint[0], str):
+            return endpoint[0]
+        return str(endpoint)
+
     for eid, (src, tgt, _etype) in graph.edge_definitions.items():
-        u_str = str(src)
-        v_str = str(tgt)
+        u_str = _bare(src)
+        v_str = _bare(tgt)
 
         u_row = v_attrs_map.get(u_str, {})
         v_row = v_attrs_map.get(v_str, {})

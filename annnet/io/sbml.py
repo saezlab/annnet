@@ -46,8 +46,11 @@ def _isset(obj, setter_name: str) -> bool:
     return bool(fn()) if fn is not None else False
 
 
-def _ensure_boundary_vertices(G, slice: str) -> None:
-    G._add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
+def _ensure_boundary_vertices(G, slice: str, layer: str | None = None) -> None:
+    kw = {'slice': slice}
+    if layer is not None:
+        kw['layer'] = layer
+    G._add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], **kw)
 
 
 # ── SBML reader ───────────────────────────────────────────────────────────────
@@ -110,7 +113,7 @@ def _register_compartments(G, model, default_slice: str) -> None:
 # ── species → vertices ────────────────────────────────────────────────────────
 
 
-def _register_species(G, model, default_slice: str) -> dict[str, str]:
+def _register_species(G, model, default_slice: str, layer: str | None = None) -> dict[str, str]:
     """Add all species as vertices into their compartment slice.
 
     Returns a mapping sid -> compartment_id for later use by reactions.
@@ -156,7 +159,10 @@ def _register_species(G, model, default_slice: str) -> dict[str, str]:
         by_slice.setdefault(target, []).append((sid, attrs) if attrs else sid)
 
     for target_slice, items in by_slice.items():
-        G._add_vertices_bulk(items, slice=target_slice)
+        kw = {'slice': target_slice}
+        if layer is not None:
+            kw['layer'] = layer
+        G._add_vertices_bulk(items, **kw)
 
     return sid_to_compartment
 
@@ -170,6 +176,7 @@ def _graph_from_sbml_model(
     *,
     slice: str = 'default',
     preserve_stoichiometry: bool = True,
+    layer: str | None = None,
 ) -> AnnNet:
     """Build an AnnNet from an SBML model using only libSBML.
 
@@ -187,8 +194,8 @@ def _graph_from_sbml_model(
     G = AnnNet(directed=True) if graph is None else graph
 
     _register_compartments(G, model, slice)
-    sid_to_compartment = _register_species(G, model, slice)
-    _ensure_boundary_vertices(G, slice)
+    sid_to_compartment = _register_species(G, model, slice, layer=layer)
+    _ensure_boundary_vertices(G, slice, layer=layer)
 
     hyperedges: list[dict] = []
     coeffs_map: dict[str, dict[str, float]] = {}
@@ -320,7 +327,10 @@ def _graph_from_sbml_model(
         rxn_slices_map[rid] = rxn_slices
 
     # ── bulk insert ───────────────────────────────────────────────────────────
-    G.add_hyperedges_bulk(hyperedges, slice=slice)
+    kw = {'slice': slice}
+    if layer is not None:
+        kw['layer'] = layer
+    G.add_hyperedges_bulk(hyperedges, **kw)
 
     # ── stoichiometry ─────────────────────────────────────────────────────────
     for rid, coeffs in coeffs_map.items():
@@ -355,6 +365,7 @@ def from_sbml(
     *,
     slice: str = 'default',
     preserve_stoichiometry: bool = True,
+    layer: str | None = None,
 ) -> AnnNet:
     """Read an SBML file into an AnnNet hypergraph.
 
@@ -378,4 +389,5 @@ def from_sbml(
         graph=graph,
         slice=slice,
         preserve_stoichiometry=preserve_stoichiometry,
+        layer=layer,
     )
