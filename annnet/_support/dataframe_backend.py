@@ -297,12 +297,20 @@ def dataframe_upsert_rows(
     *,
     backend: str | None = None,
 ):
-    """Replace rows with matching key values, then append the new rows."""
+    """Replace rows with matching key values, then append the new rows.
+
+    Partial rows (those missing one or more existing non-key columns) are
+    overlaid on the matching existing row so that unmentioned columns keep
+    their prior values. Fully specified rows (or rows for keys that don't
+    exist yet) pass through unchanged.
+    """
     rows = [dict(row) for row in (rows or [])]
     if not rows:
         return clone_dataframe(df)
 
     keys = (key_columns,) if isinstance(key_columns, str) else tuple(key_columns)
+
+    rows = _merge_partial_rows(df, rows, keys)
 
     # Fast path: single-key upsert that adds no new columns can run as
     # native filter + vstack on the underlying backend, avoiding the
@@ -318,6 +326,43 @@ def dataframe_upsert_rows(
         if tuple(row.get(key) for key in keys) not in incoming_keys
     ]
     return _rebuild_dataframe(df, kept + rows, backend=backend)
+
+
+def _merge_partial_rows(df, rows, keys):
+    """Overlay partial incoming rows on existing rows to preserve unmentioned columns.
+
+    Without this, a fast-path replace would null out any column the user
+    didn't include in their update dict — which is correct row-replacement
+    semantics but wrong upsert semantics.
+    """
+    existing_cols = set(dataframe_columns(df) or ())
+    if not existing_cols:
+        return rows
+    non_key_cols = existing_cols - set(keys)
+    if not non_key_cols:
+        return rows
+    needs_merge = any(any(c not in row for c in non_key_cols) for row in rows)
+    if not needs_merge:
+        return rows
+
+    incoming_key_set = {tuple(row.get(k) for k in keys) for row in rows}
+    existing_by_key: dict[tuple, dict] = {}
+    for old in dataframe_to_rows(df):
+        k = tuple(old.get(c) for c in keys)
+        if k in incoming_key_set:
+            existing_by_key[k] = old
+
+    merged: list[dict[str, Any]] = []
+    for row in rows:
+        k = tuple(row.get(c) for c in keys)
+        existing = existing_by_key.get(k)
+        if existing is None:
+            merged.append(row)
+            continue
+        base = {c: existing.get(c) for c in existing_cols if c in existing}
+        base.update(row)
+        merged.append(base)
+    return merged
 
 
 def _fast_concat_rows(df, rows: list[dict[str, Any]], *, backend: str | None = None):
