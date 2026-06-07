@@ -60,6 +60,9 @@ test_venv/
 *venv*/
 test_venv/
 notebooks/data
+# Build-time mirror of the notebooks/ SSoT dirs (see tools/mkdocs_hooks.py)
+docs/tutorials/notebooks/special/
+docs/tutorials/notebooks/use_cases/
 site/
 benchmarks/
 

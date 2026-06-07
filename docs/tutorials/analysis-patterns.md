@@ -14,8 +14,8 @@ states, or timepoints.
 Related pages: [Multilayer and multi-aspect graphs](../explanations/math-multilayer.md),
 [Layers](../reference/core/layers.md), and [Graph](../reference/core/graph.md).
 
-Notebooks: [Multilayer Systems Biology](notebooks/SBUC.ipynb) and
-[HEK293 multilayer network](notebooks/UC2.ipynb).
+Notebooks: [Multilayer math](notebooks/special/sp02_multilayer_math.ipynb) and
+[HEK293 multilayer network](notebooks/use_cases/UC2.ipynb).
 
 ## Hyperedges and Stoichiometry
 
@@ -30,7 +30,7 @@ weighted memberships, or SBML-style reaction structure.
 Related pages: [Incidence representation](../explanations/math-incidence.md),
 [Graph](../reference/core/graph.md), and [SBML](../reference/io/sbml.md).
 
-Notebook: [AnnNet Showcase](notebooks/annnet_showcase.ipynb).
+Notebook: [Directed hyperedges & stoichiometry](notebooks/special/sp01_directed_hyperedges.ipynb).
 
 ## Slices and Scenario Management
 

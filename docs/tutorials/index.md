@@ -7,67 +7,61 @@ This section collects some useful HowTo tutorials and Use Case notebooks.
 <div class="grid cards annnet-feature-cards" markdown>
 
 
--   __Quickstart graph basics__
+-   __Tutorial index__
+
+    ---
+
+    Overview and suggested reading order for the HowTo notebooks.
+
+    [Open notebook](notebooks/tutos/00_tutorial_index.ipynb)
+
+-   __Quickstart__
 
     ---
 
     First hands-on tutorial covering core graph construction and inspection.
 
-    [Open notebook](notebooks/tutos/01_quickstart_graph_basics.ipynb)
+    [Open notebook](notebooks/tutos/01_quickstart.ipynb)
 
--   __Attributes, views, and indexing__
+-   __Attributes & views__
 
     ---
 
     Focused walkthrough of annotations, indexing helpers, and graph views.
 
-    [Open notebook](notebooks/tutos/02_attributes_views_and_indexing.ipynb)
+    [Open notebook](notebooks/tutos/02_attributes_and_views.ipynb)
 
--   __Slices and multilayer workflows__
-
-    ---
-
-    Practical examples for slicing, layering, and multilayer analysis patterns.
-
-    [Open notebook](notebooks/tutos/03_slices_and_multilayer_workflows.ipynb)
-
--   __Traversal and history__
-
-    ---
-
-    Traversal helpers and change-tracking workflows.
-
-    [Open notebook](notebooks/tutos/04_traversal_and_history.ipynb)
-
--   __IO and interoperability__
+-   __IO & interop__
 
     ---
 
     Reading, writing, and exchanging data with supported formats and tools.
 
-    [Open notebook](notebooks/tutos/05_io_and_interoperability.ipynb)
+    [Open notebook](notebooks/tutos/03_io_and_interop.ipynb)
 
-</div>
-
-## API Showcase 
-
-<div class="grid cards annnet-feature-cards" markdown>
-
--   __AnnNet Showcase__
+-   __Slices__
 
     ---
 
-    Broad introduction. Overview of graph structure, interoperability, SBML-related examples, and `.annnet` I/O.
+    Practical examples for slicing and view-based analysis patterns.
 
-    [Open notebook](notebooks/annnet_showcase.ipynb)
+    [Open notebook](notebooks/tutos/04_slices.ipynb)
 
--   __AnnNet Demo__
+-   __Hyperedges__
 
     ---
 
-    Shorter walkthrough. A shorter hands-on introduction to the core object model.
+    Working with hyperedges and higher-order relationships.
 
-    [Open notebook](notebooks/Demo.ipynb)
+    [Open notebook](notebooks/tutos/05_hyperedges.ipynb)
+
+-   __Multilayer__
+
+    ---
+
+    Layering and multilayer analysis workflows.
+
+    [Open notebook](notebooks/tutos/06_multilayer.ipynb)
 
 </div>
 
@@ -75,37 +69,51 @@ This section collects some useful HowTo tutorials and Use Case notebooks.
 
 <div class="grid cards annnet-feature-cards" markdown>
 
--   __Use Case 1__
+-   __Multi-Condition Causal Signaling__
 
     ---
 
-    Use case 1. A rendered use-case notebook for a more guided applied example.
+    Use case 1. A guided applied example using AnnNet as the hub.
 
-    [Open notebook](notebooks/UC1.ipynb)
+    [Open notebook](notebooks/use_cases/UC1.ipynb)
 
--   __Use Case 2__
-
-    ---
-
-    Use case 2. HEK293 multilayer network example.
-
-    [Open notebook](notebooks/UC2.ipynb)
-
--   __Multilayer Systems Biology__
+-   __HEK293 multilayer network__
 
     ---
 
-    Main example. Main multilayer biology example with Narwhals-compatible tables.
+    Use case 2. HEK293 heterogeneous biology graph as one AnnNet object.
 
-    [Open notebook](notebooks/SBUC.ipynb)
+    [Open notebook](notebooks/use_cases/UC2.ipynb)
 
--   __DataFrame backends__
+</div>
+
+## Special topics
+
+<div class="grid cards annnet-feature-cards" markdown>
+
+-   __Directed hyperedges & stoichiometry__
 
     ---
 
-    Lighter environment. Similar example without the Polars dependency.
+    Directed hyperedges and stoichiometric relationships.
 
-    [Open notebook](notebooks/SBUC-nopolars.ipynb)
+    [Open notebook](notebooks/special/sp01_directed_hyperedges.ipynb)
+
+-   __Multilayer math__
+
+    ---
+
+    The mathematical representation behind multilayer graphs.
+
+    [Open notebook](notebooks/special/sp02_multilayer_math.ipynb)
+
+-   __Flexible edge orientation__
+
+    ---
+
+    Mixing directed and undirected edges in one object.
+
+    [Open notebook](notebooks/special/sp03_flexible_edge_orientation.ipynb)
 
 </div>
 
