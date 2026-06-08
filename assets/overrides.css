@@ -1,0 +1,251 @@
+/* Prevent wrapping of code/output blocks; enable horizontal scrolling */
+:root {
+  /* Force a robust monospace stack for code + outputs */
+  --md-code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "DejaVu Sans Mono", "Liberation Mono", "Courier New", monospace;
+  --annnet-surface: color-mix(in srgb, var(--md-default-bg-color) 86%, var(--md-primary-fg-color) 14%);
+  --annnet-surface-strong: color-mix(in srgb, var(--md-default-bg-color) 74%, var(--md-primary-fg-color) 26%);
+  --annnet-border: color-mix(in srgb, var(--md-primary-fg-color) 18%, transparent);
+  --annnet-shadow: 0 18px 40px rgba(7, 33, 41, 0.09);
+}
+
+.md-typeset {
+  --md-code-font-size: 0.74rem; /* smaller code font globally */
+}
+.md-typeset pre,
+.md-typeset code {
+  white-space: pre;           /* do not wrap */
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.md-typeset .highlight pre,
+.md-typeset .highlight code {
+  white-space: pre;           /* override theme pre-wrap */
+  overflow-x: auto;           /* scroll horizontally */
+}
+
+/* Jupyter/MkDocs-Jupyter output containers */
+.jp-OutputArea-output pre,
+.jp-OutputArea-output code,
+.output pre,
+.output code,
+.nb-output pre,
+.nb-output code {
+  white-space: pre !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  overflow-x: auto;
+}
+
+/* Ensure monospace font for ASCII tables */
+.md-typeset pre,
+.md-typeset code,
+.md-typeset kbd,
+.md-typeset samp,
+.md-typeset tt,
+.jp-OutputArea-output pre,
+.nb-output pre,
+.output pre,
+.cell_output pre {
+  font-family: var(--md-code-font) !important;
+  font-size: 0.74rem !important; /* smaller code/output font */
+  font-variant-ligatures: none !important; /* keep spacing exact */
+}
+
+/* Ensure plain text outputs also use monospace + smaller size */
+.jp-OutputArea-output,
+.output,
+.nb-output,
+.output_text,
+.cell_output,
+.jp-OutputArea,
+.jp-RenderedText,
+.rendered_html pre,
+.rendered_html code {
+  font-family: var(--md-code-font) !important;
+  font-size: 0.74rem !important;
+  font-variant-ligatures: none !important;
+}
+
+/* Extra: prevent wrapping everywhere in notebook outputs */
+.md-typeset .jp-OutputArea-output pre,
+.md-typeset .output pre,
+.md-typeset .nb-output pre,
+.md-typeset .cell_output pre,
+.md-typeset .output_text pre {
+  white-space: pre !important;
+  overflow-x: auto !important;
+}
+
+/* Make links clearly clickable */
+.md-typeset a,
+.md-nav__link {
+  color: var(--md-primary-fg-color);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.2em;
+}
+
+.md-typeset a:hover,
+.md-nav__link:hover {
+  color: var(--md-accent-fg-color);
+  text-decoration-color: var(--md-accent-fg-color);
+}
+
+/* Simple badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--md-primary-fg-color);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--md-primary-fg-color);
+  background: color-mix(in srgb, var(--md-primary-fg-color) 12%, transparent);
+  text-decoration: none;
+}
+
+.badge:hover {
+  color: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+  background: color-mix(in srgb, var(--md-accent-fg-color) 16%, transparent);
+}
+
+/* Landing page and docs marketing blocks */
+.annnet-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 2rem;
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--annnet-border);
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--md-accent-fg-color) 22%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--md-primary-fg-color) 10%, var(--md-default-bg-color)) 0%, var(--md-default-bg-color) 62%, color-mix(in srgb, var(--md-accent-fg-color) 10%, var(--md-default-bg-color)) 100%);
+  box-shadow: var(--annnet-shadow);
+}
+
+.annnet-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.annnet-kicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  margin-bottom: 1rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-primary-fg-color) 14%, transparent);
+  color: var(--md-primary-fg-color);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.annnet-hero h1,
+.annnet-section-heading {
+  margin-top: 0;
+}
+
+.annnet-lead {
+  max-width: 52rem;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.annnet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin: 1.25rem 0 0;
+}
+
+.annnet-actions .md-button {
+  margin: 0;
+  border-radius: 999px;
+}
+
+.annnet-actions .md-button--primary {
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--md-primary-fg-color) 22%, transparent);
+}
+
+.md-typeset .annnet-feature-cards {
+  margin: 1.25rem 0 1.75rem;
+}
+
+.md-typeset .annnet-feature-cards > ul {
+  gap: 1rem;
+}
+
+.md-typeset .annnet-feature-cards > ul > li {
+  border: 1px solid var(--annnet-border);
+  border-radius: 1.1rem;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--md-default-bg-color) 92%, var(--md-primary-fg-color) 8%), var(--md-default-bg-color));
+  box-shadow: var(--annnet-shadow);
+}
+
+.md-typeset .annnet-feature-cards > ul > li > p:last-child {
+  margin-bottom: 0;
+}
+
+.md-typeset .annnet-feature-cards a {
+  text-decoration: none;
+}
+
+.md-typeset .annnet-mini-feature-cards {
+  margin: 1rem 0 1.5rem;
+}
+
+.md-typeset .annnet-mini-feature-cards > ul {
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.md-typeset .annnet-mini-feature-cards > ul > li {
+  border: 1px solid var(--annnet-border);
+  border-radius: 1rem;
+  background: var(--annnet-surface);
+  box-shadow: none;
+}
+
+.md-typeset .annnet-mini-feature-cards > ul > li > p:last-child {
+  margin-bottom: 0;
+}
+
+.md-typeset .annnet-mini-feature-cards a {
+  text-decoration: none;
+}
+
+.annnet-callout {
+  padding: 1rem 1.15rem;
+  margin: 1.25rem 0;
+  border-left: 4px solid var(--md-primary-fg-color);
+  border-radius: 0.9rem;
+  background: var(--annnet-surface);
+}
+
+.annnet-visual {
+  margin-top: 1.5rem;
+}
+
+.annnet-visual img {
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid var(--annnet-border);
+}
+
+@media screen and (max-width: 760px) {
+  .annnet-hero {
+    padding: 1.4rem;
+    border-radius: 1.15rem;
+  }
+
+  .annnet-lead {
+    font-size: 0.98rem;
+  }
+}
+
