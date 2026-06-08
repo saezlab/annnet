@@ -384,8 +384,11 @@ class TestGraphBasics(unittest.TestCase):
         self.assertIn('e_intra', g.edge_to_idx)
         self.assertIn('e_couple', g.edge_to_idx)
         self.assertIn('h1', g.edge_to_idx)
-        self.assertEqual(g._edges['e_intra'].ml_kind, None)
-        self.assertEqual(g._edges['e_couple'].ml_kind, None)
+        # Flattened to a single layer: every edge's multilayer role is intra,
+        # with no cross-layer ml_layers assignment.
+        self.assertEqual(g._edges['e_intra'].ml_kind, 'intra')
+        self.assertEqual(g._edges['e_couple'].ml_kind, 'intra')
+        self.assertEqual(g._edges['h1'].ml_kind, 'intra')
         self.assertEqual(g._edges['h1'].ml_layers, None)
         g.add_vertices('isolated')
         self.assertIn('isolated', set(g.vertices()))

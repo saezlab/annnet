@@ -48,6 +48,28 @@ def test_cache_has_flags_track_validity() -> None:
     assert G.cache.has_csc() is False
     assert G.cache.has_adjacency() is False
 
+
+def test_set_edge_coeffs_invalidates_incidence_cache() -> None:
+    """Regression: ``set_edge_coeffs`` mutates ``_matrix`` directly, so it must
+    invalidate the derived sparse caches. ``incidence_as_lists`` reads the
+    cached CSR (via ``_get_csr``); without invalidation a read materialized
+    *before* the edit returns the stale coefficient."""
+    G = _build_graph()
+
+    # Materialize the CSR cache before editing so the bug (if present) triggers.
+    before = G.ops.incidence_as_lists(values=True)
+    assert G.cache.has_csr() is True
+    a_idx = list(G.ops.incidence_as_lists()).index('A')
+    e1_col = next(j for j in range(G.ne) if G.get_edge(j).edge_id == 'e1')
+    assert before['A'][G.ops.incidence_as_lists()['A'].index(e1_col)] == 2.5
+
+    G.set_edge_coeffs('e1', {'A': 4.0})
+
+    after = G.ops.incidence_as_lists(values=True)
+    cols = G.ops.incidence_as_lists()
+    assert after['A'][cols['A'].index(e1_col)] == 4.0
+    assert a_idx == list(cols).index('A')  # row ordering unchanged
+
     G.cache.build(['csr'])
     assert G.cache.has_csr() is True
     assert G.cache.has_csc() is False
