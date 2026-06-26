@@ -1235,9 +1235,18 @@ class LayerAccessor:
 
     @staticmethod
     def _effective_ml_edge_kind(rec):
-        """Resolve the multilayer selector kind from canonical edge state."""
+        """Internal *routing* key for the supra builders.
+
+        ``ml_kind`` is the pure multilayer role (intra/inter/coupling); ``etype``
+        is the structure (binary/hyper). The two are stored independently. This
+        helper folds them back into the single key the supra dispatch switches
+        on: hyperedges route as ``'hyper'`` unless they are cross-layer
+        (inter/coupling, handled by dedicated hyper-aware branches), while binary
+        edges route by their role. The ``'hyper'`` key is derived here, never
+        stored in ``ml_kind``.
+        """
         if rec.etype == 'hyper':
-            return rec.ml_kind or 'hyper'
+            return rec.ml_kind if rec.ml_kind in ('inter', 'coupling') else 'hyper'
         return rec.ml_kind
 
     @staticmethod

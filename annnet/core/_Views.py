@@ -593,16 +593,18 @@ class ViewsClass:
         Vectorized implementation avoids per-edge scans.
         """
         if not self._col_to_edge:
-            return empty_dataframe({'edge_id': 'text', 'kind': 'text'})
+            return empty_dataframe({'edge_id': 'text', 'kind': 'text', 'ml_kind': 'text'})
 
         eids_raw = list(self._col_to_edge.values())
         eids_str = [str(eid) for eid in eids_raw]  # Stringified for DataFrame
 
         _default_dir = True if self.directed is None else self.directed
         _edge_recs = [self._edges[eid] for eid in eids_raw]
-        kinds = [
-            'hyper' if rec.etype == 'hyper' else (rec.ml_kind or 'binary') for rec in _edge_recs
-        ]
+        # Two orthogonal axes, kept in separate columns:
+        #   kind    -> structure (binary / hyper)
+        #   ml_kind -> multilayer role (intra / inter / coupling, or None)
+        kinds = ['hyper' if rec.etype == 'hyper' else 'binary' for rec in _edge_recs]
+        ml_kinds = [rec.ml_kind for rec in _edge_recs]
 
         need_global = include_weight or resolved_weight
         global_w = [rec.weight for rec in _edge_recs] if need_global else None
@@ -650,7 +652,7 @@ class ViewsClass:
                     members.append(None)
 
         # Use stringified IDs in DataFrame
-        cols = {'edge_id': eids_str, 'kind': kinds}
+        cols = {'edge_id': eids_str, 'kind': kinds, 'ml_kind': ml_kinds}
         if include_directed:
             cols['directed'] = dirs
         if include_weight:
@@ -677,6 +679,7 @@ class ViewsClass:
             row = {
                 'edge_id': eid,
                 'kind': kinds[idx],
+                'ml_kind': ml_kinds[idx],
                 'source': src[idx],
                 'target': tgt[idx],
                 'edge_type': etype[idx],

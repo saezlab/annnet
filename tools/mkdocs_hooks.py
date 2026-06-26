@@ -24,14 +24,24 @@ warnings.filterwarnings(
 )
 
 
+# Single source of truth: these notebooks/ subdirs are mirrored into the docs
+# tree at build time so editing them auto-updates the published docs. The
+# tutos/ notebooks already live under docs/ directly and are their own SSoT.
+_MIRRORED_NOTEBOOK_DIRS = ("special", "use_cases")
+
+
 def _sync_tutorial_notebooks() -> None:
-    """Mirror notebooks/tu*/ into docs/tutorials/notebooks for MkDocs."""
+    """Mirror the SSoT notebooks/ subdirs into docs/tutorials/notebooks for MkDocs."""
     repo_root = Path(__file__).resolve().parent.parent
     notebooks_root = repo_root / "notebooks"
     tutorials_root = repo_root / "docs" / "tutorials" / "notebooks"
 
-    for source_dir in sorted(path for path in notebooks_root.glob("tu*") if path.is_dir()):
-        destination_dir = tutorials_root / source_dir.name
+    for name in _MIRRORED_NOTEBOOK_DIRS:
+        source_dir = notebooks_root / name
+        if not source_dir.is_dir():
+            continue
+
+        destination_dir = tutorials_root / name
         destination_dir.mkdir(parents=True, exist_ok=True)
 
         for notebook in sorted(source_dir.glob("*.ipynb")):

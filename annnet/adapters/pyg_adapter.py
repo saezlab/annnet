@@ -178,7 +178,7 @@ def to_pyg(
     kind_to_vertices: dict[str, list[str]] = {}
     for uid in _iter_vertex_ids(graph):
         row = v_attrs_map.get(str(uid), {})
-        kind = row.get('kind', 'default')
+        kind = row.get('kind') or 'default'
 
         if kind not in kind_to_vertices:
             kind_to_vertices[kind] = []
@@ -228,15 +228,23 @@ def to_pyg(
     # in tensor-copy traffic.
     edge_buckets: dict[tuple, dict] = {}
 
+    def _bare(endpoint):
+        # Multilayer endpoints are (vid, layer_coord) tuples; collapse to
+        # bare vid for kind / attribute lookups (kind is per vertex_id,
+        # not per supra-node).
+        if isinstance(endpoint, tuple) and len(endpoint) == 2 and isinstance(endpoint[0], str):
+            return endpoint[0]
+        return str(endpoint)
+
     for eid, (src, tgt, _etype) in graph.edge_definitions.items():
-        u_str = str(src)
-        v_str = str(tgt)
+        u_str = _bare(src)
+        v_str = _bare(tgt)
 
         u_row = v_attrs_map.get(u_str, {})
         v_row = v_attrs_map.get(v_str, {})
 
-        uk = u_row.get('kind', 'default')
-        vk = v_row.get('kind', 'default')
+        uk = u_row.get('kind') or 'default'
+        vk = v_row.get('kind') or 'default'
 
         if uk not in node_index or vk not in node_index:
             continue
@@ -332,7 +340,7 @@ def _process_hyperedge_reify(
     for u in members:
         u_str = str(u)
         u_row = v_attrs_map.get(u_str, {})
-        uk = u_row.get('kind', 'default')
+        uk = u_row.get('kind') or 'default'
 
         if uk not in node_index:
             continue
@@ -406,8 +414,8 @@ def _add_expanded_edge(
     u_row = v_attrs_map.get(u_str, {})
     v_row = v_attrs_map.get(v_str, {})
 
-    uk = u_row.get('kind', 'default')
-    vk = v_row.get('kind', 'default')
+    uk = u_row.get('kind') or 'default'
+    vk = v_row.get('kind') or 'default'
 
     node_index = manifest['node_index']
     if uk not in node_index or vk not in node_index:

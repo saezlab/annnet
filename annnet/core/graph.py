@@ -133,6 +133,10 @@ _HYPER_BATCH_RESERVED_KEYS = frozenset(
         'directed',
         'attributes',
         'attrs',
+        'layer',
+        '_resolved_members',
+        '_resolved_head',
+        '_resolved_tail',
     }
 )
 
@@ -1232,14 +1236,60 @@ class AnnNet(
 
     @staticmethod
     def _infer_ml_kind(src_key, tgt_key):
-        """Infer multilayer edge kind from two supra-node endpoint keys."""
+        """Infer the multilayer *role* of a binary edge from its endpoint keys.
+
+        Pure role, decoupled from structure (``etype``):
+
+        - endpoints in the same layer                 -> ``"intra"``
+        - different layers, but the same vertex id     -> ``"coupling"``
+        - different layers and different vertices      -> ``"inter"``
+
+        A self-loop (same vertex, same layer) is therefore ``intra``; coupling is
+        its cross-layer generalization.
+        """
         vid_s, lay_s = src_key
         vid_t, lay_t = tgt_key
-        if vid_s == vid_t:
-            return 'coupling'
         if lay_s == lay_t:
             return 'intra'
+        if vid_s == vid_t:
+            return 'coupling'
         return 'inter'
+
+    @staticmethod
+    def _infer_hyper_ml(head_keys, tail_keys):
+        """Infer ``(ml_kind, ml_layers)`` for a hyperedge from its endpoints.
+
+        ``ml_kind`` is the pure multilayer role — the same intra/inter/coupling
+        rule as :meth:`_infer_ml_kind`, generalized over many endpoints. Structure
+        (binary vs hyper) lives in ``etype`` and is *not* encoded here.
+
+        ``head_keys``/``tail_keys`` are iterables of resolved ``(vid, coord)``
+        supra-node keys (pass all members as ``head_keys`` and ``None`` for
+        ``tail_keys`` for an undirected hyperedge). The layer coordinate is read
+        straight off each key, so this adds only an O(endpoints) scan over data
+        the caller has already materialized — no registry lookups. Callers guard
+        flat graphs and never reach this.
+
+        - all endpoints in one layer        -> ``("intra", coord)``
+        - many layers, every endpoint same vertex id -> ``("coupling", …)``
+        - many layers, different vertices    -> ``("inter", …)``
+
+        ``ml_layers`` is the single layer ``coord`` for intra; for cross-layer
+        edges it is ``(head_layer, tail_layer)`` when head and tail are each
+        confined to one layer, else ``None`` (role still set, but the 2-tuple
+        layer slot cannot represent a >2-layer split).
+        """
+        head_layers = {k[1] for k in head_keys} if head_keys else set()
+        tail_layers = {k[1] for k in tail_keys} if tail_keys else set()
+        all_layers = head_layers | tail_layers
+        if len(all_layers) <= 1:
+            return 'intra', (next(iter(all_layers)) if all_layers else None)
+        head_vids = {k[0] for k in head_keys} if head_keys else set()
+        tail_vids = {k[0] for k in tail_keys} if tail_keys else set()
+        kind = 'coupling' if len(head_vids | tail_vids) == 1 else 'inter'
+        if len(head_layers) == 1 and len(tail_layers) == 1:
+            return kind, (next(iter(head_layers)), next(iter(tail_layers)))
+        return kind, None
 
     def _find_parallel_edges(self, endpoint_set, etype):
         """Return edge_ids with the same endpoint set (any direction)."""
@@ -1441,6 +1491,7 @@ class AnnNet(
             default_propagate = kwargs.pop('default_propagate', 'none')
             default_slice_weight = kwargs.pop('default_slice_weight', None)
             default_edge_directed = kwargs.pop('default_edge_directed', None)
+            default_layer = kwargs.pop('layer', None)
             if kwargs:
                 unexpected = ', '.join(sorted(kwargs))
                 raise TypeError(f'Unexpected keyword arguments for batch add_edges: {unexpected}')
@@ -1492,6 +1543,7 @@ class AnnNet(
                     slice=default_slice,
                     default_weight=default_weight,
                     default_edge_directed=default_edge_directed,
+                    layer=default_layer,
                 )
 
             if kinds <= {'binary'}:
@@ -1515,6 +1567,7 @@ class AnnNet(
                             slice=default_slice,
                             default_weight=default_weight,
                             default_edge_directed=default_edge_directed,
+                            layer=default_layer,
                         )
                     )
                 else:
@@ -1781,10 +1834,14 @@ class AnnNet(
             tgt_store = frozenset(tgt_nodes) if tgt_nodes else None
             rec_etype = 'hyper'
 
-        # ── 9. Infer ml_kind for supra-node edges ──────────────────────────
+        # ── 9. Infer ml_kind (multilayer role) ─────────────────────────────
+        # Every edge carries a role. A flat graph is a single layer, so every
+        # edge is intra. Otherwise classify from the endpoints' layers.
         ml_kind = None
         ml_layers = None
-        if (
+        if not self.is_multilayer:
+            ml_kind = 'intra'
+        elif (
             etype == 'binary'
             and isinstance(src, tuple)
             and len(src) == 2
@@ -1795,6 +1852,10 @@ class AnnNet(
         ):
             ml_kind = self._infer_ml_kind(src, tgt)
             ml_layers = (src[1], tgt[1])
+        elif etype == 'hyper':
+            # Hyperedge: classify from the layers its members live in
+            # (src_nodes = head/members, tgt_nodes = tail; both are supra keys).
+            ml_kind, ml_layers = self._infer_hyper_ml(src_nodes, tgt_nodes)
 
         # ── 10. Store / update EdgeRecord ──────────────────────────────────
         if is_new:
@@ -1901,6 +1962,9 @@ class AnnNet(
         col = self._edges[edge_id].col_idx
         for vid, coeff in coeffs.items():
             self._matrix[self._entity_row(vid), col] = float(coeff)
+        # Direct ``_matrix`` mutation: drop derived sparse caches so subsequent
+        # incidence/adjacency reads reflect the new coefficients.
+        self._invalidate_sparse_caches()
 
     def _propagate_to_shared_slices(self, edge_id, source, target):
         """INTERNAL: Add an edge to all slices that already contain **both** endpoints.
@@ -3923,6 +3987,8 @@ class AnnNet(
         _slice_vids: dict = {}
         _slice_weights: list = []
 
+        _is_multilayer = self._aspects != ('_',)  # hoisted out of the per-edge loop
+
         for d in norm:
             s, t = d['source'], d['target']
             w = d['weight']
@@ -3942,10 +4008,14 @@ class AnnNet(
             t_idx = endpoint_cache[t]
             fw = _m_dtype(w)
 
-            # Multilayer endpoint detection — mirrors the singular _add_edge_impl
+            # Multilayer role — mirrors the singular _add_edge path. Flat graphs
+            # are a single layer, so every edge is intra; otherwise classify from
+            # the endpoints' layers when they are supra-node keys.
             ml_kind = None
             ml_layers = None
-            if (
+            if not _is_multilayer:
+                ml_kind = 'intra'
+            elif (
                 isinstance(s, tuple)
                 and len(s) == 2
                 and isinstance(s[1], tuple)
@@ -4107,6 +4177,7 @@ class AnnNet(
         slice=None,
         default_weight=1.0,
         default_edge_directed=None,
+        layer=None,
     ):
         """Add many hyperedges in one pass.
 
@@ -4215,22 +4286,61 @@ class AnnNet(
         except Exception:  # noqa: BLE001
             pass
 
-        all_verts: set = set()
-        for d in items:
-            if 'members' in d and d['members'] is not None:
-                all_verts.update(d['members'])
-            else:
-                all_verts.update(d.get('head', []))
-                all_verts.update(d.get('tail', []))
+        # Per-hyperedge layer override; falls back to batch-level `layer`.
+        # A member endpoint may also be a (vid, layer_coord) tuple, in which
+        # case it carries its own coord and the layer parameter is ignored.
+        def _member_layer(d):
+            return d.get('layer', layer)
 
-        for u in all_verts:
+        def _resolve_member_key(u, layer_for_d):
+            if isinstance(u, tuple) and len(u) == 2 and isinstance(u[1], tuple):
+                # Pre-keyed (vid, layer_coord) endpoint.
+                vid = u[0]
+                coord = self._make_layer_coord(u[1])
+                return vid, coord
+            # Bare string vid: place into layer_for_d if given, else fall
+            # through to the existing placeholder/single-match resolution.
+            if layer_for_d is not None and self._aspects != ('_',):
+                coord = self._make_layer_coord(layer_for_d)
+                return u, coord
+            # No layer hint. If the vid already lives in exactly one real
+            # layer (i.e. it was previously inserted), reuse that coord
+            # instead of forking a placeholder copy — this is what previously
+            # produced the "Ambiguous bare vertex_id" failures.
+            if self._aspects != ('_',):
+                ekeys = self._vid_to_ekeys.get(u, ())
+                real_keys = [k for k in ekeys if k[1] != self._placeholder_layer_coord()]
+                if len(real_keys) == 1:
+                    return u, real_keys[0][1]
             coord = self._resolve_vertex_insert_coord(
                 None, vertex_ids=u, context='_add_hyperedges_batch'
             )
-            ekey = (u, coord)
-            if ekey not in self._entities:
-                idx = len(self._entities)
-                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
+            return u, coord
+
+        # Resolve every member endpoint up-front and stash the resolved keys
+        # back onto each item so the matrix-write loop below doesn't need to
+        # re-resolve.
+        for d in items:
+            layer_for_d = _member_layer(d)
+            if 'members' in d and d['members'] is not None:
+                d['_resolved_members'] = [_resolve_member_key(u, layer_for_d) for u in d['members']]
+            else:
+                d['_resolved_head'] = [
+                    _resolve_member_key(u, layer_for_d) for u in d.get('head', [])
+                ]
+                d['_resolved_tail'] = [
+                    _resolve_member_key(u, layer_for_d) for u in d.get('tail', [])
+                ]
+
+        for d in items:
+            for ekey in (
+                (d.get('_resolved_members') or [])
+                + (d.get('_resolved_head') or [])
+                + (d.get('_resolved_tail') or [])
+            ):
+                if ekey not in self._entities:
+                    idx = len(self._entities)
+                    self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
 
         self._grow_rows_to(len(self._entities))
 
@@ -4248,8 +4358,6 @@ class AnnNet(
 
         for d in items:
             members = d.get('members')
-            head = d.get('head')
-            tail = d.get('tail')
             slice_local = d.get('slice', slice)
             w = float(d.get('weight', default_weight))
             e_id = d.get('edge_id')
@@ -4260,14 +4368,48 @@ class AnnNet(
             if e_id is None:
                 e_id = self._get_next_edge_id()
 
+            # Classify the hyperedge by its multilayer role from the layers of
+            # its (already resolved) endpoints. A flat graph is a single layer,
+            # so the role is always intra (no scan needed).
+            if self._aspects == ('_',):
+                ml_kind_for_e, ml_layers_for_e = 'intra', None
+            else:
+                ml_kind_for_e, ml_layers_for_e = self._infer_hyper_ml(
+                    d.get('_resolved_head') or d.get('_resolved_members'),
+                    d.get('_resolved_tail'),
+                )
+
             if e_id in self._edges:
                 rec = self._edges[e_id]
                 col = rec.col_idx
+                # When the edge already has an ml_layers tag, use it to
+                # resolve old bare-vid members back to the correct supra-
+                # node. Without this, an in-place hyperedge update on a
+                # multilayer graph raises ambiguous-vid as soon as the
+                # protein has more than one layer presence.
+                old_layer_coord = (
+                    rec.ml_layers
+                    if isinstance(rec.ml_layers, tuple)
+                    and rec.ml_layers
+                    and isinstance(rec.ml_layers[0], str)
+                    else None
+                )
+
+                # Bind the closure variable explicitly via default arg so
+                # mutations to `old_layer_coord` in subsequent iterations
+                # don't leak into already-built loop bodies (B023).
+                def _row_for_old(v, _olc=old_layer_coord):
+                    if isinstance(v, tuple) and len(v) == 2 and isinstance(v[1], tuple):
+                        return self._entities[v].row_idx
+                    if _olc is not None:
+                        return self._entities[(v, _olc)].row_idx
+                    return self._entity_row(v)
+
                 if rec.etype == 'hyper':
                     old_verts = rec.src if rec.tgt is None else (rec.src | rec.tgt)
                     for vid in old_verts:
                         try:
-                            r = self._entity_row(vid)
+                            r = _row_for_old(vid)
                             if _m_fast_set is not None:
                                 _m_fast_set(r, col, 0)
                             else:
@@ -4279,7 +4421,7 @@ class AnnNet(
                         if vid is None:
                             continue
                         try:
-                            r = self._entity_row(vid)
+                            r = _row_for_old(vid)
                             if _m_fast_set is not None:
                                 _m_fast_set(r, col, 0)
                             else:
@@ -4296,51 +4438,62 @@ class AnnNet(
                     directed=False,
                     etype='hyper',
                     col_idx=col,
-                    ml_kind=None,
-                    ml_layers=None,
+                    ml_kind=ml_kind_for_e,
+                    ml_layers=ml_layers_for_e,
                     direction_policy=None,
                 )
                 self._edges[e_id] = rec
 
+            resolved_members = d.get('_resolved_members')
+            resolved_head = d.get('_resolved_head')
+            resolved_tail = d.get('_resolved_tail')
+
+            def _row_of(ekey):
+                return self._entities[ekey].row_idx
+
             fw = _m_dtype(w)
             if members is not None:
                 if _m_fast_set is not None:
-                    for u in members:
-                        _m_fast_set(self._entity_row(u), col, fw)
+                    for ekey in resolved_members:
+                        _m_fast_set(_row_of(ekey), col, fw)
                 else:
-                    for u in members:
-                        M[self._entity_row(u), col] = fw
-                rec.src = frozenset(members)
+                    for ekey in resolved_members:
+                        M[_row_of(ekey), col] = fw
+                rec.src = frozenset(ekey[0] for ekey in resolved_members)
                 rec.tgt = None
                 rec.directed = False
             else:
                 neg_fw = _m_dtype(-w)
                 if _m_fast_set is not None:
-                    for u in head:
-                        _m_fast_set(self._entity_row(u), col, fw)
-                    for v in tail:
-                        _m_fast_set(self._entity_row(v), col, neg_fw)
+                    for ekey in resolved_head:
+                        _m_fast_set(_row_of(ekey), col, fw)
+                    for ekey in resolved_tail:
+                        _m_fast_set(_row_of(ekey), col, neg_fw)
                 else:
-                    for u in head:
-                        M[self._entity_row(u), col] = fw
-                    for v in tail:
-                        M[self._entity_row(v), col] = neg_fw
-                rec.src = frozenset(head)
-                rec.tgt = frozenset(tail)
+                    for ekey in resolved_head:
+                        M[_row_of(ekey), col] = fw
+                    for ekey in resolved_tail:
+                        M[_row_of(ekey), col] = neg_fw
+                rec.src = frozenset(ekey[0] for ekey in resolved_head)
+                rec.tgt = frozenset(ekey[0] for ekey in resolved_tail)
                 rec.directed = True
 
             rec.weight = w
             rec.etype = 'hyper'
+            # Refresh on both create and in-place update paths.
+            rec.ml_kind = ml_kind_for_e
+            rec.ml_layers = ml_layers_for_e
 
             if slice_local is not None:
                 if slice_local not in slices:
                     slices[slice_local] = SliceRecord()
                 slices[slice_local]['edges'].add(e_id)
-                if members is not None:
-                    slices[slice_local]['vertices'].update(members)
+                # Slice membership tracks bare vids, not (vid, layer) keys.
+                if resolved_members is not None:
+                    slices[slice_local]['vertices'].update(k[0] for k in resolved_members)
                 else:
-                    slices[slice_local]['vertices'].update(head)
-                    slices[slice_local]['vertices'].update(tail)
+                    slices[slice_local]['vertices'].update(k[0] for k in resolved_head)
+                    slices[slice_local]['vertices'].update(k[0] for k in resolved_tail)
 
             sub_attrs = d.get('attributes') or d.get('attrs') or {}
             flat_attrs = {k: v for k, v in d.items() if k not in _HYPER_BATCH_RESERVED_KEYS}
@@ -4365,6 +4518,7 @@ class AnnNet(
         slice=None,
         default_weight=1.0,
         default_edge_directed=None,
+        layer=None,
     ):
         """Hidden compatibility shim for legacy internal hyperedge insertion."""
         return self._add_hyperedges_batch(
@@ -4372,6 +4526,7 @@ class AnnNet(
             slice=slice,
             default_weight=default_weight,
             default_edge_directed=default_edge_directed,
+            layer=layer,
         )
 
     def _add_edges_to_slice_batch(self, slice_id, edge_ids):

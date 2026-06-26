@@ -132,8 +132,14 @@ def serialize_multilayer_manifest(
     *,
     table_to_rows,
     serialize_edge_layers,
+    include_edge_layers: bool = True,
 ):
-    """Serialize multilayer bookkeeping through the public layer API when possible."""
+    """Serialize multilayer bookkeeping through the public layer API when possible.
+
+    Pass ``include_edge_layers=False`` to skip the (potentially expensive)
+    serialize_edge_layers pass when the caller already reads ``graph.edge_layers``
+    directly (e.g. the native parquet writer).
+    """
     aspect_attrs = {}
     for aspect in graph.aspects:
         attrs = graph.layers.get_aspect_attrs(aspect)
@@ -164,17 +170,19 @@ def serialize_multilayer_manifest(
     layer_table = getattr(graph, 'layer_attributes', None)
     layer_attr_rows = table_to_rows(layer_table) if layer_table is not None else []
 
-    return {
+    out = {
         'aspects': list(graph.aspects),
         'aspect_attrs': aspect_attrs,
         'elem_layers': dict(graph.elem_layers),
         'VM': vm_rows,
         'edge_kind': dict(graph.edge_kind),
-        'edge_layers': serialize_edge_layers(dict(graph.edge_layers)),
         'node_layer_attrs': node_layer_attrs,
         'layer_tuple_attrs': layer_tuple_attrs,
         'layer_attributes': layer_attr_rows,
     }
+    if include_edge_layers:
+        out['edge_layers'] = serialize_edge_layers(dict(graph.edge_layers))
+    return out
 
 
 def restore_multilayer_manifest(
@@ -202,9 +210,28 @@ def restore_multilayer_manifest(
     aspects = manifest.get('aspects', [])
     elem_layers = manifest.get('elem_layers', {})
     if aspects:
-        graph.layers.set_aspects(aspects)
-        if elem_layers:
+        # Skip set_aspects if the caller already declared the same aspects on
+        # an entity-populated graph (e.g. native read() declares them up-front
+        # to preserve stored layer coords). A second set_aspects would treat
+        # the existing entities as flat and reassign them to the placeholder.
+        same_aspects = tuple(graph.aspects) == tuple(aspects)
+        if not same_aspects:
+            graph.layers.set_aspects(aspects)
+        if elem_layers and not same_aspects:
             graph.layers.set_elementary_layers(elem_layers)
+        elif elem_layers:
+            # Augment existing layer values without going through
+            # set_elementary_layers — that helper calls
+            # _drop_unused_placeholder_layers, which would strip the '_'
+            # placeholder if no entity has the multi-aspect placeholder
+            # coord, breaking subsequent _make_layer_coord validation.
+            for aspect, values in elem_layers.items():
+                if aspect in graph._layers:
+                    graph._layers[aspect].update(values)
+            graph.layers._rebuild_all_layers_cache()
+        # Ensure '_' is available per aspect; legacy graphs may have stored
+        # entities at single-aspect ('_',) coords on a multi-aspect graph.
+        graph._ensure_placeholder_layers_declared()
 
     if not graph.aspects:
         layer_attr_rows = manifest.get('layer_attributes', [])
@@ -239,9 +266,21 @@ def restore_multilayer_manifest(
         vm_by_layer.setdefault(layer_tuple, []).append(vid)
 
     entities = graph._entities
+    placeholder = tuple('_' for _ in graph.aspects)
+    single_placeholder = ('_',)
     for layer_tuple, vids in vm_by_layer.items():
-        # Filter to missing vids without paying _validate_layer_tuple per vid
-        missing = [v for v in vids if (v, layer_tuple) not in entities]
+        # Filter to missing vids without paying _validate_layer_tuple per vid.
+        # Also treat single-aspect ('_',) and multi-aspect ('_','_',...) as
+        # the same supra-node so legacy fixtures stored at ('_',) don't get
+        # duplicated by a VM row asking for the multi-aspect placeholder.
+        if layer_tuple == placeholder:
+            missing = [
+                v
+                for v in vids
+                if (v, layer_tuple) not in entities and (v, single_placeholder) not in entities
+            ]
+        else:
+            missing = [v for v in vids if (v, layer_tuple) not in entities]
         if missing:
             graph._add_vertices_bulk(missing, layer=layer_tuple)
 

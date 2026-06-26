@@ -45,12 +45,12 @@ nav:
         -   Hyperedges: tutorials/notebooks/tutos/05_hyperedges.ipynb
         -   Multilayer: tutorials/notebooks/tutos/06_multilayer.ipynb
     -   Use Cases:
-        -   AnnNet Showcase: tutorials/notebooks/annnet_showcase.ipynb
-        -   AnnNet Demo: tutorials/notebooks/Demo.ipynb
-        -   Multi-Condition Causal Signaling: tutorials/notebooks/UC1.ipynb
-        -   HEK293 multilayer network: tutorials/notebooks/UC2.ipynb
-        -   Multilayer Systems Biology: tutorials/notebooks/SBUC.ipynb
-        -   DataFrame backends: tutorials/notebooks/SBUC-nopolars.ipynb
+        -   Multi-Condition Causal Signaling: tutorials/notebooks/use_cases/UC1.ipynb
+        -   HEK293 multilayer network: tutorials/notebooks/use_cases/UC2.ipynb
+    -   Special Topics:
+        -   Directed hyperedges & stoichiometry: tutorials/notebooks/special/sp01_directed_hyperedges.ipynb
+        -   Multilayer math: tutorials/notebooks/special/sp02_multilayer_math.ipynb
+        -   Flexible edge orientation: tutorials/notebooks/special/sp03_flexible_edge_orientation.ipynb
         
 
 -   Explanations:
