@@ -1,0 +1,13 @@
+name: annnet-scenario-pyg
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10,<3.14
+  - pip
+  - pip:
+      - annnet @ git+https://github.com/saezlab/annnet.git
+      - graphviz
+      - ipykernel>=6
+      - ipywidgets>=8
+      - torch>=2.2
+      - torch-geometric>=2.5

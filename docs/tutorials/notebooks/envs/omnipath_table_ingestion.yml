@@ -1,0 +1,12 @@
+name: annnet-scenario-omnipath
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10,<3.14
+  - pip
+  - pip:
+      - annnet @ git+https://github.com/saezlab/annnet.git
+      - graphviz
+      - ipykernel>=6
+      - omnipath>=1.0
+      - polars>=0.20.0

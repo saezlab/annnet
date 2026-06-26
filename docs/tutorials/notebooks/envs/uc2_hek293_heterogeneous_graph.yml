@@ -1,0 +1,21 @@
+name: annnet-use-case-uc2-hek293-heterogeneous-graph
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.11,<3.14
+  - pip
+  - pip:
+      - annnet @ git+https://github.com/saezlab/annnet.git
+      - graphviz
+      - ipykernel>=6
+      - matplotlib>=3.5
+      - numpy>=1.24
+      - omnipath>=1.0
+      - pandas>=2.0
+      - polars>=0.20.0
+      - requests
+      - scipy
+      - lxml>=4.9
+      - torch>=2.2
+      - torch-geometric>=2.5
+      - scikit-learn

@@ -1,124 +1,190 @@
-This section collects some useful HowTo tutorials and Use Case notebooks.
+# Notebook Gallery
 
-# Notebook gallery
+This section collects runnable AnnNet notebooks with rendered outputs. To
+recreate them, use the linked GitHub environment file for the notebook family.
 
-## Step-by-step tutorials
+Base HowTos use the
+[HowTo environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/environment.yml).
+Scenario and use-case notebooks each link a narrower environment for the
+external packages they demonstrate.
+
+## HowTos
+
+Small, self-contained notebooks that show AnnNet APIs directly, including
+focused special-topic notebooks.
 
 <div class="grid cards annnet-feature-cards" markdown>
-
-
--   __Tutorial index__
-
-    ---
-
-    Overview and suggested reading order for the HowTo notebooks.
-
-    [Open notebook](notebooks/tutos/00_tutorial_index.ipynb)
 
 -   __Quickstart__
 
     ---
 
-    First hands-on tutorial covering core graph construction and inspection.
+    Build a directed graph, inspect it, and round-trip it through `.annnet`.
 
     [Open notebook](notebooks/tutos/01_quickstart.ipynb)
 
--   __Attributes & views__
+-   __Attributes and views__
 
     ---
 
-    Focused walkthrough of annotations, indexing helpers, and graph views.
+    Attach metadata to vertices and edges, then inspect dataframe-like views.
 
     [Open notebook](notebooks/tutos/02_attributes_and_views.ipynb)
 
--   __IO & interop__
+-   __Tables and storage__
 
     ---
 
-    Reading, writing, and exchanging data with supported formats and tools.
+    Build from tables and compare CSV, Excel, native, Parquet, JSON, and NDJSON.
 
-    [Open notebook](notebooks/tutos/03_io_and_interop.ipynb)
+    [Open notebook](notebooks/tutos/03_tables_and_storage.ipynb)
 
--   __Slices__
-
-    ---
-
-    Practical examples for slicing and view-based analysis patterns.
-
-    [Open notebook](notebooks/tutos/04_slices.ipynb)
-
--   __Hyperedges__
+-   __Slices and subgraphs__
 
     ---
 
-    Working with hyperedges and higher-order relationships.
+    Manage context-specific graph state and materialize smaller graphs.
 
-    [Open notebook](notebooks/tutos/05_hyperedges.ipynb)
+    [Open notebook](notebooks/tutos/04_slices_and_subgraphs.ipynb)
+
+-   __Hyperedges and traversal__
+
+    ---
+
+    Represent complexes/reactions and traverse local neighborhoods.
+
+    [Open notebook](notebooks/tutos/05_hyperedges_and_traversal.ipynb)
+
+-   __Directed hyperedges and stoichiometry__
+
+    ---
+
+    Work directly with directed hyperedges, incidence coefficients, and
+    reaction-style semantics.
+
+    [Open notebook](notebooks/special/sp01_directed_hyperedges.ipynb)
 
 -   __Multilayer__
 
     ---
 
-    Layering and multilayer analysis workflows.
+    Work with layers, coupling edges, layer-derived slices, and supra matrices.
 
     [Open notebook](notebooks/tutos/06_multilayer.ipynb)
-
-</div>
-
-## Use-case notebooks
-
-<div class="grid cards annnet-feature-cards" markdown>
-
--   __Multi-Condition Causal Signaling__
-
-    ---
-
-    Use case 1. A guided applied example using AnnNet as the hub.
-
-    [Open notebook](notebooks/use_cases/UC1.ipynb)
-
--   __HEK293 multilayer network__
-
-    ---
-
-    Use case 2. HEK293 heterogeneous biology graph as one AnnNet object.
-
-    [Open notebook](notebooks/use_cases/UC2.ipynb)
-
-</div>
-
-## Special topics
-
-<div class="grid cards annnet-feature-cards" markdown>
-
--   __Directed hyperedges & stoichiometry__
-
-    ---
-
-    Directed hyperedges and stoichiometric relationships.
-
-    [Open notebook](notebooks/special/sp01_directed_hyperedges.ipynb)
 
 -   __Multilayer math__
 
     ---
 
-    The mathematical representation behind multilayer graphs.
+    Inspect supra-adjacency, Laplacians, diffusion, coupling sweeps, and tensor views.
 
     [Open notebook](notebooks/special/sp02_multilayer_math.ipynb)
+
+-   __History and reproducibility__
+
+    ---
+
+    Record mutations, create snapshots, diff graph states, and export history.
+
+    [Open notebook](notebooks/tutos/07_history_and_reproducibility.ipynb)
+
+-   __Backend accessors__
+
+    ---
+
+    Inspect optional components and dispatch to installed graph backends.
+
+    [Open notebook](notebooks/tutos/08_backend_accessors.ipynb)
 
 -   __Flexible edge orientation__
 
     ---
 
-    Mixing directed and undirected edges in one object.
+    Compare edge-scope and vertex-scope orientation policies on mixed graphs.
 
     [Open notebook](notebooks/special/sp03_flexible_edge_orientation.ipynb)
 
 </div>
 
-## Related reading
+## Use Cases
 
-- Read [Analysis patterns](analysis-patterns.md) for a short guide to common workflow shapes.
-- Read [Quickstart](../quickstart.md) if you have not built a first toy graph yet.
-- Read [Explanations](../explanations/index.md) if you want the underlying concepts.
+Larger applied notebooks that combine AnnNet with external biological data,
+optimization, and graph learning workflows.
+
+<div class="grid cards annnet-feature-cards" markdown>
+
+-   __Multi-condition causal signaling__
+
+    ---
+
+    Build patient layers from CPTAC/OmniPath data and write inferred causal
+    subnetworks back into AnnNet.
+
+    [Open notebook](notebooks/use_cases/UC1.ipynb) ·
+    [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/uc1_multi_condition_causal_signaling.yml)
+
+-   __HEK293 heterogeneous biology graph__
+
+    ---
+
+    Combine signaling, metabolic, complex, regulatory, organelle, and
+    graph-learning workflows in one AnnNet object.
+
+    [Open notebook](notebooks/use_cases/UC2.ipynb) ·
+    [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/uc2_hek293_heterogeneous_graph.yml)
+
+</div>
+
+## Scenarios
+
+Short ecosystem bridges. They use tiny deterministic data and keep external
+dependencies in scenario-specific environment files.
+
+<div class="grid cards annnet-feature-cards" markdown>
+
+-   __AnnData/scverse bridge__
+
+    ---
+
+    Convert a tiny annotated graph at the AnnNet/scverse boundary.
+
+    [Open notebook](notebooks/scenarios/scverse_bridge.ipynb) ·
+    [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/scverse_bridge.yml)
+
+-   __OmniPath table ingestion__
+
+    ---
+
+    Load an OmniPath-style interaction table as prior knowledge without a network call.
+
+    [Open notebook](notebooks/scenarios/omnipath_table_ingestion.ipynb) ·
+    [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/omnipath_table_ingestion.yml)
+
+-   __Cytoscape CX2 export__
+
+    ---
+
+    Export annotated and hyperedge graphs with explicit CX2 projection modes.
+
+    [Open notebook](notebooks/scenarios/cytoscape_cx2_export.ipynb) ·
+    [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/cytoscape_cx2_export.yml)
+
+-   __PyG HeteroData export__
+
+    ---
+
+    Prepare typed graph data and numeric features for PyTorch Geometric.
+
+    [Open notebook](notebooks/scenarios/pyg_heterodata_export.ipynb) ·
+    [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/pyg_heterodata_export.yml)
+
+-   __Causal activity bridge__
+
+    ---
+
+    Store activity scores and causal solution edges from decoupler/CORNETO-style workflows.
+
+    [Open notebook](notebooks/scenarios/causal_activity_bridge.ipynb) ·
+    [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/causal_activity_bridge.yml)
+
+</div>

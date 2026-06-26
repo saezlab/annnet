@@ -1,0 +1,10 @@
+name: annnet-scenario-cx2
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10,<3.14
+  - pip
+  - pip:
+      - annnet @ git+https://github.com/saezlab/annnet.git
+      - graphviz
+      - ipykernel>=6

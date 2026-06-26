@@ -2,6 +2,9 @@ site_name: 'annnet'
 site_url: https://saezlab.github.io/annnet
 repo_url: https://github.com/saezlab/annnet
 repo_name: saezlab/annnet
+exclude_docs: |
+    tutorials/notebooks/environment.yml
+    tutorials/notebooks/envs/*.yml
 theme:
     name: material
     font:
@@ -33,24 +36,30 @@ nav:
 
 -   Installation: installation.md
 -   Quickstart: quickstart.md
--   Tutorials and Use Cases: 
+-   Tutorials and Scenarios:
     -   Notebooks Overview: tutorials/index.md
     -   Analysis patterns: tutorials/analysis-patterns.md
     -   HowTo's:
-        -   Tutorial index: tutorials/notebooks/tutos/00_tutorial_index.ipynb
         -   Quickstart: tutorials/notebooks/tutos/01_quickstart.ipynb
         -   Attributes & views: tutorials/notebooks/tutos/02_attributes_and_views.ipynb
-        -   IO & interop: tutorials/notebooks/tutos/03_io_and_interop.ipynb
-        -   Slices: tutorials/notebooks/tutos/04_slices.ipynb
-        -   Hyperedges: tutorials/notebooks/tutos/05_hyperedges.ipynb
-        -   Multilayer: tutorials/notebooks/tutos/06_multilayer.ipynb
-    -   Use Cases:
-        -   Multi-Condition Causal Signaling: tutorials/notebooks/use_cases/UC1.ipynb
-        -   HEK293 multilayer network: tutorials/notebooks/use_cases/UC2.ipynb
-    -   Special Topics:
+        -   Tables & storage: tutorials/notebooks/tutos/03_tables_and_storage.ipynb
+        -   Slices & subgraphs: tutorials/notebooks/tutos/04_slices_and_subgraphs.ipynb
+        -   Hyperedges & traversal: tutorials/notebooks/tutos/05_hyperedges_and_traversal.ipynb
         -   Directed hyperedges & stoichiometry: tutorials/notebooks/special/sp01_directed_hyperedges.ipynb
+        -   Multilayer: tutorials/notebooks/tutos/06_multilayer.ipynb
         -   Multilayer math: tutorials/notebooks/special/sp02_multilayer_math.ipynb
+        -   History & reproducibility: tutorials/notebooks/tutos/07_history_and_reproducibility.ipynb
+        -   Backend accessors: tutorials/notebooks/tutos/08_backend_accessors.ipynb
         -   Flexible edge orientation: tutorials/notebooks/special/sp03_flexible_edge_orientation.ipynb
+    -   Use Cases:
+        -   Multi-condition causal signaling: tutorials/notebooks/use_cases/UC1.ipynb
+        -   HEK293 heterogeneous biology graph: tutorials/notebooks/use_cases/UC2.ipynb
+    -   Scenarios:
+        -   AnnData/scverse bridge: tutorials/notebooks/scenarios/scverse_bridge.ipynb
+        -   OmniPath table ingestion: tutorials/notebooks/scenarios/omnipath_table_ingestion.ipynb
+        -   Cytoscape CX2 export: tutorials/notebooks/scenarios/cytoscape_cx2_export.ipynb
+        -   PyG HeteroData export: tutorials/notebooks/scenarios/pyg_heterodata_export.ipynb
+        -   Causal activity bridge: tutorials/notebooks/scenarios/causal_activity_bridge.ipynb
         
 
 -   Explanations:
@@ -161,7 +170,10 @@ plugins:
                     separate_signature: true
                     line_length: 60
 -   mkdocs-jupyter:
-        execute: false
+        execute: true
+        execute_ignore:
+        -   tutorials/notebooks/scenarios/*.ipynb
+        -   tutorials/notebooks/use_cases/*.ipynb
 
 hooks:
   # Quiet Jupyter/nbformat warning noise during docs builds.

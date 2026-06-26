@@ -12,11 +12,23 @@ dev = [
     "mypy>=1.0"
 ]
 docs = [
+    "graphviz",
+    "ipykernel>=6",
+    "matplotlib>=3.5",
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.25",
     "mkdocs-jupyter>=0.25",
-    "mkdocs-autorefs>=1.0"
+    "mkdocs-autorefs>=1.0",
+    "nbconvert>=7",
+    "networkx>=3.3",
+    "numcodecs>=0.12",
+    "openpyxl>=3.1",
+    "pandas>=2.0",
+    "polars>=0.20.0",
+    "pyarrow>=10",
+    "python-igraph>=0.11",
+    "zarr>=2.18"
 ]
 tests = [
     "pytest>=7.0",
@@ -188,6 +200,7 @@ include = [
   "LICENSE",
   "docs/**/*.ipynb",
   "docs/**/*.md",
+  "docs/**/*.yml",
   "docs/Elowitz.sbml.xml",
 ]
 
@@ -261,8 +274,7 @@ ignore_roles = ["ref"]
 report_level = "INFO"
 
 [tool.ruff]
-extend-include = ["*.ipynb"]
-extend-exclude = ["tools/*.py"]
+extend-exclude = ["tools/*.py", "**/*.ipynb"]
 line-length = 100
 target-version = "py313"
 

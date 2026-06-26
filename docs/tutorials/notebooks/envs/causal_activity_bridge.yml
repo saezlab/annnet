@@ -1,0 +1,14 @@
+name: annnet-scenario-causal-activity
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.11,<3.14
+  - pip
+  - pip:
+      - annnet @ git+https://github.com/saezlab/annnet.git
+      - graphviz
+      - ipykernel>=6
+      - corneto
+      - pandas>=2.0
+      - polars>=0.20.0
+      - scipy

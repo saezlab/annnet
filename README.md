@@ -354,6 +354,10 @@ uv sync --group docs
 uv run python -m mkdocs serve
 ```
 
+By default, the docs build reruns the HowTo notebooks and renders stored outputs
+for heavier scenario and use-case notebooks. The notebook gallery links
+environment files for rerunning those larger examples.
+
 ## Contributing
 
 Contributions are welcome, especially around public API, interoperability, file adapters, and algorithms. For changes that affect graph semantics or round-trip behavior, include tests that demonstrate the intended behavior and guard against regressions.
