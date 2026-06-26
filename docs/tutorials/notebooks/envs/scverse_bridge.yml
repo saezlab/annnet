@@ -3,6 +3,7 @@ channels:
   - conda-forge
 dependencies:
   - python>=3.11,<3.14
+  - graphviz
   - pip
   - pip:
       - annnet @ git+https://github.com/saezlab/annnet.git

@@ -19,6 +19,8 @@ jobs:
         -   uses: ./.github/actions/setup
             with:
                 python-version: '3.12'
+        -   name: Install Graphviz executable
+            run: sudo apt-get update && sudo apt-get install -y graphviz
         -   name: configure mkdocs-material cache
             uses: actions/cache@v4
             with:
@@ -26,7 +28,9 @@ jobs:
                 path: .cache
                 restore-keys: |
                     mkdocs-material-
+        -   name: Install online docs dependencies
+            run: uv sync --group docs --group docs-online
         -   name: Build documentation with mkdocs
             env:
                 JUPYTER_PLATFORM_DIRS: "1"
-            run: .venv/bin/mkdocs gh-deploy --force
+            run: .venv/bin/mkdocs gh-deploy --force --strict --config-file mkdocs-online.yml

@@ -1,0 +1,30 @@
+INHERIT: mkdocs.yml
+
+plugins:
+-   search
+-   autorefs
+-   mkdocstrings:
+        default_handler: python
+        handlers:
+            python:
+                options:
+                    annotations_path: brief
+                    docstring_style: numpy
+                    heading_level: 3
+                    members_order: source
+                    modernize_annotations: true
+                    show_category_heading: true
+                    show_object_full_path: false
+                    show_root_toc_entry: true
+                    show_signature: true
+                    show_signature_annotations: false
+                    signature_crossrefs: true
+                    show_bases: false
+                    show_if_no_docstring: false
+                    show_source: false
+                    separate_signature: true
+                    line_length: 60
+-   mkdocs-jupyter:
+        execute: true
+        execute_ignore:
+        -   tutorials/notebooks/use_cases/*.ipynb
