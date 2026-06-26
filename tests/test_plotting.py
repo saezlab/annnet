@@ -70,10 +70,10 @@ class TestPlottingWithRealGraph(unittest.TestCase):
         lbls = plotting.build_edge_labels(self.g, use_weight=True, extra_keys=['type'], layer=None)
         # keys are edge indices (0..m-1)
         self.assertIn(0, lbls)
-        self.assertRegex(lbls[0], r'w=2(\.0+)?')
+        self.assertRegex(lbls[0], r'^2(\.0+)?')
         # slice-aware override
         lbls_Lw = plotting.build_edge_labels(self.g, use_weight=True, extra_keys=[], layer='Lw')
-        self.assertRegex(lbls_Lw[0], r'w=5(\.0+)?')
+        self.assertRegex(lbls_Lw[0], r'^5(\.0+)?')
 
     def test_edge_style_signed(self):
         styles = plotting.edge_style_from_weights(self.g, color_mode='signed')
@@ -83,6 +83,12 @@ class TestPlottingWithRealGraph(unittest.TestCase):
         colors = [styles[i]['color'] for i in sorted(styles)]
         self.assertIn('firebrick4', colors)
         self.assertIn('dodgerblue4', colors)
+
+    def test_edge_style_greys_are_visible(self):
+        styles = plotting.edge_style_from_weights(self.g)
+        colors = [styles[i]['color'] for i in sorted(styles)]
+        self.assertNotIn('#ffffff', colors)
+        self.assertGreaterEqual(min(float(styles[i]['penwidth']) for i in styles), 1.15)
 
 
 class TestBackends(unittest.TestCase):
@@ -146,7 +152,7 @@ class TestBackends(unittest.TestCase):
             self.skipTest('pydot package not installed')
         Gd = plotting.plot(self.g, backend='pydot', show_vertex_labels=True, show_edge_labels=True)
         labels = [e.get('label') for e in Gd.get_edges()]
-        self.assertTrue(any(lbl and re.search(r'w=', lbl) for lbl in labels))
+        self.assertTrue(any(lbl and re.search(r'\b2\b', lbl) for lbl in labels))
 
     def test_undirected_binary_edges_no_center_node_graphviz(self):
         """Undirected binary edges must NOT be rendered as hyperedges with center nodes."""

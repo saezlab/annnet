@@ -399,6 +399,13 @@ def test_metadata_helpers_and_info_rendering(monkeypatch):
     text = str(info)
     html = info.to_html()
     assert 'Installed version: v9.9.9' in text
+    assert 'class="annnet-info"' in html
+    assert 'width:100%' in html
+    assert 'annnet-info-row-odd' in html
+    assert '<details' in html
+    assert 'Show environment details' in html
+    assert 'Installed path' not in text
+    assert 'Installed path' not in html
     assert 'https://example.org/repo' in html
     assert 'Installable bundles' in html
     assert info._mime_()[0] == 'text/html'

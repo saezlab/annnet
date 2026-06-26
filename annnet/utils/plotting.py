@@ -102,7 +102,7 @@ def build_edge_labels(
         if use_weight:
             try:
                 w = _edge_weight_getter(graph)(eid, slice=layer)
-                parts.append(f'w={w:.3g}')
+                parts.append(f'{w:.3g}')
             except (AttributeError, KeyError, TypeError, ValueError):
                 pass
         for k in extra_keys:
@@ -121,8 +121,8 @@ def edge_style_from_weights(
     graph,
     *,
     layer: str | None = None,
-    min_width: float = 0.5,
-    max_width: float = 5.0,
+    min_width: float = 1.15,
+    max_width: float = 4.25,
     color_mode: Literal['greys', 'signed'] = 'greys',
 ) -> dict[int, dict[str, str]]:
     """Compute visual edge styles (pen width and color) from effective weights.
@@ -179,7 +179,7 @@ def edge_style_from_weights(
                 w = 0.0
             color = 'firebrick4' if w > 0 else ('dodgerblue4' if w < 0 else 'black')
         else:
-            color = _greyscale(1.0 - float(xv))  # heavier => darker
+            color = _greyscale(0.42 - 0.32 * float(xv))  # heavier => darker
         styles[j] = {'penwidth': f'{pen:.3f}', 'color': color}
     return styles
 
@@ -272,12 +272,27 @@ def to_graphviz(
         if _is_true_hyperedge(S, T):
             center = f'e_{j}_center'
             Gv.node(center, shape='square', width='0.1', height='0.1', label='')
-            for u in S:
+            label_attr = {}
+            hyper_label = e_attr.pop('label', None)
+            if hyper_label is not None:
+                label_attr = {'label': hyper_label}
+                for key in ('fontcolor', 'fontsize', 'fontname'):
+                    if key in e_attr:
+                        label_attr[key] = e_attr[key]
+            labeled = False
+            for u in sorted(S, key=str):
                 a = {'arrowtail': 'none', 'arrowhead': 'none', 'dir': 'both'}
                 a.update(e_attr)
+                if not T and label_attr and not labeled:
+                    a.update(label_attr)
+                    labeled = True
                 Gv.edge(str(u), center, **a)
-            for v in T:
-                Gv.edge(center, str(v), **e_attr)
+            for v in sorted(T, key=str):
+                a = dict(e_attr)
+                if label_attr and not labeled:
+                    a.update(label_attr)
+                    labeled = True
+                Gv.edge(center, str(v), **a)
         else:
             # binary edge (directed or undirected)
             if S == T:
@@ -351,12 +366,27 @@ def to_pydot(
         if _is_true_hyperedge(S, T):
             center = f'e_{j}_center'
             Gd.add_node(pydot.Node(center, shape='square', width='0.1', height='0.1', label=''))
-            for u in S:
+            label_attr = {}
+            hyper_label = e_attr.pop('label', None)
+            if hyper_label is not None:
+                label_attr = {'label': hyper_label}
+                for key in ('fontcolor', 'fontsize', 'fontname'):
+                    if key in e_attr:
+                        label_attr[key] = e_attr[key]
+            labeled = False
+            for u in sorted(S, key=str):
                 a = {'arrowtail': 'none', 'arrowhead': 'none', 'dir': 'both'}
                 a.update(e_attr)
+                if not T and label_attr and not labeled:
+                    a.update(label_attr)
+                    labeled = True
                 Gd.add_edge(pydot.Edge(str(u), center, **a))
-            for v in T:
-                Gd.add_edge(pydot.Edge(center, str(v), **e_attr))
+            for v in sorted(T, key=str):
+                a = dict(e_attr)
+                if label_attr and not labeled:
+                    a.update(label_attr)
+                    labeled = True
+                Gd.add_edge(pydot.Edge(center, str(v), **a))
         else:
             # binary edge (directed or undirected)
             if S == T:
@@ -469,7 +499,15 @@ def to_matplotlib(
                 x, y = positions[vertex]
                 ax.plot([center[0], x], [center[1], y], color=hyperedge_color, linewidth=1.0)
             if j in edge_labels:
-                ax.text(center[0], center[1], edge_labels[j], ha='left', va='bottom', fontsize=8)
+                ax.text(
+                    center[0],
+                    center[1],
+                    edge_labels[j],
+                    ha='left',
+                    va='bottom',
+                    fontsize=7,
+                    color='#777777',
+                )
             continue
 
         if S == T:
@@ -499,7 +537,13 @@ def to_matplotlib(
             )
 
         if j in edge_labels:
-            ax.text((x0 + x1) / 2.0, (y0 + y1) / 2.0, edge_labels[j], fontsize=8)
+            ax.text(
+                (x0 + x1) / 2.0,
+                (y0 + y1) / 2.0,
+                edge_labels[j],
+                fontsize=7,
+                color='#777777',
+            )
 
     ax.set_aspect('equal')
     ax.axis('off')
@@ -605,6 +649,8 @@ def plot(
             # reapply labels by regenerating with label overrides
             for j, txt in elabels.items():
                 custom_edge_attr.setdefault(j, {})['label'] = txt
+                custom_edge_attr[j].setdefault('fontcolor', '#8a8a8a')
+                custom_edge_attr[j].setdefault('fontsize', '8')
             G = to_graphviz(
                 graph,
                 layout=layout,
@@ -642,7 +688,9 @@ def plot(
                 S, T = graph.get_edge(j)
                 sv = next(iter(S)) if len(S) else f'e_{j}_source'
                 tv = next(iter(T)) if len(T) else f'e_{j}_target'
-                G.add_edge(pydot.Edge(str(sv), str(tv), label=txt))
+                G.add_edge(
+                    pydot.Edge(str(sv), str(tv), label=txt, fontcolor='#8a8a8a', fontsize='8')
+                )
         return G
 
     elif backend == 'matplotlib':

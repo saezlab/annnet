@@ -44,7 +44,7 @@ _OPTIONAL_BUNDLES = {'io', 'backends', 'plot', 'bio', 'storage', 'all', 'dev'}
 _CHIP_STYLE = (
     'display:inline-flex;align-items:center;gap:.28rem;'
     'padding:.12rem .45rem;margin:.08rem .35rem .08rem 0;'
-    'border:1px solid #d0d7de;border-radius:999px;'
+    'border:1px solid var(--annnet-info-border,#d0d7de);border-radius:999px;'
 )
 
 
@@ -191,6 +191,12 @@ def _default_available(values: dict[str, dict[str, str]], backends: Any) -> str:
     )
 
 
+def _available_ratio(values: dict[str, dict[str, str]]) -> str:
+    total = len(values)
+    available = sum(1 for details in values.values() if details.get('available') == 'yes')
+    return f'{available}/{total}' if total else '0/0'
+
+
 def _chips(
     items: dict[str, bool] | dict[str, list[str]],
     *,
@@ -270,7 +276,6 @@ class AnnNetInfo:
         for key in ('Repository', 'Documentation'):
             if urls.get(key):
                 rows.append((key, urls[key]))
-        rows.append(('Installed path', str(_PROJECT_ROOT)))
         return rows
 
     def __str__(self) -> str:
@@ -292,7 +297,6 @@ class AnnNetInfo:
             ('Authors', _author_links(self.metadata.get('authors', []))),
             ('Repository', _link(urls['Repository'])) if urls.get('Repository') else None,
             ('Documentation', _link(urls['Documentation'])) if urls.get('Documentation') else None,
-            ('Installed path', escape(str(_PROJECT_ROOT))),
             (
                 'Default graph backend',
                 _chips({graph_default: graph_default != 'none'}, icons=False),
@@ -317,29 +321,61 @@ class AnnNetInfo:
             ('Installable bundles', _chips(optional, icons=False, titles=True)),
         ]
 
-        table_rows = ''.join(
-            '<tr>'
-            "<th style='text-align:right;vertical-align:top;padding:.2rem .9rem .2rem 0;"
-            f"white-space:nowrap;width:10.5rem;'>{escape(title)}</th>"
-            f"<td style='text-align:left;padding:.2rem 0'>{value}</td>"
-            '</tr>'
-            for row in rows
-            if row is not None
-            for title, value in [row]
+        table_rows = ''
+        row_index = 0
+        for row in rows:
+            if row is None:
+                continue
+            title, value = row
+            row_class = 'annnet-info-row-even' if row_index % 2 == 0 else 'annnet-info-row-odd'
+            row_bg = (
+                'var(--annnet-info-row-bg,#fff)'
+                if row_index % 2 == 0
+                else 'var(--annnet-info-row-alt,#f6f8fa)'
+            )
+            table_rows += (
+                f'<tr class="annnet-info-row {row_class}" style="background:{row_bg};">'
+                "<th style='text-align:right;vertical-align:top;padding:.2rem .65rem;"
+                'white-space:nowrap;width:9.5rem;font-weight:600;'
+                f"color:var(--annnet-info-muted,#57606a);'>{escape(title)}</th>"
+                f"<td style='text-align:left;padding:.2rem .65rem .2rem 0;'>{value}</td>"
+                '</tr>'
+            )
+            row_index += 1
+
+        summary_bits = [
+            f'v{escape(str(version))}',
+            f'graph: {escape(str(graph_default))}',
+            f'plot: {escape(str(plot_default))}',
+            f'I/O: {escape(_available_ratio(self.io_modules))}',
+        ]
+        summary = (
+            '<span>'
+            + '</span><span aria-hidden="true">·</span><span>'.join(summary_bits)
+            + '</span>'
         )
 
         return (
-            '<div style=\'font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;'
-            'border:1px solid #d0d7de;border-radius:12px;padding:1rem 1.1rem;'
-            "max-width:820px;background:#fff;'>"
-            "<div style='margin-bottom:.6rem;'>"
-            "<div style='font-size:1.05rem;font-weight:700;'>annnet</div>"
-            f"<div style='font-size:.92rem;color:#57606a;'>"
-            f'Environment summary for annnet v{escape(str(version))}</div>'
+            '<div class="annnet-info" '
+            'style=\'font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;'
+            'box-sizing:border-box;border:1px solid var(--annnet-info-border,#d0d7de);'
+            'border-radius:6px;'
+            'width:100%;max-width:100%;padding:.22rem .42rem;'
+            'background:var(--annnet-info-bg,#fff);'
+            "color:var(--annnet-info-fg,#24292f);'>"
+            "<div class='annnet-info-summary' style='display:flex;align-items:center;"
+            "flex-wrap:wrap;gap:.16rem .36rem;font-size:.7rem;line-height:1.25;'>"
+            "<strong style='font-size:.74rem;'>annnet</strong>"
+            f'{summary}'
             '</div>'
-            "<table style='border-collapse:collapse;width:100%;'><tbody>"
+            "<details style='margin-top:.22rem;'>"
+            "<summary style='cursor:pointer;color:var(--annnet-info-link,#0969da);"
+            "font-size:.68rem;font-weight:600;'>"
+            'Show environment details</summary>'
+            "<table style='border-collapse:collapse;width:100%;margin-top:.35rem;"
+            "font-size:.72rem;line-height:1.3;'><tbody>"
             f'{table_rows}'
-            '</tbody></table></div>'
+            '</tbody></table></details></div>'
         )
 
     def _mime_(self) -> tuple[str, str]:
