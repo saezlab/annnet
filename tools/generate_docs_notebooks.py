@@ -56,7 +56,10 @@ def write_notebook(relative: str, cells: list[dict]) -> None:
     path = NOTEBOOK_DIR / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     for index, cell in enumerate(cells, start=1):
-        digest = hashlib.sha1(f'{relative}:{index}:{cell["source"]}'.encode()).hexdigest()[:8]
+        digest = hashlib.sha1(
+            f'{relative}:{index}:{cell["source"]}'.encode(),
+            usedforsecurity=False,
+        ).hexdigest()[:8]
         cell['id'] = f'cell-{index:02d}-{digest}'
     path.write_text(json.dumps(notebook(cells), indent=1, ensure_ascii=False) + '\n')
 
