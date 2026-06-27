@@ -767,6 +767,16 @@ class AnnNet(
                 )
         return coord
 
+    @staticmethod
+    def _is_explicit_entity_key(value) -> bool:
+        """Return True when ``value`` is an explicit ``(vertex_id, layer_coord)`` key."""
+        return (
+            isinstance(value, tuple)
+            and len(value) == 2
+            and isinstance(value[0], str)
+            and isinstance(value[1], tuple)
+        )
+
     def _resolve_entity_key(self, vid_or_key) -> tuple:
         """Resolve a vertex identifier to an internal (vid, layer_coord) key.
 
@@ -801,12 +811,8 @@ class AnnNet(
                 )
             # No supra-node found: placeholder key — won't have a matrix row until vertex is added
             return (vid_or_key, self._placeholder_layer_coord())
-        if isinstance(vid_or_key, tuple) and len(vid_or_key) == 2:
+        if self._is_explicit_entity_key(vid_or_key):
             vid, layer_coord = vid_or_key
-            if not isinstance(layer_coord, tuple):
-                raise TypeError(
-                    f'Layer coordinate must be a tuple, got {type(layer_coord).__name__!r}'
-                )
             coord = self._make_layer_coord(layer_coord)  # validates values
             return (vid, coord)
         raise TypeError(
@@ -903,6 +909,45 @@ class AnnNet(
             return
         if not bucket:
             self._pair_to_edges.pop((src, tgt), None)
+
+    @staticmethod
+    def _remove_edge_id_from_index(index: dict, key, edge_id: str) -> None:
+        """Remove one edge id from an adjacency bucket if it is present."""
+        if key is None:
+            return
+        bucket = index.get(key)
+        if not bucket:
+            return
+        try:
+            bucket.remove(edge_id)
+        except ValueError:
+            return
+        if not bucket:
+            index.pop(key, None)
+
+    def _endpoint_slice_vertex_ids(self, endpoint) -> set[str]:
+        """Map an endpoint identity to the bare vertex ids used by slice membership."""
+        if endpoint is None:
+            return set()
+        if isinstance(endpoint, str):
+            return {endpoint}
+        if self._is_explicit_entity_key(endpoint):
+            return {endpoint[0]}
+        if isinstance(endpoint, (set, frozenset, list, tuple)):
+            out = set()
+            for member in endpoint:
+                out.update(self._endpoint_slice_vertex_ids(member))
+            return out
+        return set()
+
+    def _slice_contains_endpoint(self, slice_vertices, endpoint) -> bool:
+        """Return True when the slice contains every bare vertex id for an endpoint."""
+        vids = self._endpoint_slice_vertex_ids(endpoint)
+        return bool(vids) and vids <= slice_vertices
+
+    def _add_endpoint_to_slice_vertices(self, slice_vertices, endpoint) -> None:
+        """Add the bare vertex ids represented by an endpoint to a slice membership set."""
+        slice_vertices.update(self._endpoint_slice_vertex_ids(endpoint))
 
     # Aspect / layer registry queries
 
@@ -1977,7 +2022,10 @@ class AnnNet(
 
         """
         for _slice_id, slice_data in self._slices.items():
-            if source in slice_data['vertices'] and target in slice_data['vertices']:
+            slice_vertices = slice_data['vertices']
+            if self._slice_contains_endpoint(
+                slice_vertices, source
+            ) and self._slice_contains_endpoint(slice_vertices, target):
                 slice_data['edges'].add(edge_id)
 
     def _propagate_to_all_slices(self, edge_id, source, target):
@@ -1994,13 +2042,16 @@ class AnnNet(
 
         """
         for _slice_id, slice_data in self._slices.items():
-            if source in slice_data['vertices'] or target in slice_data['vertices']:
+            slice_vertices = slice_data['vertices']
+            source_present = self._slice_contains_endpoint(slice_vertices, source)
+            target_present = self._slice_contains_endpoint(slice_vertices, target)
+            if source_present or target_present:
                 slice_data['edges'].add(edge_id)
                 # Only add missing endpoint if both vertices should be in slice
-                if source in slice_data['vertices']:
-                    slice_data['vertices'].add(target)
-                if target in slice_data['vertices']:
-                    slice_data['vertices'].add(source)
+                if source_present:
+                    self._add_endpoint_to_slice_vertices(slice_vertices, target)
+                if target_present:
+                    self._add_endpoint_to_slice_vertices(slice_vertices, source)
 
     def _normalize_vertices_arg(self, vertices):
         """Normalize a single vertex or an iterable of vertices into a set.
@@ -2031,7 +2082,7 @@ class AnnNet(
         """
         if vertices is None:
             return set()
-        if isinstance(vertices, (str, bytes)):
+        if isinstance(vertices, (str, bytes)) or self._is_explicit_entity_key(vertices):
             return {vertices}
         try:
             return set(vertices)
@@ -2207,17 +2258,9 @@ class AnnNet(
             self._edges[eid].col_idx = old_c - 1
 
         # Adjacency cleanup
-        s, t = rec.src, rec.tgt
-        if s is not None and t is not None and isinstance(s, str) and isinstance(t, str):
-            for v, index in ((s, self._src_to_edges), (t, self._tgt_to_edges)):
-                _lst = index.get(v)
-                if _lst:
-                    try:
-                        _lst.remove(edge_id)
-                    except ValueError:
-                        pass
-                    if not _lst:
-                        del index[v]
+        if rec.etype != 'hyper':
+            self._remove_edge_id_from_index(self._src_to_edges, rec.src, edge_id)
+            self._remove_edge_id_from_index(self._tgt_to_edges, rec.tgt, edge_id)
 
         # Primary record deletion
         del self._edges[edge_id]
@@ -4459,7 +4502,10 @@ class AnnNet(
                 else:
                     for ekey in resolved_members:
                         M[_row_of(ekey), col] = fw
-                rec.src = frozenset(ekey[0] for ekey in resolved_members)
+                if self._aspects == ('_',):
+                    rec.src = frozenset(ekey[0] for ekey in resolved_members)
+                else:
+                    rec.src = frozenset(resolved_members)
                 rec.tgt = None
                 rec.directed = False
             else:
@@ -4474,8 +4520,12 @@ class AnnNet(
                         M[_row_of(ekey), col] = fw
                     for ekey in resolved_tail:
                         M[_row_of(ekey), col] = neg_fw
-                rec.src = frozenset(ekey[0] for ekey in resolved_head)
-                rec.tgt = frozenset(ekey[0] for ekey in resolved_tail)
+                if self._aspects == ('_',):
+                    rec.src = frozenset(ekey[0] for ekey in resolved_head)
+                    rec.tgt = frozenset(ekey[0] for ekey in resolved_tail)
+                else:
+                    rec.src = frozenset(resolved_head)
+                    rec.tgt = frozenset(resolved_tail)
                 rec.directed = True
 
             rec.weight = w
@@ -4554,14 +4604,12 @@ class AnnNet(
         for eid in add_edges:
             rec = self._edges[eid]
             if rec.etype == 'hyper':
-                verts.update(rec.src)
+                verts.update(self._endpoint_slice_vertex_ids(rec.src))
                 if rec.tgt is not None:
-                    verts.update(rec.tgt)
+                    verts.update(self._endpoint_slice_vertex_ids(rec.tgt))
             else:
-                if rec.src is not None:
-                    verts.add(rec.src)
-                if rec.tgt is not None:
-                    verts.add(rec.tgt)
+                verts.update(self._endpoint_slice_vertex_ids(rec.src))
+                verts.update(self._endpoint_slice_vertex_ids(rec.tgt))
 
         L['vertices'].update(verts)
 
@@ -4795,12 +4843,16 @@ class AnnNet(
         drop_es: set = set()
         for eid, rec in list(self._edges.items()):
             if rec.etype == 'hyper':
-                if drop_vertex_ids & set(rec.src):
+                if drop_vertex_ids & self._endpoint_slice_vertex_ids(rec.src):
                     drop_es.add(eid)
-                elif rec.tgt is not None and (drop_vertex_ids & set(rec.tgt)):
+                elif rec.tgt is not None and (
+                    drop_vertex_ids & self._endpoint_slice_vertex_ids(rec.tgt)
+                ):
                     drop_es.add(eid)
             else:
-                if rec.src in drop_vertex_ids or rec.tgt in drop_vertex_ids:
+                if drop_vertex_ids & self._endpoint_slice_vertex_ids(rec.src):
+                    drop_es.add(eid)
+                elif drop_vertex_ids & self._endpoint_slice_vertex_ids(rec.tgt):
                     drop_es.add(eid)
 
         if drop_es:

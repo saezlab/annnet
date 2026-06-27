@@ -241,6 +241,18 @@ def test_remove_edges_bulk_removes_each_edge() -> None:
     assert G.ne == 0
 
 
+def test_remove_edge_cleans_flat_adjacency_indexes() -> None:
+    G = AnnNet()
+    G.add_vertices(['A', 'B'])
+    G.add_edges('A', 'B', edge_id='e1')
+
+    G.remove_edge('e1')
+
+    assert G._src_to_edges == {}
+    assert G._tgt_to_edges == {}
+    assert G._pair_to_edges == {}
+
+
 def test_remove_vertices_with_unknown_id_raises_by_default() -> None:
     G = _toy()
     with pytest.raises(KeyError, match='Unknown vertex'):
@@ -265,6 +277,25 @@ def test_remove_vertices_cascades_incident_edges() -> None:
     assert 'A' not in G.vertices()
     assert 'e1' not in G._edges
     assert 'e2' in G._edges
+
+
+def test_remove_vertex_cascades_multilayer_hyperedge_with_supra_member_storage() -> None:
+    G = AnnNet(directed=True)
+    G.layers.set_aspects(['condition'], {'condition': ['healthy']})
+    G.add_vertices(['A', 'B', 'C'], layer={'condition': 'healthy'})
+    G.add_edges(
+        [
+            {
+                'head': [('A', ('healthy',)), ('B', ('healthy',))],
+                'tail': [('C', ('healthy',))],
+                'edge_id': 'h1',
+            }
+        ]
+    )
+
+    G.remove_vertices('A')
+
+    assert 'h1' not in G._edges
 
 
 def test_remove_vertices_bulk_removes_each() -> None:
@@ -365,6 +396,21 @@ def test_remove_edge_singular_drops_the_edge() -> None:
     G = _toy()
     G.remove_edge('e1')
     assert 'e1' not in G._edges
+
+
+def test_remove_edge_cleans_multilayer_adjacency_indexes() -> None:
+    G = AnnNet(aspects={'time': ['t1']})
+    G.add_vertices('A', layer='t1')
+    G.add_vertices('B', layer='t1')
+    src = ('A', ('t1',))
+    tgt = ('B', ('t1',))
+    G.add_edges(src, tgt, edge_id='e1')
+
+    G.remove_edge('e1')
+
+    assert src not in G._src_to_edges
+    assert tgt not in G._tgt_to_edges
+    assert (src, tgt) not in G._pair_to_edges
 
 
 def test_remove_vertex_singular_cascades_incident_edges() -> None:

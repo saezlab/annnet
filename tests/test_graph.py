@@ -300,6 +300,29 @@ class TestGraphBasics(unittest.TestCase):
         ids = {self.g.idx_to_edge[j] for j, _edge in inc}
         self.assertSetEqual(ids, {e1, e2, e3})
 
+    def test_incident_edges_accepts_single_multilayer_supra_node_tuple(self):
+        g = AnnNet(aspects={'time': ['t1', 't2']})
+        g.add_vertices('A', layer='t1')
+        g.add_vertices('B', layer='t1')
+        g.add_edges(('A', ('t1',)), ('B', ('t1',)), edge_id='e1')
+
+        out = g.incident_edges(('A', ('t1',)))
+
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0][1].edge_id, 'e1')
+
+    def test_incident_edges_accepts_iterable_of_multilayer_supra_nodes(self):
+        g = AnnNet(aspects={'time': ['t1', 't2']})
+        g.add_vertices('A', layer='t1')
+        g.add_vertices('B', layer='t1')
+        g.add_vertices('C', layer='t2')
+        g.add_edges(('A', ('t1',)), ('B', ('t1',)), edge_id='e1')
+        g.add_edges(('A', ('t1',)), ('C', ('t2',)), edge_id='e2')
+
+        out = g.incident_edges([('A', ('t1',)), ('C', ('t2',))])
+
+        self.assertSetEqual({edge.edge_id for _, edge in out}, {'e1', 'e2'})
+
     def test_remove_edge_then_vertex(self):
         e = self.g.add_edges('r1', 'r2', weight=1.0, tag='tmp')
         self.g.remove_edge(e)
@@ -426,6 +449,42 @@ class TestGraphBasics(unittest.TestCase):
         self.assertNotIn(hid, g.layers.layer_edge_set(('healthy',)))
         self.assertIn(hid, g.layers.layer_edge_set(('healthy',), include_inter=True))
         self.assertIn(hid, g.layers.layer_edge_set(('treated',), include_inter=True))
+
+    def test_multilayer_propagate_shared_uses_bare_slice_membership(self):
+        g = AnnNet(aspects={'time': ['t1', 't2']})
+        g.add_vertices('A', layer='t1', slice='s1')
+        g.add_vertices('B', layer='t1', slice='s1')
+        g.add_vertices('A', layer='t2', slice='s2')
+        g.add_vertices('B', layer='t2', slice='s2')
+
+        eid = g.add_edges(
+            ('A', ('t1',)),
+            ('B', ('t1',)),
+            edge_id='e1',
+            slice='s1',
+            propagate='shared',
+        )
+
+        self.assertIn(eid, g._slices['s1']['edges'])
+        self.assertIn(eid, g._slices['s2']['edges'])
+
+    def test_multilayer_propagate_all_pulls_bare_vertex_ids_across_slices(self):
+        g = AnnNet(aspects={'time': ['t1', 't2']})
+        g.add_vertices('A', layer='t1', slice='s1')
+        g.add_vertices('B', layer='t2', slice='s2')
+
+        eid = g.add_edges(
+            ('A', ('t1',)),
+            ('B', ('t2',)),
+            edge_id='e1',
+            slice='s1',
+            propagate='all',
+        )
+
+        self.assertIn(eid, g._slices['s1']['edges'])
+        self.assertIn(eid, g._slices['s2']['edges'])
+        self.assertIn('B', g._slices['s1']['vertices'])
+        self.assertIn('A', g._slices['s2']['vertices'])
 
     def test_supra_incidence_includes_coupling_hyperedge_when_requested(self):
         g = AnnNet(aspects={'condition': ['healthy', 'treated']})
