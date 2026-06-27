@@ -54,6 +54,16 @@ def _share_or_clone_table(df):
 class Operations:
     """Topology materialization and graph-copy operations."""
 
+    def _constructor_aspects(self):
+        """Return constructor-ready aspects metadata preserving declared layer sets."""
+        if self._aspects == ('_',):
+            return None
+        return {aspect: list(self._layers.get(aspect, ())) for aspect in self._aspects}
+
+    def _copy_graph_attributes(self, new) -> None:
+        """Preserve graph-level metadata on derived graph objects."""
+        new.graph_attributes = self.graph_attributes.copy()
+
     def _rows_attr_map(self, df, key_col: str, keys=None) -> dict:
         """Return a key -> attrs mapping from an attribute table."""
         if df is None or key_col not in dataframe_columns(df):
@@ -208,7 +218,7 @@ class Operations:
         )
         new.layer_attributes = self.layer_attributes.clone()
         new.slice_edge_weights = type(self.slice_edge_weights)()
-        new.graph_attributes = {}
+        self._copy_graph_attributes(new)
         new._install_history_hooks()
         return new
 
@@ -306,9 +316,9 @@ class Operations:
         # new graph prealloc — preserve aspects when self is multilayer so
         # supra-node tuple endpoints remain valid in the new graph.
         G = self.__class__
-        if self._aspects != ('_',):
-            new_aspects = {a: list(self._layers.get(a, [])) for a in self._aspects}
-            g = G(directed=self.directed, n=len(V), e=len(E), aspects=new_aspects)
+        new_aspects = self._constructor_aspects()
+        if new_aspects is not None:
+            g = G(directed=self.directed, v=len(V), e=len(E), aspects=new_aspects)
             # Place vertices in their original supra-node coordinates.
             bare_vid_attrs = self._rows_attr_map(
                 self.vertex_attributes, 'vertex_id', {self._bare_vid(v) for v in V}
@@ -321,7 +331,7 @@ class Operations:
                 attrs = bare_vid_attrs.get(bare_vid, {})
                 g.add_vertices(bare_vid, layer=layer_coord, **attrs)
         else:
-            g = G(directed=self.directed, n=len(V), e=len(E))
+            g = G(directed=self.directed, v=len(V), e=len(E))
             va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
             v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
             g._add_vertices_bulk(v_rows, slice=g._default_slice)
@@ -340,6 +350,7 @@ class Operations:
             if kept_edges:
                 g.slices.add_edges(lid, kept_edges)
 
+        self._copy_graph_attributes(g)
         return g
 
     @staticmethod
@@ -458,9 +469,9 @@ class Operations:
         # supra-node-tuple endpoints in payloads stay valid.
         G = self.__class__
         edge_count = len(E_bin) + len(E_hyper_members) + len(E_hyper_dir)
-        if self._aspects != ('_',):
-            new_aspects = {a: list(self._layers.get(a, [])) for a in self._aspects}
-            g = G(directed=self.directed, n=len(V), e=edge_count, aspects=new_aspects)
+        new_aspects = self._constructor_aspects()
+        if new_aspects is not None:
+            g = G(directed=self.directed, v=len(V), e=edge_count, aspects=new_aspects)
             # Place each retained vertex back at its original supra-node coords.
             for vid in V:
                 attrs = va_lookup.get(vid, {})
@@ -471,7 +482,7 @@ class Operations:
                 if not placed:
                     g.add_vertices(vid, **attrs)
         else:
-            g = G(directed=self.directed, n=len(V), e=edge_count)
+            g = G(directed=self.directed, v=len(V), e=edge_count)
             g._add_vertices_bulk(v_rows, slice=g._default_slice)
         if bin_payload:
             g._add_edges_bulk(bin_payload, slice=g._default_slice)
@@ -504,6 +515,7 @@ class Operations:
             if keep:
                 g.slices.add_edges(lid, keep)
 
+        self._copy_graph_attributes(g)
         return g
 
     def extract_subgraph(self, vertices=None, edges=None) -> AnnNet:
@@ -709,14 +721,31 @@ class Operations:
             )
 
         G = self.__class__
-        g = G(directed=self.directed, n=len(V), e=len(E))
+        new_aspects = self._constructor_aspects()
+        if new_aspects is not None:
+            g = G(directed=self.directed, v=len(V), e=len(E), aspects=new_aspects)
+        else:
+            g = G(directed=self.directed, v=len(V), e=len(E))
         g.slices.add(slice_id, **slice_meta['attributes'])
         g.slices.active = slice_id
 
         # vertices with attrs (edge-entities share same table)
         va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
-        v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
-        g._add_vertices_bulk(v_rows, slice=slice_id)
+        if new_aspects is not None:
+            for vid in V:
+                attrs = va_lookup.get(vid, {})
+                placed = False
+                for ekey in self._vid_to_ekeys.get(vid, []):
+                    rec = self._entities.get(ekey)
+                    if rec is None or rec.kind != 'vertex':
+                        continue
+                    g.add_vertices(ekey[0], layer=ekey[1], slice=slice_id, **attrs)
+                    placed = True
+                if not placed:
+                    g.add_vertices(vid, slice=slice_id, **attrs)
+        else:
+            v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
+            g._add_vertices_bulk(v_rows, slice=slice_id)
 
         # edge attrs
         e_attrs = self._rows_attr_map(self.edge_attributes, 'edge_id', E)
@@ -782,6 +811,7 @@ class Operations:
         if hyper_payload:
             g.add_edges(hyper_payload, slice=slice_id)
 
+        self._copy_graph_attributes(g)
         return g
 
     def _row_attrs(self, df, key_col: str, key):
@@ -843,7 +873,16 @@ class Operations:
         # 1) Construct empty graph with same capacity (fast path)
         # ---------------------------------------------------------------
         G = self.__class__
-        new = G(directed=self.directed)
+        new_aspects = self._constructor_aspects()
+        if new_aspects is not None:
+            new = G(
+                directed=self.directed,
+                v=self._matrix.shape[0],
+                e=self._matrix.shape[1],
+                aspects=new_aspects,
+            )
+        else:
+            new = G(directed=self.directed, v=self._matrix.shape[0], e=self._matrix.shape[1])
 
         # ---------------------------------------------------------------
         # 2) Clone incidence matrix (DOK → DOK copy is fast)
@@ -913,14 +952,9 @@ class Operations:
         # ---------------------------------------------------------------
         # 8) Clone Kivela metadata
         # ---------------------------------------------------------------
-        if self.layers.aspects:
-            new.layers.set_aspects(
-                list(self.layers.aspects),
-                {k: list(v) for k, v in self.layers.elem_layers.items()},
-            )
-            new.layers._all_layers = tuple(tuple(x) for x in self.layers._all_layers)
-        else:
-            new.layers._all_layers = ()
+        new.layers._all_layers = (
+            tuple(tuple(x) for x in self.layers._all_layers) if self.layers.aspects else ()
+        )
         new.layers._aspect_attrs = {a: m.copy() for a, m in self.layers._aspect_attrs.items()}
         new.layers._layer_attrs = {aa: m.copy() for aa, m in self.layers._layer_attrs.items()}
         new.layers._state_attrs = {k: m.copy() for k, m in self.layers._state_attrs.items()}

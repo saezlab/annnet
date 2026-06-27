@@ -210,6 +210,34 @@ class TestGraphViewMaterialize(unittest.TestCase):
         self.assertEqual(sub.nv, 3)
         self.assertEqual(sub.ne, 2)
 
+    def test_materialize_preserves_explicit_edge_ids_in_flat_graph(self):
+        G = AnnNet()
+        G.add_vertices(['A', 'B'])
+        G.add_edges('A', 'B', edge_id='e1', score=7)
+
+        H = G.view().materialize()
+
+        self.assertEqual(H.edges(), ['e1'])
+        self.assertEqual(H.attrs.get_attr_edge('e1', 'score'), 7)
+
+    def test_materialize_preserves_multilayer_aspects_supra_vertices_and_edges(self):
+        G = AnnNet(aspects={'time': ['t1', 't2']})
+        G.add_vertices('A', layer='t1')
+        G.add_vertices('A', layer='t2')
+        G.add_vertices('B', layer='t1')
+        G.add_edges(('A', ('t1',)), ('B', ('t1',)), edge_id='e1')
+
+        H = G.view().materialize()
+
+        self.assertEqual(H.layers.list_aspects(), ('time',))
+        self.assertSetEqual(
+            set(H.supra_vertices()),
+            {('A', ('t1',)), ('A', ('t2',)), ('B', ('t1',))},
+        )
+        self.assertEqual(H.edges(), ['e1'])
+        self.assertEqual(H._edges['e1'].src, ('A', ('t1',)))
+        self.assertEqual(H._edges['e1'].tgt, ('B', ('t1',)))
+
 
 class TestViewNamespace(unittest.TestCase):
     def test_views_namespace_matches_flat_api(self):

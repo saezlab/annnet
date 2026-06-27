@@ -11,6 +11,8 @@ Target: ≥80 % per SCV-5.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 import scipy.sparse as sp
@@ -174,6 +176,29 @@ def test_ops_subgraph_and_edge_subgraph_forwarders() -> None:
     assert 'e_dir' in esub._edges
 
 
+def test_subgraph_preserves_graph_attributes() -> None:
+    G = AnnNet(project='proj1', stage='draft')
+    G.add_vertices(['A', 'B'])
+    G.add_edges('A', 'B', edge_id='e1')
+
+    H = G.ops.subgraph({'A', 'B'})
+
+    assert H.graph_attributes == {'project': 'proj1', 'stage': 'draft'}
+
+
+def test_edge_subgraph_does_not_leak_constructor_capacity_into_graph_attributes() -> None:
+    G = AnnNet(aspects={'time': ['t1']}, project='demo')
+    G.add_vertices('A', layer='t1')
+    G.add_vertices('B', layer='t1')
+    G.add_edges(('A', ('t1',)), ('B', ('t1',)), edge_id='e1')
+
+    H = G.ops.edge_subgraph(['e1'])
+
+    assert 'n' not in H.graph_attributes
+    assert H.graph_attributes['project'] == 'demo'
+    assert H.edges() == ['e1']
+
+
 def test_ops_extract_and_extract_subgraph_aliases_match() -> None:
     G = _mixed_graph()
     a = G.ops.extract(vertices=['A', 'B'])
@@ -308,6 +333,38 @@ def test_subgraph_from_slice_multilayer_with_binary_edges_only() -> None:
     assert 'e2' in H._edges
 
 
+def test_multilayer_subgraph_from_slice_preserves_graph_attributes_and_real_supra_vertices():
+    G = AnnNet(directed=True, project='sliceproj')
+    G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
+    G.add_vertices(['A', 'B'], layer={'condition': 'healthy'}, slice='S1')
+    G.add_vertices(['C'], layer={'condition': 'treated'}, slice='S1')
+    G.add_edges(
+        [
+            {
+                'members': [('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))],
+                'edge_id': 'h1',
+            }
+        ],
+        slice='S1',
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        H = G.subgraph_from_slice('S1')
+
+    msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+    assert not any('placeholder layer' in msg for msg in msgs), msgs
+    assert H.graph_attributes['project'] == 'sliceproj'
+    assert set(H.supra_vertices()) == {
+        ('A', ('healthy',)),
+        ('B', ('healthy',)),
+        ('C', ('treated',)),
+    }
+    assert H._edges['h1'].src == frozenset(
+        {('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))}
+    )
+
+
 # ── multilayer edge_subgraph / subgraph branches ────────────────────────
 
 
@@ -364,6 +421,19 @@ def test_copy_multilayer_preserves_aspects_and_layer_attrs() -> None:
     assert dict(H.layers.elem_layers) == dict(G.layers.elem_layers)
 
 
+def test_copy_multilayer_does_not_emit_placeholder_reassignment_warning() -> None:
+    G = AnnNet(aspects={'time': ['t1']})
+    G.add_vertices('A', layer='t1')
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        H = G.ops.copy()
+
+    msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+    assert not any('reassigned to placeholder layer' in msg for msg in msgs), msgs
+    assert H.layers.list_aspects() == ('time',)
+
+
 def test_subgraph_on_multilayer_with_hyperedge_via_supra_members() -> None:
     """Hyperedge whose members are supra-node tuples must round-trip
     through ``subgraph``."""
@@ -402,6 +472,36 @@ def test_edge_subgraph_multilayer_with_hyperedge_via_supra_members() -> None:
     )
     H = G.ops.edge_subgraph(['h_dir'])
     assert 'h_dir' in H._edges
+
+
+def test_edge_subgraph_multilayer_hyperedge_preserves_supra_members_without_placeholder_warnings():
+    G = AnnNet(directed=True)
+    G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
+    G.add_vertices(['A', 'B'], layer={'condition': 'healthy'})
+    G.add_vertices(['C'], layer={'condition': 'treated'})
+    G.add_edges(
+        [
+            {
+                'members': [('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))],
+                'edge_id': 'h1',
+            }
+        ]
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        H = G.ops.edge_subgraph(['h1'])
+
+    msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
+    assert not any('placeholder layer' in msg for msg in msgs), msgs
+    assert set(H.supra_vertices()) == {
+        ('A', ('healthy',)),
+        ('B', ('healthy',)),
+        ('C', ('treated',)),
+    }
+    assert H._edges['h1'].src == frozenset(
+        {('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))}
+    )
 
 
 # ── _row_attrs (exercised via views.layers on a graph with layer attrs) ─

@@ -347,88 +347,24 @@ class GraphView:
         AnnNet
             Materialized subgraph.
         """
-        # Create an empty AnnNet object (no need to import annnet.core.graph)
-        subG = type(self._graph)(directed=self._graph.directed)
+        subG = self._graph.ops.extract_subgraph(vertices=self.vertex_ids, edges=self.edge_ids)
 
-        vertex_ids = self.vertex_ids
-        edge_ids = self.edge_ids
-
-        # vset is a set for O(1) membership checks throughout
-        if vertex_ids is not None:
-            vset = vertex_ids  # already a set from _compute_ids
-        else:
-            vset = {ekey[0] for ekey, rec in self._graph._entities.items() if rec.kind == 'vertex'}
-
-        # ---- Copy vertices in one bulk call ----
         if copy_attributes:
-            vertex_records = dataframe_to_rows(self.obs)
-            if not vertex_records:
-                vertex_records = [{'vertex_id': vid} for vid in vset]
-            subG.add_vertices(vertex_records)
-        else:
-            subG.add_vertices({'vertex_id': vid} for vid in vset)
+            return subG
 
-        # ---- Collect all edge attrs in one bulk scan ----
-        edge_attrs_map = {}
-        if copy_attributes:
-            for row in dataframe_to_rows(self.var):
-                eid = row.pop('edge_id', None)
-                if eid is not None:
-                    edge_attrs_map[eid] = row
+        def _id_only_table(df, id_col: str):
+            rows = []
+            if df is not None:
+                for row in dataframe_to_rows(df):
+                    key = row.get(id_col)
+                    if key is not None:
+                        rows.append({id_col: key})
+            if rows:
+                return dataframe_from_rows(rows)
+            return empty_dataframe({id_col: 'text'}, backend=self._graph._annotations_backend)
 
-        # ---- Determine which edges to copy ----
-        if edge_ids is not None:
-            eids_to_copy = edge_ids
-        else:
-            eids_to_copy = self._graph._col_to_edge.values()
-
-        # ---- Partition into binary and hyperedges ----
-        binary_edges = []
-        hyper_edges = []
-
-        for eid in eids_to_copy:
-            rec = self._graph._edges.get(eid)
-            if rec is None or rec.col_idx < 0:
-                continue
-            weight = rec.weight if rec.weight is not None else 1.0
-            if rec.etype == 'hyper':
-                if rec.tgt is not None:
-                    heads = list(rec.src)
-                    tails = list(rec.tgt)
-                    if not all(h in vset for h in heads) or not all(t in vset for t in tails):
-                        continue
-                    d = {'head': heads, 'tail': tails, 'weight': weight}
-                else:
-                    members = list(rec.src)
-                    if not all(m in vset for m in members):
-                        continue
-                    d = {'members': members, 'weight': weight}
-                if copy_attributes and eid in edge_attrs_map:
-                    d['attributes'] = edge_attrs_map[eid]
-                hyper_edges.append(d)
-            else:
-                source, target = rec.src, rec.tgt
-                if source is None or target is None:
-                    continue
-                if source not in vset or target not in vset:
-                    continue
-                directed = rec.directed if rec.directed is not None else self._graph.directed
-                d = {
-                    'source': source,
-                    'target': target,
-                    'weight': weight,
-                    'edge_type': rec.etype,
-                    'edge_directed': directed,
-                }
-                if copy_attributes and eid in edge_attrs_map:
-                    d['attributes'] = edge_attrs_map[eid]
-                binary_edges.append(d)
-
-        if binary_edges:
-            subG._add_edges_bulk(binary_edges)
-        if hyper_edges:
-            subG.add_edges(hyper_edges)
-
+        subG.vertex_attributes = _id_only_table(subG.vertex_attributes, 'vertex_id')
+        subG.edge_attributes = _id_only_table(subG.edge_attributes, 'edge_id')
         return subG
 
     def subview(self, vertices=None, edges=None, slices=None, predicate=None):
