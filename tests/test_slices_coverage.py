@@ -250,6 +250,43 @@ def test_hyperedge_presence_argument_errors() -> None:
         G.slices.hyperedge_presence(head=['A', 'B'], tail=['B', 'C'])
 
 
+def test_hyperedge_presence_multilayer_directed_match_with_bare_ids() -> None:
+    G = AnnNet(directed=True)
+    G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
+    G.add_vertices(['A', 'B'], layer={'condition': 'healthy'}, slice='S1')
+    G.add_vertices(['C'], layer={'condition': 'treated'}, slice='S1')
+    G.add_edges(
+        [
+            {
+                'head': [('A', ('healthy',)), ('B', ('healthy',))],
+                'tail': [('C', ('treated',))],
+                'edge_id': 'h1',
+            }
+        ],
+        slice='S1',
+    )
+    out = G.slices.hyperedge_presence(head=['A', 'B'], tail=['C'])
+    assert 'S1' in out and 'h1' in out['S1']
+
+
+def test_hyperedge_presence_multilayer_undirected_match_with_bare_ids() -> None:
+    G = AnnNet(directed=True)
+    G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
+    G.add_vertices(['A', 'B'], layer={'condition': 'healthy'}, slice='S1')
+    G.add_vertices(['C'], layer={'condition': 'treated'}, slice='S1')
+    G.add_edges(
+        [
+            {
+                'members': [('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))],
+                'edge_id': 'h1',
+            }
+        ],
+        slice='S1',
+    )
+    out = G.slices.hyperedge_presence(members=['A', 'B', 'C'])
+    assert 'S1' in out and 'h1' in out['S1']
+
+
 # ── conserved / specific / temporal ─────────────────────────────────────
 
 

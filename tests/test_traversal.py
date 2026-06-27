@@ -209,5 +209,41 @@ class TestHyperedgeTraversal(unittest.TestCase):
         self.assertIn('A', inn)
 
 
+class TestMultilayerTraversal(unittest.TestCase):
+    """Bare-id traversal should work when a multilayer vertex resolves uniquely."""
+
+    def test_neighbors_bare_id_on_unique_multilayer_binary_edge(self):
+        G = AnnNet(directed=True)
+        G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
+        G.add_vertices('A', layer={'condition': 'healthy'})
+        G.add_vertices('B', layer={'condition': 'healthy'})
+        G.add_edges(('A', ('healthy',)), ('B', ('healthy',)), edge_id='e1')
+        self.assertIn(('B', ('healthy',)), G.neighbors('A'))
+
+    def test_out_neighbors_bare_id_on_unique_multilayer_binary_edge(self):
+        G = AnnNet(directed=True)
+        G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
+        G.add_vertices('A', layer={'condition': 'healthy'})
+        G.add_vertices('B', layer={'condition': 'healthy'})
+        G.add_edges(('A', ('healthy',)), ('B', ('healthy',)), edge_id='e1')
+        self.assertIn(('B', ('healthy',)), G.out_neighbors('A'))
+
+    def test_in_neighbors_bare_id_on_unique_multilayer_binary_edge(self):
+        G = AnnNet(directed=True)
+        G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
+        G.add_vertices('A', layer={'condition': 'healthy'})
+        G.add_vertices('B', layer={'condition': 'healthy'})
+        G.add_edges(('A', ('healthy',)), ('B', ('healthy',)), edge_id='e1')
+        self.assertIn(('A', ('healthy',)), G.in_neighbors('B'))
+
+    def test_neighbors_bare_id_on_unique_multilayer_hyperedge(self):
+        G = AnnNet(directed=True)
+        G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
+        G.add_vertices('A', layer={'condition': 'healthy'})
+        G.add_vertices('B', layer={'condition': 'treated'})
+        G.add_edges([{'members': [('A', ('healthy',)), ('B', ('treated',))], 'edge_id': 'h1'}])
+        self.assertIn(('B', ('treated',)), G.neighbors('A'))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -31,6 +31,7 @@ class Traversal:
         out = set()
         default_dir = self.directed if self.directed is not None else True
         ekey_kind = self._entities[ekey].kind
+        probe = ekey if self._aspects != ('_',) else entity_id
 
         for _eid, rec in self._edges.items():
             if rec.col_idx < 0:
@@ -38,22 +39,22 @@ class Traversal:
             if rec.etype == 'hyper':
                 meta = _hyper_meta(rec)
                 if meta['directed']:
-                    if entity_id in meta['head']:
+                    if probe in meta['head']:
                         out |= meta['tail']
-                    elif entity_id in meta['tail']:
+                    elif probe in meta['tail']:
                         out |= meta['head']
                 else:
                     members = meta.get('members', set())
-                    if entity_id in members:
-                        out |= members - {entity_id}
+                    if probe in members:
+                        out |= members - {probe}
             else:
                 s, t = rec.src, rec.tgt
                 if s is None or t is None:
                     continue
                 edir = rec.directed if rec.directed is not None else default_dir
-                if s == entity_id:
+                if s == probe:
                     out.add(t)
-                elif t == entity_id and (not edir or ekey_kind == 'edge_entity'):
+                elif t == probe and (not edir or ekey_kind == 'edge_entity'):
                     out.add(s)
         return list(out)
 
@@ -76,6 +77,7 @@ class Traversal:
 
         out = set()
         default_dir = self.directed if self.directed is not None else True
+        probe = ekey if self._aspects != ('_',) else vertex_id
 
         for _eid, rec in self._edges.items():
             if rec.col_idx < 0:
@@ -83,20 +85,20 @@ class Traversal:
             if rec.etype == 'hyper':
                 meta = _hyper_meta(rec)
                 if meta['directed']:
-                    if vertex_id in meta['head']:
+                    if probe in meta['head']:
                         out |= meta['tail']
                 else:
                     members = meta.get('members', set())
-                    if vertex_id in members:
-                        out |= members - {vertex_id}
+                    if probe in members:
+                        out |= members - {probe}
             else:
                 s, t = rec.src, rec.tgt
                 if s is None or t is None:
                     continue
                 edir = rec.directed if rec.directed is not None else default_dir
-                if s == vertex_id:
+                if s == probe:
                     out.add(t)
-                elif t == vertex_id and not edir:
+                elif t == probe and not edir:
                     out.add(s)
         return list(out)
 
@@ -134,6 +136,7 @@ class Traversal:
 
         inn = set()
         default_dir = self.directed if self.directed is not None else True
+        probe = ekey if self._aspects != ('_',) else vertex_id
 
         for _eid, rec in self._edges.items():
             if rec.col_idx < 0:
@@ -141,20 +144,20 @@ class Traversal:
             if rec.etype == 'hyper':
                 meta = _hyper_meta(rec)
                 if meta['directed']:
-                    if vertex_id in meta['tail']:
+                    if probe in meta['tail']:
                         inn |= meta['head']
                 else:
                     members = meta.get('members', set())
-                    if vertex_id in members:
-                        inn |= members - {vertex_id}
+                    if probe in members:
+                        inn |= members - {probe}
             else:
                 s, t = rec.src, rec.tgt
                 if s is None or t is None:
                     continue
                 edir = rec.directed if rec.directed is not None else default_dir
-                if t == vertex_id:
+                if t == probe:
                     inn.add(s)
-                elif s == vertex_id and not edir:
+                elif s == probe and not edir:
                     inn.add(t)
         return list(inn)
 

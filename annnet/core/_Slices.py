@@ -432,18 +432,24 @@ class SliceManager:
         include_default: bool = False,
     ) -> dict[str, list[str]]:
         G = self._G
+
+        def _bare(v):
+            if isinstance(v, tuple) and len(v) == 2 and isinstance(v[1], tuple):
+                return v[0]
+            return v
+
         undirected = members is not None
         if undirected and (head is not None or tail is not None):
             raise ValueError('Use either members OR head+tail, not both.')
         if not undirected and (head is None or tail is None):
             raise ValueError('Directed hyperedge query requires both head and tail.')
         if undirected:
-            members_set = set(members) if members is not None else set()
+            members_set = {_bare(v) for v in members} if members is not None else set()
             if not members_set:
                 raise ValueError('members must be non-empty.')
         else:
-            head_set = set(head) if head is not None else set()
-            tail_set = set(tail) if tail is not None else set()
+            head_set = {_bare(v) for v in head} if head is not None else set()
+            tail_set = {_bare(v) for v in tail} if tail is not None else set()
             if not head_set or not tail_set:
                 raise ValueError('head and tail must be non-empty.')
             if head_set & tail_set:
@@ -457,10 +463,12 @@ class SliceManager:
                 if rec is None or rec.col_idx < 0 or rec.etype != 'hyper':
                     continue
                 if undirected and rec.tgt is None:
-                    if set(rec.src) == members_set:
+                    if {_bare(v) for v in rec.src} == members_set:
                         matches.append(eid)
                 elif (not undirected) and rec.tgt is not None:
-                    if set(rec.src) == head_set and set(rec.tgt) == tail_set:
+                    if {_bare(v) for v in rec.src} == head_set and {
+                        _bare(v) for v in rec.tgt
+                    } == tail_set:
                         matches.append(eid)
             if matches:
                 out[lid] = matches
