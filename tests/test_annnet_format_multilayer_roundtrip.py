@@ -78,6 +78,35 @@ def _build_multilayer_graph():
     return G, samples, base_vertices, consensus_nodes, intra_edge_specs
 
 
+def _build_multilayer_hypergraph(*, directed: bool):
+    G = annnet.AnnNet(directed=directed)
+    G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
+    G.add_vertices(['A', 'B'], layer={'condition': 'healthy'})
+    G.add_vertices(['C'], layer={'condition': 'treated'})
+
+    if directed:
+        G.add_edges(
+            [
+                {
+                    'head': [('A', ('healthy',)), ('B', ('healthy',))],
+                    'tail': [('C', ('treated',))],
+                    'edge_id': 'h1',
+                }
+            ]
+        )
+    else:
+        G.add_edges(
+            [
+                {
+                    'members': [('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))],
+                    'edge_id': 'h1',
+                }
+            ]
+        )
+
+    return G
+
+
 def _snapshot(G, samples, probe_vid, consensus_aa):
     return {
         'nv': G.global_count('vertices'),
@@ -145,6 +174,34 @@ def test_multilayer_intra_edges_preserve_ml_kind(tmp_path: Path, compression):
         assert len(edges) == len(intra_edge_specs), (
             f'sample {s}: expected {len(intra_edge_specs)} intra edges, got {len(edges)}'
         )
+
+
+def test_multilayer_directed_hyperedge_roundtrip_preserves_supra_members(tmp_path: Path):
+    G = _build_multilayer_hypergraph(directed=True)
+
+    out = tmp_path / 'directed_hyper.annnet'
+    io_write(G, out, overwrite=True)
+    G2 = io_read(out)
+
+    rec = G2._edges['h1']
+    assert rec.src == frozenset({('A', ('healthy',)), ('B', ('healthy',))})
+    assert rec.tgt == frozenset({('C', ('treated',))})
+    assert {type(member).__name__ for member in rec.src | rec.tgt} == {'tuple'}
+
+
+def test_multilayer_undirected_hyperedge_roundtrip_preserves_supra_members(tmp_path: Path):
+    G = _build_multilayer_hypergraph(directed=False)
+
+    out = tmp_path / 'undirected_hyper.annnet'
+    io_write(G, out, overwrite=True)
+    G2 = io_read(out)
+
+    rec = G2._edges['h1']
+    assert rec.src == frozenset(
+        {('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))}
+    )
+    assert rec.tgt is None
+    assert {type(member).__name__ for member in rec.src} == {'tuple'}
 
 
 if __name__ == '__main__':

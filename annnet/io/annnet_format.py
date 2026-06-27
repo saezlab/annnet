@@ -32,10 +32,12 @@ from ._common import (
     dataframe_from_rows,
     dataframe_iter_rows,
     serialize_edge_layers,
+    serialize_endpoint,
     collect_slice_manifest,
     dataframe_from_columns,
     dataframe_read_parquet,
     dataframe_write_parquet,
+    deserialize_endpoint,
     deserialize_edge_layers,
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
@@ -51,6 +53,18 @@ def _df_from_dict(data: dict):
     if isinstance(data, list):
         return dataframe_from_rows(data)
     return dataframe_from_columns(data)
+
+
+def _serialize_hyper_members(members) -> list[str]:
+    """Encode hyperedge members deterministically for parquet round-trip."""
+    import json
+
+    return [json.dumps(serialize_endpoint(member), sort_keys=True) for member in sorted(members, key=repr)]
+
+
+def _deserialize_hyper_members(members) -> list:
+    """Restore hyperedge members from parquet-safe endpoint payloads."""
+    return [deserialize_endpoint(member) for member in (members or [])]
 
 
 ANNNET_EXT = 'graph.annnet'
@@ -441,13 +455,13 @@ def _write_structure(graph, path: Path, compression: str, layer_dict: _LayerDict
             is_dir = rec.tgt is not None
             dirs.append(is_dir)
             if is_dir:
-                heads.append(sorted(map(str, rec.src)))
-                tails.append(sorted(map(str, rec.tgt)))
+                heads.append(_serialize_hyper_members(rec.src))
+                tails.append(_serialize_hyper_members(rec.tgt))
                 mems.append(None)
             else:
                 heads.append(None)
                 tails.append(None)
-                mems.append(sorted(map(str, rec.src)))
+                mems.append(_serialize_hyper_members(rec.src))
         hyper_df = _df_from_dict(
             {'edge_id': eids, 'directed': dirs, 'members': mems, 'head': heads, 'tail': tails}
         )
@@ -1005,9 +1019,9 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
             if rec is None:
                 continue
             is_dir = bool(hrow.get('directed', False))
-            head = hrow.get('head') or []
-            tail = hrow.get('tail') or []
-            members = hrow.get('members') or []
+            head = _deserialize_hyper_members(hrow.get('head'))
+            tail = _deserialize_hyper_members(hrow.get('tail'))
+            members = _deserialize_hyper_members(hrow.get('members'))
             if is_dir:
                 rec.src = frozenset(head)
                 rec.tgt = frozenset(tail)
