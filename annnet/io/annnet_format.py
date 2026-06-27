@@ -29,15 +29,15 @@ import scipy.sparse as sp
 from .. import __version__ as ANNNET_VERSION
 from ._common import (
     dataframe_to_rows,
+    serialize_endpoint,
     dataframe_from_rows,
     dataframe_iter_rows,
+    deserialize_endpoint,
     serialize_edge_layers,
-    serialize_endpoint,
     collect_slice_manifest,
     dataframe_from_columns,
     dataframe_read_parquet,
     dataframe_write_parquet,
-    deserialize_endpoint,
     deserialize_edge_layers,
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
@@ -59,7 +59,10 @@ def _serialize_hyper_members(members) -> list[str]:
     """Encode hyperedge members deterministically for parquet round-trip."""
     import json
 
-    return [json.dumps(serialize_endpoint(member), sort_keys=True) for member in sorted(members, key=repr)]
+    return [
+        json.dumps(serialize_endpoint(member), sort_keys=True)
+        for member in sorted(members, key=repr)
+    ]
 
 
 def _deserialize_hyper_members(members) -> list:

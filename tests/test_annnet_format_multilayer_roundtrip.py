@@ -197,9 +197,7 @@ def test_multilayer_undirected_hyperedge_roundtrip_preserves_supra_members(tmp_p
     G2 = io_read(out)
 
     rec = G2._edges['h1']
-    assert rec.src == frozenset(
-        {('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))}
-    )
+    assert rec.src == frozenset({('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))})
     assert rec.tgt is None
     assert {type(member).__name__ for member in rec.src} == {'tuple'}
 
