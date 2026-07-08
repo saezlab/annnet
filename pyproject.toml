@@ -353,6 +353,7 @@ section-order = [
 "docs/*" = ["ANN", "BLE", "D", "E402", "I"]
 "tests/*" = ["ANN", "BLE", "D", "E402", "I"]
 "tests/conftest.py" = ["D101", "D102", "D103", "E402"]
+"benchmarks/*" = ["ANN", "BLE", "D", "E402"]
 "notebooks/*" = ["ANN", "BLE", "D", "E402", "I001"]
 "docs/tutorials/notebooks/*" = ["ANN", "BLE", "D", "E402", "I001"]
 

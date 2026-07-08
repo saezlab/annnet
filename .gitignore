@@ -64,7 +64,9 @@ notebooks/data
 docs/tutorials/notebooks/special/
 docs/tutorials/notebooks/use_cases/
 site/
-benchmarks/
+
+# Track the benchmark suite code & ignore generated outputs
+benchmarks/results/
 
 # pixi environments
 .pixi/*
