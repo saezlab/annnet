@@ -123,14 +123,40 @@ def to_pyg(
     hyperedge_mode: Literal['skip', 'reify', 'expand'] = 'reify',
     device: str = 'cpu',
 ) -> HeteroData:
-    """
-    Direct AnnNet -> PyTorch Geometric adapter.
+    """Export AnnNet → torch_geometric.data.HeteroData.
 
-    - Respects AnnNet architecture (uses entity_types, edge_definitions)
-    - Narwhals-compatible dataframe input via shared row conversion
-    - Heterogeneous (vertex kinds)
-    - Hypergraph-safe (reification)
-    - Slice-aware (boolean masks)
+    Builds a heterogeneous graph: vertices are grouped into node types by their
+    ``kind`` attribute and edges into relation types by their endpoint kinds, so
+    AnnNet's entity/edge typing is preserved. Selected vertex/edge attribute
+    columns become node/edge feature tensors, and slice membership is carried as
+    boolean masks. Hyperedges have no native PyG equivalent and are handled per
+    ``hyperedge_mode``.
+
+    Parameters
+    ----------
+    graph : AnnNet
+    node_features : dict[str, list[str]], optional
+        Per node-kind, the vertex-attribute columns to stack into the node
+        feature tensor ``x``. Kinds absent from the mapping get no features.
+    edge_features : dict[tuple[str, str, str], list[str]], optional
+        Per relation triple ``(src_kind, relation, dst_kind)``, the edge-attribute
+        columns to stack into ``edge_attr``.
+    slice_id : str, optional
+        Slice to export; defaults to the graph's active slice
+        (``graph.slices.active``).
+    hyperedge_mode : {"reify", "expand", "skip"}, default "reify"
+        - ``"reify"``: add a node per hyperedge plus membership edges carrying
+          per-endpoint roles/coefficients.
+        - ``"expand"``: replace each hyperedge with binary edges over its endpoints.
+        - ``"skip"``: drop hyperedges (kept only in the manifest).
+    device : str, default "cpu"
+        Torch device the returned tensors are allocated on.
+
+    Returns
+    -------
+    torch_geometric.data.HeteroData
+        Heterogeneous graph with per-type ``x`` / ``edge_index`` / ``edge_attr``
+        and slice masks.
     """
 
     if slice_id is None:
