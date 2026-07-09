@@ -1,25 +1,19 @@
+"""Matrix caches, index lookups, and attribute-table row helpers."""
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import sys as _sys
 
 from .._support.dataframe_backend import (
     empty_dataframe,
-    dataframe_height,
     dataframe_columns,
     dataframe_to_rows,
     dataframe_append_rows,
 )
 
-if TYPE_CHECKING:
-    pass
-
 
 class CacheManager:
-    """Materialized matrix cache manager.
-
-    The cache manager owns derived sparse representations such as CSR, CSC, and
-    adjacency. Cached values are invalidated against the graph version counter.
-    """
+    """Derived sparse-matrix cache (CSR/CSC/adjacency), keyed on the graph version."""
 
     def __init__(self, graph):
         self._G = graph
@@ -29,8 +23,6 @@ class CacheManager:
         self._csr_version = None
         self._csc_version = None
         self._adjacency_version = None
-
-    # ==================== CSR/CSC Properties ====================
 
     @property
     def csr(self):
@@ -80,7 +72,6 @@ class CacheManager:
         """
         if self._adjacency is None or self._adjacency_version != self._G._version:
             csr = self.csr
-            # Adjacency from incidence: A = B @ B.T
             self._adjacency = csr @ csr.T
             self._adjacency_version = self._G._version
         return self._adjacency
@@ -139,8 +130,6 @@ class CacheManager:
         """
         return self.adjacency
 
-    # ==================== Cache Management ====================
-
     def invalidate(self, formats=None):
         """Invalidate cached formats.
 
@@ -156,17 +145,13 @@ class CacheManager:
         """
         if formats is None:
             formats = ['csr', 'csc', 'adjacency']
-
         for fmt in formats:
             if fmt == 'csr':
-                self._csr = None
-                self._csr_version = None
+                self._csr = self._csr_version = None
             elif fmt == 'csc':
-                self._csc = None
-                self._csc_version = None
+                self._csc = self._csc_version = None
             elif fmt == 'adjacency':
-                self._adjacency = None
-                self._adjacency_version = None
+                self._adjacency = self._adjacency_version = None
 
     def build(self, formats=None):
         """Pre-build specified formats (eager caching).
@@ -183,14 +168,9 @@ class CacheManager:
         """
         if formats is None:
             formats = ['csr', 'csc', 'adjacency']
-
         for fmt in formats:
-            if fmt == 'csr':
-                _ = self.csr
-            elif fmt == 'csc':
-                _ = self.csc
-            elif fmt == 'adjacency':
-                _ = self.adjacency
+            if fmt in ('csr', 'csc', 'adjacency'):
+                getattr(self, fmt)
 
     def clear(self):
         """Clear all caches.
@@ -210,35 +190,30 @@ class CacheManager:
             Status and size information for each cached format.
         """
 
-        def _format_info(matrix, version):
+        def _fmt(matrix, version):
             if matrix is None:
                 return {'cached': False}
-
-            size_bytes = 0
-            if hasattr(matrix, 'data'):
-                size_bytes += matrix.data.nbytes
-            if hasattr(matrix, 'indices'):
-                size_bytes += matrix.indices.nbytes
-            if hasattr(matrix, 'indptr'):
-                size_bytes += matrix.indptr.nbytes
-
+            size = sum(
+                getattr(matrix, a).nbytes
+                for a in ('data', 'indices', 'indptr')
+                if hasattr(matrix, a)
+            )
             return {
                 'cached': True,
                 'version': version,
-                'size_mb': size_bytes / (1024**2),
-                'nnz': matrix.nnz if hasattr(matrix, 'nnz') else 0,
+                'size_mb': size / (1024**2),
+                'nnz': getattr(matrix, 'nnz', 0),
                 'shape': matrix.shape,
             }
 
         return {
-            'csr': _format_info(self._csr, self._csr_version),
-            'csc': _format_info(self._csc, self._csc_version),
-            'adjacency': _format_info(self._adjacency, self._adjacency_version),
+            'csr': _fmt(self._csr, self._csr_version),
+            'csc': _fmt(self._csc, self._csc_version),
+            'adjacency': _fmt(self._adjacency, self._adjacency_version),
         }
 
 
 def _entity_kind(rec):
-    """Return the external kind string for an EntityRecord."""
     k = rec.kind
     if k == 'vertex':
         return 'vertex'
@@ -248,17 +223,10 @@ def _entity_kind(rec):
 
 
 class IndexManager:
-    """Namespace for entity-row and edge-column lookups.
-
-    The manager exposes the incidence-matrix indexing layer without surfacing
-    the internal storage dicts directly. It is the preferred public path for
-    translating between graph identifiers and matrix coordinates.
-    """
+    """Read-only selectors translating graph ids to/from matrix coordinates."""
 
     def __init__(self, graph):
         self._G = graph
-
-    # ==================== Entity (vertex) Indexes ====================
 
     def entity_to_row(self, entity_id):
         """Map an entity ID to its matrix row index.
@@ -278,8 +246,7 @@ class IndexManager:
         KeyError
             If the entity is not found.
         """
-        ekey = self._G._resolve_entity_key(entity_id)
-        rec = self._G._entities.get(ekey)
+        rec = self._G._entities.get(self._G._resolve_entity_key(entity_id))
         if rec is None:
             raise KeyError(f"Entity '{entity_id}' not found")
         return rec.row_idx
@@ -305,7 +272,7 @@ class IndexManager:
         ekey = self._G._row_to_entity.get(row)
         if ekey is None:
             raise KeyError(f'Row {row} not found')
-        return ekey[0]  # bare vid
+        return ekey[0]
 
     def entities_to_rows(self, entity_ids):
         """Batch convert entity IDs to row indices.
@@ -334,8 +301,6 @@ class IndexManager:
         list[str]
         """
         return [self._G._row_to_entity[r][0] for r in rows]
-
-    # ==================== Edge Indexes ====================
 
     def edge_to_col(self, edge_id):
         """Map an edge ID to its matrix column index.
@@ -411,8 +376,6 @@ class IndexManager:
         """
         return [self._G._col_to_edge[c] for c in cols]
 
-    # ==================== Utilities ====================
-
     def entity_type(self, entity_id):
         """Get the entity type for an ID.
 
@@ -431,8 +394,7 @@ class IndexManager:
         KeyError
             If the entity is not found.
         """
-        ekey = self._G._resolve_entity_key(entity_id)
-        rec = self._G._entities.get(ekey)
+        rec = self._G._entities.get(self._G._resolve_entity_key(entity_id))
         if rec is None:
             raise KeyError(f"Entity '{entity_id}' not found")
         return _entity_kind(rec)
@@ -477,8 +439,7 @@ class IndexManager:
         -------
         bool
         """
-        ekey = self._G._resolve_entity_key(entity_id)
-        return ekey in self._G._entities
+        return self._G._resolve_entity_key(entity_id) in self._G._entities
 
     def has_vertex(self, vertex_id: str) -> bool:
         """Check if an ID exists and is a vertex.
@@ -492,8 +453,7 @@ class IndexManager:
         -------
         bool
         """
-        ekey = self._G._resolve_entity_key(vertex_id)
-        rec = self._G._entities.get(ekey)
+        rec = self._G._entities.get(self._G._resolve_entity_key(vertex_id))
         return rec is not None and rec.kind == 'vertex'
 
     def has_edge_id(self, edge_id: str) -> bool:
@@ -562,181 +522,114 @@ class IndexManager:
 
 
 class IndexMapping:
-    """Internal indexing helpers used by :class:`annnet.core.graph.AnnNet`."""
+    """Internal id-generation and attribute-row helpers mixed into ``AnnNet``."""
 
     def _get_next_edge_id(self) -> str:
-        """Generate a fresh edge identifier.
-
-        Returns
-        -------
-        str
-            Fresh ``edge_<n>`` identifier from the monotonic internal counter.
-        """
         edge_id = f'edge_{self._next_edge_id}'
         self._next_edge_id += 1
         return edge_id
 
+    # --- Buffered attribute-row insertion -------------------------------------
+    # ``add_vertices``/``add_edges`` must guarantee a row per entity in obs/var
+    # (the anndata symmetry). Appending one row to a columnar (Polars) table per
+    # call is O(n) -> O(n^2). Instead we buffer new id-only rows and flush them in
+    # one batch when the table is read (via the vertex_attributes/edge_attributes
+    # property getters on AnnNet). Membership stays O(1) via a maintained id-set.
+
     def _ensure_vertex_table(self) -> None:
-        """Ensure the vertex attribute table exists with a canonical schema.
-
-        Notes
-        -----
-        Creates an empty dataframe with a canonical ``vertex_id`` column when
-        the current vertex attribute table is missing or malformed.
-        """
-        df = getattr(self, 'vertex_attributes', None)
-
-        needs_init = df is None or 'vertex_id' not in dataframe_columns(df)
-
-        if needs_init:
+        df = self._vertex_attributes
+        if df is None or 'vertex_id' not in dataframe_columns(df):
             self.vertex_attributes = empty_dataframe({'vertex_id': 'text'})
+
+    def _vertex_id_set(self):
+        df = self._vertex_attributes
+        ids = getattr(self, '_vertex_attr_ids', None)
+        if ids is None or getattr(self, '_vertex_attr_df_id', None) != id(df):
+            ids = set()
+            if df is not None and 'vertex_id' in dataframe_columns(df):
+                ids = {r.get('vertex_id') for r in dataframe_to_rows(df)}
+                ids.discard(None)
+            ids.update(self._pending_vertex_ids)
+            self._vertex_attr_ids = ids
+            self._vertex_attr_df_id = id(df)
+        return ids
 
     def _ensure_vertex_row(self, vertex_id: str) -> None:
-        """INTERNAL: Ensure a row for ``vertex_id`` exists in the vertex attribute DF."""
-        try:
-            import sys as _sys
-
-            if isinstance(vertex_id, str):
-                vertex_id = _sys.intern(vertex_id)
-        except (AttributeError, TypeError):
-            pass
-
-        df = self.vertex_attributes
-
-        # Build/refresh cached id-set (auto-invalidates on DF object change)
-        try:
-            cached_ids = getattr(self, '_vertex_attr_ids', None)
-            cached_df_id = getattr(self, '_vertex_attr_df_id', None)
-            if cached_ids is None or cached_df_id != id(df):
-                ids = set()
-                if df is not None and 'vertex_id' in dataframe_columns(df):
-                    ids = {row.get('vertex_id') for row in dataframe_to_rows(df)}
-                    ids.discard(None)
-                self._vertex_attr_ids = ids
-                self._vertex_attr_df_id = id(df)
-        except (AttributeError, TypeError, ValueError):
-            self._vertex_attr_ids = None
-            self._vertex_attr_df_id = None
-
-        ids = getattr(self, '_vertex_attr_ids', None)
-        if ids is not None and vertex_id in ids:
-            return
-
-        is_empty = dataframe_height(df) == 0
-
-        if is_empty:
-            self.vertex_attributes = empty_dataframe({'vertex_id': 'text'})
-            self.vertex_attributes = dataframe_append_rows(
-                self.vertex_attributes,
-                [{'vertex_id': vertex_id}],
-            )
+        if isinstance(vertex_id, str):
             try:
-                if isinstance(self._vertex_attr_ids, set):
-                    self._vertex_attr_ids.add(vertex_id)
-                else:
-                    self._vertex_attr_ids = {vertex_id}
-                self._vertex_attr_df_id = id(self.vertex_attributes)
-            except (AttributeError, TypeError, ValueError):
+                vertex_id = _sys.intern(vertex_id)
+            except (AttributeError, TypeError):
                 pass
+        ids = self._vertex_id_set()
+        if vertex_id in ids:
             return
+        ids.add(vertex_id)
+        self._pending_vertex_ids.append(vertex_id)
 
-        row = dict.fromkeys(dataframe_columns(df))
-        row['vertex_id'] = vertex_id
-        self.vertex_attributes = dataframe_append_rows(df, [row])
+    def _flush_vertex_rows(self) -> None:
+        pend = self._pending_vertex_ids
+        if not pend:
+            return
+        self._pending_vertex_ids = []
+        df = self._vertex_attributes
+        if df is None or 'vertex_id' not in dataframe_columns(df):
+            df = empty_dataframe({'vertex_id': 'text'}, backend=self._annotations_backend)
+            cols = ['vertex_id']
+        else:
+            cols = list(dataframe_columns(df))
+        rows = [{**dict.fromkeys(cols), 'vertex_id': v} for v in pend]
+        self._vertex_attributes = dataframe_append_rows(df, rows)
+        self._vertex_attr_df_id = id(self._vertex_attributes)
 
-        try:
-            if isinstance(self._vertex_attr_ids, set):
-                self._vertex_attr_ids.add(vertex_id)
-            else:
-                self._vertex_attr_ids = {vertex_id}
-            self._vertex_attr_df_id = id(self.vertex_attributes)
-        except (AttributeError, TypeError, ValueError):
-            pass
+    def _edge_id_set(self):
+        df = self._edge_attributes
+        ids = getattr(self, '_edge_attr_ids', None)
+        if ids is None or getattr(self, '_edge_attr_df_id', None) != id(df):
+            ids = set()
+            if df is not None and 'edge_id' in dataframe_columns(df):
+                ids = {r.get('edge_id') for r in dataframe_to_rows(df)}
+                ids.discard(None)
+            ids.update(self._pending_edge_ids)
+            self._edge_attr_ids = ids
+            self._edge_attr_df_id = id(df)
+        return ids
 
     def _ensure_edge_row(self, edge_id: str) -> None:
-        """INTERNAL: Ensure a row for ``edge_id`` exists in the edge attribute DF."""
-        try:
-            import sys as _sys
-
-            if isinstance(edge_id, str):
+        if isinstance(edge_id, str):
+            try:
                 edge_id = _sys.intern(edge_id)
-        except (AttributeError, TypeError):
-            pass
-
-        df = self.edge_attributes
-
-        try:
-            cached_ids = getattr(self, '_edge_attr_ids', None)
-            cached_df_id = getattr(self, '_edge_attr_df_id', None)
-            if cached_ids is None or cached_df_id != id(df):
-                ids = set()
-                if df is not None and 'edge_id' in dataframe_columns(df):
-                    ids = {row.get('edge_id') for row in dataframe_to_rows(df)}
-                    ids.discard(None)
-                self._edge_attr_ids = ids
-                self._edge_attr_df_id = id(df)
-        except (AttributeError, TypeError, ValueError):
-            self._edge_attr_ids = None
-            self._edge_attr_df_id = None
-
-        ids = getattr(self, '_edge_attr_ids', None)
-        if ids is not None and edge_id in ids:
+            except (AttributeError, TypeError):
+                pass
+        ids = self._edge_id_set()
+        if edge_id in ids:
             return
-
-        is_empty = dataframe_height(df) == 0
-
-        if is_empty:
-            self.edge_attributes = empty_dataframe({'edge_id': 'text'})
-            self.edge_attributes = dataframe_append_rows(
-                self.edge_attributes,
-                [{'edge_id': edge_id}],
-            )
-        else:
-            row = dict.fromkeys(dataframe_columns(df))
-            row['edge_id'] = edge_id
-            self.edge_attributes = dataframe_append_rows(df, [row])
-
-        try:
-            if isinstance(self._edge_attr_ids, set):
-                self._edge_attr_ids.add(edge_id)
-            else:
-                self._edge_attr_ids = {edge_id}
-            self._edge_attr_df_id = id(self.edge_attributes)
-        except (AttributeError, TypeError, ValueError):
-            pass
+        ids.add(edge_id)
+        self._pending_edge_ids.append(edge_id)
 
     def _ensure_edge_rows_bulk(self, edge_ids) -> None:
-        """INTERNAL: Ensure rows for many edge IDs in one append."""
         if not edge_ids:
             return
-        df = self.edge_attributes
-        existing = set()
-        if df is not None and 'edge_id' in dataframe_columns(df):
-            existing = {row.get('edge_id') for row in dataframe_to_rows(df)}
-            existing.discard(None)
-
-        new_ids = [eid for eid in edge_ids if eid not in existing]
-        if not new_ids:
+        ids = self._edge_id_set()
+        new = [eid for eid in edge_ids if eid not in ids]
+        if not new:
             return
+        ids.update(new)
+        self._pending_edge_ids.extend(new)
 
-        is_empty = dataframe_height(df) == 0
-        if is_empty:
-            self.edge_attributes = empty_dataframe({'edge_id': 'text'})
-            df = self.edge_attributes
+    def _flush_edge_rows(self) -> None:
+        pend = self._pending_edge_ids
+        if not pend:
+            return
+        self._pending_edge_ids = []
+        df = self._edge_attributes
+        if df is None or 'edge_id' not in dataframe_columns(df):
+            df = empty_dataframe({'edge_id': 'text'}, backend=self._annotations_backend)
             cols = ['edge_id']
         else:
             cols = list(dataframe_columns(df))
-
-        rows = []
-        for eid in new_ids:
-            r = dict.fromkeys(cols)
-            r['edge_id'] = eid
-            rows.append(r)
-        self.edge_attributes = dataframe_append_rows(df, rows)
-
-        # Invalidate cached ID set so the next read rebuilds it.
-        self._edge_attr_ids = None
-        self._edge_attr_df_id = None
+        rows = [{**dict.fromkeys(cols), 'edge_id': eid} for eid in pend]
+        self._edge_attributes = dataframe_append_rows(df, rows)
+        self._edge_attr_df_id = id(self._edge_attributes)
 
     def _vertex_key_enabled(self) -> bool:
         return bool(self._vertex_key_fields)

@@ -1,3 +1,5 @@
+"""Canonical record types — the source of truth for entities, edges, and slices."""
+
 from __future__ import annotations
 
 from enum import Enum
@@ -37,6 +39,7 @@ def _get_numeric_supertype(left, right):
 
 
 def build_dataframe_from_rows(rows):
+    """Build a dataframe from a sequence of row dictionaries."""
     return dataframe_from_rows(rows)
 
 
@@ -53,7 +56,7 @@ class EdgeType(Enum):
 class EntityRecord:
     """One record per entity (vertex or edge-entity) with an incidence-matrix row."""
 
-    row_idx: int  # row index in the incidence matrix
+    row_idx: int
     kind: str  # "vertex" | "edge_entity"
 
 
@@ -72,21 +75,13 @@ class SliceRecord:
         setattr(self, key, value)
 
     def get(self, key, default=None):
+        """Return a slice field by name with an optional default."""
         return getattr(self, key, default)
 
 
 @dataclass(slots=True)
 class EdgeRecord:
-    """One record per edge (binary, hyperedge, structural edge-entity, or placeholder).
-
-    Topology encoding
-    -----------------
-    binary edge          : src=str,       tgt=str,       directed=bool|None
-    undirected hyperedge : src=frozenset, tgt=None,      directed=False
-    directed hyperedge   : src=frozenset, tgt=frozenset, directed=True
-    structural edge-entity : src=str,       tgt=str,       etype="vertex_edge"
-    edge placeholder       : src=None,      tgt=None,      etype="edge_placeholder"
-    """
+    """One record per edge (binary, hyperedge, structural edge-entity, or placeholder)."""
 
     src: object  # str (binary) | frozenset (hyper) | None
     tgt: object  # str (binary) | frozenset (directed hyper) | None
@@ -97,23 +92,15 @@ class EdgeRecord:
     ml_kind: object  # str | None — "intra" | "inter" | "coupling"
     ml_layers: object  # tuple | None — multilayer layer assignment
     direction_policy: object  # dict | None
+    # Literal per-node incidence coefficients for stoichiometric / explicitly-set columns,
+    # keyed by the same node form stored in src/tgt. None when the column is the plain
+    # +/- weight pattern (derivable from weight + directed). Makes the records the complete
+    # source of truth: the incidence matrix is fully reconstructable from them.
+    coeffs: object = None  # dict[node, float] | None
 
 
 class EdgeView(tuple):
-    """Edge view returned by :meth:`AnnNet.get_edge`.
-
-    Iteration / unpacking yields ``(source, target)`` for backward compat
-    with code that already does ``S, T = G.get_edge(j)``. Additional fields
-    are exposed as attributes:
-
-    - ``edge_id`` (str)
-    - ``kind`` ("binary" | "hyper_undirected" | "hyper_directed" |
-      "vertex_edge" | "edge_placeholder")
-    - ``source`` / ``target`` (same as tuple positions 0 / 1)
-    - ``members`` (frozenset of every entity incident to the edge)
-    - ``weight`` (float)
-    - ``directed`` (bool)
-    """
+    """Tuple-shaped edge record returned by :meth:`AnnNet.get_edge`."""
 
     def __new__(cls, source, target, *, edge_id, kind, members, weight, directed):
         self = super().__new__(cls, (source, target))

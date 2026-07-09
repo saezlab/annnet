@@ -1,7 +1,7 @@
 from .graph import AnnNet
 from ._records import (
     EdgeType,
-    EntityRecord,  # TODO: remove dependency on internal _records.py classes (exported for io/cx2.py)
+    EntityRecord,  # exported for io/cx2.py compatibility
 )
 
 Graph = AnnNet

@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import json
 import time
 from typing import TYPE_CHECKING, Any
-import warnings
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, MutableMapping
 
 import numpy as np
-import scipy.sparse as sp
 
+from . import _state, _derive, _mutate, _identity, _validate
 from ._Ops import Operations, OperationsAccessor
 from ._Views import GraphView, ViewsClass, ViewsAccessor
 from ._Layers import LayerAccessor
@@ -17,16 +15,8 @@ from ._Matrix import CacheManager, IndexManager, IndexMapping
 from ._Slices import SliceManager
 from ._History import History, HistoryAccessor
 from ._records import (
-    _EDGE_RESERVED,
     EdgeView,
-    EdgeRecord,
-    SliceRecord,
-    EntityRecord,
-    _slice_RESERVED,
-    _vertex_RESERVED,
-    _df_filter_not_equal,
     _external_entity_kind,
-    _internal_entity_kind,
 )
 from ._Annotation import AttributesClass, AttributesAccessor
 from ..algorithms.traversal import Traversal
@@ -35,10 +25,6 @@ from .._support.dataframe_backend import (
     dataframe_height,
     dataframe_columns,
     dataframe_to_rows,
-    dataframe_drop_rows,
-    is_polars_dataframe,
-    dataframe_upsert_rows,
-    polars_upsert_vertices,
     select_dataframe_backend,
 )
 
@@ -54,10 +40,35 @@ else:
 # ===================================
 
 
-def _sanitize(v):
-    if isinstance(v, (list, tuple, dict)):
-        return json.dumps(v, ensure_ascii=False)
-    return v
+def _is_multilayer_endpoint(v) -> bool:
+    """A ``(vertex_id, layer_coord)`` multilayer binary endpoint (not a member list)."""
+    return (
+        isinstance(v, tuple) and len(v) == 2 and isinstance(v[0], str) and isinstance(v[1], tuple)
+    )
+
+
+def _is_hyper_item(item) -> bool:
+    """Whether a batch item describes a hyperedge (list-shaped endpoints / legacy keys)."""
+    if not isinstance(item, dict):
+        return False
+    if 'members' in item or 'head' in item or 'tail' in item:
+        return True
+    # Preserve 'src'/'tgt' precedence over 'source'/'target', but avoid the
+    # eagerly-evaluated default of ``get('src', get('source'))`` on every item.
+    src_val = item.get('src')
+    if src_val is None:
+        src_val = item.get('source')
+    tgt_val = item.get('tgt')
+    if tgt_val is None:
+        tgt_val = item.get('target')
+    for val in (src_val, tgt_val):
+        if (
+            isinstance(val, (list, tuple, set, frozenset))
+            and not isinstance(val, str)
+            and not _is_multilayer_endpoint(val)
+        ):
+            return True
+    return False
 
 
 class _EdgeRecordFieldMap(MutableMapping):
@@ -80,16 +91,15 @@ class _EdgeRecordFieldMap(MutableMapping):
     def __setitem__(self, key, value):
         if key not in self._graph._edges:
             raise KeyError(key)
-        rec = self._graph._edges[key]
         if self._setter:
-            self._setter(rec, value)
+            self._setter(self._graph, key, value)
         else:
-            setattr(rec, self._field_name, value)
+            _mutate.set_edge_field(self._graph, key, self._field_name, value)
 
     def __delitem__(self, key):
         if key not in self._graph._edges:
             raise KeyError(key)
-        setattr(self._graph._edges[key], self._field_name, None)
+        _mutate.set_edge_field(self._graph, key, self._field_name, None)
 
     def __iter__(self):
         for eid, rec in self._graph._edges.items():
@@ -99,46 +109,6 @@ class _EdgeRecordFieldMap(MutableMapping):
 
     def __len__(self):
         return sum(1 for _ in self.__iter__())
-
-
-_BINARY_BATCH_RESERVED_KEYS = frozenset(
-    {
-        'source',
-        'target',
-        'src',
-        'tgt',
-        'edge_id',
-        'slice',
-        'weight',
-        'edge_directed',
-        'directed',
-        'edge_type',
-        'propagate',
-        'flexible',
-        'attributes',
-        'attrs',
-        'slice_weight',
-    }
-)
-
-_HYPER_BATCH_RESERVED_KEYS = frozenset(
-    {
-        'members',
-        'head',
-        'tail',
-        'edge_id',
-        'slice',
-        'weight',
-        'edge_directed',
-        'directed',
-        'attributes',
-        'attrs',
-        'layer',
-        '_resolved_members',
-        '_resolved_head',
-        '_resolved_tail',
-    }
-)
 
 
 class AnnNetMeta(type):
@@ -379,7 +349,7 @@ class AnnNet(
         v: int = 0,
         e: int = 0,
         annotations: dict[str, Any] | None = None,
-        annotations_backend: str = 'polars',
+        annotations_backend: str = 'auto',
         aspects: dict[str, list[str]] | None = None,
         **kwargs: Any,
     ) -> None:
@@ -406,115 +376,36 @@ class AnnNet(
         -----
         A default slice named ``"default"`` is always created and made active.
         """
-        self.directed = directed
+        _state.init_state(self, directed=directed, v=v, e=e, aspects=aspects)
 
-        self._vertex_RESERVED = set(_vertex_RESERVED)
-        self._EDGE_RESERVED = set(_EDGE_RESERVED)
-        self._slice_RESERVED = set(_slice_RESERVED)
-
-        # --- Aspect/layer registry (immutable aspect count after init) ---
-        if aspects is None:
-            self._aspects: tuple[str, ...] = ('_',)
-            self._layers: dict[str, set[str]] = {'_': {'_'}}
-        else:
-            if not aspects:
-                raise ValueError('aspects dict must not be empty')
-            for asp, vals in aspects.items():
-                if not vals:
-                    raise ValueError(f'Aspect {asp!r} must have at least one layer value')
-            self._aspects = tuple(aspects.keys())
-            self._layers = {k: set(v) for k, v in aspects.items()}
-
-        # --- Entity store (vertices + edge-entities, things with matrix rows) ---
-        # Keys are (vertex_id, layer_coord) tuples; flat graphs use ("_",) as basal layer coord.
-        self._entities: dict[tuple, EntityRecord] = {}
-        self._row_to_entity: dict[int, tuple] = {}
-        self._vid_to_ekeys: dict[str, list[tuple]] = {}
-
-        # --- Edge store (all edges with matrix columns) ---
-        self._edges: dict[str, EdgeRecord] = {}  # edge_id   -> EdgeRecord
-        self._col_to_edge: dict[int, str] = {}  # col_idx   -> edge_id
-
-        # --- Adjacency indices (src/tgt → edge lists, maintained incrementally) ---
-        self._src_to_edges: dict = {}  # src -> [edge_id, ...]
-        self._tgt_to_edges: dict = {}  # tgt -> [edge_id, ...]
-        self._pair_to_edges: dict = {}  # (src, tgt) -> [edge_id, ...] for binary edges
-        self._edge_indexes_built: bool = True
-
-        # --- Composite vertex key support ---
-        self._vertex_key_fields = None  # tuple[str, ...] | None
-        self._vertex_key_index: dict = {}  # key_tuple -> vertex_id
-
-        # --- Sparse incidence matrix ---
-        v = int(v) if v and v > 0 else 0
-        e = int(e) if e and e > 0 else 0
-        self._matrix = sp.dok_matrix((v, e), dtype=np.float32)
-        self._csr_cache = None
-
-        # --- Attribute storage ---
+        # Attribute storage
         self._annotations_backend = select_dataframe_backend(annotations_backend)
         self._init_annotation_tables(annotations)
-        self.graph_attributes: dict = {}
+        self.graph_attributes = {}
         self.graph_attributes.update(kwargs)
 
-        # --- Edge ID counter ---
-        self._next_edge_id = 0
+        # Per-slice edge-weight compatibility cache
+        self.slice_edge_weights = defaultdict(dict)
 
-        # --- Slice state ---
-        self._slices: dict = {}  # slice_id -> SliceRecord
-        self._current_slice: str | None = None
-        self._default_slice: str = 'default'
-        self.slice_edge_weights: defaultdict = defaultdict(dict)  # slice_id -> {edge_id: weight}
-        self._slices[self._default_slice] = SliceRecord()
-        self._current_slice = self._default_slice
-
-        # --- History ---
+        # History
         self._history_enabled = True
-        self._history: list = []
-        self._version = 0
+        self._history = []
         self._history_clock0 = time.perf_counter_ns()
         self._install_history_hooks()
         self.history = HistoryAccessor(self)
-        self._snapshots: list = []
+        self._snapshots = []
 
-        # --- Multilayer state ---
-        self.vertex_aligned: bool = False
-        # Multilayer edge metadata — stored in EdgeRecord.ml_kind / ml_layers (canonical).
-        # edge_kind / edge_layers properties are thin compat proxies over EdgeRecord.
-
-        # Build the cartesian-product layer cache from the aspects/layers given
-        # at construction. set_aspects/set_elementary_layers do this on mutation;
-        # the constructor must do it too, otherwise iter_layers/layer_edge_set/
-        # subgraph_from_layer_tuple all see an empty layer space.
+        # Cartesian-product layer cache (set_aspects refreshes it on mutation).
         self._rebuild_all_layers_cache()
 
-    def _grow_rows_to(self, target: int):
-        """Grow incidence rows geometrically to accommodate ``target`` rows."""
-        rows, cols = self._matrix.shape
-        if target > rows:
-            new_rows = max(target, rows + max(8, rows >> 1))
-            self._matrix.resize((new_rows, cols))
+    def _grow_rows_to(self, *args, **kwargs):
+        return _derive.grow_rows_to(self, *args, **kwargs)
 
-    def _grow_cols_to(self, target: int):
-        """Grow incidence columns geometrically to accommodate ``target`` cols."""
-        rows, cols = self._matrix.shape
-        if target > cols:
-            new_cols = max(target, cols + max(8, cols >> 1))
-            self._matrix.resize((rows, new_cols))
+    def _grow_cols_to(self, *args, **kwargs):
+        return _derive.grow_cols_to(self, *args, **kwargs)
 
-    def _invalidate_sparse_caches(self, formats=None):
-        """Invalidate all derived sparse cache views behind one internal hook."""
-        if formats is None:
-            formats = ('csr', 'csc', 'adjacency')
-        else:
-            formats = tuple(formats)
-
-        if 'csr' in formats:
-            self._csr_cache = None
-
-        cache_manager = getattr(self, '_cache_manager', None)
-        if cache_manager is not None:
-            cache_manager.invalidate(list(formats))
+    def _invalidate_sparse_caches(self, *args, **kwargs):
+        return _derive.invalidate_sparse_caches(self, *args, **kwargs)
 
     def _rebuild_slice_edge_weights_cache(self):
         cache = defaultdict(dict)
@@ -542,7 +433,6 @@ class AnnNet(
         self.slice_edge_weights = cache
 
     def _sync_slice_edge_weights_for_rows(self, slice_id, rows):
-        """Incrementally refresh the compatibility slice-weight cache for written rows."""
         if not isinstance(self.slice_edge_weights, defaultdict):
             self.slice_edge_weights = defaultdict(dict, self.slice_edge_weights)
 
@@ -574,6 +464,17 @@ class AnnNet(
             self.slice_edge_weights.pop(slice_id, None)
 
     def _init_annotation_tables(self, annotations):
+        # Buffered vertex/edge attribute tables: backing frame + pending id rows
+        # (see IndexMapping._ensure_*_row / _flush_*_rows for the rationale).
+        self._vertex_attributes = None
+        self._edge_attributes = None
+        self._pending_vertex_ids: list = []
+        self._pending_edge_ids: list = []
+        self._vertex_attr_ids = None
+        self._edge_attr_ids = None
+        self._vertex_attr_df_id = None
+        self._edge_attr_df_id = None
+
         # 1) If user provided tables, keep them (we’ll wrap with Narwhals in ops)
         if annotations is not None:
             self.vertex_attributes = annotations.get('vertex_attributes')
@@ -593,6 +494,36 @@ class AnnNet(
             backend=backend,
         )
         self.layer_attributes = empty_dataframe({'layer_id': 'text'}, backend=backend)
+
+    @property
+    def vertex_attributes(self):
+        """Vertex (obs) attribute table; flushes buffered id-only rows on read."""
+        if self._pending_vertex_ids:
+            self._flush_vertex_rows()
+        return self._vertex_attributes
+
+    @vertex_attributes.setter
+    def vertex_attributes(self, value):
+        """Replace the vertex attribute table and clear buffered row state."""
+        self._vertex_attributes = value
+        self._pending_vertex_ids = []
+        self._vertex_attr_ids = None
+        self._vertex_attr_df_id = None
+
+    @property
+    def edge_attributes(self):
+        """Edge (var) attribute table; flushes buffered id-only rows on read."""
+        if self._pending_edge_ids:
+            self._flush_edge_rows()
+        return self._edge_attributes
+
+    @edge_attributes.setter
+    def edge_attributes(self, value):
+        """Replace the edge attribute table and clear buffered row state."""
+        self._edge_attributes = value
+        self._pending_edge_ids = []
+        self._edge_attr_ids = None
+        self._edge_attr_df_id = None
 
     def __dir__(self):
         return sorted(set(self._PUBLIC_API))
@@ -650,304 +581,73 @@ class AnnNet(
         rec = self._entities.get(ekey)
         return rec is not None and rec.kind == 'vertex'
 
-    def _entity_row(self, vid) -> int:
-        """Return incidence matrix row index for a vertex (resolves bare vid to supra-node key)."""
-        return self._entities[self._resolve_entity_key(vid)].row_idx
+    def _entity_row(self, *args, **kwargs):
+        return _identity.entity_row(self, *args, **kwargs)
 
-    def _placeholder_layer_coord(self) -> tuple:
-        """Canonical placeholder coordinate for the current aspect rank."""
-        if self._aspects == ('_',):
-            return ('_',)
-        return tuple('_' for _ in self._aspects)
+    def _placeholder_layer_coord(self, *args, **kwargs):
+        return _identity.placeholder_layer_coord(self, *args, **kwargs)
 
-    def _ensure_placeholder_layers_declared(self) -> tuple:
-        """Ensure the placeholder value '_' exists for every declared aspect."""
-        coord = self._placeholder_layer_coord()
-        if self._aspects == ('_',):
-            self._layers.setdefault('_', {'_'})
-            return coord
-        for aspect in self._aspects:
-            self._layers.setdefault(aspect, set()).add('_')
-        self._rebuild_all_layers_cache()
-        return coord
+    def _ensure_placeholder_layers_declared(self, *args, **kwargs):
+        return _identity.ensure_placeholder_layers_declared(self, *args, **kwargs)
 
-    def _warn_placeholder_vertex_assignment(self, vertex_ids, *, context: str) -> None:
-        """Warn that vertices were assigned to the placeholder layer tuple."""
-        coord = self._placeholder_layer_coord()
-        if isinstance(vertex_ids, str):
-            warnings.warn(
-                f'{context}: vertex {vertex_ids!r} was assigned to placeholder layer '
-                f'{coord!r}. Pass layer= to place it explicitly.',
-                UserWarning,
-                stacklevel=3,
-            )
-            return
+    def _warn_placeholder_vertex_assignment(self, *args, **kwargs):
+        return _identity.warn_placeholder_vertex_assignment(self, *args, **kwargs)
 
-        vids = list(vertex_ids)
-        if not vids:
-            return
-        sample = ', '.join(repr(v) for v in vids[:3])
-        suffix = '' if len(vids) <= 3 else ', ...'
-        warnings.warn(
-            f'{context}: {len(vids)} vertices were assigned to placeholder layer '
-            f'{coord!r} ({sample}{suffix}). Pass layer= to place them explicitly.',
-            UserWarning,
-            stacklevel=3,
-        )
+    def _resolve_vertex_insert_coord(self, *args, **kwargs):
+        return _identity.resolve_vertex_insert_coord(self, *args, **kwargs)
 
-    def _resolve_vertex_insert_coord(
-        self, layer_spec, *, vertex_ids=None, context='add_vertex'
-    ) -> tuple:
-        """Resolve layer placement for vertex insertion, using placeholder fallback when needed."""
-        if layer_spec is not None:
-            return self._make_layer_coord(layer_spec)
-        if self._aspects == ('_',):
-            return ('_',)
-        coord = self._ensure_placeholder_layers_declared()
-        if vertex_ids is not None:
-            self._warn_placeholder_vertex_assignment(vertex_ids, context=context)
-        return coord
-
-    def _make_layer_coord(self, layer_spec) -> tuple:
-        """Normalize any layer specification to a canonical layer_coord tuple.
-
-        Accepted forms
-        --------------
-        None              flat graph → ("_",); multilayer → raises
-        str               single-aspect shorthand, e.g. "t1" → ("t1",)
-        dict              {aspect: value} ordered by self._aspects
-        tuple             already canonical — validated and returned as-is
-
-        Raises ValueError if a layer value is not declared for its aspect.
-        """
-        is_flat = self._aspects == ('_',)
-
-        if layer_spec is None:
-            if is_flat:
-                return ('_',)
-            raise ValueError(
-                f'layer= must be specified for multilayer graphs with aspects {self._aspects}. '
-                'Pass a dict {aspect: value}, a tuple of values, or a bare string (single-aspect).'
-            )
-
-        if isinstance(layer_spec, str):
-            if len(self._aspects) != 1:
-                raise ValueError(
-                    f'String layer spec {layer_spec!r} is only valid for single-aspect graphs. '
-                    f'Got aspects {self._aspects}. Pass a dict or tuple.'
-                )
-            coord = (layer_spec,)
-
-        elif isinstance(layer_spec, dict):
-            missing = [asp for asp in self._aspects if asp not in layer_spec]
-            if missing:
-                raise ValueError(
-                    f'Missing aspects {missing} in layer spec. Required: {list(self._aspects)}'
-                )
-            coord = tuple(layer_spec[asp] for asp in self._aspects)
-
-        elif isinstance(layer_spec, tuple):
-            coord = layer_spec
-
-        else:
-            raise TypeError(
-                f'layer_spec must be None, str, dict, or tuple; got {type(layer_spec).__name__!r}'
-            )
-
-        # Validate all values against declared layer sets
-        if len(coord) != len(self._aspects):
-            raise ValueError(
-                f'Layer coord length {len(coord)} != number of aspects {len(self._aspects)}'
-            )
-        for asp, val in zip(self._aspects, coord, strict=False):
-            if val not in self._layers[asp]:
-                raise ValueError(
-                    f'Layer value {val!r} not declared for aspect {asp!r}. '
-                    f'Valid: {sorted(self._layers[asp])}'
-                )
-        return coord
+    def _make_layer_coord(self, *args, **kwargs):
+        return _identity.make_layer_coord(self, *args, **kwargs)
 
     @staticmethod
-    def _is_explicit_entity_key(value) -> bool:
-        """Return True when ``value`` is an explicit ``(vertex_id, layer_coord)`` key."""
-        return (
-            isinstance(value, tuple)
-            and len(value) == 2
-            and isinstance(value[0], str)
-            and isinstance(value[1], tuple)
-        )
+    def _is_explicit_entity_key(*args, **kwargs):
+        return _identity.is_explicit_entity_key(*args, **kwargs)
 
-    def _resolve_entity_key(self, vid_or_key) -> tuple:
-        """Resolve a vertex identifier to an internal (vid, layer_coord) key.
+    def _resolve_entity_key(self, *args, **kwargs):
+        return _identity.resolve_ekey(self, *args, **kwargs)
 
-        Flat graphs (_aspects == ("_",)):
-            "alice"               -> ("alice", ("_",))
-            ("alice", ("_",))     -> ("alice", ("_",))   [validated]
+    def _index_entity_key(self, *args, **kwargs):
+        return _derive.index_entity_key(self, *args, **kwargs)
 
-        Multilayer graphs:
-            "alice"               -> resolves only if exactly one supra-node exists for "alice";
-                                     if none exists, returns the placeholder-layer key for deferred creation;
-                                     if multiple exist, raises ValueError and requires an explicit
-                                     ``(vertex_id, layer_coord)`` tuple.
-            ("alice", ("t1",))    -> ("alice", ("t1",))  [validated]
-        """
-        if isinstance(vid_or_key, str):
-            is_flat = self._aspects == ('_',)
-            if is_flat:
-                return (vid_or_key, ('_',))
-            matches = []
-            for ekey in self._vid_to_ekeys.get(vid_or_key, ()):
-                rec = self._entities.get(ekey)
-                if rec is None:
-                    continue
-                matches.append((rec.row_idx, ekey))
-            if len(matches) == 1:
-                return matches[0][1]
-            if len(matches) > 1:
-                choices = [ekey for _, ekey in sorted(matches)]
-                raise ValueError(
-                    f'Ambiguous bare vertex_id {vid_or_key!r} in multilayer graph; '
-                    f'use an explicit (vertex_id, layer_coord) tuple. Choices: {choices!r}'
-                )
-            # No supra-node found: placeholder key — won't have a matrix row until vertex is added
-            return (vid_or_key, self._placeholder_layer_coord())
-        if self._is_explicit_entity_key(vid_or_key):
-            vid, layer_coord = vid_or_key
-            coord = self._make_layer_coord(layer_coord)  # validates values
-            return (vid, coord)
-        raise TypeError(
-            f'vertex_id must be str or (str, tuple[str,...]), got {type(vid_or_key).__name__!r}'
-        )
+    def _unindex_entity_key(self, *args, **kwargs):
+        return _derive.unindex_entity_key(self, *args, **kwargs)
 
-    def _index_entity_key(self, ekey) -> None:
-        if isinstance(ekey, tuple) and len(ekey) == 2 and isinstance(ekey[0], str):
-            bucket = self._vid_to_ekeys.setdefault(ekey[0], [])
-            if ekey not in bucket:
-                bucket.append(ekey)
+    def _register_entity_record(self, *args, **kwargs):
+        return _mutate.register_entity_record(self, *args, **kwargs)
 
-    def _unindex_entity_key(self, ekey) -> None:
-        if isinstance(ekey, tuple) and len(ekey) == 2 and isinstance(ekey[0], str):
-            bucket = self._vid_to_ekeys.get(ekey[0])
-            if not bucket:
-                return
-            try:
-                bucket.remove(ekey)
-            except ValueError:
-                return
-            if not bucket:
-                self._vid_to_ekeys.pop(ekey[0], None)
+    def _remove_entity_record(self, *args, **kwargs):
+        return _mutate.remove_entity_record(self, *args, **kwargs)
 
-    def _register_entity_record(self, ekey, rec: EntityRecord) -> None:
-        old = self._entities.get(ekey)
-        if old is not None and old.row_idx in self._row_to_entity:
-            self._row_to_entity.pop(old.row_idx, None)
-        self._entities[ekey] = rec
-        self._row_to_entity[rec.row_idx] = ekey
-        self._index_entity_key(ekey)
+    def _rebuild_entity_indexes(self, *args, **kwargs):
+        return _derive.rebuild_entity_indexes(self, *args, **kwargs)
 
-    def _remove_entity_record(self, ekey):
-        rec = self._entities.pop(ekey)
-        self._row_to_entity.pop(rec.row_idx, None)
-        self._unindex_entity_key(ekey)
-        return rec
+    def _rebuild_edge_indexes(self, *args, **kwargs):
+        return _derive.rebuild_edge_indexes(self, *args, **kwargs)
 
-    def _rebuild_entity_indexes(self) -> None:
-        self._row_to_entity = {}
-        self._vid_to_ekeys = {}
-        for ekey, rec in self._entities.items():
-            self._row_to_entity[rec.row_idx] = ekey
-            self._index_entity_key(ekey)
+    def _ensure_edge_indexes(self, *args, **kwargs):
+        return _derive.ensure_edge_indexes(self, *args, **kwargs)
 
-    def _rebuild_edge_indexes(self) -> None:
-        """Rebuild adjacency-derived edge indexes from canonical edge records."""
-        self._src_to_edges = {}
-        self._tgt_to_edges = {}
-        self._pair_to_edges = {}
-        for eid, rec in self._edges.items():
-            if rec.etype == 'hyper' or rec.src is None or rec.tgt is None:
-                continue
-            self._src_to_edges.setdefault(rec.src, []).append(eid)
-            self._tgt_to_edges.setdefault(rec.tgt, []).append(eid)
-            self._pair_to_edges.setdefault((rec.src, rec.tgt), []).append(eid)
-        self._edge_indexes_built = True
+    def _edge_ids_for_pair(self, *args, **kwargs):
+        return _derive.edge_ids_for_pair(self, *args, **kwargs)
 
-    def _ensure_edge_indexes(self) -> None:
-        """Materialize adjacency-derived edge indexes on demand."""
-        if not getattr(self, '_edge_indexes_built', True):
-            self._rebuild_edge_indexes()
+    def _index_edge_pair(self, *args, **kwargs):
+        return _derive.index_edge_pair(self, *args, **kwargs)
 
-    def _edge_ids_for_pair(self, source, target) -> list[str]:
-        """Return edge ids for a binary endpoint pair from canonical src-edge buckets."""
-        self._ensure_edge_indexes()
-        eids = []
-        for eid in self._src_to_edges.get(source, ()):
-            rec = self._edges.get(eid)
-            if rec is not None and rec.etype != 'hyper' and rec.tgt == target:
-                eids.append(eid)
-        if eids:
-            self._pair_to_edges[(source, target)] = list(eids)
-        else:
-            self._pair_to_edges.pop((source, target), None)
-        return eids
-
-    def _index_edge_pair(self, edge_id, src, tgt) -> None:
-        if src is None or tgt is None:
-            return
-        bucket = self._pair_to_edges.setdefault((src, tgt), [])
-        if edge_id not in bucket:
-            bucket.append(edge_id)
-
-    def _unindex_edge_pair(self, edge_id, src, tgt) -> None:
-        if src is None or tgt is None:
-            return
-        bucket = self._pair_to_edges.get((src, tgt))
-        if not bucket:
-            return
-        try:
-            bucket.remove(edge_id)
-        except ValueError:
-            return
-        if not bucket:
-            self._pair_to_edges.pop((src, tgt), None)
+    def _unindex_edge_pair(self, *args, **kwargs):
+        return _derive.unindex_edge_pair(self, *args, **kwargs)
 
     @staticmethod
-    def _remove_edge_id_from_index(index: dict, key, edge_id: str) -> None:
-        """Remove one edge id from an adjacency bucket if it is present."""
-        if key is None:
-            return
-        bucket = index.get(key)
-        if not bucket:
-            return
-        try:
-            bucket.remove(edge_id)
-        except ValueError:
-            return
-        if not bucket:
-            index.pop(key, None)
+    def _remove_edge_id_from_index(*args, **kwargs):
+        return _derive.remove_edge_id_from_index(*args, **kwargs)
 
-    def _endpoint_slice_vertex_ids(self, endpoint) -> set[str]:
-        """Map an endpoint identity to the bare vertex ids used by slice membership."""
-        if endpoint is None:
-            return set()
-        if isinstance(endpoint, str):
-            return {endpoint}
-        if self._is_explicit_entity_key(endpoint):
-            return {endpoint[0]}
-        if isinstance(endpoint, (set, frozenset, list, tuple)):
-            out = set()
-            for member in endpoint:
-                out.update(self._endpoint_slice_vertex_ids(member))
-            return out
-        return set()
+    def _endpoint_slice_vertex_ids(self, *args, **kwargs):
+        return _identity.endpoint_slice_vertex_ids(self, *args, **kwargs)
 
-    def _slice_contains_endpoint(self, slice_vertices, endpoint) -> bool:
-        """Return True when the slice contains every bare vertex id for an endpoint."""
-        vids = self._endpoint_slice_vertex_ids(endpoint)
-        return bool(vids) and vids <= slice_vertices
+    def _slice_contains_endpoint(self, *args, **kwargs):
+        return _identity.slice_contains_endpoint(self, *args, **kwargs)
 
-    def _add_endpoint_to_slice_vertices(self, slice_vertices, endpoint) -> None:
-        """Add the bare vertex ids represented by an endpoint to a slice membership set."""
-        slice_vertices.update(self._endpoint_slice_vertex_ids(endpoint))
+    def _add_endpoint_to_slice_vertices(self, *args, **kwargs):
+        return _identity.add_endpoint_to_slice_vertices(self, *args, **kwargs)
 
     # Aspect / layer registry queries
 
@@ -965,22 +665,14 @@ class AnnNet(
 
     @property
     def _V(self) -> set:
-        """Set of all vertex IDs (pure strings, derived from _entities)."""
         return {ekey[0] for ekey, rec in self._entities.items() if rec.kind == 'vertex'}
 
     @property
     def _VM(self) -> set:
-        """Set of (vertex_id, layer_coord) supra-node pairs (derived from _entities)."""
         return {ekey for ekey, rec in self._entities.items() if rec.kind == 'vertex'}
 
     @_VM.setter
     def _VM(self, value) -> None:
-        """Compatibility sink for legacy restore paths.
-
-        The canonical source of truth is ``self._entities``. Some IO/adapters
-        still assign ``G._VM = vm_set`` after calling ``_restore_supra_nodes``.
-        Accept the assignment without replacing the derived property.
-        """
         if value:
             try:
                 self._restore_supra_nodes(value)
@@ -1107,7 +799,6 @@ class AnnNet(
         return out
 
     def _add_vertices_bulk(self, vertices, *, layer=None, slice=None):
-        """Hidden compatibility shim for legacy internal bulk insertion."""
         items = list(vertices)
         self._add_vertices_batch(items, layer=layer, slice=slice)
         out = []
@@ -1125,275 +816,33 @@ class AnnNet(
                 out.append(it)
         return out
 
-    def _add_vertex(self, vertex_id, slice=None, layer=None, **attributes):
-        """Add or update a vertex.
+    def _add_vertex(self, *args, **kwargs):
+        return _mutate.add_vertex(self, *args, **kwargs)
 
-        Parameters
-        ----------
-        vertex_id : str
-            Vertex identifier.
-        slice : str, optional
-            Slice receiving the vertex membership. Defaults to the active slice.
-        layer : str | dict | tuple | None, optional
-            Multilayer placement. Accepted forms are:
+    def _ensure_edge_entity_placeholder(self, *args, **kwargs):
+        return _mutate.ensure_edge_entity_placeholder(self, *args, **kwargs)
 
-            - ``None`` for the flat graph default, or for placeholder placement
-              in a layered graph
-            - ``str`` for the single-aspect shorthand
-            - ``dict`` mapping aspect name to value
-            - canonical coordinate tuple
-        **attributes
-            Vertex attributes to upsert into the vertex attribute table.
-
-        Returns
-        -------
-        str
-            The inserted vertex identifier.
-
-        Notes
-        -----
-        In multilayer graphs, omitting ``layer`` places the vertex at the
-        placeholder coordinate ``("_", ..., "_")`` and emits a warning.
-        """
-        if slice is None:
-            slice = self._current_slice
-
-        # Resolve to internal (vid, layer_coord) key
-        # layer= can be None (flat/default), str (single-aspect), dict, or tuple
-        coord = self._resolve_vertex_insert_coord(
-            layer,
-            vertex_ids=vertex_id,
-            context='add_vertex',
-        )
-        key = (vertex_id, coord)
-        vid = vertex_id
-
-        _ent = self._entities
-
-        # Register entity if new
-        if key not in _ent:
-            idx = len(_ent)
-            self._register_entity_record(key, EntityRecord(row_idx=idx, kind='vertex'))
-            self._grow_rows_to(len(_ent))
-
-        # Add to slice (slice tracks bare vid for backward compat with _Slices.py)
-        slices = self._slices
-        if slice not in slices:
-            slices[slice] = SliceRecord()
-        slices[slice]['vertices'].add(vid)
-
-        self._ensure_vertex_table()
-        self._ensure_vertex_row(vid)
-
-        if attributes:
-            self.vertex_attributes = self._upsert_row(self.vertex_attributes, vid, attributes)
-
-        return vid
-
-    def _ensure_edge_entity_placeholder(self, edge_id, slice=None, **attributes):
-        """Ensure a connectable edge-entity placeholder exists without structural incidence."""
-        self._register_edge_as_entity(edge_id)
-
-        if edge_id not in self._edges:
-            self._edges[edge_id] = EdgeRecord(
-                src=None,
-                tgt=None,
-                weight=1.0,
-                directed=False,
-                etype='edge_placeholder',
-                col_idx=-1,
-                ml_kind=None,
-                ml_layers=None,
-                direction_policy=None,
-            )
-
-        slice = slice or self._current_slice
-        if slice is not None:
-            self.slices._ensure_slice(slice)['edges'].add(edge_id)
-        if attributes:
-            self.attrs.set_edge_attrs(edge_id, **attributes)
-        self._ensure_edge_row(edge_id)
-        return edge_id
-
-    def _register_edge_as_entity(self, edge_id):
-        """Make an existing edge connectable as an endpoint."""
-        ekey = self._resolve_entity_key(edge_id)
-        if ekey in self._entities:
-            return
-        idx = len(self._entities)
-        self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='edge_entity'))
-        self._grow_rows_to(len(self._entities))
+    def _register_edge_as_entity(self, *args, **kwargs):
+        return _mutate.register_edge_as_entity(self, *args, **kwargs)
 
     # ── Edge input helpers ────────────────────────────────────────────────────
 
-    def _parse_edge_inputs(self, src, tgt, weight):
-        """Normalize src/tgt to (src_nodes, tgt_nodes, col_entries_or_None, etype).
-
-        col_entries is a dict[node, float] with literal matrix values for stoich
-        forms, or None for binary/hyper forms (direction applied separately).
-        etype is 'binary' | 'hyper' | 'stoich'.
-        """
-        # Dict forms: literal incidence entries
-        if isinstance(src, dict):
-            if tgt is None:
-                # single dict: negative values → source side, positive → target side
-                src_nodes = frozenset(k for k, v in src.items() if v <= 0)
-                tgt_nodes = frozenset(k for k, v in src.items() if v > 0)
-                return src_nodes, tgt_nodes, dict(src), 'stoich'
-            if isinstance(tgt, dict):
-                return frozenset(src), frozenset(tgt), {**src, **tgt}, 'stoich'
-            raise TypeError(f'If src is dict, tgt must be dict or None, got {type(tgt).__name__!r}')
-
-        # Supra-node binary edge: (vid, layer_coord) tuples
-        if (
-            isinstance(src, tuple)
-            and len(src) == 2
-            and isinstance(src[1], tuple)
-            and tgt is not None
-            and isinstance(tgt, tuple)
-            and len(tgt) == 2
-            and isinstance(tgt[1], tuple)
-        ):
-            return frozenset({src}), frozenset({tgt}), None, 'binary'
-
-        # Plain string binary edge
-        if isinstance(src, str):
-            if tgt is None:
-                raise ValueError('Binary edge requires tgt when src is a string.')
-            if not isinstance(tgt, str):
-                raise TypeError(f'tgt must be str for binary edge, got {type(tgt).__name__!r}')
-            return frozenset({src}), frozenset({tgt}), None, 'binary'
-
-        # List/set forms
-        if isinstance(src, (list, set, frozenset)):
-            src_seq = list(src)
-            if tgt is None:
-                return frozenset(src_seq), frozenset(), None, 'hyper'
-            if isinstance(tgt, (list, set, frozenset)):
-                return frozenset(src_seq), frozenset(tgt), None, 'hyper'
-            raise TypeError(
-                f'If src is list/set, tgt must be list/set or None, got {type(tgt).__name__!r}'
-            )
-
-        raise TypeError(
-            f'src must be str, tuple (supra-node), list, set, or dict; got {type(src).__name__!r}'
-        )
+    def _parse_edge_inputs(self, *args, **kwargs):
+        return _mutate.parse_edge_inputs(self, *args, **kwargs)
 
     @staticmethod
-    def _infer_ml_kind(src_key, tgt_key):
-        """Infer the multilayer *role* of a binary edge from its endpoint keys.
-
-        Pure role, decoupled from structure (``etype``):
-
-        - endpoints in the same layer                 -> ``"intra"``
-        - different layers, but the same vertex id     -> ``"coupling"``
-        - different layers and different vertices      -> ``"inter"``
-
-        A self-loop (same vertex, same layer) is therefore ``intra``; coupling is
-        its cross-layer generalization.
-        """
-        vid_s, lay_s = src_key
-        vid_t, lay_t = tgt_key
-        if lay_s == lay_t:
-            return 'intra'
-        if vid_s == vid_t:
-            return 'coupling'
-        return 'inter'
+    def _infer_ml_kind(*args, **kwargs):
+        return _mutate.infer_ml_kind(*args, **kwargs)
 
     @staticmethod
-    def _infer_hyper_ml(head_keys, tail_keys):
-        """Infer ``(ml_kind, ml_layers)`` for a hyperedge from its endpoints.
+    def _infer_hyper_ml(*args, **kwargs):
+        return _mutate.infer_hyper_ml(*args, **kwargs)
 
-        ``ml_kind`` is the pure multilayer role — the same intra/inter/coupling
-        rule as :meth:`_infer_ml_kind`, generalized over many endpoints. Structure
-        (binary vs hyper) lives in ``etype`` and is *not* encoded here.
+    def _find_parallel_edges(self, *args, **kwargs):
+        return _mutate.find_parallel_edges(self, *args, **kwargs)
 
-        ``head_keys``/``tail_keys`` are iterables of resolved ``(vid, coord)``
-        supra-node keys (pass all members as ``head_keys`` and ``None`` for
-        ``tail_keys`` for an undirected hyperedge). The layer coordinate is read
-        straight off each key, so this adds only an O(endpoints) scan over data
-        the caller has already materialized — no registry lookups. Callers guard
-        flat graphs and never reach this.
-
-        - all endpoints in one layer        -> ``("intra", coord)``
-        - many layers, every endpoint same vertex id -> ``("coupling", …)``
-        - many layers, different vertices    -> ``("inter", …)``
-
-        ``ml_layers`` is the single layer ``coord`` for intra; for cross-layer
-        edges it is ``(head_layer, tail_layer)`` when head and tail are each
-        confined to one layer, else ``None`` (role still set, but the 2-tuple
-        layer slot cannot represent a >2-layer split).
-        """
-        head_layers = {k[1] for k in head_keys} if head_keys else set()
-        tail_layers = {k[1] for k in tail_keys} if tail_keys else set()
-        all_layers = head_layers | tail_layers
-        if len(all_layers) <= 1:
-            return 'intra', (next(iter(all_layers)) if all_layers else None)
-        head_vids = {k[0] for k in head_keys} if head_keys else set()
-        tail_vids = {k[0] for k in tail_keys} if tail_keys else set()
-        kind = 'coupling' if len(head_vids | tail_vids) == 1 else 'inter'
-        if len(head_layers) == 1 and len(tail_layers) == 1:
-            return kind, (next(iter(head_layers)), next(iter(tail_layers)))
-        return kind, None
-
-    def _find_parallel_edges(self, endpoint_set, etype):
-        """Return edge_ids with the same endpoint set (any direction)."""
-        self._ensure_edge_indexes()
-        if etype == 'binary':
-            nodes = list(endpoint_set)
-            a, b = (nodes[0], nodes[0]) if len(nodes) == 1 else (nodes[0], nodes[1])
-            result = [eid for eid in self._src_to_edges.get(a, []) if self._edges[eid].tgt == b]
-            if a != b:
-                result.extend(
-                    eid for eid in self._src_to_edges.get(b, []) if self._edges[eid].tgt == a
-                )
-            return result
-        # Hyperedge / stoich: scan _edges for matching member frozenset
-        all_members = endpoint_set
-        result = []
-        for eid, rec in self._edges.items():
-            if rec.etype != 'hyper' or rec.col_idx < 0:
-                continue
-            members = set()
-            if isinstance(rec.src, frozenset):
-                members.update(rec.src)
-            elif rec.src is not None:
-                members.add(rec.src)
-            if isinstance(rec.tgt, frozenset):
-                members.update(rec.tgt)
-            elif rec.tgt is not None:
-                members.add(rec.tgt)
-            if frozenset(members) == all_members:
-                result.append(eid)
-        return result
-
-    def _zero_edge_column(self, rec, col_idx):
-        """Zero out all matrix entries for an existing edge column."""
-        M = self._matrix
-        _fast = getattr(M, '_set_intXint', None)
-
-        def _z(node):
-            try:
-                r = self._entity_row(node)
-                if _fast:
-                    _fast(r, col_idx, 0)
-                else:
-                    M[r, col_idx] = 0
-            except (KeyError, ValueError, TypeError):
-                pass
-
-        if rec.etype == 'hyper':
-            for side in (rec.src, rec.tgt):
-                if isinstance(side, frozenset):
-                    for n in side:
-                        _z(n)
-                elif side is not None:
-                    _z(side)
-        else:
-            if rec.src is not None:
-                _z(rec.src)
-            if rec.tgt is not None and rec.tgt != rec.src:
-                _z(rec.tgt)
+    def _zero_edge_column(self, *args, **kwargs):
+        return _mutate.zero_edge_column(self, *args, **kwargs)
 
     # ── Unified edge builder ──────────────────────────────────────────────────
 
@@ -1541,41 +990,6 @@ class AnnNet(
                 unexpected = ', '.join(sorted(kwargs))
                 raise TypeError(f'Unexpected keyword arguments for batch add_edges: {unexpected}')
 
-            def _is_multilayer_endpoint(v):
-                # Multilayer binary endpoint: (vertex_id, layer_coord)
-                # where layer_coord is itself a tuple. Must not be confused
-                # with hyperedge member-lists like ("A", "B", "C").
-                return (
-                    isinstance(v, tuple)
-                    and len(v) == 2
-                    and isinstance(v[0], str)
-                    and isinstance(v[1], tuple)
-                )
-
-            def _is_hyper_item(item):
-                if not isinstance(item, dict):
-                    return False
-                # Internal/IO compat: legacy members/head/tail keys still mark a hyperedge.
-                if any(k in item for k in ('members', 'head', 'tail')):
-                    return True
-                # User-facing rule: a list-shaped src or tgt means hyperedge,
-                # UNLESS the value is a (vid, layer_coord) multilayer endpoint.
-                src_val = item.get('src', item.get('source'))
-                tgt_val = item.get('tgt', item.get('target'))
-                if (
-                    isinstance(src_val, (list, tuple, set, frozenset))
-                    and not isinstance(src_val, str)
-                    and not _is_multilayer_endpoint(src_val)
-                ):
-                    return True
-                if (
-                    isinstance(tgt_val, (list, tuple, set, frozenset))
-                    and not isinstance(tgt_val, str)
-                    and not _is_multilayer_endpoint(tgt_val)
-                ):
-                    return True
-                return False
-
             kinds = set()
             for item in batch_candidate:
                 kinds.add('hyper' if _is_hyper_item(item) else 'binary')
@@ -1644,7 +1058,6 @@ class AnnNet(
         default_slice_weight=None,
         default_edge_directed=None,
     ):
-        """Hidden compatibility shim for legacy internal bulk edge insertion."""
         return self._add_edges_batch(
             list(edges),
             slice=slice,
@@ -1656,337 +1069,8 @@ class AnnNet(
             default_edge_directed=default_edge_directed,
         )
 
-    def _add_edge(
-        self,
-        src=None,
-        tgt=None,
-        *,
-        weight=1.0,
-        edge_id=None,
-        directed=None,
-        parallel='update',
-        slice=None,
-        as_entity=False,
-        propagate='none',
-        flexible=None,
-        **attrs,
-    ):
-        """Add or update an edge.
-
-        Parameters
-        ----------
-        src : str | tuple | list | dict | None
-            Edge source specification. Supported forms are:
-
-            - ``str`` or ``(vertex_id, layer_coord)`` for a binary edge source
-            - ``list`` for hyperedge members or heads
-            - ``dict`` for explicit incidence coefficients
-            - ``None`` only when creating an edge-entity placeholder via
-              ``as_entity=True`` and ``edge_id=...``
-        tgt : str | tuple | list | dict | None
-            Edge target specification. ``None`` indicates an undirected
-            hyperedge when ``src`` is a list or dict.
-        weight : float, optional
-            Default coefficient magnitude for binary edges and list-based
-            hyperedges.
-        edge_id : str | None
-            Explicit edge identifier. If omitted, a fresh identifier is generated.
-        directed : bool | None
-            Per-edge directedness override.
-        parallel : {"update", "error", "parallel"}, optional
-            Policy for duplicate endpoint sets when ``edge_id`` is not supplied.
-        slice : str | None
-            Slice receiving the edge membership. Defaults to the active slice.
-        as_entity : bool
-            If ``True``, also register the edge as an entity with its own row.
-            When combined with ``src is None`` and ``tgt is None``, this creates
-            a connectable edge-entity placeholder with no structural incidence.
-        propagate : {"none", "shared", "all"}, optional
-            Slice propagation strategy for the created edge.
-        flexible : dict | None
-            Flexible-direction policy configuration.
-        **attrs
-            Edge attributes to upsert into the edge attribute table.
-
-        Returns
-        -------
-        str
-            Identifier of the created or updated edge.
-
-        Notes
-        -----
-        This is the canonical edge constructor. It covers binary edges,
-        supra-node edges, undirected and directed hyperedges, stoichiometric
-        hyperedges, and edge-entities.
-
-        Raises
-        ------
-        ValueError
-            If the argument combination is invalid or structurally ambiguous.
-        """
-        if parallel not in {'update', 'error', 'parallel'}:
-            raise ValueError(f"parallel must be 'update'|'error'|'parallel', got {parallel!r}")
-        if propagate not in {'none', 'shared', 'all'}:
-            raise ValueError(f"propagate must be 'none'|'shared'|'all', got {propagate!r}")
-        if not isinstance(weight, (int, float)):
-            raise TypeError(f'weight must be numeric, got {type(weight).__name__!r}')
-        if flexible is not None and (
-            not isinstance(flexible, dict) or 'var' not in flexible or 'threshold' not in flexible
-        ):
-            raise ValueError(
-                "flexible must be a dict with keys {'var','threshold'[,'scope','above','tie']}"
-            )
-
-        slice = slice if slice is not None else self._current_slice
-
-        if src is None and tgt is None:
-            if as_entity:
-                if edge_id is None:
-                    raise ValueError(
-                        'edge_id is required when creating an edge-entity without endpoints.'
-                    )
-                return self._ensure_edge_entity_placeholder(edge_id, slice=slice, **attrs)
-            raise ValueError('add_edge requires structural endpoints unless as_entity=True.')
-
-        # ── 1. Parse inputs ────────────────────────────────────────────────
-        src_nodes, tgt_nodes, col_entries_literal, etype = self._parse_edge_inputs(src, tgt, weight)
-
-        if self.is_multilayer and col_entries_literal is None:
-            # Promote bare vertex strings to supra-node keys, mirroring
-            # ``add_vertices``: warn + place on the placeholder layer when
-            # the bare id has no existing supra-node. Ambiguous bare ids
-            # (multiple supra-nodes) raise ValueError via
-            # ``_resolve_entity_key``.
-
-            def _promote(node_set):
-                promoted = set()
-                bare_to_placeholder = []
-                for node in node_set:
-                    if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
-                        promoted.add(node)
-                        continue
-                    ekey = self._resolve_entity_key(node)
-                    promoted.add(ekey)
-                    if ekey not in self._entities:
-                        bare_to_placeholder.append(node)
-                return promoted, bare_to_placeholder
-
-            src_nodes, bare_src = _promote(src_nodes)
-            tgt_nodes, bare_tgt = _promote(tgt_nodes)
-            bare_total = bare_src + bare_tgt
-            if bare_total:
-                self._ensure_placeholder_layers_declared()
-                self._warn_placeholder_vertex_assignment(bare_total, context='add_edges')
-
-        # ── 2. Resolve direction ───────────────────────────────────────────
-        if directed is not None:
-            is_dir = bool(directed)
-        elif etype == 'hyper':
-            # For hyperedges, direction is topological: has explicit tail → directed
-            is_dir = bool(tgt_nodes)
-        elif self.directed is not None:
-            is_dir = bool(self.directed)
-        else:
-            is_dir = True
-
-        # ── 3. Build column entries ────────────────────────────────────────
-        if col_entries_literal is not None:
-            # stoich: literal values already in col_entries_literal
-            col_entries = col_entries_literal
-        else:
-            # binary / hyper: apply ±weight based on direction
-            col_entries = {}
-            for n in src_nodes:
-                col_entries[n] = float(weight)
-            for n in tgt_nodes:
-                col_entries[n] = -float(weight) if is_dir else float(weight)
-
-        endpoint_set = frozenset(col_entries)
-
-        # ── 4. Resolve parallel ────────────────────────────────────────────
-        # If the caller provided an explicit edge_id that already exists → always update it.
-        # If the caller provided an explicit edge_id that doesn't exist → always create it.
-        # The parallel policy only applies when edge_id is None (auto-generated).
-        explicit_id = edge_id is not None
-        if explicit_id and edge_id in self._edges:
-            # targeting an existing named edge: update in-place, skip endpoint dedup
-            pass
-        elif explicit_id:
-            # new named edge: create regardless of parallel edges between same endpoints
-            if parallel == 'error':
-                existing = self._find_parallel_edges(endpoint_set, etype)
-                if existing:
-                    raise ValueError(
-                        f'Edge already exists between {endpoint_set}. '
-                        "Use parallel='parallel' to allow parallel edges."
-                    )
-        else:
-            # auto-generated id: apply parallel policy
-            existing = self._find_parallel_edges(endpoint_set, etype)
-            if existing:
-                if parallel == 'error':
-                    raise ValueError(
-                        f'Edge already exists between {endpoint_set}. '
-                        "Use parallel='parallel' to allow parallel edges."
-                    )
-                if parallel == 'update':
-                    edge_id = existing[-1]
-            if edge_id is None:
-                edge_id = self._get_next_edge_id()
-
-        # ── 5. Ensure endpoints exist ──────────────────────────────────────
-        self._ensure_edge_indexes()
-        _ent = self._entities
-        _edg = self._edges
-        for node in endpoint_set:
-            ekey = self._resolve_entity_key(node)
-            if ekey not in _ent:
-                if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
-                    self._add_vertex(node[0], layer=node[1], slice=slice)
-                else:
-                    self._add_vertex(node, slice=slice)
-
-        self._grow_rows_to(len(_ent))
-
-        # ── 6. Column allocation / zeroing ─────────────────────────────────
-        is_new = edge_id not in _edg or _edg[edge_id].col_idx < 0
-        if is_new:
-            col_idx = len(self._col_to_edge)
-            self._col_to_edge[col_idx] = edge_id
-            self._grow_cols_to(col_idx + 1)
-        else:
-            col_idx = _edg[edge_id].col_idx
-            self._zero_edge_column(_edg[edge_id], col_idx)
-
-        # ── 7. Write matrix column ─────────────────────────────────────────
-        M = self._matrix
-        _fast = getattr(M, '_set_intXint', None)
-        _dt = M.dtype.type
-        for node, coeff in col_entries.items():
-            r = self._entity_row(node)
-            if _fast:
-                _fast(r, col_idx, _dt(coeff))
-            else:
-                M[r, col_idx] = coeff
-
-        # ── 8. Compute src_store / tgt_store for EdgeRecord ────────────────
-        if etype == 'binary':
-            src_store = next(iter(src_nodes))
-            tgt_store = next(iter(tgt_nodes)) if tgt_nodes else None
-            rec_etype = 'vertex_edge' if as_entity else 'binary'
-        else:
-            src_store = frozenset(src_nodes) if src_nodes else None
-            tgt_store = frozenset(tgt_nodes) if tgt_nodes else None
-            rec_etype = 'hyper'
-
-        # ── 9. Infer ml_kind (multilayer role) ─────────────────────────────
-        # Every edge carries a role. A flat graph is a single layer, so every
-        # edge is intra. Otherwise classify from the endpoints' layers.
-        ml_kind = None
-        ml_layers = None
-        if not self.is_multilayer:
-            ml_kind = 'intra'
-        elif (
-            etype == 'binary'
-            and isinstance(src, tuple)
-            and len(src) == 2
-            and isinstance(src[1], tuple)
-            and isinstance(tgt, tuple)
-            and len(tgt) == 2
-            and isinstance(tgt[1], tuple)
-        ):
-            ml_kind = self._infer_ml_kind(src, tgt)
-            ml_layers = (src[1], tgt[1])
-        elif etype == 'hyper':
-            # Hyperedge: classify from the layers its members live in
-            # (src_nodes = head/members, tgt_nodes = tail; both are supra keys).
-            ml_kind, ml_layers = self._infer_hyper_ml(src_nodes, tgt_nodes)
-
-        # ── 10. Store / update EdgeRecord ──────────────────────────────────
-        if is_new:
-            _edg[edge_id] = EdgeRecord(
-                src=src_store,
-                tgt=tgt_store,
-                weight=float(weight),
-                directed=is_dir,
-                etype=rec_etype,
-                col_idx=col_idx,
-                ml_kind=ml_kind,
-                ml_layers=ml_layers,
-                direction_policy=flexible,
-            )
-            if src_store is not None:
-                self._src_to_edges.setdefault(src_store, []).append(edge_id)
-            if tgt_store is not None:
-                self._tgt_to_edges.setdefault(tgt_store, []).append(edge_id)
-            if etype == 'binary':
-                self._index_edge_pair(edge_id, src_store, tgt_store)
-        else:
-            rec = _edg[edge_id]
-            old_src, old_tgt = rec.src, rec.tgt
-            if (old_src, old_tgt) != (src_store, tgt_store):
-                self._unindex_edge_pair(edge_id, old_src, old_tgt)
-                for _old, _new, _idx in (
-                    (old_src, src_store, self._src_to_edges),
-                    (old_tgt, tgt_store, self._tgt_to_edges),
-                ):
-                    if _old != _new:
-                        lst = _idx.get(_old)
-                        if lst:
-                            try:
-                                lst.remove(edge_id)
-                            except ValueError:
-                                pass
-                            if not lst:
-                                del _idx[_old]
-                        if _new is not None:
-                            _idx.setdefault(_new, []).append(edge_id)
-                if etype == 'binary':
-                    self._index_edge_pair(edge_id, src_store, tgt_store)
-            rec.src = src_store
-            rec.tgt = tgt_store
-            rec.weight = float(weight)
-            rec.directed = is_dir
-            rec.etype = rec_etype
-            rec.ml_kind = ml_kind
-            rec.ml_layers = ml_layers
-            if flexible is not None:
-                rec.direction_policy = flexible
-
-        # ── 11. as_entity ──────────────────────────────────────────────────
-        if as_entity:
-            self._register_edge_as_entity(edge_id)
-
-        # ── 12. Slice ──────────────────────────────────────────────────────
-        if slice is not None:
-            slices = self._slices
-            if slice not in slices:
-                slices[slice] = SliceRecord()
-            slices[slice]['edges'].add(edge_id)
-            # Slice tracks bare vids
-            for n in endpoint_set:
-                slices[slice]['vertices'].add(n[0] if isinstance(n, tuple) else n)
-
-        # ── 13. Propagate ──────────────────────────────────────────────────
-        if propagate == 'shared':
-            self._propagate_to_shared_slices(edge_id, src_store, tgt_store)
-        elif propagate == 'all':
-            self._propagate_to_all_slices(edge_id, src_store, tgt_store)
-
-        # ── 14. Flexible direction ─────────────────────────────────────────
-        if flexible is not None:
-            _edg[edge_id].directed = True
-            self._apply_flexible_direction(edge_id)
-
-        # ── 15. Attributes ─────────────────────────────────────────────────
-        if attrs:
-            self.attrs.set_edge_attrs(edge_id, **attrs)
-
-        # Ensure the edge has a row in ``var`` even when no user attrs were
-        # supplied — keeps ``var.shape[0] == ne`` (anndata-style symmetry).
-        self._ensure_edge_row(edge_id)
-
-        return edge_id
+    def _add_edge(self, *args, **kwargs):
+        return _mutate.add_edge(self, *args, **kwargs)
 
     def set_edge_coeffs(self, edge_id: str, coeffs: dict[str, float]) -> None:
         """Overwrite incidence coefficients for an existing edge.
@@ -2004,82 +1088,15 @@ class AnnNet(
         only provide coefficient patterns consistent with the existing edge
         topology.
         """
-        col = self._edges[edge_id].col_idx
-        for vid, coeff in coeffs.items():
-            self._matrix[self._entity_row(vid), col] = float(coeff)
-        # Direct ``_matrix`` mutation: drop derived sparse caches so subsequent
-        # incidence/adjacency reads reflect the new coefficients.
-        self._invalidate_sparse_caches()
+        return _mutate.set_edge_coeffs(self, edge_id, coeffs)
 
-    def _propagate_to_shared_slices(self, edge_id, source, target):
-        """INTERNAL: Add an edge to all slices that already contain **both** endpoints.
+    def _propagate_to_shared_slices(self, *args, **kwargs):
+        return _mutate.propagate_to_shared_slices(self, *args, **kwargs)
 
-        Parameters
-        ----------
-        edge_id : str
-        source : str
-        target : str
-
-        """
-        for _slice_id, slice_data in self._slices.items():
-            slice_vertices = slice_data['vertices']
-            if self._slice_contains_endpoint(
-                slice_vertices, source
-            ) and self._slice_contains_endpoint(slice_vertices, target):
-                slice_data['edges'].add(edge_id)
-
-    def _propagate_to_all_slices(self, edge_id, source, target):
-        """INTERNAL: Add an edge to any slice containing **either** endpoint.
-
-        Inserts the missing endpoint into that slice when only one endpoint is
-        already a member.
-
-        Parameters
-        ----------
-        edge_id : str
-        source : str
-        target : str
-
-        """
-        for _slice_id, slice_data in self._slices.items():
-            slice_vertices = slice_data['vertices']
-            source_present = self._slice_contains_endpoint(slice_vertices, source)
-            target_present = self._slice_contains_endpoint(slice_vertices, target)
-            if source_present or target_present:
-                slice_data['edges'].add(edge_id)
-                # Only add missing endpoint if both vertices should be in slice
-                if source_present:
-                    self._add_endpoint_to_slice_vertices(slice_vertices, target)
-                if target_present:
-                    self._add_endpoint_to_slice_vertices(slice_vertices, source)
+    def _propagate_to_all_slices(self, *args, **kwargs):
+        return _mutate.propagate_to_all_slices(self, *args, **kwargs)
 
     def _normalize_vertices_arg(self, vertices):
-        """Normalize a single vertex or an iterable of vertices into a set.
-
-        This internal utility function standardizes input for methods like
-        `incident_edges()` by converting the argument into a set of vertex
-        identifiers.
-
-        Parameters
-        ----------
-        vertices : str | Iterable[str] | None
-            - A single vertex ID (string).
-            - An iterable of vertex IDs (e.g., list, tuple, set).
-            - `None` is allowed and will return an empty set.
-
-        Returns
-        -------
-        set[str]
-            A set of vertex identifiers. If `vertices` is `None`, returns an
-            empty set. If a single vertex is provided, returns a one-element set.
-
-        Notes
-        -----
-        - Strings are treated as **single vertex IDs**, not iterables.
-        - If the argument is neither iterable nor a string, it is wrapped in a set.
-        - Used internally by API methods that accept flexible vertex arguments.
-
-        """
         if vertices is None:
             return set()
         if isinstance(vertices, (str, bytes)) or self._is_explicit_entity_key(vertices):
@@ -2123,87 +1140,17 @@ class AnnNet(
         >>> G.make_undirected()
         AnnNet(...)
         """
+        return _mutate.make_undirected(
+            self, drop_flexible=drop_flexible, update_default=update_default
+        )
 
-        M = self._matrix
-
-        # 1) Binary / vertex-edge edges
-        for _eid, rec in list(self._edges.items()):
-            if rec.etype == 'hyper':
-                continue  # handled below
-            if rec.src is None or rec.tgt is None:
-                continue
-
-            col = rec.col_idx
-            if col < 0:
-                continue
-
-            w = float(rec.weight)
-
-            try:
-                si = self._entity_row(rec.src) if rec.src is not None else None
-            except (KeyError, ValueError, TypeError):
-                si = None
-            try:
-                ti = self._entity_row(rec.tgt) if rec.tgt is not None else None
-            except (KeyError, ValueError, TypeError):
-                ti = None
-
-            if si is not None:
-                M[si, col] = w
-            if ti is not None and ti != si:
-                M[ti, col] = w
-
-            rec.directed = False
-
-        # 2) Hyperedges
-        for _eid, rec in list(self._edges.items()):
-            if rec.etype != 'hyper':
-                continue
-
-            col = rec.col_idx
-            if col < 0:
-                continue
-
-            w = float(rec.weight)
-
-            # rec.src is frozenset(head or members), rec.tgt is frozenset(tail) or None
-            if rec.tgt is not None:
-                # directed hyperedge: src=head, tgt=tail
-                members = rec.src | rec.tgt
-                for u in members:
-                    ent = self._entities.get(u)
-                    if ent is not None:
-                        try:
-                            M[ent.row_idx, col] = 0
-                        except KeyError:
-                            pass
-            else:
-                members = rec.src  # undirected: src=all members
-
-            for u in members:
-                ent = self._entities.get(u)
-                if ent is not None:
-                    M[ent.row_idx, col] = w
-
-            # Rewrite as undirected: src=all members, tgt=None
-            rec.src = frozenset(members)
-            rec.tgt = None
-            rec.directed = False
-
-        # 3) Optional: drop flexible-direction policies
-        if drop_flexible:
-            for rec in self._edges.values():
-                rec.direction_policy = None
-
-        # 4) Optional: set global default to undirected for future edges
-        if update_default:
-            self.directed = False
-
-        return self
+    def validate(self, *, strict: bool = True) -> list[str]:
+        """Assert internal-consistency invariants; return problems (raises if ``strict``)."""
+        return _validate.validate_internal_consistency(self, strict=strict)
 
     # Remove / mutate down
 
-    def remove_edge(self, edge_id):
+    def remove_edge(self, *args, **kwargs):
         """Remove an edge (binary or hyperedge) from the graph.
 
         Parameters
@@ -2225,69 +1172,7 @@ class AnnNet(
         --------
         remove_edges : Remove one or more edges through the compact public API.
         """
-        self._ensure_edge_indexes()
-        if edge_id not in self._edges:
-            raise KeyError(f'Edge {edge_id} not found')
-
-        rec = self._edges[edge_id]
-        col_idx = rec.col_idx
-        if rec.etype != 'hyper':
-            self._unindex_edge_pair(edge_id, rec.src, rec.tgt)
-
-        # column removal without CSR (single pass over nonzeros)
-        M_old = self._matrix
-        rows, cols = M_old.shape
-        new_cols = cols - 1
-        M_new = sp.dok_matrix((rows, new_cols), dtype=M_old.dtype)
-        for (r, c), v in M_old.items():
-            if c == col_idx:
-                continue
-            elif c > col_idx:
-                M_new[r, c - 1] = v
-            else:
-                M_new[r, c] = v
-        self._matrix = M_new
-        self._invalidate_sparse_caches()
-
-        # Shift col indices for all edges after the removed column
-        del self._col_to_edge[col_idx]
-        num_edges = len(self._col_to_edge) + 1  # before deletion
-        for old_c in range(col_idx + 1, num_edges):
-            eid = self._col_to_edge.pop(old_c)
-            self._col_to_edge[old_c - 1] = eid
-            self._edges[eid].col_idx = old_c - 1
-
-        # Adjacency cleanup
-        if rec.etype != 'hyper':
-            self._remove_edge_id_from_index(self._src_to_edges, rec.src, edge_id)
-            self._remove_edge_id_from_index(self._tgt_to_edges, rec.tgt, edge_id)
-
-        # Primary record deletion
-        del self._edges[edge_id]
-
-        # Remove from edge attributes DataFrame
-        ea = self.edge_attributes
-        if ea is not None and hasattr(ea, 'columns'):
-            is_empty = (getattr(ea, 'height', None) == 0) or (
-                hasattr(ea, '__len__') and len(ea) == 0
-            )
-            if (not is_empty) and ('edge_id' in list(ea.columns)):
-                self.edge_attributes = _df_filter_not_equal(ea, 'edge_id', edge_id)
-
-        # Remove from per-slice membership
-        for slice_data in self._slices.values():
-            slice_data['edges'].discard(edge_id)
-
-        # Remove from edge-slice attributes
-        esa = self.edge_slice_attributes
-        if esa is not None and hasattr(esa, 'columns'):
-            is_empty = (getattr(esa, 'height', None) == 0) or (
-                hasattr(esa, '__len__') and len(esa) == 0
-            )
-            if (not is_empty) and ('edge_id' in list(esa.columns)):
-                self.edge_slice_attributes = _df_filter_not_equal(esa, 'edge_id', edge_id)
-
-        self._rebuild_slice_edge_weights_cache()
+        return _mutate.remove_edge(self, *args, **kwargs)
 
     def remove_vertex(self, vertex_id):
         """Remove a vertex and all incident edges (binary + hyperedges).
@@ -2445,7 +1330,6 @@ class AnnNet(
         )
 
     def _incident_edge_indices(self, vertex_id) -> list[int]:
-        """Return matrix column indices of all edges incident to a vertex."""
         incident = []
         ent = self._entities.get(vertex_id)
         if ent is not None:
@@ -2466,17 +1350,6 @@ class AnnNet(
         return incident
 
     def _is_directed_edge(self, edge_id):
-        """Check if an edge is directed (per-edge flag overrides graph default).
-
-        Parameters
-        ----------
-        edge_id : str
-
-        Returns
-        -------
-        bool
-
-        """
         rec = self._edges.get(edge_id)
         if rec is None:
             return bool(self.directed)
@@ -2595,7 +1468,6 @@ class AnnNet(
         return self._edge_ids_for_pair(source, target)
 
     def _get_csr(self):
-        """Return a cached CSR view of _matrix. Rebuilt when _csr_cache is None."""
         csr = self.cache.csr
         self._csr_cache = csr
         return csr
@@ -3029,12 +1901,6 @@ class AnnNet(
         return vid
 
     def _gen_vertex_id_from_key(self, key) -> str:
-        """Generate a stable vertex id from a composite key tuple.
-
-        The id is deterministic for a given key and namespaced away from
-        user-provided ids. If a generated id already exists for a different
-        key, append a numeric suffix until it becomes unique.
-        """
         from urllib.parse import quote
 
         base = 'cid:' + '|'.join(quote(str(part), safe='') for part in key)
@@ -3144,6 +2010,29 @@ class AnnNet(
         return self._gt_proxy
 
     # AnnNet API
+
+    @property
+    def _matrix(self):
+        """Incidence matrix, rebuilt lazily from records when marked dirty.
+
+        Records (``_edges`` + entity row indices) are the complete source of
+        truth, so the matrix is a warm cache: mutation marks it dirty instead of
+        patching cells, and the next read materializes a compact CSR once.
+        """
+        if self._matrix_dirty:
+            self._matrix_cache = _derive.rebuild_matrix(self)
+            self._matrix_dirty = False
+        return self._matrix_cache
+
+    @_matrix.setter
+    def _matrix(self, value) -> None:
+        self._matrix_cache = value
+        self._matrix_shape = tuple(value.shape)
+        self._matrix_dirty = False
+
+    def _mark_matrix_dirty(self) -> None:
+        """Flag the incidence cache for lazy rebuild from records."""
+        self._matrix_dirty = True
 
     def X(self):
         """Return the sparse incidence matrix.
@@ -3444,7 +2333,6 @@ class AnnNet(
         return GraphView(self, vertices, edges, slices, predicate)
 
     def _resolve_snapshot(self, ref):
-        """Resolve snapshot reference (label, dict, or AnnNet)."""
         if isinstance(ref, dict):
             return ref
         elif isinstance(ref, str):
@@ -3466,7 +2354,6 @@ class AnnNet(
             raise TypeError(f'Invalid snapshot reference: {type(ref)}')
 
     def _current_snapshot(self):
-        """Create snapshot of current state (uses AnnNet attributes)."""
         return {
             'label': 'current',
             'version': self._version,
@@ -3492,6 +2379,7 @@ class AnnNet(
 
     @aspects.setter
     def aspects(self, val: list[str]):
+        """Set the graph aspect names and rebuild the layer registry."""
         if not val:
             self._aspects = ('_',)
             self._layers = {'_': {'_'}}
@@ -3511,6 +2399,7 @@ class AnnNet(
 
     @elem_layers.setter
     def elem_layers(self, val: dict[str, list[str]]):
+        """Replace the declared elementary layers and rebuild layer caches."""
         if not val:
             self._layers = {'_': {'_'}}
         else:
@@ -3536,9 +2425,9 @@ class AnnNet(
 
     @edge_layers.setter
     def edge_layers(self, mapping):
+        """Set multilayer layer assignments for existing edges."""
         for eid, layers in dict(mapping).items():
-            if eid in self._edges:
-                self._edges[eid].ml_layers = layers
+            _mutate.set_edge_field(self, eid, 'ml_layers', layers)
 
     @property
     def edge_kind(self) -> dict:
@@ -3548,23 +2437,14 @@ class AnnNet(
             'ml_kind',
             include=lambda rec, value: rec.etype == 'hyper' or value is not None,
             getter=lambda rec, value: 'hyper' if rec.etype == 'hyper' else value,
-            setter=lambda rec, value: (
-                setattr(rec, 'etype', 'hyper')
-                if value == 'hyper'
-                else setattr(rec, 'ml_kind', value)
-            ),
+            setter=_mutate.set_edge_kind,
         )
 
     @edge_kind.setter
     def edge_kind(self, mapping):
+        """Set edge kinds for existing edges."""
         for eid, kind in dict(mapping).items():
-            if eid not in self._edges:
-                continue
-            rec = self._edges[eid]
-            if kind == 'hyper':
-                rec.etype = 'hyper'
-            else:
-                rec.ml_kind = kind
+            _mutate.set_edge_kind(self, eid, kind)
 
     @property
     def _aspect_attrs(self) -> dict:
@@ -3597,14 +2477,8 @@ class AnnNet(
 
     @entity_to_idx.setter
     def entity_to_idx(self, mapping):
-        self._entities.clear()
-        self._row_to_entity.clear()
-        self._vid_to_ekeys.clear()
-        for vid, row_idx in dict(mapping).items():
-            coord = self._placeholder_layer_coord()
-            self._register_entity_record(
-                (vid, coord), EntityRecord(row_idx=int(row_idx), kind='vertex')
-            )
+        """Rebuild the entity registry from a ``vertex_id -> row_idx`` mapping."""
+        _mutate.set_entity_to_idx(self, mapping)
 
     @property
     def idx_to_entity(self) -> dict:
@@ -3618,13 +2492,8 @@ class AnnNet(
 
     @entity_types.setter
     def entity_types(self, mapping):
-        for vid, kind in dict(mapping).items():
-            ekey = self._resolve_entity_key(vid)
-            rec = self._entities.get(ekey)
-            row_idx = rec.row_idx if rec is not None else len(self._entities)
-            self._register_entity_record(
-                ekey, EntityRecord(row_idx=row_idx, kind=_internal_entity_kind(kind))
-            )
+        """Set entity kinds from a ``vertex_id -> kind`` mapping."""
+        _mutate.set_entity_types(self, mapping)
 
     @property
     def edge_to_idx(self) -> dict:
@@ -3657,14 +2526,9 @@ class AnnNet(
 
     @edge_definitions.setter
     def edge_definitions(self, mapping):
+        """Rewrite binary edge endpoint definitions from a mapping."""
         for eid, defn in dict(mapping).items():
-            if eid not in self._edges:
-                continue
-            src, tgt, etype = defn
-            rec = self._edges[eid]
-            rec.src = src
-            rec.tgt = tgt
-            rec.etype = etype if etype != 'hyper' else 'binary'
+            _mutate.set_edge_definition(self, eid, *defn)
 
     @property
     def hyperedge_definitions(self) -> dict:
@@ -3681,25 +2545,9 @@ class AnnNet(
 
     @hyperedge_definitions.setter
     def hyperedge_definitions(self, mapping):
+        """Rewrite hyperedge memberships from a mapping."""
         for eid, defn in dict(mapping).items():
-            if eid not in self._edges:
-                continue
-            rec = self._edges[eid]
-            rec.etype = 'hyper'
-            if isinstance(defn, list):
-                rec.src = frozenset(defn)
-                rec.tgt = None
-                rec.directed = False
-            else:
-                directed = bool(defn.get('directed', False))
-                if directed:
-                    rec.src = frozenset(defn.get('head', []))
-                    rec.tgt = frozenset(defn.get('tail', []))
-                    rec.directed = True
-                else:
-                    rec.src = frozenset(defn.get('members', []))
-                    rec.tgt = None
-                    rec.directed = False
+            _mutate.set_hyperedge_definition(self, eid, defn)
 
     @property
     def edge_direction_policy(self) -> dict:
@@ -3712,9 +2560,9 @@ class AnnNet(
 
     @edge_direction_policy.setter
     def edge_direction_policy(self, mapping):
+        """Attach flexible-direction policies from a mapping."""
         for eid, policy in dict(mapping).items():
-            if eid in self._edges:
-                self._edges[eid].direction_policy = policy
+            _mutate.set_edge_direction_policy(self, eid, policy)
 
     @property
     def _num_entities(self) -> int:
@@ -3736,830 +2584,14 @@ class AnnNet(
     # Bulk mutation API
     # ------------------------------------------------------------------
 
-    def _add_vertices_batch(self, vertices, layer=None, slice=None, default_attrs=None):
-        """Add many vertices in one pass.
+    def _add_vertices_batch(self, *args, **kwargs):
+        return _mutate.batch_add_vertices(self, *args, **kwargs)
 
-        Parameters
-        ----------
-        vertices : Iterable[str] | Iterable[tuple[str, dict]] | Iterable[dict]
-            Each item may be a vertex_id string, a ``(vertex_id, attrs)`` tuple,
-            or a dict with a ``vertex_id`` key plus attribute keys.
-        layer : str | dict | tuple | None, optional
-            Layer spec applied to every vertex in this batch.
-        slice : str, optional
-            Target slice. Defaults to the active slice.
-        default_attrs : dict | None, optional
-            Attributes broadcast across every item. Per-item attrs take
-            precedence on key collision.
-        """
-        slice = slice or self._current_slice
-        default_attrs = default_attrs or {}
+    def _add_edges_batch(self, *args, **kwargs):
+        return _mutate.batch_add_edges(self, *args, **kwargs)
 
-        # --- normalize input ---
-        norm = []
-        for it in vertices:
-            if isinstance(it, dict):
-                if it.get('vertex_id'):
-                    vid = it['vertex_id']
-                    _id_keys = {'vertex_id'}
-                elif it.get('id'):
-                    vid = it['id']
-                    _id_keys = {'vertex_id', 'id'}
-                elif it.get('name'):
-                    vid = it['name']
-                    _id_keys = {'vertex_id', 'id', 'name'}
-                else:
-                    vid = None
-                if vid is None:
-                    continue
-                attrs = {k: v for k, v in it.items() if k not in _id_keys}
-            elif isinstance(it, (tuple, list)) and it:
-                vid = it[0]
-                attrs = it[1] if len(it) > 1 and isinstance(it[1], dict) else {}
-            else:
-                vid = it
-                attrs = {}
-            if default_attrs:
-                merged = dict(default_attrs)
-                merged.update(attrs)
-                attrs = merged
-            norm.append((vid, attrs))
-
-        if not norm:
-            return
-
-        try:
-            import sys as _sys
-
-            norm = [
-                (_sys.intern(vid) if isinstance(vid, str) else vid, attrs) for vid, attrs in norm
-            ]
-            if isinstance(slice, str):
-                slice = _sys.intern(slice)
-        except TypeError:
-            pass
-
-        # --- entity registration ---
-        coord = self._resolve_vertex_insert_coord(
-            layer, vertex_ids=[vid for vid, _ in norm], context='_add_vertices_batch'
-        )
-        new_rows = 0
-        for vid, _ in norm:
-            ekey = (vid, coord)
-            if ekey not in self._entities:
-                idx = len(self._entities)
-                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
-                new_rows += 1
-        if new_rows:
-            self._grow_rows_to(len(self._entities))
-
-        # --- slice ---
-        self.slices._ensure_slice(slice)['vertices'].update(vid for vid, _ in norm)
-
-        # --- attribute table (Polars fast path) ---
-        self._ensure_vertex_table()
-        if is_polars_dataframe(self.vertex_attributes):
-            keys = {k for _, attrs in norm for k in attrs}
-            df = self.vertex_attributes
-            if keys:
-                df = self._ensure_attr_columns(df, dict.fromkeys(keys))
-            if is_polars_dataframe(df):
-                result = polars_upsert_vertices(df, norm)
-                if result is not None:
-                    self.vertex_attributes = result
-                    return
-
-        # --- generic fallback (pandas / pyarrow, or polars with non-string vids) ---
-        # Non-string vids (e.g. multilayer supra-node tuples) are tracked in
-        # ``_entities`` only and stay out of the obs table. The polars backend
-        # cannot represent tuples in a String-typed vertex_id column anyway.
-        df2 = self.vertex_attributes
-
-        rows = [
-            {'vertex_id': vid, **{k: _sanitize(v) for k, v in attrs.items()}}
-            for vid, attrs in norm
-            if isinstance(vid, str)
-        ]
-        if rows:
-            df2 = dataframe_upsert_rows(df2, rows, ('vertex_id',))
-
-        self.vertex_attributes = df2
-
-    def _add_edges_batch(
-        self,
-        edges,
-        *,
-        slice=None,
-        as_entity=False,
-        default_weight=1.0,
-        default_edge_type='regular',
-        default_propagate='none',
-        default_slice_weight=None,
-        default_edge_directed=None,
-    ):
-        """Add many binary edges in one pass.
-
-        Parameters
-        ----------
-        edges : Iterable
-            Each item may be a ``(source, target)`` tuple, ``(source, target,
-            weight)`` tuple, or a dict with ``source`` / ``target`` plus
-            optional edge fields.
-        slice : str, optional
-            Default slice for edges missing an explicit slice.
-        as_entity : bool, optional
-            Register each edge as a connectable entity.
-        default_weight : float, optional
-            Weight for edges missing an explicit weight.
-        default_edge_type : str, optional
-            Edge type when not provided.
-        default_propagate : {'none', 'shared', 'all'}, optional
-            Slice propagation mode.
-        default_slice_weight : float, optional
-            Per-slice weight override.
-        default_edge_directed : bool, optional
-            Per-edge directedness override.
-
-        Returns
-        -------
-        list[str]
-            Edge IDs for created/updated edges.
-        """
-        self._ensure_edge_indexes()
-        slice = self._current_slice if slice is None else slice
-        pending_attrs = {}
-
-        norm = []
-        for idx, it in enumerate(edges):
-            if isinstance(it, dict):
-                d = dict(it)
-                if 'src' in d and 'source' not in d:
-                    d['source'] = d.pop('src')
-                if 'tgt' in d and 'target' not in d:
-                    d['target'] = d.pop('tgt')
-                if 'directed' in d and 'edge_directed' not in d:
-                    d['edge_directed'] = d.pop('directed')
-                has_src = 'source' in d
-                has_tgt = 'target' in d
-                if has_src ^ has_tgt:
-                    missing = 'target' if has_src else 'source'
-                    raise ValueError(
-                        f'add_edges batch item at index {idx} is missing '
-                        f"'{missing}' (or its alias '{'tgt' if missing == 'target' else 'src'}'): "
-                        f'{it!r}'
-                    )
-            elif isinstance(it, (tuple, list)):
-                if len(it) == 2:
-                    d = {'source': it[0], 'target': it[1], 'weight': default_weight}
-                else:
-                    d = {'source': it[0], 'target': it[1], 'weight': it[2]}
-            else:
-                continue
-            d.setdefault('weight', default_weight)
-            d.setdefault('edge_type', default_edge_type)
-            d.setdefault('propagate', default_propagate)
-            if 'slice' not in d:
-                d['slice'] = slice
-            if 'edge_directed' not in d:
-                d['edge_directed'] = default_edge_directed
-            norm.append(d)
-
-        if not norm:
-            return []
-
-        # ── Null-endpoint entity-placeholders ──────────────────────────────────
-        _EE_RESERVED = _BINARY_BATCH_RESERVED_KEYS
-        entity_items = [d for d in norm if 'source' not in d and 'target' not in d]
-        if entity_items:
-            if not as_entity:
-                raise ValueError(
-                    'Batch items without source/target require as_entity=True to be '
-                    'treated as edge-entity placeholders.'
-                )
-            norm = [d for d in norm if 'source' in d or 'target' in d]
-
-        entity_out: list = []
-        for d in entity_items:
-            e_id = d.get('edge_id') or self._get_next_edge_id()
-            sl = d.get('slice', slice)
-            extra = {k: v for k, v in d.items() if k not in _EE_RESERVED}
-            self._ensure_edge_entity_placeholder(e_id, slice=sl, **extra)
-            entity_out.append(e_id)
-
-        if not norm:
-            return entity_out
-
-        try:
-            import sys as _sys
-
-            for d in norm:
-                s, t = d['source'], d['target']
-                if isinstance(s, str):
-                    d['source'] = _sys.intern(s)
-                if isinstance(t, str):
-                    d['target'] = _sys.intern(t)
-                if isinstance(d.get('slice'), str):
-                    d['slice'] = _sys.intern(d['slice'])
-                if isinstance(d.get('edge_id'), str):
-                    d['edge_id'] = _sys.intern(d['edge_id'])
-                try:
-                    d['weight'] = float(d['weight'])
-                except (TypeError, ValueError):
-                    pass
-        except Exception:  # noqa: BLE001
-            pass
-
-        M = self._matrix
-        _m_fast_set = getattr(M, '_set_intXint', None)
-        _m_dtype = M.dtype.type
-
-        unique_vids: dict = {}
-        for d in norm:
-            s, t = d['source'], d['target']
-            et = d.get('edge_type', 'regular')
-            unique_vids[s] = et
-            unique_vids[t] = et
-
-        endpoint_cache: dict = {}
-        for vid, et in unique_vids.items():
-            if isinstance(vid, tuple) and len(vid) == 2 and isinstance(vid[1], tuple):
-                ekey = vid
-            else:
-                coord = self._resolve_vertex_insert_coord(
-                    None, vertex_ids=vid, context='_add_edges_batch'
-                )
-                ekey = (vid, coord)
-            if ekey not in self._entities:
-                if (
-                    et in {'vertex_edge', 'edge_placeholder'}
-                    and isinstance(vid, str)
-                    and vid.startswith('edge_')
-                ):
-                    self._ensure_edge_entity_placeholder(vid)
-                else:
-                    idx = len(self._entities)
-                    self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
-            endpoint_cache[vid] = self._entities[ekey].row_idx
-
-        self._grow_rows_to(len(self._entities))
-
-        _edges_store = self._edges
-        new_count = 0
-        _need_auto_id = []
-        for _i, d in enumerate(norm):
-            eid = d.get('edge_id')
-            if eid not in _edges_store or _edges_store[eid].col_idx < 0:
-                new_count += 1
-            if eid is None:
-                _need_auto_id.append(_i)
-
-        if new_count:
-            self._grow_cols_to(len(self._col_to_edge) + new_count)
-
-        if _need_auto_id:
-            _base_id = self._next_edge_id
-            self._next_edge_id += len(_need_auto_id)
-            _auto_ids = iter(range(_base_id, _base_id + len(_need_auto_id)))
-            for _i in _need_auto_id:
-                norm[_i]['edge_id'] = f'edge_{next(_auto_ids)}'
-
-        out_ids = []
-        _M_writes: dict = {}
-        _M_zero_keys: list = []
-        _slice_eids: dict = {}
-        _slice_vids: dict = {}
-        _slice_weights: list = []
-
-        _is_multilayer = self._aspects != ('_',)  # hoisted out of the per-edge loop
-
-        for d in norm:
-            s, t = d['source'], d['target']
-            w = d['weight']
-            prop = d.get('propagate', default_propagate)
-            slice_local = d.get('slice', slice)
-            slice_w = d.get('slice_weight', default_slice_weight)
-            e_dir = d.get('edge_directed', default_edge_directed)
-            edge_id = d.get('edge_id')
-
-            if e_dir is not None:
-                is_dir = bool(e_dir)
-            elif self.directed is not None:
-                is_dir = self.directed
-            else:
-                is_dir = True
-            s_idx = endpoint_cache[s]
-            t_idx = endpoint_cache[t]
-            fw = _m_dtype(w)
-
-            # Multilayer role — mirrors the singular _add_edge path. Flat graphs
-            # are a single layer, so every edge is intra; otherwise classify from
-            # the endpoints' layers when they are supra-node keys.
-            ml_kind = None
-            ml_layers = None
-            if not _is_multilayer:
-                ml_kind = 'intra'
-            elif (
-                isinstance(s, tuple)
-                and len(s) == 2
-                and isinstance(s[1], tuple)
-                and isinstance(t, tuple)
-                and len(t) == 2
-                and isinstance(t[1], tuple)
-            ):
-                ml_kind = self._infer_ml_kind(s, t)
-                ml_layers = (s[1], t[1])
-
-            if edge_id in self._edges and self._edges[edge_id].col_idx >= 0:
-                rec = self._edges[edge_id]
-                col = rec.col_idx
-                old_s, old_t = rec.src, rec.tgt
-                try:
-                    _M_zero_keys.append((self._entity_row(old_s), col))
-                except KeyError:
-                    pass
-                if old_t is not None and old_t != old_s:
-                    try:
-                        _M_zero_keys.append((self._entity_row(old_t), col))
-                    except KeyError:
-                        pass
-                _M_writes[(s_idx, col)] = fw
-                if s != t:
-                    _M_writes[(t_idx, col)] = _m_dtype(-w) if is_dir else fw
-                rec.src = s
-                rec.tgt = t
-                rec.weight = w
-                rec.directed = is_dir
-                rec.ml_kind = ml_kind
-                rec.ml_layers = ml_layers
-                if (old_s, old_t) != (s, t):
-                    self._unindex_edge_pair(edge_id, old_s, old_t)
-                    for _old, _new, _index in (
-                        (old_s, s, self._src_to_edges),
-                        (old_t, t, self._tgt_to_edges),
-                    ):
-                        if _old != _new:
-                            _lst = _index.get(_old)
-                            if _lst:
-                                try:
-                                    _lst.remove(edge_id)
-                                except ValueError:
-                                    pass
-                                if not _lst:
-                                    del _index[_old]
-                            _index.setdefault(_new, []).append(edge_id)
-                    self._index_edge_pair(edge_id, s, t)
-            else:
-                col = len(self._col_to_edge)
-                self._col_to_edge[col] = edge_id
-                if edge_id in self._edges:
-                    rec = self._edges[edge_id]
-                    rec.src = s
-                    rec.tgt = t
-                    rec.weight = w
-                    rec.directed = is_dir
-                    rec.etype = 'binary'
-                    rec.col_idx = col
-                    rec.ml_kind = ml_kind
-                    rec.ml_layers = ml_layers
-                else:
-                    self._edges[edge_id] = EdgeRecord(
-                        src=s,
-                        tgt=t,
-                        weight=w,
-                        directed=is_dir,
-                        etype='binary',
-                        col_idx=col,
-                        ml_kind=ml_kind,
-                        ml_layers=ml_layers,
-                        direction_policy=None,
-                    )
-                _M_writes[(s_idx, col)] = fw
-                if s != t:
-                    _M_writes[(t_idx, col)] = _m_dtype(-w) if is_dir else fw
-                self._src_to_edges.setdefault(s, []).append(edge_id)
-                self._tgt_to_edges.setdefault(t, []).append(edge_id)
-                self._index_edge_pair(edge_id, s, t)
-
-            if slice_local is not None:
-                # Slice membership tracks bare vertex ids; mirror the singular
-                # path's normalization for multilayer (vid, layer_coord) endpoints.
-                s_bare = s[0] if isinstance(s, tuple) else s
-                t_bare = t[0] if isinstance(t, tuple) else t
-                _lst = _slice_eids.get(slice_local)
-                if _lst is None:
-                    _slice_eids[slice_local] = [edge_id]
-                    _slice_vids[slice_local] = [s_bare, t_bare]
-                else:
-                    _lst.append(edge_id)
-                    _slice_vids[slice_local].extend((s_bare, t_bare))
-                if slice_w is not None:
-                    _slice_weights.append((slice_local, edge_id, float(slice_w)))
-
-            if prop == 'shared':
-                self._propagate_to_shared_slices(edge_id, s, t)
-            elif prop == 'all':
-                self._propagate_to_all_slices(edge_id, s, t)
-
-            sub_attrs = d.get('attributes') or d.get('attrs') or {}
-            flat_attrs = {k: v for k, v in d.items() if k not in _BINARY_BATCH_RESERVED_KEYS}
-            if sub_attrs or flat_attrs:
-                merged_attrs = dict(sub_attrs)
-                merged_attrs.update(flat_attrs)
-                pending_attrs.setdefault(edge_id, {}).update(merged_attrs)
-
-            out_ids.append(edge_id)
-
-        for key in _M_zero_keys:
-            try:
-                del M[key]
-            except (KeyError, IndexError):
-                pass
-        if _M_writes:
-            for (r, c), v in _M_writes.items():
-                M[r, c] = v
-            self._invalidate_sparse_caches()
-
-        for sid, eids in _slice_eids.items():
-            self.slices._ensure_slice(sid)['edges'].update(eids)
-        for sid, vids in _slice_vids.items():
-            self._slices[sid]['vertices'].update(vids)
-        for sid, eid, sw in _slice_weights:
-            self.attrs.set_edge_slice_attrs(sid, eid, weight=sw)
-
-        if pending_attrs:
-            self.attrs.set_edge_attrs_bulk(pending_attrs)
-
-        if as_entity:
-            entities = self._entities
-            flat = self._aspects == ('_',)
-            flat_coord = ('_',)
-            for eid in out_ids:
-                ekey = (
-                    (eid, flat_coord)
-                    if flat and isinstance(eid, str)
-                    else self._resolve_entity_key(eid)
-                )
-                if ekey not in entities:
-                    self._register_entity_record(
-                        ekey,
-                        EntityRecord(row_idx=len(entities), kind='edge_entity'),
-                    )
-                rec = self._edges[eid]
-                if rec.etype == 'binary':
-                    rec.etype = 'vertex_edge'
-            self._grow_rows_to(len(entities))
-
-        self._ensure_edge_rows_bulk(entity_out + out_ids)
-
-        return entity_out + out_ids
-
-    def _add_hyperedges_batch(
-        self,
-        hyperedges,
-        *,
-        slice=None,
-        default_weight=1.0,
-        default_edge_directed=None,
-        layer=None,
-    ):
-        """Add many hyperedges in one pass.
-
-        Parameters
-        ----------
-        hyperedges : Iterable[dict]
-            Each item declares a hyperedge via ``src`` (or its alias
-            ``source``) and optionally ``tgt`` (or ``target``):
-
-            - list-shaped ``src`` with no ``tgt`` → undirected hyperedge
-              (``src`` is the member set)
-            - list-shaped ``src`` and ``tgt`` → directed hyperedge
-              (``src`` is stored in ``rec.src`` and gets the ``+w`` matrix
-              entries; ``tgt`` is stored in ``rec.tgt`` and gets ``-w``,
-              matching the single-edge ``add_edges`` path).
-
-            Legacy ``members`` / ``head`` / ``tail`` keys are still accepted
-            for internal IO compatibility but should not be used in
-            user-written code.
-        slice : str, optional
-            Default slice for hyperedges missing an explicit slice.
-        default_weight : float, optional
-            Default weight.
-        default_edge_directed : bool, optional
-            Default directedness override.
-
-        Returns
-        -------
-        list[str]
-            Hyperedge IDs.
-        """
-        slice = self._current_slice if slice is None else slice
-
-        items = []
-        for it in hyperedges:
-            if not isinstance(it, dict):
-                continue
-            d = dict(it)
-            if 'directed' in d and 'edge_directed' not in d:
-                d['edge_directed'] = d.pop('directed')
-
-            # ── Normalize user-facing src/tgt to internal members/head/tail ──
-            # annnet stores rec.src = head (the +w side in the incidence
-            # matrix) and rec.tgt = tail (the -w side). To keep the batch
-            # path consistent with the single-edge path — where the user's
-            # ``src`` ends up in rec.src and gets +w — map user.src → head
-            # and user.tgt → tail here.
-            if 'src' in d and 'source' not in d:
-                d['source'] = d.pop('src')
-            if 'tgt' in d and 'target' not in d:
-                d['target'] = d.pop('tgt')
-            has_legacy = any(k in d for k in ('members', 'head', 'tail'))
-            has_new = 'source' in d or 'target' in d
-            if has_new and not has_legacy:
-                src_val = d.pop('source', None)
-                tgt_val = d.pop('target', None)
-
-                def _as_list(v):
-                    if v is None:
-                        return None
-                    if isinstance(v, str):
-                        return [v]
-                    return list(v)
-
-                src_list = _as_list(src_val)
-                tgt_list = _as_list(tgt_val)
-                if tgt_list is None:
-                    d['members'] = src_list or []
-                else:
-                    d['head'] = src_list or []
-                    d['tail'] = tgt_list
-
-            d.setdefault('weight', default_weight)
-            if 'slice' not in d:
-                d['slice'] = slice
-            if 'edge_directed' not in d:
-                d['edge_directed'] = default_edge_directed
-            items.append(d)
-
-        if not items:
-            return []
-
-        try:
-            import sys as _sys
-
-            for d in items:
-                if 'members' in d and d['members'] is not None:
-                    d['members'] = [
-                        _sys.intern(x) if isinstance(x, str) else x for x in d['members']
-                    ]
-                else:
-                    d['head'] = [
-                        _sys.intern(x) if isinstance(x, str) else x for x in d.get('head', [])
-                    ]
-                    d['tail'] = [
-                        _sys.intern(x) if isinstance(x, str) else x for x in d.get('tail', [])
-                    ]
-                if isinstance(d.get('slice'), str):
-                    d['slice'] = _sys.intern(d['slice'])
-                if isinstance(d.get('edge_id'), str):
-                    d['edge_id'] = _sys.intern(d['edge_id'])
-                try:
-                    d['weight'] = float(d['weight'])
-                except (TypeError, ValueError):
-                    pass
-        except Exception:  # noqa: BLE001
-            pass
-
-        # Per-hyperedge layer override; falls back to batch-level `layer`.
-        # A member endpoint may also be a (vid, layer_coord) tuple, in which
-        # case it carries its own coord and the layer parameter is ignored.
-        def _member_layer(d):
-            return d.get('layer', layer)
-
-        def _resolve_member_key(u, layer_for_d):
-            if isinstance(u, tuple) and len(u) == 2 and isinstance(u[1], tuple):
-                # Pre-keyed (vid, layer_coord) endpoint.
-                vid = u[0]
-                coord = self._make_layer_coord(u[1])
-                return vid, coord
-            # Bare string vid: place into layer_for_d if given, else fall
-            # through to the existing placeholder/single-match resolution.
-            if layer_for_d is not None and self._aspects != ('_',):
-                coord = self._make_layer_coord(layer_for_d)
-                return u, coord
-            # No layer hint. If the vid already lives in exactly one real
-            # layer (i.e. it was previously inserted), reuse that coord
-            # instead of forking a placeholder copy — this is what previously
-            # produced the "Ambiguous bare vertex_id" failures.
-            if self._aspects != ('_',):
-                ekeys = self._vid_to_ekeys.get(u, ())
-                real_keys = [k for k in ekeys if k[1] != self._placeholder_layer_coord()]
-                if len(real_keys) == 1:
-                    return u, real_keys[0][1]
-            coord = self._resolve_vertex_insert_coord(
-                None, vertex_ids=u, context='_add_hyperedges_batch'
-            )
-            return u, coord
-
-        # Resolve every member endpoint up-front and stash the resolved keys
-        # back onto each item so the matrix-write loop below doesn't need to
-        # re-resolve.
-        for d in items:
-            layer_for_d = _member_layer(d)
-            if 'members' in d and d['members'] is not None:
-                d['_resolved_members'] = [_resolve_member_key(u, layer_for_d) for u in d['members']]
-            else:
-                d['_resolved_head'] = [
-                    _resolve_member_key(u, layer_for_d) for u in d.get('head', [])
-                ]
-                d['_resolved_tail'] = [
-                    _resolve_member_key(u, layer_for_d) for u in d.get('tail', [])
-                ]
-
-        for d in items:
-            for ekey in (
-                (d.get('_resolved_members') or [])
-                + (d.get('_resolved_head') or [])
-                + (d.get('_resolved_tail') or [])
-            ):
-                if ekey not in self._entities:
-                    idx = len(self._entities)
-                    self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
-
-        self._grow_rows_to(len(self._entities))
-
-        new_count = sum(1 for d in items if d.get('edge_id') not in self._edges)
-        if new_count:
-            self._grow_cols_to(len(self._col_to_edge) + new_count)
-
-        M = self._matrix
-        slices = self._slices
-        _m_fast_set = getattr(M, '_set_intXint', None)
-        _m_dtype = M.dtype.type
-
-        out_ids = []
-        attrs_batch = {}
-
-        for d in items:
-            members = d.get('members')
-            slice_local = d.get('slice', slice)
-            w = float(d.get('weight', default_weight))
-            e_id = d.get('edge_id')
-            directed = d.get('edge_directed')
-            if directed is None:
-                directed = members is None
-
-            if e_id is None:
-                e_id = self._get_next_edge_id()
-
-            # Classify the hyperedge by its multilayer role from the layers of
-            # its (already resolved) endpoints. A flat graph is a single layer,
-            # so the role is always intra (no scan needed).
-            if self._aspects == ('_',):
-                ml_kind_for_e, ml_layers_for_e = 'intra', None
-            else:
-                ml_kind_for_e, ml_layers_for_e = self._infer_hyper_ml(
-                    d.get('_resolved_head') or d.get('_resolved_members'),
-                    d.get('_resolved_tail'),
-                )
-
-            if e_id in self._edges:
-                rec = self._edges[e_id]
-                col = rec.col_idx
-                # When the edge already has an ml_layers tag, use it to
-                # resolve old bare-vid members back to the correct supra-
-                # node. Without this, an in-place hyperedge update on a
-                # multilayer graph raises ambiguous-vid as soon as the
-                # protein has more than one layer presence.
-                old_layer_coord = (
-                    rec.ml_layers
-                    if isinstance(rec.ml_layers, tuple)
-                    and rec.ml_layers
-                    and isinstance(rec.ml_layers[0], str)
-                    else None
-                )
-
-                # Bind the closure variable explicitly via default arg so
-                # mutations to `old_layer_coord` in subsequent iterations
-                # don't leak into already-built loop bodies (B023).
-                def _row_for_old(v, _olc=old_layer_coord):
-                    if isinstance(v, tuple) and len(v) == 2 and isinstance(v[1], tuple):
-                        return self._entities[v].row_idx
-                    if _olc is not None:
-                        return self._entities[(v, _olc)].row_idx
-                    return self._entity_row(v)
-
-                if rec.etype == 'hyper':
-                    old_verts = rec.src if rec.tgt is None else (rec.src | rec.tgt)
-                    for vid in old_verts:
-                        try:
-                            r = _row_for_old(vid)
-                            if _m_fast_set is not None:
-                                _m_fast_set(r, col, 0)
-                            else:
-                                M[r, col] = 0
-                        except (KeyError, IndexError):
-                            pass
-                else:
-                    for vid in (rec.src, rec.tgt):
-                        if vid is None:
-                            continue
-                        try:
-                            r = _row_for_old(vid)
-                            if _m_fast_set is not None:
-                                _m_fast_set(r, col, 0)
-                            else:
-                                M[r, col] = 0
-                        except (KeyError, IndexError):
-                            pass
-            else:
-                col = len(self._col_to_edge)
-                self._col_to_edge[col] = e_id
-                rec = EdgeRecord(
-                    src=None,
-                    tgt=None,
-                    weight=1.0,
-                    directed=False,
-                    etype='hyper',
-                    col_idx=col,
-                    ml_kind=ml_kind_for_e,
-                    ml_layers=ml_layers_for_e,
-                    direction_policy=None,
-                )
-                self._edges[e_id] = rec
-
-            resolved_members = d.get('_resolved_members')
-            resolved_head = d.get('_resolved_head')
-            resolved_tail = d.get('_resolved_tail')
-
-            def _row_of(ekey):
-                return self._entities[ekey].row_idx
-
-            fw = _m_dtype(w)
-            if members is not None:
-                if _m_fast_set is not None:
-                    for ekey in resolved_members:
-                        _m_fast_set(_row_of(ekey), col, fw)
-                else:
-                    for ekey in resolved_members:
-                        M[_row_of(ekey), col] = fw
-                if self._aspects == ('_',):
-                    rec.src = frozenset(ekey[0] for ekey in resolved_members)
-                else:
-                    rec.src = frozenset(resolved_members)
-                rec.tgt = None
-                rec.directed = False
-            else:
-                neg_fw = _m_dtype(-w)
-                if _m_fast_set is not None:
-                    for ekey in resolved_head:
-                        _m_fast_set(_row_of(ekey), col, fw)
-                    for ekey in resolved_tail:
-                        _m_fast_set(_row_of(ekey), col, neg_fw)
-                else:
-                    for ekey in resolved_head:
-                        M[_row_of(ekey), col] = fw
-                    for ekey in resolved_tail:
-                        M[_row_of(ekey), col] = neg_fw
-                if self._aspects == ('_',):
-                    rec.src = frozenset(ekey[0] for ekey in resolved_head)
-                    rec.tgt = frozenset(ekey[0] for ekey in resolved_tail)
-                else:
-                    rec.src = frozenset(resolved_head)
-                    rec.tgt = frozenset(resolved_tail)
-                rec.directed = True
-
-            rec.weight = w
-            rec.etype = 'hyper'
-            # Refresh on both create and in-place update paths.
-            rec.ml_kind = ml_kind_for_e
-            rec.ml_layers = ml_layers_for_e
-
-            if slice_local is not None:
-                if slice_local not in slices:
-                    slices[slice_local] = SliceRecord()
-                slices[slice_local]['edges'].add(e_id)
-                # Slice membership tracks bare vids, not (vid, layer) keys.
-                if resolved_members is not None:
-                    slices[slice_local]['vertices'].update(k[0] for k in resolved_members)
-                else:
-                    slices[slice_local]['vertices'].update(k[0] for k in resolved_head)
-                    slices[slice_local]['vertices'].update(k[0] for k in resolved_tail)
-
-            sub_attrs = d.get('attributes') or d.get('attrs') or {}
-            flat_attrs = {k: v for k, v in d.items() if k not in _HYPER_BATCH_RESERVED_KEYS}
-            if sub_attrs or flat_attrs:
-                merged = dict(sub_attrs)
-                merged.update(flat_attrs)
-                attrs_batch[e_id] = merged
-
-            out_ids.append(e_id)
-
-        self._invalidate_sparse_caches()
-        self._ensure_edge_rows_bulk(out_ids)
-        if attrs_batch:
-            self.attrs.set_edge_attrs_bulk(attrs_batch)
-
-        return out_ids
+    def _add_hyperedges_batch(self, *args, **kwargs):
+        return _mutate.batch_add_hyperedges(self, *args, **kwargs)
 
     def add_hyperedges_bulk(
         self,
@@ -4580,15 +2612,6 @@ class AnnNet(
         )
 
     def _add_edges_to_slice_batch(self, slice_id, edge_ids):
-        """Add many edges to a slice and attach all incident vertices.
-
-        Parameters
-        ----------
-        slice_id : str
-            Slice identifier.
-        edge_ids : Iterable[str]
-            Edge identifiers to add.
-        """
         slice = slice_id if slice_id is not None else self._current_slice
         L = self.slices._ensure_slice(slice)
 
@@ -4614,7 +2637,6 @@ class AnnNet(
         L['vertices'].update(verts)
 
     def _add_edges_to_slice_bulk(self, slice_id, edge_ids):
-        """Hidden compatibility shim for legacy internal slice edge attachment."""
         return self._add_edges_to_slice_batch(slice_id, edge_ids)
 
     def set_vertex_key(self, *fields: str):
@@ -4762,135 +2784,11 @@ class AnnNet(
             return
         self._remove_vertices_bulk(to_drop)
 
-    def _remove_edges_bulk(self, edge_ids):
-        self._ensure_edge_indexes()
-        drop = set(edge_ids)
-        if not drop:
-            return
+    def _remove_edges_bulk(self, *args, **kwargs):
+        return _mutate.remove_edges_bulk(self, *args, **kwargs)
 
-        keep_pairs = [(col, eid) for col, eid in self._col_to_edge.items() if eid not in drop]
-        old_to_new = {old: new for new, (old, _eid) in enumerate(keep_pairs)}
-        new_cols = len(keep_pairs)
-
-        M_old = self._matrix
-        rows, _cols = M_old.shape
-        M_new = sp.dok_matrix((rows, new_cols), dtype=M_old.dtype)
-        for (r, c), v in M_old.items():
-            mapped = old_to_new.get(c)
-            if mapped is not None:
-                M_new[r, mapped] = v
-        self._matrix = M_new
-        self._invalidate_sparse_caches()
-
-        self._col_to_edge.clear()
-        for new_idx, (_old_idx, eid) in enumerate(keep_pairs):
-            self._col_to_edge[new_idx] = eid
-            self._edges[eid].col_idx = new_idx
-
-        for eid in drop:
-            rec = self._edges.pop(eid, None)
-            if (
-                rec is not None
-                and rec.etype != 'hyper'
-                and rec.src is not None
-                and rec.tgt is not None
-            ):
-                s, t = rec.src, rec.tgt
-                self._unindex_edge_pair(eid, s, t)
-                for v, index in ((s, self._src_to_edges), (t, self._tgt_to_edges)):
-                    _lst = index.get(v)
-                    if _lst:
-                        try:
-                            _lst.remove(eid)
-                        except ValueError:
-                            pass
-                        if not _lst:
-                            del index[v]
-            rec2 = self._edges.get(eid)
-            if rec2 is not None:
-                rec2.ml_kind = None
-            if eid in self._edges:
-                self._edges[eid].ml_layers = None
-        for slice_data in self._slices.values():
-            slice_data['edges'].difference_update(drop)
-        for d in self.slice_edge_weights.values():
-            for eid in drop:
-                d.pop(eid, None)
-
-        ea = self.edge_attributes
-        if ea is not None and 'edge_id' in dataframe_columns(ea):
-            self.edge_attributes = dataframe_drop_rows(ea, 'edge_id', drop)
-        ela = self.edge_slice_attributes
-        if ela is not None and 'edge_id' in dataframe_columns(ela):
-            self.edge_slice_attributes = dataframe_drop_rows(ela, 'edge_id', drop)
-
-    def _remove_vertices_bulk(self, vertex_ids):
-        drop_keys = set()
-        drop_vertex_ids = set()
-        for vid in vertex_ids:
-            try:
-                ekey = self._resolve_entity_key(vid)
-            except (KeyError, ValueError, TypeError):
-                continue
-            if ekey not in self._entities:
-                continue
-            drop_keys.add(ekey)
-            drop_vertex_ids.add(ekey[0] if isinstance(ekey, tuple) and len(ekey) == 2 else ekey)
-
-        if not drop_keys:
-            return
-
-        drop_es: set = set()
-        for eid, rec in list(self._edges.items()):
-            if rec.etype == 'hyper':
-                if drop_vertex_ids & self._endpoint_slice_vertex_ids(rec.src):
-                    drop_es.add(eid)
-                elif rec.tgt is not None and (
-                    drop_vertex_ids & self._endpoint_slice_vertex_ids(rec.tgt)
-                ):
-                    drop_es.add(eid)
-            else:
-                if drop_vertex_ids & self._endpoint_slice_vertex_ids(rec.src):
-                    drop_es.add(eid)
-                elif drop_vertex_ids & self._endpoint_slice_vertex_ids(rec.tgt):
-                    drop_es.add(eid)
-
-        if drop_es:
-            self._remove_edges_bulk(drop_es)
-
-        keep_idx = sorted(
-            rec.row_idx for eid, rec in self._entities.items() if eid not in drop_keys
-        )
-        old_to_new = {old: new for new, old in enumerate(keep_idx)}
-        new_rows = len(keep_idx)
-
-        M_old = self._matrix
-        _rows, cols = M_old.shape
-        M_new = sp.dok_matrix((new_rows, cols), dtype=M_old.dtype)
-        for (r, c), v in M_old.items():
-            mapped = old_to_new.get(r)
-            if mapped is not None:
-                M_new[mapped, c] = v
-        self._matrix = M_new
-        self._invalidate_sparse_caches()
-
-        new_entities: dict = {}
-        new_row_to_entity: dict = {}
-        for new_i, old_i in enumerate(keep_idx):
-            ent = self._row_to_entity[old_i]
-            old_rec = self._entities[ent]
-            new_entities[ent] = EntityRecord(row_idx=new_i, kind=old_rec.kind)
-            new_row_to_entity[new_i] = ent
-        self._entities = new_entities
-        self._row_to_entity = new_row_to_entity
-        self._rebuild_entity_indexes()
-
-        va = self.vertex_attributes
-        if va is not None and 'vertex_id' in dataframe_columns(va):
-            self.vertex_attributes = dataframe_drop_rows(va, 'vertex_id', drop_vertex_ids)
-
-        for slice_data in self._slices.values():
-            slice_data['vertices'].difference_update(drop_vertex_ids)
+    def _remove_vertices_bulk(self, *args, **kwargs):
+        return _mutate.remove_vertices_bulk(self, *args, **kwargs)
 
     # ------------------------------------------------------------------
     # Layer internals used by LayerAccessor

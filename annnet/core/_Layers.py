@@ -11,16 +11,19 @@ import scipy.sparse as sp
 if TYPE_CHECKING:
     from .graph import AnnNet
 
-from ._records import SliceRecord, EntityRecord, build_dataframe_from_rows
-from .._support.dataframe_backend import dataframe_columns, dataframe_to_rows, dataframe_filter_eq
+from . import _build, _mutate
+from .._support.dataframe_backend import (
+    clone_dataframe,
+    dataframe_height,
+    dataframe_columns,
+    dataframe_to_rows,
+    dataframe_filter_eq,
+    dataframe_from_rows,
+)
 
 
 class LayerAccessor:
-    """Namespace for multilayer operations on an :class:`~annnet.core.graph.AnnNet` graph.
-
-    Returned by ``G.layers``. All multilayer configuration, presence queries,
-    layer-set algebra, and supra-matrix constructions live here.
-    """
+    """Namespace for multilayer operations on an :class:`~annnet.core.graph.AnnNet` graph."""
 
     __slots__ = ('_G', '_all_layers', '_aspect_attrs', '_layer_attrs', '_state_attrs')
 
@@ -32,6 +35,7 @@ class LayerAccessor:
         self._state_attrs: dict = {}
 
     def list_aspects(self) -> tuple:
+        """Return declared aspect names, or an empty tuple for flat graphs."""
         if self._aspects == ('_',):
             return ()
         return self._aspects
@@ -61,318 +65,24 @@ class LayerAccessor:
         return _filter(self._layers.get(aspect, ()))
 
     # ------------------------------------------------------------------
-    # State proxies — expose AnnNet backing store to shared implementations
+    # State proxies — delegate the AnnNet backing store to the owner.
+    # Any non-own attribute read falls through to ``self._G``; any non-own
+    # attribute write is forwarded to ``self._G``. The accessor's own state
+    # lives in __slots__.
     # ------------------------------------------------------------------
 
-    @property
-    def _entities(self):
-        return self._G._entities
-
-    @_entities.setter
-    def _entities(self, v):
-        self._G._entities = v
-
-    @property
-    def _edges(self):
-        return self._G._edges
-
-    @_edges.setter
-    def _edges(self, v):
-        self._G._edges = v
-
-    @property
-    def _matrix(self):
-        return self._G._matrix
-
-    @_matrix.setter
-    def _matrix(self, v):
-        self._G._matrix = v
-
-    @property
-    def _col_to_edge(self):
-        return self._G._col_to_edge
-
-    @_col_to_edge.setter
-    def _col_to_edge(self, v):
-        self._G._col_to_edge = v
-
-    @property
-    def _aspects(self):
-        return self._G._aspects
-
-    @_aspects.setter
-    def _aspects(self, v):
-        self._G._aspects = v
-
-    @property
-    def _layers(self):
-        return self._G._layers
-
-    @_layers.setter
-    def _layers(self, v):
-        self._G._layers = v
-
-    @property
-    def _slices(self):
-        return self._G._slices
-
-    @_slices.setter
-    def _slices(self, v):
-        self._G._slices = v
-
-    @property
-    def _src_to_edges(self):
-        return self._G._src_to_edges
-
-    @_src_to_edges.setter
-    def _src_to_edges(self, v):
-        self._G._src_to_edges = v
-
-    @property
-    def _tgt_to_edges(self):
-        return self._G._tgt_to_edges
-
-    @_tgt_to_edges.setter
-    def _tgt_to_edges(self, v):
-        self._G._tgt_to_edges = v
-
-    @property
-    def _row_to_entity(self):
-        return self._G._row_to_entity
-
-    @_row_to_entity.setter
-    def _row_to_entity(self, v):
-        self._G._row_to_entity = v
-
-    @property
-    def _vid_to_ekeys(self):
-        return self._G._vid_to_ekeys
-
-    @_vid_to_ekeys.setter
-    def _vid_to_ekeys(self, v):
-        self._G._vid_to_ekeys = v
-
-    @property
-    def _csr_cache(self):
-        return self._G._csr_cache
-
-    @_csr_cache.setter
-    def _csr_cache(self, v):
-        self._G._csr_cache = v
-
-    @property
-    def _next_edge_id(self):
-        return self._G._next_edge_id
-
-    @_next_edge_id.setter
-    def _next_edge_id(self, v):
-        self._G._next_edge_id = v
-
-    @property
-    def _current_slice(self):
-        return self._G._current_slice
-
-    @_current_slice.setter
-    def _current_slice(self, v):
-        self._G._current_slice = v
-
-    @property
-    def _default_slice(self):
-        return self._G._default_slice
-
-    @_default_slice.setter
-    def _default_slice(self, v):
-        self._G._default_slice = v
-
-    @property
-    def _vertex_key_fields(self):
-        return self._G._vertex_key_fields
-
-    @_vertex_key_fields.setter
-    def _vertex_key_fields(self, v):
-        self._G._vertex_key_fields = v
-
-    @property
-    def _vertex_key_index(self):
-        return self._G._vertex_key_index
-
-    @_vertex_key_index.setter
-    def _vertex_key_index(self, v):
-        self._G._vertex_key_index = v
-
-    @property
-    def vertex_attributes(self):
-        return self._G.vertex_attributes
-
-    @vertex_attributes.setter
-    def vertex_attributes(self, v):
-        self._G.vertex_attributes = v
-
-    @property
-    def edge_attributes(self):
-        return self._G.edge_attributes
-
-    @edge_attributes.setter
-    def edge_attributes(self, v):
-        self._G.edge_attributes = v
-
-    @property
-    def layer_attributes(self):
-        return self._G.layer_attributes
-
-    @layer_attributes.setter
-    def layer_attributes(self, v):
-        self._G.layer_attributes = v
-
-    @property
-    def slice_edge_weights(self):
-        return self._G.slice_edge_weights
-
-    @slice_edge_weights.setter
-    def slice_edge_weights(self, v):
-        self._G.slice_edge_weights = v
-
-    @property
-    def slice_attributes(self):
-        return self._G.slice_attributes
-
-    @slice_attributes.setter
-    def slice_attributes(self, v):
-        self._G.slice_attributes = v
-
-    @property
-    def edge_slice_attributes(self):
-        return self._G.edge_slice_attributes
-
-    @edge_slice_attributes.setter
-    def edge_slice_attributes(self, v):
-        self._G.edge_slice_attributes = v
-
-    @property
-    def vertex_aligned(self):
-        return self._G.vertex_aligned
-
-    @vertex_aligned.setter
-    def vertex_aligned(self, v):
-        self._G.vertex_aligned = v
-
-    @property
-    def directed(self):
-        return self._G.directed
-
-    @directed.setter
-    def directed(self, v):
-        self._G.directed = v
-
-    @property
-    def aspects(self):
-        return self._G.aspects
-
-    @aspects.setter
-    def aspects(self, v):
-        self._G.aspects = v
-
-    @property
-    def elem_layers(self):
-        return self._G.elem_layers
-
-    @elem_layers.setter
-    def elem_layers(self, v):
-        self._G.elem_layers = v
-
-    @property
-    def _history_enabled(self):
-        return self._G._history_enabled
-
-    @_history_enabled.setter
-    def _history_enabled(self, v):
-        self._G._history_enabled = v
-
-    @property
-    def _version(self):
-        return self._G._version
-
-    @_version.setter
-    def _version(self, v):
-        self._G._version = v
-
-    @property
-    def _vertex_RESERVED(self):
-        return self._G._vertex_RESERVED
-
-    @property
-    def _EDGE_RESERVED(self):
-        return self._G._EDGE_RESERVED
-
-    # Delegate infrastructure methods that live on AnnNet / IndexMapping
-    def _placeholder_layer_coord(self):
-        return self._G._placeholder_layer_coord()
-
-    def _make_layer_coord(self, *a, **kw):
-        return self._G._make_layer_coord(*a, **kw)
-
-    def _resolve_entity_key(self, *a, **kw):
-        return self._G._resolve_entity_key(*a, **kw)
-
-    def _resolve_vertex_insert_coord(self, *a, **kw):
-        return self._G._resolve_vertex_insert_coord(*a, **kw)
-
-    def _rebuild_entity_indexes(self):
-        return self._G._rebuild_entity_indexes()
-
-    def _grow_rows_to(self, n):
-        return self._G._grow_rows_to(n)
-
-    def _grow_cols_to(self, n):
-        return self._G._grow_cols_to(n)
-
-    def _entity_row(self, vid):
-        return self._G._entity_row(vid)
-
-    def _get_next_edge_id(self):
-        return self._G._get_next_edge_id()
-
-    def _register_edge_as_entity(self, eid):
-        return self._G._register_edge_as_entity(eid)
-
-    def _register_entity_record(self, ekey, rec):
-        return self._G._register_entity_record(ekey, rec)
-
-    def _ensure_edge_entity_placeholder(self, vid):
-        return self._G._ensure_edge_entity_placeholder(vid)
-
-    def _ensure_vertex_row(self, vid):
-        return self._G._ensure_vertex_row(vid)
-
-    def _ensure_vertex_table(self):
-        return self._G._ensure_vertex_table()
-
-    def _upsert_row(self, df, vid, attrs):
-        return self._G._upsert_row(df, vid, attrs)
-
-    def _ensure_attr_columns(self, df, keys):
-        return self._G._ensure_attr_columns(df, keys)
-
-    def _propagate_to_shared_slices(self, eid, s, t):
-        return self._G._propagate_to_shared_slices(eid, s, t)
-
-    def _propagate_to_all_slices(self, eid, s, t):
-        return self._G._propagate_to_all_slices(eid, s, t)
-
-    def set_edge_attrs_bulk(self, d):
-        return self._G.attrs.set_edge_attrs_bulk(d)
-
-    def set_edge_slice_attrs(self, sid, eid, **kw):
-        return self._G.attrs.set_edge_slice_attrs(sid, eid, **kw)
-
-    def set_vertex_attrs(self, vid, **kw):
-        return self._G.attrs.set_vertex_attrs(vid, **kw)
-
-    def _add_edges_bulk(self, edges, **kw):
-        return self._G._add_edges_bulk(edges, **kw)
-
-    def _add_vertices_bulk(self, verts, **kw):
-        return self._G._add_vertices_bulk(verts, **kw)
+    _OWN = frozenset({'_G', '_all_layers', '_aspect_attrs', '_layer_attrs', '_state_attrs'})
+
+    def __getattr__(self, name):
+        if name == '_G':
+            raise AttributeError(name)
+        return getattr(object.__getattribute__(self, '_G'), name)
+
+    def __setattr__(self, name, value):
+        if name in LayerAccessor._OWN:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._G, name, value)
 
     ## Aspects & layers
 
@@ -461,15 +171,17 @@ class LayerAccessor:
             self._layers[aspect] = values
 
         if had_existing_flat_entities:
-            self._entities = {
-                (vid, new_placeholder if coord == old_placeholder else coord): rec
-                for (vid, coord), rec in self._entities.items()
-            }
+            _mutate.rekey_entities(
+                self._G,
+                {
+                    (vid, new_placeholder if coord == old_placeholder else coord): rec
+                    for (vid, coord), rec in self._entities.items()
+                },
+            )
             self._state_attrs = {
                 (vid, new_placeholder if coord == old_placeholder else coord): attrs
                 for (vid, coord), attrs in self._state_attrs.items()
             }
-            self._rebuild_entity_indexes()
             warnings.warn(
                 f'Declared aspects {tuple(aspects)!r}; existing flat vertices were reassigned '
                 f'to placeholder layer {new_placeholder!r}. Set explicit layer coordinates if needed.',
@@ -526,13 +238,7 @@ class LayerAccessor:
             return self
 
         def _clone_table(df):
-            if df is None:
-                return None
-            if hasattr(df, 'clone'):
-                return df.clone()
-            if hasattr(df, 'copy'):
-                return df.copy()
-            return df
+            return None if df is None else clone_dataframe(df)
 
         def _project_node(node):
             if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
@@ -559,18 +265,24 @@ class LayerAccessor:
             flat._vertex_key_fields = self._vertex_key_fields
             flat._vertex_key_index = dict(self._vertex_key_index)
             flat.vertex_aligned = False
-            flat._default_slice = self._default_slice
-            flat._current_slice = self._current_slice
 
-            for slice_id, meta in self._slices.items():
-                flat._slices[slice_id] = SliceRecord(
-                    vertices={
+            slice_specs = {
+                slice_id: {
+                    'vertices': {
                         v[0] if isinstance(v, tuple) and len(v) == 2 else v
                         for v in meta['vertices']
                     },
-                    edges=set(meta['edges']),
-                    attributes={},
-                )
+                    'edges': set(meta['edges']),
+                    'attributes': {},
+                }
+                for slice_id, meta in self._slices.items()
+            }
+            _build.install_slices(
+                flat,
+                _build.slices_from_specs(slice_specs),
+                default=self._default_slice,
+                current=self._current_slice,
+            )
 
             vertex_ids = sorted(
                 {ekey[0] for ekey, rec in self._entities.items() if rec.kind == 'vertex'}
@@ -678,20 +390,19 @@ class LayerAccessor:
 
             self._aspects = flat._aspects
             self._layers = flat._layers
-            self._entities = flat._entities
-            self._row_to_entity = flat._row_to_entity
-            self._vid_to_ekeys = flat._vid_to_ekeys
-            self._edges = flat._edges
-            self._col_to_edge = flat._col_to_edge
-            self._src_to_edges = flat._src_to_edges
-            self._tgt_to_edges = flat._tgt_to_edges
-            self._G._pair_to_edges = flat._pair_to_edges
-            self._matrix = flat._matrix
-            self._G._invalidate_sparse_caches()
+            _build.install_structure(
+                self._G,
+                entities=flat._entities,
+                edges=flat._edges,
+                matrix=flat._matrix,
+            )
             self._next_edge_id = flat._next_edge_id
-            self._slices = flat._slices
-            self._current_slice = flat._current_slice
-            self._default_slice = flat._default_slice
+            _build.install_slices(
+                self._G,
+                flat._slices,
+                default=flat._default_slice,
+                current=flat._current_slice,
+            )
             self.slice_edge_weights = flat.slice_edge_weights
             self.vertex_attributes = flat.vertex_attributes
             self.edge_attributes = flat.edge_attributes
@@ -710,8 +421,7 @@ class LayerAccessor:
         return self._G
 
     def add_elementary_layer(self, aspect: str, label: str):
-        """
-        Register a new elementary layer label under an existing aspect.
+        """Register a new elementary layer label under an existing aspect.
 
         Parameters
         ----------
@@ -737,13 +447,12 @@ class LayerAccessor:
     ## Presence (V_M)
 
     def _restore_supra_nodes(self, vm_set: set) -> None:
-        """Register (vid, layer_tuple) pairs from deserialized VM data into _entities."""
         new_rows = 0
         for vid, aa in vm_set:
             ekey = (vid, aa)
             if ekey not in self._entities:
                 idx = len(self._entities)
-                self._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
+                self._register_entity_record(ekey, _build.new_entity_record(idx, 'vertex'))
                 new_rows += 1
         if new_rows:
             self._grow_rows_to(len(self._entities))
@@ -803,14 +512,6 @@ class LayerAccessor:
     def _build_supra_index(
         self, restrict_layers: list[tuple[str, ...]] | None = None
     ) -> tuple[dict, list]:
-        """Build a local (vertex, layer) → row index from ``_VM``.
-
-        Returns
-        -------
-        nl_to_row : dict[(str, tuple), int]
-        row_to_nl : list[(str, tuple)]
-            Both ordered lexicographically by (vertex_id, layer_tuple).
-        """
         if restrict_layers is not None:
             R = {tuple(x) for x in restrict_layers}
             vm = [
@@ -947,12 +648,6 @@ class LayerAccessor:
     ## Aspect / layer / vertex–layer attributes
 
     def _elem_layer_id(self, aspect: str, label: str) -> str:
-        """
-        Canonical id for an *elementary* Kivela layer (aspect, label).
-
-        This is the key used in `layer_attributes.layer_id`:
-            layer_id = "{aspect}_{label}"
-        """
         if aspect not in self._aspects:
             raise KeyError(f'unknown aspect {aspect!r}; known: {list(self._aspects)!r}')
         allowed = self._layers.get(aspect, set())
@@ -963,21 +658,10 @@ class LayerAccessor:
         return f'{aspect}_{label}'
 
     def _upsert_layer_attribute_row(self, layer_id: str, attrs: dict):
-        """
-        Upsert a row in `self.layer_attributes` for `layer_id`.
-
-        Strategy (simple & robust):
-          - convert current DF to list[dict]
-          - find existing row for this layer_id (if any)
-          - merge attrs into that row (override keys)
-          - rebuild DataFrame from the updated list of rows
-
-        This avoids all schema/dtype headaches (Polars infers them).
-        """
         df = self.layer_attributes
 
-        # Convert existing DF to list of dict rows
-        rows = df.to_dicts() if df.height > 0 else []
+        # Convert existing DF to list of dict rows (backend-agnostic)
+        rows = dataframe_to_rows(df) if dataframe_height(df) > 0 else []
 
         # Find if we already have a row for this layer_id
         existing = None
@@ -1001,7 +685,7 @@ class LayerAccessor:
         new_rows.append(base)
 
         # Rebuild DF; Polars will infer schema and fill missing values with nulls
-        self.layer_attributes = build_dataframe_from_rows(new_rows)
+        self.layer_attributes = dataframe_from_rows(new_rows, backend=self._annotations_backend)
 
     def set_elementary_layer_attrs(self, aspect: str, label: str, /, **attrs):
         """Attach attributes to an elementary Kivela layer.
@@ -1235,29 +919,12 @@ class LayerAccessor:
 
     @staticmethod
     def _effective_ml_edge_kind(rec):
-        """Internal *routing* key for the supra builders.
-
-        ``ml_kind`` is the pure multilayer role (intra/inter/coupling); ``etype``
-        is the structure (binary/hyper). The two are stored independently. This
-        helper folds them back into the single key the supra dispatch switches
-        on: hyperedges route as ``'hyper'`` unless they are cross-layer
-        (inter/coupling, handled by dedicated hyper-aware branches), while binary
-        edges route by their role. The ``'hyper'`` key is derived here, never
-        stored in ``ml_kind``.
-        """
         if rec.etype == 'hyper':
             return rec.ml_kind if rec.ml_kind in ('inter', 'coupling') else 'hyper'
         return rec.ml_kind
 
     @staticmethod
     def _supra_endpoint(endpoint):
-        """Split a binary-edge endpoint into ``(supra_node_key, layer_tuple)``.
-
-        For multilayer binary edges ``rec.src`` and ``rec.tgt`` are stored as
-        ``(vertex_id, layer_tuple)`` supra-node tuples (matching the
-        ``_build_supra_index`` key shape). For flat graphs they are bare
-        vertex ids; this helper returns ``(endpoint, None)`` in that case.
-        """
         if isinstance(endpoint, tuple) and len(endpoint) == 2 and isinstance(endpoint[1], tuple):
             return endpoint, endpoint[1]
         return endpoint, None
@@ -2139,7 +1806,6 @@ class LayerAccessor:
     ##  Block partitions & Laplacians
 
     def _normalize_layers_arg(self, layers):
-        """Normalize ``layers`` argument to aspect tuples or None."""
         if layers is None:
             return None
         if len(getattr(self, 'aspects', [])) == 1:
@@ -2147,7 +1813,6 @@ class LayerAccessor:
         return [tuple(L) for L in layers]
 
     def _build_block(self, include_kinds: set[str], layers: list[str] | list[tuple] | None = None):
-        """Internal builder for supra block matrices."""
 
         layers_t = self._normalize_layers_arg(layers)
         nl_to_row, row_to_nl = self._build_supra_index(layers_t)
@@ -2301,9 +1966,6 @@ class LayerAccessor:
         return self.aspects.index(aspect)
 
     def _layer_matches_filter(self, aa: tuple[str, ...], layer_filter: dict[str, set]) -> bool:
-        """
-        layer_filter: {aspect_name: {elem1, elem2, ...}}; a layer matches if aa[a] ∈ set for all keys.
-        """
         if not layer_filter:
             return True
         for a_name, allowed in layer_filter.items():
@@ -2313,7 +1975,6 @@ class LayerAccessor:
         return True
 
     def _coupling_edge_spec(self, u: str, La: tuple, Lb: tuple, weight: float) -> dict:
-        """Build the edge-spec dict for a single coupling edge ``(u@La)→(u@Lb)``."""
         _lid = lambda t: t[0] if len(self.aspects) == 1 else '×'.join(t)
         return {
             'source': (u, La),
@@ -2327,7 +1988,6 @@ class LayerAccessor:
         triples: list[tuple[str, tuple, tuple]],
         weight: float,
     ) -> int:
-        """Insert a batch of coupling edges via the bulk edge path."""
         if not triples:
             return 0
         specs = [self._coupling_edge_spec(u, La, Lb, weight) for (u, La, Lb) in triples]
@@ -2335,7 +1995,6 @@ class LayerAccessor:
         return len(specs)
 
     def _add_coupling_edge(self, u: str, La: tuple, Lb: tuple, weight: float = 1.0) -> str:
-        """Backward-compat singular shim; prefer ``_add_coupling_edges_bulk``."""
         spec = self._coupling_edge_spec(u, La, Lb, weight)
         self._G._add_edges_bulk([spec])
         return spec['edge_id']
@@ -2897,7 +2556,6 @@ class LayerAccessor:
     ## Layer-aware descriptors
 
     def _rows_for_layer(self, L):
-        """Return row indices in the supra index that belong to aspect-tuple layer L."""
         if not isinstance(L, tuple):
             if len(getattr(self, 'aspects', [])) == 1:
                 L = self.layer_id_to_tuple(L)

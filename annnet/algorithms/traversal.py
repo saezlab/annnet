@@ -9,7 +9,26 @@ def _hyper_meta(rec):
 
 
 class Traversal:
-    """Local neighborhood traversal helpers over the incidence-backed graph."""
+    """Local neighborhood traversal over the incidence-backed graph.
+
+    Binary adjacency is answered from the ``_src_to_edges`` / ``_tgt_to_edges`` indices in
+    O(degree); hyperedges are handled from a per-version cached list, so a graph with no
+    hyperedges never pays a full edge scan.
+    """
+
+    def _iter_hyperedges(self):
+        """Return ``(eid, rec)`` for live hyperedges, cached against the graph version."""
+        version = getattr(self, '_version', None)
+        cache = getattr(self, '_hyper_items_cache', None)
+        if cache is None or cache[0] != version:
+            items = [
+                (eid, rec)
+                for eid, rec in self._edges.items()
+                if rec.etype == 'hyper' and rec.col_idx >= 0
+            ]
+            self._hyper_items_cache = (version, items)
+            return items
+        return cache[1]
 
     def neighbors(self, entity_id):
         """Return adjacent entities for a vertex or edge-entity.
@@ -27,35 +46,37 @@ class Traversal:
         ekey = self._resolve_entity_key(entity_id)
         if ekey not in self._entities:
             return []
+        self._ensure_edge_indexes()
 
         out = set()
         default_dir = self.directed if self.directed is not None else True
         ekey_kind = self._entities[ekey].kind
         probe = ekey if self._aspects != ('_',) else entity_id
+        edges = self._edges
 
-        for _eid, rec in self._edges.items():
+        for eid in self._src_to_edges.get(probe, ()):
+            rec = edges[eid]
+            if rec.col_idx >= 0:
+                out.add(rec.tgt)
+        for eid in self._tgt_to_edges.get(probe, ()):
+            rec = edges[eid]
             if rec.col_idx < 0:
                 continue
-            if rec.etype == 'hyper':
-                meta = _hyper_meta(rec)
-                if meta['directed']:
-                    if probe in meta['head']:
-                        out |= meta['tail']
-                    elif probe in meta['tail']:
-                        out |= meta['head']
-                else:
-                    members = meta.get('members', set())
-                    if probe in members:
-                        out |= members - {probe}
+            edir = rec.directed if rec.directed is not None else default_dir
+            if (not edir) or ekey_kind == 'edge_entity':
+                out.add(rec.src)
+
+        for _eid, rec in self._iter_hyperedges():
+            meta = _hyper_meta(rec)
+            if meta['directed']:
+                if probe in meta['head']:
+                    out |= meta['tail']
+                elif probe in meta['tail']:
+                    out |= meta['head']
             else:
-                s, t = rec.src, rec.tgt
-                if s is None or t is None:
-                    continue
-                edir = rec.directed if rec.directed is not None else default_dir
-                if s == probe:
-                    out.add(t)
-                elif t == probe and (not edir or ekey_kind == 'edge_entity'):
-                    out.add(s)
+                members = meta['members']
+                if probe in members:
+                    out |= members - {probe}
         return list(out)
 
     def out_neighbors(self, vertex_id):
@@ -74,32 +95,34 @@ class Traversal:
         ekey = self._resolve_entity_key(vertex_id)
         if ekey not in self._entities:
             return []
+        self._ensure_edge_indexes()
 
         out = set()
         default_dir = self.directed if self.directed is not None else True
         probe = ekey if self._aspects != ('_',) else vertex_id
+        edges = self._edges
 
-        for _eid, rec in self._edges.items():
+        for eid in self._src_to_edges.get(probe, ()):
+            rec = edges[eid]
+            if rec.col_idx >= 0:
+                out.add(rec.tgt)
+        for eid in self._tgt_to_edges.get(probe, ()):
+            rec = edges[eid]
             if rec.col_idx < 0:
                 continue
-            if rec.etype == 'hyper':
-                meta = _hyper_meta(rec)
-                if meta['directed']:
-                    if probe in meta['head']:
-                        out |= meta['tail']
-                else:
-                    members = meta.get('members', set())
-                    if probe in members:
-                        out |= members - {probe}
+            edir = rec.directed if rec.directed is not None else default_dir
+            if not edir:
+                out.add(rec.src)
+
+        for _eid, rec in self._iter_hyperedges():
+            meta = _hyper_meta(rec)
+            if meta['directed']:
+                if probe in meta['head']:
+                    out |= meta['tail']
             else:
-                s, t = rec.src, rec.tgt
-                if s is None or t is None:
-                    continue
-                edir = rec.directed if rec.directed is not None else default_dir
-                if s == probe:
-                    out.add(t)
-                elif t == probe and not edir:
-                    out.add(s)
+                members = meta['members']
+                if probe in members:
+                    out |= members - {probe}
         return list(out)
 
     def successors(self, vertex_id):
@@ -133,32 +156,34 @@ class Traversal:
         ekey = self._resolve_entity_key(vertex_id)
         if ekey not in self._entities:
             return []
+        self._ensure_edge_indexes()
 
         inn = set()
         default_dir = self.directed if self.directed is not None else True
         probe = ekey if self._aspects != ('_',) else vertex_id
+        edges = self._edges
 
-        for _eid, rec in self._edges.items():
+        for eid in self._tgt_to_edges.get(probe, ()):
+            rec = edges[eid]
+            if rec.col_idx >= 0:
+                inn.add(rec.src)
+        for eid in self._src_to_edges.get(probe, ()):
+            rec = edges[eid]
             if rec.col_idx < 0:
                 continue
-            if rec.etype == 'hyper':
-                meta = _hyper_meta(rec)
-                if meta['directed']:
-                    if probe in meta['tail']:
-                        inn |= meta['head']
-                else:
-                    members = meta.get('members', set())
-                    if probe in members:
-                        inn |= members - {probe}
+            edir = rec.directed if rec.directed is not None else default_dir
+            if not edir:
+                inn.add(rec.tgt)
+
+        for _eid, rec in self._iter_hyperedges():
+            meta = _hyper_meta(rec)
+            if meta['directed']:
+                if probe in meta['tail']:
+                    inn |= meta['head']
             else:
-                s, t = rec.src, rec.tgt
-                if s is None or t is None:
-                    continue
-                edir = rec.directed if rec.directed is not None else default_dir
-                if t == probe:
-                    inn.add(s)
-                elif s == probe and not edir:
-                    inn.add(t)
+                members = meta['members']
+                if probe in members:
+                    inn |= members - {probe}
         return list(inn)
 
     def predecessors(self, vertex_id):

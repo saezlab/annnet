@@ -1,3 +1,5 @@
+"""Lazy graph views and materialized table builders."""
+
 import scipy.sparse as sp
 
 from .._support.dataframe_backend import (
@@ -11,46 +13,22 @@ from .._support.dataframe_backend import (
 
 
 class GraphView:
-    """Lazy view into a graph with deferred operations.
-
-    Provides filtered access to graph components without copying the underlying data.
-    Views can be materialized into concrete subgraphs when needed.
-
-    Parameters
-    ----------
-    graph : AnnNet
-        Parent graph instance
-    vertices : list[str] | set[str] | callable | None
-        vertex IDs to include, or predicate function
-    edges : list[str] | set[str] | callable | None
-        Edge IDs to include, or predicate function
-    slices : str | list[str] | None
-        slice ID(s) to include
-    predicate : callable | None
-        Additional filter: predicate(vertex_id) -> bool
-
-    """
+    """Lazy, filtered view into a graph; materialize() for a concrete subgraph."""
 
     def __init__(self, graph, vertices=None, edges=None, slices=None, predicate=None):
         self._graph = graph
         self._vertices_filter = vertices
         self._edges_filter = edges
         self._predicate = predicate
-
-        # Normalize slices to list
         if slices is None:
             self._slices = None
         elif isinstance(slices, str):
             self._slices = [slices]
         else:
             self._slices = list(slices)
-
-        # Lazy caches
         self._vertex_ids_cache = None
         self._edge_ids_cache = None
         self._computed = False
-
-    # ==================== Properties ====================
 
     @property
     def obs(self):
@@ -67,9 +45,7 @@ class GraphView:
         vertex_ids = self.vertex_ids
         if vertex_ids is None:
             return self._graph.vertex_attributes
-
-        df = self._graph.vertex_attributes
-        return dataframe_filter_in(df, 'vertex_id', vertex_ids)
+        return dataframe_filter_in(self._graph.vertex_attributes, 'vertex_id', vertex_ids)
 
     @property
     def var(self):
@@ -86,9 +62,7 @@ class GraphView:
         edge_ids = self.edge_ids
         if edge_ids is None:
             return self._graph.edge_attributes
-
-        df = self._graph.edge_attributes
-        return dataframe_filter_in(df, 'edge_id', edge_ids)
+        return dataframe_filter_in(self._graph.edge_attributes, 'edge_id', edge_ids)
 
     @property
     def X(self):
@@ -100,18 +74,14 @@ class GraphView:
         """
         vertex_ids = self.vertex_ids
         edge_ids = self.edge_ids
-
-        # Get row and column indices
         if vertex_ids is not None:
             rows = []
             for nid in vertex_ids:
-                ekey = self._graph._resolve_entity_key(nid)
-                rec = self._graph._entities.get(ekey)
+                rec = self._graph._entities.get(self._graph._resolve_entity_key(nid))
                 if rec is not None:
                     rows.append(rec.row_idx)
         else:
             rows = list(range(self._graph._matrix.shape[0]))
-
         if edge_ids is not None:
             cols = []
             for eid in edge_ids:
@@ -120,12 +90,9 @@ class GraphView:
                     cols.append(rec.col_idx)
         else:
             cols = list(range(self._graph._matrix.shape[1]))
-
-        # Return submatrix slice
         if rows and cols:
             return self._graph._matrix[rows, :][:, cols]
-        else:
-            return sp.dok_matrix((len(rows), len(cols)), dtype=self._graph._matrix.dtype)
+        return sp.dok_matrix((len(rows), len(cols)), dtype=self._graph._matrix.dtype)
 
     @property
     def vertex_ids(self):
@@ -179,14 +146,10 @@ class GraphView:
             return len(self._graph._col_to_edge)
         return len(edge_ids)
 
-    # ==================== Internal Computation ====================
-
     def _compute_ids(self):
-        """Compute and cache filtered vertex and edge IDs."""
         vertex_ids = None
         edge_ids = None
 
-        # Step 1: Apply slice filter (uses AnnNet._slices)
         if self._slices is not None:
             vertex_ids = set()
             edge_ids = set()
@@ -195,7 +158,6 @@ class GraphView:
                     vertex_ids.update(self._graph._slices[slice_id]['vertices'])
                     edge_ids.update(self._graph._slices[slice_id]['edges'])
 
-        # Step 2: Apply vertex filter
         if self._vertices_filter is not None:
             candidate_vertices = (
                 vertex_ids
@@ -204,59 +166,56 @@ class GraphView:
                     ekey[0] for ekey, rec in self._graph._entities.items() if rec.kind == 'vertex'
                 }
             )
-
             if callable(self._vertices_filter):
-                filtered_vertices = set()
+                filtered = set()
                 for vid in candidate_vertices:
                     try:
                         if self._vertices_filter(vid):
-                            filtered_vertices.add(vid)
+                            filtered.add(vid)
                     except (AttributeError, KeyError, TypeError, ValueError):
                         pass
-                vertex_ids = filtered_vertices
+                vertex_ids = filtered
             else:
                 specified = set(self._vertices_filter)
-                if vertex_ids is not None:
-                    vertex_ids &= specified
-                else:
-                    vertex_ids = specified & candidate_vertices
+                vertex_ids = (
+                    (vertex_ids & specified)
+                    if vertex_ids is not None
+                    else (specified & candidate_vertices)
+                )
 
-        # Step 3: Apply edge filter
         if self._edges_filter is not None:
             candidate_edges = (
                 edge_ids if edge_ids is not None else set(self._graph._col_to_edge.values())
             )
-
             if callable(self._edges_filter):
-                filtered_edges = set()
+                filtered = set()
                 for eid in candidate_edges:
                     try:
                         if self._edges_filter(eid):
-                            filtered_edges.add(eid)
+                            filtered.add(eid)
                     except (AttributeError, KeyError, TypeError, ValueError):
                         pass
-                edge_ids = filtered_edges
+                edge_ids = filtered
             else:
                 specified = set(self._edges_filter)
-                if edge_ids is not None:
-                    edge_ids &= specified
-                else:
-                    edge_ids = specified & candidate_edges
+                edge_ids = (
+                    (edge_ids & specified)
+                    if edge_ids is not None
+                    else (specified & candidate_edges)
+                )
 
-        # Step 4: Apply additional predicate to vertices
         if self._predicate is not None and vertex_ids is not None:
-            filtered_vertices = set()
+            filtered = set()
             for vid in vertex_ids:
                 try:
                     if self._predicate(vid):
-                        filtered_vertices.add(vid)
+                        filtered.add(vid)
                 except (AttributeError, KeyError, TypeError, ValueError):
                     pass
-            vertex_ids = filtered_vertices
+            vertex_ids = filtered
 
-        # Step 5: Filter edges by vertex connectivity
         if vertex_ids is not None and edge_ids is not None:
-            filtered_edges = set()
+            filtered = set()
             for eid in edge_ids:
                 rec = self._graph._edges.get(eid)
                 if rec is None or rec.col_idx < 0:
@@ -264,22 +223,18 @@ class GraphView:
                 if rec.etype == 'hyper':
                     if rec.tgt is not None:
                         if set(rec.src).issubset(vertex_ids) and set(rec.tgt).issubset(vertex_ids):
-                            filtered_edges.add(eid)
-                    else:
-                        if set(rec.src).issubset(vertex_ids):
-                            filtered_edges.add(eid)
+                            filtered.add(eid)
+                    elif set(rec.src).issubset(vertex_ids):
+                        filtered.add(eid)
                 else:
                     s, t = rec.src, rec.tgt
                     if s is not None and t is not None and s in vertex_ids and t in vertex_ids:
-                        filtered_edges.add(eid)
-            edge_ids = filtered_edges
+                        filtered.add(eid)
+            edge_ids = filtered
 
-        # Cache results
         self._vertex_ids_cache = vertex_ids
         self._edge_ids_cache = edge_ids
         self._computed = True
-
-    # ==================== View Methods (use AnnNet's existing methods) ====================
 
     def edges_df(self, **kwargs):
         """Return an edge DataFrame view filtered to this view's edges.
@@ -297,14 +252,10 @@ class GraphView:
         -----
         Uses `AnnNet.edges_view()` and then filters by the view's edge IDs.
         """
-        # Use AnnNet's existing edges_view() method
         df = self._graph.views.edges(**kwargs)
-
-        # Filter by edge IDs in this view
         edge_ids = self.edge_ids
         if edge_ids is not None:
             df = dataframe_filter_in(df, 'edge_id', edge_ids)
-
         return df
 
     def vertices_df(self, **kwargs):
@@ -323,16 +274,11 @@ class GraphView:
         -----
         Uses `AnnNet.vertices_view()` and then filters by the view's vertex IDs.
         """
-        # Use AnnNet's existing vertices_view() method
         df = self._graph.views.vertices(**kwargs)
-
-        # Filter by vertex IDs in this view
         vertex_ids = self.vertex_ids
         if vertex_ids is not None:
             df = dataframe_filter_in(df, 'vertex_id', vertex_ids)
         return df
-
-    # ==================== Materialization (uses AnnNet methods) ====================
 
     def materialize(self, copy_attributes=True):
         """Create a concrete subgraph from this view.
@@ -348,7 +294,6 @@ class GraphView:
             Materialized subgraph.
         """
         subG = self._graph.ops.extract_subgraph(vertices=self.vertex_ids, edges=self.edge_ids)
-
         if copy_attributes:
             return subG
 
@@ -389,57 +334,37 @@ class GraphView:
         -----
         Predicates are combined with logical AND.
         """
-        # Force compute current filters
         base_vertices = self.vertex_ids
         base_edges = self.edge_ids
 
-        # vertices
         if vertices is None:
-            new_vertices = base_vertices
-            vertex_pred = None
+            new_vertices, vertex_pred = base_vertices, None
         elif callable(vertices):
-            new_vertices = base_vertices  # keep current set; apply new predicate below
-            vertex_pred = vertices
+            new_vertices, vertex_pred = base_vertices, vertices
         else:
             to_set = set(vertices)
             new_vertices = (set(base_vertices) & to_set) if base_vertices is not None else to_set
             vertex_pred = None
 
-        # Edges
-        if edges is None:
-            new_edges = base_edges
-        elif callable(edges):
+        if edges is None or callable(edges):
             new_edges = base_edges
         else:
             to_set = set(edges)
             new_edges = (set(base_edges) & to_set) if base_edges is not None else to_set
 
-        # slices
         new_slices = slices if slices is not None else (self._slices if self._slices else None)
 
-        # Combine predicates (AND) with existing one
         def combined_pred(v):
             ok = True
-            if self._predicate:
-                try:
-                    ok = ok and bool(self._predicate(v))
-                except (AttributeError, TypeError, ValueError):
-                    ok = False
-            if predicate:
-                try:
-                    ok = ok and bool(predicate(v))
-                except (AttributeError, TypeError, ValueError):
-                    ok = False
-            if vertex_pred:
-                try:
-                    ok = ok and bool(vertex_pred(v))
-                except (AttributeError, TypeError, ValueError):
-                    ok = False
+            for pred in (self._predicate, predicate, vertex_pred):
+                if pred:
+                    try:
+                        ok = ok and bool(pred(v))
+                    except (AttributeError, TypeError, ValueError):
+                        ok = False
             return ok
 
         final_pred = combined_pred if (self._predicate or predicate or vertex_pred) else None
-
-        # Return a fresh GraphView
         return GraphView(
             self._graph,
             vertices=new_vertices,
@@ -447,8 +372,6 @@ class GraphView:
             slices=new_slices,
             predicate=final_pred,
         )
-
-    # ==================== Convenience ====================
 
     def summary(self):
         """Return a human-readable summary of this view.
@@ -463,28 +386,24 @@ class GraphView:
             f'vertices: {self.vertex_count}',
             f'Edges: {self.edge_count}',
         ]
-
         filters = []
         if self._slices:
             filters.append(f'slices={self._slices}')
         if self._vertices_filter:
-            if callable(self._vertices_filter):
-                filters.append('vertices=<predicate>')
-            else:
-                filters.append(f'vertices={len(list(self._vertices_filter))} specified')
+            filters.append(
+                'vertices=<predicate>'
+                if callable(self._vertices_filter)
+                else f'vertices={len(list(self._vertices_filter))} specified'
+            )
         if self._edges_filter:
-            if callable(self._edges_filter):
-                filters.append('edges=<predicate>')
-            else:
-                filters.append(f'edges={len(list(self._edges_filter))} specified')
+            filters.append(
+                'edges=<predicate>'
+                if callable(self._edges_filter)
+                else f'edges={len(list(self._edges_filter))} specified'
+            )
         if self._predicate:
             filters.append('predicate=<function>')
-
-        if filters:
-            lines.append(f'Filters: {", ".join(filters)}')
-        else:
-            lines.append('Filters: None (full graph)')
-
+        lines.append(f'Filters: {", ".join(filters)}' if filters else 'Filters: None (full graph)')
         return '\n'.join(lines)
 
     def __repr__(self):
@@ -495,7 +414,7 @@ class GraphView:
 
 
 class ViewsClass:
-    # Materialized views
+    """Materialized table builders mixed into ``AnnNet``."""
 
     def edges_view(
         self,
@@ -532,13 +451,10 @@ class ViewsClass:
             return empty_dataframe({'edge_id': 'text', 'kind': 'text', 'ml_kind': 'text'})
 
         eids_raw = list(self._col_to_edge.values())
-        eids_str = [str(eid) for eid in eids_raw]  # Stringified for DataFrame
+        eids_str = [str(eid) for eid in eids_raw]
 
         _default_dir = True if self.directed is None else self.directed
         _edge_recs = [self._edges[eid] for eid in eids_raw]
-        # Two orthogonal axes, kept in separate columns:
-        #   kind    -> structure (binary / hyper)
-        #   ml_kind -> multilayer role (intra / inter / coupling, or None)
         kinds = ['hyper' if rec.etype == 'hyper' else 'binary' for rec in _edge_recs]
         ml_kinds = [rec.ml_kind for rec in _edge_recs]
 
@@ -550,51 +466,32 @@ class ViewsClass:
             else None
         )
 
-        if all(rec.etype != 'hyper' for rec in _edge_recs):
-            src = [str(rec.src) if rec.src is not None else None for rec in _edge_recs]
-            tgt = [str(rec.tgt) if rec.tgt is not None else None for rec in _edge_recs]
-            etype = [str(rec.etype) if rec.etype is not None else None for rec in _edge_recs]
-            head = [None] * len(_edge_recs)
-            tail = [None] * len(_edge_recs)
-            members = [None] * len(_edge_recs)
-        else:
-            src, tgt, etype = [], [], []
-            head, tail, members = [], [], []
-
-            for rec in _edge_recs:
-                if rec.etype == 'hyper':
-                    if rec.tgt is not None:
-                        src_vals = tuple(str(x) for x in sorted(rec.src))
-                        tgt_vals = tuple(str(x) for x in sorted(rec.tgt))
-                        head.append(src_vals)
-                        tail.append(tgt_vals)
-                        members.append(None)
-                        src.append('|'.join(src_vals))
-                        tgt.append('|'.join(tgt_vals))
-                    else:
-                        src_vals = tuple(str(x) for x in sorted(rec.src))
-                        head.append(None)
-                        tail.append(None)
-                        members.append(src_vals)
-                        src.append('|'.join(src_vals))
-                        tgt.append(None)
-                    etype.append(None)
+        src, tgt, etype, head, tail, members = [], [], [], [], [], []
+        for rec in _edge_recs:
+            if rec.etype == 'hyper':
+                if rec.tgt is not None:
+                    src_vals = tuple(str(x) for x in sorted(rec.src))
+                    tgt_vals = tuple(str(x) for x in sorted(rec.tgt))
+                    head.append(src_vals)
+                    tail.append(tgt_vals)
+                    members.append(None)
+                    src.append('|'.join(src_vals))
+                    tgt.append('|'.join(tgt_vals))
                 else:
-                    src.append(str(rec.src) if rec.src is not None else None)
-                    tgt.append(str(rec.tgt) if rec.tgt is not None else None)
-                    etype.append(str(rec.etype) if rec.etype is not None else None)
+                    src_vals = tuple(str(x) for x in sorted(rec.src))
                     head.append(None)
                     tail.append(None)
-                    members.append(None)
-
-        # Use stringified IDs in DataFrame
-        cols = {'edge_id': eids_str, 'kind': kinds, 'ml_kind': ml_kinds}
-        if include_directed:
-            cols['directed'] = dirs
-        if include_weight:
-            cols['global_weight'] = global_w
-        if resolved_weight and not include_weight:
-            cols['_gw_tmp'] = global_w
+                    members.append(src_vals)
+                    src.append('|'.join(src_vals))
+                    tgt.append(None)
+                etype.append(None)
+            else:
+                src.append(str(rec.src) if rec.src is not None else None)
+                tgt.append(str(rec.tgt) if rec.tgt is not None else None)
+                etype.append(str(rec.etype) if rec.etype is not None else None)
+                head.append(None)
+                tail.append(None)
+                members.append(None)
 
         edge_attrs_map = self._rows_attr_map(self.edge_attributes, 'edge_id')
         slice_attrs_map = {}
@@ -605,10 +502,9 @@ class ViewsClass:
                 eid = row.get('edge_id')
                 if eid is None:
                     continue
-                payload = {
+                slice_attrs_map[str(eid)] = {
                     f'slice_{k}': v for k, v in row.items() if k not in {'slice_id', 'edge_id'}
                 }
-                slice_attrs_map[str(eid)] = payload
 
         out_rows = []
         for idx, eid in enumerate(eids_str):
@@ -682,19 +578,14 @@ class ViewsClass:
         """
         all_slice_ids = list(self.slices.list(include_default=True))
         attr_df = self.slice_attributes
-
         attr_rows: dict = {}
         if attr_df is not None and 'slice_id' in dataframe_columns(attr_df):
             for row in dataframe_to_rows(attr_df):
                 sid = row.get('slice_id')
                 if sid is not None:
                     attr_rows[sid] = {k: v for k, v in row.items() if k != 'slice_id'}
-
         rows = [{'slice_id': sid, **attr_rows.get(sid, {})} for sid in all_slice_ids]
-        if not rows:
-            out = empty_dataframe({'slice_id': 'text'})
-        else:
-            out = dataframe_from_rows(rows)
+        out = dataframe_from_rows(rows) if rows else empty_dataframe({'slice_id': 'text'})
         return clone_dataframe(out) if copy else out
 
     def aspects_view(self, copy=True):
@@ -715,17 +606,11 @@ class ViewsClass:
         """
         if not getattr(self, 'aspects', None):
             return empty_dataframe({'aspect': 'text', 'elem_layers': 'list_text'})
-
         rows = []
         for a in self.aspects:
-            base = {
-                'aspect': a,
-                'elem_layers': list(self.elem_layers.get(a, [])),
-            }
-            for k, v in self.layers._aspect_attrs.get(a, {}).items():
-                base[k] = v
+            base = {'aspect': a, 'elem_layers': list(self.elem_layers.get(a, []))}
+            base.update(self.layers._aspect_attrs.get(a, {}))
             rows.append(base)
-
         df = dataframe_from_rows(rows)
         return clone_dataframe(df) if copy else df
 
@@ -746,10 +631,7 @@ class ViewsClass:
         Columns include `layer_tuple`, `layer_id`, aspect columns, layer attributes,
         and prefixed elementary layer attributes.
         """
-        if not self.aspects:
-            return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
-
-        if not getattr(self.layers, '_all_layers', ()):
+        if not self.aspects or not getattr(self.layers, '_all_layers', ()):
             return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
 
         elem_attr_rows = {}
@@ -758,44 +640,28 @@ class ViewsClass:
         ):
             for row in dataframe_to_rows(self.layer_attributes):
                 layer_id = row.get('layer_id')
-                if layer_id is None:
-                    continue
-                elem_attr_rows[str(layer_id)] = {k: v for k, v in row.items() if k != 'layer_id'}
+                if layer_id is not None:
+                    elem_attr_rows[str(layer_id)] = {
+                        k: v for k, v in row.items() if k != 'layer_id'
+                    }
 
         rows = []
         for aa in self.layers._all_layers:
             aa = tuple(aa)
-            lid = self.layers.layer_tuple_to_id(aa)
-
-            base = {
-                'layer_tuple': list(aa),
-                'layer_id': lid,
-            }
-
+            base = {'layer_tuple': list(aa), 'layer_id': self.layers.layer_tuple_to_id(aa)}
             for i, aspect in enumerate(self.aspects):
                 base[aspect] = aa[i]
-
-            for k, v in self.layers._layer_attrs.get(aa, {}).items():
-                base[k] = v
-
+            base.update(self.layers._layer_attrs.get(aa, {}))
             for i, aspect in enumerate(self.aspects):
-                lid_elem = f'{aspect}_{aa[i]}'
-                rdict = elem_attr_rows.get(lid_elem, {})
-                for k, v in rdict.items():
+                for k, v in elem_attr_rows.get(f'{aspect}_{aa[i]}', {}).items():
                     base[f'{aspect}__{k}'] = v
-
             rows.append(base)
-
         df = dataframe_from_rows(rows)
         return clone_dataframe(df) if copy else df
 
 
 class ViewsAccessor:
-    """Namespace for materialized graph tables.
-
-    Returned by ``G.views``. Flat ``*_view()`` methods remain as compatibility
-    wrappers during the contraction phase.
-    """
+    """Namespace for materialized graph tables (``G.views``)."""
 
     __slots__ = ('_G',)
 
@@ -803,19 +669,25 @@ class ViewsAccessor:
         self._G = graph
 
     def edges(self, *args, **kwargs):
+        """Materialize the edge table view."""
         return ViewsClass.edges_view(self._G, *args, **kwargs)
 
     def vertices(self, *args, **kwargs):
+        """Materialize the vertex table view."""
         return ViewsClass.vertices_view(self._G, *args, **kwargs)
 
     def slices(self, *args, **kwargs):
+        """Materialize the slice table view."""
         return ViewsClass.slices_view(self._G, *args, **kwargs)
 
     def aspects(self, *args, **kwargs):
+        """Materialize the aspect table view."""
         return ViewsClass.aspects_view(self._G, *args, **kwargs)
 
     def layers(self, *args, **kwargs):
+        """Materialize the layer table view."""
         return ViewsClass.layers_view(self._G, *args, **kwargs)
 
     def layers_view(self, copy=True):
+        """Materialize the layer table view."""
         return ViewsClass.layers_view(self._G, copy=copy)

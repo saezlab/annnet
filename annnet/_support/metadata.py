@@ -298,7 +298,7 @@ class AnnNetInfo:
             ('Repository', _link(urls['Repository'])) if urls.get('Repository') else None,
             ('Documentation', _link(urls['Documentation'])) if urls.get('Documentation') else None,
             (
-                'Default graph backend',
+                'Default adapter backend',
                 _chips({graph_default: graph_default != 'none'}, icons=False),
             ),
             ('Default plot backend', _chips({plot_default: plot_default != 'none'}, icons=False)),

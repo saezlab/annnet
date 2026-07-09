@@ -1,3 +1,5 @@
+"""Mutation history, snapshots, and diffs."""
+
 import json
 import time
 import inspect
@@ -14,30 +16,11 @@ from .._support.dataframe_backend import (
 
 
 class GraphDiff:
-    """Represents the difference between two graph states.
-
-    Attributes
-    ----------
-    vertices_added : set
-        Vertices in b but not in a
-    vertices_removed : set
-        Vertices in a but not in b
-    edges_added : set
-        Edges in b but not in a
-    edges_removed : set
-        Edges in a but not in b
-    slices_added : set
-        slices in b but not in a
-    slices_removed : set
-        slices in a but not in b
-
-    """
+    """Set difference between two graph snapshots (vertices/edges/slices added/removed)."""
 
     def __init__(self, snapshot_a, snapshot_b):
         self.snapshot_a = snapshot_a
         self.snapshot_b = snapshot_b
-
-        # Compute differences
         self.vertices_added = snapshot_b['vertex_ids'] - snapshot_a['vertex_ids']
         self.vertices_removed = snapshot_a['vertex_ids'] - snapshot_b['vertex_ids']
         self.edges_added = snapshot_b['edge_ids'] - snapshot_a['edge_ids']
@@ -53,14 +36,15 @@ class GraphDiff:
         str
             Summary text describing added/removed vertices, edges, and slices.
         """
-        lines = [
-            f'Diff: {self.snapshot_a["label"]} - {self.snapshot_b["label"]}',
-            '',
-            f'Vertices: {len(self.vertices_added):+d} added, {len(self.vertices_removed)} removed',
-            f'Edges: {len(self.edges_added):+d} added, {len(self.edges_removed)} removed',
-            f'slices: {len(self.slices_added):+d} added, {len(self.slices_removed)} removed',
-        ]
-        return '\n'.join(lines)
+        return '\n'.join(
+            [
+                f'Diff: {self.snapshot_a["label"]} - {self.snapshot_b["label"]}',
+                '',
+                f'Vertices: {len(self.vertices_added):+d} added, {len(self.vertices_removed)} removed',
+                f'Edges: {len(self.edges_added):+d} added, {len(self.edges_removed)} removed',
+                f'slices: {len(self.slices_added):+d} added, {len(self.slices_removed)} removed',
+            ]
+        )
 
     def is_empty(self):
         """Check whether the diff contains no changes.
@@ -69,13 +53,13 @@ class GraphDiff:
         -------
         bool
         """
-        return (
-            not self.vertices_added
-            and not self.vertices_removed
-            and not self.edges_added
-            and not self.edges_removed
-            and not self.slices_added
-            and not self.slices_removed
+        return not (
+            self.vertices_added
+            or self.vertices_removed
+            or self.edges_added
+            or self.edges_removed
+            or self.slices_added
+            or self.slices_removed
         )
 
     def __repr__(self):
@@ -101,9 +85,9 @@ class GraphDiff:
 
 
 class History:
-    # History and Timeline
+    """Mutation logging, version counter, snapshots, and diffs (mixed into AnnNet)."""
+
     def _bump_version(self) -> int:
-        """Advance the graph mutation counter independently of history logging."""
         self._version += 1
         return self._version
 
@@ -111,8 +95,6 @@ class History:
         return datetime.now(UTC).isoformat(timespec='microseconds').replace('+00:00', 'Z')
 
     def _jsonify(self, x):
-        # Make args/return JSON-safe & compact.
-
         if x is None or isinstance(x, (bool, int, float, str)):
             return x
         if isinstance(x, (set, frozenset)):
@@ -121,12 +103,9 @@ class History:
             return [self._jsonify(v) for v in x]
         if isinstance(x, dict):
             return {str(k): self._jsonify(v) for k, v in x.items()}
-        # NumPy scalars
         if isinstance(x, np.generic):
             return x.item()
-        # Polars, SciPy, or other heavy objects -> just a tag
-        t = type(x).__name__
-        return f'<<{t}>>'
+        return f'<<{type(x).__name__}>>'
 
     def _log_event(self, op: str, **fields):
         version = self._bump_version()
@@ -134,14 +113,20 @@ class History:
             return
         evt = {
             'version': version,
-            'ts_utc': self._utcnow_iso(),  # ISO-8601 with Z
+            'ts_utc': self._utcnow_iso(),
             'mono_ns': time.perf_counter_ns() - self._history_clock0,
             'op': op,
         }
-        # sanitize
         for k, v in fields.items():
             evt[k] = self._jsonify(v)
         self._history.append(evt)
+
+    @staticmethod
+    def _summarize_arg(v, _limit=32):
+        """Cheap log value: large collections are summarized, not serialized."""
+        if isinstance(v, (list, tuple, set, frozenset, dict)) and len(v) > _limit:
+            return f'<{type(v).__name__}: {len(v)} items>'
+        return v
 
     def _log_mutation(self, name=None):
         def deco(fn):
@@ -150,18 +135,17 @@ class History:
 
             @wraps(fn)
             def wrapper(*args, **kwargs):
-                bound = sig.bind(*args, **kwargs)
-                bound.apply_defaults()
                 result = fn(*args, **kwargs)
                 if not self._history_enabled:
                     self._bump_version()
                     return result
-                payload = {}
-                # record all call args except 'self'
-                for k, v in bound.arguments.items():
-                    if k != 'self':
-                        payload[k] = v
-                payload['result'] = result
+                # Capture args only when logging; summarize big collections so a
+                # bulk add_edges([...10k...]) does not pay an O(n) serialization.
+                bound = sig.bind(*args, **kwargs)
+                bound.apply_defaults()
+                summ = self._summarize_arg
+                payload = {k: summ(v) for k, v in bound.arguments.items() if k != 'self'}
+                payload['result'] = summ(result)
                 self._log_event(op, **payload)
                 return result
 
@@ -170,7 +154,6 @@ class History:
         return deco
 
     def _install_history_hooks(self):
-        # Mutating methods to wrap. Add here if you add new mutators.
         to_wrap = [
             'add_vertices',
             'add_edges',
@@ -240,13 +223,8 @@ class History:
         """
         if not self._history:
             return 0
-        # Accept both str and pathlib.Path; only the suffix matters for routing.
-        path_str = str(path)
-        suffix = path_str.lower()
+        suffix = str(path).lower()
 
-        # JSON paths don't need a tabular round-trip — dump rows directly so
-        # heterogeneous cells (e.g. a column that holds a str in some rows and
-        # a list[str] in others) don't trip polars dtype inference.
         if suffix.endswith('.ndjson') or suffix.endswith('.jsonl'):
             with open(path, 'w', encoding='utf-8') as f:
                 for r in self._history:
@@ -257,8 +235,6 @@ class History:
                 json.dump([self._jsonify(r) for r in self._history], f, ensure_ascii=False)
             return len(self._history)
 
-        # Tabular paths (parquet/csv): stringify list/dict/set cells before
-        # building the DataFrame so polars sees uniform String columns.
         def _flatten_row(row):
             flat = {}
             for key, value in row.items():
@@ -268,16 +244,13 @@ class History:
                     flat[key] = value
             return flat
 
-        flat_rows = [_flatten_row(r) for r in self._history]
-        df = dataframe_from_rows(flat_rows)
+        df = dataframe_from_rows([_flatten_row(r) for r in self._history])
         if suffix.endswith('.parquet'):
             dataframe_write_parquet(df, path)
-            return len(self._history)
-        if suffix.endswith('.csv'):
+        elif suffix.endswith('.csv'):
             dataframe_write_csv(df, path)
-            return len(self._history)
-        # Default to Parquet if unknown
-        dataframe_write_parquet(df, path_str + '.parquet')
+        else:
+            dataframe_write_parquet(df, str(path) + '.parquet')
         return len(self._history)
 
     def enable_history(self, flag: bool = True):
@@ -328,30 +301,6 @@ class History:
         self._log_event('mark', label=label)
 
     def _history_snapshot_impl(self, label=None):
-        """Capture and store the current graph topology as a named snapshot.
-
-        Parameters
-        ----------
-        label : str, optional
-            Human-readable name for the snapshot. Defaults to
-            ``'snap_<n>'`` where *n* is the current snapshot count.
-
-        Returns
-        -------
-        dict
-            The stored snapshot with keys ``label``, ``version``,
-            ``vertex_ids``, ``edge_ids``, ``slice_ids``.
-
-        Notes
-        -----
-        Snapshots are **write-only memos**: they record the set of vertex,
-        edge, and slice IDs (plus a version counter) so that later calls to
-        :meth:`diff` can highlight what changed. They do **not** capture
-        attribute values, weights, slice membership, or the incidence
-        matrix, and there is no restore operation. To save a fully
-        round-trippable graph use the IO layer (e.g. :func:`io.to_annnet`
-        / :func:`io.to_json`).
-        """
         raw = self._current_snapshot()
         name = label if label is not None else f'snap_{len(self._snapshots)}'
         snap = {
@@ -366,27 +315,6 @@ class History:
         return snap
 
     def _history_diff_impl(self, a=None, b=None):
-        """Compare two graph states and return a :class:`GraphDiff`.
-
-        Parameters
-        ----------
-        a : str | dict | AnnNet | None, optional
-            Reference for the *before* state — a snapshot label, a raw
-            snapshot dict, or another ``AnnNet`` instance. When ``None``
-            (default), the most recent stored snapshot is used.
-        b : str | dict | AnnNet | None, optional
-            Reference for the *after* state. When ``None`` (default) the
-            current graph state is used.
-
-        Returns
-        -------
-        GraphDiff
-
-        Raises
-        ------
-        ValueError
-            If ``a`` is omitted and no snapshots are stored yet.
-        """
         if a is None:
             if not self._snapshots:
                 raise ValueError(
@@ -399,22 +327,11 @@ class History:
         return GraphDiff(snap_a, snap_b)
 
     def _history_list_snapshots_impl(self):
-        """Return all stored snapshots in creation order.
-
-        Returns
-        -------
-        list[dict]
-        """
         return list(self._snapshots)
 
 
 class HistoryAccessor:
-    """Namespace for mutation logs and snapshots.
-
-    Stored on each graph instance as ``G.history``. The accessor is callable so
-    existing ``G.history()`` call sites remain valid while enabling
-    ``G.history.export(...)`` and related namespace usage.
-    """
+    """Callable ``G.history`` namespace for logs and snapshots."""
 
     __slots__ = ('_G',)
 
@@ -425,22 +342,29 @@ class HistoryAccessor:
         return History.history(self._G, *args, **kwargs)
 
     def enable(self, flag: bool = True):
+        """Enable or disable mutation history recording."""
         return History.enable_history(self._G, flag)
 
     def clear(self):
+        """Clear the recorded history log and stored snapshots."""
         return History.clear_history(self._G)
 
     def export(self, path: str):
+        """Write the recorded history log to disk."""
         return History.export_history(self._G, path)
 
     def mark(self, label: str):
+        """Append a labeled marker event to the history log."""
         return History.mark(self._G, label)
 
     def snapshot(self, label=None):
+        """Capture and return a snapshot of the current graph state."""
         return self._G._history_snapshot_impl(label=label)
 
     def diff(self, a=None, b=None):
+        """Return a diff between two snapshots or snapshot references."""
         return self._G._history_diff_impl(a, b=b)
 
     def list_snapshots(self):
+        """Return the recorded snapshot list."""
         return self._G._history_list_snapshots_impl()

@@ -131,7 +131,7 @@ def dataframe_height(df) -> int:
     """Return the row count for a dataframe-like object."""
     if df is None:
         return 0
-    return len(_to_nw(df).rows())
+    return _to_nw(df).shape[0]
 
 
 def dataframe_width(df) -> int:
