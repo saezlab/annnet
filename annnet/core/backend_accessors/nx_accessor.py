@@ -2,11 +2,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 import inspect
+from functools import lru_cache
 
 from ._base import _BackendAccessorBase
 
 if TYPE_CHECKING:
     from ..graph import AnnNet
+
+
+@lru_cache(maxsize=4096)
+def _cached_signature(fn):
+    """inspect.signature is expensive; NX callables are stable, so memoise it."""
+    return inspect.signature(fn)
+
+
+# name -> resolved networkx callable (global; the nx module set is static).
+_NX_CALLABLE_CACHE: dict = {}
 
 
 class _NXBackendAccessor(_BackendAccessorBase):
@@ -108,7 +119,7 @@ class _NXBackendAccessor(_BackendAccessorBase):
                 args, kwargs = self._replace_owner_graph(args, kwargs, nxG)
 
             try:
-                sig = inspect.signature(nx_callable)
+                sig = _cached_signature(nx_callable)
                 bound = sig.bind_partial(*args, **kwargs)
             except Exception:  # noqa: BLE001
                 bound = None
@@ -151,9 +162,13 @@ class _NXBackendAccessor(_BackendAccessorBase):
         return sorted(set(super().__dir__()) | self._callable_names(*self._nx_candidates()))
 
     def _resolve_nx_callable(self, name: str):
+        cached = _NX_CALLABLE_CACHE.get(name)
+        if cached is not None:
+            return cached
         for mod in self._nx_candidates():
             attr = getattr(mod, name, None)
             if callable(attr):
+                _NX_CALLABLE_CACHE[name] = attr
                 return attr
         raise AttributeError(f"networkx has no callable '{name}'")
 
@@ -185,7 +200,7 @@ class _NXBackendAccessor(_BackendAccessorBase):
     def _needed_edge_attrs(self, target, kwargs) -> set:
         needed = set()
         try:
-            params = inspect.signature(target).parameters
+            params = _cached_signature(target).parameters
         except Exception:  # noqa: BLE001
             params = {}
         if 'weight' in params:
@@ -290,15 +305,17 @@ class _NXBackendAccessor(_BackendAccessorBase):
         )
 
     def _map_output_vertices(self, obj):
-        _id_to_row, row_to_id = self._vertex_row_maps()
-
         def map_id(value):
             # NetworkX returns vertex IDs as the backend graph's node values.
             # Our backend nodes are vertex-ID strings, so strings pass through
             # unchanged. Integers that NX produced from a relabel-to-int pass
-            # are mapped back to their vertex IDs.
-            if isinstance(value, int) and not isinstance(value, bool) and value in row_to_id:
-                return row_to_id[value]
+            # are mapped back to their vertex IDs. Resolve each int in O(1) via
+            # the graph's row->entity index instead of materialising the whole
+            # row->id map on every call.
+            if isinstance(value, int) and not isinstance(value, bool):
+                vid = self._vertex_row_to_id(value)
+                if vid is not None:
+                    return vid
             return value
 
         return self._map_nested_output(obj, map_id)

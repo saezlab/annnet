@@ -379,6 +379,20 @@ def render(payload, report_path, plots_dir=None):
         'Algorithms / traversal',
         'Directional neighbor + edge queries and matrix-derived traversals.',
     )
+    lines += _feature_section(
+        records,
+        'layers',
+        'Layers (supra index + supra operations)',
+        'Vertex-layer index and supra-matrix ops; nl_to_row must stay ~O(1) in the '
+        'supra size (cached index).',
+    )
+    lines += _feature_section(
+        records,
+        'backend_proxy',
+        'Backend proxies (G.nx.*)',
+        'Per-call wrapper tax with the converted graph cached; must stay ~O(1) in '
+        'vertex count (O(1) output mapping).',
+    )
     lines += _io_formats(payload)
     lines += _adapters(payload)
     lines += _plots(records, plots_dir)

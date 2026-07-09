@@ -193,6 +193,7 @@ class LayerAccessor:
 
         self._rebuild_all_layers_cache()
         self._drop_unused_placeholder_layers()
+        self._supra_index_cache = None
 
     def set_elementary_layers(self, layers_by_aspect: dict[str, list[str]]):
         """Declare concrete elementary layer values for existing aspects."""
@@ -510,6 +511,27 @@ class LayerAccessor:
     ## Index for supra rows
 
     def _build_supra_index(
+        self, restrict_layers: list[tuple[str, ...]] | None = None
+    ) -> tuple[dict, list]:
+        """Return ``(nl_to_row, row_to_nl)`` for the supra layout, cached.
+
+        The index is a full scan + sort of the vertex-entity population, so it is
+        memoised per ``restrict_layers`` key and reused until a structural
+        mutation clears ``_supra_index_cache`` (via ``_mark_matrix_dirty``).
+        The returned dict/list are shared — callers treat them as read-only.
+        """
+        cache = self._supra_index_cache
+        if cache is None:
+            cache = {}
+            self._supra_index_cache = cache
+        key = None if restrict_layers is None else frozenset(tuple(x) for x in restrict_layers)
+        entry = cache.get(key)
+        if entry is None:
+            entry = self._compute_supra_index(restrict_layers)
+            cache[key] = entry
+        return entry
+
+    def _compute_supra_index(
         self, restrict_layers: list[tuple[str, ...]] | None = None
     ) -> tuple[dict, list]:
         if restrict_layers is not None:

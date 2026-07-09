@@ -98,6 +98,7 @@ def invalidate_sparse_caches(g, formats=None) -> None:
     cache_manager = getattr(g, '_cache_manager', None)
     if cache_manager is not None:
         cache_manager.invalidate(list(formats))
+    g._supra_index_cache = None
 
 
 # ---------------------------------------------------------------------------

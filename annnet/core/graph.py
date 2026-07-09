@@ -2031,8 +2031,15 @@ class AnnNet(
         self._matrix_dirty = False
 
     def _mark_matrix_dirty(self) -> None:
-        """Flag the incidence cache for lazy rebuild from records."""
+        """Flag the incidence cache for lazy rebuild from records.
+
+        Also drops the cached supra (vertex-layer) index: it is derived from the
+        vertex-entity population, which every structural mutation routes through
+        here (add / remove / rekey), so this is the single reliable invalidation
+        point (``_version`` does not bump on removes or ``set_aspects``).
+        """
         self._matrix_dirty = True
+        self._supra_index_cache = None
 
     def X(self):
         """Return the sparse incidence matrix.

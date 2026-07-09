@@ -99,5 +99,6 @@ def init_state(g, *, directed=None, v=0, e=0, aspects=None) -> None:
 
     # Version clock (dirty signal for derived sparse caches).
     g._version = 0
+    g._supra_index_cache = None
 
     g.vertex_aligned = False

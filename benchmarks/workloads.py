@@ -480,4 +480,79 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
             note='per-vertex incident edge lists',
         )
     )
+
+    # --- layers: supra (vertex-layer) index + supra operations --------------
+    # Guards the cached supra index: nl_to_row must stay ~O(1) as V_M grows.
+    n_layers = 3
+    n_lv = max(50, min(scale.vertices // 20, 20_000))  # vertices per layer
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        Gml = AnnNet(directed=True)
+        Gml.layers.set_aspects(['layer'], {'layer': [f'L{k}' for k in range(n_layers)]})
+        coords = list(Gml.layers.iter_layers())
+        for aa in coords:
+            Gml.add_edges(
+                [
+                    {'source': (f'm{i}', aa), 'target': (f'm{(i + 1) % n_lv}', aa), 'weight': 1.0}
+                    for i in range(n_lv)
+                ]
+            )
+    aa0 = coords[0]
+    v_m = n_lv * n_layers
+    recs.append(
+        rec(
+            'layers',
+            'nl_to_row',
+            time=harness.time_repeat(lambda: Gml.layers.nl_to_row('m0', aa0)),
+            note=f'single vertex-layer lookup (V_M={v_m}); must be ~O(1)',
+        )
+    )
+    recs.append(
+        rec(
+            'layers',
+            'build_supra_index',
+            time=harness.time_repeat(lambda: Gml.layers._build_supra_index()),
+            note='full supra index (cache hit after first build)',
+        )
+    )
+    recs.append(
+        rec(
+            'layers',
+            'supra_adjacency',
+            time=harness.time_oneshot(
+                lambda: Gml.layers.supra_adjacency(), samples=max(3, samples // 2)
+            ),
+            note=f'supra-adjacency over {v_m} vertex-layer nodes',
+        )
+    )
+    recs.append(
+        rec(
+            'layers',
+            'subgraph_from_layer',
+            time=harness.time_oneshot(
+                lambda: Gml.layers.subgraph_from_layer_tuple(aa0), samples=max(3, samples // 2)
+            ),
+            note='single-layer induced subgraph',
+        )
+    )
+
+    # --- backend proxy: G.nx.* per-call wrapper tax on a cache hit ----------
+    # Guards the O(1) output mapping: this must stay flat as V grows.
+    try:
+        import networkx as _nx  # noqa: F401
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            G.nx.number_of_nodes(G)  # prime the conversion cache
+            recs.append(
+                rec(
+                    'backend_proxy',
+                    'nx_call_cache_hit',
+                    time=harness.time_repeat(lambda: G.nx.number_of_nodes(G)),
+                    note='G.nx.* wrapper tax with conversion cached; must be ~O(1) in V',
+                )
+            )
+    except ImportError:
+        pass
+
     return recs
