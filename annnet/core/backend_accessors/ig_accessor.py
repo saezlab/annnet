@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-import inspect
 
-from ._base import _BackendAccessorBase
+from ._base import _cached_signature, _BackendAccessorBase
 
 if TYPE_CHECKING:
     from ..graph import AnnNet
@@ -32,6 +31,9 @@ class _IGBackendAccessor(_BackendAccessorBase):
 
     def __init__(self, owner: AnnNet):
         self._init_backend_accessor(owner, cache_attr='_ig_backend_cache')
+        # (converted_graph, name->index map); set here so __getattr__ (which
+        # returns an igraph-call wrapper for any unknown name) never sees it.
+        self._name_index_cache = None
 
     def peek_vertices(self, k: int = 10):
         igG = self._get_or_make_ig(
@@ -119,7 +121,7 @@ class _IGBackendAccessor(_BackendAccessorBase):
                 raise AttributeError(f"igraph has no callable '{name}'")
 
             try:
-                sig = inspect.signature(target)
+                sig = _cached_signature(target)
                 bound = sig.bind_partial(*args, **kwargs)
             except Exception:  # noqa: BLE001
                 bound = None
@@ -215,8 +217,16 @@ class _IGBackendAccessor(_BackendAccessorBase):
         return entry['igG']
 
     def _name_to_index_map(self, igG):
+        # The converted igG is version-cached (stable identity until it rebuilds),
+        # so memoise its name->index map instead of rebuilding it O(V) per coerced
+        # vertex (a bulk vertex arg was O(V*k) before).
+        cached = self._name_index_cache
+        if cached is not None and cached[0] is igG:
+            return cached[1]
         names = igG.vs['name'] if 'name' in igG.vs.attributes() else None
-        return {name: idx for idx, name in enumerate(names)} if names is not None else {}
+        m = {name: idx for idx, name in enumerate(names)} if names is not None else {}
+        self._name_index_cache = (igG, m)
+        return m
 
     def _coerce_vertex(self, value, igG, label_field: str | None):
         if isinstance(value, int) and 0 <= value < igG.vcount():

@@ -504,9 +504,8 @@ class LayerAccessor:
         tuple[str, ...]
             Layer tuples for ``u``.
         """
-        for (uu, aa), rec in self._entities.items():
-            if rec.kind == 'vertex' and uu == u:
-                yield aa
+        _, vertex_to_layers = self._layer_membership()
+        yield from vertex_to_layers.get(u, ())
 
     ## Index for supra rows
 
@@ -520,16 +519,45 @@ class LayerAccessor:
         mutation clears ``_supra_index_cache`` (via ``_mark_matrix_dirty``).
         The returned dict/list are shared — callers treat them as read-only.
         """
-        cache = self._supra_index_cache
-        if cache is None:
-            cache = {}
-            self._supra_index_cache = cache
+        cache = self._supra_cache()
         key = None if restrict_layers is None else frozenset(tuple(x) for x in restrict_layers)
-        entry = cache.get(key)
+        entry = cache['entries'].get(key)
         if entry is None:
             entry = self._compute_supra_index(restrict_layers)
-            cache[key] = entry
+            cache['entries'][key] = entry
         return entry
+
+    def _supra_cache(self) -> dict:
+        """Return the (lazy) layer index cache, holding supra indexes + membership.
+
+        A single dict per graph so all layer indexes share one invalidation
+        point (``_supra_index_cache = None`` in the structural-mutation hooks).
+        """
+        cache = self._supra_index_cache
+        if cache is None:
+            cache = {'entries': {}, 'layer_to_vertices': None, 'vertex_to_layers': None}
+            self._supra_index_cache = cache
+        return cache
+
+    def _layer_membership(self) -> tuple[dict, dict]:
+        """Return cached ``(layer_to_vertices, vertex_to_layers)`` maps.
+
+        Built in one pass over the vertex entities and reused until a structural
+        mutation clears the cache — replaces the per-call O(V) scans in
+        ``layer_vertex_set`` / ``iter_vertex_layers``.
+        """
+        cache = self._supra_cache()
+        if cache['layer_to_vertices'] is None:
+            l2v: dict = {}
+            v2l: dict = {}
+            for (u, aa), rec in self._entities.items():
+                if rec.kind != 'vertex':
+                    continue
+                l2v.setdefault(aa, set()).add(u)
+                v2l.setdefault(u, []).append(aa)
+            cache['layer_to_vertices'] = l2v
+            cache['vertex_to_layers'] = v2l
+        return cache['layer_to_vertices'], cache['vertex_to_layers']
 
     def _compute_supra_index(
         self, restrict_layers: list[tuple[str, ...]] | None = None
@@ -887,7 +915,9 @@ class LayerAccessor:
         set[str]
         """
         aa = tuple(layer_tuple)
-        return {u for (u, L), rec in self._entities.items() if rec.kind == 'vertex' and L == aa}
+        layer_to_vertices, _ = self._layer_membership()
+        # Copy: callers mutate the result in-place (e.g. `V &= ...`).
+        return set(layer_to_vertices.get(aa, ()))
 
     def layer_edge_set(
         self,

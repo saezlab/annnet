@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import inspect
 
-from ._base import _BackendAccessorBase
+from ._base import _cached_signature, _BackendAccessorBase
 
 if TYPE_CHECKING:
     pass
@@ -41,6 +41,9 @@ class _GTBackendAccessor(_BackendAccessorBase):
 
     def __init__(self, owner):
         self._init_backend_accessor(owner, cache_attr='_gt_backend_cache')
+        # (converted_graph, id_map, vertex_ids); set here so __getattr__ never
+        # sees it unset (it would otherwise trigger namespace module loading).
+        self._vertex_maps_cache = None
 
         # lazy module map (values are callables)
         self._GT_MODULES = {
@@ -109,8 +112,7 @@ class _GTBackendAccessor(_BackendAccessorBase):
 
     def _coerce_vertices(self, bound, kwargs, gtG):
         label_field = self._infer_label_field()
-        id_map = self._build_id_map(gtG)
-        vertex_ids = {ekey[0] for ekey, rec in self._G._entities.items() if rec.kind == 'vertex'}
+        id_map, vertex_ids = self._vertex_maps(gtG)
 
         def map_one(x):
             # AnnNet internal id?
@@ -135,6 +137,17 @@ class _GTBackendAccessor(_BackendAccessorBase):
         # Raw kwargs
         else:
             self._coerce_vertex_kwargs(kwargs, map_obj)
+
+    def _vertex_maps(self, gtG):
+        # Both maps depend only on the version-cached gtG (built from the current
+        # entities), so memoise by its identity instead of rebuilding O(V) per call.
+        cached = self._vertex_maps_cache
+        if cached is not None and cached[0] is gtG:
+            return cached[1], cached[2]
+        id_map = self._build_id_map(gtG)
+        vertex_ids = {ekey[0] for ekey, rec in self._G._entities.items() if rec.kind == 'vertex'}
+        self._vertex_maps_cache = (gtG, id_map, vertex_ids)
+        return id_map, vertex_ids
 
     def _build_id_map(self, gtG):
         if 'id' not in gtG.vp:
@@ -203,7 +216,7 @@ class _GTNamespaceProxy:
             gtG = None
 
             try:
-                sig = inspect.signature(func)
+                sig = _cached_signature(func)
             except Exception:  # noqa: BLE001
                 sig = None
 

@@ -555,4 +555,23 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
     except ImportError:
         pass
 
+    # G.ig.* wrapper tax with a vertex arg (guards the cached name->index map;
+    # a bulk vertex arg was O(V*k) before caching).
+    try:
+        import igraph as _ig  # noqa: F401
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            G.ig.degree(vertices=['v0'])  # prime the conversion + name-index cache
+            recs.append(
+                rec(
+                    'backend_proxy',
+                    'ig_call_cache_hit',
+                    time=harness.time_repeat(lambda: G.ig.degree(vertices=['v0'])),
+                    note='G.ig.* wrapper tax (1 vertex arg) with caches warm; ~O(1) in V',
+                )
+            )
+    except ImportError:
+        pass
+
     return recs

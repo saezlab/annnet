@@ -1,19 +1,11 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-import inspect
-from functools import lru_cache
 
-from ._base import _BackendAccessorBase
+from ._base import _cached_signature, _BackendAccessorBase
 
 if TYPE_CHECKING:
     from ..graph import AnnNet
-
-
-@lru_cache(maxsize=4096)
-def _cached_signature(fn):
-    """inspect.signature is expensive; NX callables are stable, so memoise it."""
-    return inspect.signature(fn)
 
 
 # name -> resolved networkx callable (global; the nx module set is static).

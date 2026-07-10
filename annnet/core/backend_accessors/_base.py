@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+import inspect
+from functools import lru_cache
 from importlib import import_module
 from collections.abc import Callable
 
@@ -8,6 +10,12 @@ from ..._support.dataframe_backend import dataframe_columns, dataframe_to_rows, 
 
 if TYPE_CHECKING:
     from ..graph import AnnNet
+
+
+@lru_cache(maxsize=4096)
+def _cached_signature(fn):
+    """inspect.signature is expensive; backend callables are stable, so memoise."""
+    return inspect.signature(fn)
 
 
 class _BackendAccessorBase:
