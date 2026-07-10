@@ -1865,7 +1865,6 @@ class LayerAccessor:
         return [tuple(L) for L in layers]
 
     def _build_block(self, include_kinds: set[str], layers: list[str] | list[tuple] | None = None):
-
         layers_t = self._normalize_layers_arg(layers)
         nl_to_row, row_to_nl = self._build_supra_index(layers_t)
         n = len(row_to_nl)
