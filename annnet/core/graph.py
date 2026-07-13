@@ -2797,6 +2797,9 @@ class AnnNet(
     def _remove_vertices_bulk(self, *args, **kwargs):
         return _mutate.remove_vertices_bulk(self, *args, **kwargs)
 
+    def _remove_orphan_node_layers(self, *args, **kwargs):
+        return _mutate.remove_orphan_node_layers(self, *args, **kwargs)
+
     # ------------------------------------------------------------------
     # Layer internals used by LayerAccessor
     # ------------------------------------------------------------------

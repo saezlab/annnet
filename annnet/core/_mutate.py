@@ -884,6 +884,45 @@ def remove_vertices_bulk(g, vertex_ids):
         slice_data['vertices'].difference_update(drop_vertex_ids)
 
 
+def remove_orphan_node_layers(g, drop_keys):
+    """Drop specific ``(vid, layer)`` vertex entities that carry no incident edges.
+
+    Unlike :func:`remove_vertices_bulk` (which drops every edge touching the bare
+    vertex id, and the vertex-attribute row for that id), this removes only the
+    given node-layer entity rows and compacts the incidence matrix. The vertex id
+    itself survives through its other node-layers, so ``vertex_attributes``,
+    slice membership, and incident edges are all left untouched.
+
+    Callers MUST guarantee every key in ``drop_keys`` is an orphan node-layer
+    (no edge references it); the incidence matrix is rebuilt lazily from edge
+    records keyed by node name, so nothing here inspects or rewrites edges.
+    """
+    drop_keys = {k for k in drop_keys if k in g._entities}
+    if not drop_keys:
+        return
+
+    keep_idx = sorted(rec.row_idx for ekey, rec in g._entities.items() if ekey not in drop_keys)
+    _rows, cols = g._matrix_shape
+    D.set_matrix_shape(g, (len(keep_idx), cols))
+    D.invalidate_sparse_caches(g)
+
+    new_entities: dict = {}
+    new_row_to_entity: dict = {}
+    for new_i, old_i in enumerate(keep_idx):
+        ent = g._row_to_entity[old_i]
+        old_rec = g._entities[ent]
+        new_entities[ent] = EntityRecord(row_idx=new_i, kind=old_rec.kind)
+        new_row_to_entity[new_i] = ent
+    g._entities = new_entities
+    g._row_to_entity = new_row_to_entity
+    D.rebuild_entity_indexes(g)
+
+    state_attrs = getattr(g, '_state_attrs', None)
+    if state_attrs:
+        for k in drop_keys:
+            state_attrs.pop(k, None)
+
+
 # -------------------------------------------------------------------------
 # Relocated module-level helpers + vectorized batch write paths (the bulk
 # gateway: the only place batch structural writes happen).

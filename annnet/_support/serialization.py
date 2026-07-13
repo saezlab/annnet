@@ -284,13 +284,48 @@ def restore_multilayer_manifest(
         if missing:
             graph._add_vertices_bulk(missing, layer=layer_tuple)
 
+    # Drop spurious placeholder node-layers. Readers add vertices flat (before
+    # aspects/VM are known), landing them at the ('_', ...) placeholder; the VM
+    # pass above then ALSO places them at their real layer, doubling the
+    # node-layer count. Remove the placeholder membership for any vertex that now
+    # lives at a real layer and that the manifest never listed at the placeholder
+    # — but only when it is a true orphan (no incident edges), so a genuine
+    # placeholder-anchored vertex/edge is never disturbed.
+    entities = graph._entities
+    legit_placeholder = set(vm_by_layer.get(placeholder, ()))
+    by_vid: dict = {}
+    for (u, aa), rec in entities.items():
+        if rec.kind == 'vertex':
+            by_vid.setdefault(u, []).append(aa)
+    candidates = [
+        (u, placeholder)
+        for u, layers in by_vid.items()
+        if placeholder in layers
+        and u not in legit_placeholder
+        and any(a != placeholder for a in layers)
+    ]
+    if candidates:
+        indptr = graph._get_csr().indptr
+        drop = {
+            ek
+            for ek in candidates
+            if indptr[entities[ek].row_idx + 1] == indptr[entities[ek].row_idx]
+        }
+        if drop:
+            graph._remove_orphan_node_layers(drop)
+
     for eid, kind in manifest.get('edge_kind', {}).items():
         if graph.has_edge(edge_id=eid):
             graph.edge_kind[eid] = kind
 
     edge_layers = deserialize_edge_layers(manifest.get('edge_layers', {}))
-    if edge_layers:
-        graph.edge_layers.update(edge_layers)
+    # edge_layers is a proxy over graph._edges; set only where the edge already
+    # exists (mirrors the edge_kind guard above). Consumers that create edges
+    # after the manifest restore (e.g. cx2's visual overlay) would otherwise
+    # KeyError on a not-yet-created edge id.
+    for eid, val in edge_layers.items():
+        if graph.has_edge(edge_id=eid):
+            graph.edge_layers[eid] = val
 
     # node_layer_attrs: write directly into _state_attrs (presence already enforced
     # by the VM pass above) — avoids 40k+ public-API calls each redoing validation.
