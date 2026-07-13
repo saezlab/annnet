@@ -160,6 +160,11 @@ class TestAnnNetIO(unittest.TestCase):
         self._test_both_modes(_test)
 
     def test_zarr_incidence_group(self):
+        # The incidence matrix is only persisted when it carries explicit coeffs
+        # (stoichiometry); otherwise it is rebuilt from records on load. Give the
+        # graph coeffs so the zarr group is written and its encoding validated.
+        self.G.set_edge_coeffs('e1', {'v1': -1.0, 'v2': 1.0})
+
         def _test(use_archive):
             G2, out_path = self._roundtrip(use_archive=use_archive)
             root = self._get_root(out_path, use_archive)
@@ -188,6 +193,20 @@ class TestAnnNetIO(unittest.TestCase):
             # COO consistency: same length across row/col/data
             self.assertEqual(len(row), len(col))
             self.assertEqual(len(row), len(dat))
+
+        self._test_both_modes(_test)
+
+    def test_incidence_omitted_without_coeffs(self):
+        # A graph with no explicit coeffs must NOT persist the incidence matrix
+        # (it is rebuilt from records on load) yet round-trip it exactly.
+        def _test(use_archive):
+            expected = self.G._matrix.tocsr()
+            G2, out_path = self._roundtrip(use_archive=use_archive)
+            root = self._get_root(out_path, use_archive)
+            self.assertFalse((root / 'structure' / 'incidence.zarr').exists())
+            got = G2._matrix.tocsr()
+            self.assertEqual(expected.shape, got.shape)
+            self.assertEqual((expected != got).nnz, 0)
 
         self._test_both_modes(_test)
 
@@ -422,8 +441,10 @@ class TestAnnNetIO(unittest.TestCase):
             for eid in (eids[0], eids[len(eids) // 2], eids[-1]):
                 self.assertEqual(G._edges[eid].weight, G2._edges[eid].weight)
 
-            self.assertLessEqual(len(G2._matrix), int(n_edges * 2))
-            self.assertLess(len(G2._matrix), n_vertices * 50)
+            # nnz, not len(): the incidence cache is CSR (as for a freshly-built
+            # graph) — len() is only defined on the legacy DOK format.
+            self.assertLessEqual(G2._matrix.nnz, int(n_edges * 2))
+            self.assertLess(G2._matrix.nnz, n_vertices * 50)
 
         self._test_both_modes(_test)
 
