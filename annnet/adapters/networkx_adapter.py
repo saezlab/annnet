@@ -51,6 +51,25 @@ if TYPE_CHECKING:
     from ..core import AnnNet
 
 
+# Structural keys that must not be re-applied as hyperedge attributes on import
+# (they are part of the edge dispatch contract).
+_HE_RESERVED_ATTRS = frozenset(
+    {
+        'directed',
+        'edge_directed',
+        'weight',
+        'edge_id',
+        'id',
+        'source',
+        'target',
+        'head',
+        'tail',
+        'members',
+        'kind',
+    }
+)
+
+
 @contextmanager
 def _time(label, timings):
     t0 = time.perf_counter()
@@ -505,7 +524,20 @@ def from_nx(
     edges_def = manifest.get('edges', {}) or {}
     mm = manifest.get('multilayer', {})
 
+    # Declare aspects up front so multilayer supra-node coordinates resolve while
+    # edges and hyperedges are added below. The full multilayer state (presence,
+    # attrs, edge layers) is restored from the same manifest at the end.
+    _asp = mm.get('aspects')
+    if _asp and tuple(H.aspects) != tuple(_asp):
+        H.layers.set_aspects(list(_asp), mm.get('elem_layers') or None)
+
     def add_vertex_once(v):
+        # Multilayer endpoints/members are (vid, layer_coord) supra-node keys, but
+        # the vertex ENTITY is keyed by the bare vid; its layer placement is
+        # restored from the manifest below. Collapsing here avoids registering a
+        # duplicate vertex per (vid, layer).
+        if isinstance(v, tuple):
+            v = v[0]
         if v not in known_vertices:
             known_vertices.add(v)
 
@@ -541,11 +573,23 @@ def from_nx(
                     for x in all_vertices:
                         add_vertex_once(x)
 
-                    # BUILD ATTRIBUTES INLINE
-                    attrs = {
-                        '__source_attr': {u: {'__value': float(c)} for u, c in head_map.items()},
-                        '__target_attr': {v: {'__value': float(c)} for v, c in tail_map.items()},
-                    }
+                    # BUILD ATTRIBUTES INLINE. Only emit the stoichiometry coeff
+                    # maps when they carry real (non-unit) coefficients: their keys
+                    # are member ids, which for multilayer graphs are supra-node
+                    # tuples that the edge-attribute table cannot store.
+                    if any(c != 1.0 for c in head_map.values()) or any(
+                        c != 1.0 for c in tail_map.values()
+                    ):
+                        attrs = {
+                            '__source_attr': {
+                                u: {'__value': float(c)} for u, c in head_map.items()
+                            },
+                            '__target_attr': {
+                                v: {'__value': float(c)} for v, c in tail_map.items()
+                            },
+                        }
+                    else:
+                        attrs = {}
 
                     if is_dir:
                         hyperedges_bulk.append(
@@ -641,21 +685,21 @@ def from_nx(
                 for x in all_vertices:
                     add_vertex_once(x)
 
-                # BUILD ATTRIBUTES INLINE
+                # BUILD ATTRIBUTES INLINE. Only emit stoichiometry coeff maps when
+                # they carry real (non-unit) coefficients — their keys are member
+                # ids, which for multilayer graphs are unserialisable supra-node
+                # tuples (and unit coefficients carry no information).
                 attrs = {}
-                if directed:
+                if any(c != 1.0 for c in head_map.values()) or any(
+                    c != 1.0 for c in tail_map.values()
+                ):
                     attrs['__source_attr'] = {u: {'__value': c} for u, c in head_map.items()}
                     attrs['__target_attr'] = {v: {'__value': c} for v, c in tail_map.items()}
-                else:
-                    attrs['__source_attr'] = {
-                        u: {'__value': head_map[u]} for u in all_vertices if u in head_map
-                    }
-                    attrs['__target_attr'] = {
-                        v: {'__value': tail_map[v]} for v in all_vertices if v in tail_map
-                    }
 
                 clean_attrs = {
-                    k: v for k, v in (he_attrs or {}).items() if k not in {he_node_flag, he_id_attr}
+                    k: v
+                    for k, v in (he_attrs or {}).items()
+                    if k not in _HE_RESERVED_ATTRS and k not in {he_node_flag, he_id_attr}
                 }
                 if clean_attrs:
                     attrs.update(clean_attrs)

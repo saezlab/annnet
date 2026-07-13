@@ -13,6 +13,7 @@ separate manifest.
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 from collections.abc import Iterable
 
 from ..core import AnnNet
@@ -388,6 +389,15 @@ def from_sif(
 
     H = AnnNet(directed=None if manifest and 'binary_edges' in manifest else directed)
 
+    # Multilayer graphs are reconstructed authoritatively from the manifest: the
+    # SIF text carries ``str((vid, layer_coord))`` reprs for supra-node endpoints,
+    # which would otherwise create one spurious vertex per repr string and lose the
+    # aspects. Declare the aspects up front so supra endpoints resolve on add.
+    _ml = manifest.get('multilayer', {}) if manifest else {}
+    _is_ml = bool(_ml.get('aspects'))
+    if _is_ml:
+        H.layers.set_aspects(list(_ml['aspects']), _ml.get('elem_layers') or None)
+
     # Single-key hashing with separator
     SEP = '\x00'  # NULL byte - impossible in text files
     binary_edge_index = None
@@ -473,7 +483,9 @@ def from_sif(
     append_edge = edges_raw.append
     comment_tuple = tuple(comment_prefixes)
 
-    with open(path, encoding=encoding) as f:
+    # Skip the lossy SIF text in multilayer mode; edges/hyperedges come from the
+    # manifest below with proper supra-node endpoints.
+    with nullcontext([]) if _is_ml else open(path, encoding=encoding) as f:
         for raw in f:
             # Inline fast path for comments
             if raw.startswith(comment_tuple):
@@ -512,7 +524,26 @@ def from_sif(
         H._add_vertices_bulk(vertices_bulk)
 
     # ===== BULK ADD EDGES WITH FAST HASHING + DELAYED EXPANSION =====
-    if manifest and 'binary_edges' in manifest:
+    if _is_ml and manifest and 'binary_edges' in manifest:
+        # Multilayer: rebuild binary edges straight from the manifest with proper
+        # supra-node endpoints (the SIF text was skipped above).
+        edge_meta_all = manifest.get('edge_metadata', {})
+        edges_bulk = []
+        for orig_eid, info in manifest['binary_edges'].items():
+            meta = edge_meta_all.get(orig_eid, {})
+            edges_bulk.append(
+                {
+                    'source': deserialize_endpoint(info.get('source_endpoint')),
+                    'target': deserialize_endpoint(info.get('target_endpoint')),
+                    'weight': meta.get('weight', 1.0),
+                    'edge_id': orig_eid,
+                    'edge_directed': info.get('directed', directed),
+                    'attributes': meta.get('attrs', {}) or {},
+                }
+            )
+        if edges_bulk:
+            H._add_edges_bulk(edges_bulk, default_weight=1.0, default_edge_directed=directed)
+    elif manifest and 'binary_edges' in manifest:
         # Lossless mode with single-key lookup
         edges_bulk = []
         get_edge = binary_edge_index.get  # Localize
@@ -579,10 +610,10 @@ def from_sif(
             }
 
             if directed_he:
-                he_dict['head'] = info.get('head', [])
-                he_dict['tail'] = info.get('tail', [])
+                he_dict['head'] = [deserialize_endpoint(m) for m in info.get('head', [])]
+                he_dict['tail'] = [deserialize_endpoint(m) for m in info.get('tail', [])]
             else:
-                he_dict['members'] = info.get('members', [])
+                he_dict['members'] = [deserialize_endpoint(m) for m in info.get('members', [])]
 
             hyperedges_bulk.append(he_dict)
 

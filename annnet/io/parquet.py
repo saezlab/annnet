@@ -104,18 +104,26 @@ def _as_list_or_empty(val):
     if _is_nullish(val):
         return []
 
-    # already list / tuple
-    if isinstance(val, list):
-        return val
-    if isinstance(val, tuple):
-        return list(val)
-    if hasattr(val, 'to_list') and callable(val.to_list):
-        return val.to_list()
-    if hasattr(val, 'tolist') and callable(val.tolist):
-        return val.tolist()
+    # JSON-encoded endpoint list (current format for head/tail/members).
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+        except (json.JSONDecodeError, ValueError):
+            return [val]
+        val = parsed if isinstance(parsed, list) else [parsed]
 
-    # scalar -> singleton
-    return [val]
+    if isinstance(val, (list, tuple)):
+        seq = list(val)
+    elif hasattr(val, 'to_list') and callable(val.to_list):
+        seq = val.to_list()
+    elif hasattr(val, 'tolist') and callable(val.tolist):
+        seq = val.tolist()
+    else:
+        # scalar -> singleton
+        seq = [val]
+
+    # Restore multilayer supra-node keys; bare-string members pass through.
+    return [deserialize_endpoint(x) for x in seq]
 
 
 def _build_attr_map(df, key_col: str) -> dict:
@@ -219,9 +227,18 @@ def to_parquet(graph: AnnNet, path):
         tail_map = endpoint_coeff_map(row, '__target_attr', T) or dict.fromkeys(T or [], 1.0)
         row.update(
             {
-                'head': list(head_map.keys()),
-                'tail': list(tail_map.keys()),
-                'members': list({*head_map.keys(), *tail_map.keys()})
+                # JSON-encode endpoints (like source/target) so multilayer
+                # supra-node keys survive the columnar String dtype.
+                'head': json.dumps(
+                    [serialize_endpoint(x) for x in head_map.keys()], ensure_ascii=False
+                ),
+                'tail': json.dumps(
+                    [serialize_endpoint(x) for x in tail_map.keys()], ensure_ascii=False
+                ),
+                'members': json.dumps(
+                    [serialize_endpoint(x) for x in {*head_map.keys(), *tail_map.keys()}],
+                    ensure_ascii=False,
+                )
                 if not row['directed']
                 else None,
             }
@@ -335,6 +352,16 @@ def from_parquet(path) -> AnnNet:
     )
 
     H = AnnNet()
+
+    # Declare aspects up front so multilayer supra-node coordinates resolve while
+    # edges and hyperedges are added below. The full multilayer state (presence,
+    # layer attrs) is restored from the same manifest at the end.
+    _manifest_path = path / 'manifest.json'
+    if _manifest_path.exists():
+        _ml = json.loads(_manifest_path.read_text()).get('multilayer', {})
+        _asp = _ml.get('aspects')
+        if _asp and tuple(H.aspects) != tuple(_asp):
+            H.layers.set_aspects(list(_asp), _ml.get('elem_layers') or None)
 
     # -------------------------
     # Vertices (bulk)

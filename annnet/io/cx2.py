@@ -153,6 +153,17 @@ def _jsonify(obj):
         return obj
 
 
+def _tuplify(obj):
+    """Recursively turn JSON lists back into tuples.
+
+    Multilayer endpoints and hyperedge members serialise as ``(vid, layer_coord)``
+    tuples, which JSON stores as nested lists. Restoring the tuples makes them
+    hashable again (needed for the ``set`` reconstruction below) and matches the
+    original supra-node key shape.
+    """
+    return tuple(_tuplify(x) for x in obj) if isinstance(obj, list) else obj
+
+
 # --- Core Adapter: to_cx2 ---
 
 
@@ -426,6 +437,11 @@ def to_cx2(
             if id_col in r:
                 e_attrs_map[str(r[id_col])] = r
 
+    def _bare(x):
+        # Multilayer endpoints/members are (vid, layer_coord) supra-node keys;
+        # the visual CX2 nodes are keyed by the bare vertex id (see node_map).
+        return x[0] if isinstance(x, tuple) else x
+
     for eid, rec in G._edges.items():
         is_hyper = rec.etype == 'hyper'
 
@@ -436,10 +452,10 @@ def to_cx2(
 
             directed = rec.tgt is not None
             if directed:
-                S = set(rec.src or [])
-                T = set(rec.tgt or [])
+                S = {_bare(x) for x in (rec.src or [])}
+                T = {_bare(x) for x in (rec.tgt or [])}
             else:
-                members = set(rec.src or [])
+                members = {_bare(x) for x in (rec.src or [])}
                 S = members
                 T = members
 
@@ -452,6 +468,12 @@ def to_cx2(
                     'expanded_edges': [],
                 }
                 members = S | T
+                # Drop the structural id keys so they do not reappear as edge
+                # attributes on read-back (they collide with reserved names).
+                exp_raw = e_attrs_map.get(str(eid), {}).copy()
+                exp_raw.pop('edge_id', None)
+                exp_raw.pop('id', None)
+                clean_attrs = _clean_cx2_attrs(exp_raw, e_string_cols)
                 if directed:
                     # tail -> head cartesian
                     for u in T:
@@ -459,8 +481,6 @@ def to_cx2(
                             exp_entry['expanded_edges'].append([u, v])
                             cx_eid = current_edge_id
                             current_edge_id += 1
-                            raw_attrs = e_attrs_map.get(str(eid), {})
-                            clean_attrs = _clean_cx2_attrs(raw_attrs, e_string_cols)
                             cx_edges.append(
                                 {
                                     'id': cx_eid,
@@ -483,8 +503,6 @@ def to_cx2(
                             exp_entry['expanded_edges'].append([u, v])
                             cx_eid = current_edge_id
                             current_edge_id += 1
-                            raw_attrs = e_attrs_map.get(str(eid), {})
-                            clean_attrs = _clean_cx2_attrs(raw_attrs, e_string_cols)
                             cx_edges.append(
                                 {
                                     'id': cx_eid,
@@ -580,7 +598,7 @@ def to_cx2(
             # unknown hyperedge mode - skip
             continue
 
-        u, v = rec.src, rec.tgt
+        u, v = _bare(rec.src), _bare(rec.tgt)
 
         if u not in node_map or v not in node_map:
             continue
@@ -842,106 +860,86 @@ def from_cx2(
         if e_rows:
             G.edge_attributes = _rows_to_df(e_rows)
 
-        # weights, directed flags, definitions
-        if emeta.get('weights'):
-            for eid, w in emeta['weights'].items():
-                rec = G._edges.get(eid)
-                if rec is not None:
-                    rec.weight = float(w)
-        if emeta.get('directed'):
-            for eid, val in emeta['directed'].items():
-                rec = G._edges.get(eid)
-                if rec is not None:
-                    rec.directed = bool(val)
-        if emeta.get('definitions'):
-            for eid, defn in emeta['definitions'].items():
-                rec = G._edges.get(eid)
-                if rec is None:
-                    continue
-                rec.src, rec.tgt, rec.etype = defn
+        # Reconstruct the graph structure from the manifest (the authoritative
+        # source). Declare aspects first so multilayer supra-node coordinates
+        # resolve while edges/hyperedges are added; the visual node/edge overlay
+        # is skipped in manifest mode (its reified/expanded edges would otherwise
+        # rebuild the wrong topology).
+        mm = manifest.get('multilayer', {})
+        _asp = mm.get('aspects')
+        if _asp and tuple(G.aspects) != tuple(_asp):
+            G.layers.set_aspects(list(_asp), mm.get('elem_layers') or None)
+
+        _vids = [r.get('vertex_id', r.get('id')) for r in v_rows]
+        _vids = [v for v in _vids if v is not None]
+        if _vids:
+            G._add_vertices_bulk([{'vertex_id': v} for v in _vids])
+
+        _weights = emeta.get('weights', {}) or {}
+        _directed = emeta.get('directed', {}) or {}
+
+        # Binary edges from the manifest definitions.
+        _bin = []
+        for eid, defn in (emeta.get('definitions') or {}).items():
+            src, tgt, etype = defn
+            if etype == 'hyper':
+                continue
+            _bin.append(
+                {
+                    'source': _tuplify(src),
+                    'target': _tuplify(tgt),
+                    'edge_id': eid,
+                    'weight': float(_weights.get(eid, 1.0)),
+                    'edge_directed': bool(_directed.get(eid, True)),
+                }
+            )
+        if _bin:
+            G._add_edges_bulk(_bin)
+
+        # Hyperedges from the manifest (authoritative regardless of export mode).
+        _he = []
+        for eid, info in (emeta.get('hyperedges') or {}).items():
+            w = float(_weights.get(eid, 1.0))
+            if isinstance(info, list):
+                members = [_tuplify(m) for m in info]
+                if len(members) >= 2:
+                    _he.append(
+                        {'members': members, 'edge_id': eid, 'edge_directed': False, 'weight': w}
+                    )
+            elif info.get('directed'):
+                head = [_tuplify(m) for m in info.get('head', [])]
+                tail = [_tuplify(m) for m in info.get('tail', [])]
+                if head and tail:
+                    _he.append(
+                        {
+                            'head': head,
+                            'tail': tail,
+                            'edge_id': eid,
+                            'edge_directed': True,
+                            'weight': w,
+                        }
+                    )
+            else:
+                members = [_tuplify(m) for m in info.get('members', [])]
+                if len(members) >= 2:
+                    _he.append(
+                        {'members': members, 'edge_id': eid, 'edge_directed': False, 'weight': w}
+                    )
+        if _he:
+            G.add_hyperedges_bulk(_he)
+
         if emeta.get('direction_policy'):
             G.edge_direction_policy.update(emeta['direction_policy'])
 
-        # hyperedge definitions
-        if emeta.get('hyperedges'):
-            fixed = {}
-            for eid, info in emeta['hyperedges'].items():
-                # Older / simple manifests store hyperedges as a plain list of members
-                # e.g. "he1": ["n1", "n2", "n3"]
-                if isinstance(info, list):
-                    fixed[eid] = {
-                        'directed': False,
-                        'members': set(info),
-                    }
-                    continue
-
-                # Newer manifests: dict form with keys like "directed", "members" or "head"/"tail"
-                directed = bool(info.get('directed', False))
-                if directed:
-                    fixed[eid] = {
-                        'directed': True,
-                        'head': set(info.get('head', [])),
-                        'tail': set(info.get('tail', [])),
-                    }
-                else:
-                    fixed[eid] = {
-                        'directed': False,
-                        'members': set(info.get('members', [])),
-                    }
-            for eid, info in fixed.items():
-                rec = G._edges.get(eid)
-                if rec is None:
-                    continue
-                rec.etype = 'hyper'
-                if info['directed']:
-                    rec.src = list(info.get('head', []))
-                    rec.tgt = list(info.get('tail', []))
-                    rec.directed = True
-                else:
-                    rec.src = list(info.get('members', []))
-                    rec.tgt = None
-                    rec.directed = False
-
-        # --- Expanded hyperedges (if present) ---
-        exp = emeta.get('expanded', {})
-        if exp:
-            hyperedge_bulk_data = []
-            for eid, info in exp.items():
-                directed = info.get('mode') == 'directed'
-                if directed:
-                    hyperedge_bulk_data.append(
-                        {
-                            'head': info.get('head', []),
-                            'tail': info.get('tail', []),
-                            'edge_id': eid,
-                            'edge_directed': True,
-                        }
-                    )
-                else:
-                    hyperedge_bulk_data.append(
-                        {
-                            'members': info.get('members', []),
-                            'edge_id': eid,
-                            'edge_directed': False,
-                        }
-                    )
-
-            if hyperedge_bulk_data:
-                G.add_hyperedges_bulk(hyperedge_bulk_data)
-
-        # --- Layers (Kivela)---
+        # --- Layers (Kivela): edge_kind + edge_layers (edges now exist) ---
         kiv = emeta.get('kivela', {})
-        if kiv.get('edge_kind'):
-            for eid, kind in kiv['edge_kind'].items():
-                rec = G._edges.get(eid)
-                if rec is None:
-                    continue
-                if kind == 'hyper':
-                    rec.etype = 'hyper'
-                else:
-                    rec.ml_kind = kind
-        if kiv.get('edge_layers'):
-            G.edge_layers.update(kiv['edge_layers'])
+        for eid, kind in (kiv.get('edge_kind') or {}).items():
+            rec = G._edges.get(eid)
+            if rec is not None and kind != 'hyper':
+                rec.ml_kind = kind
+        for eid, val in (kiv.get('edge_layers') or {}).items():
+            if eid in G._edges:
+                G.edge_layers[eid] = val
 
         # --- Slices ---
         smeta = manifest.get('slices', {})
@@ -970,9 +968,8 @@ def from_cx2(
             deserialize_edge_layers=deserialize_edge_layers,
         )
 
-        # --- OPTIONAL: overlay reified hyperedges ---
-        if hyperedges == 'reified':
-            _cx2_collect_reified(aspects, G)
+        # Hyperedges were reconstructed from the manifest above; the visual
+        # reified-detection overlay is not needed and would add spurious edges.
 
     # PATH B: NO MANIFEST
 
@@ -1009,8 +1006,11 @@ def from_cx2(
             vmap[vid] = dict(r)
 
     # --- update vertex attrs ---
+    # In manifest mode the structure (vertices, edges, hyperedges) is already
+    # reconstructed from the manifest above; skip the visual node/edge overlay,
+    # which would re-add reified hyperedge nodes and the wrong edge topology.
     vertex_bulk_data = []
-    for n in node_aspects:
+    for n in [] if _manifest_mode else node_aspects:
         cx_id = n['id']
         attrs = dict(n.get('v', {}))
         ann_id = str(attrs.get('name', cx_id))
@@ -1068,7 +1068,7 @@ def from_cx2(
             emap[eid] = dict(r)
 
     edge_bulk_data = []
-    for e in aspects.get('edges', []):
+    for e in [] if _manifest_mode else aspects.get('edges', []):
         s = cx2node.get(e['s'])
         t = cx2node.get(e['t'])
         if not s or not t:
@@ -1086,8 +1086,13 @@ def from_cx2(
             'weight': w,
         }
 
-        # Collect additional attributes (excluding interaction and weight)
-        extra_attrs = {k: v for k, v in attrs.items() if k not in ('interaction', 'weight')}
+        # Collect additional attributes, excluding reserved structural keys
+        # (they would collide with the edge dispatch contract on bulk insert).
+        extra_attrs = {
+            k: v
+            for k, v in attrs.items()
+            if k not in ('interaction', 'weight', 'edge_id', 'id', 'source', 'target', 'src', 'tgt')
+        }
         if extra_attrs:
             edge_dict['attributes'] = extra_attrs
             if not _manifest_mode:
@@ -1125,9 +1130,15 @@ def show_cx2(  # pragma: no cover  — Flask preview server, not covered in unit
     hyperedges='skip',
     port=None,
     auto_open=True,
-) -> str:
+    inline=False,
+    height='520px',
+):
     """
     Visualize graph in web browser using Cytoscape.js.
+
+    Set ``inline=True`` inside a Jupyter notebook to render the network directly in
+    the cell output (returns an ``IPython.display.HTML`` object) instead of starting
+    a local web server. ``height`` sizes the inline container.
 
     Parameters
     ----------
@@ -1207,6 +1218,43 @@ def show_cx2(  # pragma: no cover  — Flask preview server, not covered in unit
     )
 
     cytoscape_json = _cx2_to_cytoscapejs(cx2_data)
+
+    if inline:
+        # Render directly in the notebook cell; no server, no browser.
+        from IPython.display import HTML
+
+        # Canonical Cytoscape.js element form is a flat array; nodes first, then
+        # edges (so an edge never references a not-yet-registered node).
+        elements = list(cytoscape_json.get('nodes', [])) + list(cytoscape_json.get('edges', []))
+        cid = f'cy_{abs(hash((export_name, len(elements)))) % 10**8}'
+        inline_html = f"""
+<div id="{cid}" style="width:100%;height:{height};border:1px solid #ddd;position:relative;"></div>
+<div style="font:12px sans-serif;color:#555;margin-top:4px">{export_name} —
+{len(cytoscape_json.get('nodes', []))} nodes, {len(cytoscape_json.get('edges', []))} edges</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+<script>
+(function() {{
+  function draw() {{
+    cytoscape({{
+      container: document.getElementById("{cid}"),
+      elements: {json.dumps(elements)},
+      style: [
+        {{selector: 'node', style: {{'background-color': '#0074D9', 'label': 'data(label)',
+          'width': 22, 'height': 22, 'font-size': '9px', 'color': '#222',
+          'text-outline-width': 2, 'text-outline-color': '#fff'}}}},
+        {{selector: 'node[?is_hyperedge]', style: {{'background-color': '#ff851b', 'shape': 'diamond'}}}},
+        {{selector: 'edge', style: {{'width': 2.5, 'line-color': '#555',
+          'target-arrow-color': '#555', 'target-arrow-shape': 'triangle',
+          'arrow-scale': 0.9, 'curve-style': 'bezier', 'opacity': 1}}}}
+      ],
+      layout: {{name: 'cose', animate: false, numIter: 800, nodeRepulsion: 8000, idealEdgeLength: 70}}
+    }});
+  }}
+  if (window.cytoscape) {{ draw(); }}
+  else {{ var iv = setInterval(function() {{ if (window.cytoscape) {{ clearInterval(iv); draw(); }} }}, 100); }}
+}})();
+</script>"""
+        return HTML(inline_html)
 
     html_content = f"""
     <!DOCTYPE html>
@@ -1351,7 +1399,10 @@ def _cx2_to_cytoscapejs(cx2_data: list[dict]) -> dict:
                 edges.append(
                     {
                         'data': {
-                            'id': str(edge['id']),
+                            # Cytoscape.js requires ids unique across nodes AND
+                            # edges; CX2 numbers them in separate spaces, so
+                            # namespace the edge id to avoid colliding with a node.
+                            'id': f'e{edge["id"]}',
                             'source': source,
                             'target': target,
                             **edge.get('v', {}),

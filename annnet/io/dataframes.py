@@ -13,15 +13,30 @@ specific dataframe library.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from ..core import AnnNet
 from ._common import (
+    _rows_to_df,
     dataframe_height,
     dataframe_columns,
     dataframe_to_rows,
     dataframe_from_rows,
+    serialize_edge_layers,
+    deserialize_edge_layers,
+    restore_multilayer_manifest,
+    serialize_multilayer_manifest,
 )
+from .._support.serialization import serialize_endpoint, deserialize_endpoint
+
+
+def _encode_endpoint(x):
+    """Keep bare-vid endpoints readable; JSON-encode multilayer supra-node keys.
+
+    A column of endpoints then stays a flat String column.
+    """
+    return json.dumps(serialize_endpoint(x)) if isinstance(x, tuple) else x
 
 
 def _binary_edge_rows(graph: AnnNet, edge_attrs: dict, *, public_only: bool):
@@ -32,8 +47,8 @@ def _binary_edge_rows(graph: AnnNet, edge_attrs: dict, *, public_only: bool):
     for eid, (src, tgt, etype) in graph.edge_definitions.items():
         row = {
             'edge_id': eid,
-            'source': src,
-            'target': tgt,
+            'source': _encode_endpoint(src),
+            'target': _encode_endpoint(tgt),
             'weight': 1.0 if edge_weights.get(eid) is None else float(edge_weights[eid]),
             'directed': edge_directed.get(eid, default_directed),
             'edge_type': etype,
@@ -100,13 +115,15 @@ def _hyperedge_rows(graph: AnnNet, edge_attrs: dict, *, public_only: bool, explo
                     yield row
             continue
 
+        # serialize_endpoint keeps multilayer supra-node keys JSON-safe inside
+        # the list_text columns (raw (vid, coord) tuples break the backend).
         row = {
             'edge_id': eid,
             'directed': directed,
             'weight': weight,
-            'head': list(spec.get('head', [])) if directed else None,
-            'tail': list(spec.get('tail', [])) if directed else None,
-            'members': None if directed else list(spec.get('members', [])),
+            'head': [_encode_endpoint(x) for x in spec.get('head', [])] if directed else None,
+            'tail': [_encode_endpoint(x) for x in spec.get('tail', [])] if directed else None,
+            'members': None if directed else [_encode_endpoint(x) for x in spec.get('members', [])],
         }
         row.update(attr_dict)
         yield row
@@ -257,6 +274,15 @@ def to_dataframes(
             backend=backend,
         )
 
+    # Multilayer aspect structure (only for multilayer graphs, so single-layer
+    # output is unchanged). Stored as a plain dict alongside the frames.
+    if graph.aspects:
+        result['multilayer'] = serialize_multilayer_manifest(
+            graph,
+            table_to_rows=dataframe_to_rows,
+            serialize_edge_layers=serialize_edge_layers,
+        )
+
     return result
 
 
@@ -267,6 +293,7 @@ def from_dataframes(
     slices: Any | None = None,
     slice_weights: Any | None = None,
     *,
+    multilayer: dict | None = None,
     directed: bool | None = None,
     exploded_hyperedges: bool = False,
 ) -> AnnNet:
@@ -319,8 +346,17 @@ def from_dataframes(
             slices = bundle.get('slices')
         if slice_weights is None:
             slice_weights = bundle.get('slice_weights')
+        if multilayer is None:
+            multilayer = bundle.get('multilayer')
 
     G = AnnNet(directed=directed)
+
+    # Declare aspects up front so multilayer supra-node coordinates resolve while
+    # edges and hyperedges are added below.
+    if multilayer:
+        _asp = multilayer.get('aspects')
+        if _asp and tuple(G.aspects) != tuple(_asp):
+            G.layers.set_aspects(list(_asp), multilayer.get('elem_layers') or None)
 
     # 1. Add vertices
     if nodes is not None:
@@ -338,8 +374,8 @@ def from_dataframes(
 
             edge_rows = []
             for row in dataframe_to_rows(edges):
-                src = row.pop('source')
-                tgt = row.pop('target')
+                src = deserialize_endpoint(row.pop('source'))
+                tgt = deserialize_endpoint(row.pop('target'))
                 eid = row.pop('edge_id', None)
                 weight = row.pop('weight', 1.0)
                 edge_directed = row.pop('directed', directed)
@@ -408,32 +444,46 @@ def from_dataframes(
                 if 'edge_id' not in dataframe_columns(hyperedges):
                     raise ValueError("hyperedges DataFrame must have 'edge_id' column")
 
+                # Accumulate then add in one bulk call. Per-row add_edges rebuilds
+                # the incidence matrix each time (~O(N^2) for many hyperedges).
+                he_bulk = []
+                attr_updates: dict = {}
                 for row in dataframe_to_rows(hyperedges):
                     eid = row.pop('edge_id')
                     directed_he = row.pop('directed', False)
                     weight = row.pop('weight', 1.0)
-                    head = row.pop('head', None)
-                    tail = row.pop('tail', None)
-                    members = row.pop('members', None)
+                    head = [deserialize_endpoint(x) for x in (row.pop('head', None) or [])]
+                    tail = [deserialize_endpoint(x) for x in (row.pop('tail', None) or [])]
+                    members = [deserialize_endpoint(x) for x in (row.pop('members', None) or [])]
 
                     if directed_he:
-                        G.add_edges(
-                            src=head or [],
-                            tgt=tail or [],
-                            edge_id=eid,
-                            directed=True,
-                            weight=weight,
+                        he_bulk.append(
+                            {
+                                'head': head,
+                                'tail': tail,
+                                'edge_id': eid,
+                                'edge_directed': True,
+                                'weight': weight,
+                            }
                         )
                     else:
-                        G.add_edges(
-                            src=members or [],
-                            edge_id=eid,
-                            directed=False,
-                            weight=weight,
+                        he_bulk.append(
+                            {
+                                'members': members,
+                                'edge_id': eid,
+                                'edge_directed': False,
+                                'weight': weight,
+                            }
                         )
 
-                    if row:
-                        G.attrs.set_edge_attrs(eid, **row)
+                    clean = {k: v for k, v in row.items() if v is not None}
+                    if clean:
+                        attr_updates[eid] = clean
+
+                if he_bulk:
+                    G.add_hyperedges_bulk(he_bulk)
+                if attr_updates:
+                    G.attrs.set_edge_attrs_bulk(attr_updates)
 
     # 4. Add slice memberships (bulk per slice — per-row was O(rows) graph ops)
     if slices is not None and dataframe_height(slices) > 0:
@@ -470,5 +520,15 @@ def from_dataframes(
                     weights_by_slice.setdefault(lid, {})[eid] = {'weight': row['weight']}
             for lid, mp in weights_by_slice.items():
                 G.attrs.set_edge_slice_attrs_bulk(lid, mp)
+
+    # 5. Restore the full multilayer state (vertex-layer presence, layer attrs,
+    # edge layers). Aspects were already declared above.
+    if multilayer:
+        restore_multilayer_manifest(
+            G,
+            multilayer,
+            rows_to_table=_rows_to_df,
+            deserialize_edge_layers=deserialize_edge_layers,
+        )
 
     return G

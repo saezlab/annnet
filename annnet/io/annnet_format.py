@@ -203,12 +203,19 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
         root.mkdir(parents=True, exist_ok=True)
 
     # 1. Write manifest
+    # The incidence matrix is only persisted when it carries data not recoverable
+    # from the edge records — i.e. explicit coeffs (stoichiometry). Otherwise it
+    # is rebuilt from records on load, saving compression on write and a load +
+    # rebuild on read. The shape is recorded so the lazy rebuild knows its extent.
+    incidence_stored = any(rec.coeffs is not None for rec in graph._edges.values())
     manifest = {
         'format': 'annnet',
         'created': datetime.now(UTC).isoformat(),
         'annnet_version': ANNNET_VERSION,
         'graph_version': graph._version,
         'directed': graph.directed,
+        'matrix_shape': list(graph._matrix_shape),
+        'incidence_stored': incidence_stored,
         'counts': {
             'vertices': sum(1 for r in graph._entities.values() if r.kind == 'vertex'),
             'edges': graph.ne,
@@ -231,7 +238,9 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
     layer_dict = _build_layer_dict(graph)
 
     # 2. Write structure/ (topology + layer dict)
-    _write_structure(graph, root / 'structure', compression, layer_dict)
+    _write_structure(
+        graph, root / 'structure', compression, layer_dict, store_incidence=incidence_stored
+    )
 
     # 3. Write tables/ (Polars > Parquet)
     _write_tables(graph, root / 'tables', compression)
@@ -276,7 +285,9 @@ def write(
     return _write_dir(graph, path, compression=compression, overwrite=overwrite)
 
 
-def _write_structure(graph, path: Path, compression: str, layer_dict: _LayerDict):
+def _write_structure(
+    graph, path: Path, compression: str, layer_dict: _LayerDict, *, store_incidence: bool = True
+):
     """Write sparse incidence matrix, layer dictionary, and merged edge tables.
 
     v2 layout:
@@ -296,20 +307,22 @@ def _write_structure(graph, path: Path, compression: str, layer_dict: _LayerDict
     # 1. Layer dictionary — read first on load, before any layer_id consumer
     (path / 'layer_dict.json').write_text(json.dumps(layer_dict.to_json()))
 
-    # 2. Sparse incidence matrix (Zarr)
-    coo = graph._matrix.tocoo()
-    root = zarr.open_group(str(path / 'incidence.zarr'), mode='w')
+    # 2. Sparse incidence matrix (Zarr) — only when it holds explicit coeffs;
+    # otherwise it is rebuilt from records on load (see read()).
+    if store_incidence:
+        coo = graph._matrix.tocoo()
+        root = zarr.open_group(str(path / 'incidence.zarr'), mode='w')
 
-    from zarr.codecs import BloscCname, BloscCodec, BloscShuffle
+        from zarr.codecs import BloscCname, BloscCodec, BloscShuffle
 
-    codec = BloscCodec(cname=BloscCname.zstd, clevel=5, shuffle=BloscShuffle.shuffle)
-    row = np.asarray(coo.row, dtype=np.int32)
-    col = np.asarray(coo.col, dtype=np.int32)
-    dat = np.asarray(coo.data, dtype=np.float32)
-    root.create_array('row', data=row, chunks=(10000,), compressors=[codec])
-    root.create_array('col', data=col, chunks=(10000,), compressors=[codec])
-    root.create_array('data', data=dat, chunks=(10000,), compressors=[codec])
-    root.attrs['shape'] = coo.shape
+        codec = BloscCodec(cname=BloscCname.zstd, clevel=5, shuffle=BloscShuffle.shuffle)
+        row = np.asarray(coo.row, dtype=np.int32)
+        col = np.asarray(coo.col, dtype=np.int32)
+        dat = np.asarray(coo.data, dtype=np.float32)
+        root.create_array('row', data=row, chunks=(10000,), compressors=[codec])
+        root.create_array('col', data=col, chunks=(10000,), compressors=[codec])
+        root.create_array('data', data=dat, chunks=(10000,), compressors=[codec])
+        root.attrs['shape'] = coo.shape
 
     # 3. Entity index — layer expressed as int32 id into layer_dict
     ent_ids: list = []
@@ -641,22 +654,21 @@ def _write_slices(graph, path: Path, compression: str, layer_dict: _LayerDict):
     dataframe_write_parquet(vm_df, path / 'vertex_memberships.parquet')
 
     # Edge memberships with weights
-    edge_members: list[dict] = []
+    # Columnar (mirrors vertex memberships): building one dict per membership
+    # row and transposing dominated write() on the edge-membership table.
+    em_slice_ids: list = []
+    em_edge_ids: list = []
+    em_weights: list = []
     for slice_id, edge_ids in slice_membership.items():
+        sw = slice_weights.get(slice_id) or {}
         for edge_id in edge_ids:
-            edge_members.append(
-                {
-                    'slice_id': slice_id,
-                    'edge_id': edge_id,
-                    'weight': (slice_weights.get(slice_id) or {}).get(edge_id),
-                }
-            )
-    # Ensure a stable schema even if there are zero rows
-    if edge_members:
-        em_df = _df_from_dict(edge_members)
-    else:
-        # explicit empty schema for pandas too
-        em_df = _df_from_dict({'slice_id': [], 'edge_id': [], 'weight': []})
+            em_slice_ids.append(slice_id)
+            em_edge_ids.append(edge_id)
+            em_weights.append(sw.get(edge_id))
+    em_df = dataframe_from_columns(
+        {'slice_id': em_slice_ids, 'edge_id': em_edge_ids, 'weight': em_weights},
+        schema={'slice_id': 'text', 'edge_id': 'text', 'weight': 'float'},
+    )
     dataframe_write_parquet(em_df, path / 'edge_memberships.parquet')
 
 
@@ -834,7 +846,13 @@ def read(path: str | Path, *, lazy: bool = False) -> AnnNet:
             G._ensure_placeholder_layers_declared()
 
     # 3. Load structure
-    _load_structure(G, structure_dir, lazy=lazy, layer_dict=layer_dict)
+    _load_structure(
+        G,
+        structure_dir,
+        lazy=lazy,
+        layer_dict=layer_dict,
+        matrix_shape=manifest.get('matrix_shape'),
+    )
 
     # 4. Load tables
     _load_tables(G, root / 'tables')
@@ -858,24 +876,56 @@ def read(path: str | Path, *, lazy: bool = False) -> AnnNet:
     return G
 
 
-def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
+def _columns_as_lists(df, names):
+    """Return ``{name: list}`` for each requested column (missing -> all None).
+
+    Columnar access avoids materialising one dict per row (polars ``iter_rows``
+    dominated ``read()`` on the edges table); the loop then ``zip``s the lists.
+    """
+    try:
+        import polars as _pl
+
+        if isinstance(df, _pl.DataFrame):
+            height = df.height
+            present = set(df.columns)
+            return {
+                name: (df[name].to_list() if name in present else [None] * height) for name in names
+            }
+    except ImportError:
+        pass
+    rows = list(dataframe_iter_rows(df))
+    return {name: [r.get(name) for r in rows] for name in names}
+
+
+def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matrix_shape=None):
     """Load incidence matrix, entity index, and merged edges from v2 layout."""
     import zarr
 
-    # 1. Sparse incidence matrix (Zarr)
-    try:
-        inc_store = zarr.DirectoryStore(str(path / 'incidence.zarr'))
-        inc_root = zarr.group(store=inc_store)
-    except AttributeError:
-        inc_root = zarr.open_group(str(path / 'incidence.zarr'), mode='r')
+    # 1. Sparse incidence matrix. Persisted only for stoichiometric graphs; when
+    # absent it is rebuilt from the edge records on first access (records are the
+    # source of truth for everything except explicit coeffs).
+    if (path / 'incidence.zarr').exists():
+        try:
+            inc_store = zarr.DirectoryStore(str(path / 'incidence.zarr'))
+            inc_root = zarr.group(store=inc_store)
+        except AttributeError:
+            inc_root = zarr.open_group(str(path / 'incidence.zarr'), mode='r')
 
-    row = inc_root['row'][:]
-    col = inc_root['col'][:]
-    data = inc_root['data'][:]
-    shape = tuple(inc_root.attrs['shape'])
+        row = inc_root['row'][:]
+        col = inc_root['col'][:]
+        data = inc_root['data'][:]
+        shape = tuple(inc_root.attrs['shape'])
 
-    coo = sp.coo_matrix((data, (row, col)), shape=shape, dtype=np.float32)
-    graph._matrix = coo.todok()
+        coo = sp.coo_matrix((data, (row, col)), shape=shape, dtype=np.float32)
+        # CSR is the format the lazy matrix cache uses; building a DOK here just to
+        # hand it to the setter meant an O(nnz) Python-dict build on every read.
+        graph._matrix = coo.tocsr()
+    else:
+        # No stored incidence: defer to a lazy rebuild from records. Fix the
+        # logical shape now so rebuild_matrix knows the extent.
+        if matrix_shape is not None:
+            graph._matrix_shape = tuple(matrix_shape)
+        graph._mark_matrix_dirty()
 
     from annnet.core._records import EdgeRecord, EntityRecord
 
@@ -954,17 +1004,53 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
         return (vid, layer_tuple) if layer_tuple is not None else vid
 
     binary_specs: list = []  # (eid, col_idx)
-    for er in dataframe_iter_rows(dataframe_read_parquet(path / 'edges.parquet')):
-        eid = er['edge_id']
-        col_idx = int(er['col_idx'])
-        w = er.get('weight')
+    ec = _columns_as_lists(
+        dataframe_read_parquet(path / 'edges.parquet'),
+        (
+            'edge_id',
+            'col_idx',
+            'weight',
+            'directed',
+            'kind',
+            'ml_kind',
+            'source',
+            'source_layer_id',
+            'target',
+            'target_layer_id',
+            'hyper_layer_id',
+        ),
+    )
+    for (
+        eid,
+        col_idx_raw,
+        w,
+        directed,
+        kind_raw,
+        ml_kind,
+        src_vid,
+        src_lid,
+        tgt_vid,
+        tgt_lid,
+        hyper_lid,
+    ) in zip(
+        ec['edge_id'],
+        ec['col_idx'],
+        ec['weight'],
+        ec['directed'],
+        ec['kind'],
+        ec['ml_kind'],
+        ec['source'],
+        ec['source_layer_id'],
+        ec['target'],
+        ec['target_layer_id'],
+        ec['hyper_layer_id'],
+        strict=False,
+    ):
+        col_idx = int(col_idx_raw)
         weight = float(w) if w is not None else 1.0
-        directed = er.get('directed')
-        kind = er.get('kind') or 'binary'
-        ml_kind = er.get('ml_kind')
+        kind = kind_raw or 'binary'
 
         if kind == 'hyper':
-            hyper_lid = er.get('hyper_layer_id')
             hyper_ml_layers = (
                 layer_dict.get_layer(int(hyper_lid)) if hyper_lid is not None else None
             )
@@ -981,8 +1067,8 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
                 direction_policy=None,
             )
         else:
-            src = _reassemble_endpoint(er.get('source'), er.get('source_layer_id'))
-            tgt = _reassemble_endpoint(er.get('target'), er.get('target_layer_id'))
+            src = _reassemble_endpoint(src_vid, src_lid)
+            tgt = _reassemble_endpoint(tgt_vid, tgt_lid)
             # Reconstruct ml_layers from the endpoint coords for multilayer
             # binary edges so layer_edge_set/_effective_ml_edge_kind keep
             # working after a roundtrip.
@@ -1033,16 +1119,15 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
                 rec.tgt = None
             rec.directed = is_dir
 
-    # 5. Rebuild adjacency indices from _edges
-    graph._adj = {}
+    # 5. Adjacency indexes are derived + lazy: defer them so they rebuild from
+    # records on the first query that needs them (many loads never do). This
+    # mirrors the bulk-mutate path and rebuilds the full, consistent set
+    # (including _pair_to_edges) via ensure_edge_indexes, unlike the old manual
+    # loop which built a now-dead _adj and omitted _pair_to_edges.
     graph._src_to_edges = {}
     graph._tgt_to_edges = {}
-    for eid, rec in graph._edges.items():
-        if rec.etype != 'hyper' and rec.src is not None and rec.tgt is not None:
-            key = (rec.src, rec.tgt)
-            graph._adj.setdefault(key, []).append(eid)
-            graph._src_to_edges.setdefault(rec.src, []).append(eid)
-            graph._tgt_to_edges.setdefault(rec.tgt, []).append(eid)
+    graph._pair_to_edges = {}
+    graph._edge_indexes_built = False
 
 
 def _load_tables(graph, path: Path):
