@@ -85,7 +85,7 @@ def init_state(g, *, directed=None, v=0, e=0, aspects=None) -> None:
     v = int(v) if v and v > 0 else 0
     e = int(e) if e and e > 0 else 0
     g._matrix_shape = (v, e)
-    g._matrix_cache = sp.csr_matrix((v, e), dtype=np.float32)
+    g._matrix_cache = sp.csr_array((v, e), dtype=np.float32)
     g._matrix_dirty = False
     g._csr_cache = None
 

@@ -233,9 +233,9 @@ def build_vertex_incidence(graph) -> sparse.csr_matrix:
     col_indexes = [graph._edges[edge_id].col_idx for edge_id in graph.edges()]
     matrix = graph.X().tocsr()
     if not row_indexes:
-        return sparse.csr_matrix((0, len(col_indexes)), dtype=matrix.dtype)
+        return sparse.csr_array((0, len(col_indexes)), dtype=matrix.dtype)
     if not col_indexes:
-        return sparse.csr_matrix((len(row_indexes), 0), dtype=matrix.dtype)
+        return sparse.csr_array((len(row_indexes), 0), dtype=matrix.dtype)
     return matrix[row_indexes, :][:, col_indexes]
 
 

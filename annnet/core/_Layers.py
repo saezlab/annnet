@@ -1529,7 +1529,7 @@ class LayerAccessor:
         nl_to_row, row_to_nl = self._build_supra_index(layers_t)
 
         n = len(row_to_nl)
-        A = sp.dok_matrix((n, n), dtype=float)
+        A = sp.dok_array((n, n), dtype=float)
 
         def _to_tuple(L):
             if isinstance(L, tuple):
@@ -1720,7 +1720,7 @@ class LayerAccessor:
                     continue
 
                 # Extract the full column from _matrix (sparse, so only nonzero entries — includes exact stoichiometric coefficients if set_edge_coeffs was called).
-                col_vec = M_csc.getcol(col_idx)
+                col_vec = M_csc[:, [col_idx]]
                 nz_rows_in_flat, _ = col_vec.nonzero()
 
                 rows_out = []
@@ -1773,7 +1773,7 @@ class LayerAccessor:
                         skipped.append(eid)
                         continue
 
-                    col_vec = M_csc.getcol(col_idx)
+                    col_vec = M_csc[:, [col_idx]]
                     nz_rows_in_flat, _ = col_vec.nonzero()
 
                     src_members = set(rec.src or ())
@@ -1835,7 +1835,7 @@ class LayerAccessor:
         n_cols = len(col_data)
 
         if n_cols == 0:
-            B = sp.csr_matrix((n_rows, 0), dtype=float)
+            B = sp.csr_array((n_rows, 0), dtype=float)
             return B, edge_ids, skipped
 
         all_rows: list[int] = []
@@ -1847,7 +1847,7 @@ class LayerAccessor:
             all_cols.extend([col_j] * len(rows_j))
             all_vals.extend(vals_j)
 
-        B = sp.coo_matrix(
+        B = sp.coo_array(
             (all_vals, (all_rows, all_cols)),
             shape=(n_rows, n_cols),
             dtype=float,
@@ -1868,7 +1868,7 @@ class LayerAccessor:
         layers_t = self._normalize_layers_arg(layers)
         nl_to_row, row_to_nl = self._build_supra_index(layers_t)
         n = len(row_to_nl)
-        A = sp.dok_matrix((n, n), dtype=float)
+        A = sp.dok_array((n, n), dtype=float)
 
         def _to_tuple(L):
             if isinstance(L, tuple):
@@ -1996,15 +1996,15 @@ class LayerAccessor:
         n = A.shape[0]
         deg = self.supra_degree(layers)
         if kind == 'comb':
-            D = sp.diags(deg, format='csr')
+            D = sp.diags_array(deg, format='csr')
             return D - A
         elif kind == 'norm':
             # D^{-1/2}; zero where deg==0
             invsqrt = np.zeros_like(deg, dtype=float)
             nz = deg > 0
             invsqrt[nz] = 1.0 / np.sqrt(deg[nz])
-            Dm12 = sp.diags(invsqrt, format='csr')
-            I = sp.eye(n, format='csr')
+            Dm12 = sp.diags_array(invsqrt, format='csr')
+            I = sp.eye_array(n, format='csr')
             return I - (Dm12 @ A @ Dm12)
         else:
             raise ValueError("kind must be 'comb' or 'norm'")
@@ -2301,7 +2301,7 @@ class LayerAccessor:
         layers_t = tensor_view['layers'] if tensor_view.get('layers', None) else None
         nl_to_row, row_to_nl = self._build_supra_index(layers_t)
         n = len(row_to_nl)
-        A = sp.dok_matrix((n, n), dtype=float)
+        A = sp.dok_array((n, n), dtype=float)
         vertices = tensor_view['vertices']
         layers = tensor_view['layers']
         ui, ai, vi, bi, w = (
@@ -2328,7 +2328,7 @@ class LayerAccessor:
 
         Parameters
         ----------
-        A : scipy.sparse.spmatrix
+        A : scipy.sparse.sparray
             Supra adjacency matrix.
         layers : list[str] | list[tuple[str, ...]] | None, optional
             Optional subset of layers.
@@ -2420,7 +2420,7 @@ class LayerAccessor:
         invdeg = np.zeros_like(deg, dtype=float)
         nz = deg > 0
         invdeg[nz] = 1.0 / deg[nz]
-        Dinv = sp.diags(invdeg, format='csr')
+        Dinv = sp.diags_array(invdeg, format='csr')
         return Dinv @ A
 
     def random_walk_step(self, p, layers: list[str] | list[tuple] | None = None):
@@ -2584,10 +2584,10 @@ class LayerAccessor:
             if metric == 'algebraic_connectivity':
                 # Compute λ2 of L = D - Aω
 
-                from scipy.sparse import diags
+                from scipy.sparse import diags_array
 
-                deg = Aω.sum(axis=1).A.ravel()
-                L = diags(deg) - Aω
+                deg = np.asarray(Aω.sum(axis=1)).ravel()
+                L = diags_array(deg) - Aω
                 from scipy.sparse.linalg import eigsh
 
                 if L.shape[0] < 2:

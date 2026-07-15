@@ -64,7 +64,7 @@ class CacheManager:
 
         Returns
         -------
-        scipy.sparse.spmatrix
+        scipy.sparse.sparray
 
         Notes
         -----
@@ -126,7 +126,7 @@ class CacheManager:
 
         Returns
         -------
-        scipy.sparse.spmatrix
+        scipy.sparse.sparray
         """
         return self.adjacency
 

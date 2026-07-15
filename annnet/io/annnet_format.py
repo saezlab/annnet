@@ -916,7 +916,7 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
         data = inc_root['data'][:]
         shape = tuple(inc_root.attrs['shape'])
 
-        coo = sp.coo_matrix((data, (row, col)), shape=shape, dtype=np.float32)
+        coo = sp.coo_array((data, (row, col)), shape=shape, dtype=np.float32)
         # CSR is the format the lazy matrix cache uses; building a DOK here just to
         # hand it to the setter meant an O(nnz) Python-dict build on every read.
         graph._matrix = coo.tocsr()

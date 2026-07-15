@@ -79,7 +79,7 @@ def rebuild_matrix(g):
             cols.append(col)
             data.append(v)
     if data:
-        coo = sp.coo_matrix(
+        coo = sp.coo_array(
             (
                 np.asarray(data, dtype=np.float32),
                 (np.asarray(rows, dtype=np.intp), np.asarray(cols, dtype=np.intp)),
@@ -87,7 +87,7 @@ def rebuild_matrix(g):
             shape=shape,
         )
         return coo.tocsr()
-    return sp.csr_matrix(shape, dtype=np.float32)
+    return sp.csr_array(shape, dtype=np.float32)
 
 
 def invalidate_sparse_caches(g, formats=None) -> None:

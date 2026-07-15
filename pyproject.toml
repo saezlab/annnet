@@ -84,7 +84,7 @@ classifiers = [
 dependencies = [
     "numpy>=1.24",
     "narwhals>=1.9",
-    "scipy>=1.10",
+    "scipy>=1.12",
 ]
 description = "A Python tool to build, manipulate, and interoperate with flexible graph structures"
 license = "BSD-3-Clause"

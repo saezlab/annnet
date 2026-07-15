@@ -1334,7 +1334,7 @@ class AnnNet(
         ent = self._entities.get(vertex_id)
         if ent is not None:
             try:
-                incident.extend(self._get_csr().getrow(ent.row_idx).indices.tolist())
+                incident.extend(self._get_csr()[ent.row_idx, :].indices.tolist())
                 return incident
             except (IndexError, ValueError):
                 pass

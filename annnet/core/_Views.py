@@ -92,7 +92,7 @@ class GraphView:
             cols = list(range(self._graph._matrix.shape[1]))
         if rows and cols:
             return self._graph._matrix[rows, :][:, cols]
-        return sp.dok_matrix((len(rows), len(cols)), dtype=self._graph._matrix.dtype)
+        return sp.dok_array((len(rows), len(cols)), dtype=self._graph._matrix.dtype)
 
     @property
     def vertex_ids(self):
