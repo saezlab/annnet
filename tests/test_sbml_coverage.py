@@ -408,8 +408,9 @@ def test_reaction_skips_endpoints_with_blank_species_id() -> None:
     _graph_from_sbml_model(model, graph=G, slice='default')
     edge = next(e for e in G.edges if e['id'] == 'R1')
     assert 'B' in edge['head']
-    # boundary source kicks in because reactants list is empty.
-    assert BOUNDARY_SOURCE in edge['tail']
+    # reactants empty → one-sided half-edge (empty tail), no placeholder source vertex.
+    assert edge['tail'] == []
+    assert BOUNDARY_SOURCE not in edge['head']
 
 
 def test_reaction_modifier_appended_only_when_not_already_present() -> None:
@@ -440,8 +441,10 @@ def test_reaction_with_modifier_only_falls_back_to_boundary() -> None:
     G = DummyGraph()
     _graph_from_sbml_model(model, graph=G, slice='default')
     edge = next(e for e in G.edges if e['id'] == 'R1')
-    # Only modifier present → no products → BOUNDARY_SINK on head.
-    assert BOUNDARY_SINK in edge['head']
+    # Only modifier present → no products → one-sided half-edge on the modifier (no BOUNDARY_SINK).
+    assert 'M' in edge['head']
+    assert edge['tail'] == []
+    assert BOUNDARY_SINK not in edge['head']
 
 
 # ── compartment-aware slice assignment ────────────────────────────────

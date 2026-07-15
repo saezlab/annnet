@@ -82,7 +82,7 @@ class TestSBMLAdapter(unittest.TestCase):
         self.assertEqual(G.num_edges, 2)
         self.assertIn('R1', G.edge_to_idx)
 
-    def test_boundary_reactions(self):
+    def test_boundary_reactions_are_one_sided_half_edges(self):
         import numpy as np
 
         from annnet.io.sbml_cobra import (
@@ -97,10 +97,24 @@ class TestSBMLAdapter(unittest.TestCase):
         G = _graph_from_stoich(
             S, mets, rxns, graph=AnnNet(directed=True), preserve_stoichiometry=True
         )
-        h_deg = G.hyperedge_definitions['deg']
-        h_syn = G.hyperedge_definitions['syn']
-        assert h_deg['tail'] == {'A'} and h_deg['head'] == {BOUNDARY_SINK}
-        assert h_syn['tail'] == {BOUNDARY_SOURCE} and h_syn['head'] == {'A'}
+
+        # No placeholder sink/source vertices — boundary reactions are one-sided half-edges.
+        assert set(G.vertices()) == {'A'}
+        assert BOUNDARY_SINK not in G.vertices() and BOUNDARY_SOURCE not in G.vertices()
+
+        # The single real metabolite is the only member; direction/sign lives in coeffs.
+        assert G.hyperedge_definitions['deg']['members'] == {'A'}
+        assert G.hyperedge_definitions['syn']['members'] == {'A'}
+        assert G._edges['deg'].coeffs == {'A': -1.0}
+        assert G._edges['syn'].coeffs == {'A': 1.0}
+
+        # Sink/source kind is preserved on the is_boundary edge attribute.
+        assert G.attrs.get_edge_attrs('deg') == {'is_boundary': True, 'boundary_kind': 'sink'}
+        assert G.attrs.get_edge_attrs('syn') == {'is_boundary': True, 'boundary_kind': 'source'}
+
+        # Boundary reactions are excluded from B @ B.T → A gets no spurious self-loop.
+        adj = np.asarray(G.cache.adjacency.todense())
+        assert adj.shape == (1, 1) and adj[0, 0] == 0.0
 
 
 if __name__ == '__main__':

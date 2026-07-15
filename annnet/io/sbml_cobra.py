@@ -34,10 +34,13 @@ except ImportError as e:  # pragma: no cover
 warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
 
 
+BOUNDARY_SOURCE = '__BOUNDARY_SOURCE__'
+BOUNDARY_SINK = '__BOUNDARY_SINK__'
+
+
 def _ensure_vertices(G, vertices: Iterable[str], slice: str | None) -> None:
     # Internal bulk vertex insertion handles missing vertices efficiently.
     G._add_vertices_bulk(list(vertices), slice=slice)
-
 
 
 def _graph_from_stoich(

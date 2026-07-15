@@ -288,7 +288,10 @@ class TestGraphFromSbmlModel(unittest.TestCase):
         )
 
         self.assertIs(G_out, G)
-        self.assertTrue({'A', 'B', BOUNDARY_SOURCE, BOUNDARY_SINK}.issubset(G.vertices))
+        # Boundary reactions are one-sided half-edges now — no placeholder vertices.
+        self.assertTrue({'A', 'B'}.issubset(G.vertices))
+        self.assertNotIn(BOUNDARY_SOURCE, G.vertices)
+        self.assertNotIn(BOUNDARY_SINK, G.vertices)
 
         self.assertEqual(len(G.edges), 1)
         edge = G.edges[0]
@@ -321,8 +324,8 @@ class TestGraphFromSbmlModel(unittest.TestCase):
         self.assertAlmostEqual(stoich['X'], -1.0)
         self.assertAlmostEqual(stoich['Y'], 1.0)
 
-    def test_sink_reaction_uses_boundary_sink(self):
-        """Reaction A -> ∅ → A -> BOUNDARY_SINK with positive sink coefficient."""
+    def test_sink_reaction_is_one_sided_half_edge(self):
+        """Reaction A -> ∅ becomes a one-sided half-edge on A (no BOUNDARY_SINK vertex)."""
         species = [DummySpecies('A')]
         r = DummyReaction(
             rid='R_sink',
@@ -338,20 +341,21 @@ class TestGraphFromSbmlModel(unittest.TestCase):
         edge = G.edges[0]
 
         self.assertEqual(edge['id'], 'R_sink')
-        self.assertEqual(edge['tail'], ['A'])
-        self.assertEqual(edge['head'], [BOUNDARY_SINK])
-        self.assertIn(BOUNDARY_SINK, G.vertices)
+        # The real species is the single populated endpoint; the opposite side is empty.
+        self.assertEqual(edge['head'], ['A'])
+        self.assertEqual(edge['tail'], [])
+        self.assertNotIn(BOUNDARY_SINK, G.vertices)
 
         stoich = edge['attrs']['stoich']
         self.assertAlmostEqual(stoich['A'], -3.0)
-        self.assertAlmostEqual(stoich[BOUNDARY_SINK], 3.0)
+        self.assertNotIn(BOUNDARY_SINK, stoich)  # no placeholder coefficient
 
         self.assertTrue(edge['attrs']['is_boundary'])
         self.assertEqual(edge['attrs']['boundary_kind'], 'sink')
-        self.assertEqual(edge['attrs']['boundary_node'], BOUNDARY_SINK)
+        self.assertNotIn('boundary_node', edge['attrs'])
 
-    def test_source_reaction_uses_boundary_source(self):
-        """Reaction ∅ -> B → BOUNDARY_SOURCE -> B with negative source coefficient."""
+    def test_source_reaction_is_one_sided_half_edge(self):
+        """Reaction ∅ -> B becomes a one-sided half-edge on B (no BOUNDARY_SOURCE vertex)."""
         species = [DummySpecies('B')]
         r = DummyReaction(
             rid='R_source',
@@ -367,17 +371,17 @@ class TestGraphFromSbmlModel(unittest.TestCase):
         edge = G.edges[0]
 
         self.assertEqual(edge['id'], 'R_source')
-        self.assertEqual(edge['tail'], [BOUNDARY_SOURCE])
         self.assertEqual(edge['head'], ['B'])
-        self.assertIn(BOUNDARY_SOURCE, G.vertices)
+        self.assertEqual(edge['tail'], [])
+        self.assertNotIn(BOUNDARY_SOURCE, G.vertices)
 
         stoich = edge['attrs']['stoich']
         self.assertAlmostEqual(stoich['B'], 4.0)
-        self.assertAlmostEqual(stoich[BOUNDARY_SOURCE], -4.0)
+        self.assertNotIn(BOUNDARY_SOURCE, stoich)  # no placeholder coefficient
 
         self.assertTrue(edge['attrs']['is_boundary'])
         self.assertEqual(edge['attrs']['boundary_kind'], 'source')
-        self.assertEqual(edge['attrs']['boundary_node'], BOUNDARY_SOURCE)
+        self.assertNotIn('boundary_node', edge['attrs'])
 
     def test_ignores_empty_reaction(self):
         """Reactions with no reactants and no products are ignored."""
