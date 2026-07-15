@@ -8,7 +8,9 @@ stoichiometric reactions into directed AnnNet hyperedges. Reactants and products
 are represented as edge endpoint sets, with optional stoichiometric coefficients
 stored on the edge.
 
-Boundary reactions are represented using dedicated placeholder vertices.
+Boundary reactions are represented as one-sided (half) edges —
+the real species form the single populated endpoint set, with no placeholder
+sink/source vertex — and flagged with an ``is_boundary`` edge attribute.
 """
 
 from __future__ import annotations
@@ -44,13 +46,6 @@ def _isset(obj, setter_name: str) -> bool:
     """Return True if obj has an isSet* method that returns True."""
     fn = getattr(obj, setter_name, None)
     return bool(fn()) if fn is not None else False
-
-
-def _ensure_boundary_vertices(G, slice: str, layer: str | None = None) -> None:
-    kw = {'slice': slice}
-    if layer is not None:
-        kw['layer'] = layer
-    G._add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], **kw)
 
 
 # ── SBML reader ───────────────────────────────────────────────────────────────
@@ -195,7 +190,8 @@ def _graph_from_sbml_model(
 
     _register_compartments(G, model, slice)
     sid_to_compartment = _register_species(G, model, slice, layer=layer)
-    _ensure_boundary_vertices(G, slice, layer=layer)
+    # Boundary reactions are modelled as one-sided (half) hyperedges, so no
+    # placeholder sink/source vertices are created.
 
     hyperedges: list[dict] = []
     coeffs_map: dict[str, dict[str, float]] = {}
@@ -247,23 +243,25 @@ def _graph_from_sbml_model(
         if not head and not tail:
             continue
 
+        # Boundary reactions keep one side empty (a single real endpoint set), so the
+        # incidence column carries exactly the real species coefficients — no placeholder
+        # vertex, no phantom cross-species coupling through a shared sink/source in adjacency.
         is_boundary = False
         boundary_kind = None
-        boundary_node = None
 
         if not head:
-            head = [BOUNDARY_SINK]
             is_boundary = True
-            boundary_kind = 'sink'
-            boundary_node = BOUNDARY_SINK
-            coeffs[BOUNDARY_SINK] = float(sum(-v for v in coeffs.values() if v < 0.0))
+            boundary_kind = 'sink'  # products empty → species consumed by the environment
 
         elif not tail:
-            tail = [BOUNDARY_SOURCE]
             is_boundary = True
-            boundary_kind = 'source'
-            boundary_node = BOUNDARY_SOURCE
-            coeffs[BOUNDARY_SOURCE] = float(-sum(v for v in coeffs.values() if v > 0.0))
+            boundary_kind = 'source'  # reactants empty → species drawn from the environment
+
+        if is_boundary:
+            # One-sided (half) edge: real species become the single populated endpoint
+            # set (head), no placeholder partner. Signs live in ``coeffs``; the
+            # sink/source distinction is preserved on the is_boundary edge attribute.
+            head, tail = list(head or tail), []
 
         hyperedges.append(
             {
@@ -312,7 +310,6 @@ def _graph_from_sbml_model(
         if is_boundary:
             attrs['is_boundary'] = True
             attrs['boundary_kind'] = boundary_kind
-            attrs['boundary_node'] = boundary_node
 
         edge_attrs_map[rid] = attrs
 

@@ -69,12 +69,39 @@ class CacheManager:
         Notes
         -----
         For incidence matrix `B`, adjacency is computed as `A = B @ B.T`.
+        Boundary (half) edges — exchange/demand reactions flagged with the
+        ``is_boundary`` edge attribute, which carry a single real endpoint and no
+        partner — are dropped from `B` first, so they contribute neither spurious
+        inter-metabolite links nor self-loop-like diagonal terms.
         """
         if self._adjacency is None or self._adjacency_version != self._G._version:
             csr = self.csr
-            self._adjacency = csr @ csr.T
+            keep = self._non_boundary_cols()
+            B = csr if keep is None else csr[:, keep]
+            self._adjacency = B @ B.T
             self._adjacency_version = self._G._version
         return self._adjacency
+
+    def _non_boundary_cols(self):
+        """Integer column indices to keep for adjacency (boundary columns removed).
+
+        Boundary edges are identified by the ``is_boundary`` edge attribute (set by
+        the stoichiometric importers, and round-tripped like any other attribute).
+        Returns ``None`` when there are no boundary edges, so the full incidence is
+        reused without copying — the overwhelmingly common case.
+        """
+        g = self._G
+        boundary_eids = g.attrs.get_edges_by_attr('is_boundary', True)
+        if not boundary_eids:
+            return None
+        edges = g._edges
+        boundary_cols = {
+            edges[e].col_idx for e in boundary_eids if e in edges and edges[e].col_idx >= 0
+        }
+        if not boundary_cols:
+            return None
+        ncols = g._matrix_shape[1]
+        return [c for c in range(ncols) if c not in boundary_cols]
 
     def has_csr(self) -> bool:
         """Check whether a valid CSR cache exists.

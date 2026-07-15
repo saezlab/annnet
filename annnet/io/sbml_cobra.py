@@ -8,7 +8,9 @@ This module converts stoichiometric models into directed AnnNet hyperedges.
 Reactants and products are represented as edge endpoint sets, with optional
 stoichiometric coefficients stored on the edge.
 
-Boundary reactions are represented using dedicated placeholder vertices.
+Boundary reactions are represented as one-sided (half) edges —
+the real metabolites form the single populated endpoint set, with no placeholder
+sink/source vertex — and flagged with an ``is_boundary`` edge attribute.
 """
 
 from __future__ import annotations
@@ -37,14 +39,6 @@ def _ensure_vertices(G, vertices: Iterable[str], slice: str | None) -> None:
     G._add_vertices_bulk(list(vertices), slice=slice)
 
 
-BOUNDARY_SOURCE = '__BOUNDARY_SOURCE__'
-BOUNDARY_SINK = '__BOUNDARY_SINK__'
-
-
-def _ensure_boundary_vertices(G, slice: str):
-    # Idempotent internal vertex insertion ignores existing ids.
-    G._add_vertices_bulk([BOUNDARY_SOURCE, BOUNDARY_SINK], slice=slice)
-
 
 def _graph_from_stoich(
     S: np.ndarray,
@@ -57,9 +51,9 @@ def _graph_from_stoich(
 ) -> AnnNet:
     G = AnnNet(directed=True) if graph is None else graph
 
-    # Ensure all species + boundary placeholders exist
+    # Ensure all species exist. Boundary reactions are modelled as one-sided
+    # (half) edges rather than routed through placeholder sink/source vertices.
     G._add_vertices_bulk(list(metabolite_ids), slice=slice)
-    _ensure_boundary_vertices(G, slice)
 
     m, n = S.shape
     assert m == len(metabolite_ids)
@@ -74,32 +68,38 @@ def _graph_from_stoich(
             # Truly empty column; ignore
             continue
 
-        boundary = None
+        # Boundary reactions keep one side empty (a single real endpoint), so the
+        # incidence column carries exactly the real metabolite coefficients — no
+        # placeholder vertex, no phantom cross-metabolite coupling in adjacency.
+        boundary_kind = None
         coeffs = {metabolite_ids[i]: float(v) for i, v in enumerate(col) if v != 0.0}
 
         if not head:
-            # sink: products empty → route to SINK on head side
-            head = [BOUNDARY_SINK]
-            boundary = ('sink', BOUNDARY_SINK)
-            # keep column balanced if we write per-vertex coefficients
-            sink_coeff = float(sum(-v for v in col if v < 0))  # sum of absolute reactants
-            coeffs[BOUNDARY_SINK] = sink_coeff
-
+            boundary_kind = 'sink'  # products empty → metabolites consumed by the environment
         elif not tail:
-            # source: reactants empty → route from SOURCE on tail side
-            tail = [BOUNDARY_SOURCE]
-            boundary = ('source', BOUNDARY_SOURCE)
-            source_coeff = float(-sum(v for v in col if v > 0))  # negative sum of products
-            coeffs[BOUNDARY_SOURCE] = source_coeff
+            boundary_kind = 'source'  # reactants empty → metabolites drawn from the environment
 
-        eid_added = G.add_edges(
-            src=head,
-            tgt=tail,
-            slice=slice,
-            edge_id=eid,
-            directed=True,
-            weight=1.0,
-        )
+        if boundary_kind:
+            # One-sided (half) edge: the real metabolites become the single populated
+            # endpoint set (no placeholder partner). Signs live in ``coeffs``; the
+            # sink/source distinction is preserved on the is_boundary edge attribute.
+            eid_added = G.add_edges(
+                src=list(head or tail),
+                tgt=None,
+                slice=slice,
+                edge_id=eid,
+                directed=True,
+                weight=1.0,
+            )
+        else:
+            eid_added = G.add_edges(
+                src=head,
+                tgt=tail,
+                slice=slice,
+                edge_id=eid,
+                directed=True,
+                weight=1.0,
+            )
 
         if preserve_stoichiometry:
             G.set_edge_coeffs(eid_added, coeffs)
@@ -107,11 +107,8 @@ def _graph_from_stoich(
             G.attrs.set_edge_attrs(eid_added, stoich=coeffs)
 
         # mark boundary reactions for easy filtering
-        if boundary:
-            kind, bnode = boundary
-            G.attrs.set_edge_attrs(
-                eid_added, is_boundary=True, boundary_kind=kind, boundary_node=bnode
-            )
+        if boundary_kind:
+            G.attrs.set_edge_attrs(eid_added, is_boundary=True, boundary_kind=boundary_kind)
 
     return G
 
