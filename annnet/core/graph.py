@@ -2289,8 +2289,8 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.write('graph.annnet')                 # matrix rebuilt on demand
-        >>> G.write('graph.annnet', matrix=True)    # cache it alongside
+        >>> G.write('graph.annnet')  # matrix rebuilt on demand
+        >>> G.write('graph.annnet', matrix=True)  # cache it alongside
         """
         from .. import write
 

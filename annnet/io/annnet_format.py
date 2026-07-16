@@ -294,14 +294,12 @@ def write(
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_root = Path(tmp) / 'graph.annnet'
-            _write_dir(graph, tmp_root, compression=compression, overwrite=True,
-                       matrix=matrix)
+            _write_dir(graph, tmp_root, compression=compression, overwrite=True, matrix=matrix)
             _write_archive(tmp_root, path)
         return
 
     # DIRECTORY MODE (canonical format)
-    return _write_dir(graph, path, compression=compression, overwrite=overwrite,
-                      matrix=matrix)
+    return _write_dir(graph, path, compression=compression, overwrite=overwrite, matrix=matrix)
 
 
 def _write_structure(
