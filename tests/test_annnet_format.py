@@ -64,13 +64,13 @@ class TestAnnNetIO(unittest.TestCase):
             shutil.rmtree(self._archive_tmp, ignore_errors=True)
 
     # ----------------------- helpers -----------------------
-    def _roundtrip(self, use_archive=False):
+    def _roundtrip(self, use_archive=False, **kwargs):
         if use_archive:
             out_path = Path(self.tmpdir) / 'test_graph.annnet'
         else:
             out_path = Path(self.tmpdir) / 'test_graph_dir'
 
-        annnet_write(self.G, out_path, compression='zstd', overwrite=True)
+        annnet_write(self.G, out_path, compression='zstd', overwrite=True, **kwargs)
         G2 = annnet_read(out_path)
         return G2, out_path
 
@@ -159,14 +159,101 @@ class TestAnnNetIO(unittest.TestCase):
 
         self._test_both_modes(_test)
 
-    def test_zarr_incidence_group(self):
-        # The incidence matrix is only persisted when it carries explicit coeffs
-        # (stoichiometry); otherwise it is rebuilt from records on load. Give the
-        # graph coeffs so the zarr group is written and its encoding validated.
-        self.G.set_edge_coeffs('e1', {'v1': -1.0, 'v2': 1.0})
+    def test_write_exposes_matrix_choice(self):
+        """`matrix` is a user-facing choice, so it must stay an explicit keyword on
+        the method people call — not absorbed into **kwargs, where it is invisible."""
+        import inspect
+
+        sig = inspect.signature(AnnNet.write)
+        self.assertIn('matrix', sig.parameters)
+        param = sig.parameters['matrix']
+        self.assertEqual(param.default, False)
+        self.assertEqual(param.kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertIn('matrix : bool', inspect.getdoc(AnnNet.write))
+
+        # ...and it reaches the writer from the method, not just the io function.
+        for matrix, expect_zarr in ((False, False), (True, True)):
+            out = Path(self.tmpdir) / f'choice_{matrix}.annnet'
+            self.G.write(out, matrix=matrix, overwrite=True)
+            root = self._get_root(out, True)
+            self.assertEqual((root / 'structure' / 'incidence.zarr').exists(), expect_zarr)
+
+    def test_coeffs_are_records_data(self):
+        """Coefficients live on EdgeRecord, so they must round-trip without the
+        matrix — exactly, and repeatedly."""
+        coeffs = {'v1': -2.0, 'v2': 3.0}
+        self.G.set_edge_coeffs('e1', coeffs)
+        want = dict(self.G._edges['e1'].coeffs)
 
         def _test(use_archive):
             G2, out_path = self._roundtrip(use_archive=use_archive)
+            root = self._get_root(out_path, use_archive)
+
+            # Persisted as records data, and the derived cache is not written.
+            self.assertTrue((root / 'structure' / 'edge_coeffs.parquet').exists())
+            self.assertFalse((root / 'structure' / 'incidence.zarr').exists())
+
+            self.assertEqual(G2._edges['e1'].coeffs, want)
+            # ...and the matrix the records rebuild is the one we started with.
+            self.assertEqual(
+                sorted(G2._matrix.tocoo().data.tolist()),
+                sorted(self.G._matrix.tocoo().data.tolist()),
+            )
+
+        self._test_both_modes(_test)
+
+    def test_coeffs_survive_repeated_roundtrips(self):
+        """Regression: read() once dropped coeffs, so the *second* write silently
+        emitted a matrix built from the +/- weight default."""
+        self.G.set_edge_coeffs('e1', {'v1': -2.0, 'v2': 3.0})
+        want = dict(self.G._edges['e1'].coeffs)
+
+        G = self.G
+        for i in range(3):
+            out = Path(self.tmpdir) / f'cycle{i}.annnet'
+            annnet_write(G, out, overwrite=True)
+            G = annnet_read(out)
+            self.assertEqual(G._edges['e1'].coeffs, want)
+
+    def test_coeffs_keep_float64_precision(self):
+        """The matrix is float32; the records are not. Persisting records data must
+        not round-trip coefficients through the cache's precision."""
+        self.G.set_edge_coeffs('e1', {'v1': -0.1, 'v2': 1.0 / 3.0})
+        want = dict(self.G._edges['e1'].coeffs)
+        G2, _ = self._roundtrip()
+        self.assertEqual(G2._edges['e1'].coeffs, want)
+
+    def test_plain_graph_stores_neither_matrix_nor_coeffs(self):
+        """No explicit coeffs anywhere: nothing to persist, nothing to restore.
+        0.1 is not float32-exact, which previously made every column look like
+        stoichiometry."""
+        G = AnnNet(directed=True)
+        G.add_vertices('a')
+        G.add_vertices('b')
+        G.add_edges('a', 'b', edge_id='e', weight=0.1)
+        out = Path(self.tmpdir) / 'plain.annnet'
+        annnet_write(G, out, overwrite=True)
+        G2 = annnet_read(out)
+        self.assertIsNone(G2._edges['e'].coeffs)
+        self.assertTrue(G2._matrix_dirty)  # rebuild still deferred
+
+    def test_matrix_true_stores_the_cache(self):
+        """matrix=True is a load-time trade: same graph, cache materialised."""
+        self.G.set_edge_coeffs('e1', {'v1': -2.0, 'v2': 3.0})
+        out = Path(self.tmpdir) / 'cached.annnet'
+        annnet_write(self.G, out, overwrite=True, matrix=True)
+        G2 = annnet_read(out)
+        self.assertFalse(G2._matrix_dirty)  # loaded, not rebuilt
+        self.assertEqual(G2._edges['e1'].coeffs, dict(self.G._edges['e1'].coeffs))
+
+    def test_zarr_incidence_group(self):
+        # The matrix is a derived cache, persisted only on matrix=True; this test is
+        # about the zarr encoding, so ask for it explicitly rather than relying on
+        # coeffs to trigger the write.
+        self.G.set_edge_coeffs('e1', {'v1': -1.0, 'v2': 1.0})
+
+        def _test(use_archive):
+            G2, out_path = self._roundtrip(use_archive=use_archive, matrix=True)
             root = self._get_root(out_path, use_archive)
 
             inc = root / 'structure' / 'incidence.zarr'

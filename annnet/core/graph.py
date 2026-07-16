@@ -2266,13 +2266,20 @@ class AnnNet(
         return self._cache_manager
 
     # I/O
-    def write(self, path, **kwargs):
+    def write(self, path, *, matrix: bool = False, **kwargs):
         """Write the graph to the native ``.annnet`` format.
 
         Parameters
         ----------
         path : str | pathlib.Path
             Output file path.
+        matrix : bool, default False
+            Also persist the incidence matrix. The records are the source of truth
+            and fully reconstruct it — including explicit coefficients, which are
+            written as records data either way — so this is a size/load-time trade,
+            never a correctness one. Left off, ``read`` defers the rebuild until the
+            matrix is first touched, which is usually cheaper than loading it. Turn
+            it on for graphs large enough that the rebuild dominates.
         **kwargs
             Passed to `annnet.io.annnet_format.write`.
 
@@ -2282,11 +2289,12 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.write('graph.annnet')
+        >>> G.write('graph.annnet')                 # matrix rebuilt on demand
+        >>> G.write('graph.annnet', matrix=True)    # cache it alongside
         """
         from .. import write
 
-        write(self, path, **kwargs)
+        write(self, path, matrix=matrix, **kwargs)
 
     @classmethod
     def read(cls, path, **kwargs):

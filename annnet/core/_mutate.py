@@ -736,7 +736,22 @@ def set_edge_coeffs(g, edge_id, coeffs):
                     base[n] = val
             elif side is not None:
                 base[side] = val
-    base.update({vid: float(coeff) for vid, coeff in coeffs.items()})
+    # On a multilayer graph the endpoints above are supra-node keys ``(vid, coord)``,
+    # while callers key coefficients by bare vertex id (from_sbml passes raw SBML
+    # species ids). The two spellings never collide, so without resolving them the
+    # update *adds* a second entry for the same vertex and the rebuilt column sums
+    # both — inflating every coefficient by the derived +/- weight.
+    by_vid = {}
+    for key in base:
+        if I.is_explicit_entity_key(key):
+            by_vid.setdefault(key[0], []).append(key)
+    resolved = {}
+    for vid, coeff in coeffs.items():
+        hits = by_vid.get(vid) if isinstance(vid, str) else None
+        # Only rewrite when the bare id names exactly one endpoint; a vid present at
+        # several coords on one edge is ambiguous, so leave it for the caller to key.
+        resolved[hits[0] if hits and len(hits) == 1 else vid] = float(coeff)
+    base.update(resolved)
     rec.coeffs = {n: v for n, v in base.items() if v != 0.0}
     g._mark_matrix_dirty()
     D.invalidate_sparse_caches(g)

@@ -171,7 +171,7 @@ def _build_layer_dict(graph) -> _LayerDict:
     return ld
 
 
-def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
+def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False, matrix=False):
     """Write graph to disk with zero topology loss.
 
     Parameters
@@ -183,6 +183,11 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
         configured dataframe backend defaults.
     overwrite : bool, default False
         Allow overwriting existing directory
+    matrix : bool, default False
+        Also persist the incidence matrix. It is a derived cache — the records
+        (including ``EdgeRecord.coeffs``) fully reconstruct it — so the default
+        omits it and lets ``read()`` rebuild lazily. Pass True to trade file size
+        for skipping that rebuild.
 
     Notes
     -----
@@ -203,11 +208,12 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False):
         root.mkdir(parents=True, exist_ok=True)
 
     # 1. Write manifest
-    # The incidence matrix is only persisted when it carries data not recoverable
-    # from the edge records — i.e. explicit coeffs (stoichiometry). Otherwise it
-    # is rebuilt from records on load, saving compression on write and a load +
-    # rebuild on read. The shape is recorded so the lazy rebuild knows its extent.
-    incidence_stored = any(rec.coeffs is not None for rec in graph._edges.values())
+    # The incidence matrix is a derived cache: every column is reconstructable from
+    # the records, since explicit coeffs now persist as records data in
+    # edge_coeffs.parquet. Storing it is therefore opt-in — a size/load-time trade,
+    # never a correctness one. The shape is recorded either way so a lazy rebuild
+    # knows its extent.
+    incidence_stored = bool(matrix)
     manifest = {
         'format': 'annnet',
         'created': datetime.now(UTC).isoformat(),
@@ -264,8 +270,19 @@ def write(
     *,
     compression: str = 'zstd',
     overwrite: bool = False,
+    matrix: bool = False,
 ) -> None:
-    """Write an AnnNet graph to a directory or `.annnet` archive."""
+    """Write an AnnNet graph to a directory or `.annnet` archive.
+
+    Parameters
+    ----------
+    matrix : bool, default False
+        Also persist the incidence matrix. The records are the source of truth and
+        fully reconstruct it, so this is a size/load-time trade rather than a
+        correctness one: with it omitted, ``read()`` defers a rebuild until the
+        matrix is first touched. Explicit coefficients persist either way, as
+        records data.
+    """
     path = Path(path)
 
     # FILE MODE (.annnet archive)
@@ -277,12 +294,14 @@ def write(
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_root = Path(tmp) / 'graph.annnet'
-            _write_dir(graph, tmp_root, compression=compression, overwrite=True)
+            _write_dir(graph, tmp_root, compression=compression, overwrite=True,
+                       matrix=matrix)
             _write_archive(tmp_root, path)
         return
 
     # DIRECTORY MODE (canonical format)
-    return _write_dir(graph, path, compression=compression, overwrite=overwrite)
+    return _write_dir(graph, path, compression=compression, overwrite=overwrite,
+                      matrix=matrix)
 
 
 def _write_structure(
@@ -461,6 +480,46 @@ def _write_structure(
         ),
         path / 'edges.parquet',
     )
+
+    # 4b. Explicit incidence coefficients (stoichiometry, resolved flexible
+    # directions). These live on the records — see ``EdgeRecord.coeffs``, which is
+    # what makes the records the complete source of truth — so they persist as
+    # records data, independent of whether the derived matrix is written at all.
+    # Long format: one row per (edge, node), keyed exactly like source/target.
+    # Float64 here, where the matrix is float32; the record's value survives intact.
+    c_eids: list = []
+    c_entities: list = []
+    c_layer_ids: list = []
+    c_values: list = []
+    for eid, rec in graph._edges.items():
+        if not rec.coeffs:
+            continue
+        # Sorted so the table is byte-stable across processes: coeffs is keyed by
+        # node, and set/dict iteration over strings follows randomised hash order.
+        for node, value in sorted(rec.coeffs.items(), key=lambda kv: repr(kv[0])):
+            vid, layer_id = _split_endpoint(node)
+            c_eids.append(eid)
+            c_entities.append(vid)
+            c_layer_ids.append(layer_id)
+            c_values.append(float(value))
+    if c_eids:
+        dataframe_write_parquet(
+            dataframe_from_columns(
+                {
+                    'edge_id': c_eids,
+                    'entity_id': c_entities,
+                    'layer_id': c_layer_ids,
+                    'coeff': c_values,
+                },
+                schema={
+                    'edge_id': 'text',
+                    'entity_id': 'text',
+                    'layer_id': 'int',
+                    'coeff': 'float',
+                },
+            ),
+            path / 'edge_coeffs.parquet',
+        )
 
     # 5. Hyperedge definitions (members / head / tail). Same schema as v1.
     hyper_edges = {eid: rec for eid, rec in graph._edges.items() if rec.etype == 'hyper'}
@@ -920,12 +979,14 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
         # CSR is the format the lazy matrix cache uses; building a DOK here just to
         # hand it to the setter meant an O(nnz) Python-dict build on every read.
         graph._matrix = coo.tocsr()
+        incidence_loaded = True
     else:
         # No stored incidence: defer to a lazy rebuild from records. Fix the
         # logical shape now so rebuild_matrix knows the extent.
         if matrix_shape is not None:
             graph._matrix_shape = tuple(matrix_shape)
         graph._mark_matrix_dirty()
+        incidence_loaded = False
 
     from annnet.core._records import EdgeRecord, EntityRecord
 
@@ -1119,7 +1180,28 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
                 rec.tgt = None
             rec.directed = is_dir
 
-    # 5. Adjacency indexes are derived + lazy: defer them so they rebuild from
+    # 5. Explicit coefficients — records data, restored exactly. Files written before
+    # edge_coeffs.parquet existed kept coefficients only inside the matrix, so fall
+    # back to recovering them from it when the table is absent.
+    coeff_path = path / 'edge_coeffs.parquet'
+    if coeff_path.exists():
+        cc = _columns_as_lists(
+            dataframe_read_parquet(coeff_path),
+            ('edge_id', 'entity_id', 'layer_id', 'coeff'),
+        )
+        for eid, vid, lid, val in zip(
+            cc['edge_id'], cc['entity_id'], cc['layer_id'], cc['coeff'], strict=False
+        ):
+            rec = graph._edges.get(eid)
+            if rec is None:
+                continue
+            if rec.coeffs is None:
+                rec.coeffs = {}
+            rec.coeffs[_reassemble_endpoint(vid, lid)] = float(val)
+    elif incidence_loaded:
+        _recover_legacy_coeffs(graph)
+
+    # 6. Adjacency indexes are derived + lazy: defer them so they rebuild from
     # records on the first query that needs them (many loads never do). This
     # mirrors the bulk-mutate path and rebuilds the full, consistent set
     # (including _pair_to_edges) via ensure_edge_indexes, unlike the old manual
@@ -1128,6 +1210,59 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
     graph._tgt_to_edges = {}
     graph._pair_to_edges = {}
     graph._edge_indexes_built = False
+
+
+def _derived_column(rec) -> dict:
+    w = float(rec.weight) if rec.weight is not None else 1.0
+    tv = -w if rec.directed else w
+    out: dict = {}
+    for side, val in ((rec.src, w), (rec.tgt, tv)):
+        if isinstance(side, frozenset):
+            for n in side:
+                out[n] = val
+        elif side is not None:
+            out[side] = val
+    return {n: v for n, v in out.items() if v != 0.0}
+
+
+def _recover_legacy_coeffs(graph) -> None:
+    from annnet.core import _identity as I
+
+    if not graph._edges:
+        return
+    matrix = graph._matrix
+    if matrix is None:
+        return
+    csc = matrix.tocsc()
+    n_cols = csc.shape[1]
+    for rec in graph._edges.values():
+        col = rec.col_idx
+        if col is None or col < 0 or col >= n_cols:
+            continue
+        start, end = int(csc.indptr[col]), int(csc.indptr[col + 1])
+        if start == end:
+            continue
+        stored = {}
+        for row, val in zip(csc.indices[start:end], csc.data[start:end], strict=False):
+            key = graph._row_to_entity.get(int(row))
+            if key is not None and float(val) != 0.0:
+                stored[key] = float(val)
+        if not stored:
+            continue
+        # Compare on resolved keys, in float32. Two traps here: endpoints deserialise
+        # bare on a single-aspect graph while matrix rows are always ``(vid, coord)``,
+        # and the matrix is float32 while ``weight`` is a Python float — so an
+        # unresolved or float64 comparison never matches for ordinary weights like
+        # 0.1, and every column would masquerade as stoichiometry.
+        try:
+            derived = {
+                I.resolve_ekey(graph, k): float(np.float32(v))
+                for k, v in _derived_column(rec).items()
+            }
+        except (ValueError, TypeError):
+            derived = None  # ambiguous endpoint: cannot prove the column rebuildable
+        if derived is None or stored != derived:
+            rec.coeffs = stored
 
 
 def _load_tables(graph, path: Path):
