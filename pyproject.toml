@@ -483,6 +483,11 @@ pip = "*"
 graph-tool = "*"
 
 [tool.pixi.feature.gt.tasks]
+install-benchmark-deps = "python -m pip install -e '.[all]' psutil"
+benchmark-gt-quick = { depends-on = ["install-benchmark-deps"], cmd = "python -m benchmarks.run --tier quick --out benchmarks/results/quick-graph-tool", env = { MPLBACKEND = "Agg" } }
+benchmark-gt-full = { depends-on = ["install-benchmark-deps"], cmd = "python -m benchmarks.run --tier full --out benchmarks/results/full-graph-tool", env = { MPLBACKEND = "Agg" } }
+benchmark-gt-heavy = { depends-on = ["install-benchmark-deps"], cmd = "python -m benchmarks.run --tier heavy --out benchmarks/results/heavy-graph-tool", env = { MPLBACKEND = "Agg" } }
+benchmark-gt-huge = { depends-on = ["install-benchmark-deps"], cmd = "python -m benchmarks.run --tier huge --out benchmarks/results/huge-graph-tool", env = { MPLBACKEND = "Agg" } }
 install-test-deps = "python -m pip install -e '.[all]' pytest pytest-cov tox tox-gh coverage codecov-cli diff_cover ruff"
 test-gt = { depends-on = ["install-test-deps"], cmd = "pytest tests/test_graphtool.py tests/test_gt_backend_accessor.py -v", env = { MPLBACKEND = "Agg" } }
 test-all = { depends-on = ["install-test-deps"], cmd = "pytest tests/ -v", env = { MPLBACKEND = "Agg" } }

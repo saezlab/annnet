@@ -1,9 +1,7 @@
-"""Rigorous micro-benchmark primitives: adaptive-repeat timing + tracemalloc memory.
+"""Micro-benchmark primitives: adaptive-repeat timing + tracemalloc memory.
 
-Why this exists next to ``benchmarks/harness/metrics.py``: the legacy ``measure()``
-times each operation exactly once and reports a raw RSS delta. A single shot is
-noise, not a measurement, and RSS delta is polluted by the allocator and other
-threads. Everything here is built so a number can be trusted as an SSoT:
+Single-shot timings and raw RSS deltas are too noisy for this suite. Everything
+here is built so a number can be trusted as an SSoT:
 
 * **Timing** — warmup, an adaptively sized inner loop so each batch runs long
   enough to dominate clock resolution, several batches, GC disabled during the

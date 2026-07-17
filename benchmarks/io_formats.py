@@ -1,7 +1,7 @@
 """IO-format round-trip benchmark — write time, read time, on-disk size, fidelity.
 
 Every serialization format AnnNet ships is exercised through the public
-``annnet.io`` facade on one identical graph, measured with the same rigorous
+``annnet.io`` API on one identical graph, measured with the same rigorous
 harness as the head-to-head suite (warmup + repeated samples, GC disabled).
 Formats that cannot represent a feature (e.g. SIF has no edge weights) still
 round-trip the structure; the ``edges_ok`` column reports whether the edge count

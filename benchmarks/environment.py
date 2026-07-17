@@ -62,6 +62,7 @@ def capture() -> dict:
         'libraries': {
             'networkx': _lib_version('networkx'),
             'igraph': _lib_version('igraph'),
+            'graph_tool': _lib_version('graph_tool'),
             'numpy': _lib_version('numpy'),
             'scipy': _lib_version('scipy'),
             'polars': _lib_version('polars'),
