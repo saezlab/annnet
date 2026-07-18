@@ -87,7 +87,11 @@ def primitive_dimensions(
         ('add_vertices_repeated', add_vertices_repeated, note('one public call per vertex')),
         ('add_edges_bulk', add_edges_bulk, note('bulk edge insertion with explicit edge ids')),
         ('add_edges_repeated', add_edges_repeated, note('one public call per edge')),
-        ('remove_edges_fraction', remove_edges_fraction, note(f'remove {scale.remove_edges} edges')),
+        (
+            'remove_edges_fraction',
+            remove_edges_fraction,
+            note(f'remove {scale.remove_edges} edges'),
+        ),
         (
             'remove_vertices_fraction',
             remove_vertices_fraction,

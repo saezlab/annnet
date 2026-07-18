@@ -62,6 +62,7 @@ tests = [
     "pydot",
     "graphviz",
     "cobra>=0.26",
+    "psutil>=5.9",
 ]
 
 [project]
@@ -488,7 +489,7 @@ benchmark-gt-quick = { depends-on = ["install-benchmark-deps"], cmd = "python -m
 benchmark-gt-full = { depends-on = ["install-benchmark-deps"], cmd = "python -m benchmarks.run --tier full --out benchmarks/results/full-graph-tool", env = { MPLBACKEND = "Agg" } }
 benchmark-gt-heavy = { depends-on = ["install-benchmark-deps"], cmd = "python -m benchmarks.run --tier heavy --out benchmarks/results/heavy-graph-tool", env = { MPLBACKEND = "Agg" } }
 benchmark-gt-huge = { depends-on = ["install-benchmark-deps"], cmd = "python -m benchmarks.run --tier huge --out benchmarks/results/huge-graph-tool", env = { MPLBACKEND = "Agg" } }
-install-test-deps = "python -m pip install -e '.[all]' pytest pytest-cov tox tox-gh coverage codecov-cli diff_cover ruff"
+install-test-deps = "python -m pip install -e '.[all]' pytest pytest-cov tox tox-gh coverage codecov-cli diff_cover ruff psutil"
 test-gt = { depends-on = ["install-test-deps"], cmd = "pytest tests/test_graphtool.py tests/test_gt_backend_accessor.py -v", env = { MPLBACKEND = "Agg" } }
 test-all = { depends-on = ["install-test-deps"], cmd = "pytest tests/ -v", env = { MPLBACKEND = "Agg" } }
 import-graph = "uv run python tools/import_graph.py --repo . --package annnet --out .cache/import_graphs --render-svg"

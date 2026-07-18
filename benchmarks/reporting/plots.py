@@ -91,8 +91,14 @@ def render_comparable_plots(records: list[dict], plots_dir: Path) -> list[str]:
     ]
 
     artifacts = [
-        ('Comparable operation scaling', _plot_scaling_dashboard(records, plots_dir / 'scaling_wall_time_overview.png')),
-        ('Retained memory scaling', _plot_memory_scaling(records, plots_dir / 'memory_retained_scaling.png')),
+        (
+            'Comparable operation scaling',
+            _plot_scaling_dashboard(records, plots_dir / 'scaling_wall_time_overview.png'),
+        ),
+        (
+            'Retained memory scaling',
+            _plot_memory_scaling(records, plots_dir / 'memory_retained_scaling.png'),
+        ),
         ('Memory density', _plot_bytes_per_edge(records, plots_dir / 'memory_bytes_per_edge.png')),
     ]
     for baseline in BASELINE_ENGINES:
@@ -115,7 +121,9 @@ def render_comparable_plots(records: list[dict], plots_dir: Path) -> list[str]:
     return lines
 
 
-def _plot_individual_comparable(records: list[dict], plots_dir: Path) -> list[tuple[str, Path | None]]:
+def _plot_individual_comparable(
+    records: list[dict], plots_dir: Path
+) -> list[tuple[str, Path | None]]:
     plt = _matplotlib()
     idx = index_records(records)
     scales = scales_in(records)
@@ -269,7 +277,12 @@ def render_io_adapter_plots(payload: dict, plots_dir: Path) -> list[str]:
 
     if not artifacts:
         return lines
-    lines += ['## IO And Adapter Plots', '', 'Focused plots for serialization and bridge costs.', '']
+    lines += [
+        '## IO And Adapter Plots',
+        '',
+        'Focused plots for serialization and bridge costs.',
+        '',
+    ]
     for label, png in artifacts:
         lines.append(f'### {label}')
         lines.append('')
@@ -390,7 +403,9 @@ def _barh(records: list[dict], path: Path, title: str, *, limit: int = 24) -> Pa
     return path
 
 
-def _plot_scale_grouped(records: list[dict], path: Path, title: str, *, op_order=None) -> Path | None:
+def _plot_scale_grouped(
+    records: list[dict], path: Path, title: str, *, op_order=None
+) -> Path | None:
     records = [r for r in records if median_s(r) is not None]
     if not records:
         return None
@@ -470,13 +485,19 @@ def _plot_backend_grouped(records: list[dict], path: Path, title: str) -> Path |
                     None,
                 )
                 vals.append(max(median_s(rec) or 0, 1e-9))
-            ax.bar(offsets, vals, width=width, label=engine_label(engine), color=ENGINE_COLORS.get(engine))
+            ax.bar(
+                offsets,
+                vals,
+                width=width,
+                label=engine_label(engine),
+                color=ENGINE_COLORS.get(engine),
+            )
         ax.set_yscale('log')
         ax.set_title(scale)
         ax.set_xticks(x)
         ax.set_xticklabels([op_label(op) for op in ops], fontsize=8)
         _style_axis(ax, grid_axis='y')
-    for ax in axes_flat[len(scales):]:
+    for ax in axes_flat[len(scales) :]:
         ax.axis('off')
     for row in axes:
         row[0].set_ylabel('median time (s, log scale)')
@@ -584,11 +605,7 @@ def _plot_phase_grouped(rows, path, title, *, category_key, phase_key, value_key
         vals = []
         for category in categories:
             row = next(
-                (
-                    row
-                    for row in rows
-                    if row[category_key] == category and row[phase_key] == phase
-                ),
+                (row for row in rows if row[category_key] == category and row[phase_key] == phase),
                 None,
             )
             vals.append(max(row[value_key] if row else 0, 1e-9))
@@ -776,9 +793,13 @@ def _plot_bytes_per_edge(records: list[dict], path: Path) -> Path | None:
         offsets = [pos + (idx - (len(engines) - 1) / 2) * width for pos in x]
         vals = []
         for scale in scales:
-            r = next((r for r in memory_records if r['scale'] == scale and r['engine'] == engine), None)
+            r = next(
+                (r for r in memory_records if r['scale'] == scale and r['engine'] == engine), None
+            )
             vals.append((r['memory']['retained_bytes'] / max(1, r['n_edges'])) if r else 0)
-        ax.bar(offsets, vals, width=width, label=engine_label(engine), color=ENGINE_COLORS.get(engine))
+        ax.bar(
+            offsets, vals, width=width, label=engine_label(engine), color=ENGINE_COLORS.get(engine)
+        )
     ax.set_yscale('log')
     ax.set_ylabel('retained bytes / edge')
     ax.set_title('Memory density by scale')
