@@ -10,12 +10,25 @@ import scipy.sparse as sp
 # ---------------------------------------------------------------------------
 
 
+def bump_structure(g) -> int:
+    """Advance the structural clock, invalidating every version-keyed derived cache.
+
+    Distinct from ``g._version``, which is a history/audit counter: it is bumped only
+    by the ``_History`` hooks, is user-visible through snapshots, and deliberately does
+    not move on removes. Caches that key on it go stale after a removal, so they key on
+    ``_structure_version`` instead and this is the single point that advances it.
+    """
+    g._structure_version = getattr(g, '_structure_version', 0) + 1
+    return g._structure_version
+
+
 def grow_rows_to(g, target: int) -> None:
     """Grow the logical incidence row capacity to accommodate ``target`` rows."""
     rows, cols = g._matrix_shape
     if target > rows:
         g._matrix_shape = (target, cols)
         g._matrix_dirty = True
+        bump_structure(g)
 
 
 def grow_cols_to(g, target: int) -> None:
@@ -24,12 +37,14 @@ def grow_cols_to(g, target: int) -> None:
     if target > cols:
         g._matrix_shape = (rows, target)
         g._matrix_dirty = True
+        bump_structure(g)
 
 
 def set_matrix_shape(g, shape) -> None:
     """Set the logical incidence shape and mark the matrix cache dirty."""
     g._matrix_shape = (int(shape[0]), int(shape[1]))
     g._matrix_dirty = True
+    bump_structure(g)
 
 
 def rebuild_matrix(g):
@@ -99,6 +114,7 @@ def invalidate_sparse_caches(g, formats=None) -> None:
     if cache_manager is not None:
         cache_manager.invalidate(list(formats))
     g._supra_index_cache = None
+    bump_structure(g)
 
 
 # ---------------------------------------------------------------------------

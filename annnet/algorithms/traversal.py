@@ -17,8 +17,13 @@ class Traversal:
     """
 
     def _iter_hyperedges(self):
-        """Return ``(eid, rec)`` for live hyperedges, cached against the graph version."""
-        version = getattr(self, '_version', None)
+        """Return ``(eid, rec)`` for live hyperedges, cached against the structural clock.
+
+        Keys on ``_structure_version``, not ``_version``: the latter is a history
+        counter that does not move on removes, so a hyperedge list warmed before a
+        removal would survive it and report neighbors through a deleted edge.
+        """
+        version = getattr(self, '_structure_version', None)
         cache = getattr(self, '_hyper_items_cache', None)
         if cache is None or cache[0] != version:
             items = [

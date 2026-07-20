@@ -13,7 +13,11 @@ from .._support.dataframe_backend import (
 
 
 class CacheManager:
-    """Derived sparse-matrix cache (CSR/CSC/adjacency), keyed on the graph version."""
+    """Derived sparse-matrix cache (CSR/CSC/adjacency), keyed on the structural clock.
+
+    Keys on ``_structure_version`` (see ``_derive.bump_structure``), never on
+    ``_version``: that is a history counter which does not advance on removes.
+    """
 
     def __init__(self, graph):
         self._G = graph
@@ -36,9 +40,9 @@ class CacheManager:
         -----
         Built and cached on first access.
         """
-        if self._csr is None or self._csr_version != self._G._version:
+        if self._csr is None or self._csr_version != self._G._structure_version:
             self._csr = self._G._matrix.tocsr()
-            self._csr_version = self._G._version
+            self._csr_version = self._G._structure_version
         return self._csr
 
     @property
@@ -53,9 +57,9 @@ class CacheManager:
         -----
         Built and cached on first access.
         """
-        if self._csc is None or self._csc_version != self._G._version:
+        if self._csc is None or self._csc_version != self._G._structure_version:
             self._csc = self._G._matrix.tocsc()
-            self._csc_version = self._G._version
+            self._csc_version = self._G._structure_version
         return self._csc
 
     @property
@@ -74,12 +78,12 @@ class CacheManager:
         partner — are dropped from `B` first, so they contribute neither spurious
         inter-metabolite links nor self-loop-like diagonal terms.
         """
-        if self._adjacency is None or self._adjacency_version != self._G._version:
+        if self._adjacency is None or self._adjacency_version != self._G._structure_version:
             csr = self.csr
             keep = self._non_boundary_cols()
             B = csr if keep is None else csr[:, keep]
             self._adjacency = B @ B.T
-            self._adjacency_version = self._G._version
+            self._adjacency_version = self._G._structure_version
         return self._adjacency
 
     def _non_boundary_cols(self):
@@ -110,7 +114,7 @@ class CacheManager:
         -------
         bool
         """
-        return self._csr is not None and self._csr_version == self._G._version
+        return self._csr is not None and self._csr_version == self._G._structure_version
 
     def has_csc(self) -> bool:
         """Check whether a valid CSC cache exists.
@@ -119,7 +123,7 @@ class CacheManager:
         -------
         bool
         """
-        return self._csc is not None and self._csc_version == self._G._version
+        return self._csc is not None and self._csc_version == self._G._structure_version
 
     def has_adjacency(self) -> bool:
         """Check whether a valid adjacency cache exists.
@@ -128,7 +132,7 @@ class CacheManager:
         -------
         bool
         """
-        return self._adjacency is not None and self._adjacency_version == self._G._version
+        return self._adjacency is not None and self._adjacency_version == self._G._structure_version
 
     def get_csr(self):
         """Return the cached CSR matrix.

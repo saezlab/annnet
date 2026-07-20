@@ -2033,13 +2033,20 @@ class AnnNet(
     def _mark_matrix_dirty(self) -> None:
         """Flag the incidence cache for lazy rebuild from records.
 
-        Also drops the cached supra (vertex-layer) index: it is derived from the
-        vertex-entity population, which every structural mutation routes through
-        here (add / remove / rekey), so this is the single reliable invalidation
-        point (``_version`` does not bump on removes or ``set_aspects``).
+        Also drops the cached supra (vertex-layer) index and advances the structural
+        clock, so version-keyed derived caches (CSR/CSC/adjacency, hyperedge lists)
+        rebuild on next read.
+
+        Note this is *not* the only structural-mutation hook: the removal paths
+        (``_mutate.remove_edge`` / ``remove_edges_bulk`` / ``remove_vertices_bulk`` /
+        ``remove_orphan_node_layers``) reshape the matrix through
+        ``_derive.set_matrix_shape`` and never come through here. Those helpers bump
+        the structural clock themselves — ``_derive.bump_structure`` is the single
+        point of truth, not this method.
         """
         self._matrix_dirty = True
         self._supra_index_cache = None
+        _derive.bump_structure(self)
 
     def X(self):
         """Return the sparse incidence matrix.

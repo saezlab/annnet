@@ -97,8 +97,17 @@ def init_state(g, *, directed=None, v=0, e=0, aspects=None) -> None:
     g._slices['default'] = SliceRecord()
     g._current_slice = 'default'
 
-    # Version clock (dirty signal for derived sparse caches).
+    # History/audit clock: bumped only by ``_History._log_event`` / ``_log_mutation``.
+    # User-visible via ``_current_snapshot()``; drives snapshot & diff numbering. It does
+    # NOT track structural mutations (removes and ``set_aspects`` leave it unchanged), so
+    # it must never be used to key a derived cache.
     g._version = 0
+
+    # Structural clock: bumped by every add / remove / rekey that can change the
+    # incidence structure (see ``_derive.bump_structure``). This is the key derived
+    # caches must validate against.
+    g._structure_version = 0
+
     g._supra_index_cache = None
 
     g.vertex_aligned = False
