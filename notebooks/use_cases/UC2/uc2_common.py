@@ -8,7 +8,7 @@ so the notebooks themselves stay about the biology, not the plumbing.
 from pathlib import Path
 from itertools import combinations  # noqa: F401 (re-exported for notebooks)
 
-from annnet import AnnNet
+import annnet as an
 
 SEED = 7
 
@@ -77,7 +77,7 @@ def bare_vid(e):
 
 def load():
     """Reload the graph saved by 02_build.ipynb."""
-    return AnnNet.read(str(SNAPSHOT))
+    return an.AnnNet.read(str(SNAPSHOT))
 
 
 def edges_frame(G):
