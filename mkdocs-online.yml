@@ -28,3 +28,4 @@ plugins:
         execute: true
         execute_ignore:
         -   tutorials/notebooks/use_cases/*.ipynb
+        -   tutorials/notebooks/use_cases/*/*.ipynb

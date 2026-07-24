@@ -52,8 +52,23 @@ nav:
         -   Backend accessors: tutorials/notebooks/tutos/08_backend_accessors.ipynb
         -   Flexible edge orientation: tutorials/notebooks/special/sp03_flexible_edge_orientation.ipynb
     -   Use Cases:
-        -   Multi-condition causal signaling: tutorials/notebooks/use_cases/UC1.ipynb
-        -   HEK293 heterogeneous biology graph: tutorials/notebooks/use_cases/UC2.ipynb
+        -   Multi-condition causal signaling (UC1):
+            -   Setup: tutorials/notebooks/use_cases/UC1/01_setup.ipynb
+            -   Omics: tutorials/notebooks/use_cases/UC1/02_omics.ipynb
+            -   Layers: tutorials/notebooks/use_cases/UC1/03_layers.ipynb
+            -   CARNIVAL: tutorials/notebooks/use_cases/UC1/04_carnival.ipynb
+            -   Consensus: tutorials/notebooks/use_cases/UC1/05_consensus.ipynb
+            -   Validation: tutorials/notebooks/use_cases/UC1/06_validation.ipynb
+            -   Interop & GNN: tutorials/notebooks/use_cases/UC1/07_interop_gnn.ipynb
+            -   Notes: tutorials/notebooks/use_cases/UC1/08_notes.ipynb
+        -   HEK293 heterogeneous biology graph (UC2):
+            -   Setup: tutorials/notebooks/use_cases/UC2/01_setup.ipynb
+            -   Build: tutorials/notebooks/use_cases/UC2/02_build.ipynb
+            -   Overlays: tutorials/notebooks/use_cases/UC2/03_overlays.ipynb
+            -   Queries: tutorials/notebooks/use_cases/UC2/04_queries.ipynb
+            -   Validation: tutorials/notebooks/use_cases/UC2/05_validation.ipynb
+            -   Interop & GNN: tutorials/notebooks/use_cases/UC2/06_interop_gnn.ipynb
+            -   Notes: tutorials/notebooks/use_cases/UC2/07_notes.ipynb
     -   Scenarios:
         -   AnnData/scverse bridge: tutorials/notebooks/scenarios/scverse_bridge.ipynb
         -   OmniPath table ingestion: tutorials/notebooks/scenarios/omnipath_table_ingestion.ipynb
@@ -174,6 +189,7 @@ plugins:
         execute_ignore:
         -   tutorials/notebooks/scenarios/*.ipynb
         -   tutorials/notebooks/use_cases/*.ipynb
+        -   tutorials/notebooks/use_cases/*/*.ipynb
 
 hooks:
   # Quiet Jupyter/nbformat warning noise during docs builds.

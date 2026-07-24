@@ -29,6 +29,20 @@ warnings.filterwarnings(
 # tutos/ notebooks already live under docs/ directly and are their own SSoT.
 _MIRRORED_NOTEBOOK_DIRS = ("special", "use_cases")
 
+# Chunked use cases live in per-case subfolders. Only the ones listed here are
+# published; work-in-progress subfolders (e.g. UC2b) and data/outputs dirs stay
+# out of the docs. Paths are relative to a mirrored dir above.
+_PUBLISHED_SUBDIRS = {
+    "use_cases": ("UC1", "UC2"),
+}
+
+
+def _copy_notebooks(source_dir: Path, destination_dir: Path) -> None:
+    """Copy the *.ipynb directly in source_dir (non-recursive) into destination_dir."""
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    for notebook in sorted(source_dir.glob("*.ipynb")):
+        shutil.copy2(notebook, destination_dir / notebook.name)
+
 
 def _sync_tutorial_notebooks() -> None:
     """Mirror the SSoT notebooks/ subdirs into docs/tutorials/notebooks for MkDocs."""
@@ -42,10 +56,12 @@ def _sync_tutorial_notebooks() -> None:
             continue
 
         destination_dir = tutorials_root / name
-        destination_dir.mkdir(parents=True, exist_ok=True)
+        _copy_notebooks(source_dir, destination_dir)
 
-        for notebook in sorted(source_dir.glob("*.ipynb")):
-            shutil.copy2(notebook, destination_dir / notebook.name)
+        for subdir in _PUBLISHED_SUBDIRS.get(name, ()):
+            sub_source = source_dir / subdir
+            if sub_source.is_dir():
+                _copy_notebooks(sub_source, destination_dir / subdir)
 
 
 _sync_tutorial_notebooks()
