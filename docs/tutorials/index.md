@@ -120,7 +120,7 @@ optimization, and graph learning workflows.
     Build patient layers from CPTAC/OmniPath data and write inferred causal
     subnetworks back into AnnNet.
 
-    [Open notebook](notebooks/use_cases/UC1.ipynb) ·
+    [Open notebook](notebooks/use_cases/UC1/01_setup.ipynb) ·
     [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/uc1_multi_condition_causal_signaling.yml)
 
 -   __HEK293 heterogeneous biology graph__
@@ -130,7 +130,7 @@ optimization, and graph learning workflows.
     Combine signaling, metabolic, complex, regulatory, organelle, and
     graph-learning workflows in one AnnNet object.
 
-    [Open notebook](notebooks/use_cases/UC2.ipynb) ·
+    [Open notebook](notebooks/use_cases/UC2/01_setup.ipynb) ·
     [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/uc2_hek293_heterogeneous_graph.yml)
 
 </div>
