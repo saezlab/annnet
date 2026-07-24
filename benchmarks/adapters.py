@@ -2,7 +2,7 @@
 
 AnnNet converts to/from NetworkX, igraph, graph-tool (round-trip) and exports to
 PyTorch Geometric (one-way tensor bundle), all through the public
-``annnet.adapters`` facade and the rigorous shared harness. Optional backends
+``annnet.adapters`` API and the rigorous shared harness. Optional backends
 that are not installed are reported as ``skipped`` rather than failing the run.
 
 Run:  python -m benchmarks.adapters [--vertices N] [--edges N] [--samples N]

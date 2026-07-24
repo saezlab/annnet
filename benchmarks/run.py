@@ -3,7 +3,8 @@
 Run it as a module from the repository root::
 
     python -m benchmarks.run                 # full tier
-    python -m benchmarks.run --tier quick     # small scale only, fast
+    python -m benchmarks.run --tier quick     # tiny + small, fast
+    python -m benchmarks.run --tier full      # tiny + xsmall + small + medium
     python -m benchmarks.run --tier heavy     # + large (100k V / 400k E)
     python -m benchmarks.run --tier huge      # + xlarge (1M V / 4M E)
     python -m benchmarks.run --backends polars,pandas
@@ -27,17 +28,19 @@ import subprocess
 # Support both `python -m benchmarks.run` and direct execution.
 if __package__ in (None, ''):  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from benchmarks import report, engines, workloads, environment
+    from benchmarks import cases, engines, workloads, environment
     from benchmarks.scales import SCALES
+    from benchmarks.reporting import render as render_report
 else:
-    from . import report, engines, workloads, environment
+    from . import cases, engines, workloads, environment
     from .scales import SCALES
+    from .reporting import render as render_report
 
 TIERS = {
-    'quick': ['small'],
-    'full': ['small', 'medium'],
-    'heavy': ['small', 'medium', 'large'],
-    'huge': ['small', 'medium', 'large', 'xlarge'],
+    'quick': ['tiny', 'small'],
+    'full': ['tiny', 'xsmall', 'small', 'medium'],
+    'heavy': ['tiny', 'xsmall', 'small', 'medium', 'large'],
+    'huge': ['tiny', 'xsmall', 'small', 'medium', 'large', 'xlarge'],
 }
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = Path(__file__).resolve().parent / 'results'
@@ -64,8 +67,16 @@ def _worker(args) -> int:
             )
             records += workloads.annnet_only(sc, backend=args.backend)
             records += workloads.annnet_features(sc, backend=args.backend)
+            if not args.no_extra:
+                records += cases.extra_dimensions(
+                    sc,
+                    backend=args.backend,
+                    max_vertices=args.extra_max_vertices,
+                    max_edges=args.extra_max_edges,
+                    max_accessor_repeats=args.extra_max_accessor_repeats,
+                )
     else:
-        eng = {'networkx': engines.NetworkXEngine, 'igraph': engines.IGraphEngine}[args.engine]()
+        eng = engines.engine_by_name(args.engine)
         if not eng.available():
             print(f'[worker] {args.engine} unavailable', file=sys.stderr)
             return 2
@@ -84,7 +95,7 @@ def _worker(args) -> int:
 # ---------------------------------------------------------------------------
 # Parent: fan out workers, merge, report.
 # ---------------------------------------------------------------------------
-def _spawn(engine, backend, scales, no_memory, tmp) -> list[dict]:
+def _spawn(engine, backend, scales, no_memory, no_extra, extra_caps, tmp) -> list[dict]:
     out = tmp / f'part_{engine}_{backend}.json'
     cmd = [
         sys.executable,
@@ -102,6 +113,18 @@ def _spawn(engine, backend, scales, no_memory, tmp) -> list[dict]:
         cmd += ['--backend', backend]
     if no_memory:
         cmd += ['--no-memory']
+    if no_extra:
+        cmd += ['--no-extra']
+    if extra_caps:
+        max_vertices, max_edges, max_accessor_repeats = extra_caps
+        cmd += [
+            '--extra-max-vertices',
+            str(max_vertices),
+            '--extra-max-edges',
+            str(max_edges),
+            '--extra-max-accessor-repeats',
+            str(max_accessor_repeats),
+        ]
 
     env = dict(os.environ)
     env['MPLBACKEND'] = 'Agg'
@@ -147,10 +170,30 @@ def _parent(args) -> int:
         tmp = Path(td)
         # AnnNet across backends
         for backend in backends:
-            all_records += _spawn('annnet', backend, scales, args.no_memory, tmp)
+            all_records += _spawn(
+                'annnet',
+                backend,
+                scales,
+                args.no_memory,
+                args.no_extra,
+                (
+                    args.extra_max_vertices,
+                    args.extra_max_edges,
+                    args.extra_max_accessor_repeats,
+                ),
+                tmp,
+            )
         # Baselines once (backend independent)
-        for engine in ('networkx', 'igraph'):
-            all_records += _spawn(engine, None, scales, args.no_memory, tmp)
+        for engine in engines.BASELINE_ENGINE_NAMES:
+            all_records += _spawn(
+                engine,
+                None,
+                scales,
+                args.no_memory,
+                args.no_extra,
+                None,
+                tmp,
+            )
 
     io_recs, adapter_recs = [], []
     if not args.no_io:
@@ -162,7 +205,17 @@ def _parent(args) -> int:
 
     payload = {
         'environment': environment.capture(),
-        'config': {'tier': args.tier, 'scales': scales, 'backends': backends},
+        'config': {
+            'tier': args.tier,
+            'scales': scales,
+            'backends': backends,
+            'extra_dimensions': not args.no_extra,
+            'extra_caps': {
+                'max_vertices': args.extra_max_vertices,
+                'max_edges': args.extra_max_edges,
+                'max_accessor_repeats': args.extra_max_accessor_repeats,
+            },
+        },
         'records': all_records,
         'io_formats': io_recs,
         'adapters': adapter_recs,
@@ -172,7 +225,7 @@ def _parent(args) -> int:
     print(f'\nRaw results  -> {results_path}  ({len(all_records)} records)')
 
     report_path = out_dir / 'REPORT.md'
-    report.render(payload, report_path, plots_dir=out_dir / 'plots')
+    render_report(payload, report_path, plots_dir=out_dir / 'plots')
     print(f'SSoT report  -> {report_path}')
     return 0
 
@@ -188,6 +241,25 @@ def main(argv=None) -> int:
     p.add_argument('--no-memory', action='store_true', help='skip memory passes')
     p.add_argument(
         '--no-io', action='store_true', help='skip the IO-format + adapter conversion sections'
+    )
+    p.add_argument('--no-extra', action='store_true', help='skip local extra benchmark dimensions')
+    p.add_argument(
+        '--extra-max-vertices',
+        type=int,
+        default=2_500,
+        help='cap local extra-dimension workloads to this many vertices',
+    )
+    p.add_argument(
+        '--extra-max-edges',
+        type=int,
+        default=10_000,
+        help='cap local extra-dimension workloads to this many edges',
+    )
+    p.add_argument(
+        '--extra-max-accessor-repeats',
+        type=int,
+        default=5,
+        help='cap repeated accessor calls in local extra-dimension workloads',
     )
     # worker-only
     p.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)

@@ -2,9 +2,9 @@
 
 Produces a compact PDF (tables only) covering:
 
-1. Head-to-head binary-graph ops (build + core queries) — AnnNet vs NetworkX vs
-   igraph, across three scales up to 1M vertices / 4M edges.
-2. Memory footprint of the built binary graph for the same three engines/scales.
+1. Head-to-head binary-graph ops (build + core queries) — AnnNet vs NetworkX,
+   igraph and graph-tool, across three scales up to 1M vertices / 4M edges.
+2. Memory footprint of the built binary graph for the same engines/scales.
 3. AnnNet-only build time + memory for every edge type it can express
    (binary, vertex-edge / edge-node, hyperedge, multilayer), across scales.
 
@@ -17,8 +17,8 @@ Design for a machine with limited RAM:
   cheap process-RSS delta so a multi-million-edge build never OOMs on tracing
   overhead. The memory method is recorded and shown in the report.
 
-Run:  python -m benchmarks.specsheet            # full run + PDF
-      python -m benchmarks.specsheet --quick    # tiny scales, fast check
+Run:  python -m benchmarks.reporting.specsheet            # full run + PDF
+      python -m benchmarks.reporting.specsheet --quick    # small scales, fast check
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ QUICK_SCALE_KEYS = ['small', 'medium']  # fast layout check
 
 
 def _scales(keys: list[str]) -> list[dict]:
-    from .scales import SCALES as _SHARED
+    from ..scales import SCALES as _SHARED
 
     return [
         {'name': _si(_SHARED[k].vertices), 'v': _SHARED[k].vertices, 'e': _SHARED[k].edges}
@@ -54,10 +54,10 @@ def _scales(keys: list[str]) -> list[dict]:
 # and use a cheap RSS delta instead.
 MEM_TRACEMALLOC_MAX_EDGES = 500_000
 
-ENGINES = ['annnet', 'networkx', 'igraph']
+ENGINES = ['annnet', 'networkx', 'igraph', 'graph-tool']
 EDGE_TYPES = ['binary', 'vertex_edge', 'hyper', 'multilayer']
 
-RESULTS_DIR = Path(__file__).resolve().parent / 'results'
+RESULTS_DIR = Path(__file__).resolve().parents[1] / 'results'
 
 
 def _scale_samples(n_edges: int) -> tuple[int, int]:
@@ -74,7 +74,7 @@ def _scale_samples(n_edges: int) -> tuple[int, int]:
 # ---------------------------------------------------------------------------
 def _measure_memory(build, n_edges: int) -> dict:
     """Retained footprint of one build; tracemalloc when cheap, else RSS delta."""
-    from . import harness
+    from .. import harness
 
     if n_edges <= MEM_TRACEMALLOC_MAX_EDGES:
         m = harness.measure_memory(build)
@@ -187,7 +187,7 @@ def _annnet_type_build(kind: str, n_v: int, n_e: int):
 
 
 def run_worker(task: dict) -> dict:
-    from . import engines, harness
+    from .. import engines, harness
 
     kind = task['kind']
     scale = task['scale']
@@ -196,11 +196,10 @@ def run_worker(task: dict) -> dict:
 
     if kind == 'cmp':
         engine_name = task['engine']
-        engine = {
-            'annnet': engines.AnnNetEngine(backend='auto'),
-            'networkx': engines.NetworkXEngine(),
-            'igraph': engines.IGraphEngine(),
-        }[engine_name]
+        if engine_name == 'annnet':
+            engine = engines.AnnNetEngine(backend='auto')
+        else:
+            engine = engines.engine_by_name(engine_name)
         data = engines.make_data(n_v, n_e)
         build = engine.build_factory(data)
 
@@ -245,7 +244,7 @@ def _spawn(task: dict) -> dict:
     print(f'  · {task["kind"]:11s} {label:12s} {task["scale"]["name"]:5s} ...', end='', flush=True)
     t0 = time.perf_counter()
     proc = subprocess.run(
-        [sys.executable, '-m', 'benchmarks.specsheet', '--worker', payload],
+        [sys.executable, '-m', 'benchmarks.reporting.specsheet', '--worker', payload],
         env=env,
         capture_output=True,
         text=True,
@@ -352,7 +351,7 @@ def render_pdf(results: dict, out_path: Path) -> None:
         fig.text(
             0.5,
             0.953,
-            'incidence-graph library vs NetworkX & igraph · '
+            'incidence-graph library vs NetworkX, igraph & graph-tool · '
             'one isolated build per cell · median of adaptive-repeat timing',
             ha='center',
             fontsize=8,
@@ -398,7 +397,7 @@ def render_pdf(results: dict, out_path: Path) -> None:
         _table(
             ax1,
             '1 · Binary graph — head-to-head (build + core queries)',
-            'Median per-call time. Same vertex/edge input fed to all three engines.',
+            'Median per-call time. Same vertex/edge input fed to all comparable engines.',
             col_labels,
             rows,
             col_widths=[0.20, 0.11] + [0.138] * 5,
@@ -481,7 +480,7 @@ def render_pdf(results: dict, out_path: Path) -> None:
         _table(
             ax3,
             '3 · AnnNet edge types — build time + memory (all scales)',
-            'Capabilities NetworkX / igraph cannot express. Hyperedges arity-4; '
+            'Capabilities NetworkX / igraph / graph-tool cannot express. Hyperedges arity-4; '
             'multilayer = 4 layers, intra-layer ring edges.',
             col_labels3,
             rows3,
@@ -496,7 +495,12 @@ def render_pdf(results: dict, out_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Graphical report (charts)
 # ---------------------------------------------------------------------------
-ENGINE_COLORS = {'annnet': '#1f3b57', 'networkx': '#d1495b', 'igraph': '#2a9d8f'}
+ENGINE_COLORS = {
+    'annnet': '#1f3b57',
+    'networkx': '#d1495b',
+    'igraph': '#2a9d8f',
+    'graph-tool': '#8e5ea2',
+}
 TYPE_COLORS = {
     'binary': '#1f3b57',
     'vertex_edge': '#2a9d8f',
@@ -535,7 +539,7 @@ def render_charts(results: dict, out_path: Path) -> None:
         fig.text(
             0.5,
             0.951,
-            'AnnNet vs NetworkX & igraph · log scales · one isolated build per point',
+            'AnnNet vs NetworkX, igraph & graph-tool · log scales · one isolated build per point',
             ha='center',
             fontsize=8,
             color='#444444',
@@ -550,6 +554,8 @@ def render_charts(results: dict, out_path: Path) -> None:
         ax = fig.add_subplot(gs[0, 0])
         for eng in ENGINES:
             ys = [_median((cmp.get((eng, sn)) or {}).get('build')) for sn in scale_names]
+            if not any(y is not None for y in ys):
+                continue
             ax.plot(edges_by_scale, ys, marker='o', color=ENGINE_COLORS[eng], label=eng, lw=2)
         ax.set_xscale('log')
         ax.set_yscale('log')
@@ -569,6 +575,8 @@ def render_charts(results: dict, out_path: Path) -> None:
                 for sn in scale_names
             ]
             ys = [(y / 1024**2 if y else None) for y in ys]
+            if not any(y is not None for y in ys):
+                continue
             ax.plot(edges_by_scale, ys, marker='s', color=ENGINE_COLORS[eng], label=eng, lw=2)
         ax.set_xscale('log')
         ax.set_yscale('log')
@@ -588,14 +596,17 @@ def render_charts(results: dict, out_path: Path) -> None:
         import numpy as np
 
         x = np.arange(len(ops))
-        w = 0.26
+        w = min(0.8 / max(1, len(ENGINES)), 0.22)
         for i, eng in enumerate(ENGINES):
             r = cmp.get((eng, big))
             ys = []
             for op in ops:
                 v = _median((r or {}).get('queries', {}).get(op)) if r else None
                 ys.append(v * 1e6 if v else np.nan)  # microseconds
-            ax.bar(x + (i - 1) * w, ys, w, color=ENGINE_COLORS[eng], label=eng)
+            if all(np.isnan(y) for y in ys):
+                continue
+            offset = (i - (len(ENGINES) - 1) / 2) * w
+            ax.bar(x + offset, ys, w, color=ENGINE_COLORS[eng], label=eng)
         ax.set_yscale('log')
         ax.set_title(
             f'Query latency @ {big} ({_si(edges_by_scale[-1])} edges)',
@@ -646,7 +657,7 @@ def _capture_env() -> str:
     import platform
 
     try:
-        from . import environment
+        from .. import environment
 
         cap = environment.capture()
         parts = [
@@ -656,7 +667,9 @@ def _capture_env() -> str:
         ]
         libs = cap.get('libraries', {}) or {}
         lib_str = ' · '.join(
-            f'{k} {libs[k]}' for k in ('networkx', 'igraph', 'numpy', 'scipy') if k in libs
+            f'{k} {libs[k]}'
+            for k in ('networkx', 'igraph', 'graph_tool', 'numpy', 'scipy')
+            if k in libs
         )
         if lib_str:
             parts.append(lib_str)
