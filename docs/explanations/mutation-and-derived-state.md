@@ -85,15 +85,13 @@ These are materializations rather than canonical state:
 
 They are either cached behind version checks or rebuilt on demand.
 
-This is why cache invalidation is part of the architecture rather than a
-separate optimization story.
+Cache invalidation is part of the architecture, not a separate optimization
+layer.
 
-## Why `_version` exists
+## `_version`
 
 Mutations advance a version counter. Derived materializations use that counter
 to decide whether their cached state is still valid.
-
-This is a pragmatic choice.
 
 It avoids trying to make every materialization update incrementally under every
 possible mutation path. Instead, AnnNet keeps the structural model coherent and
@@ -185,8 +183,6 @@ History hooks wrap mutating methods and record:
 - monotonic clock
 - captured arguments
 - result
-
-This matters for interpretation.
 
 The history system logs what the API call did, not a reconstructed semantic
 "meaning" of the mutation after the fact. That keeps the log simple, explicit,

@@ -51,10 +51,10 @@ For computation, the multilayer graph can be unfolded into supra structures over
 - Derived operators such as Laplacians or transition operators can then be built
   in the usual matrix form.
 
-The important point is that these are derived views of the multilayer state, not
-separate primary data structures that replace the graph.
+These are derived views of the multilayer state, not separate primary data
+structures that replace the graph.
 
-## Why this matters
+## Layer distinctions
 
 A plain collection of annotated edges cannot easily distinguish:
 

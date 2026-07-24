@@ -25,7 +25,7 @@ can store:
 - slice-level metadata
 - edge-level overrides such as slice-specific weights
 
-This makes slices useful for cases such as:
+Slices support cases such as:
 
 - experimental conditions
 - perturbation scenarios
@@ -33,7 +33,7 @@ This makes slices useful for cases such as:
 - condition-specific subgraphs
 - alternative weighting schemes over the same structure
 
-## Why slices exist
+## Slice storage model
 
 Without slices, these contexts usually become separate graph copies. That leads
 to duplicated structure, inconsistent updates, and extra bookkeeping. annnet
@@ -53,17 +53,15 @@ This makes slice handling explicit instead of implicit.
 
 ## What a view is
 
-A view is a filtered, read-only lens over the graph. It is useful when you want
-to inspect or compute on a selected part of the graph without materializing a
-new object.
+A view is a filtered, read-only lens over the graph for inspection or
+computation without materializing a new object.
 
 - `G.view(...)` creates a filtered view.
 - `G.subgraph(...)` materializes a vertex-induced graph.
 - `G.edge_subgraph(...)` materializes an edge-induced graph.
 - `G.extract_subgraph(...)` combines both filters.
 
-The distinction matters: a view is temporary and lightweight, while a subgraph
-is a separate graph object.
+A view is temporary and lightweight; a subgraph is a separate graph object.
 
 ## Relation to layers
 

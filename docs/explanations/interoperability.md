@@ -3,10 +3,8 @@
 In annnet, interoperability means preserving as much graph meaning as possible
 when moving between annnet and other tools, backends, or file formats.
 
-## Why this matters
-
-Most external graph tools expect a simpler structure than annnet can represent.
-They may assume:
+Most external graph tools support a narrower model than annnet. Common target
+assumptions include:
 
 - only binary edges
 - one global graph context
@@ -14,8 +12,8 @@ They may assume:
 - limited multilayer support
 - dictionary-style attributes rather than aligned tables
 
-Interoperability in annnet is therefore not just file export. It is controlled
-translation between models with different expressive power.
+AnnNet conversions are explicit projections between models with different
+expressive power.
 
 ## Two kinds of interoperability
 
@@ -24,8 +22,8 @@ annnet separates two jobs:
 - runtime backends for in-memory computation
 - IO and exchange formats for persistence or data transfer
 
-That separation is important because converting to another in-memory graph
-backend is not the same thing as writing a file format.
+Converting to another in-memory graph backend is separate from writing a file
+format.
 
 ## Runtime backends
 
@@ -45,8 +43,8 @@ nxG = G.nx.backend(
 )
 ```
 
-This is useful when annnet is your source of truth but another library provides
-a specific algorithm or workflow you need.
+Use this when annnet is the source of truth and another library provides the
+algorithm or workflow.
 
 Under the hood, these accessors are attached to the `AnnNet` instance and use
 the normal backend conversion functions. For a call like
@@ -92,8 +90,8 @@ nxG, manifest = an.adapters.to_nx(G, directed=True, hyperedge_mode="skip")
 G2 = an.adapters.from_nx(nxG, manifest)
 ```
 
-A manifest is especially useful when hyperedges, slices, or multiedges are
-projected into a simpler graph shape.
+A manifest records reconstruction details when hyperedges, slices, or
+multiedges are projected into a simpler graph shape.
 
 ## Relation to storage and IO
 

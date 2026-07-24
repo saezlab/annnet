@@ -354,9 +354,9 @@ uv sync --group docs
 uv run python -m mkdocs serve
 ```
 
-By default, the docs build reruns the HowTo notebooks and renders stored outputs
-for heavier scenario and use-case notebooks. The notebook gallery links
-environment files for rerunning those larger examples.
+By default, the docs build reruns the HowTo notebooks and renders stored
+outputs for heavier scenario notebooks. The notebook gallery links environment
+files for rerunning those larger examples; use-case notebooks are coming soon.
 
 ## Contributing
 

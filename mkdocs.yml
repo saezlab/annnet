@@ -5,6 +5,8 @@ repo_name: saezlab/annnet
 exclude_docs: |
     tutorials/notebooks/environment.yml
     tutorials/notebooks/envs/*.yml
+    tutorials/notebooks/use_cases/*.ipynb
+    tutorials/notebooks/use_cases/*/*.ipynb
 theme:
     name: material
     font:
@@ -38,7 +40,6 @@ nav:
 -   Quickstart: quickstart.md
 -   Tutorials and Scenarios:
     -   Notebooks Overview: tutorials/index.md
-    -   Analysis patterns: tutorials/analysis-patterns.md
     -   HowTo's:
         -   Quickstart: tutorials/notebooks/tutos/01_quickstart.ipynb
         -   Attributes & views: tutorials/notebooks/tutos/02_attributes_and_views.ipynb
@@ -51,26 +52,8 @@ nav:
         -   History & reproducibility: tutorials/notebooks/tutos/07_history_and_reproducibility.ipynb
         -   Backend accessors: tutorials/notebooks/tutos/08_backend_accessors.ipynb
         -   Flexible edge orientation: tutorials/notebooks/special/sp03_flexible_edge_orientation.ipynb
-    -   Use Cases:
-        -   Multi-condition causal signaling (UC1):
-            -   Setup: tutorials/notebooks/use_cases/UC1/01_setup.ipynb
-            -   Omics: tutorials/notebooks/use_cases/UC1/02_omics.ipynb
-            -   Layers: tutorials/notebooks/use_cases/UC1/03_layers.ipynb
-            -   CARNIVAL: tutorials/notebooks/use_cases/UC1/04_carnival.ipynb
-            -   Consensus: tutorials/notebooks/use_cases/UC1/05_consensus.ipynb
-            -   Validation: tutorials/notebooks/use_cases/UC1/06_validation.ipynb
-            -   Interop & GNN: tutorials/notebooks/use_cases/UC1/07_interop_gnn.ipynb
-            -   Notes: tutorials/notebooks/use_cases/UC1/08_notes.ipynb
-        -   HEK293 heterogeneous biology graph (UC2):
-            -   Setup: tutorials/notebooks/use_cases/UC2/01_setup.ipynb
-            -   Build: tutorials/notebooks/use_cases/UC2/02_build.ipynb
-            -   Overlays: tutorials/notebooks/use_cases/UC2/03_overlays.ipynb
-            -   Queries: tutorials/notebooks/use_cases/UC2/04_queries.ipynb
-            -   Validation: tutorials/notebooks/use_cases/UC2/05_validation.ipynb
-            -   Interop & GNN: tutorials/notebooks/use_cases/UC2/06_interop_gnn.ipynb
-            -   Notes: tutorials/notebooks/use_cases/UC2/07_notes.ipynb
+    -   Use Cases: tutorials/use-cases.md
     -   Scenarios:
-        -   AnnData/scverse bridge: tutorials/notebooks/scenarios/scverse_bridge.ipynb
         -   OmniPath table ingestion: tutorials/notebooks/scenarios/omnipath_table_ingestion.ipynb
         -   Cytoscape CX2 export: tutorials/notebooks/scenarios/cytoscape_cx2_export.ipynb
         -   PyG HeteroData export: tutorials/notebooks/scenarios/pyg_heterodata_export.ipynb
@@ -79,11 +62,6 @@ nav:
 
 -   Explanations:
     -   Explanations Overview: explanations/index.md
-    -   Design principles: explanations/design-philosophy.md
-    -   Package architecture: explanations/architecture-overview.md
-    -   Internal representation: explanations/internal-representation.md
-    -   Mutation and derived state: explanations/mutation-and-derived-state.md
-    -   Incidence representation: explanations/math-incidence.md
     -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
     -   Slices and views: explanations/managers-and-views.md
     -   Interoperability: explanations/interoperability.md

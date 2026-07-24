@@ -131,7 +131,7 @@ The canonical interpretation is:
 The matrix is not the only source of truth. It is one half of the structural
 truth together with the registries above.
 
-Why this matters:
+Consequences:
 
 - a matrix entry alone does not tell you whether a column is binary or hyper
 - a matrix entry alone does not tell you whether a row is a vertex or an
@@ -141,7 +141,7 @@ Why this matters:
 That information lives in the records. The matrix holds incidence; the records
 hold semantics.
 
-## Why the row key is `(vertex_id, layer_coord)`
+## Row key: `(vertex_id, layer_coord)`
 
 The clean invariant is:
 

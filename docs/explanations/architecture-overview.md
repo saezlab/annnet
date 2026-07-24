@@ -24,12 +24,10 @@ That split is the main mental model behind the package.
 - caches
 - backend adapters and lazy interoperability accessors
 
-The important point is that these concerns are not independent subsystems
-floating next to each other. They all describe different views of the same
-graph state.
+These concerns are coordinated views of the same graph state, not independent
+subsystems.
 
-The structural single source of truth is described in detail in
-[Internal representation](internal-representation.md).
+The structural single source of truth is the canonical in-memory graph model.
 
 ## The role of `annnet.core`
 
@@ -91,14 +89,14 @@ Several pieces of state are intentionally derived rather than canonical:
 - subgraphs and reversed graphs
 - backend graphs for NetworkX, igraph, and graph-tool
 
-This matters for two reasons.
+This has two consequences.
 
 First, the package avoids fragmenting topology across several competing stores.
 Second, it explains why cache invalidation and view logic are part of the core
 architecture rather than afterthoughts.
 
-The operational side of this is covered in
-[Mutation and derived state](mutation-and-derived-state.md).
+Mutation updates the canonical stores first; derived structures are invalidated
+or rebuilt from them.
 
 ## Public namespaces follow the architecture
 
@@ -120,8 +118,7 @@ The codebase still exposes compatibility-oriented properties such as
 Those should be understood as a public compatibility boundary, not as the
 internal storage model.
 
-Internally, the package is organized around the structured SSOT described in
-[Internal representation](internal-representation.md).
+Internally, the package is organized around the structured SSOT.
 
 That distinction matters because compatibility views do not replace the
 canonical model.

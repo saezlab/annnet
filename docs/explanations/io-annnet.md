@@ -17,7 +17,7 @@ objects. Its job is to preserve the graph as annnet understands it, including:
 The format mirrors the in-memory model instead of flattening it into a simpler
 external graph shape.
 
-## Why the native format is structured this way
+## Native layout
 
 The native layout combines different storage technologies because different
 parts of the graph have different access patterns.
@@ -58,12 +58,12 @@ as:
 - DataFrame-based import and export
 - Parquet graph directories
 
-These formats are useful for interoperability, but they do not all preserve the
-full annnet model equally well.
+These formats support interoperability, but they do not all preserve the full
+annnet model equally well.
 
 ## Storage versus exchange
 
-This distinction is important:
+Use each format according to its role:
 
 - Use native `.annnet` storage when annnet is the system of record.
 - Use exchange formats when you need to interoperate with another tool,

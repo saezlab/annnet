@@ -281,13 +281,10 @@ Rows:      A      B      C
 Column:  +1.0   +1.0   -1.0
 ```
 
-See [Incidence representation](math-incidence.md) for the full matrix algebra.
-
 ---
 
 ## See also
 
-- [Incidence representation](math-incidence.md) — matrix layout, sign convention, operators
 - [Multilayer and multi-aspect graphs](math-multilayer.md) — supra-node form in depth
 - [Slices and views](managers-and-views.md) — how `slice=` and `propagate=` interact with slice state
 - API reference: [`AnnNet.add_edges`][annnet.core.graph.AnnNet.add_edges]

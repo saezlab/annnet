@@ -216,9 +216,9 @@ uv run python -m mkdocs serve
 ```
 
 The default MkDocs configuration executes the HowTo notebooks during the docs
-build. Scenario and large use-case notebooks render their stored outputs; use
-the environment files linked from the notebook gallery when you want to rerun
-those heavier notebooks.
+build. Scenario notebooks render their stored outputs; use the environment
+files linked from the notebook gallery when you want to rerun those heavier
+notebooks. Use-case notebooks are coming soon.
 
 For a one-off strict build:
 

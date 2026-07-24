@@ -5,8 +5,8 @@ recreate them, use the linked GitHub environment file for the notebook family.
 
 Base HowTos use the
 [HowTo environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/environment.yml).
-Scenario and use-case notebooks each link a narrower environment for the
-external packages they demonstrate.
+Scenario notebooks each link a narrower environment for the external packages
+they demonstrate. Use-case notebooks are coming soon.
 
 ## HowTos
 
@@ -120,8 +120,7 @@ optimization, and graph learning workflows.
     Build patient layers from CPTAC/OmniPath data and write inferred causal
     subnetworks back into AnnNet.
 
-    [Open notebook](notebooks/use_cases/UC1/01_setup.ipynb) ·
-    [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/uc1_multi_condition_causal_signaling.yml)
+    Coming soon.
 
 -   __HEK293 heterogeneous biology graph__
 
@@ -130,8 +129,7 @@ optimization, and graph learning workflows.
     Combine signaling, metabolic, complex, regulatory, organelle, and
     graph-learning workflows in one AnnNet object.
 
-    [Open notebook](notebooks/use_cases/UC2/01_setup.ipynb) ·
-    [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/uc2_hek293_heterogeneous_graph.yml)
+    Coming soon.
 
 </div>
 
@@ -141,15 +139,6 @@ Short ecosystem bridges. They use tiny deterministic data and keep external
 dependencies in scenario-specific environment files.
 
 <div class="grid cards annnet-feature-cards" markdown>
-
--   __AnnData/scverse bridge__
-
-    ---
-
-    Convert a tiny annotated graph at the AnnNet/scverse boundary.
-
-    [Open notebook](notebooks/scenarios/scverse_bridge.ipynb) ·
-    [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/scverse_bridge.yml)
 
 -   __OmniPath table ingestion__
 
