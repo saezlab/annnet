@@ -8,7 +8,7 @@ handed between notebooks through the artifact paths defined below.
 """
 
 import json
-import pickle
+import pickle  # nosec B403 - only our own CARNIVAL cache (trusted, self-written)
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -104,7 +104,7 @@ def save_carnival(networks):
 
 
 def load_carnival():
-    return pickle.loads(CARNIVAL_PKL.read_bytes())
+    return pickle.loads(CARNIVAL_PKL.read_bytes())  # nosec B301 - our own cache, not untrusted input
 
 
 def save_cohorts(cohorts):
