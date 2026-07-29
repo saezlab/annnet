@@ -59,6 +59,9 @@ class FakeAnnNet:
     def _resolve_entity_key(self, key):
         return key
 
+    def has_vertex(self, vertex_id):
+        return self._resolve_entity_key(vertex_id) in self._entities
+
 
 @pytest.fixture(autouse=True)
 def patch_annnet(monkeypatch):

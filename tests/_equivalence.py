@@ -64,9 +64,7 @@ def _edge_view_signature(view) -> tuple:
 
 def _incident_signature(graph, node_id, direction) -> set:
     """Return the edge signatures incident to one node, without the columns."""
-    return {
-        _edge_view_signature(view) for _col, view in graph.incident_edges(node_id, direction)
-    }
+    return {_edge_view_signature(view) for _col, view in graph.incident_edges(node_id, direction)}
 
 
 def _matrix_cells(graph) -> dict[tuple, float]:
@@ -170,9 +168,7 @@ def compare(left, right) -> list[str]:
     _compare_sets(problems, 'matrix nonzeros', left_cells, right_cells)
     for key in sorted(set(left_cells) & set(right_cells), key=repr):
         if not _close(left_cells[key], right_cells[key]):
-            problems.append(
-                f'matrix cell {key!r} differs: {left_cells[key]} != {right_cells[key]}'
-            )
+            problems.append(f'matrix cell {key!r} differs: {left_cells[key]} != {right_cells[key]}')
 
     # The node table and the edge table.
     for label, table_name, key_column in (

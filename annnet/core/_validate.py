@@ -17,10 +17,30 @@ the end when the caller asks for strict mode.
 
 from __future__ import annotations
 
-from . import _derive as D, _identity as I
+from . import _derive as D, _identity as I, _structure as S
 
 RECORD_STORE = 'records'
 SLOT_STORE = 'slots'
+
+# A materialized cell and the coefficient it comes from may differ by the rounding
+# of the float32 matrix storage.
+_TOLERANCE = 1e-4
+
+
+def _materialized_matrix(g, problems):
+    """Return the incidence matrix, or None when it cannot be built.
+
+    A check must never raise, because the caller wants the whole problem list
+    and not the first exception. A store that cannot even produce its matrix is
+    itself a problem, so it joins the list.
+    """
+    try:
+        return g._matrix
+    except Exception as error:  # noqa: BLE001 - any failure here is a reportable problem
+        message = f'the incidence matrix cannot be materialized: {error}'
+        if message not in problems:
+            problems.append(message)
+        return None
 
 
 def detect_store_kind(g) -> str:
@@ -107,12 +127,124 @@ def _check_adjacency_indexes(g, problems) -> None:
                 problems.append(f'_pair_to_edges[{key!r}] has stale/mis-keyed edge {eid!r}')
 
 
+def _check_member_liveness(g, problems) -> None:
+    """Every member of every edge is a live entity.
+
+    A member that names no entity leaves a column that no row can carry, so the
+    matrix silently drops it.
+    """
+    for eid in g._edges:
+        for member_key in S.edge_members(g, eid):
+            if member_key not in g._entities:
+                problems.append(f'edge {eid!r} has member {member_key[0]!r} that is not an entity')
+
+
+def _check_edge_entity_linkage(g, problems) -> None:
+    """An edge-entity holds an edge and an entity under one id."""
+    for ekey, rec in g._entities.items():
+        if rec.kind == 'edge_entity' and ekey[0] not in g._edges:
+            problems.append(f'entity {ekey[0]!r} is marked as an edge but no edge carries that id')
+    for eid, rec in g._edges.items():
+        if rec.etype not in ('vertex_edge', 'edge_placeholder'):
+            continue
+        matches = [ekey for ekey in g._entities if ekey[0] == eid]
+        if not matches:
+            problems.append(f'edge {eid!r} is an edge-entity but no entity carries that id')
+            continue
+        for ekey in matches:
+            if g._entities[ekey].kind != 'edge_entity':
+                problems.append(
+                    f'edge-entity {eid!r} has entity kind {g._entities[ekey].kind!r}, '
+                    "expected 'edge_entity'"
+                )
+
+
+def _check_matrix_agrees_with_members(g, problems) -> None:
+    """The materialized matrix holds exactly the member lists the store implies.
+
+    This is the rule that a directly assigned matrix breaks. It also covers the
+    sign rule, because the member list of an edge with no explicit coefficient
+    carries the signs its kind and directedness imply.
+    """
+    raw = _materialized_matrix(g, problems)
+    if raw is None:
+        return
+    matrix = raw.tocsc()
+    n_rows, n_cols = matrix.shape
+    seen_cells: set[tuple[int, int]] = set()
+
+    for eid, rec in g._edges.items():
+        col = rec.col_idx
+        if col < 0:
+            continue
+        if col >= n_cols:
+            problems.append(f'edge {eid!r} has column {col} outside the matrix of {n_cols} columns')
+            continue
+        expected: dict[int, float] = {}
+        for member_key, coefficient in S.edge_members(g, eid).items():
+            record = g._entities.get(member_key)
+            if record is None or coefficient == 0:
+                continue
+            expected[record.row_idx] = coefficient
+        block = matrix[:, [col]].tocoo()
+        found = {
+            int(r): float(v) for r, v in zip(block.row, block.data, strict=False) if float(v) != 0.0
+        }
+        seen_cells.update((row, col) for row in found)
+        for row in set(expected) | set(found):
+            want = expected.get(row, 0.0)
+            have = found.get(row, 0.0)
+            if abs(want - have) > _TOLERANCE * max(1.0, abs(want)):
+                ekey = g._row_to_entity.get(row)
+                name = repr(ekey) if ekey is not None else f'row {row}, which holds no entity'
+                problems.append(
+                    f'edge {eid!r} cell for {name}: store says {want}, matrix says {have}'
+                )
+
+    live_rows = {rec.row_idx for rec in g._entities.values()}
+    block = raw.tocoo()
+    for row, col, value in zip(block.row, block.col, block.data, strict=False):
+        if float(value) == 0.0 or (int(row), int(col)) in seen_cells:
+            continue
+        if int(row) not in live_rows:
+            problems.append(f'matrix holds {float(value)} at row {int(row)}, which holds no entity')
+        elif int(col) not in g._col_to_edge:
+            problems.append(
+                f'matrix holds {float(value)} at column {int(col)}, which holds no edge'
+            )
+    if n_rows < len(live_rows):
+        problems.append(f'matrix has {n_rows} rows but the store holds {len(live_rows)} entities')
+
+
+def _check_table_levels(g, problems) -> None:
+    """The node table stays node-level and the edge table stays edge-level."""
+    entity_ids = {ekey[0] for ekey in g._entities}
+    for label, table, key_column, known in (
+        ('obs', g.vertex_attributes, 'vertex_id', entity_ids),
+        ('var', g.edge_attributes, 'edge_id', set(g._edges)),
+    ):
+        if table is None:
+            continue
+        try:
+            rows = table.to_dicts() if hasattr(table, 'to_dicts') else list(table.rows(named=True))
+        except (AttributeError, TypeError):  # pragma: no cover - unknown backend
+            continue
+        for row in rows:
+            key = row.get(key_column)
+            if key is not None and key not in known:
+                problems.append(f'{label} holds a row for {key!r}, which the store does not hold')
+
+
 def _check_slice_membership(g, problems) -> None:
-    """A slice holds bare node ids and known edge ids."""
+    """A slice holds bare node ids and known edge ids, and both must be live."""
+    node_ids = {ekey[0] for ekey in g._entities}
     for sid, srec in g._slices.items():
         for v in srec['vertices']:
             if not isinstance(v, str):
                 problems.append(f'slice {sid!r} has non-string vertex {v!r} (must be bare vid)')
+                break
+            if v not in node_ids:
+                problems.append(f'slice {sid!r} references unknown vertex {v!r}')
                 break
         for eid in srec['edges']:
             if eid not in g._edges:
@@ -122,8 +254,12 @@ def _check_slice_membership(g, problems) -> None:
 
 def _check_coefficients(g, problems) -> None:
     """A coefficient-bearing column matches the coefficients its record holds."""
+    matrix = _materialized_matrix(g, problems)
+    if matrix is None:
+        return
+    n_rows, n_cols = matrix.shape
     for eid, rec in g._edges.items():
-        if rec.coeffs is None or rec.col_idx < 0:
+        if rec.coeffs is None or rec.col_idx < 0 or rec.col_idx >= n_cols:
             continue
         for node, val in rec.coeffs.items():
             try:
@@ -131,14 +267,19 @@ def _check_coefficients(g, problems) -> None:
             except (KeyError, ValueError, TypeError):
                 problems.append(f'edge {eid!r} coeff node {node!r} not resolvable')
                 continue
-            actual = float(g._matrix[r, rec.col_idx])
+            if r >= n_rows:
+                continue
+            actual = float(matrix[r, rec.col_idx])
             if abs(actual - float(val)) > 1e-4 * max(1.0, abs(float(val))):
                 problems.append(f'edge {eid!r} coeff[{node!r}]={val} != matrix {actual}')
 
 
 def _check_matrix_bounds(g, problems) -> None:
     """The matrix is large enough for every row and every column in use."""
-    nrows, ncols = g._matrix.shape
+    matrix = _materialized_matrix(g, problems)
+    if matrix is None:
+        return
+    nrows, ncols = matrix.shape
     if len(g._entities) > nrows:
         problems.append(f'matrix rows {nrows} < #entities {len(g._entities)}')
     cols = [rec.col_idx for rec in g._edges.values() if rec.col_idx >= 0]
@@ -150,6 +291,10 @@ RECORD_CHECKS = (
     _check_entity_rows,
     _check_edge_columns,
     _check_adjacency_indexes,
+    _check_member_liveness,
+    _check_edge_entity_linkage,
+    _check_matrix_agrees_with_members,
+    _check_table_levels,
     _check_slice_membership,
     _check_coefficients,
     _check_matrix_bounds,

@@ -1145,7 +1145,34 @@ class AnnNet(
         )
 
     def validate(self, *, strict: bool = True) -> list[str]:
-        """Assert internal-consistency invariants; return problems (raises if ``strict``)."""
+        """Check the internal consistency of the graph and report every problem.
+
+        The check covers the agreement between identity and address, the member
+        list of every edge, the link between the two sides of an edge-entity,
+        the agreement between the store and the materialized matrix, the level
+        of the node table and the edge table, and slice membership.
+
+        The check picks its rules from the store the graph holds, so the same
+        call serves the record store and the slot-addressed store.
+
+        Parameters
+        ----------
+        strict : bool, default True
+            Raise ``AssertionError`` when the graph has any problem.
+
+        Returns
+        -------
+        list[str]
+            One message per problem. An empty list means a consistent graph.
+
+        Examples
+        --------
+        >>> G = AnnNet(directed=True)
+        >>> G.add_edges('A', 'B')
+        'edge_0'
+        >>> G.validate()
+        []
+        """
         return _validate.validate_internal_consistency(self, strict=strict)
 
     # Remove / mutate down

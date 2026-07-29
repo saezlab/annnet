@@ -27,7 +27,10 @@ import scipy as scipy
 import scipy.sparse as sp
 
 from .. import __version__ as ANNNET_VERSION
+from ..core import _structure
 from ._common import (
+    STORED_EDGE_KIND,
+    STORED_ENTITY_KIND,
     dataframe_to_rows,
     serialize_endpoint,
     dataframe_from_rows,
@@ -131,23 +134,19 @@ def _build_layer_dict(graph) -> _LayerDict:
     ld = _LayerDict()
 
     # 1. Entity index — the canonical source of layer coords
-    for _vid, coord in graph._entities.keys():
-        ld.intern(coord)
+    for ref in _structure.iter_entities(graph):
+        ld.intern(ref.layer)
 
     # 2. Multilayer endpoints in binary edges
-    for rec in graph._edges.values():
-        for ep in (rec.src, rec.tgt):
-            if (
-                isinstance(ep, tuple)
-                and len(ep) == 2
-                and isinstance(ep[0], str)
-                and isinstance(ep[1], tuple)
-            ):
-                ld.intern(ep[1])
+    for edge in _structure.iter_edges(graph, include_placeholders=True):
+        sides = _structure.edge_sides(graph, edge.id)
+        for endpoint in sides.source | sides.target:
+            if _structure.is_entity_key(endpoint):
+                ld.intern(endpoint[1])
 
     # 3. ml_layers stored on edges (intra: single tuple; inter/coupling: (a,b))
-    for rec in graph._edges.values():
-        ml = rec.ml_layers
+    for edge in _structure.iter_edges(graph, include_placeholders=True):
+        ml = edge.ml_layers
         if ml is None:
             continue
         if isinstance(ml, tuple) and ml and isinstance(ml[0], tuple):
@@ -220,12 +219,14 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False, 
         'annnet_version': ANNNET_VERSION,
         'graph_version': graph._version,
         'directed': graph.directed,
-        'matrix_shape': list(graph._matrix_shape),
+        'matrix_shape': list(graph.X().shape),
         'incidence_stored': incidence_stored,
         'counts': {
-            'vertices': sum(1 for r in graph._entities.values() if r.kind == 'vertex'),
+            'vertices': sum(
+                1 for ref in _structure.iter_entities(graph) if ref.kind == _structure.NODE
+            ),
             'edges': graph.ne,
-            'entities': len(graph._entities),
+            'entities': sum(1 for _ in _structure.iter_entities(graph)),
             'slices': len(graph.slices.list(include_default=True)),
             'hyperedges': len(graph.hyperedge_definitions),
             'aspects': len(graph.aspects),
@@ -327,7 +328,7 @@ def _write_structure(
     # 2. Sparse incidence matrix (Zarr) — only when it holds explicit coeffs;
     # otherwise it is rebuilt from records on load (see read()).
     if store_incidence:
-        coo = graph._matrix.tocoo()
+        coo = graph.X().tocoo()
         root = zarr.open_group(str(path / 'incidence.zarr'), mode='w')
 
         from zarr.codecs import BloscCname, BloscCodec, BloscShuffle
@@ -346,11 +347,11 @@ def _write_structure(
     ent_layer_ids: list = []
     ent_idxs: list = []
     ent_types: list = []
-    for ekey, rec in graph._entities.items():
-        ent_ids.append(ekey[0])
-        ent_layer_ids.append(layer_dict.intern(ekey[1]))
-        ent_idxs.append(rec.row_idx)
-        ent_types.append(rec.kind)
+    for ref in _structure.iter_entities(graph):
+        ent_ids.append(ref.id)
+        ent_layer_ids.append(layer_dict.intern(ref.layer))
+        ent_idxs.append(_structure.entity_row(graph, ref.key))
+        ent_types.append(STORED_ENTITY_KIND.get(ref.kind, ref.kind))
     dataframe_write_parquet(
         dataframe_from_columns(
             {
@@ -404,43 +405,44 @@ def _write_structure(
     # this slot null.
     e_hyper_layer_ids: list = []
 
-    for eid, rec in graph._edges.items():
-        e_eids.append(eid)
-        e_col_idxs.append(int(rec.col_idx))
-        e_weights.append(float(rec.weight) if rec.weight is not None else 1.0)
-        e_directed.append(rec.directed)
-        e_kinds.append(rec.etype)
-        e_ml_kinds.append(rec.ml_kind)
+    for edge in _structure.iter_edges(graph, include_placeholders=True):
+        sides = _structure.edge_sides(graph, edge.id)
+        source, target = sides.source, sides.target
+        is_hyper = edge.kind == _structure.HYPER
 
-        if rec.etype == 'hyper' or rec.src is None or isinstance(rec.src, (frozenset, set)):
+        e_eids.append(edge.id)
+        e_col_idxs.append(_structure.edge_column(graph, edge.id))
+        e_weights.append(float(edge.weight))
+        e_directed.append(edge.declared_directed)
+        e_kinds.append(STORED_EDGE_KIND.get(edge.kind, edge.kind))
+        e_ml_kinds.append(edge.ml_kind)
+
+        if is_hyper or not source or len(source) > 1 or len(target) > 1:
             # Hyperedge or null placeholder; endpoints live elsewhere / are absent.
             e_sources.append(None)
             e_source_layer_ids.append(None)
             e_targets.append(None)
             e_target_layer_ids.append(None)
-            if rec.etype != 'hyper':
-                e_edge_types.append(None)
-            else:
-                e_edge_types.append(None)
+            e_edge_types.append(None)
             if (
-                rec.etype == 'hyper'
-                and isinstance(rec.ml_layers, tuple)
-                and rec.ml_layers
-                and isinstance(rec.ml_layers[0], str)
+                is_hyper
+                and isinstance(edge.ml_layers, tuple)
+                and edge.ml_layers
+                and isinstance(edge.ml_layers[0], str)
             ):
-                e_hyper_layer_ids.append(layer_dict.intern(rec.ml_layers))
+                e_hyper_layer_ids.append(layer_dict.intern(edge.ml_layers))
             else:
                 e_hyper_layer_ids.append(None)
         else:
-            sid, slay = _split_endpoint(rec.src)
-            tid, tlay = _split_endpoint(rec.tgt)
+            sid, slay = _split_endpoint(next(iter(source), None))
+            tid, tlay = _split_endpoint(next(iter(target), None))
             e_sources.append(sid)
             e_source_layer_ids.append(slay)
             e_targets.append(tid)
             e_target_layer_ids.append(tlay)
             e_edge_types.append(
                 'DIRECTED'
-                if (rec.directed if rec.directed is not None else default_dir)
+                if (edge.declared_directed if edge.declared_directed is not None else default_dir)
                 else 'UNDIRECTED'
             )
             e_hyper_layer_ids.append(None)
@@ -489,12 +491,14 @@ def _write_structure(
     c_entities: list = []
     c_layer_ids: list = []
     c_values: list = []
-    for eid, rec in graph._edges.items():
-        if not rec.coeffs:
+    for edge in _structure.iter_edges(graph, include_placeholders=True):
+        coefficients = _structure.edge_coefficients(graph, edge.id)
+        if not coefficients:
             continue
-        # Sorted so the table is byte-stable across processes: coeffs is keyed by
-        # node, and set/dict iteration over strings follows randomised hash order.
-        for node, value in sorted(rec.coeffs.items(), key=lambda kv: repr(kv[0])):
+        eid = edge.id
+        # Sorted so the table is byte-stable across processes: a coefficient map is
+        # keyed by node, and iteration over strings follows randomised hash order.
+        for node, value in sorted(coefficients.items(), key=lambda kv: repr(kv[0])):
             vid, layer_id = _split_endpoint(node)
             c_eids.append(eid)
             c_entities.append(vid)
@@ -520,21 +524,26 @@ def _write_structure(
         )
 
     # 5. Hyperedge definitions (members / head / tail). Same schema as v1.
-    hyper_edges = {eid: rec for eid, rec in graph._edges.items() if rec.etype == 'hyper'}
+    hyper_edges = [
+        edge
+        for edge in _structure.iter_edges(graph, include_placeholders=True)
+        if edge.kind == _structure.HYPER
+    ]
     if hyper_edges:
         eids, dirs, mems, heads, tails = [], [], [], [], []
-        for eid, rec in hyper_edges.items():
-            eids.append(eid)
-            is_dir = rec.tgt is not None
+        for edge in hyper_edges:
+            sides = _structure.edge_sides(graph, edge.id)
+            eids.append(edge.id)
+            is_dir = bool(sides.target)
             dirs.append(is_dir)
             if is_dir:
-                heads.append(_serialize_hyper_members(rec.src))
-                tails.append(_serialize_hyper_members(rec.tgt))
+                heads.append(_serialize_hyper_members(sides.source))
+                tails.append(_serialize_hyper_members(sides.target))
                 mems.append(None)
             else:
                 heads.append(None)
                 tails.append(None)
-                mems.append(_serialize_hyper_members(rec.src))
+                mems.append(_serialize_hyper_members(sides.source))
         hyper_df = _df_from_dict(
             {'edge_id': eids, 'directed': dirs, 'members': mems, 'head': heads, 'tail': tails}
         )

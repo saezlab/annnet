@@ -80,10 +80,14 @@ def hyper_undirected() -> AnnNet:
 
 
 def hyper_directed() -> AnnNet:
-    """One hyperedge with a tail of two nodes and a head of one node."""
+    """One hyperedge that runs from two source nodes to one target node.
+
+    The source side carries the positive coefficient, exactly as it does for a
+    binary edge.
+    """
     G = AnnNet(directed=True)
     G.add_vertices(['A', 'B', 'C'])
-    G.add_edges([{'tail': ['A', 'B'], 'head': ['C'], 'edge_id': 'h_ab_c'}])
+    G.add_edges([{'source': ['A', 'B'], 'target': ['C'], 'edge_id': 'h_ab_c'}])
     return G
 
 
@@ -190,7 +194,9 @@ def build_case(name: str) -> AnnNet:
     try:
         builder = OPERATION_MATRIX[name]
     except KeyError:
-        raise KeyError(f'Unknown operation-matrix case {name!r}. Known: {list(CASE_NAMES)}') from None
+        raise KeyError(
+            f'Unknown operation-matrix case {name!r}. Known: {list(CASE_NAMES)}'
+        ) from None
     return builder()
 
 

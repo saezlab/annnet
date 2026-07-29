@@ -8,6 +8,7 @@ _support modules.
 
 from __future__ import annotations
 
+from ..core import _structure
 from .._support.graph_records import (
     _rows_to_df,
     _is_directed_eid,
@@ -46,7 +47,24 @@ from .._support.dataframe_backend import (
     dataframe_column_is_numeric,
 )
 
+# A stored file names the entity and edge kinds the way the record store named
+# them. The facade uses the vocabulary of the new core, so a writer maps back
+# here and a reader maps forward. A file written today therefore stays readable
+# by a version that no longer holds records.
+STORED_ENTITY_KIND = {
+    _structure.NODE: 'vertex',
+    _structure.EDGE_ENTITY: 'edge_entity',
+}
+STORED_EDGE_KIND = {
+    _structure.BINARY: 'binary',
+    _structure.HYPER: 'hyper',
+    _structure.NODE_EDGE: 'vertex_edge',
+    _structure.PLACEHOLDER: 'edge_placeholder',
+}
+
 __all__ = [
+    'STORED_EDGE_KIND',
+    'STORED_ENTITY_KIND',
     'collect_slice_manifest',
     'dataframe_column_is_numeric',
     'dataframe_column_values',
