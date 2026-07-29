@@ -1,27 +1,44 @@
 """Internal-consistency validation.
 
-``validate_internal_consistency(g)`` asserts the invariants that the mutation gateway and
-derive layer are supposed to maintain: row/col index bijections, derived indexes matching
-the canonical records, the bare-vid slice contract, and matrix bounds. It is a debugging /
-test aid — never part of a hot path.
+``validate_internal_consistency(g)`` asserts the invariants that the mutation
+gateway and the derive layer are supposed to maintain. It is a debugging and
+test aid. It never runs on a hot path.
+
+The core holds two store models during the refactor. The record store keeps one
+record per entity and one record per edge, and addresses a row and a column by
+position. The slot store keeps slot-addressed member lists. The two models need
+different checks, so this module keeps one check list per model and picks the
+list from the store the graph holds.
+
+Every check takes the graph and a list, and appends one message per problem it
+finds. A check never raises. ``validate_internal_consistency`` raises once at
+the end when the caller asks for strict mode.
 """
 
 from __future__ import annotations
 
 from . import _derive as D, _identity as I
 
+RECORD_STORE = 'records'
+SLOT_STORE = 'slots'
 
-def validate_internal_consistency(g, *, strict: bool = True) -> list[str]:
-    """Check graph invariants; return a list of problems (and raise if ``strict``).
 
-    Asserts: entity row bijection with ``_row_to_entity``; ``_vid_to_ekeys`` matches the
-    entity keys; edge column bijection with ``_col_to_edge``; adjacency indexes match the
-    records (when built); slice ``vertices`` are bare strings; matrix shape covers all
-    rows/cols. Returns ``[]`` for a consistent graph.
+def detect_store_kind(g) -> str:
+    """Return which store model backs a graph.
+
+    The slot store lives at ``g._store``. A graph without that attribute still
+    runs on the record store.
     """
-    problems: list[str] = []
+    return SLOT_STORE if getattr(g, '_store', None) is not None else RECORD_STORE
 
-    # --- entities <-> rows -----------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Record-store checks
+# ---------------------------------------------------------------------------
+
+
+def _check_entity_rows(g, problems) -> None:
+    """Entities and rows form a bijection, and the row block is contiguous."""
     seen_rows: dict[int, tuple] = {}
     vid_to_ekeys: dict[str, list] = {}
     for ekey, rec in g._entities.items():
@@ -33,21 +50,21 @@ def validate_internal_consistency(g, *, strict: bool = True) -> list[str]:
             problems.append(f'_row_to_entity[{r}] != {ekey!r} (got {g._row_to_entity.get(r)!r})')
         if isinstance(ekey, tuple) and len(ekey) == 2 and isinstance(ekey[0], str):
             vid_to_ekeys.setdefault(ekey[0], []).append(ekey)
-    # row indices should be a contiguous 0..n-1 block
     if seen_rows and set(seen_rows) != set(range(len(g._entities))):
         problems.append(f'entity row indices not contiguous 0..{len(g._entities) - 1}')
-    # _row_to_entity must not carry stale rows
     for r, ekey in g._row_to_entity.items():
         if ekey not in g._entities or g._entities[ekey].row_idx != r:
             problems.append(f'_row_to_entity has stale entry [{r}]={ekey!r}')
-    # _vid_to_ekeys must match — but it is intentionally left empty on flat
-    # graphs (resolve_ekey returns the placeholder ekey directly there).
+    # ``_vid_to_ekeys`` is intentionally left empty on a flat graph, because
+    # ``resolve_ekey`` returns the placeholder key directly there.
     if g._aspects != ('_',):
         for vid, ekeys in vid_to_ekeys.items():
             if set(g._vid_to_ekeys.get(vid, ())) != set(ekeys):
                 problems.append(f'_vid_to_ekeys[{vid!r}] mismatch')
 
-    # --- edges <-> columns -----------------------------------------------------
+
+def _check_edge_columns(g, problems) -> None:
+    """Edges and columns form a bijection, and the column block is contiguous."""
     seen_cols: dict[int, str] = {}
     for eid, rec in g._edges.items():
         c = rec.col_idx
@@ -65,27 +82,33 @@ def validate_internal_consistency(g, *, strict: bool = True) -> list[str]:
         if rec is None or rec.col_idx != c:
             problems.append(f'_col_to_edge has stale entry [{c}]={eid!r}')
 
-    # --- adjacency indexes carry no stale / mis-keyed entries ------------------
-    # (the incremental and rebuilt forms can differ benignly for hyperedges, which are
-    # never queried via these maps; what must hold is that every entry points at a real
-    # edge whose endpoint actually equals the key.)
-    if getattr(g, '_edge_indexes_built', True):
-        for label, index, field in (
-            ('_src_to_edges', g._src_to_edges, 'src'),
-            ('_tgt_to_edges', g._tgt_to_edges, 'tgt'),
-        ):
-            for key, eids in index.items():
-                for eid in eids:
-                    rec = g._edges.get(eid)
-                    if rec is None or getattr(rec, field) != key:
-                        problems.append(f'{label}[{key!r}] has stale/mis-keyed edge {eid!r}')
-        for key, eids in g._pair_to_edges.items():
+
+def _check_adjacency_indexes(g, problems) -> None:
+    """Every adjacency entry points at a real edge whose endpoint equals the key.
+
+    The incremental form and the rebuilt form differ benignly for a hyperedge,
+    which is never queried through these maps.
+    """
+    if not getattr(g, '_edge_indexes_built', True):
+        return
+    for label, index, field in (
+        ('_src_to_edges', g._src_to_edges, 'src'),
+        ('_tgt_to_edges', g._tgt_to_edges, 'tgt'),
+    ):
+        for key, eids in index.items():
             for eid in eids:
                 rec = g._edges.get(eid)
-                if rec is None or (rec.src, rec.tgt) != key:
-                    problems.append(f'_pair_to_edges[{key!r}] has stale/mis-keyed edge {eid!r}')
+                if rec is None or getattr(rec, field) != key:
+                    problems.append(f'{label}[{key!r}] has stale/mis-keyed edge {eid!r}')
+    for key, eids in g._pair_to_edges.items():
+        for eid in eids:
+            rec = g._edges.get(eid)
+            if rec is None or (rec.src, rec.tgt) != key:
+                problems.append(f'_pair_to_edges[{key!r}] has stale/mis-keyed edge {eid!r}')
 
-    # --- slice contract: vertices are bare ids --------------------------------
+
+def _check_slice_membership(g, problems) -> None:
+    """A slice holds bare node ids and known edge ids."""
     for sid, srec in g._slices.items():
         for v in srec['vertices']:
             if not isinstance(v, str):
@@ -96,9 +119,9 @@ def validate_internal_consistency(g, *, strict: bool = True) -> list[str]:
                 problems.append(f'slice {sid!r} references unknown edge {eid!r}')
                 break
 
-    # --- numerical: coeff-bearing columns match their records ------------------
-    # (possible now that records carry stoich/explicit coefficients; the matrix is a
-    # warm cache of what the records imply.)
+
+def _check_coefficients(g, problems) -> None:
+    """A coefficient-bearing column matches the coefficients its record holds."""
     for eid, rec in g._edges.items():
         if rec.coeffs is None or rec.col_idx < 0:
             continue
@@ -112,12 +135,62 @@ def validate_internal_consistency(g, *, strict: bool = True) -> list[str]:
             if abs(actual - float(val)) > 1e-4 * max(1.0, abs(float(val))):
                 problems.append(f'edge {eid!r} coeff[{node!r}]={val} != matrix {actual}')
 
-    # --- matrix bounds ---------------------------------------------------------
+
+def _check_matrix_bounds(g, problems) -> None:
+    """The matrix is large enough for every row and every column in use."""
     nrows, ncols = g._matrix.shape
     if len(g._entities) > nrows:
         problems.append(f'matrix rows {nrows} < #entities {len(g._entities)}')
-    if seen_cols and max(seen_cols) >= ncols:
-        problems.append(f'matrix cols {ncols} <= max col_idx {max(seen_cols)}')
+    cols = [rec.col_idx for rec in g._edges.values() if rec.col_idx >= 0]
+    if cols and max(cols) >= ncols:
+        problems.append(f'matrix cols {ncols} <= max col_idx {max(cols)}')
+
+
+RECORD_CHECKS = (
+    _check_entity_rows,
+    _check_edge_columns,
+    _check_adjacency_indexes,
+    _check_slice_membership,
+    _check_coefficients,
+    _check_matrix_bounds,
+)
+
+# The slot store arrives with the new core. Its checks register here.
+SLOT_CHECKS: tuple = ()
+
+_CHECKS_BY_STORE = {
+    RECORD_STORE: RECORD_CHECKS,
+    SLOT_STORE: SLOT_CHECKS,
+}
+
+
+def checks_for(store_kind: str) -> tuple:
+    """Return the check list for one store model."""
+    try:
+        return _CHECKS_BY_STORE[store_kind]
+    except KeyError:
+        raise ValueError(
+            f'Unknown store kind {store_kind!r}. Known: {sorted(_CHECKS_BY_STORE)}'
+        ) from None
+
+
+def validate_internal_consistency(g, *, strict: bool = True) -> list[str]:
+    """Check the invariants of a graph and return one message per problem.
+
+    The function picks the check list from the store the graph holds. It returns
+    an empty list for a consistent graph. It raises ``AssertionError`` on a
+    problem when ``strict`` is set.
+    """
+    store_kind = detect_store_kind(g)
+    checks = checks_for(store_kind)
+    if not checks:
+        raise NotImplementedError(
+            f'No invariant checks are registered for the {store_kind!r} store.'
+        )
+
+    problems: list[str] = []
+    for check in checks:
+        check(g, problems)
 
     if strict and problems:
         raise AssertionError('internal consistency violated:\n  ' + '\n  '.join(problems))
