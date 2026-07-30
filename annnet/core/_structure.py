@@ -177,7 +177,17 @@ def entity_key(graph, ref) -> tuple:
 
 
 def entity_key_of_row(graph, row: int) -> tuple:
-    """Return the entity key that a materialized row belongs to."""
+    """Return the entity key that a materialized row belongs to.
+
+    This is the inverse of :func:`entity_row`, and it carries the same warning: a
+    row belongs to one materialized matrix and to nothing else.
+    """
+    if is_slot_backed(graph):
+        store = store_of(graph)
+        slots = store.live_entity_slots()
+        if not 0 <= row < slots.size:
+            raise KeyError(f'No entity at row {row}')
+        return store.entity_key(int(slots[row]))
     try:
         return graph._row_to_entity[row]
     except KeyError:
@@ -220,11 +230,63 @@ def has_entity(graph, ref) -> bool:
     return True
 
 
+def has_entity_id(graph, entity_id: str) -> bool:
+    """Return True when any entity of the graph carries this id, in any layer.
+
+    A bare id names one entity in a flat graph and any number of them in a
+    multilayer graph. Ask this when the id alone is the question. Ask
+    :func:`has_entity` when the answer has to be one entity.
+    """
+    if is_slot_backed(graph):
+        store = store_of(graph)
+        return any(key[0] == entity_id for _slot, key in store.live_entities())
+    if graph._aspects == ('_',):
+        return (entity_id, ('_',)) in graph._entities
+    return entity_id in graph._vid_to_ekeys
+
+
 def has_edge(graph, edge_id: str) -> bool:
     """Return True when the graph holds this edge."""
     if is_slot_backed(graph):
         return store_of(graph).edge_slot(edge_id) is not None
     return edge_id in graph._edges
+
+
+# ---------------------------------------------------------------------------
+# Counts
+# ---------------------------------------------------------------------------
+# A count is the size of the matching enumeration. Each store answers it from
+# what it already holds, so a caller that needs a size never walks the graph.
+
+
+def entity_count(graph) -> int:
+    """Return how many entities the graph holds, nodes and edge entities."""
+    if is_slot_backed(graph):
+        return store_of(graph).entity_count
+    return len(graph._entities)
+
+
+def node_count(graph) -> int:
+    """Return how many nodes the graph holds, leaving out the edge entities."""
+    if is_slot_backed(graph):
+        store = store_of(graph)
+        return sum(
+            1
+            for slot, _key in store.live_entities()
+            if _SLOT_ENTITY_KIND[int(store.entity_kind[slot])] == NODE
+        )
+    return sum(1 for record in graph._entities.values() if record.kind == 'vertex')
+
+
+def edge_count(graph) -> int:
+    """Return how many edges carry structure.
+
+    An edge that occupies no column holds no members, so it counts for nothing
+    here. :func:`iter_edges` leaves the same edges out.
+    """
+    if is_slot_backed(graph):
+        return store_of(graph).edge_count
+    return len(graph._col_to_edge)
 
 
 # ---------------------------------------------------------------------------

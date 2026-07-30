@@ -77,19 +77,21 @@ class GraphView:
         vertex_ids = self.vertex_ids
         edge_ids = self.edge_ids
         if vertex_ids is not None:
-            rows = []
-            for nid in vertex_ids:
-                rec = self._graph._entities.get(self._graph._resolve_entity_key(nid))
-                if rec is not None:
-                    rows.append(rec.row_idx)
+            rows = [
+                _structure.entity_row(self._graph, nid)
+                for nid in vertex_ids
+                if _structure.has_entity(self._graph, nid)
+            ]
         else:
             rows = list(range(self._graph._matrix.shape[0]))
         if edge_ids is not None:
             cols = []
             for eid in edge_ids:
-                rec = self._graph._edges.get(eid)
-                if rec is not None and rec.col_idx >= 0:
-                    cols.append(rec.col_idx)
+                if not _structure.has_edge(self._graph, eid):
+                    continue
+                column = _structure.edge_column(self._graph, eid)
+                if column >= 0:
+                    cols.append(column)
         else:
             cols = list(range(self._graph._matrix.shape[1]))
         if rows and cols:
@@ -132,7 +134,7 @@ class GraphView:
         """
         vertex_ids = self.vertex_ids
         if vertex_ids is None:
-            return sum(1 for rec in self._graph._entities.values() if rec.kind == 'vertex')
+            return _structure.node_count(self._graph)
         return len(vertex_ids)
 
     @property
@@ -145,7 +147,7 @@ class GraphView:
         """
         edge_ids = self.edge_ids
         if edge_ids is None:
-            return len(self._graph._col_to_edge)
+            return _structure.edge_count(self._graph)
         return len(edge_ids)
 
     def _compute_ids(self):
@@ -165,7 +167,9 @@ class GraphView:
                 vertex_ids
                 if vertex_ids is not None
                 else {
-                    ekey[0] for ekey, rec in self._graph._entities.items() if rec.kind == 'vertex'
+                    ref.id
+                    for ref in _structure.iter_entities(self._graph)
+                    if ref.kind == _structure.NODE
                 }
             )
             if callable(self._vertices_filter):
@@ -187,7 +191,9 @@ class GraphView:
 
         if self._edges_filter is not None:
             candidate_edges = (
-                edge_ids if edge_ids is not None else set(self._graph._col_to_edge.values())
+                edge_ids
+                if edge_ids is not None
+                else {ref.id for ref in _structure.iter_edges(self._graph)}
             )
             if callable(self._edges_filter):
                 filtered = set()
@@ -219,19 +225,18 @@ class GraphView:
         if vertex_ids is not None and edge_ids is not None:
             filtered = set()
             for eid in edge_ids:
-                rec = self._graph._edges.get(eid)
-                if rec is None or rec.col_idx < 0:
+                if not _structure.has_edge(self._graph, eid):
                     continue
-                if rec.etype == 'hyper':
-                    if rec.tgt is not None:
-                        if set(rec.src).issubset(vertex_ids) and set(rec.tgt).issubset(vertex_ids):
-                            filtered.add(eid)
-                    elif set(rec.src).issubset(vertex_ids):
-                        filtered.add(eid)
-                else:
-                    s, t = rec.src, rec.tgt
-                    if s is not None and t is not None and s in vertex_ids and t in vertex_ids:
-                        filtered.add(eid)
+                if _structure.edge_column(self._graph, eid) < 0:
+                    continue
+                sides = _structure.edge_sides(self._graph, eid)
+                if not (sides.source <= vertex_ids and sides.target <= vertex_ids):
+                    continue
+                # A binary edge needs both of its sides. A hyperedge with no target
+                # side is undirected, and its one side is the whole edge.
+                is_hyper = _structure.edge_ref(self._graph, eid).kind == _structure.HYPER
+                if is_hyper or (sides.source and sides.target):
+                    filtered.add(eid)
             edge_ids = filtered
 
         self._vertex_ids_cache = vertex_ids

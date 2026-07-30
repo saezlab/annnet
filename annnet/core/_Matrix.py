@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys as _sys
 
 from . import _structure
+from ._records import _external_entity_kind
+from ._stored_kinds import STORED_ENTITY_KIND
 from .._support.dataframe_backend import (
     empty_dataframe,
     dataframe_columns,
@@ -246,13 +248,9 @@ class CacheManager:
         }
 
 
-def _entity_kind(rec):
-    k = rec.kind
-    if k == 'vertex':
-        return 'vertex'
-    if k in ('edge', 'edge_entity'):
-        return 'edge'
-    return k
+def _entity_kind(kind):
+    """Return the word this API uses for one entity kind of the facade."""
+    return _external_entity_kind(STORED_ENTITY_KIND.get(kind, kind))
 
 
 class IndexManager:
@@ -279,10 +277,7 @@ class IndexManager:
         KeyError
             If the entity is not found.
         """
-        rec = self._G._entities.get(self._G._resolve_entity_key(entity_id))
-        if rec is None:
-            raise KeyError(f"Entity '{entity_id}' not found")
-        return rec.row_idx
+        return _structure.entity_row(self._G, entity_id)
 
     def row_to_entity(self, row):
         """Map a matrix row index to its entity ID.
@@ -302,10 +297,7 @@ class IndexManager:
         KeyError
             If the row index is not found.
         """
-        ekey = self._G._row_to_entity.get(row)
-        if ekey is None:
-            raise KeyError(f'Row {row} not found')
-        return ekey[0]
+        return _structure.entity_key_of_row(self._G, row)[0]
 
     def entities_to_rows(self, entity_ids):
         """Batch convert entity IDs to row indices.
@@ -319,7 +311,7 @@ class IndexManager:
         -------
         list[int]
         """
-        return [self._G._entities[self._G._resolve_entity_key(eid)].row_idx for eid in entity_ids]
+        return [_structure.entity_row(self._G, eid) for eid in entity_ids]
 
     def rows_to_entities(self, rows):
         """Batch convert row indices to entity IDs.
@@ -333,7 +325,7 @@ class IndexManager:
         -------
         list[str]
         """
-        return [self._G._row_to_entity[r][0] for r in rows]
+        return [_structure.entity_key_of_row(self._G, r)[0] for r in rows]
 
     def edge_to_col(self, edge_id):
         """Map an edge ID to its matrix column index.
@@ -353,10 +345,14 @@ class IndexManager:
         KeyError
             If the edge is not found.
         """
-        rec = self._G._edges.get(edge_id)
-        if rec is None or rec.col_idx < 0:
+        column = (
+            _structure.edge_column(self._G, edge_id)
+            if _structure.has_edge(self._G, edge_id)
+            else -1
+        )
+        if column < 0:
             raise KeyError(f"Edge '{edge_id}' not found")
-        return rec.col_idx
+        return column
 
     def col_to_edge(self, col):
         """Map a matrix column index to its edge ID.
@@ -376,10 +372,7 @@ class IndexManager:
         KeyError
             If the column index is not found.
         """
-        eid = self._G._col_to_edge.get(col)
-        if eid is None:
-            raise KeyError(f'Column {col} not found')
-        return eid
+        return _structure.edge_at_column(self._G, col)
 
     def edges_to_cols(self, edge_ids):
         """Batch convert edge IDs to column indices.
@@ -393,7 +386,7 @@ class IndexManager:
         -------
         list[int]
         """
-        return [self._G._edges[eid].col_idx for eid in edge_ids]
+        return [_structure.edge_column(self._G, eid) for eid in edge_ids]
 
     def cols_to_edges(self, cols):
         """Batch convert column indices to edge IDs.
@@ -407,7 +400,7 @@ class IndexManager:
         -------
         list[str]
         """
-        return [self._G._col_to_edge[c] for c in cols]
+        return [_structure.edge_at_column(self._G, c) for c in cols]
 
     def entity_type(self, entity_id):
         """Get the entity type for an ID.
@@ -427,10 +420,7 @@ class IndexManager:
         KeyError
             If the entity is not found.
         """
-        rec = self._G._entities.get(self._G._resolve_entity_key(entity_id))
-        if rec is None:
-            raise KeyError(f"Entity '{entity_id}' not found")
-        return _entity_kind(rec)
+        return _entity_kind(_structure.entity_ref(self._G, entity_id).kind)
 
     def is_vertex(self, entity_id):
         """Check whether an entity ID refers to a vertex.
@@ -472,7 +462,7 @@ class IndexManager:
         -------
         bool
         """
-        return self._G._resolve_entity_key(entity_id) in self._G._entities
+        return _structure.has_entity(self._G, entity_id)
 
     def has_vertex(self, vertex_id: str) -> bool:
         """Check if an ID exists and is a vertex.
@@ -486,8 +476,9 @@ class IndexManager:
         -------
         bool
         """
-        rec = self._G._entities.get(self._G._resolve_entity_key(vertex_id))
-        return rec is not None and rec.kind == 'vertex'
+        if not _structure.has_entity(self._G, vertex_id):
+            return False
+        return _structure.entity_ref(self._G, vertex_id).kind == _structure.NODE
 
     def has_edge_id(self, edge_id: str) -> bool:
         """Check if an edge ID exists.
@@ -501,8 +492,9 @@ class IndexManager:
         -------
         bool
         """
-        rec = self._G._edges.get(edge_id)
-        return rec is not None and rec.col_idx >= 0
+        return (
+            _structure.has_edge(self._G, edge_id) and _structure.edge_column(self._G, edge_id) >= 0
+        )
 
     def edge_count(self) -> int:
         """Return the number of edges in the graph.
@@ -511,7 +503,7 @@ class IndexManager:
         -------
         int
         """
-        return len(self._G._col_to_edge)
+        return _structure.edge_count(self._G)
 
     def entity_count(self) -> int:
         """Return the number of entities (vertices + edge-entities).
@@ -520,7 +512,7 @@ class IndexManager:
         -------
         int
         """
-        return len(self._G._entities)
+        return _structure.entity_count(self._G)
 
     def vertex_count(self) -> int:
         """Return the number of true vertices (excludes edge-entities).
@@ -529,7 +521,7 @@ class IndexManager:
         -------
         int
         """
-        return sum(1 for rec in self._G._entities.values() if rec.kind == 'vertex')
+        return _structure.node_count(self._G)
 
     def stats(self):
         """Return index statistics for entities and edges.
@@ -539,11 +531,11 @@ class IndexManager:
         dict
         """
         counts = {'vertex': 0, 'edge': 0}
-        for rec in self._G._entities.values():
-            k = _entity_kind(rec)
+        for ref in _structure.iter_entities(self._G):
+            k = _entity_kind(ref.kind)
             counts[k] = counts.get(k, 0) + 1
-        n_ents = len(self._G._entities)
-        n_edges = len(self._G._col_to_edge)
+        n_ents = _structure.entity_count(self._G)
+        n_edges = _structure.edge_count(self._G)
         return {
             'n_entities': n_ents,
             'n_vertices': counts['vertex'],

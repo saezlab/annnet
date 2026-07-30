@@ -6,6 +6,7 @@ import math
 from typing import TYPE_CHECKING, Any, TypedDict
 from collections.abc import Iterable
 
+from . import _structure
 from ._records import SliceRecord, _df_filter_not_equal
 from .._support.dataframe_backend import dataframe_columns, dataframe_to_rows, dataframe_filter_eq
 
@@ -147,7 +148,7 @@ class SliceManager:
         G = self._G
         if lid not in G._slices:
             raise KeyError(f'slice {lid!r} does not exist')
-        if eid not in G._edges:
+        if not _structure.has_edge(G, eid):
             raise KeyError(f'edge {eid!r} does not exist')
         G._slices[lid]['edges'].add(eid)
 
@@ -157,24 +158,19 @@ class SliceManager:
         sid = slice_id if slice_id is not None else G._current_slice
         data = self._ensure_slice(sid)
 
-        add_edges = {eid for eid in edge_ids if eid in G._edges and G._edges[eid].col_idx >= 0}
+        add_edges = {
+            eid
+            for eid in edge_ids
+            if _structure.has_edge(G, eid) and _structure.edge_column(G, eid) >= 0
+        }
         if not add_edges:
             return
         data['edges'].update(add_edges)
 
         verts: set[str] = set()
         for eid in add_edges:
-            rec = G._edges[eid]
-            if rec.etype == 'hyper':
-                if rec.src is not None:
-                    verts.update(_bare(m) for m in rec.src)
-                if rec.tgt is not None:
-                    verts.update(_bare(m) for m in rec.tgt)
-            else:
-                if rec.src is not None:
-                    verts.add(_bare(rec.src))
-                if rec.tgt is not None:
-                    verts.add(_bare(rec.tgt))
+            sides = _structure.edge_sides(G, eid)
+            verts.update(_bare(member) for member in sides.source | sides.target)
         data['vertices'].update(verts)
 
     # ── active slice ──────────────────────────────────────────────────────────
@@ -297,13 +293,9 @@ class SliceManager:
         G = self._G
         if lid not in G._slices:
             raise KeyError(f'slice {lid!r} does not exist')
-        # Existence check works on flat graphs too, where _vid_to_ekeys is unused
-        # (a vid exists iff its placeholder ekey is registered).
-        if G._aspects == ('_',):
-            exists = (vid, ('_',)) in G._entities
-        else:
-            exists = vid in G._vid_to_ekeys
-        if not exists:
+        # A slice names a vertex by its bare id, so the id alone is the question.
+        # In a multilayer graph that id may stand for an entity in every layer.
+        if not _structure.has_entity_id(G, vid):
             raise KeyError(f'vertex {vid!r} does not exist')
         G._slices[lid]['vertices'].add(vid)
 
@@ -391,18 +383,25 @@ class SliceManager:
         if undirected_match is None:
             undirected_match = False
         out: dict[str, list[str]] = {}
-        default_dir = True if G.directed is None else G.directed
+        wanted_source = frozenset({source})
+        wanted_target = frozenset({target})
         for lid, ldata in slices_view.items():
             matches: list[str] = []
             for eid in ldata['edges']:
-                rec = G._edges.get(eid)
-                if rec is None or rec.col_idx < 0 or rec.etype == 'hyper':
+                if not _structure.has_edge(G, eid) or _structure.edge_column(G, eid) < 0:
                     continue
-                s, t = rec.src, rec.tgt
-                edge_is_directed = rec.directed if rec.directed is not None else default_dir
-                if s == source and t == target:
+                ref = _structure.edge_ref(G, eid)
+                if ref.kind == _structure.HYPER:
+                    continue
+                sides = _structure.edge_sides(G, eid)
+                if sides.source == wanted_source and sides.target == wanted_target:
                     matches.append(eid)
-                elif undirected_match and not edge_is_directed and s == target and t == source:
+                elif (
+                    undirected_match
+                    and not ref.directed
+                    and sides.source == wanted_target
+                    and sides.target == wanted_source
+                ):
                     matches.append(eid)
             if matches:
                 out[lid] = matches
@@ -439,16 +438,18 @@ class SliceManager:
         for lid, ldata in self.get_slices_dict(include_default=include_default).items():
             matches: list[str] = []
             for eid in ldata['edges']:
-                rec = G._edges.get(eid)
-                if rec is None or rec.col_idx < 0 or rec.etype != 'hyper':
+                if not _structure.has_edge(G, eid) or _structure.edge_column(G, eid) < 0:
                     continue
-                if undirected and rec.tgt is None:
-                    if {_bare(v) for v in rec.src} == members_set:
+                ref = _structure.edge_ref(G, eid)
+                if ref.kind != _structure.HYPER:
+                    continue
+                sides = _structure.edge_sides(G, eid)
+                head = {_bare(member) for member in sides.source}
+                if undirected and not ref.directed:
+                    if head == members_set:
                         matches.append(eid)
-                elif (not undirected) and rec.tgt is not None:
-                    if {_bare(v) for v in rec.src} == head_set and {
-                        _bare(v) for v in rec.tgt
-                    } == tail_set:
+                elif (not undirected) and ref.directed:
+                    if head == head_set and {_bare(m) for m in sides.target} == tail_set:
                         matches.append(eid)
             if matches:
                 out[lid] = matches

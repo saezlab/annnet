@@ -281,6 +281,50 @@ def test_has_edge_is_true_for_an_edge_entity():
     assert S.has_edge(G, 'ee_ab') is True
 
 
+def test_has_entity_id_answers_for_a_bare_id_alone():
+    G = build_case('binary_directed')
+    assert S.has_entity_id(G, 'A') is True
+    assert S.has_entity_id(G, 'Z') is False
+
+
+def test_has_entity_id_is_true_for_an_id_that_more_than_one_layer_carries():
+    """``has_entity`` cannot answer this, because a bare id names no one entity."""
+    G = build_case('multilayer')
+    assert S.has_entity_id(G, 'A') is True
+    assert S.has_entity(G, 'A') is False
+    assert S.has_entity_id(G, 'Z') is False
+
+
+# ---------------------------------------------------------------------------
+# Counts
+# ---------------------------------------------------------------------------
+# A count is the size of an enumeration, so the two must never disagree. The
+# facade answers a count without walking the graph, which is why it exists as
+# its own question.
+
+
+@pytest.mark.parametrize('case', CASE_NAMES)
+def test_a_count_equals_the_length_of_its_enumeration(case):
+    G = build_case(case)
+    assert S.entity_count(G) == len(list(S.iter_entities(G)))
+    assert S.edge_count(G) == len(list(S.iter_edges(G)))
+    assert S.node_count(G) == sum(1 for ref in S.iter_entities(G) if ref.kind == S.NODE)
+
+
+def test_node_count_leaves_out_an_edge_entity():
+    G = build_case('edge_entity')
+    assert S.entity_count(G) == 4
+    assert S.node_count(G) == 3
+
+
+def test_edge_count_leaves_out_an_edge_that_carries_no_structure():
+    G = build_case('binary_directed')
+    before = S.edge_count(G)
+    G._ensure_edge_entity_placeholder('e_future')
+    assert S.has_edge(G, 'e_future') is True
+    assert S.edge_count(G) == before
+
+
 # ---------------------------------------------------------------------------
 # Whole-set consistency
 # ---------------------------------------------------------------------------
@@ -377,6 +421,20 @@ def test_both_stores_reject_an_unknown_edge_the_same_way(both_stores):
         S.edge_endpoints(store, 'no_such_edge')
 
 
+def test_both_stores_answer_for_a_bare_id_the_same(both_stores):
+    case, graph, store = both_stores
+    for ref in S.iter_entities(graph):
+        assert S.has_entity_id(store, ref.id) is True, f'{case}/{ref.id}'
+    assert S.has_entity_id(store, 'no_such_id') is False
+
+
+def test_both_stores_report_the_same_counts(both_stores):
+    case, graph, store = both_stores
+    assert S.entity_count(store) == S.entity_count(graph), case
+    assert S.node_count(store) == S.node_count(graph), case
+    assert S.edge_count(store) == S.edge_count(graph), case
+
+
 def test_positions_stay_contiguous_on_the_slot_store(both_stores):
     """A slot is stable, but the position it maps to is dense and starts at zero."""
     _case, _graph, store = both_stores
@@ -384,6 +442,19 @@ def test_positions_stay_contiguous_on_the_slot_store(both_stores):
     columns = [S.edge_column(store, ref.id) for ref in S.iter_edges(store)]
     assert rows == list(range(len(rows)))
     assert columns == list(range(len(columns)))
+
+
+def test_both_stores_name_the_entity_of_a_row_the_same_way(both_stores):
+    case, graph, store = both_stores
+    for ref in S.iter_entities(graph):
+        row = S.entity_row(graph, ref.key)
+        assert S.entity_key_of_row(store, row) == ref.key, f'{case}/{ref.key}'
+
+
+def test_a_row_no_entity_occupies_is_rejected(both_stores):
+    _case, _graph, store = both_stores
+    with pytest.raises(KeyError):
+        S.entity_key_of_row(store, S.entity_count(store))
 
 
 def _bare(endpoint):
