@@ -15,6 +15,33 @@ Sign convention:
 - Directed edge `e`: for each tail or target endpoint `v`, set `B[v,e] = -w`.
 - Undirected edge `e`: for each endpoint `u`, set `B[u,e] = +w`.
 
+## A self-loop and a one-sided edge
+
+A column records one entry per **role**, not one per entity. An entity that takes two
+roles in one edge therefore appears twice in that column.
+
+This matters for two shapes that would otherwise look identical:
+
+- A **self-loop** `a -> a` with weight `w` contributes `+w` for the source role and `-w`
+  for the target role, both on row `a`. The two entries sum, so the column of a directed
+  self-loop is zero in `B` and in `S`. The loop is still in the graph: `G.A` gives it a
+  diagonal entry, and `degree` counts it twice, once per role.
+- A **one-sided or boundary edge**, which drains or feeds a node with no other side,
+  contributes a single entry.
+
+**This changed.** Before the core refactor, a directed self-loop wrote `+w` and then `-w`
+into the same cell, so the second overwrote the first and the column held one entry of
+`-w`. That was indistinguishable from a sink boundary edge on the same node, and the fact
+that the edge was a loop survived only outside the matrix.
+
+If you relied on the old shape, the migration is:
+
+| You want | Before | Now |
+|---|---|---|
+| Is this edge a self-loop | inspect the endpoints | the column sums to zero, or ask `G.A` for the diagonal |
+| The weight of a self-loop | read the single entry | read `G.A[a, a]`, or the edge weight |
+| A boundary edge | one entry, ambiguous | one entry, and no other shape produces one |
+
 ## What this makes possible
 
 - Hyperedges become columns with more than two non-zero entries.
