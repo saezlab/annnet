@@ -8,6 +8,8 @@ import itertools
 import numpy as np
 import scipy.sparse as sp
 
+from . import _structure
+
 if TYPE_CHECKING:
     from .graph import AnnNet
 
@@ -88,7 +90,7 @@ class LayerAccessor:
 
     def _placeholder_layer_referenced(self) -> bool:
         placeholder = self._placeholder_layer_coord()
-        if any(ekey[1] == placeholder for ekey in self._entities):
+        if any(ref.layer == placeholder for ref in _structure.iter_entities(self)):
             return True
         if any(key[1] == placeholder for key in self._state_attrs):
             return True
@@ -286,13 +288,17 @@ class LayerAccessor:
             )
 
             vertex_ids = sorted(
-                {ekey[0] for ekey, rec in self._entities.items() if rec.kind == 'vertex'}
+                {ref.id for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE}
             )
             if vertex_ids:
                 flat._add_vertices_bulk([{'vertex_id': v} for v in vertex_ids])
 
             edge_entity_ids = sorted(
-                {ekey[0] for ekey, rec in self._entities.items() if rec.kind == 'edge_entity'}
+                {
+                    ref.id
+                    for ref in _structure.iter_entities(self)
+                    if ref.kind == _structure.EDGE_ENTITY
+                }
             )
             edge_entity_id_set = set(edge_entity_ids)
             ent_placeholder_specs = [
@@ -473,7 +479,7 @@ class LayerAccessor:
         bool
         """
         self._validate_layer_tuple(layer_tuple)
-        return (u, tuple(layer_tuple)) in self._entities
+        return _structure.has_entity(self, (u, tuple(layer_tuple)))
 
     def iter_layers(self):
         """Iterate over all aspect-tuples (Cartesian product).
@@ -550,8 +556,9 @@ class LayerAccessor:
         if cache['layer_to_vertices'] is None:
             l2v: dict = {}
             v2l: dict = {}
-            for (u, aa), rec in self._entities.items():
-                if rec.kind != 'vertex':
+            for ref in _structure.iter_entities(self):
+                u, aa = ref.key
+                if ref.kind != _structure.NODE:
                     continue
                 l2v.setdefault(aa, set()).add(u)
                 v2l.setdefault(u, []).append(aa)
@@ -565,12 +572,12 @@ class LayerAccessor:
         if restrict_layers is not None:
             R = {tuple(x) for x in restrict_layers}
             vm = [
-                (u, aa)
-                for (u, aa), rec in self._entities.items()
-                if rec.kind == 'vertex' and aa in R
+                ref.key
+                for ref in _structure.iter_entities(self)
+                if ref.kind == _structure.NODE and ref.layer in R
             ]
         else:
-            vm = [(u, aa) for (u, aa), rec in self._entities.items() if rec.kind == 'vertex']
+            vm = [ref.key for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE]
         vm.sort(key=lambda x: (x[0], x[1]))
         return {nl: i for i, nl in enumerate(vm)}, vm
 
@@ -1496,7 +1503,7 @@ class LayerAccessor:
     ## helper
 
     def _assert_presence(self, u: str, aa: tuple[str, ...]):
-        if (u, aa) not in self._entities:
+        if not _structure.has_entity(self, (u, aa)):
             raise KeyError(
                 f'presence missing: {(u, aa)} not in entities; add vertex to that layer first'
             )
@@ -2077,9 +2084,9 @@ class LayerAccessor:
             norm_pairs.append((La, Lb))
         # Build per-layer presence index to avoid O(|V_M|^2)
         layer_to_vertices = {}
-        for (u, aa), rec in self._entities.items():
-            if rec.kind == 'vertex':
-                layer_to_vertices.setdefault(aa, set()).add(u)
+        for ref in _structure.iter_entities(self):
+            if ref.kind == _structure.NODE:
+                layer_to_vertices.setdefault(ref.layer, set()).add(ref.id)
         triples: list[tuple[str, tuple, tuple]] = []
         for La, Lb in norm_pairs:
             Ua = layer_to_vertices.get(La, set())
@@ -2110,8 +2117,9 @@ class LayerAccessor:
         ai = self._aspect_index(aspect)
         # Map: (u, other_aspects_tuple) -> {elem_on_aspect: full_layer_tuple}
         buckets = {}
-        for (u, aa), rec in self._entities.items():
-            if rec.kind != 'vertex':
+        for ref in _structure.iter_entities(self):
+            u, aa = ref.key
+            if ref.kind != _structure.NODE:
                 continue
             other = aa[:ai] + aa[ai + 1 :]
             buckets.setdefault((u, other), {}).setdefault(aa[ai], aa)
@@ -2146,8 +2154,9 @@ class LayerAccessor:
         """
         # collect per vertex the matching layers actually present
         per_u = {}
-        for (u, aa), rec in self._entities.items():
-            if rec.kind == 'vertex' and self._layer_matches_filter(aa, layer_filter):
+        for ref in _structure.iter_entities(self):
+            u, aa = ref.key
+            if ref.kind == _structure.NODE and self._layer_matches_filter(aa, layer_filter):
                 per_u.setdefault(u, []).append(aa)
         triples: list[tuple[str, tuple, tuple]] = []
         for u, layers in per_u.items():
