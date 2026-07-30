@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-from annnet.core import _structure as S, _validate as V
+from annnet.core import _store as ST, _structure as S, _validate as V
 from annnet.core._records import build_dataframe_from_rows
 
 from ._fixtures import CASE_NAMES, build_case
@@ -73,16 +73,123 @@ def test_the_checker_picks_the_record_store_for_the_current_core():
     assert V.detect_store_kind(build_case('binary_directed')) == V.RECORD_STORE
 
 
-def test_the_checker_refuses_a_store_it_has_no_checks_for():
-    G = build_case('binary_directed')
-    G._store = object()
-    with pytest.raises(NotImplementedError):
-        problems_of(G)
-
-
 def test_checks_for_rejects_an_unknown_store_kind():
     with pytest.raises(ValueError):
         V.checks_for('no_such_store')
+
+
+def test_the_checker_picks_the_slot_store_for_a_slot_store():
+    assert V.detect_store_kind(_slot_case()) == V.SLOT_STORE
+
+
+def test_both_store_models_have_checks_registered():
+    assert V.checks_for(V.RECORD_STORE)
+    assert V.checks_for(V.SLOT_STORE)
+
+
+# ---------------------------------------------------------------------------
+# The slot store obeys the same rules
+# ---------------------------------------------------------------------------
+
+
+def _slot_case():
+    """A slot store holding a self-loop, a boundary edge, and a plain edge."""
+    store = ST.CoreState(directed=True)
+    for node_id in ('A', 'B', 'C'):
+        store.add_entity((node_id, FLAT))
+    store.add_edge(
+        'e_ab',
+        [(('A', FLAT), 1.0, ST.SOURCE), (('B', FLAT), -1.0, ST.TARGET)],
+        kind=ST.BINARY,
+        directed=True,
+        weight=1.5,
+    )
+    store.add_edge(
+        'e_loop',
+        [(('A', FLAT), 0.5, ST.SOURCE), (('A', FLAT), -0.5, ST.TARGET)],
+        kind=ST.BINARY,
+        directed=True,
+        weight=0.5,
+    )
+    store.add_edge(
+        'b_out',
+        [(('C', FLAT), -1.0, ST.SOURCE)],
+        kind=ST.HYPER,
+        directed=False,
+        weight=1.0,
+        explicit_coefficients=True,
+    )
+    return store
+
+
+def test_a_clean_slot_store_is_consistent():
+    assert problems_of(_slot_case()) == []
+
+
+def test_a_slot_store_stays_consistent_through_churn():
+    store = _slot_case()
+    store.remove_edge('e_loop')
+    assert problems_of(store) == []
+    for dangling in store.remove_entity(('B', FLAT)):
+        # The store reports the edges an entity removal leaves dangling, and the
+        # caller has to deal with them. Keeping one would be a real problem.
+        store.remove_edge(dangling)
+    assert problems_of(store) == []
+    store.add_entity(('D', FLAT))
+    store.add_edge(
+        'e_ad',
+        [(('A', FLAT), 1.0, ST.SOURCE), (('D', FLAT), -1.0, ST.TARGET)],
+        kind=ST.BINARY,
+        directed=True,
+        weight=1.0,
+    )
+    assert problems_of(store) == []
+    store.compact_members()
+    assert problems_of(store) == []
+
+
+def test_the_slot_checker_reports_a_broken_bijection():
+    store = _slot_case()
+    store._entity_slot[('A', FLAT)] = 99
+    assert_reports(store, 'slot 99')
+
+
+def test_the_slot_checker_reports_a_freelist_that_holds_a_live_slot():
+    store = _slot_case()
+    store.entity_free.append(store.entity_slot(('A', FLAT)))
+    assert_reports(store, 'freelist')
+
+
+def test_the_slot_checker_reports_a_member_on_a_free_slot():
+    store = _slot_case()
+    slot = store.edge_slot('e_ab')
+    store.member_ent[int(store.member_start[slot])] = 90
+    assert_reports(store, 'holds no entity')
+
+
+def test_the_slot_checker_reports_two_edges_sharing_a_member_segment():
+    store = _slot_case()
+    store.member_start[store.edge_slot('e_loop')] = int(store.member_start[store.edge_slot('e_ab')])
+    assert_reports(store, 'shares member entry')
+
+
+def test_the_slot_checker_reports_a_self_loop_that_lost_an_entry():
+    """The regression that the record core has by design."""
+    store = _slot_case()
+    store.member_len[store.edge_slot('e_loop')] = 1
+    assert_reports(store, 'self-loop')
+
+
+def test_the_slot_checker_reports_a_stale_incidence_index():
+    store = _slot_case()
+    store._entity_edges[store.entity_slot(('A', FLAT))].add(99)
+    assert_reports(store, 'edge index')
+
+
+def test_the_slot_checker_reports_an_append_log_that_the_clock_denies():
+    store = _slot_case()
+    store.append_log_from_version = store.structure_version + 5
+    assert_reports(store, 'append log')
 
 
 # ---------------------------------------------------------------------------

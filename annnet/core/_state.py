@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
-import scipy.sparse as sp
-
 from ._records import (
     _EDGE_RESERVED,
     SliceRecord,
@@ -79,14 +76,17 @@ def init_state(g, *, directed=None, v=0, e=0, aspects=None) -> None:
     g._vertex_key_fields = None
     g._vertex_key_index = {}
 
-    # Sparse incidence matrix (lazily derived from records). ``_matrix_shape``
-    # tracks the logical (rows, cols) capacity; ``_matrix_cache`` holds the last
-    # materialized matrix and ``_matrix_dirty`` signals a pending rebuild.
+    # The incidence matrix is derived state, so init records its logical extent and
+    # builds nothing. ``_matrix_shape`` tracks the logical (rows, cols) capacity,
+    # ``_matrix_cache`` holds the last materialized matrix, and ``_matrix_dirty``
+    # signals a pending build. Starting dirty with an empty cache keeps a matrix
+    # library out of the canonical store: a graph that never reads a matrix never
+    # builds one.
     v = int(v) if v and v > 0 else 0
     e = int(e) if e and e > 0 else 0
     g._matrix_shape = (v, e)
-    g._matrix_cache = sp.csr_array((v, e), dtype=np.float32)
-    g._matrix_dirty = False
+    g._matrix_cache = None
+    g._matrix_dirty = True
     g._csr_cache = None
 
     g._next_edge_id = 0

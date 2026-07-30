@@ -46,9 +46,11 @@ def _materialized_matrix(g, problems):
 def detect_store_kind(g) -> str:
     """Return which store model backs a graph.
 
-    The slot store lives at ``g._store``. A graph without that attribute still
-    runs on the record store.
+    A slot store answers to ``member_start``, either as the graph itself or through
+    ``g._store``. A graph without one runs on the record store.
     """
+    if hasattr(g, 'member_start'):
+        return SLOT_STORE
     return SLOT_STORE if getattr(g, '_store', None) is not None else RECORD_STORE
 
 
@@ -287,6 +289,217 @@ def _check_matrix_bounds(g, problems) -> None:
         problems.append(f'matrix cols {ncols} <= max col_idx {max(cols)}')
 
 
+# ---------------------------------------------------------------------------
+# Slot-store checks
+# ---------------------------------------------------------------------------
+
+
+def _slot_of(g):
+    """Return the slot store of a graph, or the graph itself when it is one."""
+    return getattr(g, '_store', None) or g
+
+
+def _check_slot_bijections(store, problems) -> None:
+    """Identity and slot agree in both directions, for entities and for edges."""
+    for label, forward, backward in (
+        ('entity', store._entity_slot, store._entity_key),
+        ('edge', store._edge_slot, store._edge_id),
+    ):
+        for identity, slot in forward.items():
+            if not 0 <= slot < len(backward):
+                problems.append(f'{label} {identity!r} claims slot {slot}, which does not exist')
+            elif backward[slot] != identity:
+                problems.append(
+                    f'{label} {identity!r} claims slot {slot}, which holds {backward[slot]!r}'
+                )
+        for slot, identity in enumerate(backward):
+            if identity is None:
+                continue
+            if forward.get(identity) != slot:
+                problems.append(
+                    f'slot {slot} holds {label} {identity!r}, which claims another slot'
+                )
+
+
+def _check_freelists(store, problems) -> None:
+    """A free slot holds no identity, and it appears on its freelist exactly once."""
+    for label, free, backward in (
+        ('entity', store.entity_free, store._entity_key),
+        ('edge', store.edge_free, store._edge_id),
+    ):
+        if len(set(free)) != len(free):
+            problems.append(f'the {label} freelist holds a slot more than once')
+        for slot in free:
+            if not 0 <= slot < len(backward):
+                problems.append(f'the {label} freelist holds slot {slot}, which does not exist')
+            elif backward[slot] is not None:
+                problems.append(
+                    f'{label} slot {slot} is on the freelist but still holds {backward[slot]!r}'
+                )
+
+
+def _check_member_segments(store, problems) -> None:
+    """Every member segment lies inside the pools, and no two live segments overlap."""
+    used = store._member_used
+    seen: dict[int, int] = {}
+    for slot, edge_id in store.live_edges():
+        start = int(store.member_start[slot])
+        length = int(store.member_len[slot])
+        if length < 0 or start < 0 or start + length > used:
+            problems.append(
+                f'edge {edge_id!r} has member segment [{start}, {start + length}) '
+                f'outside the pool of {used}'
+            )
+            continue
+        for offset in range(start, start + length):
+            other = seen.get(offset)
+            if other is not None:
+                problems.append(f'edge {edge_id!r} shares member entry {offset} with slot {other}')
+            seen[offset] = slot
+    for slot in store.edge_free:
+        if int(store.member_len[slot]) != 0:
+            problems.append(f'free edge slot {slot} still holds member entries')
+
+
+def _check_slot_member_liveness(store, problems) -> None:
+    """Every member entry names a live entity slot."""
+    for slot, edge_id in store.live_edges():
+        for entity_slot in store.members(slot).entities:
+            if store.entity_key(int(entity_slot)) is None:
+                problems.append(
+                    f'edge {edge_id!r} has a member on slot {int(entity_slot)}, which holds no entity'
+                )
+
+
+def _check_member_counts(store, problems) -> None:
+    """The member entry count of an edge matches its kind.
+
+    This is what keeps a self-loop apart from a boundary edge. A binary edge holds
+    two entries, one per role. A boundary edge holds one. A self-loop holds two on
+    one entity slot.
+    """
+    from . import _store as S_
+
+    for slot, edge_id in store.live_edges():
+        kind = int(store.edge_kind[slot])
+        count = store.member_count(slot)
+        if kind == S_.PLACEHOLDER:
+            if count != 0:
+                problems.append(f'placeholder edge {edge_id!r} holds {count} member entries')
+            continue
+        if kind in (S_.BINARY, S_.NODE_EDGE):
+            if count == 2:
+                continue
+            if count == 1 and bool(store.edge_explicit[slot]):
+                # A one-sided binary edge is a boundary edge, and a boundary edge
+                # states its own coefficient.
+                continue
+            problems.append(
+                f'binary edge {edge_id!r} holds {count} member entries. A binary edge holds '
+                'one entry per role, so two, and a self-loop holds two on one entity slot. '
+                'One entry means a lost role, unless the edge declares its own coefficient '
+                'and is therefore a boundary edge.'
+            )
+
+
+def _check_edge_entity_slots(store, problems) -> None:
+    """An edge-entity holds an edge slot and an entity slot under one id."""
+    from . import _store as S_
+
+    for slot, edge_id in store.live_edges():
+        if int(store.edge_kind[slot]) not in (S_.NODE_EDGE, S_.PLACEHOLDER):
+            continue
+        matches = [key for _slot, key in store.live_entities() if key[0] == edge_id]
+        if not matches:
+            problems.append(f'edge {edge_id!r} is an edge-entity but no entity carries that id')
+            continue
+        for key in matches:
+            entity_slot = store.entity_slot(key)
+            if int(store.entity_kind[entity_slot]) != S_.EDGE_ENTITY:
+                problems.append(f'edge-entity {edge_id!r} has an entity that is not marked as one')
+
+
+def _check_incidence_index(store, problems) -> None:
+    """The entity-to-edge index matches the member lists it is derived from."""
+    expected: dict[int, set[int]] = {slot: set() for slot, _key in store.live_entities()}
+    for edge_slot, _edge_id in store.live_edges():
+        for entity_slot in store.members(edge_slot).entities:
+            bucket = expected.get(int(entity_slot))
+            if bucket is not None:
+                bucket.add(edge_slot)
+    for entity_slot, edges in expected.items():
+        held = store._entity_edges.get(entity_slot, set())
+        if held != edges:
+            problems.append(
+                f'the edge index of entity slot {entity_slot} says {sorted(held)}, '
+                f'the member lists say {sorted(edges)}'
+            )
+
+
+def _check_matrix_matches_member_lists(store, problems) -> None:
+    """A materialized matrix holds exactly what the member lists imply."""
+    from . import _matrices as MX
+
+    try:
+        view = MX.incidence(store)
+    except Exception as error:  # noqa: BLE001 - a store that cannot materialize is a problem
+        problems.append(f'the incidence matrix cannot be materialized: {error}')
+        return
+    matrix = view.matrix.tocsc()
+    for column, edge_id in enumerate(view.edge_of_column):
+        slot = store.edge_slot(edge_id)
+        members = store.members(slot)
+        expected: dict[int, float] = {}
+        for entity_slot, coefficient in zip(members.entities, members.coefficients, strict=False):
+            row = view.row_of_entity[int(entity_slot)]
+            expected[row] = expected.get(row, 0.0) + float(coefficient)
+        expected = {row: value for row, value in expected.items() if value != 0.0}
+        block = matrix[:, [column]].tocoo()
+        found = {
+            int(r): float(v) for r, v in zip(block.row, block.data, strict=False) if float(v) != 0.0
+        }
+        for row in set(expected) | set(found):
+            want, have = expected.get(row, 0.0), found.get(row, 0.0)
+            if abs(want - have) > _TOLERANCE * max(1.0, abs(want)):
+                problems.append(
+                    f'edge {edge_id!r} cell at row {row}: store says {want}, matrix says {have}'
+                )
+
+
+def _check_clock(store, problems) -> None:
+    """The clock and the append log agree with each other."""
+    if store.structure_version < 0:
+        problems.append('the structural clock is negative')
+    if store.append_log_from_version > store.structure_version:
+        problems.append('the append log starts after the current clock value')
+    if len(store.append_log) > store.structure_version - store.append_log_from_version:
+        problems.append('the append log holds more entries than the clock accounts for')
+
+
+SLOT_CHECKS_IMPL = (
+    _check_slot_bijections,
+    _check_freelists,
+    _check_member_segments,
+    _check_slot_member_liveness,
+    _check_member_counts,
+    _check_edge_entity_slots,
+    _check_incidence_index,
+    _check_matrix_matches_member_lists,
+    _check_clock,
+)
+
+
+def _slot_check(check):
+    """Adapt a store-level check so the dispatcher can call it with a graph."""
+
+    def run(g, problems):
+        check(_slot_of(g), problems)
+
+    run.__name__ = check.__name__
+    run.__doc__ = check.__doc__
+    return run
+
+
 RECORD_CHECKS = (
     _check_entity_rows,
     _check_edge_columns,
@@ -300,8 +513,7 @@ RECORD_CHECKS = (
     _check_matrix_bounds,
 )
 
-# The slot store arrives with the new core. Its checks register here.
-SLOT_CHECKS: tuple = ()
+SLOT_CHECKS: tuple = tuple(_slot_check(check) for check in SLOT_CHECKS_IMPL)
 
 _CHECKS_BY_STORE = {
     RECORD_STORE: RECORD_CHECKS,
