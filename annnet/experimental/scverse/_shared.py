@@ -10,7 +10,9 @@ from typing import Any
 from scipy import sparse
 import pandas as pd
 
+from annnet.core import _structure
 from annnet.io._common import (
+    STORED_EDGE_KIND,
     dataframe_to_rows,
     serialize_endpoint,
     dataframe_from_rows,
@@ -92,16 +94,11 @@ def copy_graph_uns(graph_uns: dict[str, Any]) -> dict[str, Any]:
 
 def _vertex_entities(graph) -> list[tuple[str, tuple[str, ...], int]]:
     """Return vertex entities in row order as (vertex_id, layer_coord, row_idx)."""
-    entities: list[tuple[str, tuple[str, ...], int]] = []
-    for row_idx in range(len(graph._row_to_entity)):
-        ekey = graph._row_to_entity.get(row_idx)
-        if ekey is None:
-            continue
-        rec = graph._entities.get(ekey)
-        if rec is None or rec.kind != 'vertex':
-            continue
-        entities.append((ekey[0], ekey[1], rec.row_idx))
-    return entities
+    return [
+        (ref.id, ref.layer, _structure.entity_row(graph, ref.key))
+        for ref in _structure.iter_entities(graph)
+        if ref.kind == _structure.NODE
+    ]
 
 
 def _vertex_obs_name(vertex_id: str, layer_coord: tuple[str, ...], *, is_multilayer: bool) -> str:
@@ -191,6 +188,11 @@ def build_obs_dataframe(graph, *, include_private: bool) -> pd.DataFrame:
     return obs
 
 
+def _single_endpoint(side):
+    """Return the one endpoint of a binary side, or None when the side is open."""
+    return next(iter(side)) if side else None
+
+
 def build_var_dataframe(graph, *, include_private: bool) -> pd.DataFrame:
     """Materialize AnnNet structural edges into an AnnData var dataframe."""
     edge_attrs = _attr_map(
@@ -198,29 +200,29 @@ def build_var_dataframe(graph, *, include_private: bool) -> pd.DataFrame:
     )
     rows: list[dict[str, Any]] = []
     index: list[str] = []
-    default_directed = True if graph.directed is None else bool(graph.directed)
 
-    for edge_id in graph.edges():
-        rec = graph._edges[edge_id]
+    for edge in _structure.iter_edges(graph):
+        sides = _structure.edge_sides(graph, edge.id)
+        source, target = sides.source, sides.target
         row = {
-            'weight': float(rec.weight if rec.weight is not None else 1.0),
-            'directed': bool(default_directed if rec.directed is None else rec.directed),
-            'edge_type': rec.etype,
-            'multilayer_kind': rec.ml_kind,
-            'edge_layers': _edge_endpoint_text(rec.ml_layers),
+            'weight': float(edge.weight),
+            'directed': bool(edge.directed),
+            'edge_type': STORED_EDGE_KIND.get(edge.kind, edge.kind),
+            'multilayer_kind': edge.ml_kind,
+            'edge_layers': _edge_endpoint_text(edge.ml_layers),
         }
-        if rec.etype == 'hyper':
-            if rec.tgt is None:
-                row['members'] = _edge_endpoint_text(sorted(rec.src, key=repr))
+        if edge.kind == _structure.HYPER:
+            if not target:
+                row['members'] = _edge_endpoint_text(sorted(source, key=repr))
             else:
-                row['head'] = _edge_endpoint_text(sorted(rec.src, key=repr))
-                row['tail'] = _edge_endpoint_text(sorted(rec.tgt, key=repr))
+                row['head'] = _edge_endpoint_text(sorted(source, key=repr))
+                row['tail'] = _edge_endpoint_text(sorted(target, key=repr))
         else:
-            row['source'] = _edge_endpoint_text(rec.src)
-            row['target'] = _edge_endpoint_text(rec.tgt)
-        row.update(edge_attrs.get(edge_id, {}))
+            row['source'] = _edge_endpoint_text(_single_endpoint(source))
+            row['target'] = _edge_endpoint_text(_single_endpoint(target))
+        row.update(edge_attrs.get(edge.id, {}))
         rows.append(row)
-        index.append(edge_id)
+        index.append(edge.id)
 
     var = pd.DataFrame(rows, index=pd.Index(index, dtype='object'))
     var.index.name = 'edge_id'
@@ -230,7 +232,7 @@ def build_var_dataframe(graph, *, include_private: bool) -> pd.DataFrame:
 def build_vertex_incidence(graph) -> sparse.csr_matrix:
     """Return the vertex-only incidence matrix aligned to the exported obs rows."""
     row_indexes = [row_idx for _vertex_id, _layer, row_idx in _vertex_entities(graph)]
-    col_indexes = [graph._edges[edge_id].col_idx for edge_id in graph.edges()]
+    col_indexes = [_structure.edge_column(graph, edge_id) for edge_id in graph.edges()]
     matrix = graph.X().tocsr()
     if not row_indexes:
         return sparse.csr_array((0, len(col_indexes)), dtype=matrix.dtype)

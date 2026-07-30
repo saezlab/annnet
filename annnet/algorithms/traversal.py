@@ -1,42 +1,68 @@
-# Traversal (neighbors)
+"""Local neighborhood traversal.
 
+The traversal reads structure through the query facade of the core. It holds no
+knowledge of how the core stores a graph.
+"""
 
-def _hyper_meta(rec):
-    """Build the hyperedge metadata dict from an EdgeRecord."""
-    if rec.tgt is not None:
-        return {'directed': True, 'head': set(rec.src), 'tail': set(rec.tgt)}
-    return {'directed': False, 'members': set(rec.src)}
+from ..core import _structure as S
 
 
 class Traversal:
     """Local neighborhood traversal over the incidence-backed graph.
 
-    Binary adjacency is answered from the ``_src_to_edges`` / ``_tgt_to_edges`` indices in
-    O(degree); hyperedges are handled from a per-version cached list, so a graph with no
-    hyperedges never pays a full edge scan.
+    A query asks the facade which edges touch the entity, then reads the two
+    sides of each of those edges. The facade answers a binary edge from the
+    adjacency index in time proportional to the degree, and it answers a
+    hyperedge from a list it caches against the structural clock. A graph with
+    no hyperedge therefore never pays a full edge scan.
     """
 
-    def _iter_hyperedges(self):
-        """Return ``(eid, rec)`` for live hyperedges, cached against the structural clock.
+    def _neighbors(self, entity_id, direction):
+        """Collect the neighbors of one entity in one direction.
 
-        Keys on ``_structure_version``, not ``_version``: the latter is a history
-        counter that does not move on removes, so a hyperedge list warmed before a
-        removal would survive it and report neighbors through a deleted edge.
+        ``direction`` is ``"out"``, ``"in"``, or ``"both"``. An undirected edge
+        answers in both directions. A directed edge answers on the side that
+        holds the entity.
         """
-        version = getattr(self, '_structure_version', None)
-        cache = getattr(self, '_hyper_items_cache', None)
-        if cache is None or cache[0] != version:
-            items = [
-                (eid, rec)
-                for eid, rec in self._edges.items()
-                if rec.etype == 'hyper' and rec.col_idx >= 0
-            ]
-            self._hyper_items_cache = (version, items)
-            return items
-        return cache[1]
+        if not S.has_entity(self, entity_id):
+            return []
+        key = S.entity_key(self, entity_id)
+        entity_kind = S.entity_ref(self, key).kind
+        wants_out = direction in ('out', 'both')
+        wants_in = direction in ('in', 'both')
+
+        found = set()
+        for edge_id in S.entity_edges(self, key, direction):
+            edge = S.edge_ref(self, edge_id)
+            sides = S.edge_endpoints(self, edge_id)
+
+            if not edge.directed:
+                # Every other member is a neighbor, whatever the shape of the edge.
+                members = set(S.edge_members(self, edge_id))
+                if key in members:
+                    found |= members - {key}
+                continue
+
+            if edge.kind == S.HYPER:
+                if wants_out and key in sides.source:
+                    found |= sides.target
+                elif wants_in and key in sides.target:
+                    found |= sides.source
+                continue
+
+            if wants_out and key in sides.source:
+                found |= sides.target
+            if wants_in and key in sides.target:
+                # A query for the inward side reaches back along a directed edge.
+                # An unqualified query does not, unless the entity is the edge
+                # itself, because both sides of that edge describe it.
+                if direction == 'in' or entity_kind == S.EDGE_ENTITY:
+                    found |= sides.source
+
+        return [S.endpoint_form(self, member) for member in found]
 
     def neighbors(self, entity_id):
-        """Return adjacent entities for a vertex or edge-entity.
+        """Return adjacent entities for a node or an edge-entity.
 
         Parameters
         ----------
@@ -48,41 +74,7 @@ class Traversal:
         list[str]
             Neighbor identifiers reachable through incident edges.
         """
-        ekey = self._resolve_entity_key(entity_id)
-        if ekey not in self._entities:
-            return []
-        self._ensure_edge_indexes()
-
-        out = set()
-        default_dir = self.directed if self.directed is not None else True
-        ekey_kind = self._entities[ekey].kind
-        probe = ekey if self._aspects != ('_',) else entity_id
-        edges = self._edges
-
-        for eid in self._src_to_edges.get(probe, ()):
-            rec = edges[eid]
-            if rec.col_idx >= 0:
-                out.add(rec.tgt)
-        for eid in self._tgt_to_edges.get(probe, ()):
-            rec = edges[eid]
-            if rec.col_idx < 0:
-                continue
-            edir = rec.directed if rec.directed is not None else default_dir
-            if (not edir) or ekey_kind == 'edge_entity':
-                out.add(rec.src)
-
-        for _eid, rec in self._iter_hyperedges():
-            meta = _hyper_meta(rec)
-            if meta['directed']:
-                if probe in meta['head']:
-                    out |= meta['tail']
-                elif probe in meta['tail']:
-                    out |= meta['head']
-            else:
-                members = meta['members']
-                if probe in members:
-                    out |= members - {probe}
-        return list(out)
+        return self._neighbors(entity_id, 'both')
 
     def out_neighbors(self, vertex_id):
         """Return outward neighbors of a vertex.
@@ -97,38 +89,7 @@ class Traversal:
         list[str]
             Neighbor identifiers reachable via outgoing or undirected edges.
         """
-        ekey = self._resolve_entity_key(vertex_id)
-        if ekey not in self._entities:
-            return []
-        self._ensure_edge_indexes()
-
-        out = set()
-        default_dir = self.directed if self.directed is not None else True
-        probe = ekey if self._aspects != ('_',) else vertex_id
-        edges = self._edges
-
-        for eid in self._src_to_edges.get(probe, ()):
-            rec = edges[eid]
-            if rec.col_idx >= 0:
-                out.add(rec.tgt)
-        for eid in self._tgt_to_edges.get(probe, ()):
-            rec = edges[eid]
-            if rec.col_idx < 0:
-                continue
-            edir = rec.directed if rec.directed is not None else default_dir
-            if not edir:
-                out.add(rec.src)
-
-        for _eid, rec in self._iter_hyperedges():
-            meta = _hyper_meta(rec)
-            if meta['directed']:
-                if probe in meta['head']:
-                    out |= meta['tail']
-            else:
-                members = meta['members']
-                if probe in members:
-                    out |= members - {probe}
-        return list(out)
+        return self._neighbors(vertex_id, 'out')
 
     def successors(self, vertex_id):
         """Alias for :meth:`out_neighbors`.
@@ -158,38 +119,7 @@ class Traversal:
         list[str]
             Neighbor identifiers reachable via incoming or undirected edges.
         """
-        ekey = self._resolve_entity_key(vertex_id)
-        if ekey not in self._entities:
-            return []
-        self._ensure_edge_indexes()
-
-        inn = set()
-        default_dir = self.directed if self.directed is not None else True
-        probe = ekey if self._aspects != ('_',) else vertex_id
-        edges = self._edges
-
-        for eid in self._tgt_to_edges.get(probe, ()):
-            rec = edges[eid]
-            if rec.col_idx >= 0:
-                inn.add(rec.src)
-        for eid in self._src_to_edges.get(probe, ()):
-            rec = edges[eid]
-            if rec.col_idx < 0:
-                continue
-            edir = rec.directed if rec.directed is not None else default_dir
-            if not edir:
-                inn.add(rec.tgt)
-
-        for _eid, rec in self._iter_hyperedges():
-            meta = _hyper_meta(rec)
-            if meta['directed']:
-                if probe in meta['tail']:
-                    inn |= meta['head']
-            else:
-                members = meta['members']
-                if probe in members:
-                    inn |= members - {probe}
-        return list(inn)
+        return self._neighbors(vertex_id, 'in')
 
     def predecessors(self, vertex_id):
         """Alias for :meth:`in_neighbors`.

@@ -662,9 +662,7 @@ def from_omnipath(
 
                 t_load = time.perf_counter()
                 payload = [
-                    (gene, attrs)
-                    for gene, attrs in grouped.items()
-                    if G._resolve_entity_key(gene) in G._entities
+                    (gene, attrs) for gene, attrs in grouped.items() if G.has_vertex(gene)
                 ]
                 G._add_vertices_bulk(payload)
                 print(

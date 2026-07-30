@@ -20,8 +20,9 @@ from typing import TYPE_CHECKING, Any
 from pathlib import Path
 from binascii import Error as BinasciiError
 
-from ..core import EntityRecord
+from ..core import EntityRecord, _structure
 from ._common import (
+    STORED_EDGE_KIND,
     _rows_to_df,
     _iter_vertex_ids,
     dataframe_columns,
@@ -39,6 +40,24 @@ if TYPE_CHECKING:
 
 # --- Helpers ---
 CX_STYLE_KEY = '__cx_style__'
+
+
+def _all_edges(graph):
+    """Return every edge of a graph, including the ones with no column."""
+    return list(_structure.iter_edges(graph, include_placeholders=True))
+
+
+def _one_endpoint(side):
+    """Return the single endpoint of a binary side, or None when the side is open."""
+    return next(iter(side), None)
+
+
+def _hyperedge_manifest(graph, edge) -> dict:
+    """Describe one hyperedge the way the manifest of the format stores it."""
+    sides = _structure.edge_sides(graph, edge.id)
+    if sides.target:
+        return {'directed': True, 'head': list(sides.source), 'tail': list(sides.target)}
+    return {'directed': False, 'members': list(sides.source)}
 
 
 def _serialize_slices_public(graph) -> dict[str, dict]:
@@ -251,30 +270,36 @@ def to_cx2(
         },
         'edges': {
             'definitions': {
-                eid: (rec.src, rec.tgt, rec.etype)
-                for eid, rec in G._edges.items()
-                if rec.etype != 'hyper'
+                edge.id: (
+                    _one_endpoint(_structure.edge_sides(G, edge.id).source),
+                    _one_endpoint(_structure.edge_sides(G, edge.id).target),
+                    STORED_EDGE_KIND.get(edge.kind, edge.kind),
+                )
+                for edge in _all_edges(G)
+                if edge.kind != _structure.HYPER
             },
-            'weights': {eid: rec.weight for eid, rec in G._edges.items() if rec.weight is not None},
+            'weights': {
+                edge.id: edge.declared_weight
+                for edge in _all_edges(G)
+                if edge.declared_weight is not None
+            },
             'directed': {
-                eid: bool(rec.directed) for eid, rec in G._edges.items() if rec.directed is not None
+                edge.id: bool(edge.declared_directed)
+                for edge in _all_edges(G)
+                if edge.declared_directed is not None
             },
             'direction_policy': dict(getattr(G, 'edge_direction_policy', {})),
             'hyperedges': {
-                eid: (
-                    {'directed': True, 'head': list(rec.src or []), 'tail': list(rec.tgt or [])}
-                    if rec.tgt is not None
-                    else {'directed': False, 'members': list(rec.src or [])}
-                )
-                for eid, rec in G._edges.items()
-                if rec.etype == 'hyper'
+                edge.id: _hyperedge_manifest(G, edge)
+                for edge in _all_edges(G)
+                if edge.kind == _structure.HYPER
             },
             'attributes': edge_rows,
             'kivela': {
                 'edge_kind': {
-                    eid: ('hyper' if rec.etype == 'hyper' else rec.ml_kind)
-                    for eid, rec in G._edges.items()
-                    if rec.etype == 'hyper' or rec.ml_kind is not None
+                    edge.id: ('hyper' if edge.kind == _structure.HYPER else edge.ml_kind)
+                    for edge in _all_edges(G)
+                    if edge.kind == _structure.HYPER or edge.ml_kind is not None
                 },
                 'edge_layers': serialize_edge_layers(getattr(G, 'edge_layers', {})),
             },
@@ -442,20 +467,23 @@ def to_cx2(
         # the visual CX2 nodes are keyed by the bare vertex id (see node_map).
         return x[0] if isinstance(x, tuple) else x
 
-    for eid, rec in G._edges.items():
-        is_hyper = rec.etype == 'hyper'
+    for edge in _all_edges(G):
+        eid = edge.id
+        sides = _structure.edge_sides(G, eid)
+        weight = edge.weight
+        is_hyper = edge.kind == _structure.HYPER
 
         # --- Hyperedge handling ---
         if is_hyper:
             if hyperedges == 'skip':
                 continue
 
-            directed = rec.tgt is not None
+            directed = bool(sides.target)
             if directed:
-                S = {_bare(x) for x in (rec.src or [])}
-                T = {_bare(x) for x in (rec.tgt or [])}
+                S = {_bare(x) for x in sides.source}
+                T = {_bare(x) for x in sides.target}
             else:
-                members = {_bare(x) for x in (rec.src or [])}
+                members = {_bare(x) for x in sides.source}
                 S = members
                 T = members
 
@@ -488,7 +516,7 @@ def to_cx2(
                                     't': node_map[v],
                                     'v': {
                                         'interaction': str(eid),
-                                        'weight': float(1.0 if rec.weight is None else rec.weight),
+                                        'weight': weight,
                                         **clean_attrs,
                                     },
                                 }
@@ -510,7 +538,7 @@ def to_cx2(
                                     't': node_map[v],
                                     'v': {
                                         'interaction': str(eid),
-                                        'weight': float(1.0 if rec.weight is None else rec.weight),
+                                        'weight': weight,
                                         **clean_attrs,
                                     },
                                 }
@@ -539,7 +567,6 @@ def to_cx2(
                 }
                 cx_nodes.append(he_node)
 
-                weight = float(1.0 if rec.weight is None else rec.weight)
 
                 if directed:
                     # tail -> HE
@@ -598,7 +625,8 @@ def to_cx2(
             # unknown hyperedge mode - skip
             continue
 
-        u, v = _bare(rec.src), _bare(rec.tgt)
+        u = _bare(_one_endpoint(sides.source))
+        v = _bare(_one_endpoint(sides.target))
 
         if u not in node_map or v not in node_map:
             continue
@@ -614,7 +642,7 @@ def to_cx2(
             't': cx_v,
             'v': {
                 'interaction': str(eid),
-                'weight': float(1.0 if rec.weight is None else rec.weight),
+                'weight': weight,
             },
         }
 

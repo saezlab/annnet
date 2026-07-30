@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 import scipy.sparse as sp
 
+from ._structure import member_entries
+
 # ---------------------------------------------------------------------------
 # Incidence matrix capacity + cache invalidation
 # ---------------------------------------------------------------------------
@@ -50,11 +52,9 @@ def set_matrix_shape(g, shape) -> None:
 def rebuild_matrix(g):
     """Materialize the incidence matrix (CSR) from canonical edge records.
 
-    Records are the complete source of truth: an edge carries its explicit
-    ``coeffs`` column when set (stoichiometry / resolved flexible direction),
-    otherwise the column is derived from ``src``/``tgt``/``weight``/``directed``
-    (src endpoints get ``+w``; tgt endpoints get ``-w`` when directed, else ``+w``;
-    a tgt sharing a src's row overwrites it, matching the canonical constructor).
+    Records are the complete source of truth. ``_structure.member_entries``
+    turns one record into its incidence column, and this function places those
+    columns into one sparse matrix. The two therefore never disagree.
     """
     shape = g._matrix_shape
     entity_row = g._entity_row
@@ -65,25 +65,7 @@ def rebuild_matrix(g):
         col = rec.col_idx
         if col < 0:
             continue
-        coeffs = rec.coeffs
-        if coeffs is not None:
-            col_entries = coeffs
-        else:
-            w = rec.weight if rec.weight is not None else 1.0
-            tv = -w if rec.directed else w
-            src, tgt = rec.src, rec.tgt
-            col_entries = {}
-            if isinstance(src, frozenset):
-                for n in src:
-                    col_entries[n] = w
-            elif src is not None:
-                col_entries[src] = w
-            if isinstance(tgt, frozenset):
-                for n in tgt:
-                    col_entries[n] = tv
-            elif tgt is not None:
-                col_entries[tgt] = tv
-        for node, v in col_entries.items():
+        for node, v in member_entries(rec).items():
             if v == 0:
                 continue
             try:

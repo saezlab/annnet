@@ -31,11 +31,11 @@ docs = [
     "zarr>=2.18"
 ]
 docs-online = [
-    "anndata>=0.12; python_version >= '3.11'",
+    "anndata>=0.12",
     "corneto",
     "ipywidgets>=8",
-    "mudata>=0.3; python_version >= '3.11'",
-    "spatialdata>=0.2; python_version >= '3.11'",
+    "mudata>=0.3",
+    "spatialdata>=0.2",
     "torch>=2.2",
     "torch-geometric>=2.5",
 ]
@@ -95,7 +95,7 @@ maintainers = [
 ]
 name = "annnet"
 readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 version = "0.2.0"
 
 [project.optional-dependencies]
@@ -148,10 +148,9 @@ io = [
 ]
 
 scverse = [
-  # anndata 0.12+ dropped Python 3.10; gate the scverse stack to 3.11+
-  "anndata>=0.12; python_version >= '3.11'",
-  "mudata>=0.3; python_version >= '3.11'",
-  "spatialdata>=0.2; python_version >= '3.11'",
+  "anndata>=0.12",
+  "mudata>=0.3",
+  "spatialdata>=0.2",
 ]
 
 storage = [
@@ -178,9 +177,8 @@ all = [
   "cobra>=0.26",
   "toml>=0.10",
   "narwhals>=1.9",
-  # anndata 0.12+ dropped Python 3.10; gate the scverse stack to 3.11+
-  "anndata>=0.12; python_version >= '3.11'",
-  "mudata>=0.3; python_version >= '3.11'",
+  "anndata>=0.12",
+  "mudata>=0.3",
   # graphtool is not on PyPI
 ]
 
@@ -370,8 +368,9 @@ min_confidence = 50
 env_list = [
     "covclean",
     "lint",
-    "py{310,311,312,313}",
+    "py{311,312,313}",
     "coverage",
+    "coverage-core",
     "readme",
     "docs"
 ]
@@ -381,7 +380,6 @@ skip_missing_interpreters = true
 
 [tool.tox.envs]
 base_python = [
-    "py310: python3.10",
     "py311: python3.11",
     "py312: python3.12",
     "py313: python3.13"
@@ -418,12 +416,23 @@ commands = [
 [tool.tox.env.coverage]
 skip_install = true
 dependency_groups = ["tests"]
-depends = ["py310", "py311", "py312", "py313"]
+depends = ["py311", "py312", "py313"]
 parallel_show_output = true
 commands = [
   ["coverage", "report", "--omit=tox/*"],
   ["coverage", "xml", "--omit=tox/*", "-o", "{toxinidir}/coverage.xml"],
   ["diff-cover", "--compare-branch", "origin/main", "{toxinidir}/coverage.xml"]
+]
+
+# The core carries the graph data structure, so it holds a higher bar than the
+# package average. The gate fails the build when core coverage drops below 80%.
+[tool.tox.env.coverage-core]
+description = "Fail when the coverage of annnet/core falls below 80 percent."
+skip_install = true
+dependency_groups = ["tests"]
+depends = ["py311", "py312", "py313"]
+commands = [
+  ["coverage", "report", "--include=annnet/core/*", "--fail-under=80"]
 ]
 
 [tool.tox.env.lint]
@@ -459,10 +468,9 @@ commands = [
 
 [tool.tox-gh-actions]
 env = [
-    "py313: covclean, lint, coverage, readme, docs"
+    "py313: covclean, lint, coverage, coverage-core, readme, docs"
 ]
 python = [
-    "3.10: py310",
     "3.11: py311",
     "3.12: py312",
     "3.13: py313"
@@ -477,7 +485,7 @@ channels = ["conda-forge"]
 platforms = ["linux-64", "osx-64", "osx-arm64"]
 
 [tool.pixi.dependencies]
-python = ">=3.10,<3.14"
+python = ">=3.11,<3.14"
 pip = "*"
 
 [tool.pixi.feature.gt.dependencies]
