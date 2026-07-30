@@ -35,6 +35,9 @@ import numpy as np
 import scipy.sparse as sp
 
 from . import _store as ST
+from .._session import logger
+
+log = logger(__name__)
 
 
 class MatrixView(NamedTuple):

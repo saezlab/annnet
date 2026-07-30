@@ -19,7 +19,10 @@ from __future__ import annotations
 
 import numpy as np
 
+from .._session import logger
 from .._support.dataframe_backend import dataframe_from_columns
+
+log = logger(__name__)
 
 NODE_AXIS = 'node'
 EDGE_AXIS = 'edge'
@@ -101,6 +104,12 @@ class AttributeStore:
             value, (int, float, np.integer, np.floating)
         ):
             # The column has to widen to hold a value its type cannot.
+            log.debug(
+                'Widening attribute column %r from %s to hold a value of type %s.',
+                name,
+                column.dtype,
+                type(value).__name__,
+            )
             widened = np.full(column.size, None, dtype=object)
             widened[:] = column
             column = widened

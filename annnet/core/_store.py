@@ -30,6 +30,10 @@ from typing import NamedTuple
 
 import numpy as np
 
+from .._session import logger
+
+log = logger(__name__)
+
 # Roles of a member inside one edge. The role says which side of the edge the
 # member is on. The coefficient says how much, and the two are independent,
 # because an explicit coefficient may carry any value.
@@ -464,6 +468,7 @@ class CoreState:
         path.
         """
         slots = self.live_edge_slots()
+        before = self._member_used
         total = int(self.member_len[slots].sum()) if slots.size else 0
         ent = np.zeros(max(_INITIAL_CAPACITY, total), dtype=np.int64)
         coef = np.zeros(max(_INITIAL_CAPACITY, total), dtype=np.float32)
@@ -477,9 +482,15 @@ class CoreState:
             role[cursor : cursor + width] = members.roles
             self.member_start[slot] = cursor
             cursor += width
+        reclaimed = before - cursor
         self.member_ent, self.member_coef, self.member_role = ent, coef, role
         self._member_used = cursor
         self._note_change()
+        log.info(
+            'Compacted the member pools of a graph with %d edges and reclaimed %d entries.',
+            self.edge_count,
+            reclaimed,
+        )
 
     def __repr__(self) -> str:
         return (
