@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from annnet.core import _structure as S
+from annnet.core import _store as ST, _structure as S
 
 from ._fixtures import CASE_NAMES, build_case
 
@@ -300,3 +300,91 @@ def test_every_member_of_every_edge_is_a_live_entity(case):
     live = {ref.key for ref in S.iter_entities(G)}
     for ref in S.iter_edges(G):
         assert set(S.edge_members(G, ref.id)) <= live, f'{case}/{ref.id}'
+
+
+# ---------------------------------------------------------------------------
+# The facade answers the same whichever store backs the graph
+# ---------------------------------------------------------------------------
+# These run the contract twice: once against the record store and once against
+# the slot store built from it. A difference here is a difference the rest of the
+# package would see when the core changes underneath it.
+
+
+@pytest.fixture(params=CASE_NAMES)
+def both_stores(request):
+    graph = build_case(request.param)
+    return request.param, graph, ST.from_graph(graph)
+
+
+def test_the_slot_store_answers_the_facade(both_stores):
+    _case, _graph, store = both_stores
+    assert S.is_slot_backed(store)
+    assert S.store_of(store) is store
+
+
+def test_both_stores_iterate_the_same_entities(both_stores):
+    _case, graph, store = both_stores
+    assert [ref.key for ref in S.iter_entities(graph)] == [
+        ref.key for ref in S.iter_entities(store)
+    ]
+    assert [ref.kind for ref in S.iter_entities(graph)] == [
+        ref.kind for ref in S.iter_entities(store)
+    ]
+
+
+def test_both_stores_iterate_the_same_edges(both_stores):
+    _case, graph, store = both_stores
+    assert {ref.id for ref in S.iter_edges(graph)} == {ref.id for ref in S.iter_edges(store)}
+
+
+def test_both_stores_report_the_same_edge_reference(both_stores):
+    case, graph, store = both_stores
+    for ref in S.iter_edges(graph):
+        found = S.edge_ref(store, ref.id)
+        assert found.kind == ref.kind, f'{case}/{ref.id}'
+        assert found.directed == ref.directed, f'{case}/{ref.id}'
+        assert found.weight == pytest.approx(ref.weight), f'{case}/{ref.id}'
+
+
+def test_both_stores_report_the_same_endpoints(both_stores):
+    case, graph, store = both_stores
+    for ref in S.iter_edges(graph):
+        expected = S.edge_sides(graph, ref.id)
+        found = S.edge_endpoints(store, ref.id)
+        assert {key[0] for key in found.source} == {_bare(e) for e in expected.source}, (
+            f'{case}/{ref.id}'
+        )
+        assert {key[0] for key in found.target} == {_bare(e) for e in expected.target}, (
+            f'{case}/{ref.id}'
+        )
+
+
+def test_both_stores_answer_existence_the_same(both_stores):
+    _case, graph, store = both_stores
+    for ref in S.iter_entities(graph):
+        assert S.has_entity(store, ref.key) is True
+    for ref in S.iter_edges(graph):
+        assert S.has_edge(store, ref.id) is True
+    assert S.has_entity(store, ('no_such_node', FLAT)) is False
+    assert S.has_edge(store, 'no_such_edge') is False
+
+
+def test_both_stores_reject_an_unknown_edge_the_same_way(both_stores):
+    _case, _graph, store = both_stores
+    with pytest.raises(KeyError):
+        S.edge_members(store, 'no_such_edge')
+    with pytest.raises(KeyError):
+        S.edge_endpoints(store, 'no_such_edge')
+
+
+def test_positions_stay_contiguous_on_the_slot_store(both_stores):
+    """A slot is stable, but the position it maps to is dense and starts at zero."""
+    _case, _graph, store = both_stores
+    rows = [S.entity_row(store, ref.key) for ref in S.iter_entities(store)]
+    columns = [S.edge_column(store, ref.id) for ref in S.iter_edges(store)]
+    assert rows == list(range(len(rows)))
+    assert columns == list(range(len(columns)))
+
+
+def _bare(endpoint):
+    return endpoint[0] if isinstance(endpoint, tuple) else endpoint
