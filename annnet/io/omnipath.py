@@ -661,9 +661,7 @@ def from_omnipath(
                 print(f'[vertex annotations] pivoted in {time.perf_counter() - t_pivot:.1f}s')
 
                 t_load = time.perf_counter()
-                payload = [
-                    (gene, attrs) for gene, attrs in grouped.items() if G.has_vertex(gene)
-                ]
+                payload = [(gene, attrs) for gene, attrs in grouped.items() if G.has_vertex(gene)]
                 G._add_vertices_bulk(payload)
                 print(
                     f'[vertex annotations] loaded {len(payload)} vertices '

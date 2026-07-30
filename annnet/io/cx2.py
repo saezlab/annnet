@@ -567,7 +567,6 @@ def to_cx2(
                 }
                 cx_nodes.append(he_node)
 
-
                 if directed:
                     # tail -> HE
                     for u in T:
