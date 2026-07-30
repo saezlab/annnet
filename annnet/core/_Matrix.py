@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys as _sys
 
+from . import _structure
 from .._support.dataframe_backend import (
     empty_dataframe,
     dataframe_columns,
@@ -98,9 +99,10 @@ class CacheManager:
         boundary_eids = g.attrs.get_edges_by_attr('is_boundary', True)
         if not boundary_eids:
             return None
-        edges = g._edges
         boundary_cols = {
-            edges[e].col_idx for e in boundary_eids if e in edges and edges[e].col_idx >= 0
+            _structure.edge_column(g, e)
+            for e in boundary_eids
+            if _structure.has_edge(g, e) and _structure.edge_column(g, e) >= 0
         }
         if not boundary_cols:
             return None

@@ -2,6 +2,8 @@
 
 import scipy.sparse as sp
 
+from . import _structure
+from ._stored_kinds import STORED_EDGE_KIND
 from .._support.dataframe_backend import (
     clone_dataframe,
     empty_dataframe,
@@ -447,38 +449,33 @@ class ViewsClass:
         -----
         Vectorized implementation avoids per-edge scans.
         """
-        if not self._col_to_edge:
+        _edge_refs = list(_structure.iter_edges(self))
+        if not _edge_refs:
             return empty_dataframe({'edge_id': 'text', 'kind': 'text', 'ml_kind': 'text'})
 
-        eids_raw = list(self._col_to_edge.values())
+        eids_raw = [ref.id for ref in _edge_refs]
         eids_str = [str(eid) for eid in eids_raw]
 
-        _default_dir = True if self.directed is None else self.directed
-        _edge_recs = [self._edges[eid] for eid in eids_raw]
-        kinds = ['hyper' if rec.etype == 'hyper' else 'binary' for rec in _edge_recs]
-        ml_kinds = [rec.ml_kind for rec in _edge_recs]
+        kinds = ['hyper' if ref.kind == _structure.HYPER else 'binary' for ref in _edge_refs]
+        ml_kinds = [ref.ml_kind for ref in _edge_refs]
 
         need_global = include_weight or resolved_weight
-        global_w = [rec.weight for rec in _edge_recs] if need_global else None
-        dirs = (
-            [rec.directed if rec.directed is not None else _default_dir for rec in _edge_recs]
-            if include_directed
-            else None
-        )
+        global_w = [ref.weight for ref in _edge_refs] if need_global else None
+        dirs = [ref.directed for ref in _edge_refs] if include_directed else None
 
         src, tgt, etype, head, tail, members = [], [], [], [], [], []
-        for rec in _edge_recs:
-            if rec.etype == 'hyper':
-                if rec.tgt is not None:
-                    src_vals = tuple(str(x) for x in sorted(rec.src))
-                    tgt_vals = tuple(str(x) for x in sorted(rec.tgt))
+        for ref in _edge_refs:
+            sides = _structure.edge_sides(self, ref.id)
+            if ref.kind == _structure.HYPER:
+                src_vals = tuple(str(x) for x in sorted(sides.source, key=str))
+                if sides.target:
+                    tgt_vals = tuple(str(x) for x in sorted(sides.target, key=str))
                     head.append(src_vals)
                     tail.append(tgt_vals)
                     members.append(None)
                     src.append('|'.join(src_vals))
                     tgt.append('|'.join(tgt_vals))
                 else:
-                    src_vals = tuple(str(x) for x in sorted(rec.src))
                     head.append(None)
                     tail.append(None)
                     members.append(src_vals)
@@ -486,9 +483,11 @@ class ViewsClass:
                     tgt.append(None)
                 etype.append(None)
             else:
-                src.append(str(rec.src) if rec.src is not None else None)
-                tgt.append(str(rec.tgt) if rec.tgt is not None else None)
-                etype.append(str(rec.etype) if rec.etype is not None else None)
+                one_source = next(iter(sides.source), None)
+                one_target = next(iter(sides.target), None)
+                src.append(str(one_source) if one_source is not None else None)
+                tgt.append(str(one_target) if one_target is not None else None)
+                etype.append(STORED_EDGE_KIND.get(ref.kind, ref.kind))
                 head.append(None)
                 tail.append(None)
                 members.append(None)

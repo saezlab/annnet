@@ -480,6 +480,25 @@ def edge_column(graph, edge_id: str) -> int:
     return int(_require_edge(graph, edge_id).col_idx)
 
 
+def edge_at_column(graph, column: int) -> str:
+    """Return the edge that occupies one column of the materialized matrix.
+
+    This is the inverse of :func:`edge_column`, and it carries the same warning: a
+    column belongs to one materialized matrix and to nothing else. It exists for
+    the public methods that still accept a position, and it goes away with them.
+    """
+    if is_slot_backed(graph):
+        store = store_of(graph)
+        slots = store.live_edge_slots()
+        if not 0 <= column < slots.size:
+            raise KeyError(f'No edge at column {column}')
+        return store.edge_id(int(slots[column]))
+    try:
+        return graph._col_to_edge[column]
+    except KeyError:
+        raise KeyError(f'No edge at column {column}') from None
+
+
 def _side_keys(graph, side) -> frozenset:
     if side is None:
         return frozenset()

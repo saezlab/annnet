@@ -5,6 +5,7 @@ from typing import Any
 
 import narwhals as nw
 
+from . import _structure
 from .._support.dataframe_backend import (
     dataframe_columns,
     dataframe_to_rows,
@@ -430,8 +431,7 @@ class AttributesClass:
         """
         if slice_id not in self._slices:
             raise KeyError(f'slice {slice_id} not found')
-        _rec = self._edges.get(edge_id)
-        if _rec is None or _rec.col_idx < 0:
+        if not _structure.has_edge(self, edge_id) or _structure.edge_column(self, edge_id) < 0:
             raise KeyError(f'Edge {edge_id} not found')
         AttributesClass.set_edge_slice_attrs(self, slice_id, edge_id, weight=float(weight))
 
@@ -463,8 +463,9 @@ class AttributesClass:
                     w = row.get('weight', None)
                     if w is not None and not (isinstance(w, float) and math.isnan(w)):
                         return float(w)
-        _rec = self._edges.get(edge_id)
-        return float(_rec.weight if (_rec is not None and _rec.weight is not None) else 1.0)
+        if not _structure.has_edge(self, edge_id):
+            return 1.0
+        return float(_structure.edge_ref(self, edge_id).weight)
 
     def audit_attributes(self):
         """Audit attribute tables for extra/missing rows and invalid edge-slice pairs.
@@ -479,8 +480,10 @@ class AttributesClass:
             - `missing_edge_rows`
             - `invalid_edge_slice_rows`
         """
-        vertex_ids = {ekey[0] for ekey, rec in self._entities.items() if rec.kind == 'vertex'}
-        edge_ids = set(self._col_to_edge.values())
+        vertex_ids = {
+            ref.id for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE
+        }
+        edge_ids = {ref.id for ref in _structure.iter_edges(self)}
         na, ea, ela = self.vertex_attributes, self.edge_attributes, self.edge_slice_attributes
 
         if na is not None and 'vertex_id' in dataframe_columns(na):
@@ -638,14 +641,15 @@ class AttributesClass:
 
     def _incident_flexible_edges(self, v):
         out = []
-        for eid, rec in self._edges.items():
-            if rec.col_idx < 0 or rec.etype == 'hyper':
+        policies = self.edge_direction_policy
+        for ref in _structure.iter_edges(self):
+            if ref.kind == _structure.HYPER or ref.id not in policies:
                 continue
-            s, t = rec.src, rec.tgt
-            if s is None or t is None:
+            sides = _structure.edge_sides(self, ref.id)
+            if not sides.source or not sides.target:
                 continue
-            if rec.direction_policy is not None and (s == v or t == v):
-                out.append(eid)
+            if v in sides.source or v in sides.target:
+                out.append(ref.id)
         return out
 
     def _apply_flexible_direction(self, edge_id):
@@ -718,7 +722,7 @@ class AttributesClass:
         dict
             Attribute dictionary for that edge. Empty if not found.
         """
-        eid = self._col_to_edge[edge] if isinstance(edge, int) else edge
+        eid = _structure.edge_at_column(self, edge) if isinstance(edge, int) else edge
         rows = dataframe_to_rows(dataframe_filter_eq(self.edge_attributes, 'edge_id', eid))
         if not rows:
             return {}
@@ -757,7 +761,7 @@ class AttributesClass:
         """
         rows = dataframe_to_rows(self.edge_attributes)
         if indexes is not None:
-            wanted = {self._col_to_edge[i] for i in indexes}
+            wanted = {_structure.edge_at_column(self, i) for i in indexes}
             rows = [row for row in rows if row.get('edge_id') in wanted]
         return {r.get('edge_id'): dict(r) for r in rows if r.get('edge_id') is not None}
 
