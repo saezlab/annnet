@@ -388,3 +388,27 @@ def test_positions_stay_contiguous_on_the_slot_store(both_stores):
 
 def _bare(endpoint):
     return endpoint[0] if isinstance(endpoint, tuple) else endpoint
+
+
+def test_both_stores_report_the_same_incident_edges(both_stores):
+    case, graph, store = both_stores
+    for ref in S.iter_entities(graph):
+        for direction in ('in', 'out', 'both'):
+            expected = set(S.entity_edges(graph, ref.key, direction))
+            found = set(S.entity_edges(store, ref.key, direction))
+            assert found == expected, f'{case}/{ref.key}/{direction}'
+
+
+def test_both_stores_report_the_same_neighbors(both_stores):
+    case, graph, store = both_stores
+    for ref in S.iter_entities(graph):
+        for direction in ('in', 'out', 'both'):
+            expected = {_bare(item) for item in S.neighbors(graph, ref.key, direction)}
+            found = {_bare(item) for item in S.neighbors(store, ref.key, direction)}
+            assert found == expected, f'{case}/{ref.key}/{direction}'
+
+
+def test_the_slot_store_rejects_an_unknown_direction():
+    store = ST.from_graph(build_case('binary_directed'))
+    with pytest.raises(ValueError):
+        S.entity_edges(store, ('A', FLAT), 'sideways')

@@ -543,6 +543,71 @@ def _stored_directed(graph, record) -> bool:
     return bool(record.directed if record.directed is not None else graph.directed)
 
 
+def _slot_incident(store, key):
+    """Yield ``(edge_slot, on_source, on_target, directed)`` for the edges of one entity.
+
+    The store keeps an index from an entity to the edges that name it, so this
+    costs the degree of the entity rather than a scan over every edge. The roles
+    come from the member list of each edge, which is where a self-loop shows up as
+    both sides at once.
+    """
+    from . import _store as ST
+
+    slot = store.entity_slot(key)
+    for edge_slot in sorted(store._entity_edges.get(slot, ())):
+        members = store.members(edge_slot)
+        on_source = False
+        on_target = False
+        for entity_slot, role in zip(members.entities, members.roles, strict=False):
+            if int(entity_slot) != slot:
+                continue
+            if role == ST.TARGET:
+                on_target = True
+            else:
+                on_source = True
+        yield edge_slot, on_source, on_target, store.is_directed(edge_slot)
+
+
+def _slot_entity_edges(store, key, direction: str) -> tuple:
+    wants_out = direction in ('out', 'both')
+    wants_in = direction in ('in', 'both')
+    found = []
+    for edge_slot, on_source, on_target, directed in _slot_incident(store, key):
+        if not directed:
+            found.append(edge_slot)
+        elif (wants_out and on_source) or (wants_in and on_target):
+            found.append(edge_slot)
+    return tuple(store.edge_id(slot) for slot in sorted(found))
+
+
+def _slot_neighbors(store, key, direction: str) -> list:
+    from . import _store as ST
+
+    wants_out = direction in ('out', 'both')
+    wants_in = direction in ('in', 'both')
+    entity_is_edge = int(store.entity_kind[store.entity_slot(key)]) == ST.EDGE_ENTITY
+    found = set()
+
+    for edge_slot, on_source, on_target, directed in _slot_incident(store, key):
+        members = store.members(edge_slot)
+        sides = store.endpoints(edge_slot)
+        if not directed:
+            everyone = {store.entity_key(int(slot)) for slot in members.entities}
+            found |= everyone - {key}
+            continue
+        if int(store.edge_kind[edge_slot]) == ST.HYPER:
+            if wants_out and on_source:
+                found |= sides.target
+            elif wants_in and on_target:
+                found |= sides.source
+            continue
+        if wants_out and on_source:
+            found |= sides.target
+        if wants_in and on_target and (direction == 'in' or entity_is_edge):
+            found |= sides.source
+    return [endpoint_form(store, member) for member in found]
+
+
 def neighbors(graph, ref, direction: str = 'both') -> list:
     """Return the entities adjacent to one entity, in the public identity form.
 
@@ -559,6 +624,12 @@ def neighbors(graph, ref, direction: str = 'both') -> list:
     """
     if direction not in DIRECTIONS:
         raise ValueError(f'direction must be one of {DIRECTIONS}, got {direction!r}')
+    if is_slot_backed(graph):
+        store = store_of(graph)
+        key = _slot_key(store, ref)
+        if store.entity_slot(key) is None:
+            return []
+        return _slot_neighbors(store, key, direction)
     try:
         key = _require_entity(graph, ref)
     except (KeyError, ValueError, TypeError):
@@ -620,6 +691,12 @@ def entity_edges(graph, ref, direction: str = 'both') -> tuple:
     """
     if direction not in DIRECTIONS:
         raise ValueError(f'direction must be one of {DIRECTIONS}, got {direction!r}')
+    if is_slot_backed(graph):
+        store = store_of(graph)
+        key = _slot_key(store, ref)
+        if store.entity_slot(key) is None:
+            raise KeyError(f'Unknown entity: {ref!r}')
+        return _slot_entity_edges(store, key, direction)
     key = _require_entity(graph, ref)
     probe = _probe_form(graph, key)
     graph._ensure_edge_indexes()
