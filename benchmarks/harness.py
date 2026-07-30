@@ -159,6 +159,44 @@ def time_oneshot(
     return _stat_from(per_call, inner=1)
 
 
+def time_batched(
+    setup: Callable[[], object],
+    step: Callable[[object, int], object],
+    *,
+    count: int,
+    warmup: int = 1,
+    samples: int = 5,
+) -> TimeStat:
+    """Time one single-element mutation, with the graph built outside the clock.
+
+    A single write cannot be repeated on one graph without changing it, and
+    building a graph per sample would measure the build instead of the write. So
+    ``setup`` builds one graph untimed, and the clock covers ``count`` successive
+    ``step`` calls on it. Each step takes its index, so it can act on a distinct
+    element. The reported time is per step.
+    """
+    count = max(1, count)
+    for _ in range(warmup):
+        handle = setup()
+        for i in range(count):
+            step(handle, i)
+        del handle
+
+    per_call: list[float] = []
+    for _ in range(samples):
+        handle = setup()
+        gc.collect()
+        gc.disable()
+        t0 = time.perf_counter_ns()
+        for i in range(count):
+            step(handle, i)
+        dt = (time.perf_counter_ns() - t0) / 1e9
+        gc.enable()
+        per_call.append(dt / count)
+        del handle
+    return _stat_from(per_call, inner=count)
+
+
 # ---------------------------------------------------------------------------
 # Memory
 # ---------------------------------------------------------------------------

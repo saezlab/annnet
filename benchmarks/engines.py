@@ -23,6 +23,7 @@ imports the stack fresh in a clean interpreter.
 
 from __future__ import annotations
 
+from typing import NamedTuple
 from collections.abc import Callable
 
 
@@ -38,6 +39,27 @@ def make_data(n_vertices: int, n_edges: int) -> tuple[list[str], list[tuple[str,
     names = [f'v{i}' for i in range(n_vertices)]
     edges = [(f'v{i % n_vertices}', f'v{(i + 1) % n_vertices}', 1.0) for i in range(n_edges)]
     return names, edges
+
+
+class Mutation(NamedTuple):
+    """One single-element write, with its setup kept out of the measurement.
+
+    ``setup`` builds a graph and is never timed. ``step`` performs the write for
+    one index and is timed. The index lets a step act on a distinct element, so
+    the same graph absorbs many steps and the reported cost is per write.
+    """
+
+    setup: Callable[[], object]
+    step: Callable[[object, int], object]
+
+
+def probe_names(count: int) -> list[str]:
+    """Names of the nodes a mutation batch writes to.
+
+    Every engine adds an edge to the same set of fresh nodes, so the comparison
+    measures one edge insertion and not a difference in what the graphs contain.
+    """
+    return [f'probe{i}' for i in range(count)]
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +92,19 @@ class Engine:
     def query_ops(self, handle, data) -> dict[str, Callable[[], object]]:
         """Return canonical-name -> repeatable read closure over a built handle."""
         raise NotImplementedError
+
+    def mutation_ops(self, data, *, count: int) -> dict[str, Mutation]:
+        """Return canonical-name -> :class:`Mutation` for the single-element writes.
+
+        ``count`` is how many steps the caller will run on one graph, so an
+        engine that has to prepare something per step, such as the edges a remove
+        will delete, knows how many to prepare.
+
+        The operation named ``read_after_mutate`` performs one write and then one
+        read of a derived matrix. That pair is the adverse case for a core that
+        rebuilds a derived structure whenever the graph changes.
+        """
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +144,43 @@ class AnnNetEngine(Engine):
             'enumerate_edges': lambda: list(G.edges()),
         }
 
+    def mutation_ops(self, data, *, count: int):
+        names, _edges = data
+        build = self.build_factory(data)
+        u = names[0]
+        probes = probe_names(count)
+
+        def with_probe_nodes():
+            G = build()
+            G.add_vertices(probes, slice='base')
+            return G
+
+        def with_probe_edges():
+            G = with_probe_nodes()
+            G.add_edges(
+                [
+                    {'source': u, 'target': name, 'edge_id': f'{name}_e', 'weight': 1.0}
+                    for name in probes
+                ]
+            )
+            return G
+
+        def add(G, i):
+            return G.add_edges(u, probes[i], edge_id=f'{probes[i]}_e')
+
+        def remove(G, i):
+            return G.remove_edge(f'{probes[i]}_e')
+
+        def add_then_read(G, i):
+            G.add_edges(u, probes[i], edge_id=f'{probes[i]}_e')
+            return G.X()
+
+        return {
+            'single_element_add': Mutation(with_probe_nodes, add),
+            'single_element_remove': Mutation(with_probe_edges, remove),
+            'read_after_mutate': Mutation(with_probe_nodes, add_then_read),
+        }
+
 
 # ---------------------------------------------------------------------------
 # NetworkX
@@ -146,6 +218,40 @@ class NetworkXEngine(Engine):
             'enumerate_edges': lambda: list(G.edges()),
         }
 
+    def mutation_ops(self, data, *, count: int):
+        names, _edges = data
+        nx = self._import()
+        build = self.build_factory(data)
+        extra = probe_names(count)
+        u = names[0]
+
+        def with_probes():
+            G = build()
+            G.add_nodes_from(extra)
+            G.add_edges_from((u, name, {'weight': 1.0}) for name in extra)
+            return G
+
+        def with_probe_nodes():
+            G = build()
+            G.add_nodes_from(extra)
+            return G
+
+        def add(G, i):
+            return G.add_edge(u, extra[i], weight=1.0)
+
+        def remove(G, i):
+            return G.remove_edge(u, extra[i])
+
+        def add_then_read(G, i):
+            G.add_edge(u, extra[i], weight=1.0)
+            return nx.adjacency_matrix(G)
+
+        return {
+            'single_element_add': Mutation(with_probe_nodes, add),
+            'single_element_remove': Mutation(with_probes, remove),
+            'read_after_mutate': Mutation(with_probe_nodes, add_then_read),
+        }
+
 
 # ---------------------------------------------------------------------------
 # igraph
@@ -177,6 +283,39 @@ class IGraphEngine(Engine):
             return g
 
         return build
+
+    def mutation_ops(self, data, *, count: int):
+        names, _edges = data
+        build = self.build_factory(data)
+        i_lo = 0
+        first_probe = len(names)
+
+        def with_probe_nodes():
+            g = build()
+            g.add_vertices(count)
+            g.vs[first_probe:]['name'] = probe_names(count)
+            return g
+
+        def with_probe_edges():
+            g = with_probe_nodes()
+            g.add_edges([(i_lo, first_probe + i) for i in range(count)])
+            return g
+
+        def add(g, i):
+            return g.add_edge(i_lo, first_probe + i, weight=1.0)
+
+        def remove(g, i):
+            return g.delete_edges(g.ecount() - 1)
+
+        def add_then_read(g, i):
+            g.add_edge(i_lo, first_probe + i, weight=1.0)
+            return g.get_adjacency_sparse()
+
+        return {
+            'single_element_add': Mutation(with_probe_nodes, add),
+            'single_element_remove': Mutation(with_probe_edges, remove),
+            'read_after_mutate': Mutation(with_probe_nodes, add_then_read),
+        }
 
     def query_ops(self, g, data):
         names, edges = data

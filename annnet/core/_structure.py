@@ -419,6 +419,75 @@ def _stored_directed(graph, record) -> bool:
     return bool(record.directed if record.directed is not None else graph.directed)
 
 
+def neighbors(graph, ref, direction: str = 'both') -> list:
+    """Return the entities adjacent to one entity, in the public identity form.
+
+    This is a structural query, so it lives here rather than in a caller. It
+    reads the store directly and builds no intermediate object per edge, because
+    a traversal is a hot path. Building an edge reference and two endpoint sets
+    for every incident edge costs about ten times as much.
+
+    ``direction`` is ``"out"``, ``"in"``, or ``"both"``. An undirected edge
+    answers in both directions. A directed edge answers on the side that holds
+    the entity, with one exception: an unqualified query does not walk backwards
+    along a directed edge unless the entity is an edge-entity, because both sides
+    of that edge describe it.
+    """
+    if direction not in DIRECTIONS:
+        raise ValueError(f'direction must be one of {DIRECTIONS}, got {direction!r}')
+    try:
+        key = _require_entity(graph, ref)
+    except (KeyError, ValueError, TypeError):
+        return []
+
+    probe = endpoint_form(graph, key)
+    graph._ensure_edge_indexes()
+    edges = graph._edges
+    default_directed = graph.directed if graph.directed is not None else True
+    entity_is_edge = graph._entities[key].kind == 'edge_entity'
+    wants_out = direction in ('out', 'both')
+    wants_in = direction in ('in', 'both')
+
+    found = set()
+
+    # The entity is on the source side of these edges.
+    for edge_id in graph._src_to_edges.get(probe, ()):
+        record = edges[edge_id]
+        if record.col_idx < 0:
+            continue
+        directed = record.directed if record.directed is not None else default_directed
+        if wants_out:
+            found.add(record.tgt)
+        elif not directed:
+            found.add(record.tgt)
+
+    # The entity is on the target side of these edges.
+    for edge_id in graph._tgt_to_edges.get(probe, ()):
+        record = edges[edge_id]
+        if record.col_idx < 0:
+            continue
+        directed = record.directed if record.directed is not None else default_directed
+        if not directed:
+            found.add(record.src)
+        elif wants_in and (direction == 'in' or entity_is_edge):
+            found.add(record.src)
+
+    # A hyperedge is not in the adjacency indexes, so it is scanned from the
+    # cached list of live hyperedges.
+    for _edge_id, record in iter_hyperedges(graph):
+        if record.tgt is not None:
+            if wants_out and probe in record.src:
+                found |= set(record.tgt)
+            elif wants_in and probe in record.tgt:
+                found |= set(record.src)
+        else:
+            members = record.src
+            if probe in members:
+                found |= set(members) - {probe}
+
+    return list(found)
+
+
 def entity_edges(graph, ref, direction: str = 'both') -> tuple:
     """Return the ids of the edges that touch one entity, in column order.
 

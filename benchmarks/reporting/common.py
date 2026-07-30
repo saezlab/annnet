@@ -5,6 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 COMPARABLE_OPS = ['build', 'degree', 'neighbors', 'has_edge', 'enumerate_edges']
+
+# The single-element writes and the write-then-read pair. Every engine can do
+# these, so they carry a ratio against a reference library just like the read
+# operations above.
+MUTATION_OPS = ['single_element_add', 'single_element_remove', 'read_after_mutate']
 COMPARABLE_ENGINES = ('annnet', 'networkx', 'igraph', 'graph-tool')
 BASELINE_ENGINES = ('networkx', 'igraph', 'graph-tool')
 ENGINE_LABELS = {

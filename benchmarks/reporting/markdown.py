@@ -12,6 +12,7 @@ from .plots import (
 )
 from .common import (
     EXTRA_GROUPS,
+    MUTATION_OPS,
     COMPARABLE_OPS,
     BASELINE_ENGINES,
     ANNNET_INTERNAL_ORDER,
@@ -64,6 +65,10 @@ def render(payload: dict, report_path, plots_dir=None):
         'Algorithms / Traversal',
         'Directional neighbor and edge queries plus matrix-derived traversal helpers.',
     )
+    lines += _mutation_ratios(idx, records)
+    lines += _matrix_growth(records)
+    lines += _matrix_cache(records)
+    lines += _attribute_options(records)
     lines += _extra_dimensions(records)
     lines += render_comparable_plots(records, plots_dir)
     lines += render_extra_plots(records, plots_dir)
@@ -427,4 +432,167 @@ def _adapters(payload: dict) -> list[str]:
             f'| {ok} | {r.get("note", "")} |'
         )
     lines.append('')
+    return lines
+
+
+def _mutation_ratios(idx: dict, records: list[dict]) -> list[str]:
+    """AnnNet against every reference library, per single-element operation."""
+    present = engines_in(records, ops=MUTATION_OPS)
+    if 'annnet' not in present:
+        return []
+    baselines = [engine for engine in BASELINE_ENGINES if engine in present]
+    lines = [
+        '## Single-element writes',
+        '',
+        'A bulk build hides the per-element cost. These rows measure one write on a',
+        'freshly built graph, so the number is what a user pays when a graph grows one',
+        'edge at a time. `read_after_mutate` performs one write and then one read of a',
+        'derived matrix, which is the adverse case for a core that rebuilds on a stale',
+        'read.',
+        '',
+    ]
+    for scale in scales_in(records):
+        header = ['op', 'annnet ms']
+        header += [ratio_label(engine) for engine in baselines]
+        lines += [
+            f'### {scale}',
+            '',
+            '| ' + ' | '.join(header) + ' |',
+            '|---' * len(header) + '|',
+        ]
+        for op in MUTATION_OPS:
+            ann = median_ms(pick(idx, 'annnet', scale, op))
+            row = [op, f'{ann:.3f}' if ann else '-']
+            for baseline in baselines:
+                base = median_ms(pick(idx, baseline, scale, op))
+                row.append(f'{ann / base:.2f}x' if (ann and base) else '-')
+            lines.append('| ' + ' | '.join(row) + ' |')
+        lines.append('')
+    return lines
+
+
+def _growth_rows(records: list[dict], group: str) -> list[dict]:
+    return [
+        row
+        for row in records
+        if row.get('group') == group and row.get('status') == 'ok' and row.get('time')
+    ]
+
+
+def _matrix_growth(records: list[dict]) -> list[str]:
+    """Show whether reading the matrix after every write stays linear."""
+    rows = _growth_rows(records, 'matrix_growth')
+    if not rows:
+        return []
+    by_size: dict[int, dict[str, float]] = {}
+    for row in rows:
+        by_size.setdefault(row['n_edges'], {})[row['op']] = row['time']['median_s'] * 1000.0
+    lines = [
+        '## Reading the matrix after every write',
+        '',
+        'A core that rebuilds the matrix on a stale read makes the second column grow',
+        'with the square of N, and the ratio grows with N. A core whose member lists are',
+        'the matrix keeps the ratio flat.',
+        '',
+        '| N appends | appends only ms | append then read ms | ratio |',
+        '|---|---|---|---|',
+    ]
+    for size in sorted(by_size):
+        pair = by_size[size]
+        only = pair.get('append_only')
+        both = pair.get('append_then_read')
+        ratio = f'{both / only:.1f}x' if (only and both) else '-'
+        lines.append(
+            f'| {size} | {only:.2f} | {both:.2f} | {ratio} |'
+            if (only and both)
+            else f'| {size} | - | - | - |'
+        )
+    lines.append('')
+    return lines
+
+
+def _matrix_cache(records: list[dict]) -> list[str]:
+    """Show where extending a cached matrix stops beating a full re-map."""
+    rows = _growth_rows(records, 'matrix_cache')
+    if not rows:
+        return []
+    by_note: dict[str, dict[str, float]] = {}
+    for row in rows:
+        by_note.setdefault(row['note'], {})[row['op']] = row['time']['median_s'] * 1000.0
+    lines = [
+        '## The append-only matrix cache',
+        '',
+        'The crossing point of these two columns is the number of appended columns that',
+        'makes dropping the cache cheaper than keeping it.',
+        '',
+        '| appended | extend ms | re-map ms | extend is |',
+        '|---|---|---|---|',
+    ]
+    for note in sorted(by_note, key=lambda text: int(text.split()[0])):
+        pair = by_note[note]
+        extend = pair.get('cache_extend')
+        remap = pair.get('cache_remap')
+        verdict = '-'
+        if extend and remap:
+            verdict = (
+                f'{remap / extend:.1f}x faster'
+                if extend < remap
+                else f'{extend / remap:.1f}x slower'
+            )
+        lines.append(
+            f'| {note.split()[0]} | {extend:.3f} | {remap:.3f} | {verdict} |'
+            if (extend and remap)
+            else f'| {note.split()[0]} | - | - | - |'
+        )
+    lines.append('')
+    return lines
+
+
+def _attribute_options(records: list[dict]) -> list[str]:
+    """The two candidate attribute stores, side by side."""
+    rows = _growth_rows(records, 'attribute_options')
+    comparison = _growth_rows(records, 'attributes')
+    if not rows and not comparison:
+        return []
+    lines = ['## Attribute storage', '']
+    if rows:
+        table: dict[str, dict[str, float]] = {}
+        for row in rows:
+            option = row['note'].split(';')[0]
+            table.setdefault(option, {})[row['op']] = row['time']['median_s'] * 1000.0
+        lines += [
+            'One typed array per attribute against an append-only journal of facts. The',
+            'journal pays a fold on every whole-frame read, so a tight alternation of one',
+            'write and one full read is its adverse case.',
+            '',
+            '| option | single write ms | whole-frame read ms |',
+            '|---|---|---|',
+        ]
+        for option in sorted(table):
+            pair = table[option]
+            write = pair.get('attr_write_single')
+            read = pair.get('attr_read_frame')
+            lines.append(
+                f'| {option} | {write:.5f} | {read:.3f} |'
+                if (write is not None and read is not None)
+                else f'| {option} | - | - |'
+            )
+        lines.append('')
+    if comparison:
+        pair = {row['op']: row['time']['median_s'] * 1000.0 for row in comparison}
+        attr = pair.get('attr_column_op')
+        frame = pair.get('dataframe_column_op')
+        lines += [
+            'The same vectorized operation on an attribute column and on a dataframe',
+            'column of the same length. The requirement is that the two match.',
+            '',
+            '| attribute column ms | dataframe column ms | ratio |',
+            '|---|---|---|',
+        ]
+        lines.append(
+            f'| {attr:.4f} | {frame:.4f} | {attr / frame:.2f}x |'
+            if (attr and frame)
+            else '| - | - | - |'
+        )
+        lines.append('')
     return lines

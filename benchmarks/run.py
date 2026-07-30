@@ -67,6 +67,11 @@ def _worker(args) -> int:
             )
             records += workloads.annnet_only(sc, backend=args.backend)
             records += workloads.annnet_features(sc, backend=args.backend)
+            records += workloads.mutations(eng, sc, backend=args.backend)
+            records += workloads.matrix_growth(sc, backend=args.backend)
+            records += workloads.matrix_cache_probe(sc, backend=args.backend)
+            records += workloads.attribute_ops(sc, backend=args.backend)
+            records += workloads.attribute_storage_options(sc, backend=args.backend)
             if not args.no_extra:
                 records += cases.extra_dimensions(
                     sc,
@@ -87,6 +92,7 @@ def _worker(args) -> int:
                 backend=None,
                 do_memory=not args.no_memory,
             )
+            records += workloads.mutations(eng, sc, backend=None)
 
     Path(args.out).write_text(json.dumps(records))
     return 0
