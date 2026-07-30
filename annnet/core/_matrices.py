@@ -133,29 +133,83 @@ def _adjacency_pairs(store, edge_slots: np.ndarray, row_lookup: np.ndarray):
     An edge joins two entities only when it has a member on each side. A one-sided
     edge, which is a boundary edge, therefore adds nothing, and no false self-loop
     appears on the node it drains.
+
+    Almost every edge that reaches here has one member on each side, so that case
+    is paired for every edge at once rather than one edge at a time. An edge with
+    a wider side, which is a directed hyperedge, needs the outer product of its two
+    sides and is handled on its own. Pairing one edge at a time cost about eight
+    times an incidence build.
     """
-    rows: list[int] = []
-    columns: list[int] = []
-    data: list[float] = []
-    for slot in edge_slots:
-        slot = int(slot)
-        members = store.members(slot)
-        sources = members.entities[members.roles != ST.TARGET]
-        targets = members.entities[members.roles == ST.TARGET]
-        if sources.size == 0 or targets.size == 0:
-            continue
-        weight = float(store.edge_weight[slot])
-        directed = store.is_directed(slot)
-        for source in sources:
-            for target in targets:
-                rows.append(int(row_lookup[source]))
-                columns.append(int(row_lookup[target]))
-                data.append(weight)
-                if not directed:
-                    rows.append(int(row_lookup[target]))
-                    columns.append(int(row_lookup[source]))
-                    data.append(weight)
-    return rows, columns, data
+    empty = (
+        np.zeros(0, dtype=np.int64),
+        np.zeros(0, dtype=np.int64),
+        np.zeros(0, dtype=np.float32),
+    )
+    if edge_slots.size == 0:
+        return empty
+
+    entities, _coefficients, roles, columns = _gather_members(store, edge_slots)
+    if entities.size == 0:
+        return empty
+
+    is_target = roles == ST.TARGET
+    width = int(edge_slots.size)
+    source_count = np.bincount(columns[~is_target], minlength=width)
+    target_count = np.bincount(columns[is_target], minlength=width)
+
+    weights = store.edge_weight[edge_slots].astype(np.float32)
+    declared = store.edge_directed[edge_slots]
+    default_directed = True if store.directed is None else bool(store.directed)
+    directed = np.where(declared == ST.INHERIT, default_directed, declared.astype(bool))
+
+    rows: list = []
+    cols: list = []
+    data: list = []
+
+    # The simple shape: one member on each side.
+    simple = (source_count == 1) & (target_count == 1)
+    if simple.any():
+        simple_columns = np.flatnonzero(simple)
+        keep = np.isin(columns, simple_columns)
+        order = np.argsort(columns[keep], kind='stable')
+        kept_columns = columns[keep][order]
+        kept_entities = entities[keep][order]
+        kept_is_target = is_target[keep][order]
+        source_rows = row_lookup[kept_entities[~kept_is_target]]
+        target_rows = row_lookup[kept_entities[kept_is_target]]
+        # Both sides are now in edge order, so they line up one to one.
+        edge_of_pair = kept_columns[~kept_is_target]
+        pair_weights = weights[edge_of_pair]
+        rows.append(source_rows)
+        cols.append(target_rows)
+        data.append(pair_weights)
+        undirected = ~directed[edge_of_pair]
+        if undirected.any():
+            rows.append(target_rows[undirected])
+            cols.append(source_rows[undirected])
+            data.append(pair_weights[undirected])
+
+    # The wide shape: a side with more than one member needs an outer product.
+    wide = (~simple) & (source_count > 0) & (target_count > 0)
+    for column in np.flatnonzero(wide):
+        members = store.members(int(edge_slots[column]))
+        member_is_target = members.roles == ST.TARGET
+        sources = members.entities[~member_is_target]
+        targets = members.entities[member_is_target]
+        source_rows = row_lookup[np.repeat(sources, targets.size)]
+        target_rows = row_lookup[np.tile(targets, sources.size)]
+        pair_weights = np.full(source_rows.size, weights[column], dtype=np.float32)
+        rows.append(source_rows)
+        cols.append(target_rows)
+        data.append(pair_weights)
+        if not directed[column]:
+            rows.append(target_rows)
+            cols.append(source_rows)
+            data.append(pair_weights)
+
+    if not rows:
+        return empty
+    return np.concatenate(rows), np.concatenate(cols), np.concatenate(data)
 
 
 def adjacency(store, *, kinds=(ST.BINARY, ST.NODE_EDGE)) -> MatrixView:
@@ -170,11 +224,7 @@ def adjacency(store, *, kinds=(ST.BINARY, ST.NODE_EDGE)) -> MatrixView:
     rows, columns, data = _adjacency_pairs(store, edge_slots, row_lookup)
     size = int(entity_slots.size)
     matrix = sp.coo_array(
-        (
-            np.asarray(data, dtype=np.float32),
-            (np.asarray(rows, dtype=np.int64), np.asarray(columns, dtype=np.int64)),
-        ),
-        shape=(size, size),
+        (data, (rows.astype(np.int64), columns.astype(np.int64))), shape=(size, size)
     ).tocsr()
     matrix.eliminate_zeros()
     view = _view(store, matrix, entity_slots, edge_slots, row_lookup)
