@@ -7,7 +7,7 @@ from collections.abc import Iterable, Iterator, MutableMapping
 
 import numpy as np
 
-from . import _state, _derive, _mutate, _identity, _validate
+from . import _state, _derive, _mutate, _identity, _validate, _structure
 from ._Ops import Operations, OperationsAccessor
 from ._Views import GraphView, ViewsClass, ViewsAccessor
 from ._Layers import LayerAccessor
@@ -19,6 +19,7 @@ from ._records import (
     _external_entity_kind,
 )
 from ._Annotation import AttributesClass, AttributesAccessor
+from ._stored_kinds import STORED_EDGE_KIND, STORED_ENTITY_KIND
 from ..algorithms.traversal import Traversal
 from .._support.dataframe_backend import (
     empty_dataframe,
@@ -578,8 +579,9 @@ class AnnNet(
             ekey = self._resolve_entity_key(item)
         except (KeyError, TypeError, ValueError):
             return False
-        rec = self._entities.get(ekey)
-        return rec is not None and rec.kind == 'vertex'
+        if not _structure.has_entity(self, ekey):
+            return False
+        return _structure.entity_ref(self, ekey).kind == _structure.NODE
 
     def _entity_row(self, *args, **kwargs):
         return _identity.entity_row(self, *args, **kwargs)
@@ -665,11 +667,11 @@ class AnnNet(
 
     @property
     def _V(self) -> set:
-        return {ekey[0] for ekey, rec in self._entities.items() if rec.kind == 'vertex'}
+        return {ref.id for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE}
 
     @property
     def _VM(self) -> set:
-        return {ekey for ekey, rec in self._entities.items() if rec.kind == 'vertex'}
+        return {ref.key for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE}
 
     @_VM.setter
     def _VM(self, value) -> None:
@@ -1224,7 +1226,7 @@ class AnnNet(
         # then a full matrix row-shift); routing through the bulk path
         # collapses that into a single pass.
         ekey = self._resolve_entity_key(vertex_id)
-        if ekey not in self._entities:
+        if not _structure.has_entity(self, ekey):
             raise KeyError(f'vertex {vertex_id!r} not found')
         self._remove_vertices_bulk([vertex_id])
 
@@ -1232,11 +1234,10 @@ class AnnNet(
         """Remove all vertices with no incident edges from the AnnNet graph."""
         csr = self._get_csr()
         orphans = []
-        for idx in range(len(self._entities)):
-            ent = self._row_to_entity[idx]
-            if self._entities[ent].kind == 'vertex':
+        for idx, ref in enumerate(_structure.iter_entities(self)):
+            if ref.kind == _structure.NODE:
                 if csr.indptr[idx + 1] - csr.indptr[idx] == 0:
-                    orphans.append(ent)
+                    orphans.append(ref.key)
         if orphans:
             self._remove_vertices_bulk(orphans)
         return len(orphans)
@@ -1267,7 +1268,7 @@ class AnnNet(
         :meth:`vertices` unless it specifically needs row-index mapping.
         """
         try:
-            entry = self._row_to_entity[index]
+            entry = _structure.entity_key_of_row(self, index)
         except KeyError:
             raise KeyError(
                 f'No vertex at row index {index}; valid range is '
@@ -1298,89 +1299,65 @@ class AnnNet(
         """
         if isinstance(index, str):
             eid = index
-            if eid not in self._edges:
+            if not _structure.has_edge(self, eid):
                 raise KeyError(f'Unknown edge id: {eid}') from None
         else:
-            eid = self._col_to_edge[index]
+            eid = _structure.edge_at_column(self, index)
 
-        rec = self._edges[eid]
-        return self._edge_tuple_from_record(rec, eid=eid)
+        return self._edge_tuple(eid)
 
-    def _edge_tuple_from_record(self, rec, *, eid: str | None = None):
-        if rec.etype == 'hyper':
-            if rec.tgt is not None:
-                src_fs = frozenset(rec.src)
-                tgt_fs = frozenset(rec.tgt)
-                members = src_fs | tgt_fs
-                kind = 'hyper_directed'
-                source, target, directed = src_fs, tgt_fs, True
-            else:
-                M = frozenset(rec.src)
-                members = M
-                kind = 'hyper_undirected'
-                source, target, directed = M, M, False
-        elif rec.etype in ('vertex_edge', 'edge_placeholder'):
-            u, v = rec.src, rec.tgt
-            members = frozenset(x for x in (u, v) if x is not None)
-            kind = rec.etype
-            source = frozenset([u]) if u is not None else frozenset()
-            target = frozenset([v]) if v is not None else frozenset()
-            directed = bool(rec.directed) if rec.directed is not None else False
+    def _edge_tuple(self, eid: str) -> EdgeView:
+        """Return the public view of one edge.
+
+        An undirected edge shows the same members on both sides, because neither
+        side means a direction.
+        """
+        ref = _structure.edge_ref(self, eid)
+        sides = _structure.edge_sides(self, eid)
+        members = sides.source | sides.target
+
+        if ref.kind == _structure.HYPER:
+            kind = 'hyper_directed' if ref.directed else 'hyper_undirected'
         else:
-            u, v = rec.src, rec.tgt
-            d = (
-                rec.directed
-                if rec.directed is not None
-                else (True if self.directed is None else self.directed)
-            )
-            if d:
-                source, target = frozenset([u]), frozenset([v])
-                directed = True
-            else:
-                M = frozenset([u, v])
-                source, target = M, M
-                directed = False
-            members = frozenset([u, v])
-            kind = 'binary'
+            kind = STORED_EDGE_KIND[ref.kind]
 
-        if eid is None:
-            eid = ''
-        weight = float(rec.weight) if rec.weight is not None else 1.0
+        if ref.directed or ref.kind in (_structure.NODE_EDGE, _structure.PLACEHOLDER):
+            source, target = sides.source, sides.target
+        else:
+            source = target = members
+
         return EdgeView(
             source,
             target,
             edge_id=eid,
             kind=kind,
             members=members,
-            weight=weight,
-            directed=directed,
+            weight=ref.weight,
+            directed=ref.directed,
         )
 
     def _incident_edge_indices(self, vertex_id) -> list[int]:
+        # The row of the matrix answers this outright, but only for a caller that
+        # names the entity by its key. Anything else is matched against the
+        # endpoints the store holds.
         incident = []
-        ent = self._entities.get(vertex_id)
-        if ent is not None:
+        if _structure.is_entity_key(vertex_id) and _structure.has_entity(self, vertex_id):
             try:
-                incident.extend(self._get_csr()[ent.row_idx, :].indices.tolist())
+                row = _structure.entity_row(self, vertex_id)
+                incident.extend(self._get_csr()[row, :].indices.tolist())
                 return incident
             except (IndexError, ValueError):
                 pass
-        for j in range(len(self._col_to_edge)):
-            eid = self._col_to_edge[j]
-            rec = self._edges[eid]
-            if rec.etype == 'hyper':
-                if vertex_id in rec.src or (rec.tgt is not None and vertex_id in rec.tgt):
-                    incident.append(j)
-            else:
-                if rec.src == vertex_id or rec.tgt == vertex_id:
-                    incident.append(j)
+        for column, ref in enumerate(_structure.iter_edges(self)):
+            sides = _structure.edge_sides(self, ref.id)
+            if vertex_id in sides.source or vertex_id in sides.target:
+                incident.append(column)
         return incident
 
     def _is_directed_edge(self, edge_id):
-        rec = self._edges.get(edge_id)
-        if rec is None:
+        if not _structure.has_edge(self, edge_id):
             return bool(self.directed)
-        d = rec.directed
+        d = _structure.edge_ref(self, edge_id).declared_directed
         return bool(d if d is not None else self.directed)
 
     def has_edge(
@@ -1423,7 +1400,7 @@ class AnnNet(
 
         # ---- Mode 1: edge_id only ----
         if edge_id is not None and source is None and target is None:
-            return edge_id in self._edges
+            return _structure.has_edge(self, edge_id)
 
         # ---- Mode 2: source + target only ----
         if edge_id is None and source is not None and target is not None:
@@ -1432,10 +1409,10 @@ class AnnNet(
 
         # ---- Mode 3: edge_id + source + target ----
         if edge_id is not None and source is not None and target is not None:
-            rec = self._edges.get(edge_id)
-            if rec is None:
+            if not _structure.has_edge(self, edge_id):
                 return False
-            return rec.src == source and rec.tgt == target
+            sides = _structure.edge_sides(self, edge_id)
+            return sides.source == frozenset({source}) and sides.target == frozenset({target})
 
         # ---- Anything else is ambiguous / invalid ----
         raise ValueError(
@@ -1464,18 +1441,12 @@ class AnnNet(
         is present on at least one layer coordinate.
         """
         if isinstance(vertex_id, str):
-            if self._aspects == ('_',):
-                ent = self._entities.get((vertex_id, ('_',)))
-                return ent is not None and ent.kind == 'vertex'
-            for ekey in self._vid_to_ekeys.get(vertex_id, ()):
-                ent = self._entities.get(ekey)
-                if ent is not None and ent.kind == 'vertex':
-                    return True
-            return False
+            return _structure.has_entity_id(self, vertex_id, kind=_structure.NODE)
 
         ekey = self._resolve_entity_key(vertex_id)
-        ent = self._entities.get(ekey)
-        return ent is not None and ent.kind == 'vertex'
+        if not _structure.has_entity(self, ekey):
+            return False
+        return _structure.entity_ref(self, ekey).kind == _structure.NODE
 
     def get_edge_ids(self, source, target):
         """List all edge IDs between two endpoints.
@@ -1514,11 +1485,11 @@ class AnnNet(
             entities have degree ``0``.
         """
         ekey = self._resolve_entity_key(entity_id)
-        ent = self._entities.get(ekey)
-        if ent is None:
+        if not _structure.has_entity(self, ekey):
             return 0
+        row = _structure.entity_row(self, ekey)
         csr = self._get_csr()
-        return int(csr.indptr[ent.row_idx + 1] - csr.indptr[ent.row_idx])
+        return int(csr.indptr[row + 1] - csr.indptr[row])
 
     def vertices(self) -> list[str]:
         """Return unique vertex IDs (one per vertex, deduplicated across layers).
@@ -1537,13 +1508,12 @@ class AnnNet(
         """
         seen: set[str] = set()
         out: list[str] = []
-        for eid, rec in self._entities.items():
-            if rec.kind != 'vertex':
+        for ref in _structure.iter_entities(self):
+            if ref.kind != _structure.NODE:
                 continue
-            vid = eid[0] if isinstance(eid, tuple) else eid
-            if vid not in seen:
-                seen.add(vid)
-                out.append(vid)
+            if ref.id not in seen:
+                seen.add(ref.id)
+                out.append(ref.id)
         return out
 
     def supra_vertices(self) -> list[tuple[str, tuple[str, ...]]]:
@@ -1559,11 +1529,7 @@ class AnnNet(
         --------
         vertices : unique vertex IDs (one per vertex regardless of layer).
         """
-        return [
-            eid
-            for eid, rec in self._entities.items()
-            if rec.kind == 'vertex' and isinstance(eid, tuple)
-        ]
+        return [ref.key for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE]
 
     def edges(self) -> list[str]:
         """Return all structural edge IDs.
@@ -1573,7 +1539,7 @@ class AnnNet(
         list[str]
             Edge identifiers for edges with an incidence-matrix column.
         """
-        return [eid for eid, rec in self._edges.items() if rec.col_idx >= 0]
+        return [ref.id for ref in _structure.iter_edges(self)]
 
     def edge_list(self) -> list[tuple[str, str, str, float]]:
         """Materialize binary edges as endpoint tuples.
@@ -1588,10 +1554,20 @@ class AnnNet(
         """
         edges = []
         get_eff = self.attrs.get_effective_edge_weight
-        for edge_id, rec in self._edges.items():
-            if rec.etype == 'hyper' or rec.src is None or rec.tgt is None:
+        for ref in _structure.iter_edges(self):
+            if ref.kind == _structure.HYPER:
                 continue
-            edges.append((rec.src, rec.tgt, edge_id, get_eff(edge_id)))
+            sides = _structure.edge_sides(self, ref.id)
+            if not sides.source or not sides.target:
+                continue
+            edges.append(
+                (
+                    next(iter(sides.source)),
+                    next(iter(sides.target)),
+                    ref.id,
+                    get_eff(ref.id),
+                )
+            )
         return edges
 
     def get_edges_by_direction(self, directed: bool):
@@ -1609,10 +1585,10 @@ class AnnNet(
         """
         default_dir = True if self.directed is None else self.directed
         return [
-            eid
-            for eid, rec in self._edges.items()
-            if rec.col_idx >= 0
-            and bool(rec.directed if rec.directed is not None else default_dir) is bool(directed)
+            ref.id
+            for ref in _structure.iter_edges(self)
+            if bool(ref.declared_directed if ref.declared_directed is not None else default_dir)
+            is bool(directed)
         ]
 
     def global_count(self, kind: str) -> int:
@@ -1761,14 +1737,14 @@ class AnnNet(
                         seen.add(eid)
                         rec = self._edges.get(eid)
                         if rec is not None and rec.col_idx >= 0:
-                            result.append((rec.col_idx, self._edge_tuple_from_record(rec, eid=eid)))
+                            result.append((rec.col_idx, self._edge_tuple(eid)))
             if direction in {'out', 'both'}:
                 for eid in self._src_to_edges.get(v, []):
                     if eid not in seen:
                         seen.add(eid)
                         rec = self._edges.get(eid)
                         if rec is not None and rec.col_idx >= 0:
-                            result.append((rec.col_idx, self._edge_tuple_from_record(rec, eid=eid)))
+                            result.append((rec.col_idx, self._edge_tuple(eid)))
             if direction == 'in':
                 secondary = self._src_to_edges.get(v, [])
             elif direction == 'out':
@@ -1780,7 +1756,7 @@ class AnnNet(
                     seen.add(eid)
                     rec = self._edges.get(eid)
                     if rec is not None and rec.col_idx >= 0:
-                        result.append((rec.col_idx, self._edge_tuple_from_record(rec, eid=eid)))
+                        result.append((rec.col_idx, self._edge_tuple(eid)))
         return result
 
     @property
@@ -1795,7 +1771,7 @@ class AnnNet(
             :attr:`nv`; in a multilayer graph it equals the sum over vertices
             of the number of layers each vertex inhabits.
         """
-        return sum(1 for r in self._entities.values() if r.kind == 'vertex')
+        return _structure.node_count(self)
 
     @property
     def nv(self) -> int:
@@ -1818,7 +1794,7 @@ class AnnNet(
         int
             Count of incidence-matrix edge columns.
         """
-        return len(self._col_to_edge)
+        return _structure.edge_count(self)
 
     @property
     def num_vertices(self) -> int:
@@ -2395,8 +2371,12 @@ class AnnNet(
             return {
                 'label': 'external',
                 'version': ref._version,
-                'vertex_ids': {eid for eid, r in ref._entities.items() if r.kind == 'vertex'},
-                'edge_ids': set(ref._col_to_edge.values()),
+                'vertex_ids': {
+                    entity.key
+                    for entity in _structure.iter_entities(ref)
+                    if entity.kind == _structure.NODE
+                },
+                'edge_ids': {edge.id for edge in _structure.iter_edges(ref)},
                 'slice_ids': set(ref._slices.keys()),
             }
         else:
@@ -2407,11 +2387,9 @@ class AnnNet(
             'label': 'current',
             'version': self._version,
             'vertex_ids': {
-                eid[0] if isinstance(eid, tuple) else eid
-                for eid, r in self._entities.items()
-                if r.kind == 'vertex'
+                ref.id for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE
             },
-            'edge_ids': set(self._col_to_edge.values()),
+            'edge_ids': {ref.id for ref in _structure.iter_edges(self)},
             'slice_ids': set(self._slices.keys()),
         }
 
@@ -2522,7 +2500,8 @@ class AnnNet(
     @property
     def entity_to_idx(self) -> dict:
         """vertex_id -> row_idx (bare string key, first supra-node wins)."""
-        return {ekey[0]: rec.row_idx for ekey, rec in self._entities.items()}
+        # ``iter_entities`` yields in row order, so the position is the row.
+        return {ref.id: row for row, ref in enumerate(_structure.iter_entities(self))}
 
     @entity_to_idx.setter
     def entity_to_idx(self, mapping):
@@ -2532,12 +2511,15 @@ class AnnNet(
     @property
     def idx_to_entity(self) -> dict:
         """row_idx -> vertex_id (bare string)."""
-        return {idx: ekey[0] for idx, ekey in self._row_to_entity.items()}
+        return {row: ref.id for row, ref in enumerate(_structure.iter_entities(self))}
 
     @property
     def entity_types(self) -> dict:
         """vertex_id -> kind string ('vertex' or 'edge')."""
-        return {ekey[0]: _external_entity_kind(rec.kind) for ekey, rec in self._entities.items()}
+        return {
+            ref.id: _external_entity_kind(STORED_ENTITY_KIND[ref.kind])
+            for ref in _structure.iter_entities(self)
+        }
 
     @entity_types.setter
     def entity_types(self, mapping):
@@ -2547,31 +2529,48 @@ class AnnNet(
     @property
     def edge_to_idx(self) -> dict:
         """edge_id -> col_idx for all edges with a matrix column."""
-        return {eid: rec.col_idx for eid, rec in self._edges.items() if rec.col_idx >= 0}
+        # ``iter_edges`` yields in column order and leaves out an edge that
+        # occupies no column, so the position is the column.
+        return {ref.id: col for col, ref in enumerate(_structure.iter_edges(self))}
 
     @property
     def idx_to_edge(self) -> dict:
         """col_idx -> edge_id."""
-        return dict(self._col_to_edge)
+        return {col: ref.id for col, ref in enumerate(_structure.iter_edges(self))}
 
     @property
     def edge_weights(self) -> dict:
         """edge_id -> weight for all edges."""
-        return {eid: rec.weight for eid, rec in self._edges.items()}
+        return {
+            ref.id: ref.declared_weight
+            for ref in _structure.iter_edges(self, include_placeholders=True)
+        }
 
     @property
     def edge_directed(self) -> dict:
         """edge_id -> directed for edges with an explicit directedness flag."""
-        return {eid: rec.directed for eid, rec in self._edges.items() if rec.directed is not None}
+        return {
+            ref.id: ref.declared_directed
+            for ref in _structure.iter_edges(self, include_placeholders=True)
+            if ref.declared_directed is not None
+        }
 
     @property
     def edge_definitions(self) -> dict:
         """edge_id -> (src, tgt, etype) for binary edges."""
-        return {
-            eid: (rec.src, rec.tgt, rec.etype)
-            for eid, rec in self._edges.items()
-            if rec.etype != 'hyper' and rec.src is not None
-        }
+        out = {}
+        for ref in _structure.iter_edges(self):
+            if ref.kind == _structure.HYPER:
+                continue
+            sides = _structure.edge_sides(self, ref.id)
+            if not sides.source:
+                continue
+            out[ref.id] = (
+                next(iter(sides.source)),
+                next(iter(sides.target)) if sides.target else None,
+                STORED_EDGE_KIND[ref.kind],
+            )
+        return out
 
     @edge_definitions.setter
     def edge_definitions(self, mapping):
@@ -2583,13 +2582,18 @@ class AnnNet(
     def hyperedge_definitions(self) -> dict:
         """edge_id -> hyper metadata dict for hyperedges."""
         out = {}
-        for eid, rec in self._edges.items():
-            if rec.etype != 'hyper':
+        for ref in _structure.iter_edges(self):
+            if ref.kind != _structure.HYPER:
                 continue
-            if rec.tgt is not None:
-                out[eid] = {'directed': True, 'head': set(rec.src), 'tail': set(rec.tgt)}
+            sides = _structure.edge_sides(self, ref.id)
+            if ref.directed:
+                out[ref.id] = {
+                    'directed': True,
+                    'head': set(sides.source),
+                    'tail': set(sides.target),
+                }
             else:
-                out[eid] = {'directed': False, 'members': set(rec.src)}
+                out[ref.id] = {'directed': False, 'members': set(sides.source)}
         return out
 
     @hyperedge_definitions.setter
@@ -2615,7 +2619,7 @@ class AnnNet(
 
     @property
     def _num_entities(self) -> int:
-        return len(self._entities)
+        return _structure.entity_count(self)
 
     @_num_entities.setter
     def _num_entities(self, value) -> None:
@@ -2623,7 +2627,7 @@ class AnnNet(
 
     @property
     def _num_edges(self) -> int:
-        return len(self._col_to_edge)
+        return _structure.edge_count(self)
 
     @_num_edges.setter
     def _num_edges(self, value) -> None:
@@ -2665,7 +2669,9 @@ class AnnNet(
         L = self.slices._ensure_slice(slice)
 
         add_edges = {
-            eid for eid in edge_ids if eid in self._edges and self._edges[eid].col_idx >= 0
+            eid
+            for eid in edge_ids
+            if _structure.has_edge(self, eid) and _structure.edge_column(self, eid) >= 0
         }
         if not add_edges:
             return
@@ -2674,14 +2680,9 @@ class AnnNet(
 
         verts: set = set()
         for eid in add_edges:
-            rec = self._edges[eid]
-            if rec.etype == 'hyper':
-                verts.update(self._endpoint_slice_vertex_ids(rec.src))
-                if rec.tgt is not None:
-                    verts.update(self._endpoint_slice_vertex_ids(rec.tgt))
-            else:
-                verts.update(self._endpoint_slice_vertex_ids(rec.src))
-                verts.update(self._endpoint_slice_vertex_ids(rec.tgt))
+            sides = _structure.edge_sides(self, eid)
+            for member in sides.source | sides.target:
+                verts.update(self._endpoint_slice_vertex_ids(member))
 
         L['vertices'].update(verts)
 
@@ -2757,13 +2758,17 @@ class AnnNet(
         else:
             edge_ids = list(edge_ids)
 
-        missing = [eid for eid in edge_ids if eid not in self._edges]
+        missing = [eid for eid in edge_ids if not _structure.has_edge(self, eid)]
         if missing and errors == 'raise':
             sample = ', '.join(repr(e) for e in missing[:3])
             suffix = '' if len(missing) <= 3 else ', ...'
             raise KeyError(f'Unknown edge id(s): {sample}{suffix}')
 
-        to_drop = [eid for eid in edge_ids if eid in self._edges and self._edges[eid].col_idx >= 0]
+        to_drop = [
+            eid
+            for eid in edge_ids
+            if _structure.has_edge(self, eid) and _structure.edge_column(self, eid) >= 0
+        ]
         if not to_drop:
             return
         self._remove_edges_bulk(to_drop)
@@ -2819,7 +2824,7 @@ class AnnNet(
             except (KeyError, ValueError, TypeError):
                 missing.append(vid)
                 continue
-            if ekey in self._entities:
+            if _structure.has_entity(self, ekey):
                 to_drop.append(vid)
             else:
                 missing.append(vid)

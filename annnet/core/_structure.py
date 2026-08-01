@@ -230,19 +230,32 @@ def has_entity(graph, ref) -> bool:
     return True
 
 
-def has_entity_id(graph, entity_id: str) -> bool:
+def has_entity_id(graph, entity_id: str, kind: str | None = None) -> bool:
     """Return True when any entity of the graph carries this id, in any layer.
 
     A bare id names one entity in a flat graph and any number of them in a
     multilayer graph. Ask this when the id alone is the question. Ask
-    :func:`has_entity` when the answer has to be one entity.
+    :func:`has_entity` when the answer has to be one entity. Pass ``kind`` to
+    ask about nodes alone, or about edge entities alone.
     """
     if is_slot_backed(graph):
         store = store_of(graph)
-        return any(key[0] == entity_id for _slot, key in store.live_entities())
+        return any(
+            key[0] == entity_id
+            and (kind is None or _SLOT_ENTITY_KIND[int(store.entity_kind[slot])] == kind)
+            for slot, key in store.live_entities()
+        )
     if graph._aspects == ('_',):
-        return (entity_id, ('_',)) in graph._entities
-    return entity_id in graph._vid_to_ekeys
+        keys = ((entity_id, ('_',)),)
+    else:
+        keys = tuple(graph._vid_to_ekeys.get(entity_id, ()))
+    for key in keys:
+        record = graph._entities.get(key)
+        if record is None:
+            continue
+        if kind is None or _ENTITY_KIND_OF_RECORD.get(record.kind, record.kind) == kind:
+            return True
+    return False
 
 
 def has_edge(graph, edge_id: str) -> bool:

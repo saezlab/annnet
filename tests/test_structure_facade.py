@@ -306,6 +306,14 @@ def test_has_entity_id_answers_for_a_bare_id_alone():
     assert S.has_entity_id(G, 'Z') is False
 
 
+def test_has_entity_id_can_ask_for_one_kind():
+    G = build_case('edge_entity')
+    assert S.has_entity_id(G, 'ee_ab') is True
+    assert S.has_entity_id(G, 'ee_ab', kind=S.NODE) is False
+    assert S.has_entity_id(G, 'ee_ab', kind=S.EDGE_ENTITY) is True
+    assert S.has_entity_id(G, 'A', kind=S.NODE) is True
+
+
 def test_has_entity_id_is_true_for_an_id_that_more_than_one_layer_carries():
     """``has_entity`` cannot answer this, because a bare id names no one entity."""
     G = build_case('multilayer')
