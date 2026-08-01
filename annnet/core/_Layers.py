@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from .graph import AnnNet
 
 from . import _build, _mutate
+from ._stored_kinds import STORED_EDGE_KIND
 from .._support.dataframe_backend import (
     clone_dataframe,
     dataframe_height,
@@ -22,6 +23,25 @@ from .._support.dataframe_backend import (
     dataframe_filter_eq,
     dataframe_from_rows,
 )
+
+
+def _entity_key_of_row(graph, row):
+    """Return the entity key at one row of the materialized matrix, or None.
+
+    A row of a matrix built a moment ago always names an entity. The caller
+    treats a missing one as an entry to skip, so this answers None instead of
+    raising.
+    """
+    try:
+        return _structure.entity_key_of_row(graph, int(row))
+    except KeyError:
+        return None
+
+
+def _entity_id_of_row(graph, row):
+    """Return the bare id of the entity at one row, or None when there is none."""
+    key = _entity_key_of_row(graph, row)
+    return key[0] if isinstance(key, tuple) else key
 
 
 class LayerAccessor:
@@ -94,8 +114,8 @@ class LayerAccessor:
             return True
         if any(key[1] == placeholder for key in self._state_attrs):
             return True
-        for rec in self._edges.values():
-            layers = rec.ml_layers
+        for ref in _structure.iter_edges(self):
+            layers = ref.ml_layers
             if layers is None:
                 continue
             if layers == placeholder:
@@ -163,7 +183,7 @@ class LayerAccessor:
         old_placeholder = ('_',) if old_aspects == ('_',) else tuple('_' for _ in old_aspects)
         new_placeholder = tuple('_' for _ in aspects)
 
-        had_existing_flat_entities = bool(self._entities) and old_aspects == ('_',)
+        had_existing_flat_entities = _structure.entity_count(self) > 0 and old_aspects == ('_',)
 
         self._aspects = tuple(aspects)
         self._layers = {}
@@ -950,9 +970,10 @@ class LayerAccessor:
         """
         aa = tuple(layer_tuple)
         E = set()
-        for eid, rec in self._edges.items():
-            kind = self._effective_ml_edge_kind(rec)
-            layers = rec.ml_layers
+        for ref in _structure.iter_edges(self):
+            eid = ref.id
+            kind = self._effective_ml_edge_kind(ref)
+            layers = ref.ml_layers
 
             if kind in {'intra', 'hyper'}:
                 # Binary intra-layer edges store layers as (Lsrc, Ltgt) where
@@ -977,10 +998,20 @@ class LayerAccessor:
         return E
 
     @staticmethod
-    def _effective_ml_edge_kind(rec):
-        if rec.etype == 'hyper':
-            return rec.ml_kind if rec.ml_kind in ('inter', 'coupling') else 'hyper'
-        return rec.ml_kind
+    def _effective_ml_edge_kind(ref):
+        """Return the multilayer role of one edge, given its facade reference."""
+        if ref.kind == _structure.HYPER:
+            return ref.ml_kind if ref.ml_kind in ('inter', 'coupling') else 'hyper'
+        return ref.ml_kind
+
+    @staticmethod
+    def _one_endpoint(side):
+        """Return the single endpoint of one side of a binary edge, or None.
+
+        A binary edge holds one identity per side. An open side holds none, which
+        is what a boundary edge looks like.
+        """
+        return next(iter(side)) if side else None
 
     @staticmethod
     def _supra_endpoint(endpoint):
@@ -1335,10 +1366,12 @@ class LayerAccessor:
         if include_inter or include_coupling:
             extra_endpoints: set = set()
             for eid in E:
-                rec = G_src._edges.get(eid)
-                if rec is None or rec.etype == 'hyper':
+                if not _structure.has_edge(G_src, eid):
                     continue
-                for ep in (rec.src, rec.tgt):
+                if _structure.edge_ref(G_src, eid).kind == _structure.HYPER:
+                    continue
+                sides = _structure.edge_sides(G_src, eid)
+                for ep in sides.source | sides.target:
                     if (
                         isinstance(ep, tuple)
                         and len(ep) == 2
@@ -1359,20 +1392,21 @@ class LayerAccessor:
             for coord, rows in by_coord.items():
                 g._add_vertices_bulk(rows, layer=coord, slice=g._default_slice)
 
-        default_dir = True if G_src.directed is None else G_src.directed
         bin_payload, hyper_payload = [], []
         for eid in E:
-            rec = G_src._edges.get(eid)
-            if rec is None or rec.col_idx < 0:
+            if not _structure.has_edge(G_src, eid):
                 continue
-            if rec.etype == 'hyper':
-                h = _hyper_def(rec)
+            if _structure.edge_column(G_src, eid) < 0:
+                continue
+            ref = _structure.edge_ref(G_src, eid)
+            if ref.kind == _structure.HYPER:
+                h = _hyper_def(G_src, eid)
                 if h.get('members'):
                     hyper_payload.append(
                         {
                             'members': list(h['members']),
                             'edge_id': eid,
-                            'weight': rec.weight,
+                            'weight': ref.declared_weight,
                         }
                     )
                 else:
@@ -1381,18 +1415,19 @@ class LayerAccessor:
                             'head': list(h.get('head', ())),
                             'tail': list(h.get('tail', ())),
                             'edge_id': eid,
-                            'weight': rec.weight,
+                            'weight': ref.declared_weight,
                         }
                     )
             else:
+                sides = _structure.edge_sides(G_src, eid)
                 bin_payload.append(
                     {
-                        'source': rec.src,
-                        'target': rec.tgt,
+                        'source': self._one_endpoint(sides.source),
+                        'target': self._one_endpoint(sides.target),
                         'edge_id': eid,
-                        'edge_type': rec.etype,
-                        'edge_directed': rec.directed if rec.directed is not None else default_dir,
-                        'weight': rec.weight,
+                        'edge_type': STORED_EDGE_KIND[ref.kind],
+                        'edge_directed': ref.directed,
+                        'weight': ref.declared_weight,
                     }
                 )
         if bin_payload:
@@ -1545,36 +1580,27 @@ class LayerAccessor:
                 return self.layer_id_to_tuple(L)
             return None
 
-        for _eid, rec in self._edges.items():
-            kind = rec.ml_kind
+        for ref in _structure.iter_edges(self):
+            kind = ref.ml_kind
+            if kind not in ('intra', 'inter', 'coupling'):
+                continue
+            sides = _structure.edge_sides(self, ref.id)
+            src_key, La = self._supra_endpoint(self._one_endpoint(sides.source))
+            tgt_key, Lb = self._supra_endpoint(self._one_endpoint(sides.target))
             if kind == 'intra':
-                src_key, La = self._supra_endpoint(rec.src)
-                tgt_key, _ = self._supra_endpoint(rec.tgt)
-                if La is None:
-                    continue
-                if layers_t is not None and La not in layers_t:
-                    continue
-                ru = nl_to_row.get(src_key)
-                rv = nl_to_row.get(tgt_key)
-                if ru is None or rv is None:
-                    continue
-                w = rec.weight if rec.weight is not None else 1
-                A[ru, rv] = A.get((ru, rv), 0.0) + w
-                A[rv, ru] = A.get((rv, ru), 0.0) + w
-            elif kind in {'inter', 'coupling'}:
-                src_key, La = self._supra_endpoint(rec.src)
-                tgt_key, Lb = self._supra_endpoint(rec.tgt)
-                if La is None or Lb is None:
-                    continue
-                if layers_t is not None and (La not in layers_t or Lb not in layers_t):
-                    continue
-                ru = nl_to_row.get(src_key)
-                rv = nl_to_row.get(tgt_key)
-                if ru is None or rv is None:
-                    continue
-                w = rec.weight if rec.weight is not None else 1
-                A[ru, rv] = A.get((ru, rv), 0.0) + w
-                A[rv, ru] = A.get((rv, ru), 0.0) + w
+                # An intra-layer edge stays in one layer, so the source names it.
+                Lb = La
+            if La is None or Lb is None:
+                continue
+            if layers_t is not None and (La not in layers_t or Lb not in layers_t):
+                continue
+            ru = nl_to_row.get(src_key)
+            rv = nl_to_row.get(tgt_key)
+            if ru is None or rv is None:
+                continue
+            w = ref.weight
+            A[ru, rv] = A.get((ru, rv), 0.0) + w
+            A[rv, ru] = A.get((rv, ru), 0.0) + w
         return A.tocsr()
 
     ## Supra_Incidence
@@ -1670,14 +1696,15 @@ class LayerAccessor:
         edge_ids: list[str] = []
         skipped: list[str] = []
 
-        default_dir = True if self.directed is None else self.directed
-        for eid, rec in self._edges.items():
-            kind = self._effective_ml_edge_kind(rec)
+        for ref in _structure.iter_edges(self):
+            eid = ref.id
+            kind = self._effective_ml_edge_kind(ref)
+            sides = _structure.edge_sides(self, eid)
             # 3a. INTRA binary edge
 
             if kind == 'intra':
-                src_key, L = self._supra_endpoint(rec.src)
-                tgt_key, _ = self._supra_endpoint(rec.tgt)
+                src_key, L = self._supra_endpoint(self._one_endpoint(sides.source))
+                tgt_key, _ = self._supra_endpoint(self._one_endpoint(sides.target))
                 if src_key is None or tgt_key is None:
                     skipped.append(eid)
                     continue
@@ -1693,10 +1720,8 @@ class LayerAccessor:
                     skipped.append(eid)
                     continue
 
-                w = float(rec.weight if rec.weight is not None else 1.0)
-                is_dir = rec.directed if rec.directed is not None else default_dir
-
-                if is_dir:
+                w = ref.weight
+                if ref.directed:
                     rows_out = [ru, rv]
                     vals_out = [w, -w]
                 else:
@@ -1709,7 +1734,7 @@ class LayerAccessor:
             # 3b. HYPER edge — read stoichiometry directly from _matrix
 
             elif kind == 'hyper':
-                raw_L = rec.ml_layers
+                raw_L = ref.ml_layers
                 if raw_L is None:
                     # No layer assignment — skip and report
                     skipped.append(eid)
@@ -1721,7 +1746,7 @@ class LayerAccessor:
                 if layers_t is not None and L not in layers_t:
                     continue
 
-                col_idx = rec.col_idx
+                col_idx = _structure.edge_column(self, eid)
                 if col_idx < 0:
                     skipped.append(eid)
                     continue
@@ -1733,8 +1758,7 @@ class LayerAccessor:
                 rows_out = []
                 vals_out = []
                 for flat_row in nz_rows_in_flat:
-                    entity_key = self._row_to_entity.get(flat_row)
-                    entity_id = entity_key[0] if isinstance(entity_key, tuple) else entity_key
+                    entity_id = _entity_id_of_row(self, flat_row)
                     if entity_id is None:
                         continue
                     supra_row = nl_to_row.get((entity_id, L))
@@ -1761,7 +1785,7 @@ class LayerAccessor:
                 if kind == 'coupling' and not include_coupling:
                     continue
 
-                raw_layers = rec.ml_layers
+                raw_layers = ref.ml_layers
                 if raw_layers is None:
                     skipped.append(eid)
                     continue
@@ -1774,8 +1798,8 @@ class LayerAccessor:
                 if layers_t is not None and (La not in layers_t or Lb not in layers_t):
                     continue
 
-                if rec.etype == 'hyper':
-                    col_idx = rec.col_idx
+                if ref.kind == _structure.HYPER:
+                    col_idx = _structure.edge_column(self, eid)
                     if col_idx < 0:
                         skipped.append(eid)
                         continue
@@ -1783,12 +1807,12 @@ class LayerAccessor:
                     col_vec = M_csc[:, [col_idx]]
                     nz_rows_in_flat, _ = col_vec.nonzero()
 
-                    src_members = set(rec.src or ())
-                    tgt_members = set(rec.tgt or ())
+                    src_members = set(sides.source)
+                    tgt_members = set(sides.target)
                     rows_out = []
                     vals_out = []
                     for flat_row in nz_rows_in_flat:
-                        entity_key = self._row_to_entity.get(flat_row)
+                        entity_key = _entity_key_of_row(self, flat_row)
                         entity_id = entity_key[0] if isinstance(entity_key, tuple) else entity_key
                         if entity_id is None:
                             continue
@@ -1808,8 +1832,8 @@ class LayerAccessor:
                         skipped.append(eid)
                         continue
                 else:
-                    src_key, _ = self._supra_endpoint(rec.src)
-                    tgt_key, _ = self._supra_endpoint(rec.tgt)
+                    src_key, _ = self._supra_endpoint(self._one_endpoint(sides.source))
+                    tgt_key, _ = self._supra_endpoint(self._one_endpoint(sides.target))
                     if src_key is None or tgt_key is None:
                         skipped.append(eid)
                         continue
@@ -1820,10 +1844,9 @@ class LayerAccessor:
                         skipped.append(eid)
                         continue
 
-                    w = float(rec.weight if rec.weight is not None else 1.0)
-                    is_dir = rec.directed if rec.directed is not None else default_dir
+                    w = ref.weight
 
-                    if is_dir:
+                    if ref.directed:
                         rows_out = [ru, rv]
                         vals_out = [w, -w]
                     else:
@@ -1886,29 +1909,31 @@ class LayerAccessor:
 
         # Intra-layer edges (diagonal blocks)
         if 'intra' in include_kinds:
-            for _eid, rec in self._edges.items():
-                if rec.ml_kind != 'intra':
+            for ref in _structure.iter_edges(self):
+                if ref.ml_kind != 'intra':
                     continue
-                src_key, L = self._supra_endpoint(rec.src)
-                tgt_key, _ = self._supra_endpoint(rec.tgt)
+                sides = _structure.edge_sides(self, ref.id)
+                src_key, L = self._supra_endpoint(self._one_endpoint(sides.source))
+                tgt_key, _ = self._supra_endpoint(self._one_endpoint(sides.target))
                 if L is None or (layers_t is not None and L not in layers_t):
                     continue
                 ru = nl_to_row.get(src_key)
                 rv = nl_to_row.get(tgt_key)
                 if ru is None or rv is None:
                     continue
-                w = rec.weight if rec.weight is not None else 1.0
+                w = ref.weight
                 A[ru, rv] = A.get((ru, rv), 0.0) + w
                 A[rv, ru] = A.get((rv, ru), 0.0) + w
 
         # Inter/coupling edges (off-diagonal blocks)
         if include_kinds & {'inter', 'coupling'}:
-            for _eid, rec in self._edges.items():
-                kind = rec.ml_kind
-                if kind not in include_kinds or rec.ml_layers is None:
+            for ref in _structure.iter_edges(self):
+                kind = ref.ml_kind
+                if kind not in include_kinds or ref.ml_layers is None:
                     continue
-                src_key, La = self._supra_endpoint(rec.src)
-                tgt_key, Lb = self._supra_endpoint(rec.tgt)
+                sides = _structure.edge_sides(self, ref.id)
+                src_key, La = self._supra_endpoint(self._one_endpoint(sides.source))
+                tgt_key, Lb = self._supra_endpoint(self._one_endpoint(sides.target))
                 if La is None or Lb is None:
                     continue
                 if layers_t is not None and (La not in layers_t or Lb not in layers_t):
@@ -1917,7 +1942,7 @@ class LayerAccessor:
                 rv = nl_to_row.get(tgt_key)
                 if ru is None or rv is None:
                     continue
-                w = rec.weight if rec.weight is not None else 1.0
+                w = ref.weight
                 A[ru, rv] = A.get((ru, rv), 0.0) + w
                 A[rv, ru] = A.get((rv, ru), 0.0) + w
 
@@ -2239,18 +2264,19 @@ class LayerAccessor:
             return None
 
         # Intra edges -> (u,aa)↔(v,aa)
-        for _eid, rec in self._edges.items():
-            if rec.ml_kind != 'intra':
+        for ref in _structure.iter_edges(self):
+            if ref.ml_kind != 'intra':
                 continue
-            src_key, L = self._supra_endpoint(rec.src)
-            tgt_key, _ = self._supra_endpoint(rec.tgt)
+            sides = _structure.edge_sides(self, ref.id)
+            src_key, L = self._supra_endpoint(self._one_endpoint(sides.source))
+            tgt_key, _ = self._supra_endpoint(self._one_endpoint(sides.target))
             if L is None or (layers is not None and L not in set(layers_t)):
                 continue
             if src_key not in nl_to_row or tgt_key not in nl_to_row:
                 continue
             u_id = src_key[0] if isinstance(src_key, tuple) else src_key
             v_id = tgt_key[0] if isinstance(tgt_key, tuple) else tgt_key
-            w = rec.weight if rec.weight is not None else 1.0
+            w = ref.weight
             ui.extend((vertex_to_i[u_id], vertex_to_i[v_id]))
             vi.extend((vertex_to_i[v_id], vertex_to_i[u_id]))
             a = layer_to_i[L]
@@ -2259,12 +2285,13 @@ class LayerAccessor:
             wv.extend((w, w))
 
         # Inter / coupling -> (u,aa)↔(v,bb)
-        for _eid, rec in self._edges.items():
-            kind = rec.ml_kind
-            if kind not in {'inter', 'coupling'} or rec.ml_layers is None:
+        for ref in _structure.iter_edges(self):
+            kind = ref.ml_kind
+            if kind not in {'inter', 'coupling'} or ref.ml_layers is None:
                 continue
-            src_key, La = self._supra_endpoint(rec.src)
-            tgt_key, Lb = self._supra_endpoint(rec.tgt)
+            sides = _structure.edge_sides(self, ref.id)
+            src_key, La = self._supra_endpoint(self._one_endpoint(sides.source))
+            tgt_key, Lb = self._supra_endpoint(self._one_endpoint(sides.target))
             if La is None or Lb is None:
                 continue
             if layers is not None:
@@ -2275,7 +2302,7 @@ class LayerAccessor:
                 continue
             u_id = src_key[0] if isinstance(src_key, tuple) else src_key
             v_id = tgt_key[0] if isinstance(tgt_key, tuple) else tgt_key
-            w = rec.weight if rec.weight is not None else 1.0
+            w = ref.weight
             ui.extend((vertex_to_i[u_id], vertex_to_i[v_id]))
             vi.extend((vertex_to_i[v_id], vertex_to_i[u_id]))
             ai.extend((layer_to_i[La], layer_to_i[Lb]))

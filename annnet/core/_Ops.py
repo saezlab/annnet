@@ -5,7 +5,8 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from . import _build, _mutate
+from . import _build, _mutate, _structure
+from ._stored_kinds import STORED_EDGE_KIND
 from .._support.dataframe_backend import (
     clone_dataframe,
     dataframe_height,
@@ -19,15 +20,83 @@ if TYPE_CHECKING:
     from .graph import AnnNet
 
 
-def _hyper_def(rec):
-    if rec.tgt is not None:
-        return {'directed': True, 'head': set(rec.src), 'tail': set(rec.tgt)}
-    return {'directed': False, 'members': set(rec.src)}
+def _hyper_def(graph, edge_id):
+    """Return the definition of one hyperedge, as the bulk add API states it.
+
+    A directed hyperedge has a head and a tail. An undirected one has members on
+    one side alone.
+    """
+    sides = _structure.edge_sides(graph, edge_id)
+    if _structure.edge_ref(graph, edge_id).directed:
+        return {'directed': True, 'head': set(sides.source), 'tail': set(sides.target)}
+    return {'directed': False, 'members': set(sides.source)}
+
+
+def _edge_payload(graph, edge_id):
+    """Return one edge in the form the bulk add API takes.
+
+    A directed hyperedge states a head and a tail, and an undirected one states
+    members. A binary edge states a source and a target, and an open side of one
+    is ``None``, which is what the store holds there.
+    """
+    ref = _structure.edge_ref(graph, edge_id)
+    sides = _structure.edge_sides(graph, edge_id)
+    if ref.kind == _structure.HYPER:
+        if ref.directed:
+            return {
+                'head': list(sides.source),
+                'tail': list(sides.target),
+                'edge_id': edge_id,
+                'weight': ref.declared_weight,
+            }
+        return {
+            'members': list(sides.source),
+            'edge_id': edge_id,
+            'weight': ref.declared_weight,
+        }
+    default_directed = True if graph.directed is None else graph.directed
+    declared = ref.declared_directed
+    return {
+        'source': next(iter(sides.source)) if sides.source else None,
+        'target': next(iter(sides.target)) if sides.target else None,
+        'edge_id': edge_id,
+        'edge_type': STORED_EDGE_KIND[ref.kind],
+        'edge_directed': declared if declared is not None else default_directed,
+        'weight': ref.declared_weight,
+    }
+
+
+def _payload_endpoints(payload) -> set:
+    """Return every identity one edge payload names."""
+    if 'source' in payload:
+        return {payload['source'], payload['target']}
+    if 'members' in payload:
+        return set(payload['members'])
+    return set(payload['head']) | set(payload['tail'])
+
+
+def _payload_has_both_sides(payload) -> bool:
+    """Return False for a binary edge that leaves one of its sides open.
+
+    Such an edge names one endpoint alone, so a graph built from the payload
+    cannot hold it.
+    """
+    if 'source' not in payload:
+        return True
+    return payload['source'] is not None and payload['target'] is not None
+
+
+def _payload_inside(payload, vertex_ids, bare) -> bool:
+    """Return True when every identity of one edge payload lies in a vertex set."""
+    if not _payload_has_both_sides(payload):
+        return False
+    return {bare(member) for member in _payload_endpoints(payload)} <= vertex_ids
 
 
 def _is_hyper(graph, eid):
-    rec = graph._edges.get(eid)
-    return rec is not None and rec.etype == 'hyper'
+    return _structure.has_edge(graph, eid) and (
+        _structure.edge_ref(graph, eid).kind == _structure.HYPER
+    )
 
 
 def _share_or_clone_table(df):
@@ -77,39 +146,26 @@ class Operations:
     def _flat_edge_vertices(self, edge_ids) -> set[str]:
         vertices = set()
         for eid in edge_ids:
-            rec = self._edges.get(eid)
-            if rec is None or rec.col_idx < 0 or rec.src is None:
+            if not _structure.has_edge(self, eid) or _structure.edge_column(self, eid) < 0:
                 continue
-            if rec.etype == 'hyper':
-                vertices.update(rec.src)
-                if rec.tgt is not None:
-                    vertices.update(rec.tgt)
-            else:
-                vertices.add(rec.src)
-                vertices.add(rec.tgt)
+            sides = _structure.edge_sides(self, eid)
+            if not sides.source:
+                continue
+            vertices.update(sides.source)
+            vertices.update(sides.target)
         return vertices
 
     def _ordered_flat_vertex_ids(self, vertex_ids) -> list[str]:
         wanted = set(vertex_ids)
-        ordered = []
-        for row_idx in range(len(self._row_to_entity)):
-            ekey = self._row_to_entity.get(row_idx)
-            if ekey is None:
-                continue
-            rec = self._entities.get(ekey)
-            if rec is None or rec.kind != 'vertex':
-                continue
-            if ekey[0] in wanted:
-                ordered.append(ekey[0])
-        return ordered
+        return [
+            ref.id
+            for ref in _structure.iter_entities(self)
+            if ref.kind == _structure.NODE and ref.id in wanted
+        ]
 
     def _ordered_edge_ids(self, edge_ids) -> list[str]:
         wanted = set(edge_ids)
-        return [
-            self._col_to_edge[col]
-            for col in range(len(self._col_to_edge))
-            if self._col_to_edge[col] in wanted
-        ]
+        return [ref.id for ref in _structure.iter_edges(self) if ref.id in wanted]
 
     def _build_flat_graph_from_selection(
         self,
@@ -189,12 +245,13 @@ class Operations:
         Hyperedges are supported and retain all member vertices.
         """
         if all(isinstance(e, int) for e in edges):
-            E = {self._col_to_edge[e] for e in edges}
+            E = {_structure.edge_at_column(self, e) for e in edges}
         else:
             E = set(edges)
 
         if self._aspects == ('_',):
-            E = {eid for eid in E if eid in self._edges and self._edges[eid].col_idx >= 0}
+            E = {eid for eid in E if _structure.has_edge(self, eid)}
+            E = {eid for eid in E if _structure.edge_column(self, eid) >= 0}
             V = self._flat_edge_vertices(E)
             slice_specs = {}
             for lid, meta in self._slices.items():
@@ -207,47 +264,19 @@ class Operations:
                 vertex_ids=V, edge_ids=E, slice_specs=slice_specs
             )
 
-        default_dir = True if self.directed is None else self.directed
         V = set()
         bin_payload, hyper_payload = [], []
         for eid in E:
-            rec = self._edges.get(eid)
-            if rec is None or rec.col_idx < 0:
+            if not _structure.has_edge(self, eid) or _structure.edge_column(self, eid) < 0:
                 continue
-            if rec.etype == 'hyper':
-                h = _hyper_def(rec)
-                if h.get('members'):
-                    V.update(h['members'])
-                    hyper_payload.append(
-                        {'members': list(h['members']), 'edge_id': eid, 'weight': rec.weight}
-                    )
-                else:
-                    V.update(h.get('head', ()))
-                    V.update(h.get('tail', ()))
-                    hyper_payload.append(
-                        {
-                            'head': list(h.get('head', ())),
-                            'tail': list(h.get('tail', ())),
-                            'edge_id': eid,
-                            'weight': rec.weight,
-                        }
-                    )
+            payload = _edge_payload(self, eid)
+            if not _payload_has_both_sides(payload):
+                continue
+            V.update(_payload_endpoints(payload))
+            if 'source' in payload:
+                bin_payload.append(payload)
             else:
-                s, t = rec.src, rec.tgt
-                if s is None or t is None:
-                    continue
-                V.add(s)
-                V.add(t)
-                bin_payload.append(
-                    {
-                        'source': s,
-                        'target': t,
-                        'edge_id': eid,
-                        'edge_type': rec.etype,
-                        'edge_directed': rec.directed if rec.directed is not None else default_dir,
-                        'weight': rec.weight,
-                    }
-                )
+                hyper_payload.append(payload)
 
         G = self.__class__
         new_aspects = self._constructor_aspects()
@@ -304,14 +333,15 @@ class Operations:
 
         if self._aspects == ('_',):
             E = set()
-            for eid, rec in self._edges.items():
-                if rec.col_idx < 0 or rec.src is None:
+            for ref in _structure.iter_edges(self):
+                sides = _structure.edge_sides(self, ref.id)
+                if not sides.source:
                     continue
-                if rec.etype == 'hyper':
-                    if set(rec.src).issubset(V) and (rec.tgt is None or set(rec.tgt).issubset(V)):
-                        E.add(eid)
-                elif rec.src in V and rec.tgt in V:
-                    E.add(eid)
+                if ref.kind == _structure.HYPER:
+                    if sides.source <= V and sides.target <= V:
+                        E.add(ref.id)
+                elif sides.target and sides.source <= V and sides.target <= V:
+                    E.add(ref.id)
             slice_specs = {}
             for lid, meta in self._slices.items():
                 slice_specs[lid] = {
@@ -324,70 +354,30 @@ class Operations:
             )
 
         bare = self._bare_vid
-        E_bin, E_hyper_members, E_hyper_dir = [], [], []
-        for eid, rec in self._edges.items():
-            if rec.col_idx < 0 or rec.src is None:
+        bin_payload, hyper_payload = [], []
+        for ref in _structure.iter_edges(self):
+            payload = _edge_payload(self, ref.id)
+            if not _payload_inside(payload, V, bare):
                 continue
-            if rec.etype == 'hyper':
-                h = _hyper_def(rec)
-                if h.get('members'):
-                    if {bare(m) for m in h['members']}.issubset(V):
-                        E_hyper_members.append(eid)
-                elif {bare(m) for m in h.get('head', ())}.issubset(V) and {
-                    bare(m) for m in h.get('tail', ())
-                }.issubset(V):
-                    E_hyper_dir.append(eid)
+            if 'source' in payload:
+                bin_payload.append(payload)
             else:
-                s, t = rec.src, rec.tgt
-                if s is not None and t is not None and bare(s) in V and bare(t) in V:
-                    E_bin.append(eid)
+                hyper_payload.append(payload)
 
         va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
         v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
-        default_dir = True if self.directed is None else self.directed
-
-        bin_payload = []
-        for eid in E_bin:
-            rec = self._edges[eid]
-            bin_payload.append(
-                {
-                    'source': rec.src,
-                    'target': rec.tgt,
-                    'edge_id': eid,
-                    'edge_type': rec.etype,
-                    'edge_directed': rec.directed if rec.directed is not None else default_dir,
-                    'weight': rec.weight,
-                }
-            )
-        hyper_payload = []
-        for eid in E_hyper_members:
-            rec = self._edges[eid]
-            h = _hyper_def(rec)
-            hyper_payload.append(
-                {'members': list(h['members']), 'edge_id': eid, 'weight': rec.weight}
-            )
-        for eid in E_hyper_dir:
-            rec = self._edges[eid]
-            h = _hyper_def(rec)
-            hyper_payload.append(
-                {
-                    'head': list(h.get('head', ())),
-                    'tail': list(h.get('tail', ())),
-                    'edge_id': eid,
-                    'weight': rec.weight,
-                }
-            )
 
         G = self.__class__
-        edge_count = len(E_bin) + len(E_hyper_members) + len(E_hyper_dir)
+        edge_count = len(bin_payload) + len(hyper_payload)
         new_aspects = self._constructor_aspects()
         if new_aspects is not None:
             g = G(directed=self.directed, v=len(V), e=edge_count, aspects=new_aspects)
+            by_id = _structure.entities_by_id(self)
             for vid in V:
                 attrs = va_lookup.get(vid, {})
                 placed = False
-                for ekey in self._vid_to_ekeys.get(vid, []):
-                    g.add_vertices(ekey[0], layer=ekey[1], **attrs)
+                for ref in by_id.get(vid, ()):
+                    g.add_vertices(ref.id, layer=ref.layer, **attrs)
                     placed = True
                 if not placed:
                     g.add_vertices(vid, **attrs)
@@ -404,22 +394,11 @@ class Operations:
                 g.slices.add(lid, **meta['attributes'])
             keep = set()
             for eid in meta['edges']:
-                rec = self._edges.get(eid)
-                if rec is None or rec.col_idx < 0:
+                if not _structure.has_edge(self, eid) or _structure.edge_column(self, eid) < 0:
                     continue
-                if rec.etype == 'hyper':
-                    h = _hyper_def(rec)
-                    if h.get('members'):
-                        if {bare(m) for m in h['members']}.issubset(V):
-                            keep.add(eid)
-                    elif {bare(m) for m in h.get('head', ())}.issubset(V) and {
-                        bare(m) for m in h.get('tail', ())
-                    }.issubset(V):
-                        keep.add(eid)
-                else:
-                    s, t = rec.src, rec.tgt
-                    if s is not None and t is not None and bare(s) in V and bare(t) in V:
-                        keep.add(eid)
+                payload = _edge_payload(self, eid)
+                if _payload_inside(payload, V, bare):
+                    keep.add(eid)
             if keep:
                 g.slices.add_edges(lid, keep)
 
@@ -451,7 +430,7 @@ class Operations:
 
         if edges is not None:
             E = (
-                {self._col_to_edge[e] for e in edges}
+                {_structure.edge_at_column(self, e) for e in edges}
                 if all(isinstance(e, int) for e in edges)
                 else set(edges)
             )
@@ -462,13 +441,15 @@ class Operations:
         if self._aspects == ('_',) and V is not None and E is not None:
             kept_edges = set()
             for eid in E:
-                rec = self._edges.get(eid)
-                if rec is None or rec.col_idx < 0 or rec.src is None:
+                if not _structure.has_edge(self, eid) or _structure.edge_column(self, eid) < 0:
                     continue
-                if rec.etype == 'hyper':
-                    if set(rec.src).issubset(V) and (rec.tgt is None or set(rec.tgt).issubset(V)):
+                sides = _structure.edge_sides(self, eid)
+                if not sides.source:
+                    continue
+                if _structure.edge_ref(self, eid).kind == _structure.HYPER:
+                    if sides.source <= V and sides.target <= V:
                         kept_edges.add(eid)
-                elif rec.src in V and rec.tgt in V:
+                elif sides.target and sides.source <= V and sides.target <= V:
                     kept_edges.add(eid)
             slice_specs = {}
             for lid, meta in self._slices.items():
@@ -489,22 +470,11 @@ class Operations:
         bare = self._bare_vid
         kept_edges = set()
         for eid in E:
-            rec = self._edges.get(eid)
-            if rec is None or rec.col_idx < 0:
+            if not _structure.has_edge(self, eid) or _structure.edge_column(self, eid) < 0:
                 continue
-            if rec.etype == 'hyper':
-                h = _hyper_def(rec)
-                if h.get('members'):
-                    if {bare(m) for m in h['members']}.issubset(V):
-                        kept_edges.add(eid)
-                elif {bare(m) for m in h.get('head', ())}.issubset(V) and {
-                    bare(m) for m in h.get('tail', ())
-                }.issubset(V):
-                    kept_edges.add(eid)
-            else:
-                s, t = rec.src, rec.tgt
-                if s is not None and t is not None and bare(s) in V and bare(t) in V:
-                    kept_edges.add(eid)
+            payload = _edge_payload(self, eid)
+            if _payload_inside(payload, V, bare):
+                kept_edges.add(eid)
 
         return Operations.subgraph(Operations.edge_subgraph(self, kept_edges), set(V))
 
@@ -563,7 +533,8 @@ class Operations:
         E = set(slice_meta['edges'])
 
         if self._aspects == ('_',):
-            E = {eid for eid in E if eid in self._edges and self._edges[eid].col_idx >= 0}
+            E = {eid for eid in E if _structure.has_edge(self, eid)}
+            E = {eid for eid in E if _structure.edge_column(self, eid) >= 0}
             weight_overrides = {}
             if resolve_slice_weights:
                 df = self.edge_slice_attributes
@@ -606,14 +577,14 @@ class Operations:
 
         va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
         if new_aspects is not None:
+            by_id = _structure.entities_by_id(self)
             for vid in V:
                 attrs = va_lookup.get(vid, {})
                 placed = False
-                for ekey in self._vid_to_ekeys.get(vid, []):
-                    rec = self._entities.get(ekey)
-                    if rec is None or rec.kind != 'vertex':
+                for ref in by_id.get(vid, ()):
+                    if ref.kind != _structure.NODE:
                         continue
-                    g.add_vertices(ekey[0], layer=ekey[1], slice=slice_id, **attrs)
+                    g.add_vertices(ref.id, layer=ref.layer, slice=slice_id, **attrs)
                     placed = True
                 if not placed:
                     g.add_vertices(vid, slice=slice_id, **attrs)
@@ -635,41 +606,18 @@ class Operations:
 
         bin_payload, hyper_payload = [], []
         for eid in E:
-            rec = self._edges.get(eid)
-            if rec is None or rec.col_idx < 0:
+            if not _structure.has_edge(self, eid) or _structure.edge_column(self, eid) < 0:
                 continue
-            base_weight = rec.weight if rec.weight is not None else 1.0
-            w = eff_w.get(eid, base_weight) if resolve_slice_weights else base_weight
-            attrs = e_attrs.get(eid, {})
-            if rec.etype == 'hyper':
-                if rec.tgt is None:
-                    hyper_payload.append(
-                        {'members': list(rec.src), 'edge_id': eid, 'weight': w, 'attributes': attrs}
-                    )
-                else:
-                    hyper_payload.append(
-                        {
-                            'head': list(rec.src),
-                            'tail': list(rec.tgt),
-                            'edge_id': eid,
-                            'weight': w,
-                            'attributes': attrs,
-                        }
-                    )
+            payload = _edge_payload(self, eid)
+            base_weight = _structure.edge_ref(self, eid).weight
+            payload['weight'] = (
+                eff_w.get(eid, base_weight) if resolve_slice_weights else base_weight
+            )
+            payload['attributes'] = e_attrs.get(eid, {})
+            if 'source' in payload:
+                bin_payload.append(payload)
             else:
-                bin_payload.append(
-                    {
-                        'source': rec.src,
-                        'target': rec.tgt,
-                        'edge_id': eid,
-                        'edge_type': rec.etype,
-                        'edge_directed': rec.directed
-                        if rec.directed is not None
-                        else (True if self.directed is None else self.directed),
-                        'weight': w,
-                        'attributes': attrs,
-                    }
-                )
+                hyper_payload.append(payload)
 
         if bin_payload:
             g._add_edges_bulk(bin_payload, slice=slice_id)
@@ -786,9 +734,13 @@ class Operations:
         """
         matrix_bytes = self._matrix.nnz * (4 + 4 + 4)
         dict_bytes = (
-            len(self._entities)
-            + len(self._col_to_edge)
-            + sum(1 for r in self._edges.values() if r.weight is not None)
+            _structure.entity_count(self)
+            + _structure.edge_count(self)
+            + sum(
+                1
+                for ref in _structure.iter_edges(self, include_placeholders=True)
+                if ref.declared_weight is not None
+            )
         ) * 100
         df_bytes = 0
         for df in (self.vertex_attributes, self.edge_attributes):
@@ -828,9 +780,8 @@ class Operations:
         """
         result = {}
         csr = self._get_csr()
-        row_to_entity = self._row_to_entity
         for i in range(self._num_entities):
-            entry = row_to_entity[i]
+            entry = _structure.entity_key_of_row(self, i)
             vertex_id = entry[0] if isinstance(entry, tuple) else entry
             start, end = csr.indptr[i], csr.indptr[i + 1]
             result[vertex_id] = (csr.data[start:end] if values else csr.indices[start:end]).tolist()
@@ -910,7 +861,7 @@ class OperationsAccessor:
         edge_defs = []
         for j in range(G.ne):
             S, T = G.get_edge(j)
-            eid = G._col_to_edge[j]
+            eid = _structure.edge_at_column(G, j)
             edge_defs.append((eid, tuple(sorted(S)), tuple(sorted(T)), G._is_directed_edge(eid)))
         edge_defs = tuple(sorted(edge_defs))
         graph_meta = (

@@ -281,6 +281,25 @@ def test_has_edge_is_true_for_an_edge_entity():
     assert S.has_edge(G, 'ee_ab') is True
 
 
+def test_entities_by_id_groups_every_layer_under_one_id():
+    G = build_case('multilayer')
+    grouped = S.entities_by_id(G)
+    assert set(grouped) == {'A', 'B'}
+    assert {ref.layer for ref in grouped['A']} == {('t0',), ('t1',)}
+
+
+def test_entities_by_id_holds_one_entry_for_a_flat_graph():
+    G = build_case('binary_directed')
+    grouped = S.entities_by_id(G)
+    assert set(grouped) == {'A', 'B', 'C'}
+    assert [ref.key for ref in grouped['A']] == [key('A')]
+
+
+def test_entities_by_id_includes_an_edge_entity():
+    G = build_case('edge_entity')
+    assert S.entities_by_id(G)['ee_ab'][0].kind == S.EDGE_ENTITY
+
+
 def test_has_entity_id_answers_for_a_bare_id_alone():
     G = build_case('binary_directed')
     assert S.has_entity_id(G, 'A') is True
@@ -419,6 +438,19 @@ def test_both_stores_reject_an_unknown_edge_the_same_way(both_stores):
         S.edge_members(store, 'no_such_edge')
     with pytest.raises(KeyError):
         S.edge_endpoints(store, 'no_such_edge')
+
+
+def test_both_stores_group_entities_by_id_the_same(both_stores):
+    case, graph, store = both_stores
+    expected = {
+        node_id: sorted(ref.key for ref in refs)
+        for node_id, refs in S.entities_by_id(graph).items()
+    }
+    found = {
+        node_id: sorted(ref.key for ref in refs)
+        for node_id, refs in S.entities_by_id(store).items()
+    }
+    assert found == expected, case
 
 
 def test_both_stores_answer_for_a_bare_id_the_same(both_stores):

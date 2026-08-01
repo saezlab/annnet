@@ -330,6 +330,20 @@ def iter_entities(graph) -> Iterator[EntityRef]:
         )
 
 
+def entities_by_id(graph) -> dict:
+    """Group every entity of the graph under its bare id.
+
+    One id covers one entity in a flat graph and one per layer in a multilayer
+    graph. The result answers "which entities does this id stand for" in one
+    pass, which is what a caller needs when it holds bare ids and has to place
+    them in layers.
+    """
+    grouped: dict = {}
+    for ref in iter_entities(graph):
+        grouped.setdefault(ref.id, []).append(ref)
+    return grouped
+
+
 def _edge_directed(graph, record) -> bool:
     """Return the directedness of an edge, as the public edge view reports it."""
     if record.etype == 'hyper':
