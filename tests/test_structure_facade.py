@@ -408,6 +408,12 @@ def both_stores(request):
     return request.param, graph, ST.from_graph(graph)
 
 
+def test_the_facade_spells_the_store_constants_the_way_the_store_does():
+    """The facade mirrors these rather than importing them per call."""
+    assert S._INHERIT == ST.INHERIT
+    assert S._TARGET == ST.TARGET
+
+
 def test_the_slot_store_answers_the_facade(both_stores):
     _case, _graph, store = both_stores
     assert S.is_slot_backed(store)

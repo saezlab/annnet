@@ -398,15 +398,23 @@ class CoreState:
         A member with no direction sits on the source side, which is the side that
         carries the positive coefficient of an edge without explicit ones.
         """
-        members = self.members(edge_slot)
-        source, target = set(), set()
-        for entity_slot, role in zip(members.entities, members.roles, strict=False):
-            key = self._entity_key[int(entity_slot)]
+        # The two member slices are converted to Python lists in one step each.
+        # Walking a numpy array element by element yields an array scalar per
+        # entry, and this runs once per edge of every enumeration.
+        start = int(self.member_start[edge_slot])
+        stop = start + int(self.member_len[edge_slot])
+        keys = self._entity_key
+        source, target = [], []
+        for entity_slot, role in zip(
+            self.member_ent[start:stop].tolist(),
+            self.member_role[start:stop].tolist(),
+            strict=False,
+        ):
             if role == TARGET:
-                target.add(key)
+                target.append(keys[entity_slot])
             else:
-                source.add(key)
-        return Endpoints(source=frozenset(source), target=frozenset(target))
+                source.append(keys[entity_slot])
+        return Endpoints(frozenset(source), frozenset(target))
 
     def is_self_loop(self, edge_slot: int) -> bool:
         """Return True when one entity takes more than one role in this edge."""
