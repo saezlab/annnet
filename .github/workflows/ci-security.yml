@@ -13,4 +13,8 @@ jobs:
         -   name: Install Bandit
             run: pip install bandit
         -   name: Run Bandit
-            run: bandit -r . --exclude tests,venv,.venv,.tox,pixi,.pixi,./benchmarks,benchmarks  --skip B101,B110,B112,B311
+            # Exclusions must be written as ./name: bandit turns a directory
+            # into the glob `<path>/*` and matches it against the paths it
+            # walked from the target `.`, so a bare `tests` never matches
+            # `./tests/...`.
+            run: bandit -r . --exclude ./tests,./venv,./.venv,./.tox,./pixi,./.pixi,./benchmarks --skip B101,B110,B112,B311
