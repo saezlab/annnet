@@ -117,6 +117,12 @@ def store_of(graph):
 _SLOT_ENTITY_KIND = {0: NODE, 1: EDGE_ENTITY}
 _SLOT_EDGE_KIND = {0: BINARY, 1: HYPER, 2: NODE_EDGE, 3: PLACEHOLDER}
 
+# Two values the slot store uses, mirrored here rather than imported inside a
+# function, because they are read once per edge of every enumeration. A test
+# holds each against the store, so neither can drift.
+_INHERIT = -1
+_TARGET = -1
+
 
 def _slot_key(store, ref):
     """Return the entity key of a reference against a slot store."""
@@ -136,19 +142,27 @@ def _slot_entity_ref(store, key) -> EntityRef:
 
 
 def _slot_edge_ref(store, edge_id: str) -> EdgeRef:
-    from . import _store as ST
-
+    # Every value comes out of an array, and reading one element of an array is
+    # dear enough that each is read once and reused. The construction is
+    # positional for the same reason. This runs once per edge of an enumeration.
     slot = store.edge_slot(edge_id)
     declared = int(store.edge_directed[slot])
+    weight = float(store.edge_weight[slot])
+    if declared != _INHERIT:
+        directed = bool(declared)
+        declared_directed = directed
+    else:
+        directed = True if store.directed is None else bool(store.directed)
+        declared_directed = None
     return EdgeRef(
-        id=edge_id,
-        kind=_SLOT_EDGE_KIND.get(int(store.edge_kind[slot]), BINARY),
-        directed=store.is_directed(slot),
-        weight=float(store.edge_weight[slot]),
-        ml_kind=store.edge_ml_kind.get(slot),
-        ml_layers=store.edge_ml_layers.get(slot),
-        declared_directed=None if declared == ST.INHERIT else bool(declared),
-        declared_weight=float(store.edge_weight[slot]),
+        edge_id,
+        _SLOT_EDGE_KIND.get(int(store.edge_kind[slot]), BINARY),
+        directed,
+        weight,
+        store.edge_ml_kind.get(slot),
+        store.edge_ml_layers.get(slot),
+        declared_directed,
+        weight,
     )
 
 
@@ -699,52 +713,67 @@ def _slot_incident(store, key):
     costs the degree of the entity rather than a scan over every edge. The roles
     come from the member list of each edge, which is where a self-loop shows up as
     both sides at once.
-    """
-    from . import _store as ST
 
+    The member entries of each edge are converted to Python lists in one step.
+    Walking a numpy array entry by entry yields an array scalar every time, and a
+    traversal walks the members of every incident edge.
+    """
     slot = store.entity_slot(key)
+    member_start = store.member_start
+    member_len = store.member_len
+    member_ent = store.member_ent
+    member_role = store.member_role
+    edge_directed = store.edge_directed
+    graph_directed = True if store.directed is None else bool(store.directed)
+
     for edge_slot in sorted(store._entity_edges.get(slot, ())):
-        members = store.members(edge_slot)
+        start = int(member_start[edge_slot])
+        stop = start + int(member_len[edge_slot])
         on_source = False
         on_target = False
-        for entity_slot, role in zip(members.entities, members.roles, strict=False):
-            if int(entity_slot) != slot:
+        for entity_slot, role in zip(
+            member_ent[start:stop].tolist(), member_role[start:stop].tolist(), strict=False
+        ):
+            if entity_slot != slot:
                 continue
-            if role == ST.TARGET:
+            if role == _TARGET:
                 on_target = True
             else:
                 on_source = True
-        yield edge_slot, on_source, on_target, store.is_directed(edge_slot)
+        declared = int(edge_directed[edge_slot])
+        directed = bool(declared) if declared != _INHERIT else graph_directed
+        yield edge_slot, on_source, on_target, directed
 
 
 def _slot_entity_edges(store, key, direction: str) -> tuple:
     wants_out = direction in ('out', 'both')
     wants_in = direction in ('in', 'both')
-    found = []
-    for edge_slot, on_source, on_target, directed in _slot_incident(store, key):
-        if not directed:
-            found.append(edge_slot)
-        elif (wants_out and on_source) or (wants_in and on_target):
-            found.append(edge_slot)
-    return tuple(store.edge_id(slot) for slot in sorted(found))
+    # ``_slot_incident`` already walks the edges in slot order, which is column
+    # order, so the result needs no sort of its own.
+    edge_id = store.edge_id
+    return tuple(
+        edge_id(edge_slot)
+        for edge_slot, on_source, on_target, directed in _slot_incident(store, key)
+        if not directed or (wants_out and on_source) or (wants_in and on_target)
+    )
 
 
 def _slot_neighbors(store, key, direction: str) -> list:
-    from . import _store as ST
-
     wants_out = direction in ('out', 'both')
     wants_in = direction in ('in', 'both')
-    entity_is_edge = int(store.entity_kind[store.entity_slot(key)]) == ST.EDGE_ENTITY
+    entity_is_edge = _SLOT_ENTITY_KIND.get(int(store.entity_kind[store.entity_slot(key)])) == (
+        EDGE_ENTITY
+    )
     found = set()
 
     for edge_slot, on_source, on_target, directed in _slot_incident(store, key):
-        members = store.members(edge_slot)
+        # The two sides carry every member between them, so an undirected edge
+        # needs no second read of the member list.
         sides = store.endpoints(edge_slot)
         if not directed:
-            everyone = {store.entity_key(int(slot)) for slot in members.entities}
-            found |= everyone - {key}
+            found |= (sides.source | sides.target) - {key}
             continue
-        if int(store.edge_kind[edge_slot]) == ST.HYPER:
+        if _SLOT_EDGE_KIND.get(int(store.edge_kind[edge_slot])) == HYPER:
             if wants_out and on_source:
                 found |= sides.target
             elif wants_in and on_target:
