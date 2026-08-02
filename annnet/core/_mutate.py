@@ -124,6 +124,93 @@ def resync(g) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Which writes reach the slot store, and how
+# ---------------------------------------------------------------------------
+# A write that changes canonical structure has to reach the slot store too. Each
+# one carries the decorator that says how, so the answer is at the write and not
+# in a table somewhere else.
+#
+# ``add_vertex`` and ``register_edge_as_entity`` carry none. They reach the entity
+# registry through ``register_entity_record``, which writes the slot store itself.
+# ``batch_add_vertices`` registers its entities inline rather than through that
+# setter, so it writes the store inline as well, at the same place.
+
+
+def _keep_identity(routed, write):
+    routed.__name__ = write.__name__
+    routed.__doc__ = write.__doc__
+    routed.__wrapped__ = write
+    return routed
+
+
+def syncs_named_edges(name, position=0):
+    """Write the edges that one argument of the call names.
+
+    ``name`` is the keyword the caller may pass, and ``position`` is where the
+    same argument sits when it is passed positionally, counting after the graph.
+    """
+
+    def decorate(write):
+        def routed(g, *args, **kwargs):
+            result = write(g, *args, **kwargs)
+            if slot_store(g) is not None:
+                named = args[position] if len(args) > position else kwargs.get(name)
+                sync_edges(g, [named] if isinstance(named, str) else (named or ()))
+            return result
+
+        return _keep_identity(routed, write)
+
+    return decorate
+
+
+def syncs_returned_edges(write):
+    """Write the edges the call reports adding, whether one or many."""
+
+    def routed(g, *args, **kwargs):
+        result = write(g, *args, **kwargs)
+        if slot_store(g) is not None:
+            if isinstance(result, str):
+                sync_edge(g, result)
+            elif isinstance(result, (list, tuple, set)):
+                sync_edges(g, [item for item in result if isinstance(item, str)])
+        return result
+
+    return _keep_identity(routed, write)
+
+
+def syncs_every_edge(write):
+    """Write every edge of the graph again.
+
+    For a call that changes the directedness of all of them at once. It adds no
+    edge and touches no entity, so only the edges are written again.
+    """
+
+    def routed(g, *args, **kwargs):
+        result = write(g, *args, **kwargs)
+        if slot_store(g) is not None:
+            sync_edges(g, list(g._edges))
+        return result
+
+    return _keep_identity(routed, write)
+
+
+def rebuilds_the_store(write):
+    """Rebuild the slot store whole.
+
+    For a call that replaces the entity registry outright rather than going
+    through the two doors. Every edge names an entity, so nothing survives. These
+    are rare and none of them runs per element.
+    """
+
+    def routed(g, *args, **kwargs):
+        result = write(g, *args, **kwargs)
+        resync(g)
+        return result
+
+    return _keep_identity(routed, write)
+
+
+# ---------------------------------------------------------------------------
 # Entity record bookkeeping
 # ---------------------------------------------------------------------------
 
@@ -194,6 +281,7 @@ def register_edge_as_entity(g, edge_id):
     D.grow_rows_to(g, len(g._entities))
 
 
+@syncs_named_edges('edge_id')
 def ensure_edge_entity_placeholder(g, edge_id, slice=None, **attributes):
     """Ensure a placeholder edge-entity exists and is attached to a slice."""
     register_edge_as_entity(g, edge_id)
@@ -355,6 +443,7 @@ def zero_edge_column(g, rec, col_idx):
 # ---------------------------------------------------------------------------
 
 
+@syncs_returned_edges
 def add_edge(
     g,
     src=None,
@@ -643,6 +732,7 @@ def propagate_to_all_slices(g, edge_id, source, target):
 # ---------------------------------------------------------------------------
 
 
+@syncs_named_edges('edge_id')
 def remove_edge(g, edge_id):
     """Remove a single edge, its column, attributes, and slice memberships."""
     D.ensure_edge_indexes(g)
@@ -691,6 +781,7 @@ def remove_edge(g, edge_id):
     g._rebuild_slice_edge_weights_cache()
 
 
+@syncs_named_edges('edge_ids')
 def remove_edges_bulk(g, edge_ids):
     """Remove many edges and compact the remaining edge columns."""
     D.ensure_edge_indexes(g)
@@ -744,6 +835,7 @@ def remove_edges_bulk(g, edge_ids):
 # ---------------------------------------------------------------------------
 
 
+@syncs_named_edges('eid')
 def set_edge_definition(g, eid, src, tgt, etype):
     """Rewrite a binary edge's endpoints/type (legacy edge_definitions setter)."""
     rec = g._edges.get(eid)
@@ -755,6 +847,7 @@ def set_edge_definition(g, eid, src, tgt, etype):
     g._mark_matrix_dirty()
 
 
+@syncs_named_edges('eid')
 def set_hyperedge_definition(g, eid, defn):
     """Rewrite a hyperedge's membership (legacy hyperedge_definitions setter)."""
     rec = g._edges.get(eid)
@@ -776,6 +869,7 @@ def set_hyperedge_definition(g, eid, defn):
     g._mark_matrix_dirty()
 
 
+@syncs_named_edges('eid')
 def set_edge_direction_policy(g, eid, policy):
     """Attach a flexible-direction policy to an edge (legacy setter)."""
     rec = g._edges.get(eid)
@@ -783,6 +877,7 @@ def set_edge_direction_policy(g, eid, policy):
         rec.direction_policy = policy
 
 
+@rebuilds_the_store
 def set_entity_to_idx(g, mapping):
     """Rebuild the entity registry from a ``vid -> row_idx`` map (legacy setter)."""
     g._entities.clear()
@@ -794,6 +889,7 @@ def set_entity_to_idx(g, mapping):
     g._mark_matrix_dirty()
 
 
+@rebuilds_the_store
 def set_entity_types(g, mapping):
     """Set entity kinds from a ``vid -> kind`` map (legacy setter)."""
     for vid, kind in dict(mapping).items():
@@ -805,6 +901,7 @@ def set_entity_types(g, mapping):
         )
 
 
+@rebuilds_the_store
 def rekey_entities(g, new_entities):
     """Replace the entity registry (e.g. layer-coord remap) and rebuild entity indexes."""
     g._entities = new_entities
@@ -822,6 +919,7 @@ def _edge_member_nodes(rec):
     return out
 
 
+@syncs_named_edges('edge_id')
 def set_edge_coeffs(g, edge_id, coeffs):
     """Overwrite an edge column's incidence coefficients (stoichiometry)."""
     rec = g._edges[edge_id]
@@ -861,6 +959,7 @@ def set_edge_coeffs(g, edge_id, coeffs):
     D.invalidate_sparse_caches(g)
 
 
+@syncs_named_edges('eid')
 def set_edge_field(g, eid, field, value):
     """Set one field on an edge record (backs the legacy dict-view writers)."""
     rec = g._edges.get(eid)
@@ -868,6 +967,7 @@ def set_edge_field(g, eid, field, value):
         setattr(rec, field, value)
 
 
+@syncs_named_edges('eid')
 def set_edge_kind(g, eid, kind):
     """Set an edge's kind: ``'hyper'`` flips etype, anything else sets ml_kind."""
     rec = g._edges.get(eid)
@@ -879,6 +979,7 @@ def set_edge_kind(g, eid, kind):
         rec.ml_kind = kind
 
 
+@syncs_every_edge
 def reverse_directions(g):
     """Flip src<->tgt on directed edges/hyperedges in place; rebuild adjacency indexes."""
     for rec in g._edges.values():
@@ -900,6 +1001,7 @@ def reverse_directions(g):
     D.invalidate_sparse_caches(g)
 
 
+@syncs_every_edge
 def make_undirected(g, *, drop_flexible=True, update_default=True):
     """Convert all existing edges to undirected form in place; returns the graph.
 
@@ -942,6 +1044,7 @@ def make_undirected(g, *, drop_flexible=True, update_default=True):
     return g
 
 
+@rebuilds_the_store
 def remove_vertices_bulk(g, vertex_ids):
     """Remove many vertices, their incident edges, and compact entity rows."""
     drop_keys = set()
@@ -1003,6 +1106,7 @@ def remove_vertices_bulk(g, vertex_ids):
         slice_data['vertices'].difference_update(drop_vertex_ids)
 
 
+@rebuilds_the_store
 def remove_orphan_node_layers(g, drop_keys):
     """Drop specific ``(vid, layer)`` vertex entities that carry no incident edges.
 
@@ -1148,6 +1252,7 @@ def batch_add_vertices(g, vertices, layer=None, slice=None, default_attrs=None):
     )
     _entities = g._entities
     _row_to_entity = g._row_to_entity
+    store = slot_store(g)
     new_rows = 0
     for vid, _ in norm:
         ekey = (vid, coord)
@@ -1156,6 +1261,8 @@ def batch_add_vertices(g, vertices, layer=None, slice=None, default_attrs=None):
             _entities[ekey] = EntityRecord(row_idx=idx, kind='vertex')
             _row_to_entity[idx] = ekey
             D.index_entity_key(g, ekey)
+            if store is not None:
+                store.add_entity(ekey, ST.NODE)
             new_rows += 1
     if new_rows:
         g._grow_rows_to(len(_entities))
@@ -1193,6 +1300,7 @@ def batch_add_vertices(g, vertices, layer=None, slice=None, default_attrs=None):
     g.vertex_attributes = df2
 
 
+@syncs_returned_edges
 def batch_add_edges(
     g,
     edges,
@@ -1504,6 +1612,7 @@ def batch_add_edges(
     return entity_out + out_ids
 
 
+@syncs_returned_edges
 def batch_add_hyperedges(
     g,
     hyperedges,
@@ -1761,47 +1870,3 @@ def batch_add_hyperedges(
 # A rebuild is the plain answer, not the fast one. It is what makes the new core
 # reachable through the public API today. The hot paths are narrowed to the edges
 # they touch below, and the whole mechanism goes when the records do.
-
-_REBUILDS_THE_STORE = (
-    'add_vertex',
-    'batch_add_vertices',
-    'ensure_edge_entity_placeholder',
-    'register_edge_as_entity',
-    'add_edge',
-    'batch_add_edges',
-    'batch_add_hyperedges',
-    'remove_edge',
-    'remove_edges_bulk',
-    'remove_vertices_bulk',
-    'remove_orphan_node_layers',
-    'set_edge_definition',
-    'set_hyperedge_definition',
-    'set_edge_coeffs',
-    'set_edge_field',
-    'set_edge_kind',
-    'set_edge_direction_policy',
-    'reverse_directions',
-    'make_undirected',
-    'rekey_entities',
-    'set_entity_to_idx',
-    'set_entity_types',
-)
-
-
-def _rebuilding(write):
-    """Return the write, followed by a rebuild of the slot store when there is one."""
-
-    def routed(g, *args, **kwargs):
-        result = write(g, *args, **kwargs)
-        resync(g)
-        return result
-
-    routed.__name__ = write.__name__
-    routed.__doc__ = write.__doc__
-    routed.__wrapped__ = write
-    return routed
-
-
-for _name in _REBUILDS_THE_STORE:
-    globals()[_name] = _rebuilding(globals()[_name])
-del _name

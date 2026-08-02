@@ -169,3 +169,53 @@ def test_the_gateway_fills_the_slot_store_as_the_bridge_would(case):
 def test_a_slot_backed_graph_holds_its_invariants(case):
     built = build_case(case, store='slots')
     assert V.validate_internal_consistency(built._store, strict=False) == []
+
+
+# ---------------------------------------------------------------------------
+# Every write reaches the slot store
+# ---------------------------------------------------------------------------
+# The gateway writes the slot store as each mutation lands. Rebuilding it from
+# the records afterwards must therefore change nothing. A write that does not
+# reach the store shows up here as a difference, which is how the inline entity
+# registration in the bulk vertex path was found.
+
+
+def _snapshot(store):
+    """Everything the slot store holds, addressed by identity alone."""
+    return {
+        'entities': S.entity_keys(store),
+        'edges': S.edge_ids(store),
+        'sides': {eid: S.edge_sides(store, eid) for eid in S.edge_ids(store)},
+        'members': {eid: S.edge_members(store, eid) for eid in S.edge_ids(store)},
+    }
+
+
+def _assert_incremental_matches_rebuild(G, note):
+    from annnet.core import _mutate
+
+    incremental = _snapshot(G._store)
+    _mutate.resync(G)
+    assert _snapshot(G._store) == incremental, note
+
+
+@pytest.mark.parametrize('case', CASE_NAMES)
+def test_building_a_shape_reaches_the_store(case):
+    _assert_incremental_matches_rebuild(build_case(case, store='slots'), case)
+
+
+def test_a_sequence_of_mutations_reaches_the_store():
+    G = build_case('binary_directed', store='slots')
+    G.add_vertices(['D', 'E'])
+    _assert_incremental_matches_rebuild(G, 'add_vertices')
+
+    G.add_edges('C', 'D', edge_id='e_cd')
+    _assert_incremental_matches_rebuild(G, 'add_edges')
+
+    G.remove_edges('e_ab')
+    _assert_incremental_matches_rebuild(G, 'remove_edges')
+
+    G.remove_vertices(['E'])
+    _assert_incremental_matches_rebuild(G, 'remove_vertices')
+
+    G.make_undirected()
+    _assert_incremental_matches_rebuild(G, 'make_undirected')
