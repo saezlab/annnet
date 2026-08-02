@@ -629,8 +629,55 @@ def _build_nw_from_columns(
         row_count = len(next(iter(cols.values()), []))
         for name in nw_schema.names():
             cols.setdefault(name, [None] * row_count)
-    df = nw.from_dict(cols, backend=backend)
+    df = _from_dict(cols, schema=nw_schema, backend=backend)
     return _cast_nw_to_schema(df, nw_schema) if nw_schema is not None else df
+
+
+def _from_dict(cols: dict[str, list[Any]], *, schema: nw.Schema | None, backend: str):
+    """Build a dataframe, coercing columns the backend can't infer a type for.
+
+    Backends infer a column dtype from its first value, so a column holding
+    values of more than one Python type (an int attribute later widened by a
+    float, say) fails to construct even though the merged dtype is known. Only
+    columns that actually fail get coerced, so single-typed columns keep
+    whatever the backend's own inference and casting would have produced.
+    """
+    try:
+        return nw.from_dict(cols, backend=backend)
+    except (TypeError, ValueError):
+        pass
+    coerced = {}
+    for name, values in cols.items():
+        try:
+            nw.from_dict({name: values}, backend=backend)
+        except (TypeError, ValueError):
+            values = [_coerce_value(value, _target_kind(name, values, schema)) for value in values]
+        coerced[name] = values
+    return nw.from_dict(coerced, backend=backend)
+
+
+def _target_kind(name: str, values: list[Any], schema: nw.Schema | None) -> str | None:
+    """The kind a mixed-typed column has to collapse to: the schema's, else the values'."""
+    if schema is not None and name in schema:
+        return _kind_from_dtype(schema[name])
+    kind = None
+    for value in values:
+        kind = _merge_kind(kind, _kind_for_value(value))
+    return kind
+
+
+def _coerce_value(value: Any, kind: str | None) -> Any:
+    if value is None or kind is None:
+        return value
+    if kind == _FLOAT and isinstance(value, (bool, int, float)):
+        return float(value)
+    if kind == _INT and isinstance(value, bool):
+        return int(value)
+    if kind == _LIST_TEXT and isinstance(value, (list, tuple)):
+        return [str(item) for item in value]
+    if kind == _TEXT and not isinstance(value, str):
+        return str(value)
+    return value
 
 
 def _normalize_schema(schema: nw.Schema | dict[str, str] | None) -> nw.Schema | None:

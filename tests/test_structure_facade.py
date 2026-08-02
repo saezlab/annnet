@@ -297,9 +297,7 @@ def test_entity_keys_lists_what_iter_entities_yields(case):
 @pytest.mark.parametrize('case', CASE_NAMES)
 def test_node_keys_leaves_out_the_edge_entities(case):
     G = build_case(case)
-    assert S.node_keys(G) == [
-        ref.key for ref in S.iter_entities(G) if ref.kind == S.NODE
-    ]
+    assert S.node_keys(G) == [ref.key for ref in S.iter_entities(G) if ref.kind == S.NODE]
 
 
 def test_entities_by_id_groups_every_layer_under_one_id():
