@@ -182,7 +182,20 @@ def test_the_slot_checker_reports_a_self_loop_that_lost_an_entry():
 
 def test_the_slot_checker_reports_a_stale_incidence_index():
     store = _slot_case()
-    store._entity_edges[store.entity_slot(('A', FLAT))].add(99)
+    store._entity_edges[store.entity_slot(('A', FLAT))][99] = 1
+    assert_reports(store, 'edge index')
+
+
+def test_the_slot_checker_reports_an_index_that_names_the_wrong_side():
+    """The index says which side an entity takes, so a wrong side is a defect.
+
+    A traversal reads the side from the index and never from the member list, so
+    nothing else would catch this.
+    """
+    store = _slot_case()
+    index = store._entity_edges[store.entity_slot(('A', FLAT))]
+    edge_slot = next(iter(index))
+    index[edge_slot] = index[edge_slot] ^ 0b11
     assert_reports(store, 'edge index')
 
 

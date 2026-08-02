@@ -55,6 +55,14 @@ PLACEHOLDER = 3
 # default of the graph".
 INHERIT = -1
 
+# Sides an entity takes in one edge, as bits of the entity-to-edge index. An
+# entity on both sides of the same edge is a self-loop, so the two bits are set
+# together. The index carries them so that a traversal reads the side it wants
+# instead of walking the member list of every incident edge.
+ON_SOURCE = 0b01
+ON_TARGET = 0b10
+_SIDE_OF_ROLE = {SOURCE: ON_SOURCE, TARGET: ON_TARGET, MEMBER: ON_SOURCE}
+
 _INITIAL_CAPACITY = 8
 
 
@@ -136,7 +144,8 @@ class CoreState:
         # A derived index, maintained rather than rebuilt, so that removing an
         # entity stays local. It is rebuildable from the member lists and it is
         # never authoritative.
-        self._entity_edges: dict[int, set[int]] = {}
+        # entity slot -> {edge slot: the sides that entity takes in that edge}
+        self._entity_edges: dict[int, dict[int, int]] = {}
 
         # Slot lifecycle hooks. A freed slot must hold a null in every structure
         # that is indexed by slot, and the store does not know what those are. So it
@@ -195,7 +204,7 @@ class CoreState:
 
         self._entity_slot[key] = slot
         self.entity_kind[slot] = kind
-        self._entity_edges[slot] = set()
+        self._entity_edges[slot] = {}
         self._note_change()
         return slot
 
@@ -315,7 +324,8 @@ class CoreState:
             self.member_ent[start + offset] = entity_slot
             self.member_coef[start + offset] = coefficient
             self.member_role[start + offset] = role
-            self._entity_edges[entity_slot].add(slot)
+            sides = self._entity_edges[entity_slot]
+            sides[slot] = sides.get(slot, 0) | _SIDE_OF_ROLE.get(role, ON_SOURCE)
         self._member_used = needed
         self.member_start[slot] = start
         self.member_len[slot] = count
@@ -335,7 +345,7 @@ class CoreState:
         for entity_slot in self.members(slot).entities:
             edges = self._entity_edges.get(int(entity_slot))
             if edges is not None:
-                edges.discard(slot)
+                edges.pop(slot, None)
 
         del self._edge_slot[edge_id]
         self._edge_id[slot] = None

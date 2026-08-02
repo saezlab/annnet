@@ -406,10 +406,10 @@ def both_stores(request):
     return request.param, graph, ST.from_graph(graph)
 
 
-def test_the_facade_spells_the_store_constants_the_way_the_store_does():
-    """The facade mirrors these rather than importing them per call."""
-    assert S._INHERIT == ST.INHERIT
-    assert S._TARGET == ST.TARGET
+def test_the_facade_binds_the_store_constants_rather_than_copying_them():
+    """Bound from the store itself, so no value can drift out of step with it."""
+    assert (S._INHERIT, S._TARGET) == (ST.INHERIT, ST.TARGET)
+    assert (S._ON_SOURCE, S._ON_TARGET, S._SLOT_NODE) == (ST.ON_SOURCE, ST.ON_TARGET, ST.NODE)
 
 
 def test_the_slot_store_answers_the_facade(both_stores):

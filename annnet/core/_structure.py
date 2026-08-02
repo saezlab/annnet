@@ -25,7 +25,7 @@ from collections.abc import Iterator
 
 import numpy as np
 
-from . import _identity as I
+from . import _store as ST, _identity as I
 
 # Entity kinds.
 NODE = 'node'
@@ -117,11 +117,14 @@ def store_of(graph):
 _SLOT_ENTITY_KIND = {0: NODE, 1: EDGE_ENTITY}
 _SLOT_EDGE_KIND = {0: BINARY, 1: HYPER, 2: NODE_EDGE, 3: PLACEHOLDER}
 
-# Two values the slot store uses, mirrored here rather than imported inside a
-# function, because they are read once per edge of every enumeration. A test
-# holds each against the store, so neither can drift.
-_INHERIT = -1
-_TARGET = -1
+# The slot store holds no matrix library and imports nothing from the core, so
+# naming it here costs no cycle. These are read once per edge of an enumeration,
+# which is why they are bound to locals rather than reached through the module.
+_INHERIT = ST.INHERIT
+_TARGET = ST.TARGET
+_ON_SOURCE = ST.ON_SOURCE
+_ON_TARGET = ST.ON_TARGET
+_SLOT_NODE = ST.NODE
 
 
 def _slot_key(store, ref):
@@ -356,7 +359,8 @@ def iter_entities(graph) -> Iterator[EntityRef]:
 def entity_keys(graph) -> list:
     """Return the key of every entity, in materialized row order."""
     if is_slot_backed(graph):
-        return [key for _slot, key in store_of(graph).live_entities()]
+        # A free slot holds a null, so the live keys are the rest, in slot order.
+        return [key for key in store_of(graph)._entity_key if key is not None]
     records = graph._entities
     # The row index is a maintained map from position to identity, so reading it
     # in order costs nothing. It is derived state, so a sort is the fallback when
@@ -371,10 +375,13 @@ def node_keys(graph) -> list:
     """Return the key of every node, in row order, leaving out the edge entities."""
     if is_slot_backed(graph):
         store = store_of(graph)
+        # The kind array is converted once. Reading one element of it per entity
+        # would cost more than the walk itself.
+        kinds = store.entity_kind.tolist()
         return [
             key
-            for slot, key in store.live_entities()
-            if _SLOT_ENTITY_KIND[int(store.entity_kind[slot])] == NODE
+            for slot, key in enumerate(store._entity_key)
+            if key is not None and kinds[slot] == _SLOT_NODE
         ]
     records = graph._entities
     return [key for key in entity_keys(graph) if records[key].kind == 'vertex']
@@ -387,7 +394,8 @@ def edge_ids(graph) -> list:
     this lists exactly what :func:`iter_edges` yields.
     """
     if is_slot_backed(graph):
-        return [edge_id for _slot, edge_id in store_of(graph).live_edges()]
+        # A free slot holds a null, so the live ids are the rest, in slot order.
+        return [edge_id for edge_id in store_of(graph)._edge_id if edge_id is not None]
     # The column index holds exactly the edges that carry structure, and
     # :func:`edge_at_column` and :func:`edge_count` already read it as the
     # authority on them, so reading it in order is the answer.
@@ -714,35 +722,18 @@ def _slot_incident(store, key):
     come from the member list of each edge, which is where a self-loop shows up as
     both sides at once.
 
-    The member entries of each edge are converted to Python lists in one step.
-    Walking a numpy array entry by entry yields an array scalar every time, and a
-    traversal walks the members of every incident edge.
+    The index carries the sides the entity takes as well as the edges, so this
+    reads no member list at all. It is what makes a traversal cost the degree of
+    the entity rather than the members of every edge that touches it.
     """
     slot = store.entity_slot(key)
-    member_start = store.member_start
-    member_len = store.member_len
-    member_ent = store.member_ent
-    member_role = store.member_role
     edge_directed = store.edge_directed
     graph_directed = True if store.directed is None else bool(store.directed)
 
-    for edge_slot in sorted(store._entity_edges.get(slot, ())):
-        start = int(member_start[edge_slot])
-        stop = start + int(member_len[edge_slot])
-        on_source = False
-        on_target = False
-        for entity_slot, role in zip(
-            member_ent[start:stop].tolist(), member_role[start:stop].tolist(), strict=False
-        ):
-            if entity_slot != slot:
-                continue
-            if role == _TARGET:
-                on_target = True
-            else:
-                on_source = True
+    for edge_slot, sides in sorted(store._entity_edges.get(slot, {}).items()):
         declared = int(edge_directed[edge_slot])
         directed = bool(declared) if declared != _INHERIT else graph_directed
-        yield edge_slot, on_source, on_target, directed
+        yield edge_slot, bool(sides & _ON_SOURCE), bool(sides & _ON_TARGET), directed
 
 
 def _slot_entity_edges(store, key, direction: str) -> tuple:
@@ -759,31 +750,50 @@ def _slot_entity_edges(store, key, direction: str) -> tuple:
 
 
 def _slot_neighbors(store, key, direction: str) -> list:
+    # Which entities an edge leads to can only come from its member list, so this
+    # reads one per incident edge. It reads it once and adds the keys straight to
+    # the result, because the two sides as sets would be built and thrown away.
     wants_out = direction in ('out', 'both')
     wants_in = direction in ('in', 'both')
     entity_is_edge = _SLOT_ENTITY_KIND.get(int(store.entity_kind[store.entity_slot(key)])) == (
         EDGE_ENTITY
     )
+    member_start = store.member_start
+    member_len = store.member_len
+    member_ent = store.member_ent
+    member_role = store.member_role
+    entity_key_of_slot = store._entity_key
     found = set()
 
     for edge_slot, on_source, on_target, directed in _slot_incident(store, key):
-        # The two sides carry every member between them, so an undirected edge
-        # needs no second read of the member list.
-        sides = store.endpoints(edge_slot)
-        if not directed:
-            found |= (sides.source | sides.target) - {key}
-            continue
-        if _SLOT_EDGE_KIND.get(int(store.edge_kind[edge_slot])) == HYPER:
-            if wants_out and on_source:
-                found |= sides.target
-            elif wants_in and on_target:
-                found |= sides.source
-            continue
-        if wants_out and on_source:
-            found |= sides.target
-        if wants_in and on_target and (direction == 'in' or entity_is_edge):
-            found |= sides.source
-    return [endpoint_form(store, member) for member in found]
+        if directed:
+            if _SLOT_EDGE_KIND.get(int(store.edge_kind[edge_slot])) == HYPER:
+                take_target = wants_out and on_source
+                take_source = wants_in and on_target and not take_target
+            else:
+                take_target = wants_out and on_source
+                take_source = wants_in and on_target and (direction == 'in' or entity_is_edge)
+            if not (take_target or take_source):
+                continue
+            drop_self = False
+        else:
+            # An undirected edge leads to everyone else on it, and not to the
+            # entity the query started from.
+            take_target = take_source = True
+            drop_self = True
+
+        start = int(member_start[edge_slot])
+        stop = start + int(member_len[edge_slot])
+        for entity_slot, role in zip(
+            member_ent[start:stop].tolist(), member_role[start:stop].tolist(), strict=False
+        ):
+            if take_target if role == _TARGET else take_source:
+                member = entity_key_of_slot[entity_slot]
+                if not (drop_self and member == key):
+                    found.add(member)
+
+    flat = store.aspects == ('_',)
+    return [member[0] if flat else member for member in found]
 
 
 def neighbors(graph, ref, direction: str = 'both') -> list:

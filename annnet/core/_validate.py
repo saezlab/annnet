@@ -420,19 +420,28 @@ def _check_edge_entity_slots(store, problems) -> None:
 
 
 def _check_incidence_index(store, problems) -> None:
-    """The entity-to-edge index matches the member lists it is derived from."""
-    expected: dict[int, set[int]] = {slot: set() for slot, _key in store.live_entities()}
+    """The entity-to-edge index matches the member lists it is derived from.
+
+    The index carries the sides an entity takes as well as the edges it is in,
+    and a traversal reads the sides from here and never from the member list. So
+    the sides are checked too, and nothing else would catch a wrong one.
+    """
+    from . import _store as ST
+
+    expected: dict[int, dict[int, int]] = {slot: {} for slot, _key in store.live_entities()}
     for edge_slot, _edge_id in store.live_edges():
-        for entity_slot in store.members(edge_slot).entities:
-            bucket = expected.get(int(entity_slot))
-            if bucket is not None:
-                bucket.add(edge_slot)
-    for entity_slot, edges in expected.items():
-        held = store._entity_edges.get(entity_slot, set())
-        if held != edges:
+        members = store.members(edge_slot)
+        for entity_slot, role in zip(members.entities, members.roles, strict=False):
+            sides = expected.get(int(entity_slot))
+            if sides is not None:
+                side = ST.ON_TARGET if int(role) == ST.TARGET else ST.ON_SOURCE
+                sides[edge_slot] = sides.get(edge_slot, 0) | side
+    for entity_slot, sides in expected.items():
+        held = store._entity_edges.get(entity_slot, {})
+        if held != sides:
             problems.append(
-                f'the edge index of entity slot {entity_slot} says {sorted(held)}, '
-                f'the member lists say {sorted(edges)}'
+                f'the edge index of entity slot {entity_slot} says {sorted(held.items())}, '
+                f'the member lists say {sorted(sides.items())}'
             )
 
 
