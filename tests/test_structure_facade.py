@@ -295,6 +295,20 @@ def test_entity_keys_lists_what_iter_entities_yields(case):
 
 
 @pytest.mark.parametrize('case', CASE_NAMES)
+def test_node_ids_names_each_node_once(case):
+    G = build_case(case)
+    ids = S.node_ids(G)
+    assert len(ids) == len(set(ids))
+    assert set(ids) == {key[0] for key in S.node_keys(G)}
+
+
+def test_node_ids_folds_the_layers_of_a_multilayer_graph():
+    G = build_case('multilayer')
+    assert len(S.node_keys(G)) == 4
+    assert S.node_ids(G) == ['A', 'B']
+
+
+@pytest.mark.parametrize('case', CASE_NAMES)
 def test_node_keys_leaves_out_the_edge_entities(case):
     G = build_case(case)
     assert S.node_keys(G) == [ref.key for ref in S.iter_entities(G) if ref.kind == S.NODE]

@@ -384,7 +384,36 @@ def node_keys(graph) -> list:
             if key is not None and kinds[slot] == _SLOT_NODE
         ]
     records = graph._entities
+    index = graph._row_to_entity
+    if len(index) == len(records):
+        # One pass. Going through ``entity_keys`` would build the whole key list
+        # first and then walk it again to drop the edge entities.
+        return [
+            key
+            for row in range(len(index))
+            if records[key := index[row]].kind == 'vertex'
+        ]
     return [key for key in entity_keys(graph) if records[key].kind == 'vertex']
+
+
+def node_ids(graph) -> list:
+    """Return the bare id of every node, once each, in row order.
+
+    A flat graph holds one entity per node, so the ids are already unique and
+    nothing has to be set aside to notice a repeat. A multilayer graph holds one
+    per layer, and the same id comes back from each of them.
+    """
+    keys = node_keys(graph)
+    aspects = store_of(graph).aspects if is_slot_backed(graph) else graph._aspects
+    if aspects == ('_',):
+        return [key[0] for key in keys]
+    seen: set = set()
+    out: list = []
+    for node_id, _layer in keys:
+        if node_id not in seen:
+            seen.add(node_id)
+            out.append(node_id)
+    return out
 
 
 def edge_ids(graph) -> list:
@@ -714,13 +743,16 @@ def _stored_directed(graph, record) -> bool:
     return bool(record.directed if record.directed is not None else graph.directed)
 
 
-def _slot_incident(store, key):
+def _slot_incident(store, key, *, ordered: bool = True):
     """Yield ``(edge_slot, on_source, on_target, directed)`` for the edges of one entity.
 
     The store keeps an index from an entity to the edges that name it, so this
     costs the degree of the entity rather than a scan over every edge. The roles
     come from the member list of each edge, which is where a self-loop shows up as
     both sides at once.
+
+    Set ``ordered`` to False when the caller collects the result into a set, so
+    that the slots do not have to be sorted first.
 
     The index carries the sides the entity takes as well as the edges, so this
     reads no member list at all. It is what makes a traversal cost the degree of
@@ -730,10 +762,11 @@ def _slot_incident(store, key):
     edge_directed = store.edge_directed
     graph_directed = True if store.directed is None else bool(store.directed)
 
-    for edge_slot, sides in sorted(store._entity_edges.get(slot, {}).items()):
+    incident = store._entity_edges.get(slot, {})
+    for edge_slot, (sides, peer) in sorted(incident.items()) if ordered else incident.items():
         declared = int(edge_directed[edge_slot])
         directed = bool(declared) if declared != _INHERIT else graph_directed
-        yield edge_slot, bool(sides & _ON_SOURCE), bool(sides & _ON_TARGET), directed
+        yield edge_slot, bool(sides & _ON_SOURCE), bool(sides & _ON_TARGET), directed, peer
 
 
 def _slot_entity_edges(store, key, direction: str) -> tuple:
@@ -744,7 +777,7 @@ def _slot_entity_edges(store, key, direction: str) -> tuple:
     edge_id = store.edge_id
     return tuple(
         edge_id(edge_slot)
-        for edge_slot, on_source, on_target, directed in _slot_incident(store, key)
+        for edge_slot, on_source, on_target, directed, _peer in _slot_incident(store, key)
         if not directed or (wants_out and on_source) or (wants_in and on_target)
     )
 
@@ -765,7 +798,29 @@ def _slot_neighbors(store, key, direction: str) -> list:
     entity_key_of_slot = store._entity_key
     found = set()
 
-    for edge_slot, on_source, on_target, directed in _slot_incident(store, key):
+    for edge_slot, on_source, on_target, directed, peer in _slot_incident(
+        store, key, ordered=False
+    ):
+        if peer is not None:
+            # The index already names the entity on the other entry, so an edge
+            # of two entries needs no member list. This is the common shape.
+            if directed and not (
+                (wants_out and on_source)
+                or (
+                    wants_in
+                    and on_target
+                    and (
+                        direction == 'in'
+                        or entity_is_edge
+                        or _SLOT_EDGE_KIND.get(int(store.edge_kind[edge_slot])) == HYPER
+                    )
+                )
+            ):
+                continue
+            member = entity_key_of_slot[peer]
+            if directed or member != key:
+                found.add(member)
+            continue
         if directed:
             if _SLOT_EDGE_KIND.get(int(store.edge_kind[edge_slot])) == HYPER:
                 take_target = wants_out and on_source

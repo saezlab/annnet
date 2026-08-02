@@ -195,7 +195,18 @@ def test_the_slot_checker_reports_an_index_that_names_the_wrong_side():
     store = _slot_case()
     index = store._entity_edges[store.entity_slot(('A', FLAT))]
     edge_slot = next(iter(index))
-    index[edge_slot] = index[edge_slot] ^ 0b11
+    sides, peer = index[edge_slot]
+    index[edge_slot] = (sides ^ 0b11, peer)
+    assert_reports(store, 'edge index')
+
+
+def test_the_slot_checker_reports_an_index_that_names_the_wrong_peer():
+    """A neighbor query reads the peer from the index and never from the members."""
+    store = _slot_case()
+    index = store._entity_edges[store.entity_slot(('A', FLAT))]
+    edge_slot = next(slot for slot, value in index.items() if value[1] is not None)
+    sides, _peer = index[edge_slot]
+    index[edge_slot] = (sides, 99)
     assert_reports(store, 'edge index')
 
 

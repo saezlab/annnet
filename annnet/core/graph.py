@@ -1507,13 +1507,7 @@ class AnnNet(
         supra_vertices : ``(vertex_id, layer_coord)`` pairs (one per row of
             the supra-incidence matrix).
         """
-        seen: set[str] = set()
-        out: list[str] = []
-        for node_id, _layer in _structure.node_keys(self):
-            if node_id not in seen:
-                seen.add(node_id)
-                out.append(node_id)
-        return out
+        return _structure.node_ids(self)
 
     def supra_vertices(self) -> list[tuple[str, tuple[str, ...]]]:
         """Return all ``(vertex_id, layer_coord)`` supra-nodes.

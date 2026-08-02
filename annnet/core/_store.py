@@ -144,8 +144,10 @@ class CoreState:
         # A derived index, maintained rather than rebuilt, so that removing an
         # entity stays local. It is rebuildable from the member lists and it is
         # never authoritative.
-        # entity slot -> {edge slot: the sides that entity takes in that edge}
-        self._entity_edges: dict[int, dict[int, int]] = {}
+        # entity slot -> {edge slot: (the sides that entity takes, the peer)}
+        # The peer is the entity on the other entry of an edge that has exactly
+        # two, and None when the edge has any other number.
+        self._entity_edges: dict[int, dict[int, tuple[int, int | None]]] = {}
 
         # Slot lifecycle hooks. A freed slot must hold a null in every structure
         # that is indexed by slot, and the store does not know what those are. So it
@@ -325,7 +327,17 @@ class CoreState:
             self.member_coef[start + offset] = coefficient
             self.member_role[start + offset] = role
             sides = self._entity_edges[entity_slot]
-            sides[slot] = sides.get(slot, 0) | _SIDE_OF_ROLE.get(role, ON_SOURCE)
+            held = sides.get(slot)
+            side = _SIDE_OF_ROLE.get(role, ON_SOURCE)
+            sides[slot] = (side if held is None else held[0] | side, None)
+        # An edge that names two entries has one entry on the other side of each
+        # of them, so each member can record its peer and a neighbour query needs
+        # no member list at all. An edge with any other number cannot, and the
+        # query falls back to reading its members.
+        if count == 2:
+            first, second = entity_slots
+            self._entity_edges[first][slot] = (self._entity_edges[first][slot][0], second)
+            self._entity_edges[second][slot] = (self._entity_edges[second][slot][0], first)
         self._member_used = needed
         self.member_start[slot] = start
         self.member_len[slot] = count

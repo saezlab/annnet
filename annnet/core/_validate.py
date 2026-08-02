@@ -428,14 +428,22 @@ def _check_incidence_index(store, problems) -> None:
     """
     from . import _store as ST
 
-    expected: dict[int, dict[int, int]] = {slot: {} for slot, _key in store.live_entities()}
+    expected: dict[int, dict[int, tuple]] = {slot: {} for slot, _key in store.live_entities()}
     for edge_slot, _edge_id in store.live_edges():
         members = store.members(edge_slot)
-        for entity_slot, role in zip(members.entities, members.roles, strict=False):
-            sides = expected.get(int(entity_slot))
+        entities = [int(entity_slot) for entity_slot in members.entities]
+        for entity_slot, role in zip(entities, members.roles, strict=False):
+            sides = expected.get(entity_slot)
             if sides is not None:
                 side = ST.ON_TARGET if int(role) == ST.TARGET else ST.ON_SOURCE
-                sides[edge_slot] = sides.get(edge_slot, 0) | side
+                held = sides.get(edge_slot)
+                sides[edge_slot] = (side if held is None else held[0] | side, None)
+        if len(entities) == 2:
+            first, second = entities
+            for mine, peer in ((first, second), (second, first)):
+                sides = expected.get(mine)
+                if sides is not None and edge_slot in sides:
+                    sides[edge_slot] = (sides[edge_slot][0], peer)
     for entity_slot, sides in expected.items():
         held = store._entity_edges.get(entity_slot, {})
         if held != sides:
