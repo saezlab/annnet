@@ -667,11 +667,11 @@ class AnnNet(
 
     @property
     def _V(self) -> set:
-        return {ref.id for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE}
+        return {key[0] for key in _structure.node_keys(self)}
 
     @property
     def _VM(self) -> set:
-        return {ref.key for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE}
+        return set(_structure.node_keys(self))
 
     @_VM.setter
     def _VM(self, value) -> None:
@@ -1485,9 +1485,10 @@ class AnnNet(
             entities have degree ``0``.
         """
         ekey = self._resolve_entity_key(entity_id)
-        if not _structure.has_entity(self, ekey):
+        try:
+            row = _structure.entity_row(self, ekey)
+        except KeyError:
             return 0
-        row = _structure.entity_row(self, ekey)
         csr = self._get_csr()
         return int(csr.indptr[row + 1] - csr.indptr[row])
 
@@ -1508,12 +1509,10 @@ class AnnNet(
         """
         seen: set[str] = set()
         out: list[str] = []
-        for ref in _structure.iter_entities(self):
-            if ref.kind != _structure.NODE:
-                continue
-            if ref.id not in seen:
-                seen.add(ref.id)
-                out.append(ref.id)
+        for node_id, _layer in _structure.node_keys(self):
+            if node_id not in seen:
+                seen.add(node_id)
+                out.append(node_id)
         return out
 
     def supra_vertices(self) -> list[tuple[str, tuple[str, ...]]]:
@@ -1529,7 +1528,7 @@ class AnnNet(
         --------
         vertices : unique vertex IDs (one per vertex regardless of layer).
         """
-        return [ref.key for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE]
+        return _structure.node_keys(self)
 
     def edges(self) -> list[str]:
         """Return all structural edge IDs.
@@ -1539,7 +1538,7 @@ class AnnNet(
         list[str]
             Edge identifiers for edges with an incidence-matrix column.
         """
-        return [ref.id for ref in _structure.iter_edges(self)]
+        return _structure.edge_ids(self)
 
     def edge_list(self) -> list[tuple[str, str, str, float]]:
         """Materialize binary edges as endpoint tuples.
@@ -2371,12 +2370,8 @@ class AnnNet(
             return {
                 'label': 'external',
                 'version': ref._version,
-                'vertex_ids': {
-                    entity.key
-                    for entity in _structure.iter_entities(ref)
-                    if entity.kind == _structure.NODE
-                },
-                'edge_ids': {edge.id for edge in _structure.iter_edges(ref)},
+                'vertex_ids': set(_structure.node_keys(ref)),
+                'edge_ids': set(_structure.edge_ids(ref)),
                 'slice_ids': set(ref._slices.keys()),
             }
         else:
@@ -2386,10 +2381,8 @@ class AnnNet(
         return {
             'label': 'current',
             'version': self._version,
-            'vertex_ids': {
-                ref.id for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE
-            },
-            'edge_ids': {ref.id for ref in _structure.iter_edges(self)},
+            'vertex_ids': {key[0] for key in _structure.node_keys(self)},
+            'edge_ids': set(_structure.edge_ids(self)),
             'slice_ids': set(self._slices.keys()),
         }
 
@@ -2501,7 +2494,7 @@ class AnnNet(
     def entity_to_idx(self) -> dict:
         """vertex_id -> row_idx (bare string key, first supra-node wins)."""
         # ``iter_entities`` yields in row order, so the position is the row.
-        return {ref.id: row for row, ref in enumerate(_structure.iter_entities(self))}
+        return {key[0]: row for row, key in enumerate(_structure.entity_keys(self))}
 
     @entity_to_idx.setter
     def entity_to_idx(self, mapping):
@@ -2511,7 +2504,7 @@ class AnnNet(
     @property
     def idx_to_entity(self) -> dict:
         """row_idx -> vertex_id (bare string)."""
-        return {row: ref.id for row, ref in enumerate(_structure.iter_entities(self))}
+        return {row: key[0] for row, key in enumerate(_structure.entity_keys(self))}
 
     @property
     def entity_types(self) -> dict:
@@ -2531,12 +2524,12 @@ class AnnNet(
         """edge_id -> col_idx for all edges with a matrix column."""
         # ``iter_edges`` yields in column order and leaves out an edge that
         # occupies no column, so the position is the column.
-        return {ref.id: col for col, ref in enumerate(_structure.iter_edges(self))}
+        return {edge_id: col for col, edge_id in enumerate(_structure.edge_ids(self))}
 
     @property
     def idx_to_edge(self) -> dict:
         """col_idx -> edge_id."""
-        return {col: ref.id for col, ref in enumerate(_structure.iter_edges(self))}
+        return dict(enumerate(_structure.edge_ids(self)))
 
     @property
     def edge_weights(self) -> dict:

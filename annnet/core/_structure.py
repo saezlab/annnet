@@ -132,11 +132,7 @@ def _slot_key(store, ref):
 
 def _slot_entity_ref(store, key) -> EntityRef:
     slot = store.entity_slot(key)
-    return EntityRef(
-        id=key[0],
-        kind=_SLOT_ENTITY_KIND.get(int(store.entity_kind[slot]), NODE),
-        layer=key[1],
-    )
+    return EntityRef(key[0], _SLOT_ENTITY_KIND.get(int(store.entity_kind[slot]), NODE), key[1])
 
 
 def _slot_edge_ref(store, edge_id: str) -> EdgeRef:
@@ -317,11 +313,7 @@ def entity_ref(graph, ref) -> EntityRef:
         return _slot_entity_ref(store, key)
     key = _require_entity(graph, ref)
     record = graph._entities[key]
-    return EntityRef(
-        id=key[0],
-        kind=_ENTITY_KIND_OF_RECORD.get(record.kind, record.kind),
-        layer=key[1],
-    )
+    return EntityRef(key[0], _ENTITY_KIND_OF_RECORD.get(record.kind, record.kind), key[1])
 
 
 def iter_entities(graph) -> Iterator[EntityRef]:
@@ -336,11 +328,57 @@ def iter_entities(graph) -> Iterator[EntityRef]:
             yield _slot_entity_ref(store, key)
         return
     for key, record in sorted(graph._entities.items(), key=lambda item: item[1].row_idx):
-        yield EntityRef(
-            id=key[0],
-            kind=_ENTITY_KIND_OF_RECORD.get(record.kind, record.kind),
-            layer=key[1],
-        )
+        yield EntityRef(key[0], _ENTITY_KIND_OF_RECORD.get(record.kind, record.kind), key[1])
+
+
+# ---------------------------------------------------------------------------
+# Cheap enumeration
+# ---------------------------------------------------------------------------
+# A caller that wants identities alone should not pay for a reference object per
+# element. These three answer with the identities in the same order the full
+# enumerations use, and they build nothing else.
+
+
+def entity_keys(graph) -> list:
+    """Return the key of every entity, in materialized row order."""
+    if is_slot_backed(graph):
+        return [key for _slot, key in store_of(graph).live_entities()]
+    records = graph._entities
+    # The row index is a maintained map from position to identity, so reading it
+    # in order costs nothing. It is derived state, so a sort is the fallback when
+    # it does not account for every entity.
+    index = graph._row_to_entity
+    if len(index) == len(records):
+        return [index[row] for row in range(len(index))]
+    return sorted(records, key=lambda key: records[key].row_idx)
+
+
+def node_keys(graph) -> list:
+    """Return the key of every node, in row order, leaving out the edge entities."""
+    if is_slot_backed(graph):
+        store = store_of(graph)
+        return [
+            key
+            for slot, key in store.live_entities()
+            if _SLOT_ENTITY_KIND[int(store.entity_kind[slot])] == NODE
+        ]
+    records = graph._entities
+    return [key for key in entity_keys(graph) if records[key].kind == 'vertex']
+
+
+def edge_ids(graph) -> list:
+    """Return the id of every structural edge, in materialized column order.
+
+    An edge that occupies no column carries no structure and is left out, so
+    this lists exactly what :func:`iter_edges` yields.
+    """
+    if is_slot_backed(graph):
+        return [edge_id for _slot, edge_id in store_of(graph).live_edges()]
+    # The column index holds exactly the edges that carry structure, and
+    # :func:`edge_at_column` and :func:`edge_count` already read it as the
+    # authority on them, so reading it in order is the answer.
+    index = graph._col_to_edge
+    return [index[column] for column in range(len(index))]
 
 
 def entities_by_id(graph) -> dict:
@@ -369,15 +407,18 @@ def _edge_directed(graph, record) -> bool:
 
 
 def _edge_ref_of_record(graph, edge_id: str, record) -> EdgeRef:
+    # Positional construction, because a reference is built once per edge on
+    # every enumeration and the keyword form costs nearly twice as much.
+    weight = record.weight
     return EdgeRef(
-        id=edge_id,
-        kind=_EDGE_KIND_OF_RECORD.get(record.etype, record.etype),
-        directed=_edge_directed(graph, record),
-        weight=float(record.weight) if record.weight is not None else 1.0,
-        ml_kind=record.ml_kind,
-        ml_layers=record.ml_layers,
-        declared_directed=record.directed,
-        declared_weight=record.weight,
+        edge_id,
+        _EDGE_KIND_OF_RECORD.get(record.etype, record.etype),
+        _edge_directed(graph, record),
+        float(weight) if weight is not None else 1.0,
+        record.ml_kind,
+        record.ml_layers,
+        record.directed,
+        weight,
     )
 
 
@@ -496,7 +537,7 @@ def edge_sides(graph, edge_id: str) -> Endpoints:
     if is_slot_backed(graph):
         return edge_endpoints(graph, edge_id)
     record = _require_edge(graph, edge_id)
-    return Endpoints(source=_raw_side(record.src), target=_raw_side(record.tgt))
+    return Endpoints(_raw_side(record.src), _raw_side(record.tgt))
 
 
 def _raw_side(side) -> frozenset:

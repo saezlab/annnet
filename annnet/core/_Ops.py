@@ -157,15 +157,11 @@ class Operations:
 
     def _ordered_flat_vertex_ids(self, vertex_ids) -> list[str]:
         wanted = set(vertex_ids)
-        return [
-            ref.id
-            for ref in _structure.iter_entities(self)
-            if ref.kind == _structure.NODE and ref.id in wanted
-        ]
+        return [key[0] for key in _structure.node_keys(self) if key[0] in wanted]
 
     def _ordered_edge_ids(self, edge_ids) -> list[str]:
         wanted = set(edge_ids)
-        return [ref.id for ref in _structure.iter_edges(self) if ref.id in wanted]
+        return [edge_id for edge_id in _structure.edge_ids(self) if edge_id in wanted]
 
     def _build_flat_graph_from_selection(
         self,

@@ -281,6 +281,27 @@ def test_has_edge_is_true_for_an_edge_entity():
     assert S.has_edge(G, 'ee_ab') is True
 
 
+@pytest.mark.parametrize('case', CASE_NAMES)
+def test_edge_ids_lists_what_iter_edges_yields(case):
+    """The cheap enumeration and the full one must agree, and in the same order."""
+    G = build_case(case)
+    assert S.edge_ids(G) == [ref.id for ref in S.iter_edges(G)]
+
+
+@pytest.mark.parametrize('case', CASE_NAMES)
+def test_entity_keys_lists_what_iter_entities_yields(case):
+    G = build_case(case)
+    assert S.entity_keys(G) == [ref.key for ref in S.iter_entities(G)]
+
+
+@pytest.mark.parametrize('case', CASE_NAMES)
+def test_node_keys_leaves_out_the_edge_entities(case):
+    G = build_case(case)
+    assert S.node_keys(G) == [
+        ref.key for ref in S.iter_entities(G) if ref.kind == S.NODE
+    ]
+
+
 def test_entities_by_id_groups_every_layer_under_one_id():
     G = build_case('multilayer')
     grouped = S.entities_by_id(G)
@@ -446,6 +467,13 @@ def test_both_stores_reject_an_unknown_edge_the_same_way(both_stores):
         S.edge_members(store, 'no_such_edge')
     with pytest.raises(KeyError):
         S.edge_endpoints(store, 'no_such_edge')
+
+
+def test_both_stores_list_the_same_ids_in_the_same_order(both_stores):
+    case, graph, store = both_stores
+    assert S.edge_ids(store) == S.edge_ids(graph), case
+    assert S.entity_keys(store) == S.entity_keys(graph), case
+    assert S.node_keys(store) == S.node_keys(graph), case
 
 
 def test_both_stores_group_entities_by_id_the_same(both_stores):
