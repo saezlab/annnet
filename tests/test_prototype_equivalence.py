@@ -141,3 +141,31 @@ def _names(endpoint, ref) -> bool:
 def _all_endpoints(graph, edge_id):
     sides = S.edge_sides(graph, edge_id)
     return list(sides.source) + list(sides.target)
+
+
+# ---------------------------------------------------------------------------
+# A graph built through the public API on the slot store
+# ---------------------------------------------------------------------------
+# The bridge builds a slot store from a finished record graph. These build one
+# through the public API instead, so the mutation gateway is what fills it. A
+# difference here is a write the gateway has not routed yet.
+
+
+@pytest.mark.parametrize('case', CASE_NAMES)
+def test_the_gateway_fills_the_slot_store_as_the_bridge_would(case):
+    built = build_case(case, store='slots')
+    expected = ST.from_graph(build_case(case))
+
+    assert S.entity_keys(built._store) == S.entity_keys(expected), 'entities'
+    assert S.edge_ids(built._store) == S.edge_ids(expected), 'edges'
+    for edge_id in S.edge_ids(expected):
+        assert S.edge_sides(built._store, edge_id) == S.edge_sides(expected, edge_id), edge_id
+        assert S.edge_members(built._store, edge_id) == pytest.approx(
+            S.edge_members(expected, edge_id)
+        ), edge_id
+
+
+@pytest.mark.parametrize('case', CASE_NAMES)
+def test_a_slot_backed_graph_holds_its_invariants(case):
+    built = build_case(case, store='slots')
+    assert V.validate_internal_consistency(built._store, strict=False) == []

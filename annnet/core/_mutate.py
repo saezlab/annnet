@@ -5,7 +5,7 @@ from __future__ import annotations
 from sys import intern as _intern
 import json
 
-from . import _derive as D, _identity as I
+from . import _store as ST, _derive as D, _identity as I, _structure as S
 from ._records import (
     EdgeRecord,
     SliceRecord,
@@ -22,6 +22,108 @@ from .._support.dataframe_backend import (
 )
 
 # ---------------------------------------------------------------------------
+# The slot store, written beside the records
+# ---------------------------------------------------------------------------
+# A graph built with ``store='slots'`` carries a slot store as well as its
+# records, and the gateway writes both. The query facade answers from the slot
+# store as soon as one is there, so every read of such a graph exercises the new
+# core while the records remain the thing the gateway knows how to build.
+#
+# These functions read the records directly, which the facade would not let them
+# do, because the facade would answer from the slot store they are here to fill.
+# The gateway owns both stores, so it is the one place that may.
+#
+# When the records go, the sync points become the writes themselves.
+
+_SLOT_ENTITY_KIND = {'vertex': ST.NODE, 'edge_entity': ST.EDGE_ENTITY}
+_SLOT_EDGE_KIND = {
+    'binary': ST.BINARY,
+    'hyper': ST.HYPER,
+    'vertex_edge': ST.NODE_EDGE,
+    'edge_placeholder': ST.PLACEHOLDER,
+}
+
+
+def slot_store(g):
+    """Return the slot store of a graph, or None when it keeps records alone."""
+    return getattr(g, '_store', None)
+
+
+def sync_entity(g, ekey) -> None:
+    """Make the slot store agree with the records about one entity."""
+    store = slot_store(g)
+    if store is None:
+        return
+    record = g._entities.get(ekey)
+    slot = store.entity_slot(ekey)
+    if record is None:
+        if slot is not None:
+            store.remove_entity(ekey)
+        return
+    kind = _SLOT_ENTITY_KIND.get(record.kind, ST.NODE)
+    if slot is None:
+        store.add_entity(ekey, kind)
+    else:
+        store.entity_kind[slot] = kind
+
+
+def sync_edge(g, edge_id) -> None:
+    """Make the slot store agree with the records about one edge.
+
+    An edge is replaced rather than patched, because a change of definition can
+    change how many entries the member list holds.
+    """
+    store = slot_store(g)
+    if store is None:
+        return
+    if store.edge_slot(edge_id) is not None:
+        store.remove_edge(edge_id)
+    record = g._edges.get(edge_id)
+    if record is None:
+        return
+    sides = S.Endpoints(S._raw_side(record.src), S._raw_side(record.tgt))
+    reference = S._edge_ref_of_record(g, edge_id, record)
+    coefficients = dict(record.coeffs) if record.coeffs is not None else None
+    store.add_edge(
+        edge_id,
+        ST.members_from_sides(store, g, sides, coefficients, reference.weight, reference),
+        kind=_SLOT_EDGE_KIND.get(record.etype, ST.BINARY),
+        directed=record.directed,
+        weight=record.weight,
+        explicit_coefficients=coefficients is not None,
+        ml_kind=record.ml_kind,
+        ml_layers=record.ml_layers,
+    )
+
+
+def sync_edges(g, edge_ids) -> None:
+    """Make the slot store agree with the records about several edges."""
+    if slot_store(g) is None:
+        return
+    for edge_id in edge_ids:
+        sync_edge(g, edge_id)
+
+
+def resync(g) -> None:
+    """Rebuild the whole slot store from the records.
+
+    A few mutations replace the entity registry outright rather than changing one
+    entry, and every edge that named a replaced entity has to be written again.
+    Those are rare, so they pay for a rebuild instead of the gateway tracking what
+    each of them touched.
+    """
+    store = slot_store(g)
+    if store is None:
+        return
+    rebuilt = ST.CoreState(directed=g.directed, aspects=g._aspects)
+    for ekey, record in sorted(g._entities.items(), key=lambda item: item[1].row_idx):
+        rebuilt.add_entity(ekey, _SLOT_ENTITY_KIND.get(record.kind, ST.NODE))
+    g._store = rebuilt
+    for edge_id in sorted(g._edges, key=lambda eid: g._edges[eid].col_idx):
+        sync_edge(g, edge_id)
+
+
+# ---------------------------------------------------------------------------
 # Entity record bookkeeping
 # ---------------------------------------------------------------------------
 
@@ -34,6 +136,7 @@ def register_entity_record(g, ekey, rec: EntityRecord) -> None:
     g._entities[ekey] = rec
     g._row_to_entity[rec.row_idx] = ekey
     D.index_entity_key(g, ekey)
+    sync_entity(g, ekey)
 
 
 def remove_entity_record(g, ekey):
@@ -41,6 +144,7 @@ def remove_entity_record(g, ekey):
     rec = g._entities.pop(ekey)
     g._row_to_entity.pop(rec.row_idx, None)
     D.unindex_entity_key(g, ekey)
+    sync_entity(g, ekey)
     return rec
 
 
@@ -1642,3 +1746,62 @@ def batch_add_hyperedges(
         g.attrs.set_edge_attrs_bulk(attrs_batch)
 
     return out_ids
+
+
+# ---------------------------------------------------------------------------
+# Routing the gateway to the slot store
+# ---------------------------------------------------------------------------
+# Every write below changes canonical structure, so a graph that carries a slot
+# store has to see the change too. The entity writes route themselves, because
+# ``register_entity_record`` and ``remove_entity_record`` are the only two doors.
+# The edge writes do not share a door, and several of them replace the entity
+# registry outright, so each is followed by a rebuild of the store from the
+# records.
+#
+# A rebuild is the plain answer, not the fast one. It is what makes the new core
+# reachable through the public API today. The hot paths are narrowed to the edges
+# they touch below, and the whole mechanism goes when the records do.
+
+_REBUILDS_THE_STORE = (
+    'add_vertex',
+    'batch_add_vertices',
+    'ensure_edge_entity_placeholder',
+    'register_edge_as_entity',
+    'add_edge',
+    'batch_add_edges',
+    'batch_add_hyperedges',
+    'remove_edge',
+    'remove_edges_bulk',
+    'remove_vertices_bulk',
+    'remove_orphan_node_layers',
+    'set_edge_definition',
+    'set_hyperedge_definition',
+    'set_edge_coeffs',
+    'set_edge_field',
+    'set_edge_kind',
+    'set_edge_direction_policy',
+    'reverse_directions',
+    'make_undirected',
+    'rekey_entities',
+    'set_entity_to_idx',
+    'set_entity_types',
+)
+
+
+def _rebuilding(write):
+    """Return the write, followed by a rebuild of the slot store when there is one."""
+
+    def routed(g, *args, **kwargs):
+        result = write(g, *args, **kwargs)
+        resync(g)
+        return result
+
+    routed.__name__ = write.__name__
+    routed.__doc__ = write.__doc__
+    routed.__wrapped__ = write
+    return routed
+
+
+for _name in _REBUILDS_THE_STORE:
+    globals()[_name] = _rebuilding(globals()[_name])
+del _name

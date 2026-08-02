@@ -14,8 +14,24 @@ The graphs carry no biological meaning. The names are plain letters.
 from __future__ import annotations
 
 import warnings
+from contextlib import contextmanager
 
 from annnet.core.graph import AnnNet
+
+
+# Which canonical store the builders give their graphs. ``build_case`` sets it,
+# so one set of builders serves both stores and the shapes cannot drift apart.
+_STORE = 'records'
+
+
+@contextmanager
+def _store_mode(store: str):
+    global _STORE
+    previous, _STORE = _STORE, store
+    try:
+        yield
+    finally:
+        _STORE = previous
 
 
 def _quiet(build):
@@ -32,7 +48,7 @@ def _quiet(build):
 
 def binary_directed() -> AnnNet:
     """Three nodes in a directed chain."""
-    G = AnnNet(directed=True)
+    G = AnnNet(store=_STORE, directed=True)
     G.add_vertices(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e_ab', weight=1.5)
     G.add_edges('B', 'C', edge_id='e_bc', weight=2.0)
@@ -41,7 +57,7 @@ def binary_directed() -> AnnNet:
 
 def binary_undirected() -> AnnNet:
     """Three nodes joined by undirected edges."""
-    G = AnnNet(directed=False)
+    G = AnnNet(store=_STORE, directed=False)
     G.add_vertices(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e_ab', weight=1.0)
     G.add_edges('B', 'C', edge_id='e_bc', weight=3.0)
@@ -50,7 +66,7 @@ def binary_undirected() -> AnnNet:
 
 def self_loop() -> AnnNet:
     """One node with an edge to itself, next to a plain edge."""
-    G = AnnNet(directed=True)
+    G = AnnNet(store=_STORE, directed=True)
     G.add_vertices(['A', 'B'])
     G.add_edges('A', 'A', edge_id='e_loop', weight=0.5)
     G.add_edges('A', 'B', edge_id='e_ab')
@@ -59,7 +75,7 @@ def self_loop() -> AnnNet:
 
 def parallel_edge() -> AnnNet:
     """Two separate edges over the same pair of endpoints."""
-    G = AnnNet(directed=True)
+    G = AnnNet(store=_STORE, directed=True)
     G.add_vertices(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e_first', weight=1.0)
     G.add_edges('A', 'B', edge_id='e_second', weight=2.0, parallel='parallel')
@@ -73,7 +89,7 @@ def parallel_edge() -> AnnNet:
 
 def hyper_undirected() -> AnnNet:
     """One hyperedge over three nodes, with no direction."""
-    G = AnnNet(directed=False)
+    G = AnnNet(store=_STORE, directed=False)
     G.add_vertices(['A', 'B', 'C'])
     G.add_edges([{'members': ['A', 'B', 'C'], 'edge_id': 'h_abc'}])
     return G
@@ -85,7 +101,7 @@ def hyper_directed() -> AnnNet:
     The source side carries the positive coefficient, exactly as it does for a
     binary edge.
     """
-    G = AnnNet(directed=True)
+    G = AnnNet(store=_STORE, directed=True)
     G.add_vertices(['A', 'B', 'C'])
     G.add_edges([{'source': ['A', 'B'], 'target': ['C'], 'edge_id': 'h_ab_c'}])
     return G
@@ -98,7 +114,7 @@ def hyper_directed() -> AnnNet:
 
 def edge_entity() -> AnnNet:
     """One edge that is also a node, and one edge that points at it."""
-    G = AnnNet(directed=True)
+    G = AnnNet(store=_STORE, directed=True)
     G.add_vertices(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='ee_ab', as_entity=True)
     G.add_edges('ee_ab', 'C', edge_id='e_meta')
@@ -111,7 +127,7 @@ def boundary_edge() -> AnnNet:
     A boundary edge holds a single member. The sign of the coefficient carries
     the direction, so the graph needs no placeholder node on the open side.
     """
-    G = AnnNet(directed=True)
+    G = AnnNet(store=_STORE, directed=True)
     G.add_vertices(['A', 'B'])
     G.add_edges([{'members': ['A'], 'edge_id': 'b_out'}])
     G.add_edges([{'members': ['A'], 'edge_id': 'b_in'}])
@@ -123,7 +139,7 @@ def boundary_edge() -> AnnNet:
 
 def coefficient_edge() -> AnnNet:
     """One hyperedge whose members carry coefficients other than plus or minus one."""
-    G = AnnNet(directed=True)
+    G = AnnNet(store=_STORE, directed=True)
     G.add_vertices(['A', 'B', 'C'])
     G.add_edges([{'members': ['A', 'B', 'C'], 'edge_id': 'r_1'}])
     G.set_edge_coeffs('r_1', {'A': -2.0, 'B': -1.0, 'C': 3.0})
@@ -139,7 +155,7 @@ def multilayer() -> AnnNet:
     """Two nodes in two layers, with an intra-layer edge and a coupling edge."""
 
     def build():
-        G = AnnNet(directed=True)
+        G = AnnNet(store=_STORE, directed=True)
         G.layers.set_aspects(['phase'], {'phase': ['t0', 't1']})
         G.add_vertices(['A', 'B'], layer=('t0',))
         G.add_vertices(['A', 'B'], layer=('t1',))
@@ -157,7 +173,7 @@ def multilayer() -> AnnNet:
 
 def sliced() -> AnnNet:
     """One graph whose edges split over two named slices."""
-    G = AnnNet(directed=True)
+    G = AnnNet(store=_STORE, directed=True)
     G.add_vertices(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e_ab')
     G.add_edges('B', 'C', edge_id='e_bc')
@@ -189,15 +205,16 @@ OPERATION_MATRIX = {
 CASE_NAMES = tuple(OPERATION_MATRIX)
 
 
-def build_case(name: str) -> AnnNet:
-    """Build one operation-matrix graph by name."""
+def build_case(name: str, store: str = 'records') -> AnnNet:
+    """Build one operation-matrix graph by name, on either canonical store."""
     try:
         builder = OPERATION_MATRIX[name]
     except KeyError:
         raise KeyError(
             f'Unknown operation-matrix case {name!r}. Known: {list(CASE_NAMES)}'
         ) from None
-    return builder()
+    with _store_mode(store):
+        return builder()
 
 
 def all_cases():

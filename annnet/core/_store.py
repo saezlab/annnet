@@ -567,20 +567,7 @@ def from_graph(graph) -> CoreState:
         explicit = coefficients is not None
         weight = edge.weight
 
-        members = []
-        for endpoint in sorted(sides.source, key=repr):
-            key = _bridged_key(graph, endpoint)
-            if key is None or state.entity_slot(key) is None:
-                continue
-            role = MEMBER if not sides.target else SOURCE
-            value = _bridged_coefficient(coefficients, endpoint, weight, role, edge)
-            members.append((key, value, role))
-        for endpoint in sorted(sides.target, key=repr):
-            key = _bridged_key(graph, endpoint)
-            if key is None or state.entity_slot(key) is None:
-                continue
-            value = _bridged_coefficient(coefficients, endpoint, weight, TARGET, edge)
-            members.append((key, value, TARGET))
+        members = members_from_sides(state, graph, sides, coefficients, weight, edge)
 
         state.add_edge(
             edge.id,
@@ -593,6 +580,36 @@ def from_graph(graph) -> CoreState:
             ml_layers=edge.ml_layers,
         )
     return state
+
+
+def members_from_sides(state, graph, sides, coefficients, weight, edge) -> list:
+    """Return the member entries of one edge, given its two sides.
+
+    One entry per role, so an entity on both sides appears twice. An endpoint that
+    names no entity the store holds is left out, exactly as the incidence matrix
+    leaves it out.
+
+    Both the bridge from a record graph and the mutation gateway build member
+    entries, and the rules for the role and the coefficient are subtle enough that
+    they live here once.
+    """
+    members = []
+    role = MEMBER if not sides.target else SOURCE
+    for endpoint in sorted(sides.source, key=repr):
+        key = _bridged_key(graph, endpoint)
+        if key is None or state.entity_slot(key) is None:
+            continue
+        members.append(
+            (key, _bridged_coefficient(coefficients, endpoint, weight, role, edge), role)
+        )
+    for endpoint in sorted(sides.target, key=repr):
+        key = _bridged_key(graph, endpoint)
+        if key is None or state.entity_slot(key) is None:
+            continue
+        members.append(
+            (key, _bridged_coefficient(coefficients, endpoint, weight, TARGET, edge), TARGET)
+        )
+    return members
 
 
 def _bridged_key(graph, endpoint):
