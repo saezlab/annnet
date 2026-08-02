@@ -104,6 +104,19 @@ def sync_edges(g, edge_ids) -> None:
         sync_edge(g, edge_id)
 
 
+def sync_aspects(g) -> None:
+    """Make the slot store agree with the graph about the declared aspects.
+
+    The store answers in the identity form its aspects imply: a bare id when it
+    holds one layer, and an ``(id, layer_coord)`` pair otherwise. So a graph that
+    declares aspects has to tell the store, or the store keeps answering in the
+    flat form for a graph that is no longer flat.
+    """
+    store = slot_store(g)
+    if store is not None:
+        store.aspects = tuple(g._aspects)
+
+
 def resync(g) -> None:
     """Rebuild the whole slot store from the records.
 

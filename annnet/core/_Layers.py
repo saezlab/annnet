@@ -186,6 +186,7 @@ class LayerAccessor:
         had_existing_flat_entities = _structure.entity_count(self) > 0 and old_aspects == ('_',)
 
         self._aspects = tuple(aspects)
+        _mutate.sync_aspects(self._G)
         self._layers = {}
         for aspect in aspects:
             values = set(elem_layers.get(aspect, []))
@@ -416,6 +417,7 @@ class LayerAccessor:
             flat._rebuild_entity_indexes()
 
             self._aspects = flat._aspects
+            _mutate.sync_aspects(self._G)
             self._layers = flat._layers
             _build.install_structure(
                 self._G,

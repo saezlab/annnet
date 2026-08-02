@@ -582,7 +582,15 @@ def edge_sides(graph, edge_id: str) -> Endpoints:
     single entity. A writer that persists a graph needs exactly this.
     """
     if is_slot_backed(graph):
-        return edge_endpoints(graph, edge_id)
+        sides = edge_endpoints(graph, edge_id)
+        if store_of(graph).aspects != ('_',):
+            return sides
+        # A flat graph names an entity by its bare id, and the answer has to be
+        # in the form the caller holds its own ids in.
+        return Endpoints(
+            frozenset(key[0] for key in sides.source),
+            frozenset(key[0] for key in sides.target),
+        )
     record = _require_edge(graph, edge_id)
     return Endpoints(_raw_side(record.src), _raw_side(record.tgt))
 

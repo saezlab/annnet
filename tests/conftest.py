@@ -188,11 +188,40 @@ def assert_edge_attrs_equal(G1, G2, edge_id, ignore_none=True, ignore_private=Fa
     assert attrs1 == attrs2, f'Edge {edge_id} attrs differ: {attrs1} != {attrs2}'
 
 
+def pytest_addoption(parser):
+    """Add the option that runs the whole suite on the slot-addressed store."""
+    parser.addoption(
+        '--store',
+        action='store',
+        default='records',
+        choices=('records', 'slots'),
+        help='which canonical store every graph built by the suite uses',
+    )
+
+
 def pytest_configure(config):
     """Configure pytest with custom markers."""
     config.addinivalue_line(
         'markers', 'slow: marks tests as slow (deselect with \'-m "not slow"\')'
     )
+    # ``--store=slots`` runs the behavior suite against the new core. Most tests
+    # build a graph directly rather than through a fixture, so the default of the
+    # constructor is what moves. This goes away when the slot store is the only
+    # one and there is nothing to choose.
+    if config.getoption('--store') == 'slots':
+        _build_every_graph_on_slots()
+
+
+def _build_every_graph_on_slots():
+    """Make ``store='slots'`` the default of the graph constructor."""
+    original = AnnNet.__init__
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('store', 'slots')
+        original(self, *args, **kwargs)
+
+    __init__.__doc__ = original.__doc__
+    AnnNet.__init__ = __init__
 
 
 # ======================================================================

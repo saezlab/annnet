@@ -514,6 +514,18 @@ def test_both_stores_answer_for_a_bare_id_the_same(both_stores):
     assert S.has_entity_id(store, 'no_such_id') is False
 
 
+def test_both_stores_name_the_sides_in_the_same_form(both_stores):
+    """``edge_sides`` answers in the form the public API shows, on either store.
+
+    A flat graph names an entity by its bare id. Answering with a key instead
+    would still name the right entity, and every caller that compares the answer
+    against ids the public API gave it would silently find nothing.
+    """
+    case, graph, store = both_stores
+    for ref in S.iter_edges(graph):
+        assert S.edge_sides(store, ref.id) == S.edge_sides(graph, ref.id), f'{case}/{ref.id}'
+
+
 def test_both_stores_report_the_same_counts(both_stores):
     case, graph, store = both_stores
     assert S.entity_count(store) == S.entity_count(graph), case
