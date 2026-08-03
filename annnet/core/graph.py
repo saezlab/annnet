@@ -7,7 +7,7 @@ from collections.abc import Iterable, Iterator, MutableMapping
 
 import numpy as np
 
-from . import _build, _state, _store, _derive, _mutate, _identity, _validate, _structure
+from . import _build, _state, _derive, _mutate, _identity, _validate, _structure
 from ._Ops import Operations, OperationsAccessor
 from ._Views import GraphView, ViewsClass, ViewsAccessor
 from ._Layers import LayerAccessor
@@ -352,7 +352,7 @@ class AnnNet(
         annotations: dict[str, Any] | None = None,
         annotations_backend: str = 'auto',
         aspects: dict[str, list[str]] | None = None,
-        store: str = 'records',
+        store: str = 'slots',
         **kwargs: Any,
     ) -> None:
         """Initialize an empty :class:`AnnNet` graph.
@@ -371,11 +371,12 @@ class AnnNet(
             Backend used when empty annotation tables need to be created.
         aspects : dict[str, list[str]] | None, optional
             Initial multilayer aspect registry.
-        store : {"records", "slots"}, optional
-            Which canonical store backs the graph. ``"slots"`` builds the
-            slot-addressed store as well, and every structural query is then
-            answered from it. This is how the new core is exercised before it
-            becomes the only one, and the option goes away with the records.
+        store : {"slots", "records"}, optional
+            Which canonical store backs the graph. ``"slots"`` is the default and
+            the new core: every structural query is answered from the
+            slot-addressed store. ``"records"`` keeps the records alone, which is
+            what the cross-store checks compare against. The option goes away with
+            the records.
         **kwargs
             Initial graph-level attributes.
 
@@ -383,11 +384,10 @@ class AnnNet(
         -----
         A default slice named ``"default"`` is always created and made active.
         """
-        _state.init_state(self, directed=directed, v=v, e=e, aspects=aspects)
         if store not in ('records', 'slots'):
             raise ValueError(f"store must be 'records' or 'slots', got {store!r}")
-        self._store = (
-            _store.CoreState(directed=directed, aspects=self._aspects) if store == 'slots' else None
+        _state.init_state(
+            self, directed=directed, v=v, e=e, aspects=aspects, slots=store == 'slots'
         )
 
         # Attribute storage

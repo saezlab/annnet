@@ -38,8 +38,14 @@ DERIVED_FIELDS = (
 )
 
 
-def init_state(g, *, directed=None, v=0, e=0, aspects=None) -> None:
-    """Initialize the structural fields of an empty graph on ``g``."""
+def init_state(g, *, directed=None, v=0, e=0, aspects=None, slots=True) -> None:
+    """Initialize the structural fields of an empty graph on ``g``.
+
+    ``slots`` builds the slot-addressed store, which is the canonical store every
+    structural query is answered from. Pass ``False`` for a graph that keeps the
+    records alone, which is what the cross-store checks compare against. The
+    option goes away with the records.
+    """
     g.directed = directed
 
     g._vertex_RESERVED = set(_vertex_RESERVED)
@@ -111,3 +117,10 @@ def init_state(g, *, directed=None, v=0, e=0, aspects=None) -> None:
     g._supra_index_cache = None
 
     g.vertex_aligned = False
+
+    # The slot-addressed store. It is built last, because it takes the aspects
+    # the graph has just declared and the store answers in the identity form they
+    # imply.
+    from ._store import CoreState
+
+    g._store = CoreState(directed=directed, aspects=g._aspects) if slots else None

@@ -444,11 +444,16 @@ class CoreState:
         """How many member entries one edge holds."""
         return int(self.member_len[edge_slot])
 
-    def endpoints(self, edge_slot: int) -> Endpoints:
+    def endpoints(self, edge_slot: int, *, bare: bool = False) -> Endpoints:
         """Return the two sides of one edge, as sets of entity keys.
 
         A member with no direction sits on the source side, which is the side that
         carries the positive coefficient of an edge without explicit ones.
+
+        Set ``bare`` for the id of each entity rather than its key, which is the
+        form a flat graph shows. The projection happens inside the one walk. Doing
+        it over the result would build two more sets on a path that runs once per
+        edge of every enumeration.
         """
         # The two member slices are converted to Python lists in one step each.
         # Walking a numpy array element by element yields an array scalar per
@@ -456,16 +461,21 @@ class CoreState:
         start = int(self.member_start[edge_slot])
         stop = start + int(self.member_len[edge_slot])
         keys = self._entity_key
+        entity_slots = self.member_ent[start:stop].tolist()
+        roles = self.member_role[start:stop].tolist()
         source, target = [], []
-        for entity_slot, role in zip(
-            self.member_ent[start:stop].tolist(),
-            self.member_role[start:stop].tolist(),
-            strict=False,
-        ):
-            if role == TARGET:
-                target.append(keys[entity_slot])
-            else:
-                source.append(keys[entity_slot])
+        if bare:
+            for entity_slot, role in zip(entity_slots, roles, strict=False):
+                if role == TARGET:
+                    target.append(keys[entity_slot][0])
+                else:
+                    source.append(keys[entity_slot][0])
+        else:
+            for entity_slot, role in zip(entity_slots, roles, strict=False):
+                if role == TARGET:
+                    target.append(keys[entity_slot])
+                else:
+                    source.append(keys[entity_slot])
         return Endpoints(frozenset(source), frozenset(target))
 
     def is_self_loop(self, edge_slot: int) -> bool:
@@ -577,8 +587,7 @@ def from_graph(graph) -> CoreState:
     intended difference, and it is why a signed incidence column for a self-loop
     now sums to zero instead of holding one negative value.
     """
-    from . import _structure as S
-
+    S = _facade()
     state = CoreState(directed=graph.directed, aspects=graph._aspects)
     kind_of_entity = {S.NODE: NODE, S.EDGE_ENTITY: EDGE_ENTITY}
     kind_of_edge = {
@@ -625,14 +634,14 @@ def members_from_sides(state, graph, sides, coefficients, weight, edge) -> list:
     """
     members = []
     role = MEMBER if not sides.target else SOURCE
-    for endpoint in sorted(sides.source, key=repr):
+    for endpoint in _ordered(sides.source):
         key = _bridged_key(graph, endpoint)
         if key is None or state.entity_slot(key) is None:
             continue
         members.append(
             (key, _bridged_coefficient(coefficients, endpoint, weight, role, edge), role)
         )
-    for endpoint in sorted(sides.target, key=repr):
+    for endpoint in _ordered(sides.target):
         key = _bridged_key(graph, endpoint)
         if key is None or state.entity_slot(key) is None:
             continue
@@ -642,10 +651,37 @@ def members_from_sides(state, graph, sides, coefficients, weight, edge) -> list:
     return members
 
 
+def _ordered(side):
+    """Return one side of an edge in a stable order.
+
+    A member list is compared entry by entry, so a set has to be walked in the
+    same order every time. A side of one needs no sort, and that is the shape of
+    every binary edge, which is what a bulk load is made of.
+    """
+    return side if len(side) < 2 else sorted(side, key=repr)
+
+
+_FACADE = None
+
+
+def _facade():
+    """Return the query facade, bound on first use.
+
+    The facade imports this module, so this module cannot import it at import
+    time. Binding it once keeps an import statement off a path that runs once per
+    member of every edge written.
+    """
+    global _FACADE
+    if _FACADE is None:
+        from . import _structure
+
+        _FACADE = _structure
+    return _FACADE
+
+
 def _bridged_key(graph, endpoint):
     """Resolve a stored endpoint to an entity key, or None when it names none."""
-    from . import _structure as S
-
+    S = _facade()
     if S.is_entity_key(endpoint):
         return endpoint
     try:
