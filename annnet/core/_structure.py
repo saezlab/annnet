@@ -125,6 +125,7 @@ _TARGET = ST.TARGET
 _ON_SOURCE = ST.ON_SOURCE
 _ON_TARGET = ST.ON_TARGET
 _SLOT_NODE = ST.NODE
+_SLOT_PLACEHOLDER = ST.PLACEHOLDER
 
 
 def _slot_key(store, ref):
@@ -167,6 +168,25 @@ def _slot_edge_ref(store, edge_id: str) -> EdgeRef:
         declared_directed,
         weight,
     )
+
+
+def _slot_carries_structure(store, slot) -> bool:
+    """Return True when an edge slot holds structure rather than a name alone.
+
+    A placeholder edge is an id the graph knows before the edge exists. It holds
+    no members and occupies no column, so every count and every enumeration of
+    the structural edges leaves it out, on either store.
+    """
+    return int(store.edge_kind[slot]) != _SLOT_PLACEHOLDER
+
+
+def _slot_structural_edges(store) -> list:
+    """Return the ``(slot, edge_id)`` pairs that carry structure, in slot order."""
+    return [
+        (slot, edge_id)
+        for slot, edge_id in store.live_edges()
+        if _slot_carries_structure(store, slot)
+    ]
 
 
 def _slot_require_edge(store, edge_id: str) -> int:
@@ -311,7 +331,7 @@ def edge_count(graph) -> int:
     here. :func:`iter_edges` leaves the same edges out.
     """
     if is_slot_backed(graph):
-        return store_of(graph).edge_count
+        return len(_slot_structural_edges(store_of(graph)))
     return len(graph._col_to_edge)
 
 
@@ -419,8 +439,7 @@ def edge_ids(graph) -> list:
     this lists exactly what :func:`iter_edges` yields.
     """
     if is_slot_backed(graph):
-        # A free slot holds a null, so the live ids are the rest, in slot order.
-        return [edge_id for edge_id in store_of(graph)._edge_id if edge_id is not None]
+        return [edge_id for _slot, edge_id in _slot_structural_edges(store_of(graph))]
     # The column index holds exactly the edges that carry structure, and
     # :func:`edge_at_column` and :func:`edge_count` already read it as the
     # authority on them, so reading it in order is the answer.
@@ -486,7 +505,8 @@ def iter_edges(graph, *, include_placeholders: bool = False) -> Iterator[EdgeRef
     """
     if is_slot_backed(graph):
         store = store_of(graph)
-        for _slot, edge_id in store.live_edges():
+        pairs = store.live_edges() if include_placeholders else _slot_structural_edges(store)
+        for _slot, edge_id in pairs:
             yield _slot_edge_ref(store, edge_id)
         return
     items = [
@@ -661,7 +681,9 @@ def edge_column(graph, edge_id: str) -> int:
     if is_slot_backed(graph):
         store = store_of(graph)
         slot = _slot_require_edge(store, edge_id)
-        return int(np.count_nonzero(store.live_edge_slots() < slot))
+        if not _slot_carries_structure(store, slot):
+            return -1
+        return sum(1 for other, _id in _slot_structural_edges(store) if other < slot)
     return int(_require_edge(graph, edge_id).col_idx)
 
 
@@ -673,11 +695,10 @@ def edge_at_column(graph, column: int) -> str:
     the public methods that still accept a position, and it goes away with them.
     """
     if is_slot_backed(graph):
-        store = store_of(graph)
-        slots = store.live_edge_slots()
-        if not 0 <= column < slots.size:
+        structural = _slot_structural_edges(store_of(graph))
+        if not 0 <= column < len(structural):
             raise KeyError(f'No edge at column {column}')
-        return store.edge_id(int(slots[column]))
+        return structural[column][1]
     try:
         return graph._col_to_edge[column]
     except KeyError:

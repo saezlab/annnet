@@ -121,6 +121,20 @@ def edge_entity() -> AnnNet:
     return G
 
 
+def placeholder_edge() -> AnnNet:
+    """An edge entity declared before the edge it stands for exists.
+
+    The placeholder holds no members and occupies no column, so it carries no
+    structure. It is the one shape that separates "the graph knows this edge id"
+    from "this edge is part of the topology".
+    """
+    G = AnnNet(store=_STORE, directed=True)
+    G.add_vertices(['A', 'B'])
+    G.add_edges('A', 'B', edge_id='e_ab')
+    G._ensure_edge_entity_placeholder('e_later')
+    return G
+
+
 def boundary_edge() -> AnnNet:
     """Two one-sided edges. One drains a node and one feeds it.
 
@@ -197,6 +211,7 @@ OPERATION_MATRIX = {
     'hyper_directed': hyper_directed,
     'edge_entity': edge_entity,
     'boundary_edge': boundary_edge,
+    'placeholder_edge': placeholder_edge,
     'coefficient_edge': coefficient_edge,
     'multilayer': multilayer,
     'sliced': sliced,

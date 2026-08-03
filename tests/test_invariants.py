@@ -422,7 +422,11 @@ def test_rule_8_reports_a_matrix_cell_that_the_store_does_not_imply():
 def test_rule_9_holds_on_every_case(case):
     G = build_case(case)
     node_ids = {ref.id for ref in S.iter_entities(G)}
-    edge_ids = {ref.id for ref in S.iter_edges(G)}
+    # An attribute table holds a row per element the graph knows, and a
+    # placeholder edge is one it knows before the edge carries any structure. So
+    # the rule is that no row names something absent, not that every row names
+    # something structural.
+    edge_ids = {ref.id for ref in S.iter_edges(G, include_placeholders=True)}
     assert {row['vertex_id'] for row in table_rows(G.obs)} <= node_ids
     assert {row['edge_id'] for row in table_rows(G.var)} <= edge_ids
 
