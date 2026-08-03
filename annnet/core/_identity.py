@@ -102,24 +102,35 @@ def make_layer_coord(g, layer_spec) -> tuple:
     return coord
 
 
+def _keys_of_id(g, vid) -> list:
+    """Return the entity keys a bare id stands for, in row order.
+
+    Each store keeps its own index of this, because a scan over the entities
+    would make resolving one bare id cost the size of the graph.
+    """
+    store = getattr(g, '_store', None)
+    if store is not None:
+        return store.entity_keys_of_id(vid)
+    matches = []
+    for ekey in g._vid_to_ekeys.get(vid, ()):
+        record = g._entities.get(ekey)
+        if record is not None:
+            matches.append((record.row_idx, ekey))
+    return [ekey for _row, ekey in sorted(matches)]
+
+
 def resolve_ekey(g, vid_or_key) -> tuple:
     """Resolve a vertex identifier to an internal ``(vid, layer_coord)`` key."""
     if isinstance(vid_or_key, str):
         if g._aspects == ('_',):
             return (vid_or_key, ('_',))
-        matches = []
-        for ekey in g._vid_to_ekeys.get(vid_or_key, ()):
-            rec = g._entities.get(ekey)
-            if rec is None:
-                continue
-            matches.append((rec.row_idx, ekey))
+        matches = _keys_of_id(g, vid_or_key)
         if len(matches) == 1:
-            return matches[0][1]
+            return matches[0]
         if len(matches) > 1:
-            choices = [ekey for _, ekey in sorted(matches)]
             raise ValueError(
                 f'Ambiguous bare vertex_id {vid_or_key!r} in multilayer graph; '
-                f'use an explicit (vertex_id, layer_coord) tuple. Choices: {choices!r}'
+                f'use an explicit (vertex_id, layer_coord) tuple. Choices: {matches!r}'
             )
         return (vid_or_key, placeholder_layer_coord(g))
     if is_explicit_entity_key(vid_or_key):

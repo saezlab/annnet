@@ -30,6 +30,22 @@ def test_incident_edges_empty_returns_empty_list():
     assert G.incident_edges('A') == []
 
 
+def test_incident_edges_reports_a_hyperedge_that_touches_the_node():
+    """An edge that holds a node is incident to it, whatever shape the edge has.
+
+    ``incident_edges`` used to read the binary endpoint indexes alone, so it left
+    out every hyperedge and disagreed with ``degree`` on the same graph.
+    """
+    G = AnnNet(directed=True)
+    G.add_vertices(['A', 'B', 'C'])
+    G.add_edges('A', 'B', edge_id='binary')
+    G.add_edges([{'members': ['A', 'B', 'C'], 'edge_id': 'hyper'}])
+
+    incident = {view.edge_id for _column, view in G.incident_edges('A')}
+    assert incident == {'binary', 'hyper'}
+    assert len(incident) == G.degree('A')
+
+
 def test_multilayer_add_edges_with_bare_ids_warns_and_falls_back():
     G = AnnNet(directed=False)
     G.layers.set_aspects(['condition'])

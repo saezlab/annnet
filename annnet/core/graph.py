@@ -1755,39 +1755,19 @@ class AnnNet(
         """
         if direction not in {'in', 'out', 'both'}:
             raise ValueError("direction must be 'in', 'out', or 'both'")
-        self._ensure_edge_indexes()
         V = self._normalize_vertices_arg(vertices)
         if not V:
             return []
         seen = set()
         result = []
         for v in V:
-            if direction in {'in', 'both'}:
-                for eid in self._tgt_to_edges.get(v, []):
-                    if eid not in seen:
-                        seen.add(eid)
-                        rec = self._edges.get(eid)
-                        if rec is not None and rec.col_idx >= 0:
-                            result.append((rec.col_idx, self._edge_tuple(eid)))
-            if direction in {'out', 'both'}:
-                for eid in self._src_to_edges.get(v, []):
-                    if eid not in seen:
-                        seen.add(eid)
-                        rec = self._edges.get(eid)
-                        if rec is not None and rec.col_idx >= 0:
-                            result.append((rec.col_idx, self._edge_tuple(eid)))
-            if direction == 'in':
-                secondary = self._src_to_edges.get(v, [])
-            elif direction == 'out':
-                secondary = self._tgt_to_edges.get(v, [])
-            else:
-                secondary = []
-            for eid in secondary:
-                if eid not in seen and not self._is_directed_edge(eid):
-                    seen.add(eid)
-                    rec = self._edges.get(eid)
-                    if rec is not None and rec.col_idx >= 0:
-                        result.append((rec.col_idx, self._edge_tuple(eid)))
+            for eid in _structure.entity_edges(self, v, direction):
+                if eid in seen:
+                    continue
+                seen.add(eid)
+                column = _structure.edge_column(self, eid)
+                if column >= 0:
+                    result.append((column, self._edge_tuple(eid)))
         return result
 
     @property

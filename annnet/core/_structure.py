@@ -23,8 +23,6 @@ from __future__ import annotations
 from typing import NamedTuple
 from collections.abc import Iterator
 
-import numpy as np
-
 from . import _store as ST, _identity as I
 
 # Entity kinds.
@@ -136,7 +134,7 @@ def _slot_key(store, ref):
         return ref
     if store.aspects == ('_',):
         return (ref, ('_',))
-    matches = [key for _slot, key in store.live_entities() if key[0] == ref]
+    matches = store.entity_keys_of_id(ref)
     if len(matches) == 1:
         return matches[0]
     return (ref, ('_',))
@@ -234,11 +232,10 @@ def entity_key_of_row(graph, row: int) -> tuple:
     row belongs to one materialized matrix and to nothing else.
     """
     if is_slot_backed(graph):
-        store = store_of(graph)
-        slots = store.live_entity_slots()
-        if not 0 <= row < slots.size:
+        key = store_of(graph).entity_at_row(row)
+        if key is None:
             raise KeyError(f'No entity at row {row}')
-        return store.entity_key(int(slots[row]))
+        return key
     try:
         return graph._row_to_entity[row]
     except KeyError:
@@ -701,7 +698,7 @@ def entity_row(graph, ref) -> int:
         slot = store.entity_slot(_slot_key(store, ref))
         if slot is None:
             raise KeyError(f'Unknown entity: {ref!r}')
-        return int(np.count_nonzero(store.live_entity_slots() < slot))
+        return store.entity_row(slot)
     return int(graph._entities[_require_entity(graph, ref)].row_idx)
 
 

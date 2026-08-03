@@ -106,11 +106,16 @@ class CoreState:
 
     def __init__(self, *, directed=None, aspects=('_',)):
         self.directed = directed
-        self.aspects = tuple(aspects)
 
         # Identity, both ways.
         self._entity_slot: dict[tuple, int] = {}
         self._entity_key: list = []
+        # Which slots one bare id stands for. A flat graph needs none, because an
+        # id names exactly one entity there. A multilayer graph asks this on every
+        # resolution of a bare id, and a scan over the entities would make that
+        # cost the size of the graph.
+        self._id_slots: dict[str, list] = {}
+        self._aspects = tuple(aspects)
         self._edge_slot: dict[str, int] = {}
         self._edge_id: list = []
 
@@ -169,6 +174,7 @@ class CoreState:
         # edge is its position among the others, and working that out per call
         # would cost a walk over every edge.
         self._structural_cache = None
+        self._rows_cache = None
 
     # -- clock ------------------------------------------------------------
 
@@ -196,6 +202,44 @@ class CoreState:
         """How many entity slots the arrays can address."""
         return len(self._entity_key)
 
+    @property
+    def aspects(self) -> tuple:
+        """The aspects the graph declares, which set the form of an identity."""
+        return self._aspects
+
+    @aspects.setter
+    def aspects(self, value) -> None:
+        """Declare the aspects, and build the bare-id index when one is now needed.
+
+        A flat graph keeps no such index, because an id names one entity there. A
+        graph that declares aspects after it holds entities therefore has to index
+        the entities it already holds.
+        """
+        value = tuple(value)
+        was_flat = self._aspects == ('_',)
+        self._aspects = value
+        if value == ('_',):
+            self._id_slots = {}
+        elif was_flat:
+            self._id_slots = {}
+            for slot, key in self.live_entities():
+                self._id_slots.setdefault(key[0], []).append(slot)
+
+    def entity_slots_of_id(self, entity_id: str) -> list:
+        """Return the slots a bare id stands for, in slot order.
+
+        One in a flat graph, and one per layer the id lives in otherwise.
+        """
+        if self._aspects == ('_',):
+            slot = self._entity_slot.get((entity_id, ('_',)))
+            return [] if slot is None else [slot]
+        return self._id_slots.get(entity_id, [])
+
+    def entity_keys_of_id(self, entity_id: str) -> list:
+        """Return the entity keys a bare id stands for, in slot order."""
+        keys = self._entity_key
+        return [keys[slot] for slot in self.entity_slots_of_id(entity_id)]
+
     def add_entity(self, key: tuple, kind: int = NODE) -> int:
         """Add one entity and return its slot. An existing identity keeps its slot."""
         existing = self._entity_slot.get(key)
@@ -213,6 +257,8 @@ class CoreState:
         self._entity_slot[key] = slot
         self.entity_kind[slot] = kind
         self._entity_edges[slot] = {}
+        if self._aspects != ('_',):
+            self._id_slots.setdefault(key[0], []).append(slot)
         self._note_change()
         return slot
 
@@ -232,6 +278,11 @@ class CoreState:
         self._entity_key[slot] = None
         self.entity_kind[slot] = NODE
         del self._entity_edges[slot]
+        held = self._id_slots.get(key[0])
+        if held is not None:
+            held.remove(slot)
+            if not held:
+                del self._id_slots[key[0]]
         self.entity_free.append(slot)
         for hook in self.entity_freed_hooks:
             hook(slot, key)
@@ -253,6 +304,32 @@ class CoreState:
         for slot, key in enumerate(self._entity_key):
             if key is not None:
                 yield slot, key
+
+    def _rows(self):
+        """Return the row of each live slot and the slot of each row, against the clock.
+
+        A row is the position of an entity among the live ones, which is the
+        address a materialized matrix uses. Working one out per call would walk
+        every entity, and building a matrix asks once per member of every edge.
+        """
+        cached = self._rows_cache
+        if cached is not None and cached[0] == self.structure_version:
+            return cached[1], cached[2]
+        slots = [slot for slot, _key in self.live_entities()]
+        rows = {slot: row for row, slot in enumerate(slots)}
+        self._rows_cache = (self.structure_version, rows, slots)
+        return rows, slots
+
+    def entity_row(self, slot: int) -> int:
+        """Return the row an entity slot occupies in a materialized matrix."""
+        return self._rows()[0][slot]
+
+    def entity_at_row(self, row: int):
+        """Return the entity key at one row, or None when the row holds none."""
+        slots = self._rows()[1]
+        if not 0 <= row < len(slots):
+            return None
+        return self._entity_key[slots[row]]
 
     def live_entity_slots(self) -> np.ndarray:
         """Return the live entity slots in slot order."""

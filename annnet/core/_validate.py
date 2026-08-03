@@ -17,7 +17,7 @@ the end when the caller asks for strict mode.
 
 from __future__ import annotations
 
-from . import _derive as D, _identity as I, _structure as S
+from . import _derive as D, _structure as S
 
 RECORD_STORE = 'records'
 SLOT_STORE = 'slots'
@@ -265,7 +265,7 @@ def _check_coefficients(g, problems) -> None:
             continue
         for node, val in rec.coeffs.items():
             try:
-                r = I.entity_row(g, node)
+                r = S.entity_row(g, node)
             except (KeyError, ValueError, TypeError):
                 problems.append(f'edge {eid!r} coeff node {node!r} not resolvable')
                 continue
@@ -319,6 +319,33 @@ def _check_slot_bijections(store, problems) -> None:
                 problems.append(
                     f'slot {slot} holds {label} {identity!r}, which claims another slot'
                 )
+
+
+def _check_bare_id_index(store, problems) -> None:
+    """The bare-id index names exactly the slots the entities hold.
+
+    A multilayer graph resolves a bare id through this index, so a slot missing
+    from it makes the id resolve to nothing and a stale slot makes it resolve to
+    an entity the store no longer holds. Neither raises on its own.
+    """
+    if store.aspects == ('_',):
+        if store._id_slots:
+            problems.append('a flat store keeps a bare-id index, which it never reads')
+        return
+    expected: dict = {}
+    for slot, key in store.live_entities():
+        expected.setdefault(key[0], []).append(slot)
+    for entity_id, slots in store._id_slots.items():
+        held = expected.get(entity_id)
+        if held is None:
+            problems.append(f'the bare-id index names {entity_id!r}, which no entity carries')
+        elif sorted(slots) != held:
+            problems.append(
+                f'the bare-id index gives {entity_id!r} slots {sorted(slots)}, '
+                f'but its entities hold {held}'
+            )
+    for entity_id in expected.keys() - store._id_slots.keys():
+        problems.append(f'the bare-id index is missing {entity_id!r}')
 
 
 def _check_freelists(store, problems) -> None:
@@ -495,6 +522,7 @@ def _check_clock(store, problems) -> None:
 
 SLOT_CHECKS_IMPL = (
     _check_slot_bijections,
+    _check_bare_id_index,
     _check_freelists,
     _check_member_segments,
     _check_slot_member_liveness,

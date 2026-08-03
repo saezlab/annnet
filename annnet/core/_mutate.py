@@ -430,7 +430,7 @@ def zero_edge_column(g, rec, col_idx):
 
     def _z(node):
         try:
-            r = I.entity_row(g, node)
+            r = S.entity_row(g, node)
             if _fast:
                 _fast(r, col_idx, 0)
             else:
