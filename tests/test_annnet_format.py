@@ -323,13 +323,14 @@ class TestAnnNetIO(unittest.TestCase):
                 }
             )
 
-            # Edge Layers — set directly on EdgeRecord
-            if 'e1' in self.G._edges:
-                self.G._edges['e1'].ml_layers = ('t1', 'bus')
-                self.G._edges['e1'].ml_kind = 'intra'
-            if 'e2' in self.G._edges:
-                self.G._edges['e2'].ml_layers = (('t1', 'bus'), ('t2', 'train'))
-                self.G._edges['e2'].ml_kind = 'inter'
+            # Edge layers and kinds, through the maps the graph exposes so that
+            # every store of the graph learns about the change.
+            if self.G.has_edge(edge_id='e1'):
+                self.G.edge_layers['e1'] = ('t1', 'bus')
+                self.G.edge_kind['e1'] = 'intra'
+            if self.G.has_edge(edge_id='e2'):
+                self.G.edge_layers['e2'] = (('t1', 'bus'), ('t2', 'train'))
+                self.G.edge_kind['e2'] = 'inter'
 
             # Attributes
             self.G.layers._aspect_attrs = {'time': {'unit': 'seconds'}}
@@ -469,10 +470,8 @@ class TestAnnNetIO(unittest.TestCase):
             self.G.elem_layers = {'time': ['t1', 't2']}
 
             # Ensure multilayer state is empty for this test
-            self.G._entities.clear()
-            self.G._row_to_entity.clear()
-            for rec in self.G._edges.values():
-                rec.ml_layers = None
+            self.G.entity_to_idx = {}
+            self.G.edge_layers = dict.fromkeys(self.G.edge_layers)
             self.G.layers._layer_attrs = {}
 
             # 2. Roundtrip

@@ -985,26 +985,21 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
         coo = sp.coo_array((data, (row, col)), shape=shape, dtype=np.float32)
         # CSR is the format the lazy matrix cache uses; building a DOK here just to
         # hand it to the setter meant an O(nnz) Python-dict build on every read.
-        graph._matrix = coo.tocsr()
+        matrix = coo.tocsr()
         incidence_loaded = True
     else:
-        # No stored incidence: defer to a lazy rebuild from records. Fix the
-        # logical shape now so rebuild_matrix knows the extent.
-        if matrix_shape is not None:
-            graph._matrix_shape = tuple(matrix_shape)
-        graph._mark_matrix_dirty()
+        # No stored incidence: defer to a lazy rebuild from records. The install
+        # below fixes the logical shape so the rebuild knows the extent.
+        matrix = None
         incidence_loaded = False
 
     from annnet.core._records import EdgeRecord, EntityRecord
 
     # 2. Entity index — translate layer_id back to tuple coords.
-    # Read columns once and iterate via zip over arrays instead of yielding
-    # one dict per row + a second pass over `_rebuild_entity_indexes`. At UC1
-    # scale (~1.87M supra-nodes) the previous code spent most of read() on
-    # this loop.
-    graph._entities = {}
-    graph._row_to_entity = {}
-    graph._vid_to_ekeys = {}
+    # Read columns once and iterate via zip over arrays instead of yielding one
+    # dict per row. At UC1 scale (~1.87M supra-nodes) the previous code spent
+    # most of read() on this loop.
+    entities: dict = {}
     ent_df = dataframe_read_parquet(path / 'entity_index.parquet')
     try:
         # Polars fast path — direct column access, no per-row dicts.
@@ -1049,19 +1044,10 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
             # over rank normalisation.
             layer_tuple = tuple(stored) if stored is not None else placeholder
             layer_cache[lid] = layer_tuple
-        ekey = (vid, layer_tuple)
-        rec = EntityRecord(row_idx=int(idx), kind=kind or 'vertex')
-        graph._entities[ekey] = rec
-        graph._row_to_entity[rec.row_idx] = ekey
-        bucket = graph._vid_to_ekeys.get(vid)
-        if bucket is None:
-            graph._vid_to_ekeys[vid] = [ekey]
-        else:
-            bucket.append(ekey)
+        entities[(vid, layer_tuple)] = EntityRecord(row_idx=int(idx), kind=kind or 'vertex')
 
     # 3. Edges — merged metadata + endpoint table
-    graph._edges = {}
-    graph._col_to_edge = {}
+    edges: dict = {}
 
     def _reassemble_endpoint(vid, layer_id):
         if vid is None:
@@ -1071,7 +1057,6 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
         layer_tuple = layer_dict.get_layer(int(layer_id))
         return (vid, layer_tuple) if layer_tuple is not None else vid
 
-    binary_specs: list = []  # (eid, col_idx)
     ec = _columns_as_lists(
         dataframe_read_parquet(path / 'edges.parquet'),
         (
@@ -1123,7 +1108,7 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
                 layer_dict.get_layer(int(hyper_lid)) if hyper_lid is not None else None
             )
             # Endpoints come from hyperedge_definitions.parquet; populate later.
-            graph._edges[eid] = EdgeRecord(
+            edges[eid] = EdgeRecord(
                 src=None,
                 tgt=None,
                 weight=weight,
@@ -1151,7 +1136,7 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
                 binary_ml_layers = (src[1], tgt[1])
             else:
                 binary_ml_layers = None
-            graph._edges[eid] = EdgeRecord(
+            edges[eid] = EdgeRecord(
                 src=src,
                 tgt=tgt,
                 weight=weight,
@@ -1162,17 +1147,13 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
                 ml_layers=binary_ml_layers,
                 direction_policy=None,
             )
-            if col_idx >= 0:
-                binary_specs.append((eid, col_idx))
-        if col_idx >= 0:
-            graph._col_to_edge[col_idx] = eid
 
     # 4. Hyperedge member / head / tail
     hyper_path = path / 'hyperedge_definitions.parquet'
     if hyper_path.exists():
         for hrow in dataframe_iter_rows(dataframe_read_parquet(hyper_path)):
             eid = hrow['edge_id']
-            rec = graph._edges.get(eid)
+            rec = edges.get(eid)
             if rec is None:
                 continue
             is_dir = bool(hrow.get('directed', False))
@@ -1199,77 +1180,70 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
         for eid, vid, lid, val in zip(
             cc['edge_id'], cc['entity_id'], cc['layer_id'], cc['coeff'], strict=False
         ):
-            rec = graph._edges.get(eid)
+            rec = edges.get(eid)
             if rec is None:
                 continue
             if rec.coeffs is None:
                 rec.coeffs = {}
             rec.coeffs[_reassemble_endpoint(vid, lid)] = float(val)
-    elif incidence_loaded:
+
+    # 6. Install the whole structure at once. This fills every store the graph
+    # keeps, so a graph read from a file answers exactly as one built by hand.
+    # The adjacency indexes are deferred, because many loads never ask an
+    # adjacency question and the first that does rebuilds them.
+    graph._install_structure(
+        entities=entities,
+        edges=edges,
+        matrix=matrix,
+        matrix_shape=matrix_shape,
+        defer_edge_indexes=True,
+    )
+
+    # 7. Coefficients a legacy file kept only inside its matrix. This needs the
+    # installed structure, because a column names its members by row.
+    if not coeff_path.exists() and incidence_loaded:
         _recover_legacy_coeffs(graph)
-
-    # 6. Adjacency indexes are derived + lazy: defer them so they rebuild from
-    # records on the first query that needs them (many loads never do). This
-    # mirrors the bulk-mutate path and rebuilds the full, consistent set
-    # (including _pair_to_edges) via ensure_edge_indexes, unlike the old manual
-    # loop which built a now-dead _adj and omitted _pair_to_edges.
-    graph._src_to_edges = {}
-    graph._tgt_to_edges = {}
-    graph._pair_to_edges = {}
-    graph._edge_indexes_built = False
-
-
-def _derived_column(rec) -> dict:
-    w = float(rec.weight) if rec.weight is not None else 1.0
-    tv = -w if rec.directed else w
-    out: dict = {}
-    for side, val in ((rec.src, w), (rec.tgt, tv)):
-        if isinstance(side, frozenset):
-            for n in side:
-                out[n] = val
-        elif side is not None:
-            out[side] = val
-    return {n: v for n, v in out.items() if v != 0.0}
 
 
 def _recover_legacy_coeffs(graph) -> None:
-    from annnet.core import _identity as I
+    """Recover the coefficients a legacy file kept only inside its matrix.
 
-    if not graph._edges:
-        return
-    matrix = graph._matrix
+    A file written before the coefficient table existed records an explicit
+    coefficient nowhere else. So a column the edge cannot derive from its weight
+    and its directedness carries one, and the edge takes the column as it stands.
+    """
+    matrix = graph.X()
     if matrix is None:
         return
     csc = matrix.tocsc()
     n_cols = csc.shape[1]
-    for rec in graph._edges.values():
-        col = rec.col_idx
-        if col is None or col < 0 or col >= n_cols:
+    for edge in _structure.iter_edges(graph, include_placeholders=True):
+        column = _structure.edge_column(graph, edge.id)
+        if column < 0 or column >= n_cols:
             continue
-        start, end = int(csc.indptr[col]), int(csc.indptr[col + 1])
+        start, end = int(csc.indptr[column]), int(csc.indptr[column + 1])
         if start == end:
             continue
         stored = {}
-        for row, val in zip(csc.indices[start:end], csc.data[start:end], strict=False):
-            key = graph._row_to_entity.get(int(row))
-            if key is not None and float(val) != 0.0:
-                stored[key] = float(val)
+        for row, value in zip(csc.indices[start:end], csc.data[start:end], strict=False):
+            try:
+                key = _structure.entity_key_of_row(graph, int(row))
+            except KeyError:
+                continue
+            if float(value) != 0.0:
+                stored[key] = float(value)
         if not stored:
             continue
-        # Compare on resolved keys, in float32. Two traps here: endpoints deserialise
-        # bare on a single-aspect graph while matrix rows are always ``(vid, coord)``,
-        # and the matrix is float32 while ``weight`` is a Python float — so an
-        # unresolved or float64 comparison never matches for ordinary weights like
-        # 0.1, and every column would masquerade as stoichiometry.
-        try:
-            derived = {
-                I.resolve_ekey(graph, k): float(np.float32(v))
-                for k, v in _derived_column(rec).items()
-            }
-        except (ValueError, TypeError):
-            derived = None  # ambiguous endpoint: cannot prove the column rebuildable
-        if derived is None or stored != derived:
-            rec.coeffs = stored
+        # Compare in float32. The matrix holds float32 while a weight is a Python
+        # float, so a float64 comparison never matches for an ordinary weight such
+        # as 0.1, and every column would masquerade as stoichiometry.
+        derived = {
+            key: float(np.float32(value))
+            for key, value in _structure.edge_members(graph, edge.id).items()
+            if value != 0.0
+        }
+        if stored != derived:
+            graph._replace_edge_coeffs(edge.id, stored)
 
 
 def _load_tables(graph, path: Path):
@@ -1289,9 +1263,9 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
 
     _UNSET = object()  # sentinel for cache miss
     legacy_flat_vertices = {
-        vertex_id
-        for (vertex_id, coord), rec in graph._entities.items()
-        if rec.kind == 'vertex' and coord == ('_',)
+        ref.id
+        for ref in _structure.iter_entities(graph)
+        if ref.kind == _structure.NODE and ref.layer == ('_',)
     }
 
     metadata = json.loads((path / 'metadata.json').read_text())
@@ -1388,7 +1362,9 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
     # by _load_structure from edges.parquet — rebuild the manifest map here so
     # restore_multilayer_manifest can hand it back to the graph state machine.
     multilayer['edge_kind'] = {
-        eid: rec.ml_kind for eid, rec in graph._edges.items() if rec.ml_kind is not None
+        edge.id: edge.ml_kind
+        for edge in _structure.iter_edges(graph, include_placeholders=True)
+        if edge.ml_kind is not None
     }
 
     if (path / 'elem_layer_attributes.parquet').exists():
@@ -1436,22 +1412,24 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
     # exactly, even when multilayer metadata is declared afterwards.
     if legacy_flat_vertices and graph.aspects:
         placeholder = tuple('_' for _ in graph.aspects)
-        remapped_entities = {}
-        for (vertex_id, coord), rec in graph._entities.items():
-            new_coord = (
-                ('_',) if vertex_id in legacy_flat_vertices and coord == placeholder else coord
-            )
-            remapped_entities[(vertex_id, new_coord)] = rec
-        graph._entities = remapped_entities
+
+        def _stored_key(key):
+            vertex_id, coord = key
+            if vertex_id in legacy_flat_vertices and coord == placeholder:
+                return (vertex_id, ('_',))
+            return key
+
+        graph._remap_entity_keys(
+            {
+                ref.key: (ref.id, ('_',))
+                for ref in _structure.iter_entities(graph)
+                if ref.id in legacy_flat_vertices and ref.layer == placeholder
+            }
+        )
         if graph._state_attrs:
             graph._state_attrs = {
-                (
-                    vertex_id,
-                    ('_',) if vertex_id in legacy_flat_vertices and coord == placeholder else coord,
-                ): attrs
-                for (vertex_id, coord), attrs in graph._state_attrs.items()
+                _stored_key(key): attrs for key, attrs in graph._state_attrs.items()
             }
-        graph._rebuild_entity_indexes()
 
 
 def _load_slices(graph, path: Path, layer_dict: _LayerDict):
@@ -1490,11 +1468,12 @@ def _load_slices(graph, path: Path, layer_dict: _LayerDict):
             vm_slice.append(row['slice_id'])
             vm_bare.append(row['vertex_id'])
             vm_lid.append(row.get('vertex_layer_id'))
-    # Cache layer lookups and use `_vid_to_ekeys` (O(1)) instead of `has_vertex`.
+    # Cache layer lookups, and group the entities by bare id once instead of
+    # asking the graph about each membership row.
     _vlayer_cache: dict = {}
-    vid_index = graph._vid_to_ekeys
+    entities_by_id = _structure.entities_by_id(graph)
     for slice_id, bare, layer_id in zip(vm_slice, vm_bare, vm_lid, strict=False):
-        if bare not in vid_index:
+        if bare not in entities_by_id:
             continue
         if layer_id is None:
             vertex_id = bare
@@ -1526,23 +1505,10 @@ def _load_slices(graph, path: Path, layer_dict: _LayerDict):
             if w is not None:
                 slice_weights.setdefault(lid, {})[eid] = w
 
-    # Attach slice edges directly into the slice record. We skip the public
-    # `slices.add_edges` path because:
-    #   (a) we already loaded vertex memberships explicitly above, so we
-    #       don't need add_edges to re-derive incident vertices; this was
-    #       the hottest per-slice loop in the profile.
-    #   (b) `slices.add_edges` filters out edges with col_idx < 0 (entity
-    #       placeholders), silently dropping them on roundtrip.
-    known_edges = graph._edges
+    # `attach_edges` rather than `add_edges`, because the vertex memberships are
+    # already loaded above and `add_edges` drops an edge that occupies no column.
     for lid, eids in slice_membership.items():
-        slice_rec = graph._slices.get(lid)
-        if slice_rec is None:
-            graph.slices.add(lid)
-            slice_rec = graph._slices[lid]
-        edge_set = slice_rec['edges']
-        for eid in eids:
-            if eid in known_edges:
-                edge_set.add(eid)
+        graph.slices.attach_edges(lid, eids)
 
     # Per-slice edge weights (preserve overrides) — bulk-update via the
     # public attrs API so the slice_edge_weights cache and the

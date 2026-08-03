@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 from pathlib import Path
 from binascii import Error as BinasciiError
 
-from ..core import EntityRecord, _structure
+from ..core import _structure
 from ._common import (
     STORED_EDGE_KIND,
     _rows_to_df,
@@ -868,16 +868,13 @@ def from_cx2(
         if v_rows:
             G.vertex_attributes = _rows_to_df(v_rows)
         if vmeta.get('types'):
+            kinds = {}
             for vid, kind in vmeta['types'].items():
                 try:
-                    ekey = G._resolve_entity_key(vid)
+                    kinds[G._resolve_entity_key(vid)] = kind
                 except (KeyError, TypeError, ValueError):
                     continue
-                if ekey in G._entities:
-                    G._entities[ekey].kind = kind
-                else:
-                    row_idx = max(G._row_to_entity.keys(), default=-1) + 1
-                    G._register_entity_record(ekey, EntityRecord(row_idx=row_idx, kind=kind))
+            G._set_entity_kinds(kinds)
 
         # --- Edges + hyperedges ---
         emeta = manifest.get('edges', {})
@@ -961,11 +958,10 @@ def from_cx2(
         # --- Layers (Kivela): edge_kind + edge_layers (edges now exist) ---
         kiv = emeta.get('kivela', {})
         for eid, kind in (kiv.get('edge_kind') or {}).items():
-            rec = G._edges.get(eid)
-            if rec is not None and kind != 'hyper':
-                rec.ml_kind = kind
+            if kind != 'hyper' and _structure.has_edge(G, eid):
+                G._set_edge_field(eid, 'ml_kind', kind)
         for eid, val in (kiv.get('edge_layers') or {}).items():
-            if eid in G._edges:
+            if _structure.has_edge(G, eid):
                 G.edge_layers[eid] = val
 
         # --- Slices ---

@@ -220,15 +220,7 @@ def restore_multilayer_manifest(
         if elem_layers and not same_aspects:
             graph.layers.set_elementary_layers(elem_layers)
         elif elem_layers:
-            # Augment existing layer values without going through
-            # set_elementary_layers — that helper calls
-            # _drop_unused_placeholder_layers, which would strip the '_'
-            # placeholder if no entity has the multi-aspect placeholder
-            # coord, breaking subsequent _make_layer_coord validation.
-            for aspect, values in elem_layers.items():
-                if aspect in graph._layers:
-                    graph._layers[aspect].update(values)
-            graph.layers._rebuild_all_layers_cache()
+            graph.layers.augment_elementary_layers(elem_layers)
         # Ensure '_' is available per aspect; legacy graphs may have stored
         # entities at single-aspect ('_',) coords on a multi-aspect graph.
         graph._ensure_placeholder_layers_declared()
@@ -265,7 +257,9 @@ def restore_multilayer_manifest(
             continue
         vm_by_layer.setdefault(layer_tuple, []).append(vid)
 
-    entities = graph._entities
+    # One snapshot of the node-layer keys, kept up to date as vertices are added,
+    # so no membership test costs a query.
+    node_keys = graph._VM
     placeholder = tuple('_' for _ in graph.aspects)
     single_placeholder = ('_',)
     for layer_tuple, vids in vm_by_layer.items():
@@ -277,12 +271,13 @@ def restore_multilayer_manifest(
             missing = [
                 v
                 for v in vids
-                if (v, layer_tuple) not in entities and (v, single_placeholder) not in entities
+                if (v, layer_tuple) not in node_keys and (v, single_placeholder) not in node_keys
             ]
         else:
-            missing = [v for v in vids if (v, layer_tuple) not in entities]
+            missing = [v for v in vids if (v, layer_tuple) not in node_keys]
         if missing:
             graph._add_vertices_bulk(missing, layer=layer_tuple)
+            node_keys.update((v, layer_tuple) for v in missing)
 
     # Drop spurious placeholder node-layers. Readers add vertices flat (before
     # aspects/VM are known), landing them at the ('_', ...) placeholder; the VM
@@ -291,12 +286,10 @@ def restore_multilayer_manifest(
     # lives at a real layer and that the manifest never listed at the placeholder
     # — but only when it is a true orphan (no incident edges), so a genuine
     # placeholder-anchored vertex/edge is never disturbed.
-    entities = graph._entities
     legit_placeholder = set(vm_by_layer.get(placeholder, ()))
     by_vid: dict = {}
-    for (u, aa), rec in entities.items():
-        if rec.kind == 'vertex':
-            by_vid.setdefault(u, []).append(aa)
+    for u, aa in node_keys:
+        by_vid.setdefault(u, []).append(aa)
     candidates = [
         (u, placeholder)
         for u, layers in by_vid.items()
@@ -305,14 +298,10 @@ def restore_multilayer_manifest(
         and any(a != placeholder for a in layers)
     ]
     if candidates:
-        indptr = graph._get_csr().indptr
-        drop = {
-            ek
-            for ek in candidates
-            if indptr[entities[ek].row_idx + 1] == indptr[entities[ek].row_idx]
-        }
+        drop = {ek for ek in candidates if graph.degree(ek) == 0}
         if drop:
             graph._remove_orphan_node_layers(drop)
+            node_keys -= drop
 
     for eid, kind in manifest.get('edge_kind', {}).items():
         if graph.has_edge(edge_id=eid):
@@ -336,7 +325,7 @@ def restore_multilayer_manifest(
         attrs = row.get('attributes') or row.get('attrs') or {}
         if vid is None or not layer_tuple or not attrs:
             continue
-        if (vid, layer_tuple) not in entities:
+        if (vid, layer_tuple) not in node_keys:
             continue
         bucket = state_attrs.get((vid, layer_tuple))
         if bucket is None:

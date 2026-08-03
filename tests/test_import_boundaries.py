@@ -41,21 +41,10 @@ PRIVATE_STORE_FIELDS = frozenset(
     if name.startswith('_')
 )
 
-# Functions that still touch the canonical store from outside the core. Each one
-# rebuilds a graph from a file or from another library, so it constructs the store
-# rather than querying it. The new store gives them a proper entry point and this
-# list then goes away. Nothing may join it.
-STORE_RESTORE_LEDGER = frozenset(
-    {
-        'annnet.io.annnet_format:_load_structure',
-        'annnet.io.annnet_format:_recover_legacy_coeffs',
-        'annnet.io.annnet_format:_load_multilayers',
-        'annnet.io.annnet_format:_load_slices',
-        'annnet.io.cx2:from_cx2',
-        'annnet.adapters.graphtool_adapter:from_graphtool',
-        'annnet._support.serialization:restore_multilayer_manifest',
-    }
-)
+# Functions that still touch the canonical store from outside the core. The list
+# is empty, and it stays empty: a reader reaches structure through the facade and
+# writes it through the doors the graph exposes. Nothing may join it.
+STORE_RESTORE_LEDGER: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

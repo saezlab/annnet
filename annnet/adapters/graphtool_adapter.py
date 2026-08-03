@@ -21,6 +21,7 @@ try:
 except ImportError:
     gt = None
 
+from ..core import _structure
 from ._common import (
     _rows_to_df,
     empty_dataframe,
@@ -340,9 +341,8 @@ def from_graphtool(
     e_directed = emeta.get('directed', {})
     if e_directed:
         for eid, val in e_directed.items():
-            rec = G._edges.get(eid)
-            if rec is not None:
-                rec.directed = bool(val)
+            if _structure.has_edge(G, eid):
+                G._set_edge_field(eid, 'directed', bool(val))
 
     e_dir_policy = emeta.get('direction_policy', {})
     if e_dir_policy:
@@ -352,8 +352,7 @@ def from_graphtool(
     if hyperedges:
         hyperedge_bulk = []
         for eid, meta in hyperedges.items():
-            rec = G._edges.get(eid)
-            if rec is None:
+            if not _structure.has_edge(G, eid):
                 payload = {
                     'edge_id': eid,
                     'edge_directed': bool(meta.get('directed', False)),
@@ -366,15 +365,10 @@ def from_graphtool(
                     payload['members'] = list(meta.get('members', []))
                 hyperedge_bulk.append(payload)
                 continue
-            rec.etype = 'hyper'
             if meta.get('directed'):
-                rec.src = list(meta.get('head', []))
-                rec.tgt = list(meta.get('tail', []))
-                rec.directed = True
+                G._set_hyperedge_members(eid, head=meta.get('head', []), tail=meta.get('tail', []))
             else:
-                rec.src = list(meta.get('members', []))
-                rec.tgt = None
-                rec.directed = False
+                G._set_hyperedge_members(eid, members=meta.get('members', []))
         if hyperedge_bulk:
             G.add_hyperedges_bulk(hyperedge_bulk)
 
@@ -384,13 +378,8 @@ def from_graphtool(
         el_ser = kivela_edge.get('edge_layers', {})
         if ek:
             for eid, kind in ek.items():
-                rec = G._edges.get(eid)
-                if rec is None:
-                    continue
-                if kind == 'hyper':
-                    rec.etype = 'hyper'
-                else:
-                    rec.ml_kind = kind
+                if _structure.has_edge(G, eid):
+                    G.edge_kind[eid] = kind
         if el_ser:
             G.edge_layers.update(deserialize_edge_layers(el_ser))
 
