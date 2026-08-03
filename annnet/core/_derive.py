@@ -5,7 +5,8 @@ from __future__ import annotations
 import numpy as np
 import scipy.sparse as sp
 
-from ._structure import member_entries
+from . import _matrices
+from ._structure import store_of, is_slot_backed, member_entries
 
 # ---------------------------------------------------------------------------
 # Incidence matrix capacity + cache invalidation
@@ -50,12 +51,21 @@ def set_matrix_shape(g, shape) -> None:
 
 
 def rebuild_matrix(g):
-    """Materialize the incidence matrix (CSR) from canonical edge records.
+    """Materialize the incidence matrix (CSR) from the canonical store.
 
-    Records are the complete source of truth. ``_structure.member_entries``
-    turns one record into its incidence column, and this function places those
-    columns into one sparse matrix. The two therefore never disagree.
+    The member lists of the slot store already are an incidence matrix in
+    compressed form, so building one there is a gather over its arrays rather
+    than a pass over every member of every edge in Python.
+
+    The record path below is the same matrix built one record at a time. It
+    differs on a self-loop: the member list holds the two roles of the node
+    separately and they sum to zero, where a record holds one entry per endpoint
+    and the target overwrites the source. Zero is what a signed incidence means,
+    so the store answer is the one the package keeps.
     """
+    if is_slot_backed(g):
+        return _matrices.structural_incidence(store_of(g), shape=g._matrix_shape)
+
     shape = g._matrix_shape
     entity_row = g._entity_row
     rows: list = []

@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 from annnet.core import _matrices as M, _store as ST
+from annnet.core.graph import AnnNet
 
 FLAT = ('_',)
 
@@ -224,3 +225,44 @@ def test_the_laplacian_follows_the_adjacency(store):
     )
     laplacian = M.laplacian(store).matrix
     assert np.allclose(np.asarray(laplacian.todense()).sum(axis=1), 0.0)
+
+
+# ---------------------------------------------------------------------------
+# The matrix the graph exposes applies the same rules
+# ---------------------------------------------------------------------------
+# The graph builds ``X()`` from the member lists, so the rules above are the ones
+# a user sees. The record core answered differently on a self-loop, which is the
+# defect this file names, so these graphs are built on the slot store by name.
+
+
+def graph():
+    """A directed graph with a self-loop next to a plain edge."""
+    G = AnnNet(store='slots', directed=True)
+    G.add_vertices(['A', 'B'])
+    G.add_edges('A', 'A', edge_id='e_loop', weight=0.5)
+    G.add_edges('A', 'B', edge_id='e_ab', weight=1.0)
+    return G
+
+
+def test_the_graph_matrix_cancels_the_two_entries_of_a_self_loop():
+    G = graph()
+    column = _column(G.X().tocsc(), G.idx.edge_to_col('e_loop'))
+    assert column == {}, 'the two entries of a self-loop cancel in the incidence matrix'
+
+
+def test_the_graph_matrix_keeps_the_plain_edge_beside_it():
+    G = graph()
+    column = _column(G.X().tocsc(), G.idx.edge_to_col('e_ab'))
+    assert column == {
+        G.idx.entity_to_row('A'): pytest.approx(1.0),
+        G.idx.entity_to_row('B'): pytest.approx(-1.0),
+    }
+
+
+def test_a_placeholder_edge_occupies_no_column_of_the_graph_matrix():
+    G = graph()
+    rows, columns = G.X().shape
+    G._ensure_edge_entity_placeholder('e_later')
+    # The placeholder is an entity the graph now knows, so it takes a row. It
+    # holds no members, so it takes no column.
+    assert G.X().shape == (rows + 1, columns)

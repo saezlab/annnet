@@ -63,12 +63,24 @@ def _row_lookup(store) -> tuple[np.ndarray, np.ndarray]:
     return slots, lookup
 
 
-def _selected_edge_slots(store, kinds) -> np.ndarray:
-    slots = store.live_edge_slots()
-    if kinds is None or slots.size == 0:
+def _selected(store, slots: np.ndarray, kinds) -> np.ndarray:
+    """Return the subset of ``slots`` that belongs in a matrix over ``kinds``.
+
+    A placeholder edge is an id the graph knows before the edge exists. It holds
+    no members and occupies no column, so it is never one of these, and asking
+    for every kind still leaves it out.
+    """
+    if slots.size == 0:
         return slots
+    if kinds is None:
+        return slots[store.edge_kind[slots] != ST.PLACEHOLDER]
     wanted = np.asarray(tuple(kinds), dtype=np.uint8)
     return slots[np.isin(store.edge_kind[slots], wanted)]
+
+
+def _selected_edge_slots(store, kinds) -> np.ndarray:
+    """Return the edge slots a matrix is built over, in slot order."""
+    return _selected(store, store.live_edge_slots(), kinds)
 
 
 def _gather_members(store, edge_slots: np.ndarray):
@@ -125,6 +137,36 @@ def incidence(store, *, kinds=None, signed: bool = True) -> MatrixView:
     matrix = sp.coo_array((data, (rows, columns)), shape=shape).tocsc()
     matrix.eliminate_zeros()
     return _view(store, matrix, entity_slots, edge_slots, row_lookup)
+
+
+def structural_incidence(store, shape=None):
+    """Materialize the signed incidence matrix of the structural edges, in CSR.
+
+    This is the matrix the graph exposes as ``X()``. A row is an entity and a
+    column is a structural edge, both in the order the store gives them, so the
+    positions agree with the ones the query facade answers with.
+
+    ``shape`` is the logical extent the graph declares. A graph built with a
+    declared size holds rows and columns that nothing occupies yet, and a caller
+    that was handed such a position indexes by it, so the result is padded out to
+    that extent. It is never trimmed below what the store holds.
+
+    Unlike :func:`incidence`, this returns the matrix alone. The graph maps
+    identity to position through the store, not through a view.
+    """
+    entity_slots, row_lookup = _row_lookup(store)
+    edge_slots = _selected_edge_slots(store, None)
+    entities, coefficients, _roles, columns = _gather_members(store, edge_slots)
+    height, width = int(entity_slots.size), int(edge_slots.size)
+    if shape is not None:
+        height = max(height, int(shape[0]))
+        width = max(width, int(shape[1]))
+    matrix = sp.coo_array(
+        (coefficients.astype(np.float32), (row_lookup[entities], columns)),
+        shape=(height, width),
+    ).tocsr()
+    matrix.eliminate_zeros()
+    return matrix
 
 
 def _adjacency_pairs(store, edge_slots: np.ndarray, row_lookup: np.ndarray):
@@ -404,10 +446,7 @@ class MatrixCache:
         def extend(entry, appended):
             store = self._store
             buffer, row_lookup = entry.buffer
-            selected = appended
-            if kinds is not None and selected.size:
-                wanted = np.asarray(tuple(kinds), dtype=np.uint8)
-                selected = selected[np.isin(store.edge_kind[selected], wanted)]
+            selected = _selected(store, appended, kinds)
             if selected.size == 0:
                 return entry
             view = entry.view
