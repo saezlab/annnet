@@ -164,6 +164,12 @@ class CoreState:
         self.append_log: list[int] = []
         self.append_log_from_version = 0
 
+        # The structural edges and their columns, against the clock they were
+        # read at. A placeholder edge occupies no column, so the column of an
+        # edge is its position among the others, and working that out per call
+        # would cost a walk over every edge.
+        self._structural_cache = None
+
     # -- clock ------------------------------------------------------------
 
     def _bump(self) -> int:
@@ -369,6 +375,30 @@ class CoreState:
         for hook in self.edge_freed_hooks:
             hook(slot, edge_id)
         self._note_change()
+
+    def structural_edges(self) -> list:
+        """Return the ``(slot, edge_id)`` pairs that carry structure, in slot order.
+
+        A placeholder edge is an id the graph knows before the edge exists. It
+        holds no members and occupies no column, so it is not one of these.
+        """
+        return self._structural()[0]
+
+    def structural_column(self, slot: int) -> int:
+        """Return the column an edge slot occupies, or -1 when it carries none."""
+        return self._structural()[1].get(slot, -1)
+
+    def _structural(self):
+        cached = self._structural_cache
+        if cached is not None and cached[0] == self.structure_version:
+            return cached[1], cached[2]
+        kinds = self.edge_kind.tolist()
+        pairs = [
+            (slot, edge_id) for slot, edge_id in self.live_edges() if kinds[slot] != PLACEHOLDER
+        ]
+        columns = {slot: column for column, (slot, _id) in enumerate(pairs)}
+        self._structural_cache = (self.structure_version, pairs, columns)
+        return pairs, columns
 
     def edge_slot(self, edge_id: str):
         """Return the slot of an edge id, or None when the store has no such edge."""

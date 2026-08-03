@@ -181,12 +181,12 @@ def _slot_carries_structure(store, slot) -> bool:
 
 
 def _slot_structural_edges(store) -> list:
-    """Return the ``(slot, edge_id)`` pairs that carry structure, in slot order."""
-    return [
-        (slot, edge_id)
-        for slot, edge_id in store.live_edges()
-        if _slot_carries_structure(store, slot)
-    ]
+    """Return the ``(slot, edge_id)`` pairs that carry structure, in slot order.
+
+    The store keeps this against its clock, because the column of an edge is its
+    position among these and a caller asks for one column at a time.
+    """
+    return store.structural_edges()
 
 
 def _slot_require_edge(store, edge_id: str) -> int:
@@ -680,10 +680,7 @@ def edge_column(graph, edge_id: str) -> int:
     """
     if is_slot_backed(graph):
         store = store_of(graph)
-        slot = _slot_require_edge(store, edge_id)
-        if not _slot_carries_structure(store, slot):
-            return -1
-        return sum(1 for other, _id in _slot_structural_edges(store) if other < slot)
+        return store.structural_column(_slot_require_edge(store, edge_id))
     return int(_require_edge(graph, edge_id).col_idx)
 
 
