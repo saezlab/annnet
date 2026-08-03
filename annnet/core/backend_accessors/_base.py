@@ -6,6 +6,7 @@ from functools import lru_cache
 from importlib import import_module
 from collections.abc import Callable
 
+from .. import _structure
 from ..._support.dataframe_backend import dataframe_columns, dataframe_to_rows, dataframe_filter_eq
 
 if TYPE_CHECKING:
@@ -43,21 +44,18 @@ class _BackendAccessorBase:
     def _vertex_row_maps(self):
         id_to_row = {}
         row_to_id = {}
-        for ekey, rec in self._G._entities.items():
-            if rec.kind != 'vertex':
+        for ref in _structure.iter_entities(self._G):
+            if ref.kind != _structure.NODE:
                 continue
-            vid = ekey[0]
-            id_to_row[vid] = rec.row_idx
-            row_to_id[rec.row_idx] = vid
+            row = _structure.entity_row(self._G, ref.key)
+            id_to_row[ref.id] = row
+            row_to_id[row] = ref.id
         return id_to_row, row_to_id
 
     def _vertex_row_to_id(self, row_idx: int):
         try:
-            ekey = self._G._row_to_entity.get(row_idx)
-            if ekey is None:
-                return None
-            rec = self._G._entities.get(ekey)
-            if rec is None or rec.kind != 'vertex':
+            ekey = _structure.entity_key_of_row(self._G, row_idx)
+            if _structure.entity_ref(self._G, ekey).kind != _structure.NODE:
                 return None
             return ekey[0]
         except Exception:  # noqa: BLE001
@@ -184,7 +182,10 @@ class _BackendAccessorBase:
 
         msgs = []
         if (
-            any(rec.etype == 'hyper' for rec in self._G._edges.values())
+            any(
+                ref.kind == _structure.HYPER
+                for ref in _structure.iter_edges(self._G, include_placeholders=True)
+            )
             and hyperedge_mode != 'expand'
         ):
             msgs.append("hyperedges dropped (hyperedge_mode='skip')")

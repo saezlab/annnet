@@ -674,6 +674,22 @@ def edge_coefficients(graph, edge_id: str):
     return dict(record.coeffs)
 
 
+def edge_policies(graph) -> dict:
+    """Return the flexible-direction policy of every edge that carries one.
+
+    A policy resolves the direction of an edge from an attribute rather than from
+    a fixed flag. Most edges carry none, so the result names only those that do.
+    """
+    if is_slot_backed(graph):
+        store = store_of(graph)
+        return {store.edge_id(slot): policy for slot, policy in store.edge_policy.items() if policy}
+    return {
+        edge_id: record.direction_policy
+        for edge_id, record in graph._edges.items()
+        if record.direction_policy is not None
+    }
+
+
 def entity_row(graph, ref) -> int:
     """Return the row an entity occupies in the materialized matrix.
 

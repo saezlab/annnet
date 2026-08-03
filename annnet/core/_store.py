@@ -280,6 +280,7 @@ class CoreState:
         explicit_coefficients: bool = False,
         ml_kind=None,
         ml_layers=None,
+        direction_policy=None,
     ) -> int:
         """Add one edge with its member list and return its slot.
 
@@ -319,6 +320,8 @@ class CoreState:
             self.edge_ml_kind[slot] = ml_kind
         if ml_layers is not None:
             self.edge_ml_layers[slot] = ml_layers
+        if direction_policy is not None:
+            self.edge_policy[slot] = direction_policy
 
         count = len(entity_slots)
         start = self._member_used

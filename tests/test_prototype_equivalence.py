@@ -187,6 +187,7 @@ def _snapshot(store):
         'edges': S.edge_ids(store),
         'sides': {eid: S.edge_sides(store, eid) for eid in S.edge_ids(store)},
         'members': {eid: S.edge_members(store, eid) for eid in S.edge_ids(store)},
+        'policies': S.edge_policies(store),
     }
 
 

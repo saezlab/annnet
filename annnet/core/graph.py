@@ -72,8 +72,12 @@ def _is_hyper_item(item) -> bool:
     return False
 
 
-class _EdgeRecordFieldMap(MutableMapping):
-    """Mutable mapping view over one field on ``AnnNet._edges`` records."""
+class _EdgeFieldMap(MutableMapping):
+    """Mutable mapping view over one field of every edge of a graph.
+
+    It reads through the facade and writes through the gateway, so it knows
+    nothing about which store holds the field.
+    """
 
     def __init__(self, graph, field_name, *, include, getter=None, setter=None):
         self._graph = graph
@@ -83,14 +87,14 @@ class _EdgeRecordFieldMap(MutableMapping):
         self._setter = setter
 
     def __getitem__(self, key):
-        rec = self._graph._edges[key]
-        value = getattr(rec, self._field_name)
-        if not self._include(rec, value):
+        ref = _structure.edge_ref(self._graph, key)
+        value = getattr(ref, self._field_name)
+        if not self._include(ref, value):
             raise KeyError(key)
-        return self._getter(rec, value) if self._getter else value
+        return self._getter(ref, value) if self._getter else value
 
     def __setitem__(self, key, value):
-        if key not in self._graph._edges:
+        if not _structure.has_edge(self._graph, key):
             raise KeyError(key)
         if self._setter:
             self._setter(self._graph, key, value)
@@ -98,15 +102,15 @@ class _EdgeRecordFieldMap(MutableMapping):
             _mutate.set_edge_field(self._graph, key, self._field_name, value)
 
     def __delitem__(self, key):
-        if key not in self._graph._edges:
+        if not _structure.has_edge(self._graph, key):
             raise KeyError(key)
         _mutate.set_edge_field(self._graph, key, self._field_name, None)
 
     def __iter__(self):
-        for eid, rec in self._graph._edges.items():
-            value = getattr(rec, self._field_name)
-            if self._include(rec, value):
-                yield eid
+        for ref in _structure.iter_edges(self._graph, include_placeholders=True):
+            value = getattr(ref, self._field_name)
+            if self._include(ref, value):
+                yield ref.id
 
     def __len__(self):
         return sum(1 for _ in self.__iter__())
@@ -2455,20 +2459,18 @@ class AnnNet(
         self._rebuild_all_layers_cache()
 
     # -------------------------------------------------------------------------
-    # Computed read properties — derived from _entities / _edges / _col_to_edge
-    # Mutation must go through the record fields directly:
-    #   self._edges[eid].ml_layers = val
-    #   self._edges[eid].weight = float(val)
-    #   self._edges[eid].direction_policy = val
+    # Computed read properties. Each answers from the facade, so a map of one
+    # edge field costs no knowledge of which store holds it. Mutation goes
+    # through the gateway, which is what keeps every store of the graph in step.
     # -------------------------------------------------------------------------
 
     @property
     def edge_layers(self) -> dict:
         """edge_id -> ml_layers for all edges that have a layer assignment."""
-        return _EdgeRecordFieldMap(
+        return _EdgeFieldMap(
             self,
             'ml_layers',
-            include=lambda _rec, value: value is not None,
+            include=lambda _ref, value: value is not None,
         )
 
     @edge_layers.setter
@@ -2480,11 +2482,11 @@ class AnnNet(
     @property
     def edge_kind(self) -> dict:
         """edge_id -> kind (hyper edges use 'hyper'; others use ml_kind)."""
-        return _EdgeRecordFieldMap(
+        return _EdgeFieldMap(
             self,
             'ml_kind',
-            include=lambda rec, value: rec.etype == 'hyper' or value is not None,
-            getter=lambda rec, value: 'hyper' if rec.etype == 'hyper' else value,
+            include=lambda ref, value: ref.kind == _structure.HYPER or value is not None,
+            getter=lambda ref, value: 'hyper' if ref.kind == _structure.HYPER else value,
             setter=_mutate.set_edge_kind,
         )
 
@@ -2626,11 +2628,7 @@ class AnnNet(
     @property
     def edge_direction_policy(self) -> dict:
         """edge_id -> direction_policy for edges that have one set."""
-        return {
-            eid: rec.direction_policy
-            for eid, rec in self._edges.items()
-            if rec.direction_policy is not None
-        }
+        return _structure.edge_policies(self)
 
     @edge_direction_policy.setter
     def edge_direction_policy(self, mapping):

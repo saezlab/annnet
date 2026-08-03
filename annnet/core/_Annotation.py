@@ -656,9 +656,11 @@ class AttributesClass:
         pol = self.edge_direction_policy.get(edge_id)
         if not pol:
             return
-        _rec = self._edges[edge_id]
-        src, tgt = _rec.src, _rec.tgt
-        w = float(_rec.weight if _rec.weight is not None else 1.0)
+        ref = _structure.edge_ref(self, edge_id)
+        sides = _structure.edge_sides(self, edge_id)
+        src = next(iter(sides.source), None)
+        tgt = next(iter(sides.target), None)
+        w = float(ref.weight if ref.weight is not None else 1.0)
 
         var = pol['var']
         T = float(pol['threshold'])
@@ -689,7 +691,9 @@ class AttributesClass:
             coeffs = {src: sval}
             if src != tgt:
                 coeffs[tgt] = tval
-            _rec.coeffs = coeffs
+            from . import _mutate
+
+            _mutate.replace_edge_coeffs(self, edge_id, coeffs)
             self._mark_matrix_dirty()
             self._invalidate_sparse_caches()
 

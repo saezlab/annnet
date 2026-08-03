@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import inspect
 
+from .. import _structure
 from ._base import _cached_signature, _BackendAccessorBase
 
 if TYPE_CHECKING:
@@ -145,7 +146,7 @@ class _GTBackendAccessor(_BackendAccessorBase):
         if cached is not None and cached[0] is gtG:
             return cached[1], cached[2]
         id_map = self._build_id_map(gtG)
-        vertex_ids = {ekey[0] for ekey, rec in self._G._entities.items() if rec.kind == 'vertex'}
+        vertex_ids = set(_structure.node_ids(self._G))
         self._vertex_maps_cache = (gtG, id_map, vertex_ids)
         return id_map, vertex_ids
 

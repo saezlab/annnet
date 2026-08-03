@@ -93,6 +93,7 @@ def sync_edge(g, edge_id) -> None:
         explicit_coefficients=coefficients is not None,
         ml_kind=record.ml_kind,
         ml_layers=record.ml_layers,
+        direction_policy=record.direction_policy,
     )
 
 
@@ -700,9 +701,12 @@ def add_edge(
     elif propagate == 'all':
         propagate_to_all_slices(g, edge_id, src_store, tgt_store)
 
-    # 14. Flexible direction
+    # 14. Flexible direction. The policy reads the edge back, so the store has to
+    # hold it before the hook runs. The decorator writes it only once this call
+    # returns, which is too late for a caller inside the call.
     if flexible is not None:
         _edg[edge_id].directed = True
+        sync_edge(g, edge_id)
         g._apply_flexible_direction(edge_id)
 
     # 15. Attributes + ensure var row
