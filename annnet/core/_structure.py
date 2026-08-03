@@ -388,11 +388,7 @@ def node_keys(graph) -> list:
     if len(index) == len(records):
         # One pass. Going through ``entity_keys`` would build the whole key list
         # first and then walk it again to drop the edge entities.
-        return [
-            key
-            for row in range(len(index))
-            if records[key := index[row]].kind == 'vertex'
-        ]
+        return [key for row in range(len(index)) if records[key := index[row]].kind == 'vertex']
     return [key for key in entity_keys(graph) if records[key].kind == 'vertex']
 
 
