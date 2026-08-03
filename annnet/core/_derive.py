@@ -165,6 +165,14 @@ def rebuild_edge_indexes(g) -> None:
     g._edge_indexes_built = True
 
 
+def clear_edge_indexes(g) -> None:
+    """Drop the adjacency-derived edge indexes so the first query rebuilds them."""
+    g._src_to_edges = {}
+    g._tgt_to_edges = {}
+    g._pair_to_edges = {}
+    g._edge_indexes_built = False
+
+
 def ensure_edge_indexes(g) -> None:
     """Materialize adjacency-derived edge indexes on demand."""
     if not getattr(g, '_edge_indexes_built', True):

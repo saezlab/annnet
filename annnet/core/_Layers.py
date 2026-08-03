@@ -234,6 +234,19 @@ class LayerAccessor:
         self._rebuild_all_layers_cache()
         self._drop_unused_placeholder_layers()
 
+    def augment_elementary_layers(self, layers_by_aspect: dict[str, list[str]]):
+        """Add layer values to the aspects the graph already declares.
+
+        This is not :meth:`set_elementary_layers`, because that helper drops an
+        unused placeholder layer. A restore needs the ``'_'`` placeholder to
+        survive, or a coordinate the file stored against it stops validating.
+        An aspect the graph does not declare is ignored.
+        """
+        for aspect, values in layers_by_aspect.items():
+            if aspect in self._layers:
+                self._layers[aspect].update(values)
+        self._rebuild_all_layers_cache()
+
     def _rebuild_all_layers_cache(self):
         if not self.aspects:
             self._all_layers = ()

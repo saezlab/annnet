@@ -7,7 +7,7 @@ from collections.abc import Iterable, Iterator, MutableMapping
 
 import numpy as np
 
-from . import _state, _store, _derive, _mutate, _identity, _validate, _structure
+from . import _build, _state, _store, _derive, _mutate, _identity, _validate, _structure
 from ._Ops import Operations, OperationsAccessor
 from ._Views import GraphView, ViewsClass, ViewsAccessor
 from ._Layers import LayerAccessor
@@ -630,6 +630,29 @@ class AnnNet(
 
     def _remove_entity_record(self, *args, **kwargs):
         return _mutate.remove_entity_record(self, *args, **kwargs)
+
+    # The doors a reader uses. A reader rebuilds a whole graph from a file or from
+    # another library, so it writes structure rather than querying it, and the
+    # structural query facade has no answer for that. Each of these installs or
+    # changes canonical state and keeps every store of the graph in step.
+
+    def _install_structure(self, *args, **kwargs):
+        return _build.install_structure(self, *args, **kwargs)
+
+    def _set_entity_kinds(self, *args, **kwargs):
+        return _mutate.set_entity_kinds(self, *args, **kwargs)
+
+    def _remap_entity_keys(self, *args, **kwargs):
+        return _mutate.remap_entity_keys(self, *args, **kwargs)
+
+    def _set_edge_field(self, *args, **kwargs):
+        return _mutate.set_edge_field(self, *args, **kwargs)
+
+    def _set_hyperedge_members(self, *args, **kwargs):
+        return _mutate.set_hyperedge_members(self, *args, **kwargs)
+
+    def _replace_edge_coeffs(self, *args, **kwargs):
+        return _mutate.replace_edge_coeffs(self, *args, **kwargs)
 
     def _rebuild_entity_indexes(self, *args, **kwargs):
         return _derive.rebuild_entity_indexes(self, *args, **kwargs)

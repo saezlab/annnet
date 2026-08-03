@@ -71,16 +71,34 @@ def slices_from_specs(specs) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def install_structure(g, *, entities, edges, matrix) -> None:
-    """Install canonical structural state on ``g`` and rebuild every derived index."""
+def install_structure(
+    g, *, entities, edges, matrix, matrix_shape=None, defer_edge_indexes=False
+) -> None:
+    """Install canonical structural state on ``g`` and rebuild every derived index.
+
+    Pass ``matrix=None`` when the caller holds no materialized matrix. The matrix
+    then rebuilds from the records on the first read, and ``matrix_shape`` tells
+    that rebuild how large the graph is.
+
+    Set ``defer_edge_indexes`` when most callers never ask an adjacency question.
+    The indexes then build on the first query that needs one.
+    """
     from . import _mutate
 
     g._entities = entities
     g._edges = edges
-    g._matrix = matrix
+    if matrix is None:
+        if matrix_shape is not None:
+            D.set_matrix_shape(g, matrix_shape)
+        g._mark_matrix_dirty()
+    else:
+        g._matrix = matrix
     D.rebuild_entity_indexes(g)  # _row_to_entity, _vid_to_ekeys
     D.rebuild_col_index(g)  # _col_to_edge
-    D.rebuild_edge_indexes(g)  # _src_to_edges, _tgt_to_edges, _pair_to_edges
+    if defer_edge_indexes:
+        D.clear_edge_indexes(g)  # _src_to_edges, _tgt_to_edges, _pair_to_edges
+    else:
+        D.rebuild_edge_indexes(g)
     D.invalidate_sparse_caches(g)
     # This installs a whole graph at once rather than changing one element, so a
     # slot store on it is filled from what was just installed. Copy, every

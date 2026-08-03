@@ -126,6 +126,8 @@ _ON_SOURCE = ST.ON_SOURCE
 _ON_TARGET = ST.ON_TARGET
 _SLOT_NODE = ST.NODE
 _SLOT_PLACEHOLDER = ST.PLACEHOLDER
+_SLOT_HYPER = ST.HYPER
+_MEMBER = ST.MEMBER
 
 
 def _slot_key(store, ref):
@@ -145,14 +147,30 @@ def _slot_entity_ref(store, key) -> EntityRef:
     return EntityRef(key[0], _SLOT_ENTITY_KIND.get(int(store.entity_kind[slot]), NODE), key[1])
 
 
+def _slot_hyper_directed(store, slot) -> bool:
+    """Return whether a hyperedge names a target side at all.
+
+    A hyperedge that names no target side is undirected, whichever flag it was
+    declared with. That is what a boundary reaction looks like. Its members carry
+    the plain member role rather than a source role, and one entry says so.
+    """
+    if int(store.member_len[slot]) == 0:
+        return False
+    return int(store.member_role[int(store.member_start[slot])]) != _MEMBER
+
+
 def _slot_edge_ref(store, edge_id: str) -> EdgeRef:
     # Every value comes out of an array, and reading one element of an array is
     # dear enough that each is read once and reused. The construction is
     # positional for the same reason. This runs once per edge of an enumeration.
     slot = store.edge_slot(edge_id)
+    kind = int(store.edge_kind[slot])
     declared = int(store.edge_directed[slot])
     weight = float(store.edge_weight[slot])
-    if declared != _INHERIT:
+    if kind == _SLOT_HYPER:
+        directed = _slot_hyper_directed(store, slot)
+        declared_directed = None if declared == _INHERIT else bool(declared)
+    elif declared != _INHERIT:
         directed = bool(declared)
         declared_directed = directed
     else:
@@ -160,7 +178,7 @@ def _slot_edge_ref(store, edge_id: str) -> EdgeRef:
         declared_directed = None
     return EdgeRef(
         edge_id,
-        _SLOT_EDGE_KIND.get(int(store.edge_kind[slot]), BINARY),
+        _SLOT_EDGE_KIND.get(kind, BINARY),
         directed,
         weight,
         store.edge_ml_kind.get(slot),
@@ -649,7 +667,12 @@ def edge_coefficients(graph, edge_id: str):
         slot = _slot_require_edge(store, edge_id)
         if not bool(store.edge_explicit[slot]):
             return None
-        return edge_members(graph, edge_id)
+        members = edge_members(graph, edge_id)
+        if store.aspects != ('_',):
+            return members
+        # A flat graph names an entity by its bare id, and the answer has to be in
+        # the form the caller holds its own ids in. See :func:`edge_sides`.
+        return {key[0]: value for key, value in members.items()}
     record = _require_edge(graph, edge_id)
     if record.coeffs is None:
         return None

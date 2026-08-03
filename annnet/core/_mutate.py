@@ -915,9 +915,39 @@ def set_entity_types(g, mapping):
 
 
 @rebuilds_the_store
+def set_entity_kinds(g, mapping):
+    """Set the kind of each entity an ``ekey -> kind`` map names.
+
+    An entity the map names but the graph does not hold is registered at the next
+    free row. A reader needs that, because a file may record the kind of an
+    entity that the structure it read never mentions.
+    """
+    for ekey, kind in mapping.items():
+        rec = g._entities.get(ekey)
+        if rec is not None:
+            rec.kind = kind
+            continue
+        row_idx = max(g._row_to_entity, default=-1) + 1
+        register_entity_record(g, ekey, EntityRecord(row_idx=row_idx, kind=kind))
+
+
+@rebuilds_the_store
 def rekey_entities(g, new_entities):
     """Replace the entity registry (e.g. layer-coord remap) and rebuild entity indexes."""
     g._entities = new_entities
+    D.rebuild_entity_indexes(g)
+
+
+@rebuilds_the_store
+def remap_entity_keys(g, remap):
+    """Move each entity an ``ekey -> ekey`` map names, keeping the row it holds.
+
+    A reader needs this when the coordinate a file stored for an entity only
+    makes sense once the aspects the same file declares are known.
+    """
+    if not remap:
+        return
+    g._entities = {remap.get(ekey, ekey): rec for ekey, rec in g._entities.items()}
     D.rebuild_entity_indexes(g)
 
 
@@ -968,6 +998,45 @@ def set_edge_coeffs(g, edge_id, coeffs):
         resolved[hits[0] if hits and len(hits) == 1 else vid] = float(coeff)
     base.update(resolved)
     rec.coeffs = {n: v for n, v in base.items() if v != 0.0}
+    g._mark_matrix_dirty()
+    D.invalidate_sparse_caches(g)
+
+
+@syncs_named_edges('edge_id')
+def replace_edge_coeffs(g, edge_id, coeffs):
+    """Set the coefficients of an edge column outright, dropping what it held.
+
+    Unlike :func:`set_edge_coeffs`, this folds nothing over the column the edge
+    already has. A reader that recovers a whole column from a file needs the
+    column it read and nothing else.
+    """
+    rec = g._edges.get(edge_id)
+    if rec is None:
+        return
+    rec.coeffs = {member: value for member, value in coeffs.items() if value != 0.0}
+    D.invalidate_sparse_caches(g)
+
+
+@syncs_named_edges('eid')
+def set_hyperedge_members(g, eid, *, members=None, head=None, tail=None):
+    """Turn an edge the graph already holds into a hyperedge over these members.
+
+    Pass ``head`` and ``tail`` for a directed hyperedge, or ``members`` for an
+    undirected one. A reader that meets the members of an edge after the edge
+    itself needs this.
+    """
+    rec = g._edges.get(eid)
+    if rec is None:
+        return
+    rec.etype = 'hyper'
+    if members is None:
+        rec.src = frozenset(head or ())
+        rec.tgt = frozenset(tail or ())
+        rec.directed = True
+    else:
+        rec.src = frozenset(members)
+        rec.tgt = None
+        rec.directed = False
     g._mark_matrix_dirty()
     D.invalidate_sparse_caches(g)
 
@@ -1340,6 +1409,11 @@ def batch_add_edges(
     _edges = g._edges
     _col_to_edge = g._col_to_edge
     _row_to_entity = g._row_to_entity
+    # An endpoint the graph has not met yet becomes a node here, inline rather
+    # than through the setter, so the slot store is written inline as well. The
+    # decorator writes the edges alone, and an edge whose endpoint the store does
+    # not hold would lose that member.
+    _slot = slot_store(g)
     _flat = g._aspects == ('_',)
     _flat_coord = ('_',)
     _is_multilayer = not _flat
@@ -1378,6 +1452,8 @@ def batch_add_edges(
                 _entities[ekey] = EntityRecord(row_idx=idx, kind='vertex')
                 _row_to_entity[idx] = ekey
                 D.index_entity_key(g, ekey)
+                if _slot is not None:
+                    _slot.add_entity(ekey, ST.NODE)
 
     for idx, it in enumerate(edges):
         # ── extract endpoints + fields without copying the input dict ──────────

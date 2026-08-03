@@ -173,6 +173,19 @@ class SliceManager:
             verts.update(_bare(member) for member in sides.source | sides.target)
         data['vertices'].update(verts)
 
+    def attach_edges(self, slice_id: str, edge_ids: Iterable[str]) -> None:
+        """Attach every edge the graph holds to a slice, and derive no vertices.
+
+        Unlike :meth:`add_edges`, this keeps an edge that occupies no column, so a
+        placeholder edge survives a round trip. It also leaves the vertex
+        memberships alone. A reader that restores the vertex memberships from the
+        file itself needs both, and deriving them again is the dearest loop of a
+        load.
+        """
+        G = self._G
+        data = self._ensure_slice(slice_id)
+        data['edges'].update(eid for eid in edge_ids if _structure.has_edge(G, eid))
+
     # ── active slice ──────────────────────────────────────────────────────────
 
     @property

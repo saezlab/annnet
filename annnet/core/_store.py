@@ -120,7 +120,7 @@ class CoreState:
         # Edge arrays, indexed by edge slot.
         self.edge_kind = np.zeros(_INITIAL_CAPACITY, dtype=np.uint8)
         self.edge_directed = np.full(_INITIAL_CAPACITY, INHERIT, dtype=np.int8)
-        self.edge_weight = np.ones(_INITIAL_CAPACITY, dtype=np.float32)
+        self.edge_weight = np.ones(_INITIAL_CAPACITY, dtype=np.float64)
         self.edge_explicit = np.zeros(_INITIAL_CAPACITY, dtype=bool)
 
         # Member lists. Each edge owns a segment of the three pools. A delete
@@ -128,7 +128,7 @@ class CoreState:
         self.member_start = np.zeros(_INITIAL_CAPACITY, dtype=np.int64)
         self.member_len = np.zeros(_INITIAL_CAPACITY, dtype=np.int32)
         self.member_ent = np.zeros(_INITIAL_CAPACITY, dtype=np.int64)
-        self.member_coef = np.zeros(_INITIAL_CAPACITY, dtype=np.float32)
+        self.member_coef = np.zeros(_INITIAL_CAPACITY, dtype=np.float64)
         self.member_role = np.zeros(_INITIAL_CAPACITY, dtype=np.int8)
         self._member_used = 0
 
@@ -531,7 +531,7 @@ class CoreState:
         before = self._member_used
         total = int(self.member_len[slots].sum()) if slots.size else 0
         ent = np.zeros(max(_INITIAL_CAPACITY, total), dtype=np.int64)
-        coef = np.zeros(max(_INITIAL_CAPACITY, total), dtype=np.float32)
+        coef = np.zeros(max(_INITIAL_CAPACITY, total), dtype=np.float64)
         role = np.zeros(max(_INITIAL_CAPACITY, total), dtype=np.int8)
         cursor = 0
         for slot in slots:
