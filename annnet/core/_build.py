@@ -73,6 +73,8 @@ def slices_from_specs(specs) -> dict:
 
 def install_structure(g, *, entities, edges, matrix) -> None:
     """Install canonical structural state on ``g`` and rebuild every derived index."""
+    from . import _mutate
+
     g._entities = entities
     g._edges = edges
     g._matrix = matrix
@@ -80,6 +82,12 @@ def install_structure(g, *, entities, edges, matrix) -> None:
     D.rebuild_col_index(g)  # _col_to_edge
     D.rebuild_edge_indexes(g)  # _src_to_edges, _tgt_to_edges, _pair_to_edges
     D.invalidate_sparse_caches(g)
+    # This installs a whole graph at once rather than changing one element, so a
+    # slot store on it is filled from what was just installed. Copy, every
+    # subgraph and every loader arrive here, which is why it is the one place
+    # that has to do it.
+    _mutate.sync_aspects(g)
+    _mutate.resync(g)
 
 
 def install_slices(g, slices, *, default=None, current=None) -> None:
