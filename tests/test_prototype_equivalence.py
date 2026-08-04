@@ -287,6 +287,27 @@ def test_a_write_to_a_copy_leaves_the_graph_it_came_from_alone():
     assert 'e_ab' in set(S.edge_ids(G._store))
 
 
+def test_removing_a_vertex_frees_its_slot_and_moves_no_other():
+    """The record store renumbers its rows on a delete. The slot store does not."""
+    G = build_case('binary_directed', store='slots')
+    before = dict(G._store.live_entities())
+    dropped = G._store.entity_slot(('A', ('_',)))
+    G.remove_vertices(['A'])
+    after = dict(G._store.live_entities())
+    assert set(after) == set(before) - {dropped}
+    assert all(after[slot] == before[slot] for slot in after)
+    assert V.validate_internal_consistency(G._store, strict=False) == []
+    _assert_incremental_matches_rebuild(G, 'remove_vertices')
+
+
+@pytest.mark.parametrize('case', CASE_NAMES)
+def test_removing_every_vertex_empties_the_store(case):
+    G = build_case(case, store='slots')
+    G.remove_vertices([ref.key for ref in S.iter_entities(G) if ref.kind == S.NODE])
+    assert V.validate_internal_consistency(G._store, strict=False) == []
+    _assert_incremental_matches_rebuild(G, case)
+
+
 def test_a_sequence_of_mutations_reaches_the_store():
     G = build_case('binary_directed', store='slots')
     G.add_vertices(['D', 'E'])

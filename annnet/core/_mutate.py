@@ -1130,7 +1130,21 @@ def make_undirected(g, *, drop_flexible=True, update_default=True):
     return g
 
 
-@rebuilds_the_store
+def drop_entities(g, keys) -> None:
+    """Remove entities from the slot store, once every edge that named one is gone.
+
+    The record store renumbers its rows on a delete, so the callers below rebuild
+    their registry. The slot store frees a slot and moves no other entity, so this
+    is the whole of the work there.
+    """
+    store = slot_store(g)
+    if store is None:
+        return
+    for key in keys:
+        if store.entity_slot(key) is not None:
+            store.remove_entity(key)
+
+
 def remove_vertices_bulk(g, vertex_ids):
     """Remove many vertices, their incident edges, and compact entity rows."""
     drop_keys = set()
@@ -1183,6 +1197,7 @@ def remove_vertices_bulk(g, vertex_ids):
     g._entities = new_entities
     g._row_to_entity = new_row_to_entity
     D.rebuild_entity_indexes(g)
+    drop_entities(g, drop_keys)
 
     va = g.vertex_attributes
     if va is not None and 'vertex_id' in dataframe_columns(va):
@@ -1192,7 +1207,6 @@ def remove_vertices_bulk(g, vertex_ids):
         slice_data['vertices'].difference_update(drop_vertex_ids)
 
 
-@rebuilds_the_store
 def remove_orphan_node_layers(g, drop_keys):
     """Drop specific ``(vid, layer)`` vertex entities that carry no incident edges.
 
@@ -1225,6 +1239,7 @@ def remove_orphan_node_layers(g, drop_keys):
     g._entities = new_entities
     g._row_to_entity = new_row_to_entity
     D.rebuild_entity_indexes(g)
+    drop_entities(g, drop_keys)
 
     state_attrs = getattr(g, '_state_attrs', None)
     if state_attrs:
