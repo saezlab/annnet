@@ -24,16 +24,6 @@ _SLOT_EDGE_KIND = {
 # ---------------------------------------------------------------------------
 
 
-def same_store(graph) -> str:
-    """Return the canonical store a graph derived from this one is built on.
-
-    A subgraph, a copy or a flattening is the same graph in another shape, so it
-    keeps the store the graph it comes from has rather than taking whatever the
-    constructor defaults to. This goes away with the record store.
-    """
-    return 'records' if graph._store is None else 'slots'
-
-
 def new_entity_record(row_idx: int, kind: str) -> EntityRecord:
     """Build an :class:`EntityRecord` for a canonical entity row and kind."""
     return EntityRecord(row_idx=row_idx, kind=kind)

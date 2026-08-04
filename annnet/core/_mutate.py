@@ -794,6 +794,7 @@ def remove_edge(g, edge_id):
         if (not is_empty) and ('edge_id' in list(esa.columns)):
             g.edge_slice_attributes = _df_filter_not_equal(esa, 'edge_id', edge_id)
 
+    keep_edge_entity_names(g, (edge_id,))
     g._rebuild_slice_edge_weights_cache()
 
 
@@ -844,6 +845,8 @@ def remove_edges_bulk(g, edge_ids):
     ela = g.edge_slice_attributes
     if ela is not None and 'edge_id' in dataframe_columns(ela):
         g.edge_slice_attributes = dataframe_drop_rows(ela, 'edge_id', drop)
+
+    keep_edge_entity_names(g, drop)
 
 
 # ---------------------------------------------------------------------------
@@ -1195,6 +1198,37 @@ def drop_edges(g, edge_ids) -> None:
     for edge_id in edge_ids:
         if store.edge_slot(edge_id) is not None:
             store.remove_edge(edge_id)
+
+
+def keep_edge_entity_names(g, edge_ids) -> None:
+    """Keep the name of an edge-entity whose edge has just been removed.
+
+    An edge-entity is one identity on both axes, so an entity marked as an edge
+    has to have an edge. An entity goes only when it is asked for, so removing
+    the edge alone would leave the entity naming nothing, and another edge may
+    still hold it as an endpoint. The graph keeps the name as a placeholder,
+    which is the shape an edge-entity already has before its edge exists.
+    """
+    for edge_id in edge_ids:
+        if edge_id in g._edges:
+            continue
+        record = g._entities.get(I.resolve_ekey(g, edge_id))
+        if record is None or record.kind != 'edge_entity':
+            continue
+        g._edges[edge_id] = EdgeRecord(
+            src=None,
+            tgt=None,
+            weight=1.0,
+            directed=False,
+            etype='edge_placeholder',
+            col_idx=-1,
+            ml_kind=None,
+            ml_layers=None,
+            direction_policy=None,
+        )
+        store = slot_store(g)
+        if store is not None and store.edge_slot(edge_id) is None:
+            store.add_edge(edge_id, (), kind=ST.PLACEHOLDER, directed=False, weight=1.0)
 
 
 def drop_entities(g, keys) -> None:

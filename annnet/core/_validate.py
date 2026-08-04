@@ -4,23 +4,19 @@
 gateway and the derive layer are supposed to maintain. It is a debugging and
 test aid. It never runs on a hot path.
 
-The core holds two store models during the refactor. The record store keeps one
-record per entity and one record per edge, and addresses a row and a column by
-position. The slot store keeps slot-addressed member lists. The two models need
-different checks, so this module keeps one check list per model and picks the
-list from the store the graph holds.
+The canonical store holds the topology, and the graph around it holds the
+slices, the attribute tables and any materialized matrix. So this module keeps
+two check lists: the rules of the store alone, and the rules that tie the graph
+to it. A caller that hands a bare store gets the first list.
 
-Every check takes the graph and a list, and appends one message per problem it
-finds. A check never raises. ``validate_internal_consistency`` raises once at
-the end when the caller asks for strict mode.
+Every check takes the graph or the store and a list, and appends one message per
+problem it finds. A check never raises. ``validate_internal_consistency`` raises
+once at the end when the caller asks for strict mode.
 """
 
 from __future__ import annotations
 
 from . import _derive as D, _structure as S
-
-RECORD_STORE = 'records'
-SLOT_STORE = 'slots'
 
 # A materialized cell and the coefficient it comes from may differ by the rounding
 # of the float32 matrix storage.
@@ -43,187 +39,26 @@ def _materialized_matrix(g, problems):
         return None
 
 
-def detect_store_kind(g) -> str:
-    """Return which store model backs a graph.
-
-    A slot store answers to ``member_start``, either as the graph itself or through
-    ``g._store``. A graph without one runs on the record store.
-    """
-    if hasattr(g, 'member_start'):
-        return SLOT_STORE
-    return SLOT_STORE if getattr(g, '_store', None) is not None else RECORD_STORE
+def _is_store(g) -> bool:
+    """Return True when the argument is a canonical store rather than a graph."""
+    return hasattr(g, 'member_start')
 
 
 # ---------------------------------------------------------------------------
-# Record-store checks
+# Graph-level checks
 # ---------------------------------------------------------------------------
-
-
-def _check_entity_rows(g, problems) -> None:
-    """Entities and rows form a bijection, and the row block is contiguous."""
-    seen_rows: dict[int, tuple] = {}
-    vid_to_ekeys: dict[str, list] = {}
-    for ekey, rec in g._entities.items():
-        r = rec.row_idx
-        if r in seen_rows:
-            problems.append(f'duplicate row_idx {r}: {ekey!r} and {seen_rows[r]!r}')
-        seen_rows[r] = ekey
-        if g._row_to_entity.get(r) != ekey:
-            problems.append(f'_row_to_entity[{r}] != {ekey!r} (got {g._row_to_entity.get(r)!r})')
-        if isinstance(ekey, tuple) and len(ekey) == 2 and isinstance(ekey[0], str):
-            vid_to_ekeys.setdefault(ekey[0], []).append(ekey)
-    if seen_rows and set(seen_rows) != set(range(len(g._entities))):
-        problems.append(f'entity row indices not contiguous 0..{len(g._entities) - 1}')
-    for r, ekey in g._row_to_entity.items():
-        if ekey not in g._entities or g._entities[ekey].row_idx != r:
-            problems.append(f'_row_to_entity has stale entry [{r}]={ekey!r}')
-    # ``_vid_to_ekeys`` is intentionally left empty on a flat graph, because
-    # ``resolve_ekey`` returns the placeholder key directly there.
-    if g._aspects != ('_',):
-        for vid, ekeys in vid_to_ekeys.items():
-            if set(g._vid_to_ekeys.get(vid, ())) != set(ekeys):
-                problems.append(f'_vid_to_ekeys[{vid!r}] mismatch')
-
-
-def _check_edge_columns(g, problems) -> None:
-    """Edges and columns form a bijection, and the column block is contiguous."""
-    seen_cols: dict[int, str] = {}
-    for eid, rec in g._edges.items():
-        c = rec.col_idx
-        if c < 0:
-            continue
-        if c in seen_cols:
-            problems.append(f'duplicate col_idx {c}: {eid!r} and {seen_cols[c]!r}')
-        seen_cols[c] = eid
-        if g._col_to_edge.get(c) != eid:
-            problems.append(f'_col_to_edge[{c}] != {eid!r} (got {g._col_to_edge.get(c)!r})')
-    if seen_cols and set(seen_cols) != set(range(len(seen_cols))):
-        problems.append(f'edge column indices not contiguous 0..{len(seen_cols) - 1}')
-    for c, eid in g._col_to_edge.items():
-        rec = g._edges.get(eid)
-        if rec is None or rec.col_idx != c:
-            problems.append(f'_col_to_edge has stale entry [{c}]={eid!r}')
-
-
-def _check_adjacency_indexes(g, problems) -> None:
-    """Every adjacency entry points at a real edge whose endpoint equals the key.
-
-    The incremental form and the rebuilt form differ benignly for a hyperedge,
-    which is never queried through these maps.
-    """
-    if not getattr(g, '_edge_indexes_built', True):
-        return
-    for label, index, field in (
-        ('_src_to_edges', g._src_to_edges, 'src'),
-        ('_tgt_to_edges', g._tgt_to_edges, 'tgt'),
-    ):
-        for key, eids in index.items():
-            for eid in eids:
-                rec = g._edges.get(eid)
-                if rec is None or getattr(rec, field) != key:
-                    problems.append(f'{label}[{key!r}] has stale/mis-keyed edge {eid!r}')
-    for key, eids in g._pair_to_edges.items():
-        for eid in eids:
-            rec = g._edges.get(eid)
-            if rec is None or (rec.src, rec.tgt) != key:
-                problems.append(f'_pair_to_edges[{key!r}] has stale/mis-keyed edge {eid!r}')
-
-
-def _check_member_liveness(g, problems) -> None:
-    """Every member of every edge is a live entity.
-
-    A member that names no entity leaves a column that no row can carry, so the
-    matrix silently drops it.
-    """
-    for eid in g._edges:
-        for member_key in S.edge_members(g, eid):
-            if member_key not in g._entities:
-                problems.append(f'edge {eid!r} has member {member_key[0]!r} that is not an entity')
-
-
-def _check_edge_entity_linkage(g, problems) -> None:
-    """An edge-entity holds an edge and an entity under one id."""
-    for ekey, rec in g._entities.items():
-        if rec.kind == 'edge_entity' and ekey[0] not in g._edges:
-            problems.append(f'entity {ekey[0]!r} is marked as an edge but no edge carries that id')
-    for eid, rec in g._edges.items():
-        if rec.etype not in ('vertex_edge', 'edge_placeholder'):
-            continue
-        matches = [ekey for ekey in g._entities if ekey[0] == eid]
-        if not matches:
-            problems.append(f'edge {eid!r} is an edge-entity but no entity carries that id')
-            continue
-        for ekey in matches:
-            if g._entities[ekey].kind != 'edge_entity':
-                problems.append(
-                    f'edge-entity {eid!r} has entity kind {g._entities[ekey].kind!r}, '
-                    "expected 'edge_entity'"
-                )
-
-
-def _check_matrix_agrees_with_members(g, problems) -> None:
-    """The materialized matrix holds exactly the member lists the store implies.
-
-    This is the rule that a directly assigned matrix breaks. It also covers the
-    sign rule, because the member list of an edge with no explicit coefficient
-    carries the signs its kind and directedness imply.
-    """
-    raw = _materialized_matrix(g, problems)
-    if raw is None:
-        return
-    matrix = raw.tocsc()
-    n_rows, n_cols = matrix.shape
-    seen_cells: set[tuple[int, int]] = set()
-
-    for eid, rec in g._edges.items():
-        col = rec.col_idx
-        if col < 0:
-            continue
-        if col >= n_cols:
-            problems.append(f'edge {eid!r} has column {col} outside the matrix of {n_cols} columns')
-            continue
-        expected: dict[int, float] = {}
-        for member_key, coefficient in S.edge_members(g, eid).items():
-            record = g._entities.get(member_key)
-            if record is None or coefficient == 0:
-                continue
-            expected[record.row_idx] = coefficient
-        block = matrix[:, [col]].tocoo()
-        found = {
-            int(r): float(v) for r, v in zip(block.row, block.data, strict=False) if float(v) != 0.0
-        }
-        seen_cells.update((row, col) for row in found)
-        for row in set(expected) | set(found):
-            want = expected.get(row, 0.0)
-            have = found.get(row, 0.0)
-            if abs(want - have) > _TOLERANCE * max(1.0, abs(want)):
-                ekey = g._row_to_entity.get(row)
-                name = repr(ekey) if ekey is not None else f'row {row}, which holds no entity'
-                problems.append(
-                    f'edge {eid!r} cell for {name}: store says {want}, matrix says {have}'
-                )
-
-    live_rows = {rec.row_idx for rec in g._entities.values()}
-    block = raw.tocoo()
-    for row, col, value in zip(block.row, block.col, block.data, strict=False):
-        if float(value) == 0.0 or (int(row), int(col)) in seen_cells:
-            continue
-        if int(row) not in live_rows:
-            problems.append(f'matrix holds {float(value)} at row {int(row)}, which holds no entity')
-        elif int(col) not in g._col_to_edge:
-            problems.append(
-                f'matrix holds {float(value)} at column {int(col)}, which holds no edge'
-            )
-    if n_rows < len(live_rows):
-        problems.append(f'matrix has {n_rows} rows but the store holds {len(live_rows)} entities')
+# The canonical store holds the topology alone. Slices, the attribute tables and
+# a materialized matrix belong to the graph around it, so the rules that tie
+# those to the topology are checked here, through the query facade.
 
 
 def _check_table_levels(g, problems) -> None:
     """The node table stays node-level and the edge table stays edge-level."""
-    entity_ids = {ekey[0] for ekey in g._entities}
+    entity_ids = {ref.id for ref in S.iter_entities(g)}
+    edge_ids = {ref.id for ref in S.iter_edges(g, include_placeholders=True)}
     for label, table, key_column, known in (
         ('obs', g.vertex_attributes, 'vertex_id', entity_ids),
-        ('var', g.edge_attributes, 'edge_id', set(g._edges)),
+        ('var', g.edge_attributes, 'edge_id', edge_ids),
     ):
         if table is None:
             continue
@@ -239,7 +74,8 @@ def _check_table_levels(g, problems) -> None:
 
 def _check_slice_membership(g, problems) -> None:
     """A slice holds bare node ids and known edge ids, and both must be live."""
-    node_ids = {ekey[0] for ekey in g._entities}
+    node_ids = {ref.id for ref in S.iter_entities(g)}
+    edge_ids = {ref.id for ref in S.iter_edges(g, include_placeholders=True)}
     for sid, srec in g._slices.items():
         for v in srec['vertices']:
             if not isinstance(v, str):
@@ -249,44 +85,67 @@ def _check_slice_membership(g, problems) -> None:
                 problems.append(f'slice {sid!r} references unknown vertex {v!r}')
                 break
         for eid in srec['edges']:
-            if eid not in g._edges:
+            if eid not in edge_ids:
                 problems.append(f'slice {sid!r} references unknown edge {eid!r}')
                 break
 
 
-def _check_coefficients(g, problems) -> None:
-    """A coefficient-bearing column matches the coefficients its record holds."""
-    matrix = _materialized_matrix(g, problems)
-    if matrix is None:
+def _check_materialized_matrix(g, problems) -> None:
+    """The matrix the graph holds is the one its member lists imply.
+
+    The store builds its own matrix, and the slot check above compares that one
+    against the member lists. A graph may hold a matrix it was handed instead of
+    one it derived, and this is the rule that catches a handed one that says
+    something else.
+    """
+    raw = _materialized_matrix(g, problems)
+    if raw is None:
         return
+    store = _slot_of(g)
+    matrix = raw.tocsc()
     n_rows, n_cols = matrix.shape
-    for eid, rec in g._edges.items():
-        if rec.coeffs is None or rec.col_idx < 0 or rec.col_idx >= n_cols:
+    seen_cells: set[tuple[int, int]] = set()
+    rows_of_entity = {key: row for row, key in enumerate(S.entity_keys(store))}
+
+    for column, edge_id in enumerate(S.edge_ids(store)):
+        if column >= n_cols:
+            problems.append(
+                f'edge {edge_id!r} has column {column} outside the matrix of {n_cols} columns'
+            )
             continue
-        for node, val in rec.coeffs.items():
-            try:
-                r = S.entity_row(g, node)
-            except (KeyError, ValueError, TypeError):
-                problems.append(f'edge {eid!r} coeff node {node!r} not resolvable')
+        expected: dict[int, float] = {}
+        for member_key, coefficient in S.edge_members(store, edge_id).items():
+            row = rows_of_entity.get(member_key)
+            if row is None or coefficient == 0:
                 continue
-            if r >= n_rows:
-                continue
-            actual = float(matrix[r, rec.col_idx])
-            if abs(actual - float(val)) > 1e-4 * max(1.0, abs(float(val))):
-                problems.append(f'edge {eid!r} coeff[{node!r}]={val} != matrix {actual}')
+            expected[row] = coefficient
+        block = matrix[:, [column]].tocoo()
+        found = {
+            int(r): float(v) for r, v in zip(block.row, block.data, strict=False) if float(v) != 0.0
+        }
+        seen_cells.update((row, column) for row in found)
+        for row in set(expected) | set(found):
+            want = expected.get(row, 0.0)
+            have = found.get(row, 0.0)
+            if abs(want - have) > _TOLERANCE * max(1.0, abs(want)):
+                problems.append(
+                    f'edge {edge_id!r} cell at row {row}: store says {want}, matrix says {have}'
+                )
 
-
-def _check_matrix_bounds(g, problems) -> None:
-    """The matrix is large enough for every row and every column in use."""
-    matrix = _materialized_matrix(g, problems)
-    if matrix is None:
-        return
-    nrows, ncols = matrix.shape
-    if len(g._entities) > nrows:
-        problems.append(f'matrix rows {nrows} < #entities {len(g._entities)}')
-    cols = [rec.col_idx for rec in g._edges.values() if rec.col_idx >= 0]
-    if cols and max(cols) >= ncols:
-        problems.append(f'matrix cols {ncols} <= max col_idx {max(cols)}')
+    live_rows = set(rows_of_entity.values())
+    live_columns = set(range(len(S.edge_ids(store))))
+    block = raw.tocoo()
+    for row, column, value in zip(block.row, block.col, block.data, strict=False):
+        if float(value) == 0.0 or (int(row), int(column)) in seen_cells:
+            continue
+        if int(row) not in live_rows:
+            problems.append(f'matrix holds {float(value)} at row {int(row)}, which holds no entity')
+        elif int(column) not in live_columns:
+            problems.append(
+                f'matrix holds {float(value)} at column {int(column)}, which holds no edge'
+            )
+    if n_rows < len(live_rows):
+        problems.append(f'matrix has {n_rows} rows but the store holds {len(live_rows)} entities')
 
 
 # ---------------------------------------------------------------------------
@@ -445,6 +304,11 @@ def _check_edge_entity_slots(store, problems) -> None:
             if int(store.entity_kind[entity_slot]) != S_.EDGE_ENTITY:
                 problems.append(f'edge-entity {edge_id!r} has an entity that is not marked as one')
 
+    edge_ids = set(store.live_edge_ids())
+    for slot, key in store.live_entities():
+        if int(store.entity_kind[slot]) == S_.EDGE_ENTITY and key[0] not in edge_ids:
+            problems.append(f'entity {key[0]!r} is marked as an edge but no edge carries that id')
+
 
 def _check_incidence_index(store, problems) -> None:
     """The entity-to-edge index matches the member lists it is derived from.
@@ -545,50 +409,28 @@ def _slot_check(check):
     return run
 
 
-RECORD_CHECKS = (
-    _check_entity_rows,
-    _check_edge_columns,
-    _check_adjacency_indexes,
-    _check_member_liveness,
-    _check_edge_entity_linkage,
-    _check_matrix_agrees_with_members,
-    _check_table_levels,
-    _check_slice_membership,
-    _check_coefficients,
-    _check_matrix_bounds,
-)
-
 SLOT_CHECKS: tuple = tuple(_slot_check(check) for check in SLOT_CHECKS_IMPL)
 
-_CHECKS_BY_STORE = {
-    RECORD_STORE: RECORD_CHECKS,
-    SLOT_STORE: SLOT_CHECKS,
-}
-
-
-def checks_for(store_kind: str) -> tuple:
-    """Return the check list for one store model."""
-    try:
-        return _CHECKS_BY_STORE[store_kind]
-    except KeyError:
-        raise ValueError(
-            f'Unknown store kind {store_kind!r}. Known: {sorted(_CHECKS_BY_STORE)}'
-        ) from None
+# The rules that tie the graph around the store to the topology in it. A caller
+# may hand a bare store instead of a graph, which holds none of what these read,
+# so they run only for a graph.
+GRAPH_CHECKS = (
+    _check_table_levels,
+    _check_slice_membership,
+    _check_materialized_matrix,
+)
 
 
 def validate_internal_consistency(g, *, strict: bool = True) -> list[str]:
     """Check the invariants of a graph and return one message per problem.
 
-    The function picks the check list from the store the graph holds. It returns
-    an empty list for a consistent graph. It raises ``AssertionError`` on a
-    problem when ``strict`` is set.
+    The argument is a graph or the canonical store of one. A store is checked
+    against the rules it holds by itself, and a graph against those and the rules
+    that tie its slices, its tables and its matrix to the store. The function
+    returns an empty list for a consistent graph, and raises ``AssertionError``
+    on a problem when ``strict`` is set.
     """
-    store_kind = detect_store_kind(g)
-    checks = checks_for(store_kind)
-    if not checks:
-        raise NotImplementedError(
-            f'No invariant checks are registered for the {store_kind!r} store.'
-        )
+    checks = SLOT_CHECKS if _is_store(g) else SLOT_CHECKS + GRAPH_CHECKS
 
     problems: list[str] = []
     for check in checks:

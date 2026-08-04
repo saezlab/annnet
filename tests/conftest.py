@@ -188,42 +188,11 @@ def assert_edge_attrs_equal(G1, G2, edge_id, ignore_none=True, ignore_private=Fa
     assert attrs1 == attrs2, f'Edge {edge_id} attrs differ: {attrs1} != {attrs2}'
 
 
-def pytest_addoption(parser):
-    """Add the option that runs the whole suite on the record store."""
-    parser.addoption(
-        '--store',
-        action='store',
-        default='slots',
-        choices=('records', 'slots'),
-        help='which canonical store every graph built by the suite uses',
-    )
-
-
 def pytest_configure(config):
     """Configure pytest with custom markers."""
     config.addinivalue_line(
         'markers', 'slow: marks tests as slow (deselect with \'-m "not slow"\')'
     )
-    # The slot store is the default of the constructor, so the suite runs on the
-    # new core without an option. ``--store=records`` runs the same behavior suite
-    # against the records instead, which is what keeps the store this cycle
-    # replaces under regression until it is removed. Most tests build a graph
-    # directly rather than through a fixture, so the default of the constructor is
-    # what moves. This goes away with the records.
-    if config.getoption('--store') == 'records':
-        _build_every_graph_on_records()
-
-
-def _build_every_graph_on_records():
-    """Make ``store='records'`` the default of the graph constructor."""
-    original = AnnNet.__init__
-
-    def __init__(self, *args, **kwargs):
-        kwargs.setdefault('store', 'records')
-        original(self, *args, **kwargs)
-
-    __init__.__doc__ = original.__doc__
-    AnnNet.__init__ = __init__
 
 
 # ======================================================================

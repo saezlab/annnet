@@ -153,7 +153,7 @@ def _all_endpoints(graph, edge_id):
 
 @pytest.mark.parametrize('case', CASE_NAMES)
 def test_the_gateway_fills_the_slot_store_as_the_bridge_would(case):
-    built = build_case(case, store='slots')
+    built = build_case(case)
     expected = ST.from_graph(build_case(case))
 
     assert S.entity_keys(built._store) == S.entity_keys(expected), 'entities'
@@ -167,7 +167,7 @@ def test_the_gateway_fills_the_slot_store_as_the_bridge_would(case):
 
 @pytest.mark.parametrize('case', CASE_NAMES)
 def test_a_slot_backed_graph_holds_its_invariants(case):
-    built = build_case(case, store='slots')
+    built = build_case(case)
     assert V.validate_internal_consistency(built._store, strict=False) == []
 
 
@@ -202,7 +202,7 @@ def _assert_incremental_matches_rebuild(G, note):
 
 @pytest.mark.parametrize('case', CASE_NAMES)
 def test_building_a_shape_reaches_the_store(case):
-    _assert_incremental_matches_rebuild(build_case(case, store='slots'), case)
+    _assert_incremental_matches_rebuild(build_case(case), case)
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +215,7 @@ def test_building_a_shape_reaches_the_store(case):
 
 @pytest.mark.parametrize('case', CASE_NAMES)
 def test_a_copied_graph_holds_the_same_store(case):
-    G = build_case(case, store='slots')
+    G = build_case(case)
     H = G.ops.copy()
     assert H._store is not G._store
     assert _snapshot(H._store) == _snapshot(G._store), case
@@ -225,14 +225,14 @@ def test_a_copied_graph_holds_the_same_store(case):
 @pytest.mark.parametrize('case', CASE_NAMES)
 def test_a_subgraph_holds_the_store_a_rebuild_would_give(case):
     """A selection numbers its own slots, so it is checked against a rebuild."""
-    G = build_case(case, store='slots')
+    G = build_case(case)
     nodes = [ref.id for ref in S.iter_entities(G) if ref.kind == S.NODE]
     for selection in (nodes, nodes[:-1]):
         _assert_incremental_matches_rebuild(G.ops.subgraph(selection), f'{case}/{selection}')
 
 
 def test_a_subgraph_takes_the_weight_the_slice_gives_an_edge():
-    G = build_case('binary_directed', store='slots')
+    G = build_case('binary_directed')
     G.slices.add('heavy')
     G.slices.add_edge_to_slice('heavy', 'e_ab')
     for vertex_id in ('A', 'B'):
@@ -249,7 +249,7 @@ def test_declaring_aspects_moves_the_keys_and_keeps_every_slot():
     """Every vertex changes identity and none changes address."""
     import warnings
 
-    G = build_case('binary_directed', store='slots')
+    G = build_case('binary_directed')
     before = {key[0]: slot for slot, key in G._store.live_entities()}
     sides_before = _snapshot(G._store)['sides']
     with warnings.catch_warnings():
@@ -268,7 +268,7 @@ def test_declaring_aspects_moves_the_keys_and_keeps_every_slot():
 
 def test_flattening_a_multilayer_graph_installs_the_store_it_built():
     """The flat graph is built through the public API, so its store is the answer."""
-    G = build_case('multilayer', store='slots')
+    G = build_case('multilayer')
     edge_id = S.edge_ids(G._store)[0]
     policy = {'var': 'score', 'threshold': 2.0}
     G.edge_direction_policy = {edge_id: policy}
@@ -283,7 +283,7 @@ def test_the_default_direction_of_a_graph_reaches_the_store():
     """An edge that declares no direction of its own answers with the graph default."""
     from annnet.core import _mutate
 
-    G = build_case('binary_directed', store='slots')
+    G = build_case('binary_directed')
     _mutate.set_edge_field(G, 'e_ab', 'directed', None)
     assert S.edge_ref(G, 'e_ab').directed is True, 'the default the graph was built with'
     G.directed = False
@@ -291,7 +291,7 @@ def test_the_default_direction_of_a_graph_reaches_the_store():
 
 
 def test_a_write_to_a_copy_leaves_the_graph_it_came_from_alone():
-    G = build_case('binary_directed', store='slots')
+    G = build_case('binary_directed')
     H = G.ops.copy()
     H.add_vertices(['Z'])
     H.remove_edges('e_ab')
@@ -301,7 +301,7 @@ def test_a_write_to_a_copy_leaves_the_graph_it_came_from_alone():
 
 def test_removing_a_vertex_frees_its_slot_and_moves_no_other():
     """The record store renumbers its rows on a delete. The slot store does not."""
-    G = build_case('binary_directed', store='slots')
+    G = build_case('binary_directed')
     before = dict(G._store.live_entities())
     dropped = G._store.entity_slot(('A', ('_',)))
     G.remove_vertices(['A'])
@@ -314,14 +314,14 @@ def test_removing_a_vertex_frees_its_slot_and_moves_no_other():
 
 @pytest.mark.parametrize('case', CASE_NAMES)
 def test_removing_every_vertex_empties_the_store(case):
-    G = build_case(case, store='slots')
+    G = build_case(case)
     G.remove_vertices([ref.key for ref in S.iter_entities(G) if ref.kind == S.NODE])
     assert V.validate_internal_consistency(G._store, strict=False) == []
     _assert_incremental_matches_rebuild(G, case)
 
 
 def test_a_sequence_of_mutations_reaches_the_store():
-    G = build_case('binary_directed', store='slots')
+    G = build_case('binary_directed')
     G.add_vertices(['D', 'E'])
     _assert_incremental_matches_rebuild(G, 'add_vertices')
 
@@ -340,7 +340,7 @@ def test_a_sequence_of_mutations_reaches_the_store():
 
 def test_setting_the_kind_of_an_entity_reaches_the_store():
     """The legacy kind setters change one field, so neither rebuilds the store."""
-    G = build_case('binary_directed', store='slots')
+    G = build_case('binary_directed')
     G.entity_types = {'A': 'edge'}
     assert S.entity_ref(G._store, ('A', ('_',))).kind == S.EDGE_ENTITY
     _assert_incremental_matches_rebuild(G, 'entity_types')
@@ -368,7 +368,7 @@ def test_a_graph_read_from_a_file_holds_the_store_the_file_describes(case, tmp_p
     from annnet.io import annnet_format
 
     path = tmp_path / f'{case}.annnet'
-    annnet_format.write(build_case(case, store='slots'), path)
+    annnet_format.write(build_case(case), path)
     loaded = annnet_format.read(path)
     if loaded._store is None:
         pytest.skip('the suite is running on the record store')

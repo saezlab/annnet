@@ -356,7 +356,6 @@ class AnnNet(
         annotations: dict[str, Any] | None = None,
         annotations_backend: str = 'auto',
         aspects: dict[str, list[str]] | None = None,
-        store: str = 'slots',
         **kwargs: Any,
     ) -> None:
         """Initialize an empty :class:`AnnNet` graph.
@@ -375,12 +374,6 @@ class AnnNet(
             Backend used when empty annotation tables need to be created.
         aspects : dict[str, list[str]] | None, optional
             Initial multilayer aspect registry.
-        store : {"slots", "records"}, optional
-            Which canonical store backs the graph. ``"slots"`` is the default and
-            the new core: every structural query is answered from the
-            slot-addressed store. ``"records"`` keeps the records alone, which is
-            what the cross-store checks compare against. The option goes away with
-            the records.
         **kwargs
             Initial graph-level attributes.
 
@@ -388,11 +381,7 @@ class AnnNet(
         -----
         A default slice named ``"default"`` is always created and made active.
         """
-        if store not in ('records', 'slots'):
-            raise ValueError(f"store must be 'records' or 'slots', got {store!r}")
-        _state.init_state(
-            self, directed=directed, v=v, e=e, aspects=aspects, slots=store == 'slots'
-        )
+        _state.init_state(self, directed=directed, v=v, e=e, aspects=aspects)
 
         # Attribute storage
         self._annotations_backend = select_dataframe_backend(annotations_backend)

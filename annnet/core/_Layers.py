@@ -299,7 +299,6 @@ class LayerAccessor:
             flat = self._G.__class__(
                 directed=self.directed,
                 annotations_backend=getattr(self._G, '_annotations_backend', 'polars'),
-                store=_build.same_store(self._G),
             )
             flat._history_enabled = False
 

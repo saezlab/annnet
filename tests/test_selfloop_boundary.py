@@ -237,7 +237,7 @@ def test_the_laplacian_follows_the_adjacency(store):
 
 def graph():
     """A directed graph with a self-loop next to a plain edge."""
-    G = AnnNet(store='slots', directed=True)
+    G = AnnNet(directed=True)
     G.add_vertices(['A', 'B'])
     G.add_edges('A', 'A', edge_id='e_loop', weight=0.5)
     G.add_edges('A', 'B', edge_id='e_ab', weight=1.0)

@@ -65,26 +65,21 @@ def test_an_empty_graph_is_consistent():
 
 
 # ---------------------------------------------------------------------------
-# Store dispatch
+# What the checker runs on what
 # ---------------------------------------------------------------------------
+# The store holds the topology and the graph around it holds the slices, the
+# tables and any materialized matrix. A caller may hand either one.
 
 
-def test_the_checker_picks_the_record_store_for_the_current_core():
-    assert V.detect_store_kind(build_case('binary_directed')) == V.RECORD_STORE
+def test_a_bare_store_is_checked_against_the_rules_it_holds_by_itself():
+    assert problems_of(_slot_case()) == []
 
 
-def test_checks_for_rejects_an_unknown_store_kind():
-    with pytest.raises(ValueError):
-        V.checks_for('no_such_store')
-
-
-def test_the_checker_picks_the_slot_store_for_a_slot_store():
-    assert V.detect_store_kind(_slot_case()) == V.SLOT_STORE
-
-
-def test_both_store_models_have_checks_registered():
-    assert V.checks_for(V.RECORD_STORE)
-    assert V.checks_for(V.SLOT_STORE)
+def test_a_graph_is_checked_against_the_rules_that_tie_it_to_its_store():
+    G = build_case('binary_directed')
+    G.slices.add('extra')
+    G._slices['extra']['edges'].add('no_such_edge')
+    assert_reports(G, 'no_such_edge')
 
 
 # ---------------------------------------------------------------------------
@@ -223,26 +218,26 @@ def test_the_slot_checker_reports_an_append_log_that_the_clock_denies():
 
 def test_rule_1_reports_two_entities_that_claim_one_address():
     G = build_case('binary_directed')
-    G._entities[('B', FLAT)].row_idx = G._entities[('A', FLAT)].row_idx
-    assert_reports(G, 'row_idx')
+    G._store._entity_slot[('B', FLAT)] = G._store.entity_slot(('A', FLAT))
+    assert_reports(G, 'slot')
 
 
-def test_rule_1_reports_an_address_map_that_disagrees_with_the_entity():
+def test_rule_1_reports_an_address_that_holds_another_entity():
     G = build_case('binary_directed')
-    G._row_to_entity[0] = ('C', FLAT)
-    assert_reports(G, '_row_to_entity')
+    G._store._entity_key[G._store.entity_slot(('A', FLAT))] = ('C', FLAT)
+    assert_reports(G, 'slot')
 
 
-def test_rule_2_reports_a_stale_address():
+def test_rule_2_reports_a_live_entity_address_on_the_freelist():
     G = build_case('binary_directed')
-    G._row_to_entity[99] = ('A', FLAT)
-    assert_reports(G, 'stale')
+    G._store.entity_free.append(G._store.entity_slot(('A', FLAT)))
+    assert_reports(G, 'freelist')
 
 
-def test_rule_2_reports_a_stale_edge_address():
+def test_rule_2_reports_a_live_edge_address_on_the_freelist():
     G = build_case('binary_directed')
-    G._col_to_edge[99] = 'e_ab'
-    assert_reports(G, 'stale')
+    G._store.edge_free.append(G._store.edge_slot('e_ab'))
+    assert_reports(G, 'freelist')
 
 
 # ---------------------------------------------------------------------------
@@ -260,14 +255,21 @@ def test_rule_3_holds_on_every_case(case):
 
 def test_rule_3_reports_a_member_that_is_not_an_entity():
     G = build_case('binary_directed')
-    G._edges['e_ab'].src = 'ghost'
-    assert_reports(G, 'ghost')
+    _point_first_member_at_no_entity(G, 'e_ab')
+    assert_reports(G, 'holds no entity')
 
 
 def test_rule_3_reports_a_hyperedge_member_that_is_not_an_entity():
     G = build_case('hyper_undirected')
-    G._edges['h_abc'].src = frozenset({'A', 'ghost'})
-    assert_reports(G, 'ghost')
+    _point_first_member_at_no_entity(G, 'h_abc')
+    assert_reports(G, 'holds no entity')
+
+
+def _point_first_member_at_no_entity(G, edge_id: str) -> None:
+    """Make the first member entry of an edge name a slot no entity holds."""
+    store = G._store
+    start = int(store.member_start[store.edge_slot(edge_id)])
+    store.member_ent[start] = store.entity_capacity + 5
 
 
 # ---------------------------------------------------------------------------
@@ -275,17 +277,24 @@ def test_rule_3_reports_a_hyperedge_member_that_is_not_an_entity():
 # ---------------------------------------------------------------------------
 
 
-def test_rule_4_reports_a_gap_in_the_edge_addresses():
-    G = build_case('binary_directed')
-    G._edges['e_bc'].col_idx = 7
-    G._col_to_edge = {0: 'e_ab', 7: 'e_bc'}
-    assert_reports(G, 'contiguous')
+@pytest.mark.parametrize('case', CASE_NAMES)
+def test_rule_4_the_columns_are_the_positions_of_the_structural_edges(case):
+    """No store can break this rule, because a column is derived and never held.
+
+    The record store kept a column number on each edge, so a gap and a duplicate
+    were both reachable. The slot store answers with the position of an edge
+    among the structural ones, so the block is contiguous by construction.
+    """
+    G = build_case(case)
+    columns = [S.edge_column(G, ref.id) for ref in S.iter_edges(G)]
+    assert columns == list(range(len(columns)))
 
 
-def test_rule_4_reports_two_edges_that_claim_one_address():
-    G = build_case('binary_directed')
-    G._edges['e_bc'].col_idx = 0
-    assert_reports(G, 'col_idx')
+def test_rule_4_an_edge_with_no_structure_holds_no_column():
+    G = build_case('edge_entity')
+    G._ensure_edge_entity_placeholder('placeholder_edge')
+    assert not S.carries_structure(G, 'placeholder_edge')
+    assert problems_of(G) == []
 
 
 # ---------------------------------------------------------------------------
@@ -346,16 +355,13 @@ def test_rule_6_holds_for_the_edge_entity_case():
 
 def test_rule_6_reports_an_edge_entity_with_no_entity_side():
     G = build_case('edge_entity')
-    del G._entities[('ee_ab', FLAT)]
-    G._row_to_entity = {
-        row: ekey for row, ekey in G._row_to_entity.items() if ekey != ('ee_ab', FLAT)
-    }
+    G._store.remove_entity(('ee_ab', FLAT))
     assert_reports(G, 'ee_ab')
 
 
 def test_rule_6_reports_an_entity_marked_as_an_edge_with_no_edge_side():
     G = build_case('binary_directed')
-    G._entities[('A', FLAT)].kind = 'edge_entity'
+    G._store.entity_kind[G._store.entity_slot(('A', FLAT))] = ST.EDGE_ENTITY
     assert_reports(G, 'A')
 
 

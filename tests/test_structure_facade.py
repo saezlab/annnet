@@ -99,7 +99,9 @@ def test_iter_edges_keeps_two_parallel_edges_apart():
     [
         ('binary_directed', 'e_ab', {key('A'): 1.5, key('B'): -1.5}),
         ('binary_undirected', 'e_ab', {key('A'): 1.0, key('B'): 1.0}),
-        ('self_loop', 'e_loop', {key('A'): -0.5}),
+        # The two roles of a directed self-loop cancel, which is the one
+        # intended change the specification states.
+        ('self_loop', 'e_loop', {key('A'): 0.0}),
         ('parallel_edge', 'e_second', {key('A'): 2.0, key('B'): -2.0}),
         ('hyper_undirected', 'h_abc', {key('A'): 1.0, key('B'): 1.0, key('C'): 1.0}),
         ('hyper_directed', 'h_ab_c', {key('A'): 1.0, key('B'): 1.0, key('C'): -1.0}),
