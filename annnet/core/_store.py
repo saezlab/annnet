@@ -65,6 +65,20 @@ _SIDE_OF_ROLE = {SOURCE: ON_SOURCE, TARGET: ON_TARGET, MEMBER: ON_SOURCE}
 
 _INITIAL_CAPACITY = 8
 
+# Every array a store owns, named once so a copy cannot leave one behind.
+_ARRAYS = (
+    'entity_kind',
+    'edge_kind',
+    'edge_directed',
+    'edge_weight',
+    'edge_explicit',
+    'member_start',
+    'member_len',
+    'member_ent',
+    'member_coef',
+    'member_role',
+)
+
 
 class MemberList(NamedTuple):
     """The member entries of one edge, as views into the store arrays.
@@ -641,6 +655,48 @@ class CoreState:
             self.edge_count,
             reclaimed,
         )
+
+    def copy(self) -> CoreState:
+        """Return a store that holds the same graph, sharing nothing with this one.
+
+        Every slot keeps its address, so a position taken from one store still
+        addresses the same element in the other. The arrays are copied, and so is
+        every map and every list, down to the per-edge dictionaries.
+
+        The slot-freed hooks are not carried over. A hook belongs to the
+        attribute layer of one graph, and the copy has its own.
+        """
+        other = CoreState.__new__(CoreState)
+        other.directed = self.directed
+        other._aspects = self._aspects
+
+        other._entity_slot = dict(self._entity_slot)
+        other._entity_key = list(self._entity_key)
+        other._id_slots = {key: list(slots) for key, slots in self._id_slots.items()}
+        other._edge_slot = dict(self._edge_slot)
+        other._edge_id = list(self._edge_id)
+
+        for name in _ARRAYS:
+            setattr(other, name, getattr(self, name).copy())
+        other._member_used = self._member_used
+
+        other.edge_ml_kind = dict(self.edge_ml_kind)
+        other.edge_ml_layers = dict(self.edge_ml_layers)
+        other.edge_policy = {slot: dict(policy) for slot, policy in self.edge_policy.items()}
+
+        other.entity_free = list(self.entity_free)
+        other.edge_free = list(self.edge_free)
+        other._entity_edges = {slot: dict(edges) for slot, edges in self._entity_edges.items()}
+
+        other.entity_freed_hooks = []
+        other.edge_freed_hooks = []
+
+        other.structure_version = self.structure_version
+        other.append_log = list(self.append_log)
+        other.append_log_from_version = self.append_log_from_version
+        other._structural_cache = None
+        other._rows_cache = None
+        return other
 
     def __repr__(self) -> str:
         return (

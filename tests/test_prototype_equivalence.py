@@ -204,6 +204,32 @@ def test_building_a_shape_reaches_the_store(case):
     _assert_incremental_matches_rebuild(build_case(case, store='slots'), case)
 
 
+# ---------------------------------------------------------------------------
+# A copy takes the store with it
+# ---------------------------------------------------------------------------
+# Copying a graph copies its slot arrays instead of rebuilding the store from
+# what was installed. So the copy has to hold the same graph, hold its own
+# invariants, and share nothing with the graph it came from.
+
+
+@pytest.mark.parametrize('case', CASE_NAMES)
+def test_a_copied_graph_holds_the_same_store(case):
+    G = build_case(case, store='slots')
+    H = G.ops.copy()
+    assert H._store is not G._store
+    assert _snapshot(H._store) == _snapshot(G._store), case
+    assert V.validate_internal_consistency(H._store, strict=False) == []
+
+
+def test_a_write_to_a_copy_leaves_the_graph_it_came_from_alone():
+    G = build_case('binary_directed', store='slots')
+    H = G.ops.copy()
+    H.add_vertices(['Z'])
+    H.remove_edges('e_ab')
+    assert 'Z' not in set(G.vertices())
+    assert 'e_ab' in set(S.edge_ids(G._store))
+
+
 def test_a_sequence_of_mutations_reaches_the_store():
     G = build_case('binary_directed', store='slots')
     G.add_vertices(['D', 'E'])

@@ -72,13 +72,17 @@ def slices_from_specs(specs) -> dict:
 
 
 def install_structure(
-    g, *, entities, edges, matrix, matrix_shape=None, defer_edge_indexes=False
+    g, *, entities, edges, matrix, matrix_shape=None, defer_edge_indexes=False, store=None
 ) -> None:
     """Install canonical structural state on ``g`` and rebuild every derived index.
 
     Pass ``matrix=None`` when the caller holds no materialized matrix. The matrix
-    then rebuilds from the records on the first read, and ``matrix_shape`` tells
-    that rebuild how large the graph is.
+    then rebuilds on the first read, and ``matrix_shape`` tells that rebuild how
+    large the graph is.
+
+    Pass ``store`` when the caller already holds the slot store this graph is to
+    have. Otherwise the store is rebuilt from what was just installed, which costs
+    a pass over every edge, so a caller that can build the store itself should.
 
     Set ``defer_edge_indexes`` when most callers never ask an adjacency question.
     The indexes then build on the first query that needs one.
@@ -100,12 +104,14 @@ def install_structure(
     else:
         D.rebuild_edge_indexes(g)
     D.invalidate_sparse_caches(g)
-    # This installs a whole graph at once rather than changing one element, so a
-    # slot store on it is filled from what was just installed. Copy, every
-    # subgraph and every loader arrive here, which is why it is the one place
-    # that has to do it.
+    # This installs a whole graph at once rather than changing one element, so the
+    # slot store on it is installed or filled here. Copy, every subgraph and every
+    # loader arrive here, which is why it is the one place that has to do it.
+    if store is not None and _mutate.slot_store(g) is not None:
+        g._store = store
     _mutate.sync_aspects(g)
-    _mutate.resync(g)
+    if store is None:
+        _mutate.resync(g)
 
 
 def install_slices(g, slices, *, default=None, current=None) -> None:

@@ -664,21 +664,33 @@ class Operations:
         """
         G = self.__class__
         new_aspects = self._constructor_aspects()
+        # The copy keeps the canonical store of the graph it copies. This argument
+        # goes away with the record store, and so does this line.
+        store = 'records' if self._store is None else 'slots'
         if new_aspects is not None:
             new = G(
                 directed=self.directed,
                 v=self._matrix.shape[0],
                 e=self._matrix.shape[1],
                 aspects=new_aspects,
+                store=store,
             )
         else:
-            new = G(directed=self.directed, v=self._matrix.shape[0], e=self._matrix.shape[1])
+            new = G(
+                directed=self.directed,
+                v=self._matrix.shape[0],
+                e=self._matrix.shape[1],
+                store=store,
+            )
 
         _build.install_structure(
             new,
             entities=_build.clone_entities(self._entities),
             edges={eid: _build.clone_edge_record(rec) for eid, rec in self._edges.items()},
             matrix=self._matrix.copy(),
+            # A copy of the slot arrays keeps every slot at the address it had,
+            # and it costs a memory copy rather than a pass over every edge.
+            store=None if self._store is None else self._store.copy(),
         )
         new.vertex_aligned = self.vertex_aligned
         new._next_edge_id = self._next_edge_id

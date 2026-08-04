@@ -7,6 +7,7 @@ on, so these tests pin it down.
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from annnet.core import _store as ST
@@ -210,3 +211,68 @@ def test_a_long_churn_keeps_identity_and_address_in_step(store):
     for slot, entity_key in store.live_entities():
         assert store.entity_slot(entity_key) == slot
         assert store.entity_key(slot) == entity_key
+
+
+# ---------------------------------------------------------------------------
+# Copy
+# ---------------------------------------------------------------------------
+
+
+def _churned(store):
+    """A store with holes in both freelists and a policy on one edge."""
+    for n in 'ABCD':
+        store.add_entity(key(n))
+    edge(store, 'e0', 'A', 'B')
+    edge(store, 'e1', 'B', 'C')
+    edge(store, 'e2', 'C', 'D')
+    store.remove_edge('e1')
+    store.remove_entity(key('D'))
+    store.edge_policy[store.edge_slot('e0')] = {'mode': 'flexible'}
+    store.edge_ml_kind[store.edge_slot('e2')] = 'inter'
+    return store
+
+
+def test_a_copy_holds_the_same_graph_at_the_same_addresses(store):
+    _churned(store)
+    other = store.copy()
+    assert list(other.live_entities()) == list(store.live_entities())
+    assert list(other.live_edges()) == list(store.live_edges())
+    for slot, _edge_id in store.live_edges():
+        mine, theirs = store.members(slot), other.members(slot)
+        assert np.array_equal(theirs.entities, mine.entities)
+        assert np.allclose(theirs.coefficients, mine.coefficients)
+        assert np.array_equal(theirs.roles, mine.roles)
+    assert other.entity_free == store.entity_free
+    assert other.edge_free == store.edge_free
+    assert other.structure_version == store.structure_version
+
+
+def test_a_write_to_a_copy_leaves_the_original_alone(store):
+    _churned(store)
+    other = store.copy()
+    other.add_entity(key('E'))
+    other.remove_edge('e0')
+    other.edge_policy[other.edge_slot('e2')] = {'mode': 'fixed'}
+    assert store.entity_slot(key('E')) is None
+    assert store.edge_slot('e0') is not None
+    assert store.edge_policy[store.edge_slot('e0')] == {'mode': 'flexible'}
+    assert store.edge_policy.get(store.edge_slot('e2')) is None
+
+
+def test_a_copy_carries_no_hook_of_the_store_it_came_from(store):
+    _churned(store)
+    freed = []
+    store.edge_freed_hooks.append(lambda slot, edge_id: freed.append(edge_id))
+    other = store.copy()
+    other.remove_edge('e0')
+    assert freed == [], 'a hook belongs to one graph, not to every copy of its store'
+
+
+def test_the_named_array_list_covers_every_array_a_store_owns(store):
+    _churned(store)
+    owned = {
+        name
+        for name, value in vars(store).items()
+        if isinstance(value, np.ndarray) and not name.startswith('__')
+    }
+    assert owned == set(ST._ARRAYS), 'a copy would leave a new array behind'
