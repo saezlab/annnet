@@ -1457,7 +1457,6 @@ def batch_add_vertices(g, vertices, layer=None, slice=None, default_attrs=None):
     g.vertex_attributes = df2
 
 
-@syncs_returned_edges
 def batch_add_edges(
     g,
     edges,
@@ -1486,9 +1485,13 @@ def batch_add_edges(
     _row_to_entity = g._row_to_entity
     # An endpoint the graph has not met yet becomes a node here, inline rather
     # than through the setter, so the slot store is written inline as well. The
-    # decorator writes the edges alone, and an edge whose endpoint the store does
-    # not hold would lose that member.
+    # edge itself is written inline too: the loop already holds both endpoint
+    # keys and the coefficient each of them takes, so reading the record back to
+    # work them out again is the whole of what a bulk load used to pay twice for.
     _slot = slot_store(g)
+    # The shapes the inline write does not cover. Each is rare, and each is
+    # written from its record once the loop is done.
+    _deferred: list = []
     _flat = g._aspects == ('_',)
     _flat_coord = ('_',)
     _is_multilayer = not _flat
@@ -1506,6 +1509,7 @@ def batch_add_edges(
     _slice_weights: list = []
 
     def _ensure_endpoint(vid, et):
+        """Register the entity one endpoint names, and return its key."""
         if isinstance(vid, tuple) and len(vid) == 2 and isinstance(vid[1], tuple):
             ekey = vid
         elif _flat:
@@ -1522,13 +1526,16 @@ def batch_add_edges(
                 and vid.startswith('edge_')
             ):
                 g._ensure_edge_entity_placeholder(vid)
-            else:
-                idx = len(_entities)
-                _entities[ekey] = EntityRecord(row_idx=idx, kind='vertex')
-                _row_to_entity[idx] = ekey
-                D.index_entity_key(g, ekey)
-                if _slot is not None:
-                    _slot.add_entity(ekey, ST.NODE)
+                # The placeholder registers the edge entity under the key its own
+                # resolution gives, which need not be the one worked out above.
+                return I.resolve_ekey(g, vid)
+            idx = len(_entities)
+            _entities[ekey] = EntityRecord(row_idx=idx, kind='vertex')
+            _row_to_entity[idx] = ekey
+            D.index_entity_key(g, ekey)
+            if _slot is not None:
+                _slot.add_entity(ekey, ST.NODE)
+        return ekey
 
     for idx, it in enumerate(edges):
         # ── extract endpoints + fields without copying the input dict ──────────
@@ -1621,8 +1628,8 @@ def batch_add_edges(
             pass
 
         # ── ensure endpoint entities exist ─────────────────────────────────────
-        _ensure_endpoint(s, edge_type)
-        _ensure_endpoint(t, edge_type)
+        source_key = _ensure_endpoint(s, edge_type)
+        target_key = _ensure_endpoint(t, edge_type)
 
         # ── direction ──────────────────────────────────────────────────────────
         if e_dir is not None:
@@ -1657,6 +1664,27 @@ def batch_add_edges(
 
         # ── record + column (adjacency indexes rebuild lazily from records) ────
         existing = _edges.get(edge_id)
+        if _slot is not None:
+            # A new edge with two endpoints is two member entries, and the loop
+            # already holds both. Anything else — an open side, or an edge the
+            # graph already holds, which keeps a kind, a policy or coefficients
+            # this write does not name — is written from its finished record.
+            if existing is not None or s is None or t is None:
+                _deferred.append(edge_id)
+            else:
+                weight = float(w) if w is not None else 1.0
+                _slot.add_edge(
+                    edge_id,
+                    (
+                        (source_key, weight, ST.SOURCE),
+                        (target_key, -weight if is_dir else weight, ST.TARGET),
+                    ),
+                    kind=ST.BINARY,
+                    directed=is_dir,
+                    weight=w,
+                    ml_kind=ml_kind,
+                    ml_layers=ml_layers,
+                )
         if existing is not None and existing.col_idx >= 0:
             rec = existing
             rec.src = s
@@ -1769,7 +1797,11 @@ def batch_add_edges(
             rec = g._edges[eid]
             if rec.etype == 'binary':
                 rec.etype = 'vertex_edge'
+                if _slot is not None and _slot.edge_slot(eid) is not None:
+                    _slot.set_edge_kind(eid, ST.NODE_EDGE)
         g._grow_rows_to(len(entities))
+
+    sync_edges(g, _deferred)
 
     g._ensure_edge_rows_bulk(entity_out + out_ids)
 
