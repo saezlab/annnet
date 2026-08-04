@@ -1828,7 +1828,6 @@ def batch_add_edges(
     return entity_out + out_ids
 
 
-@syncs_returned_edges
 def batch_add_hyperedges(
     g,
     hyperedges,
@@ -1840,6 +1839,7 @@ def batch_add_hyperedges(
 ):
     """Add many hyperedges through the bulk mutation path."""
     slice = g._current_slice if slice is None else slice
+    _slot = slot_store(g)
 
     items = []
     for it in hyperedges:
@@ -2043,6 +2043,33 @@ def batch_add_hyperedges(
         # Refresh on both create and in-place update paths.
         rec.ml_kind = ml_kind_for_e
         rec.ml_layers = ml_layers_for_e
+
+        # The slot store. Every member is already resolved to an entity key, so
+        # the member list is the resolved sides and the coefficient each side
+        # takes. An entity named twice on one side is one member of it, exactly
+        # as the record set is.
+        if _slot is not None:
+            if resolved_members is not None:
+                source_keys, target_keys = dict.fromkeys(resolved_members), ()
+            else:
+                source_keys = dict.fromkeys(resolved_head)
+                target_keys = dict.fromkeys(resolved_tail)
+            role = ST.SOURCE if target_keys else ST.MEMBER
+            member_entries = [(key, w, role) for key in source_keys]
+            target_coefficient = -w if rec.directed else w
+            member_entries += [(key, target_coefficient, ST.TARGET) for key in target_keys]
+            if _slot.edge_slot(e_id) is not None:
+                _slot.remove_edge(e_id)
+            _slot.add_edge(
+                e_id,
+                member_entries,
+                kind=ST.HYPER,
+                directed=rec.directed,
+                weight=w,
+                ml_kind=ml_kind_for_e,
+                ml_layers=ml_layers_for_e,
+                direction_policy=rec.direction_policy,
+            )
 
         if slice_local is not None:
             if slice_local not in slices:
