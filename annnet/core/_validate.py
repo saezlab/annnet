@@ -359,7 +359,7 @@ def _check_matrix_matches_member_lists(store, problems) -> None:
         members = store.members(slot)
         expected: dict[int, float] = {}
         for entity_slot, coefficient in zip(members.entities, members.coefficients, strict=False):
-            row = view.row_of_entity[int(entity_slot)]
+            row = view.row_of_entity[store.entity_key(int(entity_slot))]
             expected[row] = expected.get(row, 0.0) + float(coefficient)
         expected = {row: value for row, value in expected.items() if value != 0.0}
         block = matrix[:, [column]].tocoo()

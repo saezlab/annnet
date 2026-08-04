@@ -154,7 +154,7 @@ def test_signed_incidence_keeps_the_single_entry_of_a_boundary_edge(store):
     add_sink_boundary(store)
     view = M.incidence(store, signed=True)
     column = _column(view.matrix, view.column_of_edge['b_out'])
-    row = view.row_of_entity[store.entity_slot(key('A'))]
+    row = view.row_of_entity[key('A')]
     assert column == {row: pytest.approx(-1.0)}
 
 
@@ -184,7 +184,7 @@ def test_hypergraph_incidence_keeps_one_entry_per_member(store):
 def test_adjacency_gives_a_self_loop_a_diagonal_entry(store):
     add_self_loop(store)
     view = M.adjacency(store)
-    row = view.row_of_entity[store.entity_slot(key('A'))]
+    row = view.row_of_entity[key('A')]
     dense = np.asarray(view.matrix.todense())
     assert dense[row, row] != 0.0
 
@@ -208,8 +208,8 @@ def test_adjacency_holds_both_a_self_loop_and_a_plain_edge(store):
     )
     view = M.adjacency(store)
     dense = np.asarray(view.matrix.todense())
-    row_a = view.row_of_entity[store.entity_slot(key('A'))]
-    row_b = view.row_of_entity[store.entity_slot(key('B'))]
+    row_a = view.row_of_entity[key('A')]
+    row_b = view.row_of_entity[key('B')]
     assert dense[row_a, row_a] != 0.0, 'the self-loop is on the diagonal'
     assert dense[row_a, row_b] != 0.0, 'the plain edge is off the diagonal'
 

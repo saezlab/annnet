@@ -43,8 +43,9 @@ log = logger(__name__)
 class MatrixView(NamedTuple):
     """One materialized matrix and the maps from identity to position.
 
-    A position belongs to this matrix and to nothing else. Read a position only to
-    index this matrix.
+    An entity is addressed by its entity key and an edge by its edge id, because
+    those are what a caller holds. A position belongs to this matrix and to
+    nothing else. Read a position only to index this matrix.
     """
 
     matrix: object
@@ -112,11 +113,12 @@ def _view(store, matrix, entity_slots, edge_slots, row_lookup) -> MatrixView:
     itself is. So the map is grown in place instead.
     """
     edge_ids = [store.edge_id(int(slot)) for slot in edge_slots]
+    entity_keys = tuple(store.entity_key(int(slot)) for slot in entity_slots)
     return MatrixView(
         matrix=matrix,
-        row_of_entity={int(slot): int(row_lookup[slot]) for slot in entity_slots},
+        row_of_entity={key: row for row, key in enumerate(entity_keys)},
         column_of_edge={edge_id: column for column, edge_id in enumerate(edge_ids)},
-        entity_of_row=tuple(store.entity_key(int(slot)) for slot in entity_slots),
+        entity_of_row=entity_keys,
         edge_of_column=edge_ids,
     )
 

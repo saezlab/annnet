@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys as _sys
 
-from . import _structure
+from . import _store as ST, _matrices, _structure
 from ._records import _external_entity_kind
 from ._stored_kinds import STORED_ENTITY_KIND
 from .._support.dataframe_backend import (
@@ -246,6 +246,94 @@ class CacheManager:
             'csc': _fmt(self._csc, self._csc_version),
             'adjacency': _fmt(self._adjacency, self._adjacency_version),
         }
+
+
+class MatrixNamespace:
+    """The parameterized matrices of one graph, over a cache keyed to its store.
+
+    Each method returns a :class:`_matrices.MatrixView`, which carries the
+    materialized matrix and the maps between an identity and the position it
+    holds in that matrix. A position belongs to one matrix and to nothing else,
+    which is why it comes with the matrix rather than from the graph.
+
+    The named properties of the graph — ``G.B``, ``G.H``, ``G.S``, ``G.A`` and
+    ``G.L`` — are the default parameterization of these, and they answer with the
+    matrix alone.
+    """
+
+    def __init__(self, graph):
+        self._G = graph
+        self._store = None
+        self._cache = None
+
+    @property
+    def cache(self):
+        """Return the matrix cache, rebound when the graph takes a new store.
+
+        A copy, a selection and a load each install a store of their own, and a
+        matrix cached against the old one names nothing in the new one.
+        """
+        store = _structure.store_of(self._G)
+        if self._cache is None or self._store is not store:
+            self._store = store
+            self._cache = _matrices.MatrixCache(store)
+        return self._cache
+
+    def incidence(self, *, kinds=None, signed: bool = True):
+        """Return an incidence matrix over the selected edge kinds.
+
+        Parameters
+        ----------
+        kinds : iterable of int | None, optional
+            The stored edge kinds to include. None includes every edge.
+        signed : bool, default True
+            Carry the coefficient of each member entry. Set False to report
+            membership alone.
+
+        Returns
+        -------
+        MatrixView
+        """
+        return self.cache.incidence(kinds=kinds, signed=signed)
+
+    def binary(self):
+        """Return the incidence matrix of the binary edges (``G.B``)."""
+        return self.incidence(kinds=(ST.BINARY, ST.NODE_EDGE), signed=True)
+
+    def hypergraph(self):
+        """Return the incidence matrix of the hyperedges (``G.H``)."""
+        return self.incidence(kinds=(ST.HYPER,), signed=False)
+
+    def signed(self):
+        """Return the coefficient incidence matrix of every edge (``G.S``)."""
+        return self.incidence(kinds=None, signed=True)
+
+    def adjacency(self, **kwargs):
+        """Return the adjacency matrix (``G.A``).
+
+        A self-loop lands on the diagonal. A boundary edge joins nothing, so it
+        is left out, and so is a hyperedge: projecting one onto pairs is a choice
+        that belongs to the caller. Pass ``kinds`` to make that choice.
+
+        Returns
+        -------
+        MatrixView
+        """
+        return self.cache.adjacency(**kwargs)
+
+    def laplacian(self, **kwargs):
+        """Return the Laplacian, which is the degree matrix minus the adjacency (``G.L``).
+
+        Returns
+        -------
+        MatrixView
+        """
+        return self.cache.laplacian(**kwargs)
+
+    def drop(self) -> None:
+        """Forget every cached matrix. A cache is always safe to drop."""
+        if self._cache is not None:
+            self._cache.drop()
 
 
 def _entity_kind(kind):

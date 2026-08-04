@@ -11,7 +11,7 @@ from . import _build, _state, _derive, _mutate, _identity, _validate, _structure
 from ._Ops import Operations, OperationsAccessor
 from ._Views import GraphView, ViewsClass, ViewsAccessor
 from ._Layers import LayerAccessor
-from ._Matrix import CacheManager, IndexManager, IndexMapping
+from ._Matrix import CacheManager, IndexManager, IndexMapping, MatrixNamespace
 from ._Slices import SliceManager
 from ._History import History, HistoryAccessor
 from ._records import (
@@ -2040,6 +2040,95 @@ class AnnNet(
         read-only unless you are implementing core internals.
         """
         return self._matrix
+
+    # The named matrices. Each is one purpose-built projection of the member
+    # lists the store holds, so no one matrix has to carry a convention another
+    # one needs. Read ``G.matrices`` for the same matrices with the maps between
+    # an identity and the position it holds, and for the parameterized forms.
+
+    @property
+    def B(self):
+        """Return the incidence matrix of the binary edges.
+
+        Returns
+        -------
+        scipy.sparse.sparray
+            Rows are entities and columns are binary edges, both in the order
+            the store holds them.
+        """
+        return self.matrices.binary().matrix
+
+    @property
+    def H(self):
+        """Return the incidence matrix of the hyperedges.
+
+        Returns
+        -------
+        scipy.sparse.sparray
+            Unsigned, so an entry reports that a hyperedge holds an entity
+            rather than which side it holds it on.
+        """
+        return self.matrices.hypergraph().matrix
+
+    @property
+    def S(self):
+        """Return the coefficient incidence matrix of every edge.
+
+        Returns
+        -------
+        scipy.sparse.sparray
+            Signed, so the two entries of a self-loop cancel and a
+            stoichiometric column carries the coefficients the user set.
+        """
+        return self.matrices.signed().matrix
+
+    @property
+    def A(self):
+        """Return the adjacency matrix.
+
+        Returns
+        -------
+        scipy.sparse.sparray
+            A self-loop lands on the diagonal. A boundary edge joins nothing and
+            a hyperedge names more than two entities, so neither is here.
+        """
+        return self.matrices.adjacency().matrix
+
+    @property
+    def L(self):
+        """Return the graph Laplacian, the degree matrix minus the adjacency.
+
+        Returns
+        -------
+        scipy.sparse.sparray
+            Every row sums to zero.
+        """
+        return self.matrices.laplacian().matrix
+
+    @property
+    def matrices(self):
+        """Return the parameterized-matrix namespace of this graph.
+
+        Returns
+        -------
+        MatrixNamespace
+        """
+        if not hasattr(self, '_matrix_namespace'):
+            self._matrix_namespace = MatrixNamespace(self)
+        return self._matrix_namespace
+
+    # ``x @ G`` for a numpy array on the left. Without this, the array handles
+    # the operator itself and raises before the graph is asked, because ``@`` is
+    # a ufunc and an array claims every ufunc it appears in.
+    __array_ufunc__ = None
+
+    def __matmul__(self, other):
+        """Apply the adjacency matrix to ``other``, so ``G @ x`` is ``G.A @ x``."""
+        return self.A @ other
+
+    def __rmatmul__(self, other):
+        """Apply ``other`` to the adjacency matrix, so ``x @ G`` is ``x @ G.A``."""
+        return other @ self.A
 
     @property
     def obs(self) -> Any:
