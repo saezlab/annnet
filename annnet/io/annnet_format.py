@@ -1228,8 +1228,7 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
     # 6. Install the whole structure at once. This fills every store the graph
     # keeps, so a graph read from a file answers exactly as one built by hand.
     # The definitions fill the canonical store directly, so no load rebuilds one
-    # from the records. The adjacency indexes are deferred, because many loads
-    # never ask an adjacency question and the first that does rebuilds them.
+    # from the records.
     # A column is the address a matrix gives an edge, so the store takes the
     # edges in the order the file records rather than in the order it lists them.
     edge_columns.sort(key=lambda item: item[0])
@@ -1237,7 +1236,6 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
         entities=entities,
         edges=edges,
         matrix=matrix,
-        defer_edge_indexes=True,
         definitions=(
             entity_definitions,
             [edge_definitions[eid] for _column, eid in edge_columns],

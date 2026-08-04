@@ -129,7 +129,6 @@ def install_structure(
     entities,
     edges,
     matrix,
-    defer_edge_indexes=False,
     store=None,
     definitions=None,
 ) -> None:
@@ -145,9 +144,6 @@ def install_structure(
     Pass ``definitions`` instead when the caller parsed the graph from a file and
     holds no store of its own. It is the ``(entities, edges)`` pair
     :func:`store_from_definitions` takes, and the store is filled from it.
-
-    Set ``defer_edge_indexes`` when most callers never ask an adjacency question.
-    The indexes then build on the first query that needs one.
     """
     from . import _mutate
 
@@ -162,10 +158,6 @@ def install_structure(
         g._matrix = matrix
     D.rebuild_entity_indexes(g)  # _row_to_entity, _vid_to_ekeys
     D.rebuild_col_index(g)  # _col_to_edge
-    if defer_edge_indexes:
-        D.clear_edge_indexes(g)  # _src_to_edges, _tgt_to_edges, _pair_to_edges
-    else:
-        D.rebuild_edge_indexes(g)
     D.invalidate_sparse_caches(g)
     # This installs a whole graph at once rather than changing one element, so the
     # slot store on it is installed or filled here. Copy, every subgraph and every

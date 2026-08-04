@@ -375,30 +375,28 @@ def infer_hyper_ml(head_keys, tail_keys):
 
 
 def find_parallel_edges(g, endpoint_set, etype):
-    """Return edge_ids with the same endpoint set (any direction)."""
-    D.ensure_edge_indexes(g)
-    if etype == 'binary':
-        nodes = list(endpoint_set)
-        a, b = (nodes[0], nodes[0]) if len(nodes) == 1 else (nodes[0], nodes[1])
-        result = [eid for eid in g._src_to_edges.get(a, []) if g._edges[eid].tgt == b]
-        if a != b:
-            result.extend(eid for eid in g._src_to_edges.get(b, []) if g._edges[eid].tgt == a)
-        return result
+    """Return the ids of the edges that hold exactly this endpoint set.
+
+    A parallel edge is one that names the same entities as the edge about to be
+    added, in either direction. The answer comes from the edges that touch one of
+    those entities, so it costs the degree of one of them rather than a pass over
+    every edge. The endpoints of a new edge need not exist yet, and an endpoint
+    the graph does not hold can be in no edge.
+    """
+    wanted = frozenset(endpoint_set)
+    if not wanted:
+        return []
+    probe = next(iter(wanted))
+    if not S.has_entity(g, probe):
+        return []
+    is_hyper = etype != 'binary'
     result = []
-    for eid, rec in g._edges.items():
-        if rec.etype != 'hyper' or rec.col_idx < 0:
+    for edge_id in S.entity_edges(g, probe, 'both'):
+        if (S.edge_ref(g, edge_id).kind == S.HYPER) != is_hyper:
             continue
-        members = set()
-        if isinstance(rec.src, frozenset):
-            members.update(rec.src)
-        elif rec.src is not None:
-            members.add(rec.src)
-        if isinstance(rec.tgt, frozenset):
-            members.update(rec.tgt)
-        elif rec.tgt is not None:
-            members.add(rec.tgt)
-        if frozenset(members) == endpoint_set:
-            result.append(eid)
+        sides = S.edge_sides(g, edge_id)
+        if sides.source | sides.target == wanted:
+            result.append(edge_id)
     return result
 
 
@@ -549,7 +547,6 @@ def add_edge(
             edge_id = g._get_next_edge_id()
 
     # 5. Ensure endpoints exist
-    D.ensure_edge_indexes(g)
     _ent = g._entities
     for node in endpoint_set:
         ekey = I.resolve_ekey(g, node)
@@ -621,34 +618,8 @@ def add_edge(
             direction_policy=flexible,
             coeffs=rec_coeffs,
         )
-        if src_store is not None:
-            g._src_to_edges.setdefault(src_store, []).append(edge_id)
-        if tgt_store is not None:
-            g._tgt_to_edges.setdefault(tgt_store, []).append(edge_id)
-        if etype == 'binary':
-            D.index_edge_pair(g, edge_id, src_store, tgt_store)
     else:
         rec = _edg[edge_id]
-        old_src, old_tgt = rec.src, rec.tgt
-        if (old_src, old_tgt) != (src_store, tgt_store):
-            D.unindex_edge_pair(g, edge_id, old_src, old_tgt)
-            for _old, _new, _idx in (
-                (old_src, src_store, g._src_to_edges),
-                (old_tgt, tgt_store, g._tgt_to_edges),
-            ):
-                if _old != _new:
-                    lst = _idx.get(_old)
-                    if lst:
-                        try:
-                            lst.remove(edge_id)
-                        except ValueError:
-                            pass
-                        if not lst:
-                            del _idx[_old]
-                    if _new is not None:
-                        _idx.setdefault(_new, []).append(edge_id)
-            if etype == 'binary':
-                D.index_edge_pair(g, edge_id, src_store, tgt_store)
         rec.src = src_store
         rec.tgt = tgt_store
         rec.weight = float(weight)
@@ -750,14 +721,11 @@ def propagate_to_all_slices(g, edge_id, source, target):
 
 def remove_edge(g, edge_id):
     """Remove a single edge, its column, attributes, and slice memberships."""
-    D.ensure_edge_indexes(g)
     if edge_id not in g._edges:
         raise KeyError(f'Edge {edge_id} not found')
 
     rec = g._edges[edge_id]
     col_idx = rec.col_idx
-    if rec.etype != 'hyper':
-        D.unindex_edge_pair(g, edge_id, rec.src, rec.tgt)
 
     D.mark_matrix_stale(g)
     D.invalidate_sparse_caches(g)
@@ -768,10 +736,6 @@ def remove_edge(g, edge_id):
         eid = g._col_to_edge.pop(old_c)
         g._col_to_edge[old_c - 1] = eid
         g._edges[eid].col_idx = old_c - 1
-
-    if rec.etype != 'hyper':
-        D.remove_edge_id_from_index(g._src_to_edges, rec.src, edge_id)
-        D.remove_edge_id_from_index(g._tgt_to_edges, rec.tgt, edge_id)
 
     del g._edges[edge_id]
     drop_edges(g, (edge_id,))
@@ -799,7 +763,6 @@ def remove_edge(g, edge_id):
 
 def remove_edges_bulk(g, edge_ids):
     """Remove many edges and compact the remaining edge columns."""
-    D.ensure_edge_indexes(g)
     drop = set(edge_ids)
     if not drop:
         return
@@ -815,19 +778,7 @@ def remove_edges_bulk(g, edge_ids):
         g._edges[eid].col_idx = new_idx
 
     for eid in drop:
-        rec = g._edges.pop(eid, None)
-        if rec is not None and rec.etype != 'hyper' and rec.src is not None and rec.tgt is not None:
-            s, t = rec.src, rec.tgt
-            D.unindex_edge_pair(g, eid, s, t)
-            for v, index in ((s, g._src_to_edges), (t, g._tgt_to_edges)):
-                _lst = index.get(v)
-                if _lst:
-                    try:
-                        _lst.remove(eid)
-                    except ValueError:
-                        pass
-                    if not _lst:
-                        del index[v]
+        g._edges.pop(eid, None)
     drop_edges(g, drop)
 
     for slice_data in g._slices.values():
@@ -1113,7 +1064,6 @@ def reverse_directions(g):
         if edge_is_directed:
             rec.src, rec.tgt = rec.tgt, rec.src
             reversed_ids.append(eid)
-    D.rebuild_edge_indexes(g)
     g._mark_matrix_dirty()
     D.invalidate_sparse_caches(g)
     store = slot_store(g)
@@ -1807,7 +1757,6 @@ def batch_add_edges(
     # lets the next reader rebuild a compact CSR from records in one pass.
     if out_ids:
         g._mark_matrix_dirty()
-        g._edge_indexes_built = False  # adjacency indexes rebuild lazily from records
         g._invalidate_sparse_caches()
 
     for sid, eids in _slice_eids.items():

@@ -99,92 +99,10 @@ def rebuild_entity_indexes(g) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Adjacency indexes:  _src_to_edges, _tgt_to_edges, _pair_to_edges (binary edges)
+# Column index:  _col_to_edge
 # ---------------------------------------------------------------------------
 
 
 def rebuild_col_index(g) -> None:
     """Rebuild ``_col_to_edge`` (column index -> edge id) from canonical edge records."""
     g._col_to_edge = {rec.col_idx: eid for eid, rec in g._edges.items() if rec.col_idx >= 0}
-
-
-def rebuild_edge_indexes(g) -> None:
-    """Rebuild adjacency-derived edge indexes from canonical edge records."""
-    g._src_to_edges = {}
-    g._tgt_to_edges = {}
-    g._pair_to_edges = {}
-    for eid, rec in g._edges.items():
-        if rec.etype == 'hyper' or rec.src is None or rec.tgt is None:
-            continue
-        g._src_to_edges.setdefault(rec.src, []).append(eid)
-        g._tgt_to_edges.setdefault(rec.tgt, []).append(eid)
-        g._pair_to_edges.setdefault((rec.src, rec.tgt), []).append(eid)
-    g._edge_indexes_built = True
-
-
-def clear_edge_indexes(g) -> None:
-    """Drop the adjacency-derived edge indexes so the first query rebuilds them."""
-    g._src_to_edges = {}
-    g._tgt_to_edges = {}
-    g._pair_to_edges = {}
-    g._edge_indexes_built = False
-
-
-def ensure_edge_indexes(g) -> None:
-    """Materialize adjacency-derived edge indexes on demand."""
-    if not getattr(g, '_edge_indexes_built', True):
-        rebuild_edge_indexes(g)
-
-
-def edge_ids_for_pair(g, source, target) -> list[str]:
-    """Return edge ids for a binary endpoint pair from canonical src-edge buckets."""
-    ensure_edge_indexes(g)
-    eids = []
-    for eid in g._src_to_edges.get(source, ()):
-        rec = g._edges.get(eid)
-        if rec is not None and rec.etype != 'hyper' and rec.tgt == target:
-            eids.append(eid)
-    if eids:
-        g._pair_to_edges[(source, target)] = list(eids)
-    else:
-        g._pair_to_edges.pop((source, target), None)
-    return eids
-
-
-def index_edge_pair(g, edge_id, src, tgt) -> None:
-    """Register an edge ID in the binary endpoint-pair index."""
-    if src is None or tgt is None:
-        return
-    bucket = g._pair_to_edges.setdefault((src, tgt), [])
-    if edge_id not in bucket:
-        bucket.append(edge_id)
-
-
-def unindex_edge_pair(g, edge_id, src, tgt) -> None:
-    """Remove an edge ID from the binary endpoint-pair index."""
-    if src is None or tgt is None:
-        return
-    bucket = g._pair_to_edges.get((src, tgt))
-    if not bucket:
-        return
-    try:
-        bucket.remove(edge_id)
-    except ValueError:
-        return
-    if not bucket:
-        g._pair_to_edges.pop((src, tgt), None)
-
-
-def remove_edge_id_from_index(index: dict, key, edge_id: str) -> None:
-    """Remove one edge id from an adjacency bucket if present."""
-    if key is None:
-        return
-    bucket = index.get(key)
-    if not bucket:
-        return
-    try:
-        bucket.remove(edge_id)
-    except ValueError:
-        return
-    if not bucket:
-        index.pop(key, None)

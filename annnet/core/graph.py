@@ -653,25 +653,6 @@ class AnnNet(
     def _rebuild_entity_indexes(self, *args, **kwargs):
         return _derive.rebuild_entity_indexes(self, *args, **kwargs)
 
-    def _rebuild_edge_indexes(self, *args, **kwargs):
-        return _derive.rebuild_edge_indexes(self, *args, **kwargs)
-
-    def _ensure_edge_indexes(self, *args, **kwargs):
-        return _derive.ensure_edge_indexes(self, *args, **kwargs)
-
-    def _edge_ids_for_pair(self, *args, **kwargs):
-        return _derive.edge_ids_for_pair(self, *args, **kwargs)
-
-    def _index_edge_pair(self, *args, **kwargs):
-        return _derive.index_edge_pair(self, *args, **kwargs)
-
-    def _unindex_edge_pair(self, *args, **kwargs):
-        return _derive.unindex_edge_pair(self, *args, **kwargs)
-
-    @staticmethod
-    def _remove_edge_id_from_index(*args, **kwargs):
-        return _derive.remove_edge_id_from_index(*args, **kwargs)
-
     def _endpoint_slice_vertex_ids(self, *args, **kwargs):
         return _identity.endpoint_slice_vertex_ids(self, *args, **kwargs)
 
@@ -1434,7 +1415,7 @@ class AnnNet(
 
         # ---- Mode 2: source + target only ----
         if edge_id is None and source is not None and target is not None:
-            eids = self._edge_ids_for_pair(source, target)
+            eids = _structure.edges_between(self, source, target)
             return (len(eids) > 0, eids)
 
         # ---- Mode 3: edge_id + source + target ----
@@ -1493,7 +1474,7 @@ class AnnNet(
         list[str]
             Edge IDs (may be empty).
         """
-        return self._edge_ids_for_pair(source, target)
+        return _structure.edges_between(self, source, target)
 
     def _get_csr(self):
         csr = self.cache.csr

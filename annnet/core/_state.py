@@ -32,9 +32,6 @@ DERIVED_FIELDS = (
     '_row_to_entity',
     '_vid_to_ekeys',
     '_col_to_edge',
-    '_src_to_edges',
-    '_tgt_to_edges',
-    '_pair_to_edges',
 )
 
 
@@ -67,10 +64,6 @@ def init_state(g, *, directed=None, aspects=None) -> None:
     # Edge store + derived edge/adjacency indexes.
     g._edges = {}  # edge_id -> EdgeRecord
     g._col_to_edge = {}  # col_idx -> edge_id
-    g._src_to_edges = {}  # src -> [edge_id, ...]
-    g._tgt_to_edges = {}  # tgt -> [edge_id, ...]
-    g._pair_to_edges = {}  # (src, tgt) -> [edge_id, ...]  (binary only)
-    g._edge_indexes_built = True
 
     # Composite vertex key support.
     g._vertex_key_fields = None

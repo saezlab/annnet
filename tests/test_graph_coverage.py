@@ -241,16 +241,16 @@ def test_remove_edges_bulk_removes_each_edge() -> None:
     assert G.ne == 0
 
 
-def test_remove_edge_cleans_flat_adjacency_indexes() -> None:
+def test_remove_edge_leaves_no_query_that_still_finds_it() -> None:
     G = AnnNet()
     G.add_vertices(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
 
     G.remove_edge('e1')
 
-    assert G._src_to_edges == {}
-    assert G._tgt_to_edges == {}
-    assert G._pair_to_edges == {}
+    assert G.has_edge('A', 'B') == (False, [])
+    assert G.incident_edges('A') == []
+    assert G.incident_edges('B') == []
 
 
 def test_remove_vertices_with_unknown_id_raises_by_default() -> None:
@@ -398,7 +398,7 @@ def test_remove_edge_singular_drops_the_edge() -> None:
     assert 'e1' not in G._edges
 
 
-def test_remove_edge_cleans_multilayer_adjacency_indexes() -> None:
+def test_remove_edge_leaves_no_query_that_still_finds_it_in_a_layer() -> None:
     G = AnnNet(aspects={'time': ['t1']})
     G.add_vertices('A', layer='t1')
     G.add_vertices('B', layer='t1')
@@ -408,9 +408,9 @@ def test_remove_edge_cleans_multilayer_adjacency_indexes() -> None:
 
     G.remove_edge('e1')
 
-    assert src not in G._src_to_edges
-    assert tgt not in G._tgt_to_edges
-    assert (src, tgt) not in G._pair_to_edges
+    assert G.has_edge(src, tgt) == (False, [])
+    assert G.incident_edges(src) == []
+    assert G.incident_edges(tgt) == []
 
 
 def test_remove_vertex_singular_cascades_incident_edges() -> None:

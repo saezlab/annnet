@@ -812,3 +812,23 @@ def entity_edges(graph, ref, direction: str = 'both') -> tuple:
     if store.entity_slot(key) is None:
         raise KeyError(f'Unknown entity: {ref!r}')
     return _slot_entity_edges(store, key, direction)
+
+
+def edges_between(graph, source, target) -> list:
+    """Return the ids of the binary edges that run from one entity to another.
+
+    An undirected edge counts as running from the side it was stored on, which is
+    what the public ``has_edge(source, target)`` reports. The answer costs the
+    degree of the source, because it reads the edges that touch it rather than
+    every edge of the graph.
+    """
+    if not has_entity(graph, source):
+        return []
+    found = []
+    for edge_id in entity_edges(graph, source, 'out'):
+        if edge_ref(graph, edge_id).kind == HYPER:
+            continue
+        sides = edge_sides(graph, edge_id)
+        if sides.source == frozenset({source}) and sides.target == frozenset({target}):
+            found.append(edge_id)
+    return found

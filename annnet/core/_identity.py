@@ -105,18 +105,10 @@ def make_layer_coord(g, layer_spec) -> tuple:
 def _keys_of_id(g, vid) -> list:
     """Return the entity keys a bare id stands for, in row order.
 
-    Each store keeps its own index of this, because a scan over the entities
-    would make resolving one bare id cost the size of the graph.
+    The store keeps an index of this, because a scan over the entities would make
+    resolving one bare id cost the size of the graph.
     """
-    store = getattr(g, '_store', None)
-    if store is not None:
-        return store.entity_keys_of_id(vid)
-    matches = []
-    for ekey in g._vid_to_ekeys.get(vid, ()):
-        record = g._entities.get(ekey)
-        if record is not None:
-            matches.append((record.row_idx, ekey))
-    return [ekey for _row, ekey in sorted(matches)]
+    return g._store.entity_keys_of_id(vid)
 
 
 def resolve_ekey(g, vid_or_key) -> tuple:
