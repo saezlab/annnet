@@ -182,32 +182,13 @@ def _keep_identity(routed, write):
     return routed
 
 
-def syncs_named_edges(name, position=0):
-    """Write the edges that one argument of the call names.
-
-    ``name`` is the keyword the caller may pass, and ``position`` is where the
-    same argument sits when it is passed positionally, counting after the graph.
-    """
-
-    def decorate(write):
-        def routed(g, *args, **kwargs):
-            result = write(g, *args, **kwargs)
-            if slot_store(g) is not None:
-                named = args[position] if len(args) > position else kwargs.get(name)
-                sync_edges(g, [named] if isinstance(named, str) else (named or ()))
-            return result
-
-        return _keep_identity(routed, write)
-
-    return decorate
-
-
 def rebuilds_the_store(write):
     """Rebuild the slot store whole.
 
-    For a call that replaces the entity registry outright rather than going
-    through the two doors. Every edge names an entity, so nothing survives. These
-    are rare and none of them runs per element.
+    One legacy setter is left that replaces the entity registry outright rather
+    than going through the two doors. Every edge names an entity, so no slot and
+    no member list survives it. It runs once per call and never per element, and
+    it goes with the records.
     """
 
     def routed(g, *args, **kwargs):
@@ -289,7 +270,6 @@ def register_edge_as_entity(g, edge_id):
     D.grow_rows_to(g, len(g._entities))
 
 
-@syncs_named_edges('edge_id')
 def ensure_edge_entity_placeholder(g, edge_id, slice=None, **attributes):
     """Ensure a placeholder edge-entity exists and is attached to a slice."""
     register_edge_as_entity(g, edge_id)
@@ -305,6 +285,11 @@ def ensure_edge_entity_placeholder(g, edge_id, slice=None, **attributes):
             ml_layers=None,
             direction_policy=None,
         )
+        # A placeholder is an edge the graph knows the name of and nothing else,
+        # so it holds no members and occupies no column.
+        store = slot_store(g)
+        if store is not None and store.edge_slot(edge_id) is None:
+            store.add_edge(edge_id, (), kind=ST.PLACEHOLDER, directed=False, weight=1.0)
     slice = slice or g._current_slice
     if slice is not None:
         g.slices._ensure_slice(slice)['edges'].add(edge_id)
@@ -923,7 +908,6 @@ def set_entity_to_idx(g, mapping):
     g._mark_matrix_dirty()
 
 
-@rebuilds_the_store
 def set_entity_types(g, mapping):
     """Set entity kinds from a ``vid -> kind`` map (legacy setter)."""
     for vid, kind in dict(mapping).items():
@@ -935,7 +919,6 @@ def set_entity_types(g, mapping):
         )
 
 
-@rebuilds_the_store
 def set_entity_kinds(g, mapping):
     """Set the kind of each entity an ``ekey -> kind`` map names.
 
@@ -947,6 +930,7 @@ def set_entity_kinds(g, mapping):
         rec = g._entities.get(ekey)
         if rec is not None:
             rec.kind = kind
+            sync_entity(g, ekey)
             continue
         row_idx = max(g._row_to_entity, default=-1) + 1
         register_entity_record(g, ekey, EntityRecord(row_idx=row_idx, kind=kind))

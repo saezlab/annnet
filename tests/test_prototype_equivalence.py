@@ -184,6 +184,7 @@ def _snapshot(store):
     """Everything the slot store holds, addressed by identity alone."""
     return {
         'entities': S.entity_keys(store),
+        'kinds': {key: S.entity_ref(store, key).kind for key in S.entity_keys(store)},
         'edges': S.edge_ids(store),
         'sides': {eid: S.edge_sides(store, eid) for eid in S.edge_ids(store)},
         'members': {eid: S.edge_members(store, eid) for eid in S.edge_ids(store)},
@@ -335,6 +336,22 @@ def test_a_sequence_of_mutations_reaches_the_store():
 
     G.make_undirected()
     _assert_incremental_matches_rebuild(G, 'make_undirected')
+
+
+def test_setting_the_kind_of_an_entity_reaches_the_store():
+    """The legacy kind setters change one field, so neither rebuilds the store."""
+    G = build_case('binary_directed', store='slots')
+    G.entity_types = {'A': 'edge'}
+    assert S.entity_ref(G._store, ('A', ('_',))).kind == S.EDGE_ENTITY
+    _assert_incremental_matches_rebuild(G, 'entity_types')
+
+    G._set_entity_kinds({('B', ('_',)): 'edge_entity'})
+    assert S.entity_ref(G._store, ('B', ('_',))).kind == S.EDGE_ENTITY
+    _assert_incremental_matches_rebuild(G, 'set_entity_kinds')
+
+    G._set_entity_kinds({('Z', ('_',)): 'vertex'})
+    assert S.has_entity(G._store, ('Z', ('_',)))
+    _assert_incremental_matches_rebuild(G, 'set_entity_kinds/new')
 
 
 # ---------------------------------------------------------------------------
