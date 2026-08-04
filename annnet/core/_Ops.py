@@ -163,6 +163,22 @@ class Operations:
         wanted = set(edge_ids)
         return [edge_id for edge_id in _structure.edge_ids(self) if edge_id in wanted]
 
+    def _ordered_selection_rows(self, vertex_ids, edge_ids) -> list:
+        """Return the entities a selection holds, in the row order they had.
+
+        An edge-entity is one identity on both axes, so a selection that keeps
+        the edge keeps the entity. Leaving it behind gives the new graph an edge
+        that is an edge-entity with nothing to name it, which is the same shape a
+        removal used to leave and which data-model rule 6 forbids.
+        """
+        wanted_vertices = set(vertex_ids)
+        wanted_edges = set(edge_ids)
+        return [
+            ref.key
+            for ref in _structure.iter_entities(self)
+            if ref.id in (wanted_edges if ref.kind == _structure.EDGE_ENTITY else wanted_vertices)
+        ]
+
     def _build_flat_graph_from_selection(
         self,
         *,
@@ -174,14 +190,17 @@ class Operations:
     ) -> AnnNet:
         ordered_vertices = self._ordered_flat_vertex_ids(vertex_ids)
         ordered_edges = self._ordered_edge_ids(edge_ids)
-        row_keys = [(vid, ('_',)) for vid in ordered_vertices]
+        row_keys = self._ordered_selection_rows(ordered_vertices, ordered_edges)
         row_indexes = [self._entities[ekey].row_idx for ekey in row_keys]
         col_indexes = [self._edges[eid].col_idx for eid in ordered_edges]
 
         new = self.__class__(directed=self.directed)
         matrix = self._get_csr()[row_indexes, :][:, col_indexes].todok()
 
-        entities = {ekey: _build.new_entity_record(i, 'vertex') for i, ekey in enumerate(row_keys)}
+        entities = {
+            ekey: _build.new_entity_record(i, self._entities[ekey].kind)
+            for i, ekey in enumerate(row_keys)
+        }
         weight_overrides = edge_weight_overrides or {}
         edges = {
             eid: _build.clone_edge_record(

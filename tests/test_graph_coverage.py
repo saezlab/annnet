@@ -456,6 +456,45 @@ def test_removing_every_vertex_of_an_edge_entity_graph_empties_it() -> None:
     assert G.validate(strict=False) == []
 
 
+def test_a_subgraph_that_keeps_the_edge_of_an_edge_entity_keeps_the_entity() -> None:
+    """The selection counterpart of the removal cascade above.
+
+    A selection lists the vertices it wants, and an edge-entity is not one. But
+    the edge it names is kept, and the entity is that edge, so the entity comes
+    with it or the subgraph holds an edge nothing names.
+    """
+    G = _edge_entity_graph()
+
+    H = G.ops.subgraph(['A', 'B', 'C'])
+
+    assert H.has_edge(edge_id='ee_ab') is True
+    assert S.has_entity_id(H, 'ee_ab', kind=S.EDGE_ENTITY)
+    assert H.validate(strict=False) == []
+
+
+def test_marking_an_entity_as_an_edge_gives_it_the_edge_to_be() -> None:
+    """Rule 6 reads in both directions, so either half declares the other."""
+    G = AnnNet(directed=True)
+    G.add_vertices(['A', 'B'])
+
+    G.entity_types = {'A': 'edge'}
+
+    assert G.has_edge(edge_id='A') is True
+    assert G.validate(strict=False) == []
+
+
+def test_the_edge_an_entity_was_given_is_replaced_by_its_definition() -> None:
+    """A reader may learn that an entity is an edge before it reads the edge."""
+    G = AnnNet(directed=True)
+    G.add_vertices(['A', 'B'])
+    G._set_entity_kinds({('e1', ('_',)): 'edge_entity'})
+
+    G.add_edges('A', 'B', edge_id='e1')
+
+    assert S.edge_sides(G, 'e1') == S.Endpoints(frozenset({'A'}), frozenset({'B'}))
+    assert G.validate(strict=False) == []
+
+
 def test_remove_vertex_singular_cascades_incident_edges() -> None:
     G = _toy()
     G.remove_vertex('B')

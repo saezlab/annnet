@@ -270,6 +270,33 @@ def register_edge_as_entity(g, edge_id):
     D.mark_matrix_stale(g)
 
 
+def register_entity_as_edge(g, entity_id) -> None:
+    """Ensure an entity marked as an edge-entity has an edge to be.
+
+    The mirror of :func:`register_edge_as_entity`, and the other half of
+    data-model rule 6. An edge-entity is one identity on both axes, so marking
+    an entity as one says an edge of that name exists. Until the definition of
+    that edge arrives it is a placeholder, which a later add of the same id
+    replaces.
+    """
+    if S.has_edge(g, entity_id):
+        return
+    g._edges[entity_id] = EdgeRecord(
+        src=None,
+        tgt=None,
+        weight=1.0,
+        directed=False,
+        etype='edge_placeholder',
+        col_idx=-1,
+        ml_kind=None,
+        ml_layers=None,
+        direction_policy=None,
+    )
+    store = slot_store(g)
+    if store is not None:
+        store.add_edge(entity_id, (), kind=ST.PLACEHOLDER, directed=False, weight=1.0)
+
+
 def ensure_edge_entity_placeholder(g, edge_id, slice=None, **attributes):
     """Ensure a placeholder edge-entity exists and is attached to a slice."""
     register_edge_as_entity(g, edge_id)
@@ -865,9 +892,10 @@ def set_entity_types(g, mapping):
         ekey = I.resolve_ekey(g, vid)
         rec = g._entities.get(ekey)
         row_idx = rec.row_idx if rec is not None else len(g._entities)
-        register_entity_record(
-            g, ekey, EntityRecord(row_idx=row_idx, kind=_internal_entity_kind(kind))
-        )
+        internal = _internal_entity_kind(kind)
+        register_entity_record(g, ekey, EntityRecord(row_idx=row_idx, kind=internal))
+        if internal == 'edge_entity':
+            register_entity_as_edge(g, ekey[0])
 
 
 def set_entity_kinds(g, mapping):
@@ -882,9 +910,11 @@ def set_entity_kinds(g, mapping):
         if rec is not None:
             rec.kind = kind
             sync_entity(g, ekey)
-            continue
-        row_idx = max(g._row_to_entity, default=-1) + 1
-        register_entity_record(g, ekey, EntityRecord(row_idx=row_idx, kind=kind))
+        else:
+            row_idx = max(g._row_to_entity, default=-1) + 1
+            register_entity_record(g, ekey, EntityRecord(row_idx=row_idx, kind=kind))
+        if kind == 'edge_entity':
+            register_entity_as_edge(g, ekey[0])
 
 
 def remap_entity_keys(g, remap):
