@@ -278,6 +278,17 @@ def test_flattening_a_multilayer_graph_installs_the_store_it_built():
     _assert_incremental_matches_rebuild(G, 'flatten_layers')
 
 
+def test_the_default_direction_of_a_graph_reaches_the_store():
+    """An edge that declares no direction of its own answers with the graph default."""
+    from annnet.core import _mutate
+
+    G = build_case('binary_directed', store='slots')
+    _mutate.set_edge_field(G, 'e_ab', 'directed', None)
+    assert S.edge_ref(G, 'e_ab').directed is True, 'the default the graph was built with'
+    G.directed = False
+    assert S.edge_ref(G, 'e_ab').directed is False, 'the default the graph now declares'
+
+
 def test_a_write_to_a_copy_leaves_the_graph_it_came_from_alone():
     G = build_case('binary_directed', store='slots')
     H = G.ops.copy()

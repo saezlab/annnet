@@ -512,6 +512,25 @@ class AnnNet(
         self.layer_attributes = empty_dataframe({'layer_id': 'text'}, backend=backend)
 
     @property
+    def directed(self):
+        """The direction an edge takes when it declares none.
+
+        The canonical store answers with it too, so the two cannot drift apart.
+        An edge that inherits the default would otherwise report the direction
+        the graph had when it was built.
+        """
+        return self._directed
+
+    @directed.setter
+    def directed(self, value) -> None:
+        self._directed = value
+        # A graph sets its default before it builds its store, and the store
+        # takes the same value when it is built.
+        store = getattr(self, '_store', None)
+        if store is not None:
+            store.directed = value
+
+    @property
     def vertex_attributes(self):
         """Vertex (obs) attribute table; flushes buffered id-only rows on read."""
         if self._pending_vertex_ids:
