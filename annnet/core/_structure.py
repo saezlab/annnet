@@ -287,11 +287,12 @@ def has_entity_id(graph, entity_id: str, kind: str | None = None) -> bool:
     ask about nodes alone, or about edge entities alone.
     """
     if is_slot_backed(graph):
+        # The store keeps an index from a bare id to the slots it stands for, so
+        # this asks it rather than walking every entity the graph holds.
         store = store_of(graph)
         return any(
-            key[0] == entity_id
-            and (kind is None or _SLOT_ENTITY_KIND[int(store.entity_kind[slot])] == kind)
-            for slot, key in store.live_entities()
+            kind is None or _SLOT_ENTITY_KIND[int(store.entity_kind[slot])] == kind
+            for slot in store.entity_slots_of_id(entity_id)
         )
     if graph._aspects == ('_',):
         keys = ((entity_id, ('_',)),)

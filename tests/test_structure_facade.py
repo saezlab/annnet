@@ -355,6 +355,25 @@ def test_has_entity_id_is_true_for_an_id_that_more_than_one_layer_carries():
     assert S.has_entity_id(G, 'Z') is False
 
 
+@pytest.mark.parametrize('case', ['binary_directed', 'multilayer'])
+def test_has_entity_id_asks_the_index_and_never_walks_the_graph(case, monkeypatch):
+    """One id lookup costs one index read, whatever the graph holds.
+
+    A walk here is the whole cost of loading a file, because a slice names every
+    vertex it holds by its bare id and asks this once per name.
+    """
+    G = build_case(case)
+    store = ST.from_graph(G)
+
+    def refuse():
+        raise AssertionError('has_entity_id walked every entity of the graph')
+
+    monkeypatch.setattr(store, 'live_entities', refuse)
+    for ref in S.iter_entities(G):
+        assert S.has_entity_id(store, ref.id) is True
+    assert S.has_entity_id(store, 'no_such_id') is False
+
+
 # ---------------------------------------------------------------------------
 # Counts
 # ---------------------------------------------------------------------------
