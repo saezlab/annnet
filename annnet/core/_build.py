@@ -119,8 +119,25 @@ def store_from_definitions(g, entities, edges):
             explicit_coefficients=edge.coefficients is not None,
             ml_kind=edge.ml_kind,
             ml_layers=edge.ml_layers,
+            direction_policy=edge.direction_policy,
         )
     return store
+
+
+def rebuild_store(g):
+    """Return the store a graph describes, built from scratch in one pass.
+
+    The graph is read back as definitions through the query facade and the
+    result is filled from those alone, so nothing of the store it came from is
+    carried over. What it checks is that the store still says what its own
+    definitions say: a write that changed one field and left a dependent one
+    behind gives a different store here.
+
+    This is what took over from the rebuild-from-records the store was checked
+    against while there were two stores. It is a round trip rather than a second
+    opinion, and ``_validate`` holds the rules that no round trip can check.
+    """
+    return store_from_definitions(g, *S.definitions_of(g))
 
 
 def install_structure(

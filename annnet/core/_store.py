@@ -1002,55 +1002,8 @@ class CoreState:
 
 
 # ---------------------------------------------------------------------------
-# The bridge from the record store
+# Building member entries
 # ---------------------------------------------------------------------------
-
-
-def from_graph(graph) -> CoreState:
-    """Build a slot store that holds the same graph as a record-backed one.
-
-    The bridge reads the record store only through the structural query facade, so
-    it depends on the boundary rather than on the layout behind it. It is the
-    migration path for the new core, and it is what lets one graph be compared
-    across the two store models.
-
-    One shape changes on purpose. A directed self-loop keeps both of its roles
-    here, where the record store collapsed them into one entry. That is the
-    intended difference, and it is why a signed incidence column for a self-loop
-    now sums to zero instead of holding one negative value.
-    """
-    S = _facade()
-    state = CoreState(directed=graph.directed, aspects=graph._aspects)
-    kind_of_entity = {S.NODE: NODE, S.EDGE_ENTITY: EDGE_ENTITY}
-    kind_of_edge = {
-        S.BINARY: BINARY,
-        S.HYPER: HYPER,
-        S.NODE_EDGE: NODE_EDGE,
-        S.PLACEHOLDER: PLACEHOLDER,
-    }
-
-    for ref in S.iter_entities(graph):
-        state.add_entity(ref.key, kind_of_entity.get(ref.kind, NODE))
-
-    for edge in S.iter_edges(graph, include_placeholders=True):
-        sides = S.edge_sides(graph, edge.id)
-        coefficients = S.edge_coefficients(graph, edge.id)
-        explicit = coefficients is not None
-        weight = edge.weight
-
-        members = members_from_sides(state, graph, sides, coefficients, weight, edge)
-
-        state.add_edge(
-            edge.id,
-            members,
-            kind=kind_of_edge.get(edge.kind, BINARY),
-            directed=edge.declared_directed,
-            weight=weight,
-            explicit_coefficients=explicit,
-            ml_kind=edge.ml_kind,
-            ml_layers=edge.ml_layers,
-        )
-    return state
 
 
 def members_from_sides(state, graph, sides, coefficients, weight, edge) -> list:
@@ -1075,9 +1028,8 @@ def members_from_endpoints(state, graph, source, target, coefficients, weight, d
     ``graph`` is what a bare endpoint is resolved against, and a loader passes
     None so the store resolves it itself.
 
-    The bridge from a record graph, the mutation gateway and every loader build
-    member entries, and the rules for the role and the coefficient are subtle
-    enough that they live here once.
+    The mutation gateway and every loader build member entries, and the rules
+    for the role and the coefficient are subtle enough that they live here once.
     """
     weight = float(weight)
     members = []

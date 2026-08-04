@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from annnet.core import _store as ST, _structure as S
+from annnet.core import _build, _store as ST, _structure as S
 
 from ._fixtures import CASE_NAMES, build_case
 
@@ -365,7 +365,7 @@ def test_has_entity_id_asks_the_index_and_never_walks_the_graph(case, monkeypatc
     vertex it holds by its bare id and asks this once per name.
     """
     G = build_case(case)
-    store = ST.from_graph(G)
+    store = _build.rebuild_store(G)
 
     def refuse():
         raise AssertionError('has_entity_id walked every entity of the graph')
@@ -428,17 +428,18 @@ def test_every_member_of_every_edge_is_a_live_entity(case):
 
 
 # ---------------------------------------------------------------------------
-# The facade answers the same whichever store backs the graph
+# The facade answers the same for a graph and for a bare store
 # ---------------------------------------------------------------------------
-# These run the contract twice: once against the record store and once against
-# the slot store built from it. A difference here is a difference the rest of the
-# package would see when the core changes underneath it.
+# A caller passes a graph or the canonical store of one and gets the same answer
+# either way. That is what lets the invariant checker and the store tests ask
+# about a store no graph holds. These run the contract twice, once each way, over
+# a store rebuilt from the graph.
 
 
 @pytest.fixture(params=CASE_NAMES)
 def both_stores(request):
     graph = build_case(request.param)
-    return request.param, graph, ST.from_graph(graph)
+    return request.param, graph, _build.rebuild_store(graph)
 
 
 def test_the_facade_binds_the_store_constants_rather_than_copying_them():
@@ -599,6 +600,6 @@ def test_both_stores_report_the_same_neighbors(both_stores):
 
 
 def test_the_slot_store_rejects_an_unknown_direction():
-    store = ST.from_graph(build_case('binary_directed'))
+    store = _build.rebuild_store(build_case('binary_directed'))
     with pytest.raises(ValueError):
         S.entity_edges(store, ('A', FLAT), 'sideways')

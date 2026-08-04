@@ -1,20 +1,29 @@
-"""The slot store answers every structural question the record store answers.
+"""Every write reaches the store, and the store still says what it describes.
 
-The bridge in the store builds a slot store from a record-backed graph, reading it
-only through the query facade. These tests then ask both stores the same questions
-and compare the answers by identity, never by position.
+There was a second store once, and these tests compared the two. There is one
+now, so what is left is the two checks that a single store can be held to.
 
-One difference is intended and stated in the specification: a directed self-loop
-keeps both of its roles in the slot store, so its signed incidence column sums to
-zero instead of holding one negative value. Every test below either avoids that
-column or accounts for it.
+A graph is read back through the query facade as the definitions a loader hands
+over, and a store is filled from those alone. The result has to hold the same
+graph. That catches a write that changed one field and left a dependent one
+behind, because the rebuild derives the dependent field again.
+
+What a round trip cannot catch is a derived index that no longer matches the
+member lists, because the rebuild builds the index from the same lists. The
+invariant checker holds those rules, and the degree test below is the one that
+walks every member entry to check the index against them.
+
+One shape is intended and stated in the specification: a directed self-loop
+keeps both of its roles, so its signed incidence column sums to zero instead of
+holding one negative value. Every test below either avoids that column or
+accounts for it.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from annnet.core import _matrices as M, _store as ST, _structure as S, _validate as V
+from annnet.core import _build, _matrices as M, _structure as S, _validate as V
 
 from ._fixtures import CASE_NAMES, build_case
 
@@ -25,58 +34,12 @@ SELF_LOOP_CASES = {'self_loop'}
 @pytest.fixture(params=CASE_NAMES)
 def pair(request):
     graph = build_case(request.param)
-    return request.param, graph, ST.from_graph(graph)
+    return request.param, graph, graph._store
 
 
-def test_the_bridge_builds_a_consistent_store(pair):
-    _case, _graph, store = pair
-    assert V.validate_internal_consistency(store, strict=False) == []
-
-
-def test_both_stores_hold_the_same_entities(pair):
-    _case, graph, store = pair
-    assert {key for _slot, key in store.live_entities()} == {
-        ref.key for ref in S.iter_entities(graph)
-    }
-
-
-def test_both_stores_hold_the_same_entity_kinds(pair):
-    _case, graph, store = pair
-    for ref in S.iter_entities(graph):
-        slot = store.entity_slot(ref.key)
-        expected = ST.EDGE_ENTITY if ref.kind == S.EDGE_ENTITY else ST.NODE
-        assert int(store.entity_kind[slot]) == expected
-
-
-def test_both_stores_hold_the_same_edges(pair):
-    _case, graph, store = pair
-    assert set(store.live_edge_ids()) == {
-        ref.id for ref in S.iter_edges(graph, include_placeholders=True)
-    }
-
-
-def test_both_stores_report_the_same_edge_sides(pair):
-    _case, graph, store = pair
-    for ref in S.iter_edges(graph, include_placeholders=True):
-        expected = S.edge_sides(graph, ref.id)
-        found = store.endpoints(store.edge_slot(ref.id))
-        expected_source = {_bare(item) for item in expected.source}
-        expected_target = {_bare(item) for item in expected.target}
-        assert {key[0] for key in found.source} == expected_source
-        assert {key[0] for key in found.target} == expected_target
-
-
-def test_both_stores_report_the_same_directedness(pair):
-    _case, graph, store = pair
-    for ref in S.iter_edges(graph):
-        assert store.is_directed(store.edge_slot(ref.id)) == ref.directed
-
-
-def test_both_stores_report_the_same_weight(pair):
-    _case, graph, store = pair
-    for ref in S.iter_edges(graph):
-        slot = store.edge_slot(ref.id)
-        assert float(store.edge_weight[slot]) == pytest.approx(ref.weight)
+def test_a_rebuilt_store_holds_its_invariants(pair):
+    _case, graph, _store = pair
+    assert V.validate_internal_consistency(_build.rebuild_store(graph), strict=False) == []
 
 
 def test_the_incidence_columns_agree(pair):
@@ -143,28 +106,6 @@ def _all_endpoints(graph, edge_id):
     return list(sides.source) + list(sides.target)
 
 
-# ---------------------------------------------------------------------------
-# A graph built through the public API on the slot store
-# ---------------------------------------------------------------------------
-# The bridge builds a slot store from a finished record graph. These build one
-# through the public API instead, so the mutation gateway is what fills it. A
-# difference here is a write the gateway has not routed yet.
-
-
-@pytest.mark.parametrize('case', CASE_NAMES)
-def test_the_gateway_fills_the_slot_store_as_the_bridge_would(case):
-    built = build_case(case)
-    expected = ST.from_graph(build_case(case))
-
-    assert S.entity_keys(built._store) == S.entity_keys(expected), 'entities'
-    assert S.edge_ids(built._store) == S.edge_ids(expected), 'edges'
-    for edge_id in S.edge_ids(expected):
-        assert S.edge_sides(built._store, edge_id) == S.edge_sides(expected, edge_id), edge_id
-        assert S.edge_members(built._store, edge_id) == pytest.approx(
-            S.edge_members(expected, edge_id)
-        ), edge_id
-
-
 @pytest.mark.parametrize('case', CASE_NAMES)
 def test_a_slot_backed_graph_holds_its_invariants(case):
     built = build_case(case)
@@ -172,16 +113,16 @@ def test_a_slot_backed_graph_holds_its_invariants(case):
 
 
 # ---------------------------------------------------------------------------
-# Every write reaches the slot store
+# Every write reaches the store
 # ---------------------------------------------------------------------------
-# The gateway writes the slot store as each mutation lands. Rebuilding it from
-# the records afterwards must therefore change nothing. A write that does not
-# reach the store shows up here as a difference, which is how the inline entity
-# registration in the bulk vertex path was found.
+# The gateway writes the store as each mutation lands. Reading the graph back as
+# definitions and filling a store from those alone must therefore give the same
+# graph. A write that reached one field and not the field derived from it shows
+# up here as a difference, which is how four of them were found.
 
 
 def _snapshot(store):
-    """Everything the slot store holds, addressed by identity alone."""
+    """Everything the store holds, addressed by identity alone."""
     return {
         'entities': S.entity_keys(store),
         'kinds': {key: S.entity_ref(store, key).kind for key in S.entity_keys(store)},
@@ -193,11 +134,8 @@ def _snapshot(store):
 
 
 def _assert_incremental_matches_rebuild(G, note):
-    from annnet.core import _mutate
-
-    incremental = _snapshot(G._store)
-    _mutate.resync(G)
-    assert _snapshot(G._store) == incremental, note
+    assert _snapshot(_build.rebuild_store(G)) == _snapshot(G._store), note
+    assert V.validate_internal_consistency(G._store, strict=False) == [], note
 
 
 @pytest.mark.parametrize('case', CASE_NAMES)
@@ -355,22 +293,23 @@ def test_setting_the_kind_of_an_entity_reaches_the_store():
 
 
 # ---------------------------------------------------------------------------
-# A load fills the store from the file
+# A file is the one check the store is not the source of
 # ---------------------------------------------------------------------------
-# A loader parses a file into definitions and hands them to the graph, which
-# fills its canonical store from them. Nothing rebuilds the store from the
-# records afterwards, so a field the load drops on the way shows up here as a
-# difference against that rebuild.
+# Everything above reads the store to say what the store should hold, so a round
+# trip through it cannot notice a graph that is wrong in the same way twice. A
+# file can. It is written by one body of code, read by another, and the store
+# that comes back is filled from the file alone. So a field lost on the way out
+# or on the way in shows up here and nowhere else.
 
 
 @pytest.mark.parametrize('case', CASE_NAMES)
-def test_a_graph_read_from_a_file_holds_the_store_the_file_describes(case, tmp_path):
+def test_a_graph_read_from_a_file_holds_the_store_it_was_written_from(case, tmp_path):
     from annnet.io import annnet_format
 
     path = tmp_path / f'{case}.annnet'
-    annnet_format.write(build_case(case), path)
+    written = build_case(case)
+    annnet_format.write(written, path)
     loaded = annnet_format.read(path)
-    if loaded._store is None:
-        pytest.skip('the suite is running on the record store')
     assert V.validate_internal_consistency(loaded._store, strict=False) == []
+    assert _snapshot(loaded._store) == _snapshot(written._store), case
     _assert_incremental_matches_rebuild(loaded, case)

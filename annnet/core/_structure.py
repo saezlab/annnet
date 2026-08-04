@@ -87,6 +87,10 @@ class EdgeDefinition(NamedTuple):
     graph. ``source`` and ``target`` name endpoints in the form the public API
     uses, and ``coefficients`` is set only for an edge that carries explicit
     ones.
+
+    One coefficient per endpoint is all a definition can state, so an edge that
+    gives an entity two different coefficients in its two roles cannot be
+    described here. Only a self-loop can hold such a column.
     """
 
     id: str
@@ -98,6 +102,7 @@ class EdgeDefinition(NamedTuple):
     coefficients: dict | None = None
     ml_kind: object = None
     ml_layers: object = None
+    direction_policy: object = None
 
 
 class Endpoints(NamedTuple):
@@ -586,6 +591,48 @@ def edge_coefficients(graph, edge_id: str):
     # A flat graph names an entity by its bare id, and the answer has to be in the
     # form the caller holds its own ids in. See :func:`edge_sides`.
     return {key[0]: value for key, value in members.items()}
+
+
+def edge_definition(graph, edge_id: str) -> EdgeDefinition:
+    """Return one edge as the definition a loader would hand over.
+
+    This is the inverse of what a load does: it says everything about an edge
+    that filling a store from scratch needs, and nothing about where the edge
+    sits. A writer persists exactly these fields, and a rebuild takes them back.
+    """
+    store = store_of(graph)
+    slot = _slot_require_edge(store, edge_id)
+    reference = _slot_edge_ref(store, edge_id)
+    sides = store.endpoints(slot, bare=store.aspects == ('_',))
+    return EdgeDefinition(
+        edge_id,
+        reference.kind,
+        sides.source,
+        sides.target,
+        reference.weight,
+        reference.declared_directed,
+        edge_coefficients(graph, edge_id),
+        reference.ml_kind,
+        reference.ml_layers,
+        store.edge_policy.get(slot),
+    )
+
+
+def definitions_of(graph):
+    """Return the whole graph as the ``(entities, edges)`` pair a loader hands over.
+
+    The entities come in row order and the edges in column order, which is the
+    order a rebuild has to take them in for every address to come out the same.
+    A placeholder edge occupies no column and is listed where its identity sits.
+
+    Rebuilding a store from this describes the graph without naming a slot, so
+    it is what tells a store that has been written one element at a time from
+    one built in a single pass.
+    """
+    return (
+        list(iter_entities(graph)),
+        [edge_definition(graph, edge_id) for edge_id in store_of(graph).live_edge_ids()],
+    )
 
 
 def edge_policies(graph) -> dict:
