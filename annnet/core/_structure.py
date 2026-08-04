@@ -82,6 +82,29 @@ class EdgeRef(NamedTuple):
     declared_weight: object = None
 
 
+class EdgeDefinition(NamedTuple):
+    """One edge as a loader read it, before any graph holds it.
+
+    A loader parses a file into definitions and hands them to the graph, which
+    fills its canonical store from them. This is the write-side counterpart of
+    :class:`EdgeRef`: every field is what the file records, so ``directed`` is
+    what the edge declares and ``None`` means it inherits the default of the
+    graph. ``source`` and ``target`` name endpoints in the form the public API
+    uses, and ``coefficients`` is set only for an edge that carries explicit
+    ones.
+    """
+
+    id: str
+    kind: str
+    source: frozenset
+    target: frozenset
+    weight: float = 1.0
+    directed: object = None
+    coefficients: dict | None = None
+    ml_kind: object = None
+    ml_layers: object = None
+
+
 class Endpoints(NamedTuple):
     """The two sides of an edge, as sets of entity keys.
 
@@ -477,15 +500,35 @@ def entities_by_id(graph) -> dict:
     return grouped
 
 
+def resolved_direction(default, kind: str, declared, has_target: bool) -> bool:
+    """Return whether an edge is directed, from what the edge itself declares.
+
+    ``default`` is the directedness of the graph, which an edge that declares
+    none inherits, and a graph that declares none is directed. A hyperedge is
+    directed when it holds a target side. A node-edge or a placeholder that
+    declares nothing is undirected.
+
+    This is the rule behind ``EdgeRef.directed``, and it also decides the sign of
+    the incidence coefficient a member entry takes, so a caller that builds
+    member entries needs the same answer.
+    """
+    if kind == HYPER:
+        return has_target
+    if kind in (NODE_EDGE, PLACEHOLDER):
+        return bool(declared) if declared is not None else False
+    if declared is not None:
+        return bool(declared)
+    return True if default is None else bool(default)
+
+
 def _edge_directed(graph, record) -> bool:
     """Return the directedness of an edge, as the public edge view reports it."""
-    if record.etype == 'hyper':
-        return record.tgt is not None
-    if record.etype in ('vertex_edge', 'edge_placeholder'):
-        return bool(record.directed) if record.directed is not None else False
-    if record.directed is not None:
-        return bool(record.directed)
-    return True if graph.directed is None else bool(graph.directed)
+    return resolved_direction(
+        graph.directed,
+        _EDGE_KIND_OF_RECORD.get(record.etype, record.etype),
+        record.directed,
+        record.tgt is not None,
+    )
 
 
 def _edge_ref_of_record(graph, edge_id: str, record) -> EdgeRef:

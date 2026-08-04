@@ -1072,16 +1072,19 @@ def members_from_endpoints(state, graph, source, target, coefficients, weight, d
     the weight and the target side takes the negated weight when the edge is
     directed.
 
-    Both the bridge from a record graph and the mutation gateway build member
-    entries, and the rules for the role and the coefficient are subtle enough that
-    they live here once.
+    ``graph`` is what a bare endpoint is resolved against, and a loader passes
+    None so the store resolves it itself.
+
+    The bridge from a record graph, the mutation gateway and every loader build
+    member entries, and the rules for the role and the coefficient are subtle
+    enough that they live here once.
     """
     weight = float(weight)
     members = []
     for side, role in ((source, SOURCE if target else MEMBER), (target, TARGET)):
         derived = -weight if role == TARGET and directed else weight
         for endpoint in _ordered(side):
-            key = _bridged_key(graph, endpoint)
+            key = _bridged_key(state, graph, endpoint)
             if key is None or state.entity_slot(key) is None:
                 continue
             coefficient = (
@@ -1119,11 +1122,18 @@ def _facade():
     return _FACADE
 
 
-def _bridged_key(graph, endpoint):
-    """Resolve a stored endpoint to an entity key, or None when it names none."""
+def _bridged_key(state, graph, endpoint):
+    """Resolve a stored endpoint to an entity key, or None when it names none.
+
+    A loader passes no graph, because the graph it is filling holds nothing to
+    resolve against yet. The store already holds every entity by then, so it
+    answers instead.
+    """
     S = _facade()
     if S.is_entity_key(endpoint):
         return endpoint
+    if graph is None:
+        return S._slot_key(state, endpoint)
     try:
         return S.entity_key(graph, endpoint)
     except (KeyError, ValueError, TypeError):

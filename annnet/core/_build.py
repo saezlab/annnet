@@ -8,8 +8,16 @@ and structural-field assignment live in this module + ``_mutate``; consumers nev
 
 from __future__ import annotations
 
-from . import _derive as D
+from . import _store as ST, _derive as D, _structure as S
 from ._records import EdgeRecord, SliceRecord, EntityRecord
+
+_SLOT_ENTITY_KIND = {S.NODE: ST.NODE, S.EDGE_ENTITY: ST.EDGE_ENTITY}
+_SLOT_EDGE_KIND = {
+    S.BINARY: ST.BINARY,
+    S.HYPER: ST.HYPER,
+    S.NODE_EDGE: ST.NODE_EDGE,
+    S.PLACEHOLDER: ST.PLACEHOLDER,
+}
 
 # ---------------------------------------------------------------------------
 # Record construction (the only place outside _mutate that builds records)
@@ -81,8 +89,60 @@ def slices_from_specs(specs) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def store_from_definitions(g, entities, edges):
+    """Build the slot store of ``g`` from what a loader parsed.
+
+    ``entities`` names every entity as an :class:`_structure.EntityRef`, in row
+    order, and ``edges`` names every edge as an
+    :class:`_structure.EdgeDefinition`, in column order. Both are the vocabulary
+    the facade speaks, so a loader outside the core describes a graph without
+    reaching for the store or for a record.
+
+    Nothing here reads a record, so this is what a load keeps once the records
+    go. Returns None when the graph keeps records alone.
+    """
+    from . import _mutate
+
+    if _mutate.slot_store(g) is None:
+        return None
+
+    default = g.directed
+    store = ST.CoreState(directed=default, aspects=g._aspects)
+    for ref in entities:
+        store.add_entity(ref.key, _SLOT_ENTITY_KIND.get(ref.kind, ST.NODE))
+    for edge in edges:
+        directed = S.resolved_direction(default, edge.kind, edge.directed, bool(edge.target))
+        store.add_edge(
+            edge.id,
+            ST.members_from_endpoints(
+                store,
+                None,
+                edge.source,
+                edge.target,
+                edge.coefficients,
+                edge.weight,
+                directed,
+            ),
+            kind=_SLOT_EDGE_KIND.get(edge.kind, ST.BINARY),
+            directed=edge.directed,
+            weight=edge.weight,
+            explicit_coefficients=edge.coefficients is not None,
+            ml_kind=edge.ml_kind,
+            ml_layers=edge.ml_layers,
+        )
+    return store
+
+
 def install_structure(
-    g, *, entities, edges, matrix, matrix_shape=None, defer_edge_indexes=False, store=None
+    g,
+    *,
+    entities,
+    edges,
+    matrix,
+    matrix_shape=None,
+    defer_edge_indexes=False,
+    store=None,
+    definitions=None,
 ) -> None:
     """Install canonical structural state on ``g`` and rebuild every derived index.
 
@@ -94,10 +154,17 @@ def install_structure(
     have. Otherwise the store is rebuilt from what was just installed, which costs
     a pass over every edge, so a caller that can build the store itself should.
 
+    Pass ``definitions`` instead when the caller parsed the graph from a file and
+    holds no store of its own. It is the ``(entities, edges)`` pair
+    :func:`store_from_definitions` takes, and the store is filled from it.
+
     Set ``defer_edge_indexes`` when most callers never ask an adjacency question.
     The indexes then build on the first query that needs one.
     """
     from . import _mutate
+
+    if store is None and definitions is not None:
+        store = store_from_definitions(g, *definitions)
 
     g._entities = entities
     g._edges = edges

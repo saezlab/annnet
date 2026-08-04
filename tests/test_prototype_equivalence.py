@@ -335,3 +335,25 @@ def test_a_sequence_of_mutations_reaches_the_store():
 
     G.make_undirected()
     _assert_incremental_matches_rebuild(G, 'make_undirected')
+
+
+# ---------------------------------------------------------------------------
+# A load fills the store from the file
+# ---------------------------------------------------------------------------
+# A loader parses a file into definitions and hands them to the graph, which
+# fills its canonical store from them. Nothing rebuilds the store from the
+# records afterwards, so a field the load drops on the way shows up here as a
+# difference against that rebuild.
+
+
+@pytest.mark.parametrize('case', CASE_NAMES)
+def test_a_graph_read_from_a_file_holds_the_store_the_file_describes(case, tmp_path):
+    from annnet.io import annnet_format
+
+    path = tmp_path / f'{case}.annnet'
+    annnet_format.write(build_case(case, store='slots'), path)
+    loaded = annnet_format.read(path)
+    if loaded._store is None:
+        pytest.skip('the suite is running on the record store')
+    assert V.validate_internal_consistency(loaded._store, strict=False) == []
+    _assert_incremental_matches_rebuild(loaded, case)

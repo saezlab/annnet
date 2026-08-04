@@ -61,8 +61,12 @@ STORED_EDGE_KIND = {
     _structure.NODE_EDGE: 'vertex_edge',
     _structure.PLACEHOLDER: 'edge_placeholder',
 }
+LOADED_ENTITY_KIND = {stored: kind for kind, stored in STORED_ENTITY_KIND.items()}
+LOADED_EDGE_KIND = {stored: kind for kind, stored in STORED_EDGE_KIND.items()}
 
 __all__ = [
+    'LOADED_EDGE_KIND',
+    'LOADED_ENTITY_KIND',
     'STORED_EDGE_KIND',
     'STORED_ENTITY_KIND',
     'collect_slice_manifest',

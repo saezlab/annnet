@@ -29,7 +29,9 @@ import scipy.sparse as sp
 from .. import __version__ as ANNNET_VERSION
 from ..core import _structure
 from ._common import (
+    LOADED_EDGE_KIND,
     STORED_EDGE_KIND,
+    LOADED_ENTITY_KIND,
     STORED_ENTITY_KIND,
     dataframe_to_rows,
     serialize_endpoint,
@@ -1021,6 +1023,9 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
             ent_idx_col.append(r['idx'])
             ent_type_col.append(r.get('type', 'vertex'))
 
+    # The canonical store is filled from these rather than from the records, so
+    # a load never rebuilds one. They stay when the records go.
+    entity_definitions: list = []
     layer_cache: dict = {}  # layer_id -> tuple
     # Fallback for an entirely absent layer id: use the graph's current
     # placeholder rank (which may be ('_',) for a flat graph or
@@ -1044,10 +1049,29 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
             # over rank normalisation.
             layer_tuple = tuple(stored) if stored is not None else placeholder
             layer_cache[lid] = layer_tuple
-        entities[(vid, layer_tuple)] = EntityRecord(row_idx=int(idx), kind=kind or 'vertex')
+        stored_kind = kind or 'vertex'
+        entities[(vid, layer_tuple)] = EntityRecord(row_idx=int(idx), kind=stored_kind)
+        entity_definitions.append(
+            (
+                int(idx),
+                _structure.EntityRef(
+                    vid, LOADED_ENTITY_KIND.get(stored_kind, _structure.NODE), layer_tuple
+                ),
+            )
+        )
+    # A row is the address a matrix gives an entity, so the store numbers its
+    # slots in the order the file records rather than in the order it lists them.
+    entity_definitions.sort(key=lambda item: item[0])
+    entity_definitions = [ref for _row, ref in entity_definitions]
 
     # 3. Edges — merged metadata + endpoint table
     edges: dict = {}
+    edge_definitions: dict = {}
+    edge_columns: list = []
+
+    def _side(endpoint) -> frozenset:
+        """One side of an edge, as the set of endpoints it names."""
+        return frozenset() if endpoint is None else frozenset({endpoint})
 
     def _reassemble_endpoint(vid, layer_id):
         if vid is None:
@@ -1119,6 +1143,8 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
                 ml_layers=hyper_ml_layers,
                 direction_policy=None,
             )
+            definition_layers = hyper_ml_layers
+            source, target = frozenset(), frozenset()
         else:
             src = _reassemble_endpoint(src_vid, src_lid)
             tgt = _reassemble_endpoint(tgt_vid, tgt_lid)
@@ -1147,6 +1173,20 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
                 ml_layers=binary_ml_layers,
                 direction_policy=None,
             )
+            definition_layers = binary_ml_layers
+            source, target = _side(src), _side(tgt)
+
+        edge_columns.append((col_idx, eid))
+        edge_definitions[eid] = _structure.EdgeDefinition(
+            id=eid,
+            kind=LOADED_EDGE_KIND.get(kind, _structure.BINARY),
+            source=source,
+            target=target,
+            weight=weight,
+            directed=directed,
+            ml_kind=ml_kind,
+            ml_layers=definition_layers,
+        )
 
     # 4. Hyperedge member / head / tail
     hyper_path = path / 'hyperedge_definitions.parquet'
@@ -1167,6 +1207,9 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
                 rec.src = frozenset(members)
                 rec.tgt = None
             rec.directed = is_dir
+            edge_definitions[eid] = edge_definitions[eid]._replace(
+                source=rec.src, target=rec.tgt or frozenset(), directed=is_dir
+            )
 
     # 5. Explicit coefficients — records data, restored exactly. Files written before
     # edge_coeffs.parquet existed kept coefficients only inside the matrix, so fall
@@ -1185,18 +1228,27 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
                 continue
             if rec.coeffs is None:
                 rec.coeffs = {}
+                edge_definitions[eid] = edge_definitions[eid]._replace(coefficients=rec.coeffs)
             rec.coeffs[_reassemble_endpoint(vid, lid)] = float(val)
 
     # 6. Install the whole structure at once. This fills every store the graph
     # keeps, so a graph read from a file answers exactly as one built by hand.
-    # The adjacency indexes are deferred, because many loads never ask an
-    # adjacency question and the first that does rebuilds them.
+    # The definitions fill the canonical store directly, so no load rebuilds one
+    # from the records. The adjacency indexes are deferred, because many loads
+    # never ask an adjacency question and the first that does rebuilds them.
+    # A column is the address a matrix gives an edge, so the store takes the
+    # edges in the order the file records rather than in the order it lists them.
+    edge_columns.sort(key=lambda item: item[0])
     graph._install_structure(
         entities=entities,
         edges=edges,
         matrix=matrix,
         matrix_shape=matrix_shape,
         defer_edge_indexes=True,
+        definitions=(
+            entity_definitions,
+            [edge_definitions[eid] for _column, eid in edge_columns],
+        ),
     )
 
     # 7. Coefficients a legacy file kept only inside its matrix. This needs the
