@@ -412,14 +412,7 @@ class CoreState:
         if edge_id in self._edge_slot:
             raise KeyError(f'Duplicate edge id: {edge_id!r}')
 
-        entity_slots = []
-        for entity_key, _coefficient, _role in members:
-            slot = self._entity_slot.get(entity_key)
-            if slot is None:
-                raise KeyError(
-                    f'Edge {edge_id!r} names an entity the store does not hold: {entity_key!r}'
-                )
-            entity_slots.append(slot)
+        entity_slots = self._member_slots(edge_id, members)
 
         appended_at_frontier = not self.edge_free
         if self.edge_free:
@@ -445,6 +438,33 @@ class CoreState:
         if direction_policy is not None:
             self.edge_policy[slot] = direction_policy
 
+        self._write_members(slot, members, entity_slots)
+
+        if appended_at_frontier:
+            self._note_append(slot)
+        else:
+            self._note_change()
+        return slot
+
+    def _member_slots(self, edge_id: str, members) -> list:
+        """Return the entity slot of every member entry, or raise naming the first gap."""
+        slots = []
+        for entity_key, _coefficient, _role in members:
+            slot = self._entity_slot.get(entity_key)
+            if slot is None:
+                raise KeyError(
+                    f'Edge {edge_id!r} names an entity the store does not hold: {entity_key!r}'
+                )
+            slots.append(slot)
+        return slots
+
+    def _write_members(self, slot: int, members, entity_slots) -> None:
+        """Give one edge slot a member segment, and index every entry it holds.
+
+        The segment is always appended at the frontier of the pools, because a
+        list written again may hold a different number of entries. What the edge
+        held before is the caller's to unlink.
+        """
         count = len(entity_slots)
         start = self._member_used
         needed = start + count
@@ -473,22 +493,23 @@ class CoreState:
         self.member_start[slot] = start
         self.member_len[slot] = count
 
-        if appended_at_frontier:
-            self._note_append(slot)
-        else:
-            self._note_change()
+    def _unlink_members(self, slot: int) -> None:
+        """Drop one edge out of the incidence index of every entity it names."""
+        for entity_slot in self.members(slot).entities.tolist():
+            edges = self._entity_edges.get(entity_slot)
+            if edges is not None:
+                edges.pop(slot, None)
+
+    def _require_edge_slot(self, edge_id: str) -> int:
+        slot = self._edge_slot.get(edge_id)
+        if slot is None:
+            raise KeyError(f'Unknown edge id: {edge_id!r}')
         return slot
 
     def remove_edge(self, edge_id: str) -> None:
         """Remove one edge. No other edge changes its address or its member list."""
-        slot = self._edge_slot.get(edge_id)
-        if slot is None:
-            raise KeyError(f'Unknown edge id: {edge_id!r}')
-
-        for entity_slot in self.members(slot).entities:
-            edges = self._entity_edges.get(int(entity_slot))
-            if edges is not None:
-                edges.pop(slot, None)
+        slot = self._require_edge_slot(edge_id)
+        self._unlink_members(slot)
 
         del self._edge_slot[edge_id]
         self._edge_id[slot] = None
@@ -500,6 +521,117 @@ class CoreState:
         for hook in self.edge_freed_hooks:
             hook(slot, edge_id)
         self._note_change()
+
+    # -- changing one edge ------------------------------------------------
+    # A write below changes one field of one edge and leaves its slot, its
+    # identity and every other edge alone. Removing the edge and adding it again
+    # would give the same answer, and it would pay for a member list the edge
+    # already holds.
+
+    def set_edge_kind(self, edge_id: str, kind: int) -> None:
+        """Set the kind of one edge."""
+        self.edge_kind[self._require_edge_slot(edge_id)] = kind
+        self._note_change()
+
+    def set_edge_ml_kind(self, edge_id: str, ml_kind) -> None:
+        """Set the multilayer role of one edge, or clear it with ``None``."""
+        slot = self._require_edge_slot(edge_id)
+        if ml_kind is None:
+            self.edge_ml_kind.pop(slot, None)
+        else:
+            self.edge_ml_kind[slot] = ml_kind
+        self._note_change()
+
+    def set_edge_ml_layers(self, edge_id: str, ml_layers) -> None:
+        """Set the layers one edge runs between, or clear them with ``None``."""
+        slot = self._require_edge_slot(edge_id)
+        if ml_layers is None:
+            self.edge_ml_layers.pop(slot, None)
+        else:
+            self.edge_ml_layers[slot] = ml_layers
+        self._note_change()
+
+    def set_edge_policy(self, edge_id: str, policy) -> None:
+        """Attach a flexible-direction policy to one edge, or clear it with ``None``."""
+        slot = self._require_edge_slot(edge_id)
+        if policy is None:
+            self.edge_policy.pop(slot, None)
+        else:
+            self.edge_policy[slot] = policy
+        self._note_change()
+
+    def set_edge_directed(self, edge_id: str, directed) -> None:
+        """Declare the directedness of one edge, and derive its coefficients again.
+
+        An edge that carries no explicit coefficients takes its member
+        coefficients from its weight and its directedness, so changing one
+        changes the other. ``None`` means the edge inherits the graph default.
+        """
+        slot = self._require_edge_slot(edge_id)
+        self.edge_directed[slot] = INHERIT if directed is None else int(bool(directed))
+        self._derive_coefficients(slot)
+        self._note_change()
+
+    def set_edge_weight(self, edge_id: str, weight) -> None:
+        """Set the weight of one edge, and derive its coefficients again."""
+        slot = self._require_edge_slot(edge_id)
+        self.edge_weight[slot] = 1.0 if weight is None else weight
+        self._derive_coefficients(slot)
+        self._note_change()
+
+    def set_edge_coefficients(self, edge_id: str, coefficients) -> None:
+        """Give the members of one edge the coefficients a map names.
+
+        The map is the whole column, so a member it leaves out takes zero. It
+        may key an entity by its key or by its bare id. An entity that takes two
+        roles in the edge takes the one value in both, which is what a column
+        keyed by entity can say.
+
+        The edge then carries explicit coefficients, so nothing derives them
+        from its weight again.
+        """
+        slot = self._require_edge_slot(edge_id)
+        start = int(self.member_start[slot])
+        stop = start + int(self.member_len[slot])
+        keys = self._entity_key
+        for position in range(start, stop):
+            key = keys[int(self.member_ent[position])]
+            value = coefficients.get(key)
+            if value is None:
+                value = coefficients.get(key[0], 0.0)
+            self.member_coef[position] = float(value)
+        self.edge_explicit[slot] = True
+        self._note_change()
+
+    def replace_members(self, edge_id: str, members) -> None:
+        """Give one edge a new member list, and leave everything else it holds.
+
+        The edge keeps its slot, its identity, its kind, its weight and its
+        policy. The old segment is dropped and a new one is appended, because a
+        list written again may hold a different number of entries.
+        """
+        slot = self._require_edge_slot(edge_id)
+        entity_slots = self._member_slots(edge_id, members)
+        self._unlink_members(slot)
+        self._write_members(slot, members, entity_slots)
+        self._note_change()
+
+    def _derive_coefficients(self, slot: int) -> None:
+        """Take the member coefficients of one edge from its weight and direction.
+
+        An edge that states its own coefficients keeps them. Otherwise the source
+        side carries the weight and the target side carries it negated when the
+        edge is directed.
+        """
+        if bool(self.edge_explicit[slot]):
+            return
+        start = int(self.member_start[slot])
+        stop = start + int(self.member_len[slot])
+        weight = float(self.edge_weight[slot])
+        self.member_coef[start:stop] = weight
+        if self.is_directed(slot):
+            roles = self.member_role[start:stop]
+            self.member_coef[start:stop][roles == TARGET] = -weight
 
     def structural_edges(self) -> list:
         """Return the ``(slot, edge_id)`` pairs that carry structure, in slot order.

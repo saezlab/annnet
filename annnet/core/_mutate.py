@@ -67,6 +67,14 @@ def sync_entity(g, ekey) -> None:
         store.entity_kind[slot] = kind
 
 
+def _members_of_record(g, store, edge_id, record) -> list:
+    """Return the member entries the slot store holds for one edge record."""
+    sides = S.Endpoints(S._raw_side(record.src), S._raw_side(record.tgt))
+    reference = S._edge_ref_of_record(g, edge_id, record)
+    coefficients = dict(record.coeffs) if record.coeffs is not None else None
+    return ST.members_from_sides(store, g, sides, coefficients, reference.weight, reference)
+
+
 def sync_edge(g, edge_id) -> None:
     """Make the slot store agree with the records about one edge.
 
@@ -81,20 +89,37 @@ def sync_edge(g, edge_id) -> None:
     record = g._edges.get(edge_id)
     if record is None:
         return
-    sides = S.Endpoints(S._raw_side(record.src), S._raw_side(record.tgt))
-    reference = S._edge_ref_of_record(g, edge_id, record)
-    coefficients = dict(record.coeffs) if record.coeffs is not None else None
     store.add_edge(
         edge_id,
-        ST.members_from_sides(store, g, sides, coefficients, reference.weight, reference),
+        _members_of_record(g, store, edge_id, record),
         kind=_SLOT_EDGE_KIND.get(record.etype, ST.BINARY),
         directed=record.directed,
         weight=record.weight,
-        explicit_coefficients=coefficients is not None,
+        explicit_coefficients=record.coeffs is not None,
         ml_kind=record.ml_kind,
         ml_layers=record.ml_layers,
         direction_policy=record.direction_policy,
     )
+
+
+def rewrite_edge(g, edge_id) -> None:
+    """Give the slot store the definition an edge record now carries.
+
+    The edge keeps the slot it holds and everything the write did not change,
+    where :func:`sync_edge` would remove it and add it again. A write that
+    changes which entities an edge names uses this; a write that changes one
+    field of an edge reaches the store through the narrow write for that field.
+    """
+    store = slot_store(g)
+    if store is None:
+        return
+    record = g._edges.get(edge_id)
+    if record is None or store.edge_slot(edge_id) is None:
+        sync_edge(g, edge_id)
+        return
+    store.set_edge_kind(edge_id, _SLOT_EDGE_KIND.get(record.etype, ST.BINARY))
+    store.set_edge_directed(edge_id, record.directed)
+    store.replace_members(edge_id, _members_of_record(g, store, edge_id, record))
 
 
 def sync_edges(g, edge_ids) -> None:
@@ -852,7 +877,6 @@ def remove_edges_bulk(g, edge_ids):
 # ---------------------------------------------------------------------------
 
 
-@syncs_named_edges('eid')
 def set_edge_definition(g, eid, src, tgt, etype):
     """Rewrite a binary edge's endpoints/type (legacy edge_definitions setter)."""
     rec = g._edges.get(eid)
@@ -862,9 +886,9 @@ def set_edge_definition(g, eid, src, tgt, etype):
     rec.tgt = tgt
     rec.etype = etype if etype != 'hyper' else 'binary'
     g._mark_matrix_dirty()
+    rewrite_edge(g, eid)
 
 
-@syncs_named_edges('eid')
 def set_hyperedge_definition(g, eid, defn):
     """Rewrite a hyperedge's membership (legacy hyperedge_definitions setter)."""
     rec = g._edges.get(eid)
@@ -884,14 +908,18 @@ def set_hyperedge_definition(g, eid, defn):
         rec.tgt = None
         rec.directed = False
     g._mark_matrix_dirty()
+    rewrite_edge(g, eid)
 
 
-@syncs_named_edges('eid')
 def set_edge_direction_policy(g, eid, policy):
     """Attach a flexible-direction policy to an edge (legacy setter)."""
     rec = g._edges.get(eid)
-    if rec is not None:
-        rec.direction_policy = policy
+    if rec is None:
+        return
+    rec.direction_policy = policy
+    store = slot_store(g)
+    if store is not None and store.edge_slot(eid) is not None:
+        store.set_edge_policy(eid, policy)
 
 
 @rebuilds_the_store
@@ -966,7 +994,6 @@ def _edge_member_nodes(rec):
     return out
 
 
-@syncs_named_edges('edge_id')
 def set_edge_coeffs(g, edge_id, coeffs):
     """Overwrite an edge column's incidence coefficients (stoichiometry)."""
     rec = g._edges[edge_id]
@@ -1004,9 +1031,11 @@ def set_edge_coeffs(g, edge_id, coeffs):
     rec.coeffs = {n: v for n, v in base.items() if v != 0.0}
     g._mark_matrix_dirty()
     D.invalidate_sparse_caches(g)
+    store = slot_store(g)
+    if store is not None and store.edge_slot(edge_id) is not None:
+        store.set_edge_coefficients(edge_id, rec.coeffs)
 
 
-@syncs_named_edges('edge_id')
 def replace_edge_coeffs(g, edge_id, coeffs):
     """Set the coefficients of an edge column outright, dropping what it held.
 
@@ -1019,9 +1048,11 @@ def replace_edge_coeffs(g, edge_id, coeffs):
         return
     rec.coeffs = {member: value for member, value in coeffs.items() if value != 0.0}
     D.invalidate_sparse_caches(g)
+    store = slot_store(g)
+    if store is not None and store.edge_slot(edge_id) is not None:
+        store.set_edge_coefficients(edge_id, rec.coeffs)
 
 
-@syncs_named_edges('eid')
 def set_hyperedge_members(g, eid, *, members=None, head=None, tail=None):
     """Turn an edge the graph already holds into a hyperedge over these members.
 
@@ -1043,17 +1074,35 @@ def set_hyperedge_members(g, eid, *, members=None, head=None, tail=None):
         rec.directed = False
     g._mark_matrix_dirty()
     D.invalidate_sparse_caches(g)
+    rewrite_edge(g, eid)
 
 
-@syncs_named_edges('eid')
+# The three fields the dict views write. Each is one field of one edge in the
+# slot store too, so each reaches it through the narrow write for that field
+# rather than through a member list the write never touched.
+_EDGE_FIELD_WRITES = {
+    'ml_layers': 'set_edge_ml_layers',
+    'ml_kind': 'set_edge_ml_kind',
+    'directed': 'set_edge_directed',
+}
+
+
 def set_edge_field(g, eid, field, value):
     """Set one field on an edge record (backs the legacy dict-view writers)."""
     rec = g._edges.get(eid)
-    if rec is not None:
-        setattr(rec, field, value)
+    if rec is None:
+        return
+    setattr(rec, field, value)
+    store = slot_store(g)
+    if store is None or store.edge_slot(eid) is None:
+        return
+    write = _EDGE_FIELD_WRITES.get(field)
+    if write is None:
+        sync_edge(g, eid)
+    else:
+        getattr(store, write)(eid, value)
 
 
-@syncs_named_edges('eid')
 def set_edge_kind(g, eid, kind):
     """Set an edge's kind: ``'hyper'`` flips etype, anything else sets ml_kind."""
     rec = g._edges.get(eid)
@@ -1063,6 +1112,13 @@ def set_edge_kind(g, eid, kind):
         rec.etype = 'hyper'
     else:
         rec.ml_kind = kind
+    store = slot_store(g)
+    if store is None or store.edge_slot(eid) is None:
+        return
+    if kind == 'hyper':
+        store.set_edge_kind(eid, ST.HYPER)
+    else:
+        store.set_edge_ml_kind(eid, kind)
 
 
 @syncs_every_edge
