@@ -16,7 +16,7 @@ once at the end when the caller asks for strict mode.
 
 from __future__ import annotations
 
-from . import _derive as D, _structure as S
+from . import _structure as S
 
 # A materialized cell and the coefficient it comes from may differ by the rounding
 # of the float32 matrix storage.
@@ -439,19 +439,3 @@ def validate_internal_consistency(g, *, strict: bool = True) -> list[str]:
     if strict and problems:
         raise AssertionError('internal consistency violated:\n  ' + '\n  '.join(problems))
     return problems
-
-
-def rebuild_and_compare(g) -> list[str]:
-    """Diagnostic: rebuild all derived indexes from records and report what changed."""
-    before = (
-        dict(g._row_to_entity),
-        dict(g._col_to_edge),
-        dict(g._src_to_edges),
-        dict(g._tgt_to_edges),
-    )
-    D.rebuild_entity_indexes(g)
-    D.rebuild_col_index(g)
-    D.rebuild_edge_indexes(g)
-    after = (g._row_to_entity, g._col_to_edge, g._src_to_edges, g._tgt_to_edges)
-    names = ('_row_to_entity', '_col_to_edge', '_src_to_edges', '_tgt_to_edges')
-    return [n for n, b, a in zip(names, before, after, strict=True) if b != a]

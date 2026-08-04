@@ -129,16 +129,14 @@ def install_structure(
     entities,
     edges,
     matrix,
-    matrix_shape=None,
     defer_edge_indexes=False,
     store=None,
     definitions=None,
 ) -> None:
     """Install canonical structural state on ``g`` and rebuild every derived index.
 
-    Pass ``matrix=None`` when the caller holds no materialized matrix. The matrix
-    then rebuilds on the first read, and ``matrix_shape`` tells that rebuild how
-    large the graph is.
+    Pass ``matrix=None`` when the caller holds no materialized matrix. It then
+    rebuilds from the store on the first read.
 
     Pass ``store`` when the caller already holds the slot store this graph is to
     have. Otherwise the store is rebuilt from what was just installed, which costs
@@ -159,8 +157,6 @@ def install_structure(
     g._entities = entities
     g._edges = edges
     if matrix is None:
-        if matrix_shape is not None:
-            D.set_matrix_shape(g, matrix_shape)
         g._mark_matrix_dirty()
     else:
         g._matrix = matrix

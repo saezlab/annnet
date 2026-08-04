@@ -13,7 +13,7 @@ from . import _structure
 if TYPE_CHECKING:
     from .graph import AnnNet
 
-from . import _build, _mutate
+from . import _build, _derive, _mutate
 from ._stored_kinds import STORED_EDGE_KIND
 from .._support.dataframe_backend import (
     clone_dataframe,
@@ -504,7 +504,7 @@ class LayerAccessor:
                 self._register_entity_record(ekey, _build.new_entity_record(idx, 'vertex'))
                 new_rows += 1
         if new_rows:
-            self._grow_rows_to(len(self._entities))
+            _derive.mark_matrix_stale(self._G)
 
     def has_presence(self, u: str, layer_tuple: tuple[str, ...]) -> bool:
         """Check whether ``(u, aa)`` is present in ``_entities``.

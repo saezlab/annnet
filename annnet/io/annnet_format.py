@@ -914,13 +914,7 @@ def read(path: str | Path, *, lazy: bool = False) -> AnnNet:
             G._ensure_placeholder_layers_declared()
 
     # 3. Load structure
-    _load_structure(
-        G,
-        structure_dir,
-        lazy=lazy,
-        layer_dict=layer_dict,
-        matrix_shape=manifest.get('matrix_shape'),
-    )
+    _load_structure(G, structure_dir, lazy=lazy, layer_dict=layer_dict)
 
     # 4. Load tables
     _load_tables(G, root / 'tables')
@@ -965,7 +959,7 @@ def _columns_as_lists(df, names):
     return {name: [r.get(name) for r in rows] for name in names}
 
 
-def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matrix_shape=None):
+def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
     """Load incidence matrix, entity index, and merged edges from v2 layout."""
     import zarr
 
@@ -1243,7 +1237,6 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict, matri
         entities=entities,
         edges=edges,
         matrix=matrix,
-        matrix_shape=matrix_shape,
         defer_edge_indexes=True,
         definitions=(
             entity_definitions,

@@ -108,7 +108,7 @@ class CacheManager:
         }
         if not boundary_cols:
             return None
-        ncols = g._matrix_shape[1]
+        ncols = _structure.edge_count(g)
         return [c for c in range(ncols) if c not in boundary_cols]
 
     def has_csr(self) -> bool:

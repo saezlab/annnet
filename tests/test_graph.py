@@ -88,13 +88,6 @@ class TestGraphBasics(unittest.TestCase):
         self.assertEqual(self.g.layers.list_aspects(), ())
         self.assertEqual(self.g.layers.list_layers(), {})
 
-    def test_grow_helpers_are_real_methods(self):
-        self.assertTrue(callable(self.g._grow_rows_to))
-        self.assertTrue(callable(self.g._grow_cols_to))
-        self.assertEqual(self.g._grow_rows_to.__self__, self.g)
-        self.assertEqual(self.g._grow_cols_to.__self__, self.g)
-        self.assertIsInstance(self.g._slices['default'], SliceRecord)
-
     def test_all_stored_slices_use_slice_record(self):
         self.g.slices.add('L1')
         self.g.add_vertices('a', slice='L1')

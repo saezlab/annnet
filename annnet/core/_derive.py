@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import numpy as np
-import scipy.sparse as sp
-
 from . import _matrices
-from ._structure import store_of, is_slot_backed, member_entries
+from ._structure import store_of
 
 # ---------------------------------------------------------------------------
 # Incidence matrix capacity + cache invalidation
@@ -25,27 +22,14 @@ def bump_structure(g) -> int:
     return g._structure_version
 
 
-def grow_rows_to(g, target: int) -> None:
-    """Grow the logical incidence row capacity to accommodate ``target`` rows."""
-    rows, cols = g._matrix_shape
-    if target > rows:
-        g._matrix_shape = (target, cols)
-        g._matrix_dirty = True
-        bump_structure(g)
+def mark_matrix_stale(g) -> None:
+    """Say that the shape of the incidence matrix has changed.
 
-
-def grow_cols_to(g, target: int) -> None:
-    """Grow the logical incidence column capacity to accommodate ``target`` cols."""
-    rows, cols = g._matrix_shape
-    if target > cols:
-        g._matrix_shape = (rows, target)
-        g._matrix_dirty = True
-        bump_structure(g)
-
-
-def set_matrix_shape(g, shape) -> None:
-    """Set the logical incidence shape and mark the matrix cache dirty."""
-    g._matrix_shape = (int(shape[0]), int(shape[1]))
+    The matrix is derived from the store, and the store already holds every
+    entity and every edge that a rebuild reads, so nothing about the extent has
+    to be recorded. What is left is the cache: the next read rebuilds it, and
+    every version-keyed derived cache goes with it.
+    """
     g._matrix_dirty = True
     bump_structure(g)
 
@@ -53,48 +37,11 @@ def set_matrix_shape(g, shape) -> None:
 def rebuild_matrix(g):
     """Materialize the incidence matrix (CSR) from the canonical store.
 
-    The member lists of the slot store already are an incidence matrix in
-    compressed form, so building one there is a gather over its arrays rather
-    than a pass over every member of every edge in Python.
-
-    The record path below is the same matrix built one record at a time. It
-    differs on a self-loop: the member list holds the two roles of the node
-    separately and they sum to zero, where a record holds one entry per endpoint
-    and the target overwrites the source. Zero is what a signed incidence means,
-    so the store answer is the one the package keeps.
+    The member lists of the store already are an incidence matrix in compressed
+    form, so building one is a gather over its arrays rather than a pass over
+    every member of every edge in Python.
     """
-    if is_slot_backed(g):
-        return _matrices.structural_incidence(store_of(g), shape=g._matrix_shape)
-
-    shape = g._matrix_shape
-    entity_row = g._entity_row
-    rows: list = []
-    cols: list = []
-    data: list = []
-    for rec in g._edges.values():
-        col = rec.col_idx
-        if col < 0:
-            continue
-        for node, v in member_entries(rec).items():
-            if v == 0:
-                continue
-            try:
-                r = entity_row(node)
-            except (KeyError, ValueError, TypeError):
-                continue
-            rows.append(r)
-            cols.append(col)
-            data.append(v)
-    if data:
-        coo = sp.coo_array(
-            (
-                np.asarray(data, dtype=np.float32),
-                (np.asarray(rows, dtype=np.intp), np.asarray(cols, dtype=np.intp)),
-            ),
-            shape=shape,
-        )
-        return coo.tocsr()
-    return sp.csr_array(shape, dtype=np.float32)
+    return _matrices.structural_incidence(store_of(g))
 
 
 def invalidate_sparse_caches(g, formats=None) -> None:

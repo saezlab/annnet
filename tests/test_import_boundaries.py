@@ -29,7 +29,6 @@ FACADE_MODULE = 'annnet.core._structure'
 EXTRA_STORE_FIELDS = (
     '_store',
     '_matrix_cache',
-    '_matrix_shape',
     '_matrix_dirty',
     '_edge_indexes_built',
     '_supra_index_cache',

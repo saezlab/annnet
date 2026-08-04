@@ -139,17 +139,13 @@ def incidence(store, *, kinds=None, signed: bool = True) -> MatrixView:
     return _view(store, matrix, entity_slots, edge_slots, row_lookup)
 
 
-def structural_incidence(store, shape=None):
+def structural_incidence(store):
     """Materialize the signed incidence matrix of the structural edges, in CSR.
 
     This is the matrix the graph exposes as ``X()``. A row is an entity and a
     column is a structural edge, both in the order the store gives them, so the
-    positions agree with the ones the query facade answers with.
-
-    ``shape`` is the logical extent the graph declares. A graph built with a
-    declared size holds rows and columns that nothing occupies yet, and a caller
-    that was handed such a position indexes by it, so the result is padded out to
-    that extent. It is never trimmed below what the store holds.
+    positions agree with the ones the query facade answers with, and the matrix
+    is exactly as large as the store is.
 
     Unlike :func:`incidence`, this returns the matrix alone. The graph maps
     identity to position through the store, not through a view.
@@ -158,9 +154,6 @@ def structural_incidence(store, shape=None):
     edge_slots = _selected_edge_slots(store, None)
     entities, coefficients, _roles, columns = _gather_members(store, edge_slots)
     height, width = int(entity_slots.size), int(edge_slots.size)
-    if shape is not None:
-        height = max(height, int(shape[0]))
-        width = max(width, int(shape[1]))
     matrix = sp.coo_array(
         (coefficients.astype(np.float32), (row_lookup[entities], columns)),
         shape=(height, width),

@@ -240,7 +240,7 @@ def add_vertex(g, vertex_id, slice=None, layer=None, **attributes):
     if key not in g._entities:
         idx = len(g._entities)
         register_entity_record(g, key, EntityRecord(row_idx=idx, kind='vertex'))
-        D.grow_rows_to(g, len(g._entities))
+        D.mark_matrix_stale(g)
 
     if slice not in g._slices:
         g._slices[slice] = SliceRecord()
@@ -267,7 +267,7 @@ def register_edge_as_entity(g, edge_id):
         return
     idx = len(g._entities)
     register_entity_record(g, ekey, EntityRecord(row_idx=idx, kind='edge_entity'))
-    D.grow_rows_to(g, len(g._entities))
+    D.mark_matrix_stale(g)
 
 
 def ensure_edge_entity_placeholder(g, edge_id, slice=None, **attributes):
@@ -558,7 +558,7 @@ def add_edge(
                 add_vertex(g, node[0], layer=node[1], slice=slice)
             else:
                 add_vertex(g, node, slice=slice)
-    D.grow_rows_to(g, len(_ent))
+    D.mark_matrix_stale(g)
 
     # 6. Column allocation
     _edg = g._edges
@@ -566,7 +566,7 @@ def add_edge(
     if is_new:
         col_idx = len(g._col_to_edge)
         g._col_to_edge[col_idx] = edge_id
-        D.grow_cols_to(g, col_idx + 1)
+        D.mark_matrix_stale(g)
     else:
         col_idx = _edg[edge_id].col_idx
 
@@ -759,8 +759,7 @@ def remove_edge(g, edge_id):
     if rec.etype != 'hyper':
         D.unindex_edge_pair(g, edge_id, rec.src, rec.tgt)
 
-    rows, cols = g._matrix_shape
-    D.set_matrix_shape(g, (rows, cols - 1))
+    D.mark_matrix_stale(g)
     D.invalidate_sparse_caches(g)
 
     del g._col_to_edge[col_idx]
@@ -806,10 +805,8 @@ def remove_edges_bulk(g, edge_ids):
         return
 
     keep_pairs = [(col, eid) for col, eid in g._col_to_edge.items() if eid not in drop]
-    new_cols = len(keep_pairs)
 
-    rows, _cols = g._matrix_shape
-    D.set_matrix_shape(g, (rows, new_cols))
+    D.mark_matrix_stale(g)
     D.invalidate_sparse_caches(g)
 
     g._col_to_edge.clear()
@@ -1282,10 +1279,8 @@ def remove_vertices_bulk(g, vertex_ids):
         remove_edges_bulk(g, drop_es)
 
     keep_idx = sorted(rec.row_idx for eid, rec in g._entities.items() if eid not in drop_keys)
-    new_rows = len(keep_idx)
 
-    _rows, cols = g._matrix_shape
-    D.set_matrix_shape(g, (new_rows, cols))
+    D.mark_matrix_stale(g)
     D.invalidate_sparse_caches(g)
 
     new_entities: dict = {}
@@ -1326,8 +1321,7 @@ def remove_orphan_node_layers(g, drop_keys):
         return
 
     keep_idx = sorted(rec.row_idx for ekey, rec in g._entities.items() if ekey not in drop_keys)
-    _rows, cols = g._matrix_shape
-    D.set_matrix_shape(g, (len(keep_idx), cols))
+    D.mark_matrix_stale(g)
     D.invalidate_sparse_caches(g)
 
     new_entities: dict = {}
@@ -1467,7 +1461,7 @@ def batch_add_vertices(g, vertices, layer=None, slice=None, default_attrs=None):
                 store.add_entity(ekey, ST.NODE)
             new_rows += 1
     if new_rows:
-        g._grow_rows_to(len(_entities))
+        D.mark_matrix_stale(g)
 
     # --- slice ---
     g.slices._ensure_slice(slice)['vertices'].update(vid for vid, _ in norm)
@@ -1804,9 +1798,9 @@ def batch_add_edges(
         return []
 
     g._next_edge_id = _next_id
-    g._grow_rows_to(len(_entities))
+    D.mark_matrix_stale(g)
     if _col > _col0:
-        g._grow_cols_to(_col)
+        D.mark_matrix_stale(g)
 
     # Incidence is a lazy cache derived from the edge records mutated above, so
     # the batch never patches matrix cells — it just marks the cache dirty and
@@ -1844,7 +1838,7 @@ def batch_add_edges(
                 rec.etype = 'vertex_edge'
                 if _slot is not None and _slot.edge_slot(eid) is not None:
                     _slot.set_edge_kind(eid, ST.NODE_EDGE)
-        g._grow_rows_to(len(entities))
+        D.mark_matrix_stale(g)
 
     sync_edges(g, _deferred)
 
@@ -1985,11 +1979,11 @@ def batch_add_hyperedges(
                 idx = len(g._entities)
                 g._register_entity_record(ekey, EntityRecord(row_idx=idx, kind='vertex'))
 
-    g._grow_rows_to(len(g._entities))
+    D.mark_matrix_stale(g)
 
     new_count = sum(1 for d in items if d.get('edge_id') not in g._edges)
     if new_count:
-        g._grow_cols_to(len(g._col_to_edge) + new_count)
+        D.mark_matrix_stale(g)
 
     slices = g._slices
 

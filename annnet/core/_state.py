@@ -38,7 +38,7 @@ DERIVED_FIELDS = (
 )
 
 
-def init_state(g, *, directed=None, v=0, e=0, aspects=None) -> None:
+def init_state(g, *, directed=None, aspects=None) -> None:
     """Initialize the structural fields of an empty graph on ``g``."""
     g.directed = directed
 
@@ -76,15 +76,11 @@ def init_state(g, *, directed=None, v=0, e=0, aspects=None) -> None:
     g._vertex_key_fields = None
     g._vertex_key_index = {}
 
-    # The incidence matrix is derived state, so init records its logical extent and
-    # builds nothing. ``_matrix_shape`` tracks the logical (rows, cols) capacity,
-    # ``_matrix_cache`` holds the last materialized matrix, and ``_matrix_dirty``
+    # The incidence matrix is derived state, so init builds nothing.
+    # ``_matrix_cache`` holds the last materialized matrix and ``_matrix_dirty``
     # signals a pending build. Starting dirty with an empty cache keeps a matrix
     # library out of the canonical store: a graph that never reads a matrix never
     # builds one.
-    v = int(v) if v and v > 0 else 0
-    e = int(e) if e and e > 0 else 0
-    g._matrix_shape = (v, e)
     g._matrix_cache = None
     g._matrix_dirty = True
     g._csr_cache = None

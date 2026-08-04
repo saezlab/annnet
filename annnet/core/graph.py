@@ -165,10 +165,6 @@ class AnnNet(
     directed : bool | None, optional
         Default directedness for newly created binary edges. If ``None``,
         methods fall back to directed semantics unless a per-edge flag is set.
-    v : int, optional
-        Initial row capacity for the incidence matrix.
-    e : int, optional
-        Initial column capacity for the incidence matrix.
     annotations : dict | None, optional
         Pre-built annotation tables to use instead of creating empty tables.
     annotations_backend : {"auto", "polars", "pandas", "pyarrow"} | None, optional
@@ -351,8 +347,6 @@ class AnnNet(
     def __init__(
         self,
         directed: bool | None = None,
-        v: int = 0,
-        e: int = 0,
         annotations: dict[str, Any] | None = None,
         annotations_backend: str = 'auto',
         aspects: dict[str, list[str]] | None = None,
@@ -364,10 +358,6 @@ class AnnNet(
         ----------
         directed : bool | None, optional
             Default directedness for newly created binary edges.
-        v : int, optional
-            Initial row capacity for the sparse incidence matrix.
-        e : int, optional
-            Initial column capacity for the sparse incidence matrix.
         annotations : dict | None, optional
             Existing annotation tables keyed by table name.
         annotations_backend : {"polars", "pandas"}, optional
@@ -381,7 +371,7 @@ class AnnNet(
         -----
         A default slice named ``"default"`` is always created and made active.
         """
-        _state.init_state(self, directed=directed, v=v, e=e, aspects=aspects)
+        _state.init_state(self, directed=directed, aspects=aspects)
 
         # Attribute storage
         self._annotations_backend = select_dataframe_backend(annotations_backend)
@@ -402,12 +392,6 @@ class AnnNet(
 
         # Cartesian-product layer cache (set_aspects refreshes it on mutation).
         self._rebuild_all_layers_cache()
-
-    def _grow_rows_to(self, *args, **kwargs):
-        return _derive.grow_rows_to(self, *args, **kwargs)
-
-    def _grow_cols_to(self, *args, **kwargs):
-        return _derive.grow_cols_to(self, *args, **kwargs)
 
     def _invalidate_sparse_caches(self, *args, **kwargs):
         return _derive.invalidate_sparse_caches(self, *args, **kwargs)
@@ -2049,7 +2033,6 @@ class AnnNet(
     @_matrix.setter
     def _matrix(self, value) -> None:
         self._matrix_cache = value
-        self._matrix_shape = tuple(value.shape)
         self._matrix_dirty = False
 
     def _mark_matrix_dirty(self) -> None:
@@ -2062,7 +2045,7 @@ class AnnNet(
         Note this is *not* the only structural-mutation hook: the removal paths
         (``_mutate.remove_edge`` / ``remove_edges_bulk`` / ``remove_vertices_bulk`` /
         ``remove_orphan_node_layers``) reshape the matrix through
-        ``_derive.set_matrix_shape`` and never come through here. Those helpers bump
+        ``_derive.mark_matrix_stale`` and never come through here. Those helpers bump
         the structural clock themselves — ``_derive.bump_structure`` is the single
         point of truth, not this method.
         """

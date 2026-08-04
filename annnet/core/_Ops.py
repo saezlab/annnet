@@ -289,8 +289,6 @@ class Operations:
         if new_aspects is not None:
             g = G(
                 directed=self.directed,
-                v=len(V),
-                e=len(E),
                 aspects=new_aspects,
             )
             bare_vid_attrs = self._rows_attr_map(
@@ -303,7 +301,7 @@ class Operations:
                     bare_vid, layer_coord = node, None
                 g.add_vertices(bare_vid, layer=layer_coord, **bare_vid_attrs.get(bare_vid, {}))
         else:
-            g = G(directed=self.directed, v=len(V), e=len(E))
+            g = G(directed=self.directed)
             va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
             v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
             g._add_vertices_bulk(v_rows, slice=g._default_slice)
@@ -379,13 +377,10 @@ class Operations:
         v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
 
         G = self.__class__
-        edge_count = len(bin_payload) + len(hyper_payload)
         new_aspects = self._constructor_aspects()
         if new_aspects is not None:
             g = G(
                 directed=self.directed,
-                v=len(V),
-                e=edge_count,
                 aspects=new_aspects,
             )
             by_id = _structure.entities_by_id(self)
@@ -398,7 +393,7 @@ class Operations:
                 if not placed:
                     g.add_vertices(vid, **attrs)
         else:
-            g = G(directed=self.directed, v=len(V), e=edge_count)
+            g = G(directed=self.directed)
             g._add_vertices_bulk(v_rows, slice=g._default_slice)
         if bin_payload:
             g._add_edges_bulk(bin_payload, slice=g._default_slice)
@@ -591,12 +586,10 @@ class Operations:
         if new_aspects is not None:
             g = G(
                 directed=self.directed,
-                v=len(V),
-                e=len(E),
                 aspects=new_aspects,
             )
         else:
-            g = G(directed=self.directed, v=len(V), e=len(E))
+            g = G(directed=self.directed)
         g.slices.add(slice_id, **slice_meta['attributes'])
         g.slices.active = slice_id
 
