@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from annnet.core import _structure as S
 from annnet.core.graph import AnnNet
 
 
@@ -411,6 +412,48 @@ def test_remove_edge_leaves_no_query_that_still_finds_it_in_a_layer() -> None:
     assert G.has_edge(src, tgt) == (False, [])
     assert G.incident_edges(src) == []
     assert G.incident_edges(tgt) == []
+
+
+def _edge_entity_graph() -> AnnNet:
+    """A, B and C, an edge-entity over A and B, and an edge from it to C."""
+    G = AnnNet(directed=True)
+    G.add_vertices(['A', 'B', 'C'])
+    G.add_edges('A', 'B', edge_id='ee_ab', as_entity=True)
+    G.add_edges('ee_ab', 'C', edge_id='e_meta')
+    return G
+
+
+def test_removing_the_edge_of_an_edge_entity_removes_the_entity_too() -> None:
+    """An edge-entity is one identity on both axes, so the entity is the edge."""
+    G = _edge_entity_graph()
+
+    G.remove_edges('ee_ab')
+
+    assert not S.has_entity_id(G, 'ee_ab')
+    assert G.has_edge(edge_id='ee_ab') is False
+    # e_meta held the entity as an endpoint, so it goes the way an edge goes when
+    # one of its vertices is removed.
+    assert G.has_edge(edge_id='e_meta') is False
+    assert sorted(G.vertices()) == ['A', 'B', 'C']
+
+
+def test_removing_an_edge_that_names_an_edge_entity_leaves_the_entity_alone() -> None:
+    G = _edge_entity_graph()
+
+    G.remove_edges('e_meta')
+
+    assert S.has_entity_id(G, 'ee_ab', kind=S.EDGE_ENTITY)
+    assert G.has_edge(edge_id='ee_ab') is True
+
+
+def test_removing_every_vertex_of_an_edge_entity_graph_empties_it() -> None:
+    G = _edge_entity_graph()
+
+    G.remove_vertices(['A', 'B', 'C'])
+
+    assert G.nv == 0
+    assert G.ne == 0
+    assert G.validate(strict=False) == []
 
 
 def test_remove_vertex_singular_cascades_incident_edges() -> None:
