@@ -20,6 +20,16 @@ if TYPE_CHECKING:
     from .graph import AnnNet
 
 
+def _same_store(graph) -> str:
+    """Return the canonical store a graph derived from this one is built on.
+
+    A subgraph, a copy or a flattening is the same graph in another shape, so it
+    keeps the store the graph it comes from has rather than taking whatever the
+    constructor defaults to. This goes away with the record store.
+    """
+    return 'records' if graph._store is None else 'slots'
+
+
 def _hyper_def(graph, edge_id):
     """Return the definition of one hyperedge, as the bulk add API states it.
 
@@ -178,7 +188,7 @@ class Operations:
         row_indexes = [self._entities[ekey].row_idx for ekey in row_keys]
         col_indexes = [self._edges[eid].col_idx for eid in ordered_edges]
 
-        new = self.__class__(directed=self.directed)
+        new = self.__class__(directed=self.directed, store=_same_store(self))
         matrix = self._get_csr()[row_indexes, :][:, col_indexes].todok()
 
         entities = {ekey: _build.new_entity_record(i, 'vertex') for i, ekey in enumerate(row_keys)}
@@ -189,7 +199,17 @@ class Operations:
             )
             for new_col, eid in enumerate(ordered_edges)
         }
-        _build.install_structure(new, entities=entities, edges=edges, matrix=matrix)
+        _build.install_structure(
+            new,
+            entities=entities,
+            edges=edges,
+            matrix=matrix,
+            # The store selects the same elements in the same order, so it numbers
+            # its slots as the new graph numbers its rows and columns.
+            store=None
+            if self._store is None
+            else self._store.select(row_keys, ordered_edges, weights=weight_overrides),
+        )
         new.vertex_aligned = self.vertex_aligned
         new._next_edge_id = self._next_edge_id
 
@@ -277,7 +297,13 @@ class Operations:
         G = self.__class__
         new_aspects = self._constructor_aspects()
         if new_aspects is not None:
-            g = G(directed=self.directed, v=len(V), e=len(E), aspects=new_aspects)
+            g = G(
+                directed=self.directed,
+                v=len(V),
+                e=len(E),
+                aspects=new_aspects,
+                store=_same_store(self),
+            )
             bare_vid_attrs = self._rows_attr_map(
                 self.vertex_attributes, 'vertex_id', {self._bare_vid(v) for v in V}
             )
@@ -288,7 +314,7 @@ class Operations:
                     bare_vid, layer_coord = node, None
                 g.add_vertices(bare_vid, layer=layer_coord, **bare_vid_attrs.get(bare_vid, {}))
         else:
-            g = G(directed=self.directed, v=len(V), e=len(E))
+            g = G(directed=self.directed, v=len(V), e=len(E), store=_same_store(self))
             va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
             v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
             g._add_vertices_bulk(v_rows, slice=g._default_slice)
@@ -367,7 +393,13 @@ class Operations:
         edge_count = len(bin_payload) + len(hyper_payload)
         new_aspects = self._constructor_aspects()
         if new_aspects is not None:
-            g = G(directed=self.directed, v=len(V), e=edge_count, aspects=new_aspects)
+            g = G(
+                directed=self.directed,
+                v=len(V),
+                e=edge_count,
+                aspects=new_aspects,
+                store=_same_store(self),
+            )
             by_id = _structure.entities_by_id(self)
             for vid in V:
                 attrs = va_lookup.get(vid, {})
@@ -378,7 +410,7 @@ class Operations:
                 if not placed:
                     g.add_vertices(vid, **attrs)
         else:
-            g = G(directed=self.directed, v=len(V), e=edge_count)
+            g = G(directed=self.directed, v=len(V), e=edge_count, store=_same_store(self))
             g._add_vertices_bulk(v_rows, slice=g._default_slice)
         if bin_payload:
             g._add_edges_bulk(bin_payload, slice=g._default_slice)
@@ -565,9 +597,15 @@ class Operations:
         G = self.__class__
         new_aspects = self._constructor_aspects()
         if new_aspects is not None:
-            g = G(directed=self.directed, v=len(V), e=len(E), aspects=new_aspects)
+            g = G(
+                directed=self.directed,
+                v=len(V),
+                e=len(E),
+                aspects=new_aspects,
+                store=_same_store(self),
+            )
         else:
-            g = G(directed=self.directed, v=len(V), e=len(E))
+            g = G(directed=self.directed, v=len(V), e=len(E), store=_same_store(self))
         g.slices.add(slice_id, **slice_meta['attributes'])
         g.slices.active = slice_id
 
@@ -664,23 +702,20 @@ class Operations:
         """
         G = self.__class__
         new_aspects = self._constructor_aspects()
-        # The copy keeps the canonical store of the graph it copies. This argument
-        # goes away with the record store, and so does this line.
-        store = 'records' if self._store is None else 'slots'
         if new_aspects is not None:
             new = G(
                 directed=self.directed,
                 v=self._matrix.shape[0],
                 e=self._matrix.shape[1],
                 aspects=new_aspects,
-                store=store,
+                store=_same_store(self),
             )
         else:
             new = G(
                 directed=self.directed,
                 v=self._matrix.shape[0],
                 e=self._matrix.shape[1],
-                store=store,
+                store=_same_store(self),
             )
 
         _build.install_structure(

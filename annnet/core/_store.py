@@ -656,6 +656,58 @@ class CoreState:
             reclaimed,
         )
 
+    def select(self, entity_keys, edge_ids, *, weights=None) -> CoreState:
+        """Return a store holding only these entities and these edges, in this order.
+
+        The result is a new store, so it numbers its slots from zero in the order
+        given. A member entry whose entity the selection leaves out is left out
+        with it, exactly as the incidence matrix leaves it out.
+
+        ``weights`` names the edges the selection gives a new weight. An edge that
+        carries no explicit coefficients derives its member coefficients from its
+        weight, so those are derived again from the new one.
+        """
+        other = CoreState(directed=self.directed, aspects=self._aspects)
+        for key in entity_keys:
+            slot = self._entity_slot.get(key)
+            other.add_entity(key, NODE if slot is None else int(self.entity_kind[slot]))
+        weights = weights or {}
+        for edge_id in edge_ids:
+            slot = self._edge_slot.get(edge_id)
+            if slot is None:
+                continue
+            weight = float(weights.get(edge_id, self.edge_weight[slot]))
+            declared = int(self.edge_directed[slot])
+            other.add_edge(
+                edge_id,
+                self._selected_members(slot, other, weight),
+                kind=int(self.edge_kind[slot]),
+                directed=None if declared == INHERIT else bool(declared),
+                weight=weight,
+                explicit_coefficients=bool(self.edge_explicit[slot]),
+                ml_kind=self.edge_ml_kind.get(slot),
+                ml_layers=self.edge_ml_layers.get(slot),
+                direction_policy=self.edge_policy.get(slot),
+            )
+        return other
+
+    def _selected_members(self, slot: int, other: CoreState, weight: float) -> list:
+        """Return the member entries of one edge that a selection keeps."""
+        members = self.members(slot)
+        explicit = bool(self.edge_explicit[slot])
+        directed = self.is_directed(slot)
+        kept = []
+        for entity_slot, coefficient, role in zip(
+            members.entities, members.coefficients, members.roles, strict=True
+        ):
+            key = self._entity_key[int(entity_slot)]
+            if key is None or other.entity_slot(key) is None:
+                continue
+            if not explicit:
+                coefficient = -weight if role == TARGET and directed else weight
+            kept.append((key, float(coefficient), int(role)))
+        return kept
+
     def copy(self) -> CoreState:
         """Return a store that holds the same graph, sharing nothing with this one.
 

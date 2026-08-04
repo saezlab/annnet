@@ -221,6 +221,29 @@ def test_a_copied_graph_holds_the_same_store(case):
     assert V.validate_internal_consistency(H._store, strict=False) == []
 
 
+@pytest.mark.parametrize('case', CASE_NAMES)
+def test_a_subgraph_holds_the_store_a_rebuild_would_give(case):
+    """A selection numbers its own slots, so it is checked against a rebuild."""
+    G = build_case(case, store='slots')
+    nodes = [ref.id for ref in S.iter_entities(G) if ref.kind == S.NODE]
+    for selection in (nodes, nodes[:-1]):
+        _assert_incremental_matches_rebuild(G.ops.subgraph(selection), f'{case}/{selection}')
+
+
+def test_a_subgraph_takes_the_weight_the_slice_gives_an_edge():
+    G = build_case('binary_directed', store='slots')
+    G.slices.add('heavy')
+    G.slices.add_edge_to_slice('heavy', 'e_ab')
+    for vertex_id in ('A', 'B'):
+        G.slices.add_vertex_to_slice('heavy', vertex_id)
+    G.attrs.set_edge_slice_attrs('heavy', 'e_ab', weight=10.0)
+    H = G.subgraph_from_slice('heavy')
+    assert S.edge_members(H._store, 'e_ab') == pytest.approx(
+        {('A', ('_',)): 10.0, ('B', ('_',)): -10.0}
+    )
+    _assert_incremental_matches_rebuild(H, 'subgraph_from_slice')
+
+
 def test_a_write_to_a_copy_leaves_the_graph_it_came_from_alone():
     G = build_case('binary_directed', store='slots')
     H = G.ops.copy()
