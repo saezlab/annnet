@@ -763,7 +763,6 @@ def propagate_to_all_slices(g, edge_id, source, target):
 # ---------------------------------------------------------------------------
 
 
-@syncs_named_edges('edge_id')
 def remove_edge(g, edge_id):
     """Remove a single edge, its column, attributes, and slice memberships."""
     D.ensure_edge_indexes(g)
@@ -791,6 +790,7 @@ def remove_edge(g, edge_id):
         D.remove_edge_id_from_index(g._tgt_to_edges, rec.tgt, edge_id)
 
     del g._edges[edge_id]
+    drop_edges(g, (edge_id,))
 
     ea = g.edge_attributes
     if ea is not None and hasattr(ea, 'columns'):
@@ -812,7 +812,6 @@ def remove_edge(g, edge_id):
     g._rebuild_slice_edge_weights_cache()
 
 
-@syncs_named_edges('edge_ids')
 def remove_edges_bulk(g, edge_ids):
     """Remove many edges and compact the remaining edge columns."""
     D.ensure_edge_indexes(g)
@@ -846,6 +845,7 @@ def remove_edges_bulk(g, edge_ids):
                         pass
                     if not _lst:
                         del index[v]
+    drop_edges(g, drop)
 
     for slice_data in g._slices.values():
         slice_data['edges'].difference_update(drop)
@@ -1196,6 +1196,21 @@ def make_undirected(g, *, drop_flexible=True, update_default=True):
     g._mark_matrix_dirty()
     D.invalidate_sparse_caches(g)
     return g
+
+
+def drop_edges(g, edge_ids) -> None:
+    """Remove edges from the slot store.
+
+    The record store renumbers every column after the one it drops. The slot
+    store frees a slot and moves no other edge, so this is the whole of the work
+    there.
+    """
+    store = slot_store(g)
+    if store is None:
+        return
+    for edge_id in edge_ids:
+        if store.edge_slot(edge_id) is not None:
+            store.remove_edge(edge_id)
 
 
 def drop_entities(g, keys) -> None:
