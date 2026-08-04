@@ -299,6 +299,7 @@ class LayerAccessor:
             flat = self._G.__class__(
                 directed=self.directed,
                 annotations_backend=getattr(self._G, '_annotations_backend', 'polars'),
+                store=_build.same_store(self._G),
             )
             flat._history_enabled = False
 
@@ -414,9 +415,8 @@ class LayerAccessor:
                 flat.add_edges(hyper_specs)
 
             for eid, policy in direction_policies.items():
-                flat_rec = flat._edges.get(eid)
-                if flat_rec is not None:
-                    flat_rec.direction_policy = copy.deepcopy(policy)
+                if _structure.has_edge(flat, eid):
+                    _mutate.set_edge_direction_policy(flat, eid, copy.deepcopy(policy))
 
             flat.slice_edge_weights = {
                 lid: dict(weights) for lid, weights in self.slice_edge_weights.items()
@@ -441,6 +441,10 @@ class LayerAccessor:
                 entities=flat._entities,
                 edges=flat._edges,
                 matrix=flat._matrix,
+                # The flat graph was built through the public API, so its store is
+                # already the store this graph is to have. Everything else the flat
+                # graph holds moves over by reference too, and it is discarded here.
+                store=flat._store,
             )
             self._next_edge_id = flat._next_edge_id
             _build.install_slices(

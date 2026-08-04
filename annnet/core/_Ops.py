@@ -20,16 +20,6 @@ if TYPE_CHECKING:
     from .graph import AnnNet
 
 
-def _same_store(graph) -> str:
-    """Return the canonical store a graph derived from this one is built on.
-
-    A subgraph, a copy or a flattening is the same graph in another shape, so it
-    keeps the store the graph it comes from has rather than taking whatever the
-    constructor defaults to. This goes away with the record store.
-    """
-    return 'records' if graph._store is None else 'slots'
-
-
 def _hyper_def(graph, edge_id):
     """Return the definition of one hyperedge, as the bulk add API states it.
 
@@ -188,7 +178,7 @@ class Operations:
         row_indexes = [self._entities[ekey].row_idx for ekey in row_keys]
         col_indexes = [self._edges[eid].col_idx for eid in ordered_edges]
 
-        new = self.__class__(directed=self.directed, store=_same_store(self))
+        new = self.__class__(directed=self.directed, store=_build.same_store(self))
         matrix = self._get_csr()[row_indexes, :][:, col_indexes].todok()
 
         entities = {ekey: _build.new_entity_record(i, 'vertex') for i, ekey in enumerate(row_keys)}
@@ -302,7 +292,7 @@ class Operations:
                 v=len(V),
                 e=len(E),
                 aspects=new_aspects,
-                store=_same_store(self),
+                store=_build.same_store(self),
             )
             bare_vid_attrs = self._rows_attr_map(
                 self.vertex_attributes, 'vertex_id', {self._bare_vid(v) for v in V}
@@ -314,7 +304,7 @@ class Operations:
                     bare_vid, layer_coord = node, None
                 g.add_vertices(bare_vid, layer=layer_coord, **bare_vid_attrs.get(bare_vid, {}))
         else:
-            g = G(directed=self.directed, v=len(V), e=len(E), store=_same_store(self))
+            g = G(directed=self.directed, v=len(V), e=len(E), store=_build.same_store(self))
             va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
             v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
             g._add_vertices_bulk(v_rows, slice=g._default_slice)
@@ -398,7 +388,7 @@ class Operations:
                 v=len(V),
                 e=edge_count,
                 aspects=new_aspects,
-                store=_same_store(self),
+                store=_build.same_store(self),
             )
             by_id = _structure.entities_by_id(self)
             for vid in V:
@@ -410,7 +400,7 @@ class Operations:
                 if not placed:
                     g.add_vertices(vid, **attrs)
         else:
-            g = G(directed=self.directed, v=len(V), e=edge_count, store=_same_store(self))
+            g = G(directed=self.directed, v=len(V), e=edge_count, store=_build.same_store(self))
             g._add_vertices_bulk(v_rows, slice=g._default_slice)
         if bin_payload:
             g._add_edges_bulk(bin_payload, slice=g._default_slice)
@@ -602,10 +592,10 @@ class Operations:
                 v=len(V),
                 e=len(E),
                 aspects=new_aspects,
-                store=_same_store(self),
+                store=_build.same_store(self),
             )
         else:
-            g = G(directed=self.directed, v=len(V), e=len(E), store=_same_store(self))
+            g = G(directed=self.directed, v=len(V), e=len(E), store=_build.same_store(self))
         g.slices.add(slice_id, **slice_meta['attributes'])
         g.slices.active = slice_id
 
@@ -708,14 +698,14 @@ class Operations:
                 v=self._matrix.shape[0],
                 e=self._matrix.shape[1],
                 aspects=new_aspects,
-                store=_same_store(self),
+                store=_build.same_store(self),
             )
         else:
             new = G(
                 directed=self.directed,
                 v=self._matrix.shape[0],
                 e=self._matrix.shape[1],
-                store=_same_store(self),
+                store=_build.same_store(self),
             )
 
         _build.install_structure(

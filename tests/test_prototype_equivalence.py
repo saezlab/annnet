@@ -265,6 +265,19 @@ def test_declaring_aspects_moves_the_keys_and_keeps_every_slot():
         }, edge_id
 
 
+def test_flattening_a_multilayer_graph_installs_the_store_it_built():
+    """The flat graph is built through the public API, so its store is the answer."""
+    G = build_case('multilayer', store='slots')
+    edge_id = S.edge_ids(G._store)[0]
+    policy = {'var': 'score', 'threshold': 2.0}
+    G.edge_direction_policy = {edge_id: policy}
+    G.layers.flatten_layers()
+    assert {key[1] for _slot, key in G._store.live_entities()} == {('_',)}
+    assert S.edge_policies(G._store)[edge_id] == policy
+    assert V.validate_internal_consistency(G._store, strict=False) == []
+    _assert_incremental_matches_rebuild(G, 'flatten_layers')
+
+
 def test_a_write_to_a_copy_leaves_the_graph_it_came_from_alone():
     G = build_case('binary_directed', store='slots')
     H = G.ops.copy()
