@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 
 from annnet.core import _build, _store as ST, _structure as S
+from annnet.core.graph import AnnNet
 
 from ._fixtures import CASE_NAMES, build_case
 
@@ -374,6 +375,37 @@ def test_has_entity_id_asks_the_index_and_never_walks_the_graph(case, monkeypatc
     for ref in S.iter_entities(G):
         assert S.has_entity_id(store, ref.id) is True
     assert S.has_entity_id(store, 'no_such_id') is False
+
+
+def test_edges_between_reads_no_member_list_for_a_binary_edge(monkeypatch):
+    """A binary edge names two entities, and the index already says which.
+
+    This is what ``has_edge(source, target)`` asks, so it is a hot path. Reading
+    the member list of every edge that touches the source made it twenty times
+    dearer, which is the regression this pins.
+    """
+    G = build_case('binary_directed')
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError('edges_between read the member list of a binary edge')
+
+    monkeypatch.setattr(G._store, 'endpoints', refuse)
+    assert S.edges_between(G, 'A', 'B') == ['e_ab']
+    assert S.edges_between(G, 'B', 'A') == []
+    assert S.edges_between(G, 'A', 'no_such_entity') == []
+    assert S.edges_between(G, 'no_such_entity', 'B') == []
+
+
+def test_edges_between_leaves_out_a_hyperedge_over_the_same_two_entities():
+    """A hyperedge of two members is still not an edge between them."""
+    G = AnnNet(directed=True)
+    G.add_vertices(['A', 'B'])
+    G.add_edges([{'head': ['A'], 'tail': ['B'], 'edge_id': 'h1'}])
+
+    assert S.edges_between(G, 'A', 'B') == []
+
+    G.add_edges('A', 'B', edge_id='e_ab')
+    assert S.edges_between(G, 'A', 'B') == ['e_ab']
 
 
 # ---------------------------------------------------------------------------

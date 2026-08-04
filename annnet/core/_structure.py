@@ -882,19 +882,44 @@ def edges_between(graph, source, target) -> list:
     """Return the ids of the binary edges that run from one entity to another.
 
     An undirected edge counts as running from the side it was stored on, which is
-    what the public ``has_edge(source, target)`` reports. The answer costs the
-    degree of the source, because it reads the edges that touch it rather than
-    every edge of the graph.
+    what the public ``has_edge(source, target)`` reports.
+
+    The index the store keeps names the sides an entity takes in an edge and, for
+    an edge of two entries, the entity on the other one. A binary edge always has
+    two, so the common answer reads that entry and no member list at all. Nothing
+    here builds an object per incident edge, which is what a lookup on a hot path
+    cannot afford.
     """
-    if not has_entity(graph, source):
+    store = store_of(graph)
+    source_slot = store.entity_slot(_slot_key(store, source))
+    if source_slot is None:
         return []
+    target_slot = store.entity_slot(_slot_key(store, target))
+    if target_slot is None:
+        return []
+
+    edge_kind = store.edge_kind
+    edge_id = store.edge_id
     found = []
-    for edge_id in entity_edges(graph, source, 'out'):
-        if edge_ref(graph, edge_id).kind == HYPER:
+    for edge_slot, (sides, peer) in sorted(store._entity_edges[source_slot].items()):
+        if not (sides & _ON_SOURCE):
             continue
-        sides = edge_sides(graph, edge_id)
-        if sides.source == frozenset({source}) and sides.target == frozenset({target}):
-            found.append(edge_id)
+        if peer is not None:
+            # The peer is a plain integer and the kind is one element of a numpy
+            # array, which is dear enough to read only for an edge that has
+            # already matched on its endpoints.
+            if peer == target_slot and int(edge_kind[edge_slot]) != _SLOT_HYPER:
+                found.append(edge_id(edge_slot))
+            continue
+        if int(edge_kind[edge_slot]) == _SLOT_HYPER:
+            continue
+        # An edge of any other number of entries carries no peer, so this one
+        # reads its two sides. A binary edge is never here.
+        stored = store.endpoints(edge_slot)
+        if stored.source == {store.entity_key(source_slot)} and stored.target == {
+            store.entity_key(target_slot)
+        }:
+            found.append(edge_id(edge_slot))
     return found
 
 
