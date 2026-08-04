@@ -10,6 +10,7 @@ from annnet.io import graphml
 from annnet.io import sif
 from annnet.adapters import graphtool_adapter
 from annnet._support.dataframe_backend import dataframe_from_rows, dataframe_to_rows
+from annnet.core import _structure as S
 
 
 def test_dataframe_export_options_and_private_attr_filtering():
@@ -18,7 +19,7 @@ def test_dataframe_export_options_and_private_attr_filtering():
     graph.add_vertices('B')
     graph.add_vertices('C')
     graph.add_edges('A', 'B', edge_id='e1', directed=None, relation='activates')
-    graph._edges['e1'].weight = None
+    graph._set_edge_field('e1', 'weight', None)
     graph.add_edges(src=['A', 'B'], tgt=['C'], edge_id='h1', weight=2.5, directed=True)
     graph.attrs.set_edge_attrs('h1', pathway='p1', __internal='secret')
     graph.slices.add('s1')
@@ -192,8 +193,8 @@ def test_sif_from_manifest_restores_hyperedges_slices_and_multilayer(tmp_path):
     }
 
     restored = sif.from_sif(sif_path, manifest=manifest, relation_attr='relation')
-    assert restored._edges['e1'].directed is False
-    assert restored._edges['e1'].weight == 2.0
+    assert S.edge_shape(restored, 'e1').directed is False
+    assert S.edge_shape(restored, 'e1').weight == 2.0
     assert 'h1' in restored.hyperedge_definitions
     assert 's1' in restored.slices.list(include_default=True)
     assert 'e1' in restored.slices.edges('s1')
@@ -265,4 +266,4 @@ def test_json_multilayer_and_malformed_entries_roundtrip(tmp_path):
     assert restored._aspect_attrs['time']['unit'] == 'day'
     assert restored._state_attrs[('A', ('t1',))]['state'] == 'on'
     assert restored.attrs.get_effective_edge_weight('e1', slice='s1') == 4.0
-    assert restored._edges['e1'].ml_kind == 'intra'
+    assert S.edge_ref(restored, 'e1').ml_kind == 'intra'

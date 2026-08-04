@@ -1,4 +1,4 @@
-"""Coverage tests for ``annnet/_support/graph_records.py``."""
+"""Coverage tests for the row helpers and the adapter view of a graph."""
 
 from __future__ import annotations
 
@@ -8,21 +8,22 @@ import narwhals as nw
 
 from annnet._support.graph_records import (
     _attrs_to_dict,
-    _is_directed_eid,
-    _iter_edge_records,
-    _iter_vertex_ids,
     _rows_like,
     _rows_to_df,
     _serialize_value,
 )
-from annnet.core._records import EdgeRecord, EntityRecord
+from annnet.core._structure import (
+    _is_directed_eid,
+    _iter_edge_records,
+    _iter_vertex_ids,
+)
 from annnet.core.graph import AnnNet
 
 
 # ── _is_directed_eid ──────────────────────────────────────────────────
 
 
-def test_is_directed_eid_reads_record_directed_field() -> None:
+def test_is_directed_eid_reads_the_directedness_of_the_edge() -> None:
     G = AnnNet(directed=True)
     G.add_vertices(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
@@ -31,11 +32,11 @@ def test_is_directed_eid_reads_record_directed_field() -> None:
 
 def test_is_directed_eid_falls_back_to_true_for_unknown_eid() -> None:
     G = AnnNet(directed=True)
-    # No edge with this id — both record lookup and attrs lookup will fail.
+    # No edge with this id — neither the store nor the attributes answer.
     assert _is_directed_eid(G, 'no-such-edge') is True
 
 
-def test_is_directed_eid_handles_object_without_edges_attribute() -> None:
+def test_is_directed_eid_handles_an_object_that_holds_no_graph() -> None:
     class Bare:
         pass
 
@@ -53,7 +54,7 @@ def test_iter_vertex_ids_yields_only_vertex_entities_in_row_order() -> None:
     assert out == ['A', 'B', 'C']
 
 
-def test_iter_vertex_ids_falls_back_to_vertices_method_when_no_entities() -> None:
+def test_iter_vertex_ids_falls_back_to_vertices_method_when_there_is_no_store() -> None:
     class Stub:
         def vertices(self):
             return ['x', 'y']
@@ -71,15 +72,12 @@ def test_iter_vertex_ids_raises_when_no_adapter_surface() -> None:
         list(_iter_vertex_ids(Bare()))
 
 
-def test_iter_vertex_ids_skips_non_vertex_entities() -> None:
-    class Stub:
-        _entities = {
-            ('a',): EntityRecord(row_idx=0, kind='vertex'),
-            ('e1',): EntityRecord(row_idx=1, kind='edge_entity'),
-            ('b',): EntityRecord(row_idx=2, kind='vertex'),
-        }
+def test_iter_vertex_ids_skips_the_edge_entities() -> None:
+    G = AnnNet(directed=True)
+    G.add_vertices(['a', 'b'])
+    G.add_edges('a', 'b', edge_id='e1', as_entity=True)
 
-    assert list(_iter_vertex_ids(Stub())) == ['a', 'b']
+    assert list(_iter_vertex_ids(G)) == ['a', 'b']
 
 
 # ── _serialize_value ───────────────────────────────────────────────────
@@ -155,7 +153,7 @@ def test_rows_like_returns_empty_for_unrecognized_shape() -> None:
 # ── _iter_edge_records ─────────────────────────────────────────────────
 
 
-def test_iter_edge_records_uses_col_to_edge_in_graph_order() -> None:
+def test_iter_edge_records_yields_the_edges_in_column_order() -> None:
     G = AnnNet(directed=True)
     G.add_vertices(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1')
@@ -165,24 +163,18 @@ def test_iter_edge_records_uses_col_to_edge_in_graph_order() -> None:
     assert eids == ['e1', 'e2']
 
 
-def test_iter_edge_records_falls_back_to_edges_dict_items() -> None:
-    class Stub:
-        _edges = {
-            'e1': EdgeRecord(
-                src='A',
-                tgt='B',
-                weight=1.0,
-                directed=True,
-                etype='binary',
-                col_idx=0,
-                ml_kind=None,
-                ml_layers=None,
-                direction_policy=None,
-            ),
-        }
+def test_iter_edge_records_gives_each_edge_the_shape_an_adapter_reads() -> None:
+    G = AnnNet(directed=True)
+    G.add_vertices(['A', 'B', 'C'])
+    G.add_edges('A', 'B', edge_id='e1', weight=2.0)
+    G.add_edges([{'members': ['A', 'B', 'C'], 'edge_id': 'h1'}])
 
-    out = list(_iter_edge_records(Stub()))
-    assert [eid for eid, _ in out] == ['e1']
+    shapes = dict(_iter_edge_records(G))
+    assert (shapes['e1'].src, shapes['e1'].tgt) == ('A', 'B')
+    assert (shapes['e1'].etype, shapes['e1'].weight, shapes['e1'].directed) == ('binary', 2.0, True)
+    assert shapes['h1'].src == frozenset({'A', 'B', 'C'})
+    assert shapes['h1'].tgt is None
+    assert (shapes['h1'].etype, shapes['h1'].directed) == ('hyper', False)
 
 
 def test_iter_edge_records_raises_when_no_edge_store() -> None:

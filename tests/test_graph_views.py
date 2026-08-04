@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from annnet.core._Views import GraphView
 from annnet.core.graph import AnnNet
+from annnet.core import _structure as S
 
 
 def _build_graph():
@@ -235,8 +236,8 @@ class TestGraphViewMaterialize(unittest.TestCase):
             {('A', ('t1',)), ('A', ('t2',)), ('B', ('t1',))},
         )
         self.assertEqual(H.edges(), ['e1'])
-        self.assertEqual(H._edges['e1'].src, ('A', ('t1',)))
-        self.assertEqual(H._edges['e1'].tgt, ('B', ('t1',)))
+        self.assertEqual(S.edge_shape(H, 'e1').src, ('A', ('t1',)))
+        self.assertEqual(S.edge_shape(H, 'e1').tgt, ('B', ('t1',)))
 
 
 class TestViewNamespace(unittest.TestCase):

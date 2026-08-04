@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
+from annnet.core import _structure as S
 from annnet.core.graph import AnnNet
 
 
@@ -40,32 +41,32 @@ def _mixed_graph() -> AnnNet:
 def test_reverse_swaps_directed_binary_endpoints() -> None:
     G = _mixed_graph()
     R = G.ops.reverse()
-    rec_orig = G._edges['e_dir']
-    rec_rev = R._edges['e_dir']
+    rec_orig = S.edge_shape(G, 'e_dir')
+    rec_rev = S.edge_shape(R, 'e_dir')
     assert (rec_orig.src, rec_orig.tgt) == (rec_rev.tgt, rec_rev.src)
 
 
 def test_reverse_leaves_undirected_binary_unchanged() -> None:
     G = _mixed_graph()
     R = G.ops.reverse()
-    a = G._edges['e_undir']
-    b = R._edges['e_undir']
+    a = S.edge_shape(G, 'e_undir')
+    b = S.edge_shape(R, 'e_undir')
     assert (a.src, a.tgt) == (b.src, b.tgt)
 
 
 def test_reverse_swaps_directed_hyperedge_head_tail() -> None:
     G = _mixed_graph()
     R = G.ops.reverse()
-    a = G._edges['h_dir']
-    b = R._edges['h_dir']
+    a = S.edge_shape(G, 'h_dir')
+    b = S.edge_shape(R, 'h_dir')
     assert a.src == b.tgt and a.tgt == b.src
 
 
 def test_reverse_leaves_undirected_hyperedge_unchanged() -> None:
     G = _mixed_graph()
     R = G.ops.reverse()
-    assert set(G._edges['h_und'].src) == set(R._edges['h_und'].src)
-    assert R._edges['h_und'].tgt is None
+    assert set(S.edge_shape(G, 'h_und').src) == set(S.edge_shape(R, 'h_und').src)
+    assert S.edge_shape(R, 'h_und').tgt is None
 
 
 def test_reverse_returns_new_graph() -> None:
@@ -81,8 +82,8 @@ def test_subgraph_from_slice_contains_slice_members() -> None:
     G = _mixed_graph()
     H = G.subgraph_from_slice('S1')
     # Slice S1 holds e_dir and h_dir.
-    assert 'e_dir' in H._edges
-    assert 'h_dir' in H._edges
+    assert S.has_edge(H, 'e_dir')
+    assert S.has_edge(H, 'h_dir')
 
 
 def test_subgraph_from_slice_raises_on_unknown_slice() -> None:
@@ -95,7 +96,7 @@ def test_subgraph_from_slice_resolves_slice_weight_overrides() -> None:
     G = _mixed_graph()
     G.attrs.set_edge_slice_attrs('S1', 'e_dir', weight=7.5)
     H = G.subgraph_from_slice('S1', resolve_slice_weights=True)
-    assert 'e_dir' in H._edges
+    assert S.has_edge(H, 'e_dir')
 
 
 # ── memory_usage ────────────────────────────────────────────────────────
@@ -173,7 +174,7 @@ def test_ops_subgraph_and_edge_subgraph_forwarders() -> None:
     sub = G.ops.subgraph(['A', 'B'])
     assert sub.nv == 2
     esub = G.ops.edge_subgraph(['e_dir'])
-    assert 'e_dir' in esub._edges
+    assert S.has_edge(esub, 'e_dir')
 
 
 def test_subgraph_preserves_graph_attributes() -> None:
@@ -240,8 +241,8 @@ def test_extract_subgraph_edge_indices_are_resolved() -> None:
     G = _mixed_graph()
     cols = [G.idx.edge_to_col('e_dir'), G.idx.edge_to_col('e_undir')]
     H = G.ops.extract_subgraph(edges=cols)
-    assert 'e_dir' in H._edges
-    assert 'e_undir' in H._edges
+    assert S.has_edge(H, 'e_dir')
+    assert S.has_edge(H, 'e_undir')
 
 
 def test_extract_subgraph_vertex_filter_only_path() -> None:
@@ -253,7 +254,7 @@ def test_extract_subgraph_vertex_filter_only_path() -> None:
 def test_extract_subgraph_edge_filter_only_path() -> None:
     G = _mixed_graph()
     H = G.ops.extract_subgraph(edges=['e_dir'])
-    assert 'e_dir' in H._edges
+    assert S.has_edge(H, 'e_dir')
 
 
 def test_extract_subgraph_both_filters_keeps_only_endpoint_safe_edges() -> None:
@@ -261,8 +262,8 @@ def test_extract_subgraph_both_filters_keeps_only_endpoint_safe_edges() -> None:
     H = G.ops.extract_subgraph(vertices={'A', 'B'}, edges={'e_dir', 'e_undir'})
     # e_dir = (A, B) — both endpoints in V → kept.
     # e_undir = (B, C) — C not in V → dropped.
-    assert 'e_dir' in H._edges
-    assert 'e_undir' not in H._edges
+    assert S.has_edge(H, 'e_dir')
+    assert not S.has_edge(H, 'e_undir')
 
 
 def test_extract_subgraph_both_filters_keeps_hyperedge_when_all_members_in_v() -> None:
@@ -271,8 +272,8 @@ def test_extract_subgraph_both_filters_keeps_hyperedge_when_all_members_in_v() -
         vertices={'A', 'B', 'C'},
         edges={'h_und', 'h_dir', 'e_dir', 'e_undir'},
     )
-    assert 'h_und' in H._edges
-    assert 'h_dir' in H._edges
+    assert S.has_edge(H, 'h_und')
+    assert S.has_edge(H, 'h_dir')
 
 
 # ── copy modes ──────────────────────────────────────────────────────────
@@ -306,7 +307,7 @@ def _multilayer_slice_graph() -> AnnNet:
 def test_subgraph_from_slice_on_multilayer_graph() -> None:
     G = _multilayer_slice_graph()
     H = G.subgraph_from_slice('S1')
-    assert 'e_intra' in H._edges
+    assert S.has_edge(H, 'e_intra')
     assert H.slices.active == 'S1'
 
 
@@ -329,8 +330,8 @@ def test_subgraph_from_slice_multilayer_with_binary_edges_only() -> None:
     G.slices.add_edge_to_slice('S1', 'e1')
     G.slices.add_edge_to_slice('S1', 'e2')
     H = G.subgraph_from_slice('S1')
-    assert 'e1' in H._edges
-    assert 'e2' in H._edges
+    assert S.has_edge(H, 'e1')
+    assert S.has_edge(H, 'e2')
 
 
 def test_multilayer_subgraph_from_slice_preserves_graph_attributes_and_real_supra_vertices():
@@ -360,7 +361,7 @@ def test_multilayer_subgraph_from_slice_preserves_graph_attributes_and_real_supr
         ('B', ('healthy',)),
         ('C', ('treated',)),
     }
-    assert H._edges['h1'].src == frozenset(
+    assert S.edge_shape(H, 'h1').src == frozenset(
         {('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))}
     )
 
@@ -396,8 +397,8 @@ def _multilayer_with_supra_edges() -> AnnNet:
 def test_edge_subgraph_multilayer_preserves_supra_node_edges() -> None:
     G = _multilayer_with_supra_edges()
     H = G.ops.edge_subgraph(['e_intra1', 'e_inter'])
-    assert 'e_intra1' in H._edges
-    assert 'e_inter' in H._edges
+    assert S.has_edge(H, 'e_intra1')
+    assert S.has_edge(H, 'e_inter')
 
 
 def test_extract_subgraph_multilayer_with_both_filters() -> None:
@@ -408,9 +409,9 @@ def test_extract_subgraph_multilayer_with_both_filters() -> None:
     )
     # e_intra1 (A→B) and e_intra2 (B→C) — both endpoints in V → kept.
     # e_inter (A→D) — D not in V → dropped.
-    assert 'e_intra1' in H._edges
-    assert 'e_intra2' in H._edges
-    assert 'e_inter' not in H._edges
+    assert S.has_edge(H, 'e_intra1')
+    assert S.has_edge(H, 'e_intra2')
+    assert not S.has_edge(H, 'e_inter')
 
 
 def test_copy_multilayer_preserves_aspects_and_layer_attrs() -> None:
@@ -453,7 +454,7 @@ def test_subgraph_on_multilayer_with_hyperedge_via_supra_members() -> None:
         ]
     )
     H = G.ops.subgraph(['A', 'B', 'C'])
-    assert 'h_und' in H._edges
+    assert S.has_edge(H, 'h_und')
 
 
 def test_edge_subgraph_multilayer_with_hyperedge_via_supra_members() -> None:
@@ -471,7 +472,7 @@ def test_edge_subgraph_multilayer_with_hyperedge_via_supra_members() -> None:
         ]
     )
     H = G.ops.edge_subgraph(['h_dir'])
-    assert 'h_dir' in H._edges
+    assert S.has_edge(H, 'h_dir')
 
 
 def test_edge_subgraph_multilayer_hyperedge_preserves_supra_members_without_placeholder_warnings():
@@ -499,7 +500,7 @@ def test_edge_subgraph_multilayer_hyperedge_preserves_supra_members_without_plac
         ('B', ('healthy',)),
         ('C', ('treated',)),
     }
-    assert H._edges['h1'].src == frozenset(
+    assert S.edge_shape(H, 'h1').src == frozenset(
         {('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))}
     )
 

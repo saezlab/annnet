@@ -6,9 +6,9 @@ import warnings
 
 import pytest
 
-from annnet.core._records import EdgeRecord, EntityRecord
 from annnet.core.backend_accessors._base import _BackendAccessorBase
 from annnet.core.graph import AnnNet
+from annnet.core import _structure as S
 
 
 class _Accessor(_BackendAccessorBase):
@@ -64,11 +64,11 @@ def test_vertex_row_to_id_returns_none_for_unknown_row() -> None:
 
 
 def test_vertex_row_to_id_returns_none_for_non_vertex_row() -> None:
-    """Synthesize an edge_entity row and confirm it's filtered out."""
+    """An edge-entity holds a row, and it is filtered out."""
     a, G = _toy_accessor()
-    G._row_to_entity[999] = ('e1',)
-    G._entities[('e1',)] = EntityRecord(row_idx=999, kind='edge_entity')
-    assert a._vertex_row_to_id(999) is None
+    G.add_edges('x', 'y', edge_id='ee', as_entity=True)
+    row = S.entity_row(G, ('ee', ('_',)))
+    assert a._vertex_row_to_id(row) is None
 
 
 # ── _infer_label_field ────────────────────────────────────────────────
@@ -365,4 +365,3 @@ def test_edge_attr_aggregator_fallback_picks_first_value_or_none() -> None:
 
 # Silence unused import warnings — keeps the module references that the
 # test infra walks over for collection.
-_ = EdgeRecord

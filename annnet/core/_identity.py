@@ -145,11 +145,6 @@ def resolve_vertex_insert_coord(g, layer_spec, *, vertex_ids=None, context='add_
     return coord
 
 
-def entity_row(g, vid) -> int:
-    """Return incidence-matrix row index for a vertex (resolves bare vid)."""
-    return g._entities[resolve_ekey(g, vid)].row_idx
-
-
 # ---------------------------------------------------------------------------
 # Slice membership translation (slices store bare vids)
 # ---------------------------------------------------------------------------

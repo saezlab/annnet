@@ -50,9 +50,9 @@ def test_add_vertex_singular_creates_one_vertex() -> None:
 def test_make_undirected_flips_directed_binary_edges() -> None:
     G = _toy()
     G.make_undirected()
-    for rec in G._edges.values():
-        if rec.etype != 'hyper':
-            assert rec.directed is False
+    for reference in S.iter_edges(G):
+        if reference.kind != S.HYPER:
+            assert reference.directed is False
 
 
 def test_make_undirected_with_directed_hyperedge_collapses_to_undirected() -> None:
@@ -60,7 +60,7 @@ def test_make_undirected_with_directed_hyperedge_collapses_to_undirected() -> No
     G.add_vertices(['A', 'B', 'C', 'D'])
     G.add_edges(src=['A', 'B'], tgt=['C', 'D'], edge_id='h1')
     G.make_undirected()
-    rec = G._edges['h1']
+    rec = S.edge_shape(G, 'h1')
     assert rec.directed is False
     assert rec.tgt is None
     assert set(rec.src) == {'A', 'B', 'C', 'D'}
@@ -71,7 +71,7 @@ def test_make_undirected_with_undirected_hyperedge_is_idempotent() -> None:
     G.add_vertices(['A', 'B', 'C'])
     G.add_edges(['A', 'B', 'C'], edge_id='h1')
     G.make_undirected()
-    rec = G._edges['h1']
+    rec = S.edge_shape(G, 'h1')
     assert rec.directed is False
     assert rec.tgt is None
     assert set(rec.src) == {'A', 'B', 'C'}
@@ -88,7 +88,7 @@ def test_make_undirected_with_drop_flexible_clears_policy() -> None:
         flexible={'var': 'x', 'threshold': 5.0, 'scope': 'edge'},
     )
     G.make_undirected(drop_flexible=True)
-    assert G._edges['e1'].direction_policy is None
+    assert S.edge_policies(G).get('e1') is None
 
 
 def test_make_undirected_without_update_default_keeps_directed_attr() -> None:
@@ -104,13 +104,13 @@ def test_make_undirected_without_update_default_keeps_directed_attr() -> None:
 def test_edge_kind_setter_marks_edge_as_hyper() -> None:
     G = _toy()
     G.edge_kind = {'e1': 'hyper'}
-    assert G._edges['e1'].etype == 'hyper'
+    assert S.edge_shape(G, 'e1').etype == 'hyper'
 
 
 def test_edge_kind_setter_marks_ml_kind_for_non_hyper() -> None:
     G = _toy()
     G.edge_kind = {'e1': 'intra'}
-    assert G._edges['e1'].ml_kind == 'intra'
+    assert S.edge_ref(G, 'e1').ml_kind == 'intra'
 
 
 def test_edge_kind_setter_ignores_unknown_eid() -> None:
@@ -121,20 +121,20 @@ def test_edge_kind_setter_ignores_unknown_eid() -> None:
 def test_edge_definitions_setter_updates_src_tgt_etype() -> None:
     G = _toy()
     G.edge_definitions = {'e1': ('A', 'C', 'binary')}
-    rec = G._edges['e1']
+    rec = S.edge_shape(G, 'e1')
     assert (rec.src, rec.tgt, rec.etype) == ('A', 'C', 'binary')
 
 
 def test_edge_definitions_setter_normalizes_hyper_etype_to_binary() -> None:
     G = _toy()
     G.edge_definitions = {'e1': ('A', 'B', 'hyper')}
-    assert G._edges['e1'].etype == 'binary'
+    assert S.edge_shape(G, 'e1').etype == 'binary'
 
 
 def test_hyperedge_definitions_setter_list_form_makes_undirected() -> None:
     G = _toy()
     G.hyperedge_definitions = {'e1': ['A', 'B', 'C']}
-    rec = G._edges['e1']
+    rec = S.edge_shape(G, 'e1')
     assert rec.etype == 'hyper'
     assert rec.tgt is None
     assert set(rec.src) == {'A', 'B', 'C'}
@@ -143,7 +143,7 @@ def test_hyperedge_definitions_setter_list_form_makes_undirected() -> None:
 def test_hyperedge_definitions_setter_dict_form_directed() -> None:
     G = _toy()
     G.hyperedge_definitions = {'e1': {'directed': True, 'head': ['A'], 'tail': ['B', 'C']}}
-    rec = G._edges['e1']
+    rec = S.edge_shape(G, 'e1')
     assert rec.directed is True
     assert set(rec.src) == {'A'}
     assert set(rec.tgt) == {'B', 'C'}
@@ -152,7 +152,7 @@ def test_hyperedge_definitions_setter_dict_form_directed() -> None:
 def test_hyperedge_definitions_setter_dict_form_undirected() -> None:
     G = _toy()
     G.hyperedge_definitions = {'e1': {'directed': False, 'members': ['A', 'B']}}
-    rec = G._edges['e1']
+    rec = S.edge_shape(G, 'e1')
     assert rec.directed is False
     assert rec.tgt is None
 
@@ -160,8 +160,7 @@ def test_hyperedge_definitions_setter_dict_form_undirected() -> None:
 def test_entity_types_setter_updates_recorded_kind() -> None:
     G = _toy()
     G.entity_types = {'A': 'edge'}  # mark vertex A as edge-entity
-    rec = G._entities[G._resolve_entity_key('A')]
-    assert rec.kind == 'edge_entity'
+    assert S.entity_ref(G, G._resolve_entity_key('A')).kind == S.EDGE_ENTITY
 
 
 # ── get_or_create_vertex_by_attrs ─────────────────────────────────────
@@ -276,8 +275,8 @@ def test_remove_vertices_cascades_incident_edges() -> None:
     G.remove_vertices('A')
     # e1 (A,B) is gone; e2 (B,C) survives.
     assert 'A' not in G.vertices()
-    assert 'e1' not in G._edges
-    assert 'e2' in G._edges
+    assert not S.has_edge(G, 'e1')
+    assert S.has_edge(G, 'e2')
 
 
 def test_remove_vertex_cascades_multilayer_hyperedge_with_supra_member_storage() -> None:
@@ -296,7 +295,7 @@ def test_remove_vertex_cascades_multilayer_hyperedge_with_supra_member_storage()
 
     G.remove_vertices('A')
 
-    assert 'h1' not in G._edges
+    assert not S.has_edge(G, 'h1')
 
 
 def test_remove_vertices_bulk_removes_each() -> None:
@@ -371,7 +370,7 @@ def test_add_hyperedges_with_existing_eid_overwrites_in_place() -> None:
     # Now re-add 'h1' as a different hyperedge — triggers the in-place
     # overwrite branch in ``_add_hyperedges_batch``.
     G.add_edges(['B', 'C', 'D'], edge_id='h1')
-    rec = G._edges['h1']
+    rec = S.edge_shape(G, 'h1')
     assert set(rec.src) == {'B', 'C', 'D'}
 
 
@@ -380,7 +379,7 @@ def test_add_edges_as_entity_promotes_to_edge_entity() -> None:
     G = AnnNet(directed=True)
     G.add_vertices(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', as_entity=True)
-    rec = G._edges['e1']
+    rec = S.edge_shape(G, 'e1')
     assert rec.etype == 'vertex_edge'
 
 
@@ -396,7 +395,7 @@ def test_remove_edge_singular_raises_for_unknown() -> None:
 def test_remove_edge_singular_drops_the_edge() -> None:
     G = _toy()
     G.remove_edge('e1')
-    assert 'e1' not in G._edges
+    assert not S.has_edge(G, 'e1')
 
 
 def test_remove_edge_leaves_no_query_that_still_finds_it_in_a_layer() -> None:
@@ -500,8 +499,8 @@ def test_remove_vertex_singular_cascades_incident_edges() -> None:
     G.remove_vertex('B')
     assert 'B' not in G.vertices()
     # both e1 (A,B) and e2 (B,C) had B as endpoint → both gone.
-    assert 'e1' not in G._edges
-    assert 'e2' not in G._edges
+    assert not S.has_edge(G, 'e1')
+    assert not S.has_edge(G, 'e2')
 
 
 # ── reset / clear helpers ────────────────────────────────────────────

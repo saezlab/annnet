@@ -590,9 +590,6 @@ class AnnNet(
             return False
         return _structure.entity_ref(self, ekey).kind == _structure.NODE
 
-    def _entity_row(self, *args, **kwargs):
-        return _identity.entity_row(self, *args, **kwargs)
-
     def _placeholder_layer_coord(self, *args, **kwargs):
         return _identity.placeholder_layer_coord(self, *args, **kwargs)
 
@@ -615,17 +612,8 @@ class AnnNet(
     def _resolve_entity_key(self, *args, **kwargs):
         return _identity.resolve_ekey(self, *args, **kwargs)
 
-    def _index_entity_key(self, *args, **kwargs):
-        return _derive.index_entity_key(self, *args, **kwargs)
-
-    def _unindex_entity_key(self, *args, **kwargs):
-        return _derive.unindex_entity_key(self, *args, **kwargs)
-
-    def _register_entity_record(self, *args, **kwargs):
-        return _mutate.register_entity_record(self, *args, **kwargs)
-
-    def _remove_entity_record(self, *args, **kwargs):
-        return _mutate.remove_entity_record(self, *args, **kwargs)
+    def _register_entity(self, *args, **kwargs):
+        return _mutate.register_entity(self, *args, **kwargs)
 
     # The doors a reader uses. A reader rebuilds a whole graph from a file or from
     # another library, so it writes structure rather than querying it, and the
@@ -649,9 +637,6 @@ class AnnNet(
 
     def _replace_edge_coeffs(self, *args, **kwargs):
         return _mutate.replace_edge_coeffs(self, *args, **kwargs)
-
-    def _rebuild_entity_indexes(self, *args, **kwargs):
-        return _derive.rebuild_entity_indexes(self, *args, **kwargs)
 
     def _endpoint_slice_vertex_ids(self, *args, **kwargs):
         return _identity.endpoint_slice_vertex_ids(self, *args, **kwargs)
@@ -683,6 +668,15 @@ class AnnNet(
     @property
     def _VM(self) -> set:
         return set(_structure.node_keys(self))
+
+    def _VM_ordered(self) -> list:
+        """Return the key of every node, in row order.
+
+        A writer needs the order as well as the membership, because a file that
+        records the rows of a graph has to record them in the order the graph
+        holds them.
+        """
+        return _structure.node_keys(self)
 
     @_VM.setter
     def _VM(self, value) -> None:
@@ -853,9 +847,6 @@ class AnnNet(
 
     def _find_parallel_edges(self, *args, **kwargs):
         return _mutate.find_parallel_edges(self, *args, **kwargs)
-
-    def _zero_edge_column(self, *args, **kwargs):
-        return _mutate.zero_edge_column(self, *args, **kwargs)
 
     # ── Unified edge builder ──────────────────────────────────────────────────
 

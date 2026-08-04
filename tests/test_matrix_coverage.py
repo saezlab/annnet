@@ -11,6 +11,7 @@ import pytest
 import scipy.sparse as sp
 
 from annnet.core.graph import AnnNet
+from annnet.core import _structure as S
 
 
 def _build_graph() -> AnnNet:
@@ -234,7 +235,7 @@ def test_idx_has_entity_has_vertex_has_edge_id() -> None:
 def test_idx_count_helpers_match_graph_shape() -> None:
     G = _build_graph()
     assert G.idx.edge_count() == G.ne
-    assert G.idx.entity_count() == len(G._entities)
+    assert G.idx.entity_count() == S.entity_count(G)
     assert G.idx.vertex_count() == G.nv_supra
 
 

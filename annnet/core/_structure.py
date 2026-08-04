@@ -861,6 +861,23 @@ def entity_edges(graph, ref, direction: str = 'both') -> tuple:
     return _slot_entity_edges(store, key, direction)
 
 
+def edges_of_id(graph, entity_id: str) -> set:
+    """Return the ids of the edges that name any entity carrying this id.
+
+    A bare id names one entity in a flat graph and one per layer in a multilayer
+    graph. This answers for all of them at once, which is what a caller holding
+    bare ids needs. It costs the degree of each entity, because the store keeps
+    the edges an entity takes part in.
+    """
+    store = store_of(graph)
+    found = set()
+    edge_id = store.edge_id
+    for slot in store.entity_slots_of_id(entity_id):
+        for edge_slot in store._entity_edges.get(slot, ()):
+            found.add(edge_id(edge_slot))
+    return found
+
+
 def edges_between(graph, source, target) -> list:
     """Return the ids of the binary edges that run from one entity to another.
 
@@ -879,3 +896,95 @@ def edges_between(graph, source, target) -> list:
         if sides.source == frozenset({source}) and sides.target == frozenset({target}):
             found.append(edge_id)
     return found
+
+
+# ---------------------------------------------------------------------------
+# The shape the adapters and the file formats read an edge through
+# ---------------------------------------------------------------------------
+# They were written against the record layout the core used to keep. This is
+# what is left of it: the field names they know, over the store that answers
+# now. Every shape is built on the call that reads it, so it is a view and never
+# a second copy. It lives here because the facade is the one path from outside
+# the core to the topology of a graph, and it goes when the last of those
+# callers asks for an :class:`EdgeRef` instead.
+
+
+class EdgeShape(NamedTuple):
+    """One edge in the shape the adapters read it.
+
+    ``src`` and ``tgt`` name one endpoint each for a binary edge and a whole
+    side for a hyperedge, and a side the edge does not have is None. ``directed``
+    is the answer the graph gives, so an edge that declares nothing carries the
+    default of the graph rather than None.
+    """
+
+    src: object
+    tgt: object
+    etype: str
+    weight: float
+    directed: bool
+
+
+_ADAPTER_EDGE_TYPE = {
+    BINARY: 'binary',
+    HYPER: 'hyper',
+    NODE_EDGE: 'vertex_edge',
+    PLACEHOLDER: 'edge_placeholder',
+}
+
+
+def _shape_side(side, hyper: bool):
+    """Return one side of an edge in the shape an adapter reads it."""
+    if not side:
+        return None
+    return frozenset(side) if hyper or len(side) > 1 else next(iter(side))
+
+
+def _is_directed_eid(graph, eid):
+    """Best-effort directedness probe; default True."""
+    try:
+        if has_edge(graph, eid):
+            return bool(edge_ref(graph, eid).directed)
+    except (AttributeError, TypeError):
+        pass
+    try:
+        value = graph.attrs.get_attr_edge(eid, 'directed')
+        return bool(value) if value is not None else True
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return True
+
+
+def _iter_vertex_ids(graph):
+    """Yield vertex ids in stable graph/entity order."""
+    if getattr(graph, '_store', None) is not None:
+        yield from node_ids(graph)
+        return
+
+    try:
+        yield from graph.vertices()
+        return
+    except AttributeError as exc:
+        raise AttributeError('Graph does not expose an adapter-readable vertex store') from exc
+
+
+def edge_shape(graph, edge_id: str) -> EdgeShape:
+    """Return one edge in the shape the adapters read it."""
+    reference = edge_ref(graph, edge_id)
+    sides = edge_sides(graph, edge_id)
+    hyper = reference.kind == HYPER
+    return EdgeShape(
+        _shape_side(sides.source, hyper),
+        _shape_side(sides.target, hyper),
+        _ADAPTER_EDGE_TYPE.get(reference.kind, 'binary'),
+        reference.weight,
+        reference.directed,
+    )
+
+
+def _iter_edge_records(graph):
+    """Yield ``(eid, EdgeShape)`` for every structural edge, in column order."""
+    if getattr(graph, '_store', None) is None:
+        raise AttributeError('Graph does not expose an adapter-readable edge store')
+
+    for reference in iter_edges(graph):
+        yield reference.id, edge_shape(graph, reference.id)

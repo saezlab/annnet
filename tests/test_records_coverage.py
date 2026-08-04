@@ -5,10 +5,8 @@ from __future__ import annotations
 import narwhals as nw
 
 from annnet.core._records import (
-    EdgeRecord,
     EdgeType,
     EdgeView,
-    EntityRecord,
     SliceRecord,
     _df_filter_not_equal,
     _external_entity_kind,
@@ -68,13 +66,7 @@ def test_df_filter_not_equal_drops_matching_rows() -> None:
     assert back.shape[0] == 1
 
 
-# ── EntityRecord / SliceRecord / EdgeRecord ────────────────────────────
-
-
-def test_entity_record_holds_row_idx_and_kind() -> None:
-    rec = EntityRecord(row_idx=3, kind='vertex')
-    assert rec.row_idx == 3
-    assert rec.kind == 'vertex'
+# ── SliceRecord ────────────────────────────────────────────────────────
 
 
 def test_slice_record_dict_style_get_returns_field_value() -> None:
@@ -85,22 +77,6 @@ def test_slice_record_dict_style_get_returns_field_value() -> None:
     # default-returning .get path
     assert sr.get('vertices') == {'a'}
     assert sr.get('nonexistent', 'fallback') == 'fallback'
-
-
-def test_edge_record_constructs_with_named_fields() -> None:
-    rec = EdgeRecord(
-        src='a',
-        tgt='b',
-        weight=1.0,
-        directed=True,
-        etype='binary',
-        col_idx=0,
-        ml_kind=None,
-        ml_layers=None,
-        direction_policy=None,
-    )
-    assert rec.src == 'a'
-    assert rec.etype == 'binary'
 
 
 # ── EdgeType ───────────────────────────────────────────────────────────

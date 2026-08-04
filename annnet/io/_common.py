@@ -9,12 +9,12 @@ _support modules.
 from __future__ import annotations
 
 from ..core import _structure
-from .._support.graph_records import (
-    _rows_to_df,
+from ..core._structure import (
     _is_directed_eid,
     _iter_vertex_ids,
     _iter_edge_records,
 )
+from .._support.graph_records import _rows_to_df
 from .._support.serialization import (
     endpoint_coeff_map,
     serialize_endpoint,

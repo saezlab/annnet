@@ -8,7 +8,7 @@ indexing, edge direction policies, graph-level uns metadata), then runs
 build → write → read → write → read and asserts equality on every
 state-bearing field.
 
-The test deliberately reaches into private state (`_entities`, `_edges`,
+The test deliberately reaches into private state (the canonical store,
 matrix coordinates, slice records). It is intended to fail loudly the
 moment any field stops surviving the roundtrip.
 """
@@ -23,6 +23,7 @@ import pytest
 
 from annnet import AnnNet
 from annnet.io import read, write
+from annnet.core import _structure as S
 
 
 # ---------------------------------------------------------------------------
@@ -215,18 +216,20 @@ def _normalise_frozenset(value):
 
 
 def _edge_state(g: AnnNet):
+    policies = S.edge_policies(g)
     out = {}
-    for eid, rec in g._edges.items():
-        out[eid] = (
-            _normalise_frozenset(rec.src),
-            _normalise_frozenset(rec.tgt),
-            float(rec.weight) if rec.weight is not None else None,
-            rec.directed,
-            rec.etype,
-            rec.col_idx,
-            rec.ml_kind,
-            rec.ml_layers,
-            rec.direction_policy,
+    for ref in S.iter_edges(g, include_placeholders=True):
+        shape = S.edge_shape(g, ref.id)
+        out[ref.id] = (
+            _normalise_frozenset(shape.src),
+            _normalise_frozenset(shape.tgt),
+            float(ref.weight) if ref.weight is not None else None,
+            ref.directed,
+            shape.etype,
+            S.edge_column(g, ref.id),
+            ref.ml_kind,
+            ref.ml_layers,
+            policies.get(ref.id),
         )
     return out
 
@@ -274,12 +277,10 @@ def _full_snapshot(g: AnnNet):
             a: sorted(g.layers.list_layers(a)) for a in g.layers.list_aspects() or ()
         },
         'aspect_attrs': {a: g.layers.get_aspect_attrs(a) for a in g.layers.list_aspects() or ()},
-        'entities': sorted(g._entities.keys()),
-        'entity_records': {ekey: (rec.row_idx, rec.kind) for ekey, rec in g._entities.items()},
-        'row_to_entity': dict(g._row_to_entity),
-        'vid_to_ekeys': {vid: sorted(keys, key=repr) for vid, keys in g._vid_to_ekeys.items()},
+        'entities': sorted(S.entity_keys(g)),
+        'entity_rows': {ref.key: (row, ref.kind) for row, ref in enumerate(S.iter_entities(g))},
         'edges': _edge_state(g),
-        'col_to_edge': dict(g._col_to_edge),
+        'edge_columns': S.edge_ids(g),
         'matrix': _matrix_state(g),
         'vertex_attributes': _df_state(g.vertex_attributes),
         'edge_attributes': _df_state(g.edge_attributes),

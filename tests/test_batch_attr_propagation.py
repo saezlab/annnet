@@ -8,6 +8,7 @@ are not structural must land in the corresponding attribute table.
 from __future__ import annotations
 
 from annnet.core.graph import AnnNet
+from annnet.core import _structure as S
 
 
 def _attr_value(graph: AnnNet, edge_id: str, key: str):
@@ -73,7 +74,7 @@ def test_add_hyperedges_batch_undirected_via_src_list():
         ]
     )
     assert _attr_value(G, 'h1', 'confidence') == 0.5
-    rec = G._edges['h1']
+    rec = S.edge_shape(G, 'h1')
     assert rec.etype == 'hyper'
     assert rec.directed is False
     assert set(rec.src) == {'A', 'B', 'C'}
@@ -92,7 +93,7 @@ def test_add_hyperedges_batch_directed_via_src_tgt_lists():
         ]
     )
     assert _attr_value(G, 'h2', 'pathway') == 'tca'
-    rec = G._edges['h2']
+    rec = S.edge_shape(G, 'h2')
     assert rec.etype == 'hyper'
     assert rec.directed is True
     assert set(rec.src) == {'A'}
@@ -109,7 +110,7 @@ def test_add_hyperedges_batch_source_target_aliases():
         ]
     )
     assert _attr_value(G, 'h1', 'category') == 'complex'
-    assert G._edges['h1'].etype == 'hyper'
+    assert S.edge_shape(G, 'h1').etype == 'hyper'
 
 
 # ── add_edges: entity batch (already works — regression guard) ────────────

@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT))
 
 from annnet.core import AnnNet
 from annnet.io.sbml_cobra import _graph_from_stoich, from_cobra_model
+from annnet.core import _structure as facade
 
 
 class TestSBMLAdapter(unittest.TestCase):
@@ -105,8 +106,8 @@ class TestSBMLAdapter(unittest.TestCase):
         # The single real metabolite is the only member; direction/sign lives in coeffs.
         assert G.hyperedge_definitions['deg']['members'] == {'A'}
         assert G.hyperedge_definitions['syn']['members'] == {'A'}
-        assert G._edges['deg'].coeffs == {'A': -1.0}
-        assert G._edges['syn'].coeffs == {'A': 1.0}
+        assert facade.edge_coefficients(G, 'deg') == {'A': -1.0}
+        assert facade.edge_coefficients(G, 'syn') == {'A': 1.0}
 
         # Sink/source kind is preserved on the is_boundary edge attribute.
         assert G.attrs.get_edge_attrs('deg') == {'is_boundary': True, 'boundary_kind': 'sink'}

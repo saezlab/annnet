@@ -215,8 +215,6 @@ class LayerAccessor:
                 UserWarning,
                 stacklevel=2,
             )
-        else:
-            self._rebuild_entity_indexes()
 
         self._rebuild_all_layers_cache()
         self._drop_unused_placeholder_layers()
@@ -293,6 +291,10 @@ class LayerAccessor:
                 return sorted({_project_node(m) for m in members})
             return _project_node(members)
 
+        def _project_side(side):
+            """Return the one endpoint a side of a binary edge names, flattened."""
+            return _project_node(next(iter(side))) if side else None
+
         history_flag = getattr(self, '_history_enabled', True)
         self._history_enabled = False
         try:
@@ -342,18 +344,20 @@ class LayerAccessor:
             ent_placeholder_specs = [
                 {'edge_id': eid}
                 for eid in edge_entity_ids
-                if flat._resolve_entity_key(eid) not in flat._entities
+                if not _structure.has_entity(flat, flat._resolve_entity_key(eid))
             ]
             if ent_placeholder_specs:
                 flat._add_edges_bulk(ent_placeholder_specs, as_entity=True)
 
-            edge_items = sorted(
-                self._edges.items(),
-                key=lambda item: (
-                    item[1].col_idx < 0,
-                    item[1].col_idx if item[1].col_idx >= 0 else 10**12,
-                    item[0],
-                ),
+            # The definitions come in column order, so replaying them in that
+            # order gives the flat graph the columns this one had. A placeholder
+            # occupies none and goes last.
+            definitions = _structure.definitions_of(self)[1]
+            edge_items = [
+                edge for edge in definitions if edge.kind != _structure.PLACEHOLDER
+            ] + sorted(
+                (edge for edge in definitions if edge.kind == _structure.PLACEHOLDER),
+                key=lambda edge: edge.id,
             )
 
             null_ent_specs: list[dict] = []
@@ -362,21 +366,22 @@ class LayerAccessor:
             hyper_specs: list[dict] = []
             direction_policies: dict = {}
 
-            for eid, rec in edge_items:
-                if rec.col_idx < 0 and rec.src is None and rec.tgt is None:
-                    if eid not in flat._edges:
+            for edge in edge_items:
+                eid = edge.id
+                if edge.kind == _structure.PLACEHOLDER:
+                    if not _structure.has_edge(flat, eid):
                         null_ent_specs.append({'edge_id': eid})
                     continue
 
-                if rec.etype == 'hyper':
-                    src = _project_members(rec.src) or []
-                    tgt = _project_members(rec.tgt) if rec.tgt is not None else None
+                if edge.kind == _structure.HYPER:
+                    src = _project_members(edge.source) or []
+                    tgt = _project_members(edge.target) if edge.target else None
                     if tgt is None:
                         hyper_specs.append(
                             {
                                 'members': src,
                                 'edge_id': eid,
-                                'weight': rec.weight,
+                                'weight': edge.weight,
                             }
                         )
                     else:
@@ -385,24 +390,24 @@ class LayerAccessor:
                                 'head': src,
                                 'tail': tgt,
                                 'edge_id': eid,
-                                'weight': rec.weight,
+                                'weight': edge.weight,
                             }
                         )
                 else:
                     spec = {
-                        'source': _project_node(rec.src),
-                        'target': _project_node(rec.tgt),
+                        'source': _project_side(edge.source),
+                        'target': _project_side(edge.target),
                         'edge_id': eid,
-                        'weight': rec.weight,
-                        'edge_directed': rec.directed,
+                        'weight': edge.weight,
+                        'edge_directed': edge.directed,
                     }
                     if eid in edge_entity_id_set:
                         bin_entity_specs.append(spec)
                     else:
                         bin_specs.append(spec)
 
-                if rec.direction_policy is not None:
-                    direction_policies[eid] = rec.direction_policy
+                if edge.direction_policy is not None:
+                    direction_policies[eid] = edge.direction_policy
 
             if null_ent_specs:
                 flat._add_edges_bulk(null_ent_specs, as_entity=True)
@@ -430,15 +435,12 @@ class LayerAccessor:
             flat.layers._layer_attrs = {}
             flat.layers._state_attrs = {}
             flat.layers._all_layers = ()
-            flat._rebuild_entity_indexes()
 
             self._aspects = flat._aspects
             _mutate.sync_aspects(self._G)
             self._layers = flat._layers
             _build.install_structure(
                 self._G,
-                entities=flat._entities,
-                edges=flat._edges,
                 matrix=flat._matrix,
                 # The flat graph was built through the public API, so its store is
                 # already the store this graph is to have. Everything else the flat
@@ -499,15 +501,14 @@ class LayerAccessor:
         new_rows = 0
         for vid, aa in vm_set:
             ekey = (vid, aa)
-            if ekey not in self._entities:
-                idx = len(self._entities)
-                self._register_entity_record(ekey, _build.new_entity_record(idx, 'vertex'))
+            if not _structure.has_entity(self, ekey):
+                self._register_entity(ekey)
                 new_rows += 1
         if new_rows:
             _derive.mark_matrix_stale(self._G)
 
     def has_presence(self, u: str, layer_tuple: tuple[str, ...]) -> bool:
-        """Check whether ``(u, aa)`` is present in ``_entities``.
+        """Check whether the graph holds the entity ``(u, aa)``.
 
         Parameters
         ----------

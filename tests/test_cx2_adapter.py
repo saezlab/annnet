@@ -12,6 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from annnet.core._records import SliceRecord
 from annnet.core.graph import AnnNet
 from annnet.io.cx2 import from_cx2, to_cx2
+from annnet.core import _structure as S
 
 
 class TestCX2Adapter(unittest.TestCase):
@@ -141,7 +142,7 @@ class TestCX2Adapter(unittest.TestCase):
 
         # Check Edges
         self.assertIn('e1', G_new.edge_definitions)
-        self.assertAlmostEqual(G_new._edges['e1'].weight, 1.5)
+        self.assertAlmostEqual(S.edge_shape(G_new, 'e1').weight, 1.5)
 
         # Check Attributes (Polars)
         df_new = G_new.vertex_attributes

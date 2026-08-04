@@ -1,4 +1,9 @@
-"""Canonical record types — the source of truth for entities, edges, and slices."""
+"""The slice registry, the public edge view, and the reserved attribute names.
+
+What is left here after the canonical store took over: a slice is still a
+membership record, ``EdgeView`` is the tuple shape ``AnnNet.get_edge`` returns,
+and the reserved sets say which attribute names the structural columns own.
+"""
 
 from __future__ import annotations
 
@@ -53,14 +58,6 @@ class EdgeType(Enum):
 
 
 @dataclass(slots=True)
-class EntityRecord:
-    """One record per entity (vertex or edge-entity) with an incidence-matrix row."""
-
-    row_idx: int
-    kind: str  # "vertex" | "edge_entity"
-
-
-@dataclass(slots=True)
 class SliceRecord:
     """Typed slice membership record with dict-style compatibility."""
 
@@ -77,26 +74,6 @@ class SliceRecord:
     def get(self, key, default=None):
         """Return a slice field by name with an optional default."""
         return getattr(self, key, default)
-
-
-@dataclass(slots=True)
-class EdgeRecord:
-    """One record per edge (binary, hyperedge, structural edge-entity, or placeholder)."""
-
-    src: object  # str (binary) | frozenset (hyper) | None
-    tgt: object  # str (binary) | frozenset (directed hyper) | None
-    weight: float
-    directed: object  # bool | None — None inherits graph default
-    etype: str  # "binary" | "hyper" | "vertex_edge" | "edge_placeholder"
-    col_idx: int  # column index in the incidence matrix (-1 = no column)
-    ml_kind: object  # str | None — "intra" | "inter" | "coupling"
-    ml_layers: object  # tuple | None — multilayer layer assignment
-    direction_policy: object  # dict | None
-    # Literal per-node incidence coefficients for stoichiometric / explicitly-set columns,
-    # keyed by the same node form stored in src/tgt. None when the column is the plain
-    # +/- weight pattern (derivable from weight + directed). Makes the records the complete
-    # source of truth: the incidence matrix is fully reconstructable from them.
-    coeffs: object = None  # dict[node, float] | None
 
 
 class EdgeView(tuple):

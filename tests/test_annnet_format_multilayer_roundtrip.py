@@ -26,6 +26,7 @@ import pytest
 import annnet
 from annnet.io import read as io_read
 from annnet.io import write as io_write
+from annnet.core import _structure as S
 
 
 def _build_multilayer_graph():
@@ -183,7 +184,7 @@ def test_multilayer_directed_hyperedge_roundtrip_preserves_supra_members(tmp_pat
     io_write(G, out, overwrite=True)
     G2 = io_read(out)
 
-    rec = G2._edges['h1']
+    rec = S.edge_shape(G2, 'h1')
     assert rec.src == frozenset({('A', ('healthy',)), ('B', ('healthy',))})
     assert rec.tgt == frozenset({('C', ('treated',))})
     assert {type(member).__name__ for member in rec.src | rec.tgt} == {'tuple'}
@@ -196,7 +197,7 @@ def test_multilayer_undirected_hyperedge_roundtrip_preserves_supra_members(tmp_p
     io_write(G, out, overwrite=True)
     G2 = io_read(out)
 
-    rec = G2._edges['h1']
+    rec = S.edge_shape(G2, 'h1')
     assert rec.src == frozenset({('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))})
     assert rec.tgt is None
     assert {type(member).__name__ for member in rec.src} == {'tuple'}

@@ -145,9 +145,6 @@ def to_graphtool(
     hyperedges: dict = {}
 
     for eid, rec in _iter_edge_records(G):
-        if rec.col_idx < 0:
-            continue
-
         if rec.etype == 'hyper':
             hyperedges[eid] = (
                 {'directed': True, 'head': list(rec.src or []), 'tail': list(rec.tgt or [])}

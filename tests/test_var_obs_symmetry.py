@@ -8,6 +8,7 @@ been set. Cells without user attributes are null.
 from __future__ import annotations
 
 from annnet.core.graph import AnnNet
+from annnet.core import _structure as S
 
 
 def test_obs_row_count_matches_nv():
@@ -40,10 +41,10 @@ def test_var_row_count_matches_ne_after_hyperedge():
 def test_var_row_count_matches_registry_after_edge_entity():
     G = AnnNet(directed=False)
     G.add_edges([{'edge_id': 'EE1'}], as_entity=True)
-    # Edge entities live in the edge registry but have no structural
-    # incidence (no matrix column), so ne stays at 0 while var still
-    # mirrors the registry.
-    assert G.var.shape[0] == len(G._edges) == 1
+    # An edge entity is an edge the graph knows the name of, and it has no
+    # structural incidence (no matrix column), so ne stays at 0 while var still
+    # mirrors every edge the graph holds.
+    assert G.var.shape[0] == len(list(S.iter_edges(G, include_placeholders=True))) == 1
     assert G.ne == 0
 
 

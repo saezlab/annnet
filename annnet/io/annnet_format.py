@@ -185,10 +185,10 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False, 
     overwrite : bool, default False
         Allow overwriting existing directory
     matrix : bool, default False
-        Also persist the incidence matrix. It is a derived cache — the records
-        (including ``EdgeRecord.coeffs``) fully reconstruct it — so the default
-        omits it and lets ``read()`` rebuild lazily. Pass True to trade file size
-        for skipping that rebuild.
+        Also persist the incidence matrix. It is a derived cache — the tables
+        written here, the coefficient table among them, fully reconstruct it —
+        so the default omits it and lets ``read()`` rebuild lazily. Pass True to
+        trade file size for skipping that rebuild.
 
     Notes
     -----
@@ -484,11 +484,11 @@ def _write_structure(
     )
 
     # 4b. Explicit incidence coefficients (stoichiometry, resolved flexible
-    # directions). These live on the records — see ``EdgeRecord.coeffs``, which is
-    # what makes the records the complete source of truth — so they persist as
-    # records data, independent of whether the derived matrix is written at all.
+    # directions). An edge that carries these cannot derive its column from its
+    # weight and its directedness, so they are what makes the file a complete
+    # description, and they are written whether or not the derived matrix is.
     # Long format: one row per (edge, node), keyed exactly like source/target.
-    # Float64 here, where the matrix is float32; the record's value survives intact.
+    # Float64 here, where the matrix is float32; the stored value survives intact.
     c_eids: list = []
     c_entities: list = []
     c_layer_ids: list = []
@@ -984,18 +984,15 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
         matrix = coo.tocsr()
         incidence_loaded = True
     else:
-        # No stored incidence: defer to a lazy rebuild from records. The install
-        # below fixes the logical shape so the rebuild knows the extent.
+        # No stored incidence: the store the install fills holds every entity
+        # and every edge a rebuild reads, so the first read builds one.
         matrix = None
         incidence_loaded = False
-
-    from annnet.core._records import EdgeRecord, EntityRecord
 
     # 2. Entity index — translate layer_id back to tuple coords.
     # Read columns once and iterate via zip over arrays instead of yielding one
     # dict per row. At UC1 scale (~1.87M supra-nodes) the previous code spent
     # most of read() on this loop.
-    entities: dict = {}
     ent_df = dataframe_read_parquet(path / 'entity_index.parquet')
     try:
         # Polars fast path — direct column access, no per-row dicts.
@@ -1017,8 +1014,8 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
             ent_idx_col.append(r['idx'])
             ent_type_col.append(r.get('type', 'vertex'))
 
-    # The canonical store is filled from these rather than from the records, so
-    # a load never rebuilds one. They stay when the records go.
+    # The canonical store is filled from these, and so is everything derived
+    # from it, so the load describes each entity once.
     entity_definitions: list = []
     layer_cache: dict = {}  # layer_id -> tuple
     # Fallback for an entirely absent layer id: use the graph's current
@@ -1044,7 +1041,6 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
             layer_tuple = tuple(stored) if stored is not None else placeholder
             layer_cache[lid] = layer_tuple
         stored_kind = kind or 'vertex'
-        entities[(vid, layer_tuple)] = EntityRecord(row_idx=int(idx), kind=stored_kind)
         entity_definitions.append(
             (
                 int(idx),
@@ -1059,7 +1055,6 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
     entity_definitions = [ref for _row, ref in entity_definitions]
 
     # 3. Edges — merged metadata + endpoint table
-    edges: dict = {}
     edge_definitions: dict = {}
     edge_columns: list = []
 
@@ -1126,17 +1121,6 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
                 layer_dict.get_layer(int(hyper_lid)) if hyper_lid is not None else None
             )
             # Endpoints come from hyperedge_definitions.parquet; populate later.
-            edges[eid] = EdgeRecord(
-                src=None,
-                tgt=None,
-                weight=weight,
-                directed=directed,
-                etype='hyper',
-                col_idx=col_idx,
-                ml_kind=ml_kind,
-                ml_layers=hyper_ml_layers,
-                direction_policy=None,
-            )
             definition_layers = hyper_ml_layers
             source, target = frozenset(), frozenset()
         else:
@@ -1156,17 +1140,6 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
                 binary_ml_layers = (src[1], tgt[1])
             else:
                 binary_ml_layers = None
-            edges[eid] = EdgeRecord(
-                src=src,
-                tgt=tgt,
-                weight=weight,
-                directed=directed,
-                etype=kind,
-                col_idx=col_idx,
-                ml_kind=ml_kind,
-                ml_layers=binary_ml_layers,
-                direction_policy=None,
-            )
             definition_layers = binary_ml_layers
             source, target = _side(src), _side(tgt)
 
@@ -1187,22 +1160,17 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
     if hyper_path.exists():
         for hrow in dataframe_iter_rows(dataframe_read_parquet(hyper_path)):
             eid = hrow['edge_id']
-            rec = edges.get(eid)
-            if rec is None:
+            if eid not in edge_definitions:
                 continue
             is_dir = bool(hrow.get('directed', False))
-            head = _deserialize_hyper_members(hrow.get('head'))
-            tail = _deserialize_hyper_members(hrow.get('tail'))
-            members = _deserialize_hyper_members(hrow.get('members'))
             if is_dir:
-                rec.src = frozenset(head)
-                rec.tgt = frozenset(tail)
+                source = frozenset(_deserialize_hyper_members(hrow.get('head')))
+                target = frozenset(_deserialize_hyper_members(hrow.get('tail')))
             else:
-                rec.src = frozenset(members)
-                rec.tgt = None
-            rec.directed = is_dir
+                source = frozenset(_deserialize_hyper_members(hrow.get('members')))
+                target = frozenset()
             edge_definitions[eid] = edge_definitions[eid]._replace(
-                source=rec.src, target=rec.tgt or frozenset(), directed=is_dir
+                source=source, target=target, directed=is_dir
             )
 
     # 5. Explicit coefficients — records data, restored exactly. Files written before
@@ -1217,24 +1185,21 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
         for eid, vid, lid, val in zip(
             cc['edge_id'], cc['entity_id'], cc['layer_id'], cc['coeff'], strict=False
         ):
-            rec = edges.get(eid)
-            if rec is None:
+            definition = edge_definitions.get(eid)
+            if definition is None:
                 continue
-            if rec.coeffs is None:
-                rec.coeffs = {}
-                edge_definitions[eid] = edge_definitions[eid]._replace(coefficients=rec.coeffs)
-            rec.coeffs[_reassemble_endpoint(vid, lid)] = float(val)
+            if definition.coefficients is None:
+                definition = definition._replace(coefficients={})
+                edge_definitions[eid] = definition
+            definition.coefficients[_reassemble_endpoint(vid, lid)] = float(val)
 
-    # 6. Install the whole structure at once. This fills every store the graph
-    # keeps, so a graph read from a file answers exactly as one built by hand.
-    # The definitions fill the canonical store directly, so no load rebuilds one
-    # from the records.
+    # 6. Install the whole structure at once. This fills the canonical store of
+    # the graph from the definitions alone, so a graph read from a file answers
+    # exactly as one built by hand.
     # A column is the address a matrix gives an edge, so the store takes the
     # edges in the order the file records rather than in the order it lists them.
     edge_columns.sort(key=lambda item: item[0])
     graph._install_structure(
-        entities=entities,
-        edges=edges,
         matrix=matrix,
         definitions=(
             entity_definitions,
@@ -1401,8 +1366,8 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
                     _layer_tuple_cache[l2] = t2
                 raw_edge_layers[eid] = (t1, t2)
 
-    # ml_kind ("intra"/"inter"/"coupling") was already loaded onto EdgeRecord
-    # by _load_structure from edges.parquet — rebuild the manifest map here so
+    # ml_kind ("intra"/"inter"/"coupling") reached the store from edges.parquet
+    # in _load_structure — rebuild the manifest map here so
     # restore_multilayer_manifest can hand it back to the graph state machine.
     multilayer['edge_kind'] = {
         edge.id: edge.ml_kind

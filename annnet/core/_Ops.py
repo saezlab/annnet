@@ -191,33 +191,19 @@ class Operations:
         ordered_vertices = self._ordered_flat_vertex_ids(vertex_ids)
         ordered_edges = self._ordered_edge_ids(edge_ids)
         row_keys = self._ordered_selection_rows(ordered_vertices, ordered_edges)
-        row_indexes = [self._entities[ekey].row_idx for ekey in row_keys]
-        col_indexes = [self._edges[eid].col_idx for eid in ordered_edges]
+        row_indexes = [_structure.entity_row(self, ekey) for ekey in row_keys]
+        col_indexes = [_structure.edge_column(self, eid) for eid in ordered_edges]
 
         new = self.__class__(directed=self.directed)
         matrix = self._get_csr()[row_indexes, :][:, col_indexes].todok()
 
-        entities = {
-            ekey: _build.new_entity_record(i, self._entities[ekey].kind)
-            for i, ekey in enumerate(row_keys)
-        }
         weight_overrides = edge_weight_overrides or {}
-        edges = {
-            eid: _build.clone_edge_record(
-                self._edges[eid], col_idx=new_col, weight=weight_overrides.get(eid)
-            )
-            for new_col, eid in enumerate(ordered_edges)
-        }
         _build.install_structure(
             new,
-            entities=entities,
-            edges=edges,
             matrix=matrix,
             # The store selects the same elements in the same order, so it numbers
             # its slots as the new graph numbers its rows and columns.
-            store=None
-            if self._store is None
-            else self._store.select(row_keys, ordered_edges, weights=weight_overrides),
+            store=self._store.select(row_keys, ordered_edges, weights=weight_overrides),
         )
         new.vertex_aligned = self.vertex_aligned
         new._next_edge_id = self._next_edge_id
@@ -705,28 +691,14 @@ class Operations:
         """
         G = self.__class__
         new_aspects = self._constructor_aspects()
-        if new_aspects is not None:
-            new = G(
-                directed=self.directed,
-                v=self._matrix.shape[0],
-                e=self._matrix.shape[1],
-                aspects=new_aspects,
-            )
-        else:
-            new = G(
-                directed=self.directed,
-                v=self._matrix.shape[0],
-                e=self._matrix.shape[1],
-            )
+        new = G(directed=self.directed, aspects=new_aspects)
 
         _build.install_structure(
             new,
-            entities=_build.clone_entities(self._entities),
-            edges={eid: _build.clone_edge_record(rec) for eid, rec in self._edges.items()},
             matrix=self._matrix.copy(),
             # A copy of the slot arrays keeps every slot at the address it had,
             # and it costs a memory copy rather than a pass over every edge.
-            store=None if self._store is None else self._store.copy(),
+            store=self._store.copy(),
         )
         new.vertex_aligned = self.vertex_aligned
         new._next_edge_id = self._next_edge_id

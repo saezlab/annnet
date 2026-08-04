@@ -10,6 +10,7 @@ import warnings
 
 from annnet.core._records import SliceRecord
 from annnet.core.graph import AnnNet
+from annnet.core import _structure as S
 
 warnings.filterwarnings(
     'ignore',
@@ -100,15 +101,15 @@ class TestGraphBasics(unittest.TestCase):
         for data in g2._slices.values():
             self.assertIsInstance(data, SliceRecord)
 
-    def test_edge_direction_policy_is_derived_from_edge_records(self):
+    def test_edge_direction_policy_is_derived_from_the_store(self):
         eid = self.g.add_edges('a', 'b', flexible={'var': 'score', 'threshold': 1.0})
-        self.assertEqual(self.g.edge_direction_policy[eid], self.g._edges[eid].direction_policy)
+        self.assertEqual(self.g.edge_direction_policy[eid], S.edge_policies(self.g)[eid])
 
-    def test_edge_direction_policy_setter_updates_records(self):
+    def test_edge_direction_policy_setter_reaches_the_store(self):
         eid = self.g.add_edges('a', 'b')
         policy = {'var': 'score', 'threshold': 2.0}
         self.g.edge_direction_policy = {eid: policy}
-        self.assertEqual(self.g._edges[eid].direction_policy, policy)
+        self.assertEqual(S.edge_policies(self.g)[eid], policy)
         self.assertEqual(self.g.edge_direction_policy, {eid: policy})
 
     def test_edge_entity_and_vertex_edge_mode(self):
@@ -126,20 +127,20 @@ class TestGraphBasics(unittest.TestCase):
         # can connect another edge TO this edge
         self.g.add_edges('z', 'edge_ghost', edge_id='meta_link')
         self.assertIn('meta_link', self.g.edge_to_idx)
-        self.assertEqual(self.g._edges[e].etype, 'vertex_edge')
+        self.assertEqual(S.edge_shape(self.g, e).etype, 'vertex_edge')
 
     def test_edge_entity_placeholder_has_distinct_etype(self):
         eid = self.g.add_edges(edge_id='edge_stub', as_entity=True)
-        rec = self.g._edges[eid]
+        rec = S.edge_shape(self.g, eid)
         self.assertEqual(rec.etype, 'edge_placeholder')
-        self.assertEqual(rec.col_idx, -1)
+        self.assertEqual(S.edge_column(self.g, eid), -1)
         self.assertIsNone(rec.src)
         self.assertIsNone(rec.tgt)
 
         self.g.add_edges('a', 'b', edge_id=eid, as_entity=True)
-        upgraded = self.g._edges[eid]
+        upgraded = S.edge_shape(self.g, eid)
         self.assertEqual(upgraded.etype, 'vertex_edge')
-        self.assertGreaterEqual(upgraded.col_idx, 0)
+        self.assertGreaterEqual(S.edge_column(self.g, eid), 0)
         self.assertEqual(upgraded.src, 'a')
         self.assertEqual(upgraded.tgt, 'b')
 
@@ -248,7 +249,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertEqual(out.slices.active, 'L1')
         self.assertEqual(set(out.vertices()), {'u', 'v'})
         self.assertEqual(set(out.edges()), {'e1'})
-        self.assertAlmostEqual(out._edges['e1'].weight, 1.25)
+        self.assertAlmostEqual(S.edge_shape(out, 'e1').weight, 1.25)
         self.assertEqual(out.attrs.get_slice_attr('L1', 'region'), 'EMEA')
         self.assertEqual(out._slices['default']['edges'], set())
         self.assertEqual(out._slices['L1']['edges'], {'e1'})
@@ -402,10 +403,10 @@ class TestGraphBasics(unittest.TestCase):
         self.assertIn('h1', g.edge_to_idx)
         # Flattened to a single layer: every edge's multilayer role is intra,
         # with no cross-layer ml_layers assignment.
-        self.assertEqual(g._edges['e_intra'].ml_kind, 'intra')
-        self.assertEqual(g._edges['e_couple'].ml_kind, 'intra')
-        self.assertEqual(g._edges['h1'].ml_kind, 'intra')
-        self.assertEqual(g._edges['h1'].ml_layers, None)
+        self.assertEqual(S.edge_ref(g, 'e_intra').ml_kind, 'intra')
+        self.assertEqual(S.edge_ref(g, 'e_couple').ml_kind, 'intra')
+        self.assertEqual(S.edge_ref(g, 'h1').ml_kind, 'intra')
+        self.assertEqual(S.edge_ref(g, 'h1').ml_layers, None)
         g.add_vertices('isolated')
         self.assertIn('isolated', set(g.vertices()))
 
@@ -436,8 +437,8 @@ class TestGraphBasics(unittest.TestCase):
             tgt=[('b', ('treated',))],
             edge_id='h_inter',
         )
-        g._edges[hid].ml_kind = 'inter'
-        g._edges[hid].ml_layers = (('healthy',), ('treated',))
+        g._set_edge_field(hid, 'ml_kind', 'inter')
+        g._set_edge_field(hid, 'ml_layers', (('healthy',), ('treated',)))
 
         self.assertNotIn(hid, g.layers.layer_edge_set(('healthy',)))
         self.assertIn(hid, g.layers.layer_edge_set(('healthy',), include_inter=True))
@@ -488,8 +489,8 @@ class TestGraphBasics(unittest.TestCase):
             tgt=[('a', ('treated',))],
             edge_id='h_couple',
         )
-        g._edges[hid].ml_kind = 'coupling'
-        g._edges[hid].ml_layers = (('healthy',), ('treated',))
+        g._set_edge_field(hid, 'ml_kind', 'coupling')
+        g._set_edge_field(hid, 'ml_layers', (('healthy',), ('treated',)))
 
         B0, eids0, skipped0 = g.layers.supra_incidence(include_coupling=False)
         self.assertNotIn(hid, eids0)
@@ -520,7 +521,7 @@ class TestErrorPaths(unittest.TestCase):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always')
             self.g.add_vertices('v1')
-        self.assertIn(('v1', ('_', '_')), self.g._entities)
+        self.assertTrue(S.has_entity(self.g, ('v1', ('_', '_'))))
         self.assertTrue(any('placeholder layer' in str(w.message) for w in caught))
 
     def test_has_vertex_multilayer_with_bare_id(self):
@@ -568,9 +569,9 @@ class TestErrorPaths(unittest.TestCase):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always')
             self.g._add_vertices_bulk(['v1', 'v2', 'v3'])
-        self.assertIn(('v1', ('_', '_')), self.g._entities)
-        self.assertIn(('v2', ('_', '_')), self.g._entities)
-        self.assertIn(('v3', ('_', '_')), self.g._entities)
+        self.assertTrue(S.has_entity(self.g, ('v1', ('_', '_'))))
+        self.assertTrue(S.has_entity(self.g, ('v2', ('_', '_'))))
+        self.assertTrue(S.has_entity(self.g, ('v3', ('_', '_'))))
         placeholder_warnings = [w for w in caught if 'placeholder layer' in str(w.message)]
         self.assertEqual(len(placeholder_warnings), 1)
 

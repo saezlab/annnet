@@ -17,6 +17,7 @@ from annnet.core.graph import AnnNet
 from annnet.io._archive import _read_archive
 from annnet.io.annnet_format import read as annnet_read
 from annnet.io.annnet_format import write as annnet_write
+from annnet.core import _structure as S
 
 
 class TestAnnNetIO(unittest.TestCase):
@@ -98,30 +99,24 @@ class TestAnnNetIO(unittest.TestCase):
             G2, out_path = self._roundtrip(use_archive=use_archive)
 
             # Top-level counts
-            self.assertEqual(len(self.G._entities), len(G2._entities))
-            self.assertEqual(len(self.G._col_to_edge), len(G2._col_to_edge))
+            self.assertEqual(S.entity_count(self.G), S.entity_count(G2))
+            self.assertEqual(len(S.edge_ids(self.G)), len(S.edge_ids(G2)))
             self.assertEqual(set(self.G._slices.keys()), set(G2._slices.keys()))
             # edge weights preserved
-            for eid, rec in self.G._edges.items():
-                self.assertAlmostEqual(rec.weight, G2._edges[eid].weight, places=5)
+            for ref in S.iter_edges(self.G, include_placeholders=True):
+                self.assertAlmostEqual(ref.weight, S.edge_ref(G2, ref.id).weight, places=5)
 
             # Hyperedges preserved
-            hyper_count = sum(1 for r in G2._edges.values() if r.etype == 'hyper')
+            hyper_count = sum(1 for ref in S.iter_edges(G2) if ref.kind == S.HYPER)
             self.assertGreater(hyper_count, 0)
 
-            # Entity and edge index maps match
-            self.assertEqual(
-                {eid: r.row_idx for eid, r in self.G._entities.items()},
-                {eid: r.row_idx for eid, r in G2._entities.items()},
-            )
-            self.assertEqual(
-                {eid: r.col_idx for eid, r in self.G._edges.items() if r.col_idx >= 0},
-                {eid: r.col_idx for eid, r in G2._edges.items() if r.col_idx >= 0},
-            )
+            # Rows and columns match
+            self.assertEqual(S.entity_keys(self.G), S.entity_keys(G2))
+            self.assertEqual(S.edge_ids(self.G), S.edge_ids(G2))
 
             # Edge directedness preserved
-            for eid, rec in self.G._edges.items():
-                self.assertEqual(rec.directed, G2._edges[eid].directed)
+            for ref in S.iter_edges(self.G, include_placeholders=True):
+                self.assertEqual(ref.directed, S.edge_ref(G2, ref.id).directed)
 
             # Multilayer edge kind dict preserved
             self.assertEqual(self.G.edge_kind, G2.edge_kind)
@@ -178,23 +173,23 @@ class TestAnnNetIO(unittest.TestCase):
             root = self._get_root(out, True)
             self.assertEqual((root / 'structure' / 'incidence.zarr').exists(), expect_zarr)
 
-    def test_coeffs_are_records_data(self):
-        """Coefficients live on EdgeRecord, so they must round-trip without the
-        matrix — exactly, and repeatedly."""
+    def test_coeffs_are_stored_data(self):
+        """An explicit column is not derivable from the weight, so it has to
+        round-trip without the matrix — exactly, and repeatedly."""
         coeffs = {'v1': -2.0, 'v2': 3.0}
         self.G.set_edge_coeffs('e1', coeffs)
-        want = dict(self.G._edges['e1'].coeffs)
+        want = dict(S.edge_coefficients(self.G, 'e1'))
 
         def _test(use_archive):
             G2, out_path = self._roundtrip(use_archive=use_archive)
             root = self._get_root(out_path, use_archive)
 
-            # Persisted as records data, and the derived cache is not written.
+            # Persisted as its own table, and the derived cache is not written.
             self.assertTrue((root / 'structure' / 'edge_coeffs.parquet').exists())
             self.assertFalse((root / 'structure' / 'incidence.zarr').exists())
 
-            self.assertEqual(G2._edges['e1'].coeffs, want)
-            # ...and the matrix the records rebuild is the one we started with.
+            self.assertEqual(S.edge_coefficients(G2, 'e1'), want)
+            # ...and the matrix the store rebuilds is the one we started with.
             self.assertEqual(
                 sorted(G2._matrix.tocoo().data.tolist()),
                 sorted(self.G._matrix.tocoo().data.tolist()),
@@ -206,22 +201,22 @@ class TestAnnNetIO(unittest.TestCase):
         """Regression: read() once dropped coeffs, so the *second* write silently
         emitted a matrix built from the +/- weight default."""
         self.G.set_edge_coeffs('e1', {'v1': -2.0, 'v2': 3.0})
-        want = dict(self.G._edges['e1'].coeffs)
+        want = dict(S.edge_coefficients(self.G, 'e1'))
 
         G = self.G
         for i in range(3):
             out = Path(self.tmpdir) / f'cycle{i}.annnet'
             annnet_write(G, out, overwrite=True)
             G = annnet_read(out)
-            self.assertEqual(G._edges['e1'].coeffs, want)
+            self.assertEqual(S.edge_coefficients(G, 'e1'), want)
 
     def test_coeffs_keep_float64_precision(self):
-        """The matrix is float32; the records are not. Persisting records data must
-        not round-trip coefficients through the cache's precision."""
+        """The matrix is float32 and the stored column is not. Persisting the
+        column must not round-trip it through the precision of the cache."""
         self.G.set_edge_coeffs('e1', {'v1': -0.1, 'v2': 1.0 / 3.0})
-        want = dict(self.G._edges['e1'].coeffs)
+        want = dict(S.edge_coefficients(self.G, 'e1'))
         G2, _ = self._roundtrip()
-        self.assertEqual(G2._edges['e1'].coeffs, want)
+        self.assertEqual(S.edge_coefficients(G2, 'e1'), want)
 
     def test_plain_graph_stores_neither_matrix_nor_coeffs(self):
         """No explicit coeffs anywhere: nothing to persist, nothing to restore.
@@ -234,7 +229,7 @@ class TestAnnNetIO(unittest.TestCase):
         out = Path(self.tmpdir) / 'plain.annnet'
         annnet_write(G, out, overwrite=True)
         G2 = annnet_read(out)
-        self.assertIsNone(G2._edges['e'].coeffs)
+        self.assertIsNone(S.edge_coefficients(G2, 'e'))
         self.assertTrue(G2._matrix_dirty)  # rebuild still deferred
 
     def test_matrix_true_stores_the_cache(self):
@@ -244,7 +239,7 @@ class TestAnnNetIO(unittest.TestCase):
         annnet_write(self.G, out, overwrite=True, matrix=True)
         G2 = annnet_read(out)
         self.assertFalse(G2._matrix_dirty)  # loaded, not rebuilt
-        self.assertEqual(G2._edges['e1'].coeffs, dict(self.G._edges['e1'].coeffs))
+        self.assertEqual(S.edge_coefficients(G2, 'e1'), dict(S.edge_coefficients(self.G, 'e1')))
 
     def test_zarr_incidence_group(self):
         # The matrix is a derived cache, persisted only on matrix=True; this test is
@@ -358,11 +353,7 @@ class TestAnnNetIO(unittest.TestCase):
             self.assertGreaterEqual(len(G2._VM), 3)
             self.assertIn(('v1', ('t1', 'bus')), G2._VM)
             self.assertIn(('v2', ('t2', 'train')), G2._VM)
-            self.assertEqual(
-                {eid: rec.row_idx for eid, rec in self.G._entities.items()},
-                {eid: rec.row_idx for eid, rec in G2._entities.items()},
-            )
-            self.assertEqual(self.G._row_to_entity, G2._row_to_entity)
+            self.assertEqual(S.entity_keys(self.G), S.entity_keys(G2))
 
             # Edge Layers & Kinds
             self.assertEqual(G2.edge_layers['e1'], ('t1', 'bus'))
@@ -520,12 +511,12 @@ class TestAnnNetIO(unittest.TestCase):
             annnet_write(G, out_path, compression='zstd', overwrite=True)
             G2 = annnet_read(out_path)
 
-            self.assertEqual(len(G._entities), len(G2._entities))
-            self.assertEqual(len(G._col_to_edge), len(G2._col_to_edge))
+            self.assertEqual(S.entity_count(G), S.entity_count(G2))
+            self.assertEqual(len(S.edge_ids(G)), len(S.edge_ids(G2)))
             self.assertEqual(G._matrix.shape, G2._matrix.shape)
 
             for eid in (eids[0], eids[len(eids) // 2], eids[-1]):
-                self.assertEqual(G._edges[eid].weight, G2._edges[eid].weight)
+                self.assertEqual(S.edge_ref(G, eid).weight, S.edge_ref(G2, eid).weight)
 
             # nnz, not len(): the incidence cache is CSR (as for a freshly-built
             # graph) — len() is only defined on the legacy DOK format.

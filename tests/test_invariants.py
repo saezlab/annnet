@@ -491,8 +491,9 @@ def test_rule_11_a_removed_node_leaves_no_address_that_resolves_to_it():
     G.remove_vertex('A')
     assert problems_of(G) == []
     assert not S.has_entity(G, 'A')
-    if removed_row in G._row_to_entity:
-        assert G._row_to_entity[removed_row] != ('A', FLAT)
+    rows = S.entity_keys(G)
+    if removed_row < len(rows):
+        assert rows[removed_row] != ('A', FLAT)
 
 
 def test_rule_11_a_removed_edge_leaves_no_address_that_resolves_to_it():
@@ -500,4 +501,4 @@ def test_rule_11_a_removed_edge_leaves_no_address_that_resolves_to_it():
     G.remove_edge('e_first')
     assert problems_of(G) == []
     assert not S.has_edge(G, 'e_first')
-    assert 'e_first' not in set(G._col_to_edge.values())
+    assert 'e_first' not in set(S.edge_ids(G))

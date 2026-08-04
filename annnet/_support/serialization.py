@@ -146,16 +146,12 @@ def serialize_multilayer_manifest(
         if attrs:
             aspect_attrs[aspect] = attrs
 
-    # Single scan over ``_entities`` instead of calling
-    # ``iter_vertex_layers`` per vertex — that helper does a full V-wide
-    # scan internally, which would make this loop O(V²).
+    # One walk over the node entities instead of calling ``iter_vertex_layers``
+    # per vertex — that helper does a full V-wide scan internally, which would
+    # make this loop O(V²).
     vm_rows = []
     node_layer_attrs = []
-    entities = getattr(graph, '_entities', {}) or {}
-    for (uu, aa), rec in entities.items():
-        if rec.kind != 'vertex':
-            continue
-        layer_tuple = aa
+    for uu, layer_tuple in graph._VM_ordered():
         vm_rows.append({'node': uu, 'layer': list(layer_tuple)})
         attrs = graph.layers.get_vertex_layer_attrs(uu, layer_tuple)
         if attrs:

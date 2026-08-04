@@ -14,25 +14,19 @@ SOT_FIELDS = (
     'directed',
     '_aspects',
     '_layers',
-    '_entities',
-    '_edges',
+    '_store',
     '_slices',
 )
 
-# Warm-cached canonical projection. Since EdgeRecord.coeffs now carries stoichiometric /
-# explicit coefficients, the incidence matrix is FULLY reconstructable from the records
-# (records are the complete source of truth). The matrix is nonetheless kept warm by the
-# mutation gateway (incrementally patched, not re-derived per use) for linear-algebra speed,
-# and IO may assign it directly. So: derived in principle, co-maintained in practice.
+# Warm-cached canonical projection. The store holds every entity, every edge and
+# the coefficient each member takes, so the incidence matrix is fully derivable
+# from it. It is nonetheless kept warm rather than re-derived per use, for
+# linear-algebra speed, and input-output may assign it directly. So: derived in
+# principle, co-maintained in practice.
 CO_MAINTAINED_FIELDS = ('_matrix',)
 
 # Purely derived / cached state — rebuilt by ``_derive`` from the SoT, never hand-patched.
-DERIVED_FIELDS = (
-    '_csr_cache',
-    '_row_to_entity',
-    '_vid_to_ekeys',
-    '_col_to_edge',
-)
+DERIVED_FIELDS = ('_csr_cache',)
 
 
 def init_state(g, *, directed=None, aspects=None) -> None:
@@ -55,15 +49,6 @@ def init_state(g, *, directed=None, aspects=None) -> None:
                 raise ValueError(f'Aspect {asp!r} must have at least one layer value')
         g._aspects = tuple(aspects.keys())
         g._layers = {k: set(val) for k, val in aspects.items()}
-
-    # Entity store + derived entity indexes.
-    g._entities = {}  # (vid, layer_coord) -> EntityRecord
-    g._row_to_entity = {}  # row_idx -> ekey
-    g._vid_to_ekeys = {}  # vid -> [ekey, ...]
-
-    # Edge store + derived edge/adjacency indexes.
-    g._edges = {}  # edge_id -> EdgeRecord
-    g._col_to_edge = {}  # col_idx -> edge_id
 
     # Composite vertex key support.
     g._vertex_key_fields = None
@@ -101,9 +86,8 @@ def init_state(g, *, directed=None, aspects=None) -> None:
 
     g.vertex_aligned = False
 
-    # The slot-addressed store. It is built last, because it takes the aspects
-    # the graph has just declared and the store answers in the identity form they
-    # imply.
+    # The canonical store. It is built last, because it takes the aspects the
+    # graph has just declared and answers in the identity form they imply.
     from ._store import CoreState
 
     g._store = CoreState(directed=directed, aspects=g._aspects)

@@ -15,6 +15,7 @@ from __future__ import annotations
 import warnings
 
 import annnet
+from annnet.core import _structure as S
 
 
 def _build_two_aspect_graph():
@@ -64,7 +65,7 @@ def _build_two_aspect_graph():
 
 
 def _node_layer_count(X):
-    return sum(1 for ek in X._entities if X._entities[ek].kind == 'vertex')
+    return len(S.node_keys(X))
 
 
 def _nodes_edges(cx2_data):
@@ -151,12 +152,12 @@ def test_multilayer_restore_preserves_legitimate_placeholder(tmp_path):
         default_edge_directed=True,
     )
     ph = ('_', '_')
-    assert ('boundary', ph) in G._entities
+    assert S.has_entity(G, ('boundary', ph))
 
     p = str(tmp_path / 'g')
     annnet.to_parquet(G, p)
     H = annnet.from_parquet(p)
-    assert ('boundary', ph) in H._entities, 'legitimate placeholder vertex was dropped'
+    assert S.has_entity(H, ('boundary', ph)), 'legitimate placeholder vertex was dropped'
     assert _node_layer_count(H) == _node_layer_count(G)
     assert H.global_count('edges') == G.global_count('edges')
 

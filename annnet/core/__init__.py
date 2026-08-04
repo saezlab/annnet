@@ -1,9 +1,6 @@
 from .graph import AnnNet
-from ._records import (
-    EdgeType,
-    EntityRecord,  # exported for io/cx2.py compatibility
-)
+from ._records import EdgeType
 
 Graph = AnnNet
 
-__all__ = ['AnnNet', 'Graph', 'EdgeType', 'EntityRecord']
+__all__ = ['AnnNet', 'Graph', 'EdgeType']

@@ -17,6 +17,10 @@ CORE_ROOT = PKG_ROOT / 'core'
 ALLOWED_PRIVATE_IMPORTS = {
     ('annnet.io', 'annnet._support.graph_records'),
     ('annnet.adapters', 'annnet._support.graph_records'),
+    # The scverse bridge is a file format in all but name: it serializes a whole
+    # graph and reads it back, so it takes the same helpers the formats under
+    # ``annnet.io`` do rather than a second copy of them.
+    ('annnet.experimental', 'annnet.io._common'),
 }
 
 # The structural query facade is the sanctioned door into the core. Every module
@@ -78,9 +82,15 @@ def _module_name(path: Path) -> str:
 
 
 def _resolve_from_import(source_module: str, level: int, module: str | None) -> str:
+    # ``from annnet.core._structure import ...`` names an absolute module and
+    # carries no level. Prefixing it with the package of the importer would give
+    # a module that exists nowhere, and every rule below would read it as an
+    # import inside the importer's own subpackage. That is the hole that let the
+    # reader import the record classes unnoticed.
+    if not level:
+        return module or ''
     package_parts = source_module.split('.')[:-1]
-    if level:
-        package_parts = package_parts[: len(package_parts) - level + 1]
+    package_parts = package_parts[: len(package_parts) - level + 1]
     target_parts = package_parts + ([module] if module else [])
     return '.'.join(part for part in target_parts if part)
 
@@ -277,4 +287,4 @@ def test_every_ledger_entry_still_touches_the_store():
 
 def test_the_store_field_list_is_not_empty():
     """A silent drop of the field inventory would make the boundary test vacuous."""
-    assert {'_entities', '_edges', '_matrix'} <= PRIVATE_STORE_FIELDS
+    assert {'_store', '_matrix', '_slices'} <= PRIVATE_STORE_FIELDS
