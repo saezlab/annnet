@@ -482,7 +482,6 @@ def zero_edge_column(g, rec, col_idx):
 # ---------------------------------------------------------------------------
 
 
-@syncs_returned_edges
 def add_edge(
     g,
     src=None,
@@ -707,6 +706,27 @@ def add_edge(
         if flexible is not None:
             rec.direction_policy = flexible
 
+    # 10b. The slot store. The two sides and the coefficient each endpoint takes
+    #      are what this call has just worked out, so the store takes them from
+    #      here rather than reading the record back to work them out again.
+    store = slot_store(g)
+    if store is not None:
+        if store.edge_slot(edge_id) is not None:
+            store.remove_edge(edge_id)
+        store.add_edge(
+            edge_id,
+            ST.members_from_endpoints(
+                store, g, src_nodes, tgt_nodes, rec_coeffs, float(weight), is_dir
+            ),
+            kind=_SLOT_EDGE_KIND.get(rec_etype, ST.BINARY),
+            directed=is_dir,
+            weight=float(weight),
+            explicit_coefficients=rec_coeffs is not None,
+            ml_kind=ml_kind,
+            ml_layers=ml_layers,
+            direction_policy=_edg[edge_id].direction_policy,
+        )
+
     # 11. as_entity
     if as_entity:
         register_edge_as_entity(g, edge_id)
@@ -727,11 +747,11 @@ def add_edge(
         propagate_to_all_slices(g, edge_id, src_store, tgt_store)
 
     # 14. Flexible direction. The policy reads the edge back, so the store has to
-    # hold it before the hook runs. The decorator writes it only once this call
-    # returns, which is too late for a caller inside the call.
+    # hold the change before the hook runs.
     if flexible is not None:
         _edg[edge_id].directed = True
-        sync_edge(g, edge_id)
+        if store is not None:
+            store.set_edge_directed(edge_id, True)
         g._apply_flexible_direction(edge_id)
 
     # 15. Attributes + ensure var row

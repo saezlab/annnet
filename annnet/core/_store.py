@@ -973,32 +973,40 @@ def from_graph(graph) -> CoreState:
 
 
 def members_from_sides(state, graph, sides, coefficients, weight, edge) -> list:
-    """Return the member entries of one edge, given its two sides.
+    """Return the member entries of one edge, given its two sides as a record holds them."""
+    return members_from_endpoints(
+        state, graph, sides.source, sides.target, coefficients, weight, edge.directed
+    )
+
+
+def members_from_endpoints(state, graph, source, target, coefficients, weight, directed) -> list:
+    """Return the member entries of one edge, given the endpoints on each side.
 
     One entry per role, so an entity on both sides appears twice. An endpoint that
     names no entity the store holds is left out, exactly as the incidence matrix
     leaves it out.
 
+    An edge with explicit coefficients keeps them, and the map may name an
+    endpoint it does not carry, which takes zero. Otherwise the source side takes
+    the weight and the target side takes the negated weight when the edge is
+    directed.
+
     Both the bridge from a record graph and the mutation gateway build member
     entries, and the rules for the role and the coefficient are subtle enough that
     they live here once.
     """
+    weight = float(weight)
     members = []
-    role = MEMBER if not sides.target else SOURCE
-    for endpoint in _ordered(sides.source):
-        key = _bridged_key(graph, endpoint)
-        if key is None or state.entity_slot(key) is None:
-            continue
-        members.append(
-            (key, _bridged_coefficient(coefficients, endpoint, weight, role, edge), role)
-        )
-    for endpoint in _ordered(sides.target):
-        key = _bridged_key(graph, endpoint)
-        if key is None or state.entity_slot(key) is None:
-            continue
-        members.append(
-            (key, _bridged_coefficient(coefficients, endpoint, weight, TARGET, edge), TARGET)
-        )
+    for side, role in ((source, SOURCE if target else MEMBER), (target, TARGET)):
+        derived = -weight if role == TARGET and directed else weight
+        for endpoint in _ordered(side):
+            key = _bridged_key(graph, endpoint)
+            if key is None or state.entity_slot(key) is None:
+                continue
+            coefficient = (
+                derived if coefficients is None else float(coefficients.get(endpoint, 0.0))
+            )
+            members.append((key, coefficient, role))
     return members
 
 
@@ -1039,17 +1047,3 @@ def _bridged_key(graph, endpoint):
         return S.entity_key(graph, endpoint)
     except (KeyError, ValueError, TypeError):
         return None
-
-
-def _bridged_coefficient(coefficients, endpoint, weight, role, edge):
-    """Return the coefficient one member entry carries.
-
-    An edge with explicit coefficients keeps them. Otherwise the source side takes
-    the weight and the target side takes the negated weight when the edge is
-    directed, which is the rule the record store used.
-    """
-    if coefficients is not None:
-        return float(coefficients.get(endpoint, 0.0))
-    if role == TARGET and edge.directed:
-        return -float(weight)
-    return float(weight)
