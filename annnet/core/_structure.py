@@ -13,9 +13,8 @@ key, which is a ``(node_id, layer_coord)`` pair. An edge is addressed by its
 edge id. A row number and a column number belong to one materialized matrix, so
 neither appears in an answer.
 
-The facade hides which store backs the graph. The current store keeps entity and
-edge records. A later store keeps slot-addressed member lists. The signatures
-here stay the same across that change, so the callers stay the same too.
+The facade hides how the store holds a graph. A caller passes a graph or the
+canonical store of one, and the answers are the same either way.
 """
 
 from __future__ import annotations
@@ -37,10 +36,6 @@ PLACEHOLDER = 'placeholder'
 
 DIRECTIONS = ('in', 'out', 'both')
 
-_ENTITY_KIND_OF_RECORD = {
-    'vertex': NODE,
-    'edge_entity': EDGE_ENTITY,
-}
 _EDGE_KIND_OF_RECORD = {
     'binary': BINARY,
     'hyper': HYPER,
@@ -118,11 +113,11 @@ class Endpoints(NamedTuple):
 
 
 # ---------------------------------------------------------------------------
-# Which store backs the graph
+# Reaching the store
 # ---------------------------------------------------------------------------
-# The facade answers the same questions whichever store holds the graph. A caller
-# passes a graph or a store, and every function below picks the reader that fits.
-# This is what lets the package move to the slot store one caller at a time.
+# A caller passes a graph or the canonical store of one, and gets the same answer
+# either way. That is what lets the invariant checker and the store tests ask the
+# facade about a store that no graph holds.
 
 
 def is_slot_backed(graph) -> bool:
@@ -254,34 +249,10 @@ def entity_key_of_row(graph, row: int) -> tuple:
     This is the inverse of :func:`entity_row`, and it carries the same warning: a
     row belongs to one materialized matrix and to nothing else.
     """
-    if is_slot_backed(graph):
-        key = store_of(graph).entity_at_row(row)
-        if key is None:
-            raise KeyError(f'No entity at row {row}')
-        return key
-    try:
-        return graph._row_to_entity[row]
-    except KeyError:
-        raise KeyError(f'No entity at row {row}') from None
-
-
-def _require_entity(graph, ref) -> tuple:
-    # An entity key that the store already holds needs no resolution. Resolving it
-    # again would re-check its layer, and a stored layer is not always one the
-    # graph still declares.
-    if is_entity_key(ref) and ref in graph._entities:
-        return ref
-    key = entity_key(graph, ref)
-    if key not in graph._entities:
-        raise KeyError(f'Unknown entity: {ref!r}')
+    key = store_of(graph).entity_at_row(row)
+    if key is None:
+        raise KeyError(f'No entity at row {row}')
     return key
-
-
-def _require_edge(graph, edge_id: str):
-    try:
-        return graph._edges[edge_id]
-    except KeyError:
-        raise KeyError(f'Unknown edge id: {edge_id!r}') from None
 
 
 # ---------------------------------------------------------------------------
@@ -291,14 +262,8 @@ def _require_edge(graph, edge_id: str):
 
 def has_entity(graph, ref) -> bool:
     """Return True when the graph holds this entity."""
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        return store.entity_slot(_slot_key(store, ref)) is not None
-    try:
-        _require_entity(graph, ref)
-    except (KeyError, ValueError, TypeError):
-        return False
-    return True
+    store = store_of(graph)
+    return store.entity_slot(_slot_key(store, ref)) is not None
 
 
 def has_entity_id(graph, entity_id: str, kind: str | None = None) -> bool:
@@ -309,32 +274,18 @@ def has_entity_id(graph, entity_id: str, kind: str | None = None) -> bool:
     :func:`has_entity` when the answer has to be one entity. Pass ``kind`` to
     ask about nodes alone, or about edge entities alone.
     """
-    if is_slot_backed(graph):
-        # The store keeps an index from a bare id to the slots it stands for, so
-        # this asks it rather than walking every entity the graph holds.
-        store = store_of(graph)
-        return any(
-            kind is None or _SLOT_ENTITY_KIND[int(store.entity_kind[slot])] == kind
-            for slot in store.entity_slots_of_id(entity_id)
-        )
-    if graph._aspects == ('_',):
-        keys = ((entity_id, ('_',)),)
-    else:
-        keys = tuple(graph._vid_to_ekeys.get(entity_id, ()))
-    for key in keys:
-        record = graph._entities.get(key)
-        if record is None:
-            continue
-        if kind is None or _ENTITY_KIND_OF_RECORD.get(record.kind, record.kind) == kind:
-            return True
-    return False
+    # The store keeps an index from a bare id to the slots it stands for, so this
+    # asks it rather than walking every entity the graph holds.
+    store = store_of(graph)
+    return any(
+        kind is None or _SLOT_ENTITY_KIND[int(store.entity_kind[slot])] == kind
+        for slot in store.entity_slots_of_id(entity_id)
+    )
 
 
 def has_edge(graph, edge_id: str) -> bool:
     """Return True when the graph holds this edge."""
-    if is_slot_backed(graph):
-        return store_of(graph).edge_slot(edge_id) is not None
-    return edge_id in graph._edges
+    return store_of(graph).edge_slot(edge_id) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -346,21 +297,17 @@ def has_edge(graph, edge_id: str) -> bool:
 
 def entity_count(graph) -> int:
     """Return how many entities the graph holds, nodes and edge entities."""
-    if is_slot_backed(graph):
-        return store_of(graph).entity_count
-    return len(graph._entities)
+    return store_of(graph).entity_count
 
 
 def node_count(graph) -> int:
     """Return how many nodes the graph holds, leaving out the edge entities."""
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        return sum(
-            1
-            for slot, _key in store.live_entities()
-            if _SLOT_ENTITY_KIND[int(store.entity_kind[slot])] == NODE
-        )
-    return sum(1 for record in graph._entities.values() if record.kind == 'vertex')
+    store = store_of(graph)
+    return sum(
+        1
+        for slot, _key in store.live_entities()
+        if _SLOT_ENTITY_KIND[int(store.entity_kind[slot])] == NODE
+    )
 
 
 def edge_count(graph) -> int:
@@ -369,9 +316,7 @@ def edge_count(graph) -> int:
     An edge that occupies no column holds no members, so it counts for nothing
     here. :func:`iter_edges` leaves the same edges out.
     """
-    if is_slot_backed(graph):
-        return len(_slot_structural_edges(store_of(graph)))
-    return len(graph._col_to_edge)
+    return len(_slot_structural_edges(store_of(graph)))
 
 
 # ---------------------------------------------------------------------------
@@ -381,15 +326,11 @@ def edge_count(graph) -> int:
 
 def entity_ref(graph, ref) -> EntityRef:
     """Return the entity reference for one entity."""
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        key = _slot_key(store, ref)
-        if store.entity_slot(key) is None:
-            raise KeyError(f'Unknown entity: {ref!r}')
-        return _slot_entity_ref(store, key)
-    key = _require_entity(graph, ref)
-    record = graph._entities[key]
-    return EntityRef(key[0], _ENTITY_KIND_OF_RECORD.get(record.kind, record.kind), key[1])
+    store = store_of(graph)
+    key = _slot_key(store, ref)
+    if store.entity_slot(key) is None:
+        raise KeyError(f'Unknown entity: {ref!r}')
+    return _slot_entity_ref(store, key)
 
 
 def iter_entities(graph) -> Iterator[EntityRef]:
@@ -398,13 +339,9 @@ def iter_entities(graph) -> Iterator[EntityRef]:
     A multilayer graph holds one entity per node and layer, so one node id can
     appear more than once. The entity key tells the two apart.
     """
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        for _slot, key in store.live_entities():
-            yield _slot_entity_ref(store, key)
-        return
-    for key, record in sorted(graph._entities.items(), key=lambda item: item[1].row_idx):
-        yield EntityRef(key[0], _ENTITY_KIND_OF_RECORD.get(record.kind, record.kind), key[1])
+    store = store_of(graph)
+    for _slot, key in store.live_entities():
+        yield _slot_entity_ref(store, key)
 
 
 # ---------------------------------------------------------------------------
@@ -417,38 +354,21 @@ def iter_entities(graph) -> Iterator[EntityRef]:
 
 def entity_keys(graph) -> list:
     """Return the key of every entity, in materialized row order."""
-    if is_slot_backed(graph):
-        # A free slot holds a null, so the live keys are the rest, in slot order.
-        return [key for key in store_of(graph)._entity_key if key is not None]
-    records = graph._entities
-    # The row index is a maintained map from position to identity, so reading it
-    # in order costs nothing. It is derived state, so a sort is the fallback when
-    # it does not account for every entity.
-    index = graph._row_to_entity
-    if len(index) == len(records):
-        return [index[row] for row in range(len(index))]
-    return sorted(records, key=lambda key: records[key].row_idx)
+    # A free slot holds a null, so the live keys are the rest, in slot order.
+    return [key for key in store_of(graph)._entity_key if key is not None]
 
 
 def node_keys(graph) -> list:
     """Return the key of every node, in row order, leaving out the edge entities."""
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        # The kind array is converted once. Reading one element of it per entity
-        # would cost more than the walk itself.
-        kinds = store.entity_kind.tolist()
-        return [
-            key
-            for slot, key in enumerate(store._entity_key)
-            if key is not None and kinds[slot] == _SLOT_NODE
-        ]
-    records = graph._entities
-    index = graph._row_to_entity
-    if len(index) == len(records):
-        # One pass. Going through ``entity_keys`` would build the whole key list
-        # first and then walk it again to drop the edge entities.
-        return [key for row in range(len(index)) if records[key := index[row]].kind == 'vertex']
-    return [key for key in entity_keys(graph) if records[key].kind == 'vertex']
+    store = store_of(graph)
+    # The kind array is converted once. Reading one element of it per entity would
+    # cost more than the walk itself.
+    kinds = store.entity_kind.tolist()
+    return [
+        key
+        for slot, key in enumerate(store._entity_key)
+        if key is not None and kinds[slot] == _SLOT_NODE
+    ]
 
 
 def node_ids(graph) -> list:
@@ -459,8 +379,7 @@ def node_ids(graph) -> list:
     per layer, and the same id comes back from each of them.
     """
     keys = node_keys(graph)
-    aspects = store_of(graph).aspects if is_slot_backed(graph) else graph._aspects
-    if aspects == ('_',):
+    if store_of(graph).aspects == ('_',):
         return [key[0] for key in keys]
     seen: set = set()
     out: list = []
@@ -477,13 +396,7 @@ def edge_ids(graph) -> list:
     An edge that occupies no column carries no structure and is left out, so
     this lists exactly what :func:`iter_edges` yields.
     """
-    if is_slot_backed(graph):
-        return [edge_id for _slot, edge_id in _slot_structural_edges(store_of(graph))]
-    # The column index holds exactly the edges that carry structure, and
-    # :func:`edge_at_column` and :func:`edge_count` already read it as the
-    # authority on them, so reading it in order is the answer.
-    index = graph._col_to_edge
-    return [index[column] for column in range(len(index))]
+    return [edge_id for _slot, edge_id in _slot_structural_edges(store_of(graph))]
 
 
 def entities_by_id(graph) -> dict:
@@ -549,11 +462,9 @@ def _edge_ref_of_record(graph, edge_id: str, record) -> EdgeRef:
 
 def edge_ref(graph, edge_id: str) -> EdgeRef:
     """Return the edge reference for one edge."""
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        _slot_require_edge(store, edge_id)
-        return _slot_edge_ref(store, edge_id)
-    return _edge_ref_of_record(graph, edge_id, _require_edge(graph, edge_id))
+    store = store_of(graph)
+    _slot_require_edge(store, edge_id)
+    return _slot_edge_ref(store, edge_id)
 
 
 def iter_edges(graph, *, include_placeholders: bool = False) -> Iterator[EdgeRef]:
@@ -562,19 +473,10 @@ def iter_edges(graph, *, include_placeholders: bool = False) -> Iterator[EdgeRef
     An edge with no column carries no structure. Set ``include_placeholders`` to
     see those too.
     """
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        pairs = store.live_edges() if include_placeholders else _slot_structural_edges(store)
-        for _slot, edge_id in pairs:
-            yield _slot_edge_ref(store, edge_id)
-        return
-    items = [
-        (record.col_idx, edge_id, record)
-        for edge_id, record in graph._edges.items()
-        if include_placeholders or record.col_idx >= 0
-    ]
-    for _col, edge_id, record in sorted(items, key=lambda item: item[0]):
-        yield _edge_ref_of_record(graph, edge_id, record)
+    store = store_of(graph)
+    pairs = store.live_edges() if include_placeholders else _slot_structural_edges(store)
+    for _slot, edge_id in pairs:
+        yield _slot_edge_ref(store, edge_id)
 
 
 # ---------------------------------------------------------------------------
@@ -612,19 +514,6 @@ def member_entries(record) -> dict:
     return entries
 
 
-def _resolved_key(graph, member):
-    """Return the entity key of a stored endpoint, or None when it has none.
-
-    A multilayer graph may hold an endpoint as a bare id that covers more than
-    one layer. Such an endpoint names no single entity, so it resolves to
-    nothing and the materialized matrix leaves it out.
-    """
-    try:
-        return entity_key(graph, member)
-    except (KeyError, ValueError, TypeError):
-        return None
-
-
 def edge_members(graph, edge_id: str) -> dict:
     """Return the member list of one edge, keyed by entity key.
 
@@ -635,21 +524,13 @@ def edge_members(graph, edge_id: str) -> dict:
     materialized matrix leaves it out. Use :func:`edge_sides` to see every
     stored endpoint, and the invariant checker to find the unresolved ones.
     """
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        entries = store.members(_slot_require_edge(store, edge_id))
-        summed: dict = {}
-        for entity_slot, coefficient in zip(entries.entities, entries.coefficients, strict=False):
-            member_key = store.entity_key(int(entity_slot))
-            summed[member_key] = summed.get(member_key, 0.0) + float(coefficient)
-        return summed
-    record = _require_edge(graph, edge_id)
-    members = {}
-    for member, coefficient in member_entries(record).items():
-        key = _resolved_key(graph, member)
-        if key is not None:
-            members[key] = float(coefficient)
-    return members
+    store = store_of(graph)
+    entries = store.members(_slot_require_edge(store, edge_id))
+    summed: dict = {}
+    for entity_slot, coefficient in zip(entries.entities, entries.coefficients, strict=False):
+        member_key = store.entity_key(int(entity_slot))
+        summed[member_key] = summed.get(member_key, 0.0) + float(coefficient)
+    return summed
 
 
 def edge_sides(graph, edge_id: str) -> Endpoints:
@@ -660,13 +541,10 @@ def edge_sides(graph, edge_id: str) -> Endpoints:
     graph. Nothing is resolved, so this works on an edge whose endpoint names no
     single entity. A writer that persists a graph needs exactly this.
     """
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        # A flat graph names an entity by its bare id, and the answer has to be in
-        # the form the caller holds its own ids in.
-        return store.endpoints(_slot_require_edge(store, edge_id), bare=store.aspects == ('_',))
-    record = _require_edge(graph, edge_id)
-    return Endpoints(_raw_side(record.src), _raw_side(record.tgt))
+    store = store_of(graph)
+    # A flat graph names an entity by its bare id, and the answer has to be in the
+    # form the caller holds its own ids in.
+    return store.endpoints(_slot_require_edge(store, edge_id), bare=store.aspects == ('_',))
 
 
 def _raw_side(side) -> frozenset:
@@ -698,21 +576,16 @@ def edge_coefficients(graph, edge_id: str):
     directedness. The keys are the identities the store holds, so nothing is
     resolved and nothing is lost.
     """
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        slot = _slot_require_edge(store, edge_id)
-        if not bool(store.edge_explicit[slot]):
-            return None
-        members = edge_members(graph, edge_id)
-        if store.aspects != ('_',):
-            return members
-        # A flat graph names an entity by its bare id, and the answer has to be in
-        # the form the caller holds its own ids in. See :func:`edge_sides`.
-        return {key[0]: value for key, value in members.items()}
-    record = _require_edge(graph, edge_id)
-    if record.coeffs is None:
+    store = store_of(graph)
+    slot = _slot_require_edge(store, edge_id)
+    if not bool(store.edge_explicit[slot]):
         return None
-    return dict(record.coeffs)
+    members = edge_members(graph, edge_id)
+    if store.aspects != ('_',):
+        return members
+    # A flat graph names an entity by its bare id, and the answer has to be in the
+    # form the caller holds its own ids in. See :func:`edge_sides`.
+    return {key[0]: value for key, value in members.items()}
 
 
 def edge_policies(graph) -> dict:
@@ -721,14 +594,8 @@ def edge_policies(graph) -> dict:
     A policy resolves the direction of an edge from an attribute rather than from
     a fixed flag. Most edges carry none, so the result names only those that do.
     """
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        return {store.edge_id(slot): policy for slot, policy in store.edge_policy.items() if policy}
-    return {
-        edge_id: record.direction_policy
-        for edge_id, record in graph._edges.items()
-        if record.direction_policy is not None
-    }
+    store = store_of(graph)
+    return {store.edge_id(slot): policy for slot, policy in store.edge_policy.items() if policy}
 
 
 def entity_row(graph, ref) -> int:
@@ -737,13 +604,11 @@ def entity_row(graph, ref) -> int:
     A row is a position, so it belongs to one materialized matrix and to nothing
     else. Use this only to persist or to rebuild that matrix.
     """
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        slot = store.entity_slot(_slot_key(store, ref))
-        if slot is None:
-            raise KeyError(f'Unknown entity: {ref!r}')
-        return store.entity_row(slot)
-    return int(graph._entities[_require_entity(graph, ref)].row_idx)
+    store = store_of(graph)
+    slot = store.entity_slot(_slot_key(store, ref))
+    if slot is None:
+        raise KeyError(f'Unknown entity: {ref!r}')
+    return store.entity_row(slot)
 
 
 def edge_column(graph, edge_id: str) -> int:
@@ -753,10 +618,8 @@ def edge_column(graph, edge_id: str) -> int:
     position, so it belongs to one materialized matrix and to nothing else. Use
     this only to persist or to rebuild that matrix.
     """
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        return store.structural_column(_slot_require_edge(store, edge_id))
-    return int(_require_edge(graph, edge_id).col_idx)
+    store = store_of(graph)
+    return store.structural_column(_slot_require_edge(store, edge_id))
 
 
 def carries_structure(graph, edge_id: str) -> bool:
@@ -767,10 +630,8 @@ def carries_structure(graph, edge_id: str) -> bool:
     answers the same question, and on the slot store a column is the position of
     an edge among the others, which costs a pass over every edge.
     """
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        return _slot_carries_structure(store, _slot_require_edge(store, edge_id))
-    return int(_require_edge(graph, edge_id).col_idx) >= 0
+    store = store_of(graph)
+    return _slot_carries_structure(store, _slot_require_edge(store, edge_id))
 
 
 def edge_at_column(graph, column: int) -> str:
@@ -780,59 +641,21 @@ def edge_at_column(graph, column: int) -> str:
     column belongs to one materialized matrix and to nothing else. It exists for
     the public methods that still accept a position, and it goes away with them.
     """
-    if is_slot_backed(graph):
-        structural = _slot_structural_edges(store_of(graph))
-        if not 0 <= column < len(structural):
-            raise KeyError(f'No edge at column {column}')
-        return structural[column][1]
-    try:
-        return graph._col_to_edge[column]
-    except KeyError:
-        raise KeyError(f'No edge at column {column}') from None
-
-
-def _side_keys(graph, side) -> frozenset:
-    if side is None:
-        return frozenset()
-    if isinstance(side, frozenset):
-        return frozenset(entity_key(graph, member) for member in side)
-    return frozenset({entity_key(graph, side)})
+    structural = _slot_structural_edges(store_of(graph))
+    if not 0 <= column < len(structural):
+        raise KeyError(f'No edge at column {column}')
+    return structural[column][1]
 
 
 def edge_endpoints(graph, edge_id: str) -> Endpoints:
     """Return the source side and the target side of one edge, as entity keys."""
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        return store.endpoints(_slot_require_edge(store, edge_id))
-    record = _require_edge(graph, edge_id)
-    return Endpoints(
-        source=_side_keys(graph, record.src),
-        target=_side_keys(graph, record.tgt),
-    )
+    store = store_of(graph)
+    return store.endpoints(_slot_require_edge(store, edge_id))
 
 
 # ---------------------------------------------------------------------------
 # Incidence
 # ---------------------------------------------------------------------------
-
-
-def iter_hyperedges(graph):
-    """Return ``(edge_id, record)`` for the live hyperedges of the graph.
-
-    The result is cached against the structural clock, so a graph with no
-    hyperedge never pays a full edge scan.
-    """
-    version = getattr(graph, '_structure_version', None)
-    cache = getattr(graph, '_hyper_items_cache', None)
-    if cache is None or cache[0] != version:
-        items = [
-            (edge_id, record)
-            for edge_id, record in graph._edges.items()
-            if record.etype == 'hyper' and record.col_idx >= 0
-        ]
-        graph._hyper_items_cache = (version, items)
-        return items
-    return cache[1]
 
 
 def endpoint_form(graph, key):
@@ -842,16 +665,7 @@ def endpoint_form(graph, key):
     the ``(id, layer_coord)`` pair, because one id covers more than one layer.
     The adjacency indexes are keyed the same way.
     """
-    aspects = store_of(graph).aspects if is_slot_backed(graph) else graph._aspects
-    return key if aspects != ('_',) else key[0]
-
-
-_probe_form = endpoint_form
-
-
-def _stored_directed(graph, record) -> bool:
-    """Return directedness the way the adjacency traversal reads it."""
-    return bool(record.directed if record.directed is not None else graph.directed)
+    return key if store_of(graph).aspects != ('_',) else key[0]
 
 
 def _slot_incident(store, key, *, ordered: bool = True):
@@ -978,63 +792,11 @@ def neighbors(graph, ref, direction: str = 'both') -> list:
     """
     if direction not in DIRECTIONS:
         raise ValueError(f'direction must be one of {DIRECTIONS}, got {direction!r}')
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        key = _slot_key(store, ref)
-        if store.entity_slot(key) is None:
-            return []
-        return _slot_neighbors(store, key, direction)
-    try:
-        key = _require_entity(graph, ref)
-    except (KeyError, ValueError, TypeError):
+    store = store_of(graph)
+    key = _slot_key(store, ref)
+    if store.entity_slot(key) is None:
         return []
-
-    probe = endpoint_form(graph, key)
-    graph._ensure_edge_indexes()
-    edges = graph._edges
-    default_directed = graph.directed if graph.directed is not None else True
-    entity_is_edge = graph._entities[key].kind == 'edge_entity'
-    wants_out = direction in ('out', 'both')
-    wants_in = direction in ('in', 'both')
-
-    found = set()
-
-    # The entity is on the source side of these edges.
-    for edge_id in graph._src_to_edges.get(probe, ()):
-        record = edges[edge_id]
-        if record.col_idx < 0:
-            continue
-        directed = record.directed if record.directed is not None else default_directed
-        if wants_out:
-            found.add(record.tgt)
-        elif not directed:
-            found.add(record.tgt)
-
-    # The entity is on the target side of these edges.
-    for edge_id in graph._tgt_to_edges.get(probe, ()):
-        record = edges[edge_id]
-        if record.col_idx < 0:
-            continue
-        directed = record.directed if record.directed is not None else default_directed
-        if not directed:
-            found.add(record.src)
-        elif wants_in and (direction == 'in' or entity_is_edge):
-            found.add(record.src)
-
-    # A hyperedge is not in the adjacency indexes, so it is scanned from the
-    # cached list of live hyperedges.
-    for _edge_id, record in iter_hyperedges(graph):
-        if record.tgt is not None:
-            if wants_out and probe in record.src:
-                found |= set(record.tgt)
-            elif wants_in and probe in record.tgt:
-                found |= set(record.src)
-        else:
-            members = record.src
-            if probe in members:
-                found |= set(members) - {probe}
-
-    return list(found)
+    return _slot_neighbors(store, key, direction)
 
 
 def entity_edges(graph, ref, direction: str = 'both') -> tuple:
@@ -1045,43 +807,8 @@ def entity_edges(graph, ref, direction: str = 'both') -> tuple:
     """
     if direction not in DIRECTIONS:
         raise ValueError(f'direction must be one of {DIRECTIONS}, got {direction!r}')
-    if is_slot_backed(graph):
-        store = store_of(graph)
-        key = _slot_key(store, ref)
-        if store.entity_slot(key) is None:
-            raise KeyError(f'Unknown entity: {ref!r}')
-        return _slot_entity_edges(store, key, direction)
-    key = _require_entity(graph, ref)
-    probe = _probe_form(graph, key)
-    graph._ensure_edge_indexes()
-
-    found: dict[str, int] = {}
-    wants_out = direction in ('out', 'both')
-    wants_in = direction in ('in', 'both')
-
-    for edge_id in graph._src_to_edges.get(probe, ()):
-        record = graph._edges.get(edge_id)
-        if record is None or record.col_idx < 0:
-            continue
-        if wants_out or not _stored_directed(graph, record):
-            found[edge_id] = record.col_idx
-
-    for edge_id in graph._tgt_to_edges.get(probe, ()):
-        record = graph._edges.get(edge_id)
-        if record is None or record.col_idx < 0:
-            continue
-        if wants_in or not _stored_directed(graph, record):
-            found[edge_id] = record.col_idx
-
-    for edge_id, record in iter_hyperedges(graph):
-        if edge_id in found:
-            continue
-        on_source = probe in record.src if record.src is not None else False
-        on_target = probe in record.tgt if record.tgt is not None else False
-        if not (on_source or on_target):
-            continue
-        directed = record.tgt is not None
-        if not directed or (wants_out and on_source) or (wants_in and on_target):
-            found[edge_id] = record.col_idx
-
-    return tuple(sorted(found, key=found.__getitem__))
+    store = store_of(graph)
+    key = _slot_key(store, ref)
+    if store.entity_slot(key) is None:
+        raise KeyError(f'Unknown entity: {ref!r}')
+    return _slot_entity_edges(store, key, direction)
