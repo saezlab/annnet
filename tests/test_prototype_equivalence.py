@@ -244,6 +244,27 @@ def test_a_subgraph_takes_the_weight_the_slice_gives_an_edge():
     _assert_incremental_matches_rebuild(H, 'subgraph_from_slice')
 
 
+def test_declaring_aspects_moves_the_keys_and_keeps_every_slot():
+    """Every vertex changes identity and none changes address."""
+    import warnings
+
+    G = build_case('binary_directed', store='slots')
+    before = {key[0]: slot for slot, key in G._store.live_entities()}
+    sides_before = _snapshot(G._store)['sides']
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        G.layers.set_aspects(['cond', 'time'], {'cond': ['ctrl'], 'time': ['t0']})
+    after = {key[0]: slot for slot, key in G._store.live_entities()}
+    assert after == before, 'a vertex changes identity, not address'
+    assert {key[1] for _slot, key in G._store.live_entities()} == {('_', '_')}
+    assert _snapshot(G._store)['sides'] != sides_before, 'the identities did move'
+    assert V.validate_internal_consistency(G._store, strict=False) == []
+    for edge_id, members in _snapshot(G._store)['members'].items():
+        assert {key[0] for key in members} == {key[0] for key in sides_before[edge_id].source} | {
+            key[0] for key in sides_before[edge_id].target
+        }, edge_id
+
+
 def test_a_write_to_a_copy_leaves_the_graph_it_came_from_alone():
     G = build_case('binary_directed', store='slots')
     H = G.ops.copy()

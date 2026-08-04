@@ -194,11 +194,15 @@ class LayerAccessor:
             self._layers[aspect] = values
 
         if had_existing_flat_entities:
-            _mutate.rekey_entities(
+            # Every vertex moves to the placeholder coordinate of the new aspects.
+            # That is a change of identity and not of address, so the gateway moves
+            # the keys rather than rebuilding the store.
+            _mutate.remap_entity_keys(
                 self._G,
                 {
-                    (vid, new_placeholder if coord == old_placeholder else coord): rec
-                    for (vid, coord), rec in self._entities.items()
+                    key: (key[0], new_placeholder)
+                    for key in _structure.entity_keys(self._G)
+                    if key[1] == old_placeholder
                 },
             )
             self._state_attrs = {

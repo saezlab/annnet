@@ -214,6 +214,57 @@ def test_a_long_churn_keeps_identity_and_address_in_step(store):
 
 
 # ---------------------------------------------------------------------------
+# Rekey
+# ---------------------------------------------------------------------------
+# An identity may change while an address does not. That is what lets a graph
+# declare aspects over the vertices it already holds without touching a member
+# list or a matrix position.
+
+
+def test_rekeying_an_entity_keeps_its_slot_and_its_edges(store):
+    for n in 'AB':
+        store.add_entity(key(n))
+    slot = store.entity_slot(key('A'))
+    edge(store, 'e0', 'A', 'B')
+    store.rekey({key('A'): ('A', ('_', '_'))})
+    assert store.entity_slot(('A', ('_', '_'))) == slot
+    assert store.entity_slot(key('A')) is None
+    assert store.entity_key(slot) == ('A', ('_', '_'))
+    assert store.entity_edge_slots(('A', ('_', '_'))) == [store.edge_slot('e0')]
+
+
+def test_rekeying_leaves_the_member_lists_alone(store):
+    for n in 'AB':
+        store.add_entity(key(n))
+    slot = edge(store, 'e0', 'A', 'B')
+    before = store.members(slot).entities.copy()
+    store.rekey({key('A'): ('A', ('x',)), key('B'): ('B', ('x',))})
+    assert np.array_equal(store.members(slot).entities, before)
+
+
+def test_rekeying_may_permute_the_keys_of_two_entities(store):
+    for n in 'AB':
+        store.add_entity(key(n))
+    slots = (store.entity_slot(key('A')), store.entity_slot(key('B')))
+    store.rekey({key('A'): key('B'), key('B'): key('A')})
+    assert (store.entity_slot(key('B')), store.entity_slot(key('A'))) == slots
+
+
+def test_rekeying_onto_an_entity_the_store_holds_raises(store):
+    for n in 'AB':
+        store.add_entity(key(n))
+    with pytest.raises(KeyError, match='Rekeying'):
+        store.rekey({key('A'): key('B')})
+
+
+def test_rekeying_names_a_bare_id_at_its_new_coordinate(store):
+    store._aspects = ('cond',)
+    store.add_entity(('A', ('ctrl',)))
+    store.rekey({('A', ('ctrl',)): ('A', ('treated',))})
+    assert store.entity_keys_of_id('A') == [('A', ('treated',))]
+
+
+# ---------------------------------------------------------------------------
 # Copy
 # ---------------------------------------------------------------------------
 

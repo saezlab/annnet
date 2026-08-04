@@ -303,6 +303,37 @@ class CoreState:
         self._note_change()
         return dangling
 
+    def rekey(self, mapping) -> None:
+        """Move each entity a key-to-key map names, keeping the slot it holds.
+
+        An identity changes and an address does not, so every member list, the
+        incidence index and every matrix position survive untouched. The map is
+        applied in two passes, so a set of keys may be permuted among themselves.
+
+        A key the store does not hold is ignored, and so is a move onto a key the
+        store still holds after the first pass, which would be two entities at one
+        identity.
+        """
+        if not mapping:
+            return
+        moved = {}
+        for old, new in mapping.items():
+            if old == new:
+                continue
+            slot = self._entity_slot.pop(old, None)
+            if slot is not None:
+                moved[new] = slot
+        for new, slot in moved.items():
+            if new in self._entity_slot:
+                raise KeyError(f'Rekeying an entity onto one the store holds: {new!r}')
+            self._entity_slot[new] = slot
+            self._entity_key[slot] = new
+        if self._aspects != ('_',):
+            self._id_slots = {}
+            for slot, key in self.live_entities():
+                self._id_slots.setdefault(key[0], []).append(slot)
+        self._note_change()
+
     def entity_slot(self, key: tuple):
         """Return the slot of an entity key, or None when the store has no such entity."""
         return self._entity_slot.get(key)

@@ -935,24 +935,24 @@ def set_entity_kinds(g, mapping):
         register_entity_record(g, ekey, EntityRecord(row_idx=row_idx, kind=kind))
 
 
-@rebuilds_the_store
-def rekey_entities(g, new_entities):
-    """Replace the entity registry (e.g. layer-coord remap) and rebuild entity indexes."""
-    g._entities = new_entities
-    D.rebuild_entity_indexes(g)
-
-
-@rebuilds_the_store
 def remap_entity_keys(g, remap):
     """Move each entity an ``ekey -> ekey`` map names, keeping the row it holds.
 
     A reader needs this when the coordinate a file stored for an entity only
-    makes sense once the aspects the same file declares are known.
+    makes sense once the aspects the same file declares are known, and declaring
+    aspects over a flat graph needs it for every vertex it already holds.
+
+    An identity changes and an address does not, so this reaches the slot store
+    directly rather than rebuilding it. Every member list and every position
+    survives, which is what makes the whole call cost the entities alone.
     """
     if not remap:
         return
     g._entities = {remap.get(ekey, ekey): rec for ekey, rec in g._entities.items()}
     D.rebuild_entity_indexes(g)
+    store = slot_store(g)
+    if store is not None:
+        store.rekey(remap)
 
 
 def _edge_member_nodes(rec):
