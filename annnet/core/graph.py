@@ -2670,7 +2670,7 @@ class AnnNet(
         add_edges = {
             eid
             for eid in edge_ids
-            if _structure.has_edge(self, eid) and _structure.edge_column(self, eid) >= 0
+            if _structure.has_edge(self, eid) and _structure.carries_structure(self, eid)
         }
         if not add_edges:
             return
@@ -2766,7 +2766,7 @@ class AnnNet(
         to_drop = [
             eid
             for eid in edge_ids
-            if _structure.has_edge(self, eid) and _structure.edge_column(self, eid) >= 0
+            if _structure.has_edge(self, eid) and _structure.carries_structure(self, eid)
         ]
         if not to_drop:
             return

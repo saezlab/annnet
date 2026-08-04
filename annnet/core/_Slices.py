@@ -161,7 +161,7 @@ class SliceManager:
         add_edges = {
             eid
             for eid in edge_ids
-            if _structure.has_edge(G, eid) and _structure.edge_column(G, eid) >= 0
+            if _structure.has_edge(G, eid) and _structure.carries_structure(G, eid)
         }
         if not add_edges:
             return
@@ -401,7 +401,7 @@ class SliceManager:
         for lid, ldata in slices_view.items():
             matches: list[str] = []
             for eid in ldata['edges']:
-                if not _structure.has_edge(G, eid) or _structure.edge_column(G, eid) < 0:
+                if not _structure.has_edge(G, eid) or not _structure.carries_structure(G, eid):
                     continue
                 ref = _structure.edge_ref(G, eid)
                 if ref.kind == _structure.HYPER:
@@ -451,7 +451,7 @@ class SliceManager:
         for lid, ldata in self.get_slices_dict(include_default=include_default).items():
             matches: list[str] = []
             for eid in ldata['edges']:
-                if not _structure.has_edge(G, eid) or _structure.edge_column(G, eid) < 0:
+                if not _structure.has_edge(G, eid) or not _structure.carries_structure(G, eid):
                     continue
                 ref = _structure.edge_ref(G, eid)
                 if ref.kind != _structure.HYPER:

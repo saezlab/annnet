@@ -431,7 +431,9 @@ class AttributesClass:
         """
         if slice_id not in self._slices:
             raise KeyError(f'slice {slice_id} not found')
-        if not _structure.has_edge(self, edge_id) or _structure.edge_column(self, edge_id) < 0:
+        if not _structure.has_edge(self, edge_id) or not _structure.carries_structure(
+            self, edge_id
+        ):
             raise KeyError(f'Edge {edge_id} not found')
         AttributesClass.set_edge_slice_attrs(self, slice_id, edge_id, weight=float(weight))
 

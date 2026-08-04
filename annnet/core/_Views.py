@@ -227,7 +227,7 @@ class GraphView:
             for eid in edge_ids:
                 if not _structure.has_edge(self._graph, eid):
                     continue
-                if _structure.edge_column(self._graph, eid) < 0:
+                if not _structure.carries_structure(self._graph, eid):
                     continue
                 sides = _structure.edge_sides(self._graph, eid)
                 if not (sides.source <= vertex_ids and sides.target <= vertex_ids):

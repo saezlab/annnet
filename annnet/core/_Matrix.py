@@ -104,7 +104,7 @@ class CacheManager:
         boundary_cols = {
             _structure.edge_column(g, e)
             for e in boundary_eids
-            if _structure.has_edge(g, e) and _structure.edge_column(g, e) >= 0
+            if _structure.has_edge(g, e) and _structure.carries_structure(g, e)
         }
         if not boundary_cols:
             return None
@@ -492,8 +492,8 @@ class IndexManager:
         -------
         bool
         """
-        return (
-            _structure.has_edge(self._G, edge_id) and _structure.edge_column(self._G, edge_id) >= 0
+        return _structure.has_edge(self._G, edge_id) and _structure.carries_structure(
+            self._G, edge_id
         )
 
     def edge_count(self) -> int:

@@ -146,7 +146,7 @@ class Operations:
     def _flat_edge_vertices(self, edge_ids) -> set[str]:
         vertices = set()
         for eid in edge_ids:
-            if not _structure.has_edge(self, eid) or _structure.edge_column(self, eid) < 0:
+            if not _structure.has_edge(self, eid) or not _structure.carries_structure(self, eid):
                 continue
             sides = _structure.edge_sides(self, eid)
             if not sides.source:
@@ -257,7 +257,7 @@ class Operations:
 
         if self._aspects == ('_',):
             E = {eid for eid in E if _structure.has_edge(self, eid)}
-            E = {eid for eid in E if _structure.edge_column(self, eid) >= 0}
+            E = {eid for eid in E if _structure.carries_structure(self, eid)}
             V = self._flat_edge_vertices(E)
             slice_specs = {}
             for lid, meta in self._slices.items():
@@ -273,7 +273,7 @@ class Operations:
         V = set()
         bin_payload, hyper_payload = [], []
         for eid in E:
-            if not _structure.has_edge(self, eid) or _structure.edge_column(self, eid) < 0:
+            if not _structure.has_edge(self, eid) or not _structure.carries_structure(self, eid):
                 continue
             payload = _edge_payload(self, eid)
             if not _payload_has_both_sides(payload):
@@ -412,7 +412,9 @@ class Operations:
                 g.slices.add(lid, **meta['attributes'])
             keep = set()
             for eid in meta['edges']:
-                if not _structure.has_edge(self, eid) or _structure.edge_column(self, eid) < 0:
+                if not _structure.has_edge(self, eid) or not _structure.carries_structure(
+                    self, eid
+                ):
                     continue
                 payload = _edge_payload(self, eid)
                 if _payload_inside(payload, V, bare):
@@ -459,7 +461,9 @@ class Operations:
         if self._aspects == ('_',) and V is not None and E is not None:
             kept_edges = set()
             for eid in E:
-                if not _structure.has_edge(self, eid) or _structure.edge_column(self, eid) < 0:
+                if not _structure.has_edge(self, eid) or not _structure.carries_structure(
+                    self, eid
+                ):
                     continue
                 sides = _structure.edge_sides(self, eid)
                 if not sides.source:
@@ -488,7 +492,7 @@ class Operations:
         bare = self._bare_vid
         kept_edges = set()
         for eid in E:
-            if not _structure.has_edge(self, eid) or _structure.edge_column(self, eid) < 0:
+            if not _structure.has_edge(self, eid) or not _structure.carries_structure(self, eid):
                 continue
             payload = _edge_payload(self, eid)
             if _payload_inside(payload, V, bare):
@@ -552,7 +556,7 @@ class Operations:
 
         if self._aspects == ('_',):
             E = {eid for eid in E if _structure.has_edge(self, eid)}
-            E = {eid for eid in E if _structure.edge_column(self, eid) >= 0}
+            E = {eid for eid in E if _structure.carries_structure(self, eid)}
             weight_overrides = {}
             if resolve_slice_weights:
                 df = self.edge_slice_attributes
@@ -630,7 +634,7 @@ class Operations:
 
         bin_payload, hyper_payload = [], []
         for eid in E:
-            if not _structure.has_edge(self, eid) or _structure.edge_column(self, eid) < 0:
+            if not _structure.has_edge(self, eid) or not _structure.carries_structure(self, eid):
                 continue
             payload = _edge_payload(self, eid)
             base_weight = _structure.edge_ref(self, eid).weight

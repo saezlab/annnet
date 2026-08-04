@@ -715,6 +715,20 @@ def edge_column(graph, edge_id: str) -> int:
     return int(_require_edge(graph, edge_id).col_idx)
 
 
+def carries_structure(graph, edge_id: str) -> bool:
+    """Return True when an edge is part of the topology.
+
+    A placeholder edge is an id the graph knows before the edge exists, so it
+    holds no members and occupies no column. Asking for its column instead
+    answers the same question, and on the slot store a column is the position of
+    an edge among the others, which costs a pass over every edge.
+    """
+    if is_slot_backed(graph):
+        store = store_of(graph)
+        return _slot_carries_structure(store, _slot_require_edge(store, edge_id))
+    return int(_require_edge(graph, edge_id).col_idx) >= 0
+
+
 def edge_at_column(graph, column: int) -> str:
     """Return the edge that occupies one column of the materialized matrix.
 

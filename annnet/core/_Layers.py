@@ -1419,7 +1419,7 @@ class LayerAccessor:
         for eid in E:
             if not _structure.has_edge(G_src, eid):
                 continue
-            if _structure.edge_column(G_src, eid) < 0:
+            if not _structure.carries_structure(G_src, eid):
                 continue
             ref = _structure.edge_ref(G_src, eid)
             if ref.kind == _structure.HYPER:
