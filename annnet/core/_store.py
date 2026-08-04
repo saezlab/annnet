@@ -493,9 +493,32 @@ class CoreState:
         self.member_start[slot] = start
         self.member_len[slot] = count
 
+    def _link_members(self, slot: int) -> None:
+        """Record the side one edge gives every entity it names.
+
+        This reads the member segment the edge already holds, so it is what a
+        write that changes a role in place uses. A write that appends a segment
+        indexes it as it goes, because that costs no second pass.
+        """
+        start = int(self.member_start[slot])
+        stop = start + int(self.member_len[slot])
+        entity_slots = self.member_ent[start:stop].tolist()
+        roles = self.member_role[start:stop].tolist()
+        for entity_slot, role in zip(entity_slots, roles, strict=False):
+            sides = self._entity_edges[entity_slot]
+            held = sides.get(slot)
+            side = _SIDE_OF_ROLE.get(role, ON_SOURCE)
+            sides[slot] = (side if held is None else held[0] | side, None)
+        if len(entity_slots) == 2:
+            first, second = entity_slots
+            self._entity_edges[first][slot] = (self._entity_edges[first][slot][0], second)
+            self._entity_edges[second][slot] = (self._entity_edges[second][slot][0], first)
+
     def _unlink_members(self, slot: int) -> None:
         """Drop one edge out of the incidence index of every entity it names."""
-        for entity_slot in self.members(slot).entities.tolist():
+        start = int(self.member_start[slot])
+        stop = start + int(self.member_len[slot])
+        for entity_slot in self.member_ent[start:stop].tolist():
             edges = self._entity_edges.get(entity_slot)
             if edges is not None:
                 edges.pop(slot, None)
@@ -603,6 +626,61 @@ class CoreState:
         self.edge_explicit[slot] = True
         self._note_change()
 
+    def set_edge_explicit(self, edge_id: str, explicit: bool) -> None:
+        """Say whether one edge states its own coefficients.
+
+        An edge that stops stating them derives them from its weight and its
+        directedness again, which is what the coefficients of an edge mean when
+        it states none.
+        """
+        slot = self._require_edge_slot(edge_id)
+        self.edge_explicit[slot] = explicit
+        self._derive_coefficients(slot)
+        self._note_change()
+
+    def reverse_edge(self, edge_id: str) -> None:
+        """Swap the two sides of one edge.
+
+        Every entry on the target side moves to the source side, and every other
+        entry moves to the target side. An edge left with nothing on its target
+        side carries the plain role instead, which is the role a member takes in
+        an edge with one side.
+
+        An edge that states its own coefficients keeps them, because a
+        coefficient belongs to an entity and not to a side. Otherwise they are
+        derived again, so the new source side carries the weight.
+        """
+        slot = self._require_edge_slot(edge_id)
+        start = int(self.member_start[slot])
+        stop = start + int(self.member_len[slot])
+        # One edge holds a handful of entries, so this walks them in Python. A
+        # numpy pass over two of them costs more than the walk.
+        roles = self.member_role[start:stop].tolist()
+        source_role = MEMBER if all(role == TARGET for role in roles) else SOURCE
+        self._unlink_members(slot)
+        self.member_role[start:stop] = [source_role if role == TARGET else TARGET for role in roles]
+        self._link_members(slot)
+        self._derive_coefficients(slot)
+        self._note_change()
+
+    def merge_sides(self, edge_id: str) -> None:
+        """Give every member of one edge the plain role, dropping the two sides.
+
+        An entity on both sides becomes one member of the result, exactly as the
+        union of the two sides holds it once. The coefficients are derived
+        again, because an edge with one side has no negated side.
+        """
+        slot = self._require_edge_slot(edge_id)
+        members = self.members(slot)
+        keys = self._entity_key
+        weight = float(self.edge_weight[slot])
+        merged = {}
+        for entity_slot in members.entities.tolist():
+            key = keys[entity_slot]
+            if key not in merged:
+                merged[key] = (key, weight, MEMBER)
+        self.replace_members(edge_id, list(merged.values()))
+
     def replace_members(self, edge_id: str, members) -> None:
         """Give one edge a new member list, and leave everything else it holds.
 
@@ -628,10 +706,13 @@ class CoreState:
         start = int(self.member_start[slot])
         stop = start + int(self.member_len[slot])
         weight = float(self.edge_weight[slot])
-        self.member_coef[start:stop] = weight
-        if self.is_directed(slot):
-            roles = self.member_role[start:stop]
-            self.member_coef[start:stop][roles == TARGET] = -weight
+        if not self.is_directed(slot):
+            self.member_coef[start:stop] = weight
+            return
+        negated = -weight
+        self.member_coef[start:stop] = [
+            negated if role == TARGET else weight for role in self.member_role[start:stop].tolist()
+        ]
 
     def structural_edges(self) -> list:
         """Return the ``(slot, edge_id)`` pairs that carry structure, in slot order.

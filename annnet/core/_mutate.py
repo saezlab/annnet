@@ -165,14 +165,14 @@ def resync(g) -> None:
 # ---------------------------------------------------------------------------
 # Which writes reach the slot store, and how
 # ---------------------------------------------------------------------------
-# A write that changes canonical structure has to reach the slot store too. Each
-# one carries the decorator that says how, so the answer is at the write and not
-# in a table somewhere else.
+# A write that changes canonical structure has to reach the slot store too, and
+# nearly every write here does it itself, from what the call already holds. What
+# is left below is for the writes that do not.
 #
-# ``add_vertex`` and ``register_edge_as_entity`` carry none. They reach the entity
-# registry through ``register_entity_record``, which writes the slot store itself.
-# ``batch_add_vertices`` registers its entities inline rather than through that
-# setter, so it writes the store inline as well, at the same place.
+# ``add_vertex`` and ``register_edge_as_entity`` need nothing. They reach the
+# entity registry through ``register_entity_record``, which writes the slot store
+# itself. ``batch_add_vertices`` registers its entities inline rather than through
+# that setter, so it writes the store inline as well, at the same place.
 
 
 def _keep_identity(routed, write):
@@ -200,37 +200,6 @@ def syncs_named_edges(name, position=0):
         return _keep_identity(routed, write)
 
     return decorate
-
-
-def syncs_returned_edges(write):
-    """Write the edges the call reports adding, whether one or many."""
-
-    def routed(g, *args, **kwargs):
-        result = write(g, *args, **kwargs)
-        if slot_store(g) is not None:
-            if isinstance(result, str):
-                sync_edge(g, result)
-            elif isinstance(result, (list, tuple, set)):
-                sync_edges(g, [item for item in result if isinstance(item, str)])
-        return result
-
-    return _keep_identity(routed, write)
-
-
-def syncs_every_edge(write):
-    """Write every edge of the graph again.
-
-    For a call that changes the directedness of all of them at once. It adds no
-    edge and touches no entity, so only the edges are written again.
-    """
-
-    def routed(g, *args, **kwargs):
-        result = write(g, *args, **kwargs)
-        if slot_store(g) is not None:
-            sync_edges(g, list(g._edges))
-        return result
-
-    return _keep_identity(routed, write)
 
 
 def rebuilds_the_store(write):
@@ -1141,15 +1110,16 @@ def set_edge_kind(g, eid, kind):
         store.set_edge_ml_kind(eid, kind)
 
 
-@syncs_every_edge
 def reverse_directions(g):
     """Flip src<->tgt on directed edges/hyperedges in place; rebuild adjacency indexes."""
-    for rec in g._edges.values():
+    reversed_ids = []
+    for eid, rec in g._edges.items():
         if rec.col_idx < 0:
             continue
         if rec.etype == 'hyper':
             if rec.tgt is not None:
                 rec.src, rec.tgt = rec.tgt, rec.src
+                reversed_ids.append(eid)
             continue
         edge_is_directed = (
             rec.directed
@@ -1158,12 +1128,17 @@ def reverse_directions(g):
         )
         if edge_is_directed:
             rec.src, rec.tgt = rec.tgt, rec.src
+            reversed_ids.append(eid)
     D.rebuild_edge_indexes(g)
     g._mark_matrix_dirty()
     D.invalidate_sparse_caches(g)
+    store = slot_store(g)
+    if store is not None:
+        for eid in reversed_ids:
+            if store.edge_slot(eid) is not None:
+                store.reverse_edge(eid)
 
 
-@syncs_every_edge
 def make_undirected(g, *, drop_flexible=True, update_default=True):
     """Convert all existing edges to undirected form in place; returns the graph.
 
@@ -1173,8 +1148,13 @@ def make_undirected(g, *, drop_flexible=True, update_default=True):
     single undirected member set. Explicit signed ``coeffs`` are dropped so the
     symmetric ``+w`` column is derived — matching the legacy overwrite behavior.
     """
+    store = slot_store(g)
+
+    def reaches_the_store(edge_id):
+        return store is not None and store.edge_slot(edge_id) is not None
+
     # 1) Binary / vertex-edge edges
-    for _eid, rec in list(g._edges.items()):
+    for eid, rec in list(g._edges.items()):
         if rec.etype == 'hyper':
             continue
         if rec.src is None or rec.tgt is None:
@@ -1183,9 +1163,15 @@ def make_undirected(g, *, drop_flexible=True, update_default=True):
             continue
         rec.coeffs = None
         rec.directed = False
+        if reaches_the_store(eid):
+            # An undirected binary edge keeps its two sides and changes only
+            # what its members carry, so the direction comes first and the
+            # coefficients are then derived once.
+            store.set_edge_directed(eid, False)
+            store.set_edge_explicit(eid, False)
 
     # 2) Hyperedges
-    for _eid, rec in list(g._edges.items()):
+    for eid, rec in list(g._edges.items()):
         if rec.etype != 'hyper':
             continue
         if rec.col_idx < 0:
@@ -1195,10 +1181,16 @@ def make_undirected(g, *, drop_flexible=True, update_default=True):
         rec.tgt = None
         rec.directed = False
         rec.coeffs = None
+        if reaches_the_store(eid):
+            store.set_edge_directed(eid, False)
+            store.set_edge_explicit(eid, False)
+            store.merge_sides(eid)
 
     if drop_flexible:
-        for rec in g._edges.values():
+        for eid, rec in g._edges.items():
             rec.direction_policy = None
+            if reaches_the_store(eid):
+                store.set_edge_policy(eid, None)
     if update_default:
         g.directed = False
     g._mark_matrix_dirty()
