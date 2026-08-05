@@ -12,7 +12,6 @@ from ._records import (
     _internal_entity_kind,
 )
 from .._support.dataframe_backend import (
-    dataframe_columns,
     dataframe_drop_rows,
     is_polars_dataframe,
     dataframe_upsert_rows,
@@ -554,12 +553,10 @@ def remove_edges_bulk(g, edge_ids):
         for eid in drop:
             d.pop(eid, None)
 
-    ea = g.edge_attributes
-    if ea is not None and 'edge_id' in dataframe_columns(ea):
-        g.edge_attributes = dataframe_drop_rows(ea, 'edge_id', drop)
-    ela = g.edge_slice_attributes
-    if ela is not None and 'edge_id' in dataframe_columns(ela):
-        g.edge_slice_attributes = dataframe_drop_rows(ela, 'edge_id', drop)
+    # A drop already leaves a frame that names no edge alone, so asking for the
+    # schema first only reads it twice.
+    g.edge_attributes = dataframe_drop_rows(g.edge_attributes, 'edge_id', drop)
+    g.edge_slice_attributes = dataframe_drop_rows(g.edge_slice_attributes, 'edge_id', drop)
 
     drop_orphan_edge_entities(g, drop)
 
@@ -897,9 +894,7 @@ def remove_vertices_bulk(g, vertex_ids):
     D.invalidate_sparse_caches(g)
     drop_entities(g, drop_keys)
 
-    va = g.vertex_attributes
-    if va is not None and 'vertex_id' in dataframe_columns(va):
-        g.vertex_attributes = dataframe_drop_rows(va, 'vertex_id', drop_vertex_ids)
+    g.vertex_attributes = dataframe_drop_rows(g.vertex_attributes, 'vertex_id', drop_vertex_ids)
 
     for slice_data in g._slices.values():
         slice_data['vertices'].difference_update(drop_vertex_ids)

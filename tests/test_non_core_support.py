@@ -273,6 +273,27 @@ def test_dataframe_backend_missing_column_paths_preserve_shape():
     assert df_backend.dataframe_columns(clone_not_in) == ['id', 'notes']
 
 
+def test_a_filter_of_an_empty_frame_answers_with_the_frame_and_keeps_its_schema():
+    """A frame with no rows is its own answer, and the shortcut must not show.
+
+    It holds no row to keep and none to drop, so a filter over it returns what it
+    was given whichever way round the question is asked. What that saves is the
+    call: dropping one edge from a graph of four thousand spent 192 microseconds
+    filtering a frame that was empty.
+    """
+    backend = df_backend.select_dataframe_backend('auto')
+    table = df_backend.empty_dataframe({'id': 'text', 'notes': 'text'}, backend=backend)
+
+    for answer in (
+        df_backend.dataframe_filter_in(table, 'id', ['a']),
+        df_backend.dataframe_filter_not_in(table, 'id', ['a']),
+        df_backend.dataframe_drop_rows(table, 'id', ['a', 'b']),
+    ):
+        assert answer is not table
+        assert df_backend.dataframe_columns(answer) == ['id', 'notes']
+        assert df_backend.dataframe_to_rows(answer) == []
+
+
 def test_adapter_utils_serialization_roundtrips(tmp_path):
     supra = ('nodeA', ('layer1', 'layer2'))
     assert (
