@@ -27,6 +27,7 @@ rebuilds when its recorded clock value differs.
 from __future__ import annotations
 
 from typing import NamedTuple
+from itertools import chain, repeat
 
 import numpy as np
 
@@ -65,6 +66,25 @@ _SIDE_OF_ROLE = {SOURCE: ON_SOURCE, TARGET: ON_TARGET, MEMBER: ON_SOURCE}
 
 _INITIAL_CAPACITY = 8
 
+# Below this many edges a bulk write costs more than the single writes it
+# replaces. Its fixed part — one transposition of the batch and thirteen array
+# assignments — is about three single writes, and what it saves is about half of
+# one per edge.
+_BULK_MINIMUM = 8
+
+# How many edges a caller should hold back before it calls the bulk write.
+#
+# What a bulk write saves — the growth of ten arrays and the interpreted write of
+# every cell — is amortized within a few dozen edges. What a larger batch costs
+# is the garbage collector. A spec and its member entries are tracked
+# containers, and a batch that survives one collection of the youngest
+# generation is promoted, so every collection after it scans the batch again.
+# The default threshold of that generation is 700 allocations, so a batch of this
+# size is collected where it stands. A load of 25 600 edges written in one batch
+# instead spent 50 ms in the collector, which is the whole of what the bulk write
+# saved.
+BULK_CHUNK = 128
+
 # Every array a store owns, named once so a copy cannot leave one behind.
 _ARRAYS = (
     'entity_kind',
@@ -99,6 +119,30 @@ class Endpoints(NamedTuple):
     target: frozenset
 
 
+class EdgeSpec(NamedTuple):
+    """One edge, in the form a bulk write takes it.
+
+    The fields are those of :meth:`CoreState.add_edge` and so are the defaults,
+    so a caller that carries none of the rare ones names two of the nine.
+
+    A bulk write reads its batch by transposing it, so what it needs of a spec is
+    that it is a tuple of these nine fields in this order. This class is where
+    they are named and where a caller reads what they mean. A caller on a load
+    path builds the plain tuple instead, because naming the fields costs four
+    times what the tuple does and a load builds one per edge.
+    """
+
+    id: str
+    members: tuple
+    kind: int = BINARY
+    directed: object = None
+    weight: float = 1.0
+    explicit_coefficients: bool = False
+    ml_kind: object = None
+    ml_layers: object = None
+    direction_policy: object = None
+
+
 def _grown(array: np.ndarray, target: int, fill=0) -> np.ndarray:
     """Return an array at least ``target`` long, doubling to amortize the cost."""
     if target <= array.size:
@@ -109,6 +153,34 @@ def _grown(array: np.ndarray, target: int, fill=0) -> np.ndarray:
     out = np.full(size, fill, dtype=array.dtype)
     out[: array.size] = array
     return out
+
+
+def _first_repeated(ids, held) -> str | None:
+    """Return the first id a batch repeats, or that a store already holds.
+
+    A bulk write finds out that a batch carries one with two set operations. This
+    walk names which one, and it runs only to raise.
+    """
+    seen = set()
+    for edge_id in ids:
+        if edge_id in held or edge_id in seen:
+            return edge_id
+        seen.add(edge_id)
+    return None
+
+
+def _edge_of_member(lengths, position: int) -> int:
+    """Return the index of the edge whose member segment holds one flat position.
+
+    A bulk write flattens every member list into one sequence, so a bad entry is
+    found by its position in that sequence. This names the edge it came from, and
+    it runs only to raise.
+    """
+    for index, width in enumerate(lengths):
+        position -= width
+        if position < 0:
+            return index
+    return len(lengths) - 1
 
 
 def _as_indexes(slots) -> list:
@@ -509,6 +581,232 @@ class CoreState:
         self._member_used = needed
         self.member_start[slot] = start
         self.member_len[slot] = count
+
+    def add_edges(self, specs) -> list[int]:
+        """Add many edges in one pass and return the slot of each, in order.
+
+        Each of ``specs`` is an :class:`EdgeSpec`, or any tuple of its nine
+        fields. The result is the store the same edges added one at a time would
+        give. What differs is the cost: every array grows once rather than once
+        per edge, every member pool takes one assignment rather than one per
+        entry, and what is left per edge is the two dictionaries an identity
+        writes and the incidence index its members touch.
+
+        A spec that names an entity the store does not hold, or an id it already
+        holds, raises before anything is written, so a bad batch leaves the store
+        as it was.
+
+        A caller with more edges than one batch should carry writes them in
+        batches of :data:`BULK_CHUNK`, for the reason recorded there.
+        """
+        specs = list(specs) if not isinstance(specs, list) else specs
+        if not specs:
+            return []
+        count = len(specs)
+        if count < _BULK_MINIMUM:
+            return self._add_edges_singly(specs)
+
+        entity_slot = self._entity_slot
+        entity_edges = self._entity_edges
+        edge_slot = self._edge_slot
+        edge_ids = self._edge_id
+        side_of_role = _SIDE_OF_ROLE.get
+
+        # The first pass reads the specs and resolves every member. It writes
+        # nothing, so the raise a bad spec earns costs the caller nothing else.
+        #
+        # A spec is a tuple, so one transposition gives every field of every edge
+        # as a column, and a member list is a tuple of tuples, so one chain and
+        # one more transposition give the three member pools. Both happen inside
+        # the interpreter, where a loop over the specs would spend a bytecode per
+        # field of every edge.
+        ids, member_lists, kinds, directions, weights, explicit, ml_kinds, ml_layers, policies = (
+            zip(*specs, strict=True)
+        )
+        # ``edge_slot.keys().isdisjoint(seen)`` and not ``seen.isdisjoint(...)``.
+        # A view asked this way walks the shorter of the two; a set asked it
+        # walks the whole argument, which is the store.
+        seen = set(ids)
+        if len(seen) != count or not edge_slot.keys().isdisjoint(seen):
+            raise KeyError(f'Duplicate edge id: {_first_repeated(ids, edge_slot)!r}')
+
+        if None in directions:
+            directions = [INHERIT if value is None else int(bool(value)) for value in directions]
+        if None in weights:
+            weights = [1.0 if value is None else value for value in weights]
+
+        lengths = list(map(len, member_lists))
+        flat = list(chain.from_iterable(member_lists))
+        if flat:
+            keys, coefficients, roles = zip(*flat, strict=True)
+            entities = list(map(entity_slot.get, keys))
+            if None in entities:
+                gap = entities.index(None)
+                raise KeyError(
+                    f'Edge {ids[_edge_of_member(lengths, gap)]!r} names an entity the '
+                    f'store does not hold: {keys[gap]!r}'
+                )
+        else:
+            coefficients, roles, entities = (), (), []
+        cursor = self._member_used + len(flat)
+
+        # The second pass gives every edge its slot. A freed slot is reused
+        # before the frontier grows, as a single add does, so a batch after a
+        # removal leaves no hole behind. A store that has never freed one takes
+        # the run after the frontier, and then both maps take one update.
+        free = self.edge_free
+        frontier = len(edge_ids)
+        if free:
+            slots = []
+            reused = 0
+            for edge_id in ids:
+                if free:
+                    slot = free.pop()
+                    edge_ids[slot] = edge_id
+                    reused += 1
+                else:
+                    slot = frontier
+                    frontier += 1
+                    edge_ids.append(edge_id)
+                edge_slot[edge_id] = slot
+                slots.append(slot)
+        else:
+            slots = list(range(frontier, frontier + count))
+            frontier += count
+            edge_ids.extend(ids)
+            edge_slot.update(zip(ids, slots, strict=True))
+            reused = 0
+
+        # The third pass puts every member in the incidence index. The side each
+        # of them takes is read for the whole batch at once, because the walk
+        # below is where the remaining cost of a bulk write lives.
+        sides_of = list(map(side_of_role, roles, repeat(ON_SOURCE)))
+        if lengths.count(2) == count:
+            # Two entries are one on each side of each other, so each member
+            # records its peer and a neighbour query needs no member list. That
+            # is the shape of a binary edge, which is what a bulk load is made
+            # of, so the whole batch is walked as pairs.
+            for slot, first, second, side, peer_side in zip(
+                slots, entities[0::2], entities[1::2], sides_of[0::2], sides_of[1::2], strict=True
+            ):
+                if first == second:
+                    entity_edges[first][slot] = (side | peer_side, first)
+                else:
+                    entity_edges[first][slot] = (side, second)
+                    entity_edges[second][slot] = (peer_side, first)
+        else:
+            position = 0
+            for slot, width in zip(slots, lengths, strict=True):
+                stop = position + width
+                if width == 2:
+                    first, second = entities[position], entities[position + 1]
+                    side, peer_side = sides_of[position], sides_of[position + 1]
+                    if first == second:
+                        entity_edges[first][slot] = (side | peer_side, first)
+                    else:
+                        entity_edges[first][slot] = (side, second)
+                        entity_edges[second][slot] = (peer_side, first)
+                else:
+                    for offset in range(position, stop):
+                        sides = entity_edges[entities[offset]]
+                        held = sides.get(slot)
+                        side = sides_of[offset]
+                        sides[slot] = (side if held is None else held[0] | side, None)
+                position = stop
+
+        # The arrays, each grown once and written once. A member segment starts
+        # where the one before it ends, so the starts are a running sum of the
+        # widths and no loop has to carry one.
+        base = self._member_used
+        index = np.fromiter(slots, dtype=np.int64, count=count)
+        widths = np.fromiter(lengths, dtype=np.int64, count=count)
+        for name in ('edge_kind', 'edge_directed', 'edge_weight', 'edge_explicit'):
+            setattr(self, name, _grown(getattr(self, name), frontier))
+        self.member_start = _grown(self.member_start, frontier)
+        self.member_len = _grown(self.member_len, frontier)
+        self.edge_kind[index] = kinds
+        self.edge_directed[index] = directions
+        self.edge_weight[index] = weights
+        self.edge_explicit[index] = explicit
+        self.member_start[index] = np.cumsum(widths) - widths + base
+        self.member_len[index] = widths
+
+        self.member_ent = _grown(self.member_ent, cursor)
+        self.member_coef = _grown(self.member_coef, cursor)
+        self.member_role = _grown(self.member_role, cursor)
+        self.member_ent[base:cursor] = entities
+        self.member_coef[base:cursor] = coefficients
+        self.member_role[base:cursor] = roles
+        self._member_used = cursor
+
+        # The rare per-edge state, only when a spec in the batch carries any.
+        if ml_kinds.count(None) < count:
+            self.edge_ml_kind.update(
+                (slot, value)
+                for slot, value in zip(slots, ml_kinds, strict=True)
+                if value is not None
+            )
+        if ml_layers.count(None) < count:
+            self.edge_ml_layers.update(
+                (slot, value)
+                for slot, value in zip(slots, ml_layers, strict=True)
+                if value is not None
+            )
+        if policies.count(None) < count:
+            self.edge_policy.update(
+                (slot, value)
+                for slot, value in zip(slots, policies, strict=True)
+                if value is not None
+            )
+
+        # One clock tick per edge, which is what the append log is counted
+        # against. A freed slot is reused before the frontier grows, so the
+        # reuses are the head of the batch and the log holds the tail after them
+        # — the same log the same adds one at a time would leave.
+        self.structure_version += count
+        if reused:
+            self.append_log.clear()
+            self.append_log_from_version = self.structure_version - (count - reused)
+        self.append_log.extend(slots[reused:])
+        return slots
+
+    def _add_edges_singly(self, specs) -> list[int]:
+        """Add a batch too small to pay for the vectorized write, one edge at a time.
+
+        The transposition, the ten array assignments and the three pool
+        assignments of a bulk write cost about as much as three single writes
+        whatever the batch holds, so a handful of edges are cheaper written the
+        ordinary way. The checks come first, because a batch that raises leaves
+        the store as it was however few edges it names.
+        """
+        held = self._edge_slot
+        entity_slot = self._entity_slot
+        seen = set()
+        for edge_id, members, *_rest in specs:
+            if edge_id in held or edge_id in seen:
+                raise KeyError(f'Duplicate edge id: {edge_id!r}')
+            seen.add(edge_id)
+            for entity_key, _coefficient, _role in members:
+                if entity_key not in entity_slot:
+                    raise KeyError(
+                        f'Edge {edge_id!r} names an entity the store does not hold: {entity_key!r}'
+                    )
+        return [
+            self.add_edge(
+                edge_id,
+                members,
+                kind=kind,
+                directed=directed,
+                weight=weight,
+                explicit_coefficients=explicit,
+                ml_kind=ml_kind,
+                ml_layers=ml_layers,
+                direction_policy=policy,
+            )
+            for edge_id, members, kind, directed, weight, explicit, ml_kind, ml_layers, policy in (
+                specs
+            )
+        ]
 
     def _link_members(self, slot: int) -> None:
         """Record the side one edge gives every entity it names.
@@ -941,23 +1239,31 @@ class CoreState:
             slot = self._entity_slot.get(key)
             other.add_entity(key, NODE if slot is None else int(self.entity_kind[slot]))
         weights = weights or {}
+        specs = []
         for edge_id in edge_ids:
             slot = self._edge_slot.get(edge_id)
             if slot is None:
                 continue
             weight = float(weights.get(edge_id, self.edge_weight[slot]))
             declared = int(self.edge_directed[slot])
-            other.add_edge(
-                edge_id,
-                self._selected_members(slot, other, weight),
-                kind=int(self.edge_kind[slot]),
-                directed=None if declared == INHERIT else bool(declared),
-                weight=weight,
-                explicit_coefficients=bool(self.edge_explicit[slot]),
-                ml_kind=self.edge_ml_kind.get(slot),
-                ml_layers=self.edge_ml_layers.get(slot),
-                direction_policy=self.edge_policy.get(slot),
+            specs.append(
+                (
+                    edge_id,
+                    self._selected_members(slot, other, weight),
+                    int(self.edge_kind[slot]),
+                    None if declared == INHERIT else bool(declared),
+                    weight,
+                    bool(self.edge_explicit[slot]),
+                    self.edge_ml_kind.get(slot),
+                    self.edge_ml_layers.get(slot),
+                    self.edge_policy.get(slot),
+                )
             )
+            if len(specs) >= BULK_CHUNK:
+                other.add_edges(specs)
+                specs = []
+        if specs:
+            other.add_edges(specs)
         return other
 
     def _selected_members(self, slot: int, other: CoreState, weight: float) -> list:
