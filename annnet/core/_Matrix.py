@@ -248,17 +248,28 @@ class CacheManager:
         }
 
 
+# One member list feeds several purpose-built matrices. Each selection below names
+# the edges that belong in one of them, so no matrix has to carry a convention
+# that another one needs. The graph exposes these as G.B, G.H and G.S.
+BINARY = {'kinds': (ST.BINARY, ST.NODE_EDGE), 'signed': True}
+HYPERGRAPH = {'kinds': (ST.HYPER,), 'signed': False}
+SIGNED = {'kinds': None, 'signed': True}
+
+
 class MatrixNamespace:
     """The parameterized matrices of one graph, over a cache keyed to its store.
 
-    Each method returns a :class:`_matrices.MatrixView`, which carries the
-    materialized matrix and the maps between an identity and the position it
-    holds in that matrix. A position belongs to one matrix and to nothing else,
-    which is why it comes with the matrix rather than from the graph.
+    Each name comes in two forms. The plain one returns a
+    :class:`_matrices.MatrixView`, which carries the materialized matrix and the
+    maps between an identity and the position it holds in that matrix. A position
+    belongs to one matrix and to nothing else, which is why it comes with the
+    matrix rather than from the graph.
 
-    The named properties of the graph — ``G.B``, ``G.H``, ``G.S``, ``G.A`` and
-    ``G.L`` — are the default parameterization of these, and they answer with the
-    matrix alone.
+    The ``_matrix`` form returns the matrix alone. The maps cost an entry per row
+    and per column, which is more than the matrix costs to build, so a caller
+    that only wants to do arithmetic must not pay for them. The named properties
+    of the graph — ``G.B``, ``G.H``, ``G.S``, ``G.A`` and ``G.L`` — are the
+    default parameterization of these, and they take the ``_matrix`` form.
     """
 
     def __init__(self, graph):
@@ -296,20 +307,41 @@ class MatrixNamespace:
         """
         return self.cache.incidence(kinds=kinds, signed=signed)
 
+    def incidence_matrix(self, *, kinds=None, signed: bool = True):
+        """Return an incidence matrix alone, without the maps a view carries.
+
+        Returns
+        -------
+        scipy.sparse.csc_array
+        """
+        return self.cache.incidence_matrix(kinds=kinds, signed=signed)
+
     def binary(self):
+        """Return the incidence matrix of the binary edges, with its maps."""
+        return self.incidence(**BINARY)
+
+    def binary_matrix(self):
         """Return the incidence matrix of the binary edges (``G.B``)."""
-        return self.incidence(kinds=(ST.BINARY, ST.NODE_EDGE), signed=True)
+        return self.incidence_matrix(**BINARY)
 
     def hypergraph(self):
+        """Return the incidence matrix of the hyperedges, with its maps."""
+        return self.incidence(**HYPERGRAPH)
+
+    def hypergraph_matrix(self):
         """Return the incidence matrix of the hyperedges (``G.H``)."""
-        return self.incidence(kinds=(ST.HYPER,), signed=False)
+        return self.incidence_matrix(**HYPERGRAPH)
 
     def signed(self):
-        """Return the coefficient incidence matrix of every edge (``G.S``)."""
-        return self.incidence(kinds=None, signed=True)
+        """Return the coefficient incidence matrix of every edge, with its maps."""
+        return self.incidence(**SIGNED)
+
+    def signed_matrix(self):
+        """Return the coefficient incidence matrix of every edge (``G.S``, ``G.X()``)."""
+        return self.incidence_matrix(**SIGNED)
 
     def adjacency(self, **kwargs):
-        """Return the adjacency matrix (``G.A``).
+        """Return the adjacency matrix with its maps (``G.A``).
 
         A self-loop lands on the diagonal. A boundary edge joins nothing, so it
         is left out, and so is a hyperedge: projecting one onto pairs is a choice
@@ -321,14 +353,34 @@ class MatrixNamespace:
         """
         return self.cache.adjacency(**kwargs)
 
+    def adjacency_matrix(self, **kwargs):
+        """Return the adjacency matrix alone (``G.A``).
+
+        Returns
+        -------
+        scipy.sparse.csr_array
+        """
+        return self.cache.adjacency_matrix(**kwargs)
+
     def laplacian(self, **kwargs):
-        """Return the Laplacian, which is the degree matrix minus the adjacency (``G.L``).
+        """Return the Laplacian with its maps.
+
+        It is the degree matrix minus the adjacency.
 
         Returns
         -------
         MatrixView
         """
         return self.cache.laplacian(**kwargs)
+
+    def laplacian_matrix(self, **kwargs):
+        """Return the Laplacian alone (``G.L``).
+
+        Returns
+        -------
+        scipy.sparse.csr_array
+        """
+        return self.cache.laplacian_matrix(**kwargs)
 
     def drop(self) -> None:
         """Forget every cached matrix. A cache is always safe to drop."""

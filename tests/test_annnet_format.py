@@ -230,16 +230,44 @@ class TestAnnNetIO(unittest.TestCase):
         annnet_write(G, out, overwrite=True)
         G2 = annnet_read(out)
         self.assertIsNone(S.edge_coefficients(G2, 'e'))
-        self.assertTrue(G2._matrix_dirty)  # rebuild still deferred
+        self.assertFalse((self._get_root(out, True) / 'structure' / 'incidence.zarr').exists())
 
-    def test_matrix_true_stores_the_cache(self):
-        """matrix=True is a load-time trade: same graph, cache materialised."""
-        self.G.set_edge_coeffs('e1', {'v1': -2.0, 'v2': 3.0})
-        out = Path(self.tmpdir) / 'cached.annnet'
+    def test_a_file_older_than_the_coefficient_table_recovers_them_from_its_matrix(self):
+        """The one thing a persisted matrix is still read for.
+
+        A file written before ``edge_coeffs.parquet`` existed records an
+        explicit column nowhere else, so the load takes it from the matrix the
+        file holds. Deleting that table is what makes a file of this age.
+        """
+        coeffs = {'v1': -2.0, 'v2': 3.0}
+        self.G.set_edge_coeffs('e1', coeffs)
+        out = Path(self.tmpdir) / 'legacy'
         annnet_write(self.G, out, overwrite=True, matrix=True)
+        (out / 'structure' / 'edge_coeffs.parquet').unlink()
+
         G2 = annnet_read(out)
-        self.assertFalse(G2._matrix_dirty)  # loaded, not rebuilt
-        self.assertEqual(S.edge_coefficients(G2, 'e1'), dict(S.edge_coefficients(self.G, 'e1')))
+        self.assertEqual(S.edge_coefficients(G2, 'e1'), coeffs)
+
+    def test_matrix_true_writes_a_matrix_the_graph_does_not_read_back(self):
+        """The matrix is derived, so a persisted one changes nothing on load.
+
+        It is written because a file older than the coefficient table records an
+        explicit column nowhere else, and the load recovers those from it. A
+        graph read from a file with one says what a graph read from a file
+        without one says.
+        """
+        self.G.set_edge_coeffs('e1', {'v1': -2.0, 'v2': 3.0})
+        want = dict(S.edge_coefficients(self.G, 'e1'))
+        loaded = {}
+        for matrix in (False, True):
+            out = Path(self.tmpdir) / f'cached_{matrix}.annnet'
+            annnet_write(self.G, out, overwrite=True, matrix=matrix)
+            root = self._get_root(out, True)
+            self.assertEqual((root / 'structure' / 'incidence.zarr').exists(), matrix)
+            G2 = annnet_read(out)
+            self.assertEqual(S.edge_coefficients(G2, 'e1'), want)
+            loaded[matrix] = G2.X().toarray()
+        self.assertTrue((loaded[False] == loaded[True]).all())
 
     def test_zarr_incidence_group(self):
         # The matrix is a derived cache, persisted only on matrix=True; this test is

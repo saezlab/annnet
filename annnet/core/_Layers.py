@@ -441,7 +441,6 @@ class LayerAccessor:
             self._layers = flat._layers
             _build.install_structure(
                 self._G,
-                matrix=flat._matrix,
                 # The flat graph was built through the public API, so its store is
                 # already the store this graph is to have. Everything else the flat
                 # graph holds moves over by reference too, and it is discarded here.
@@ -505,7 +504,7 @@ class LayerAccessor:
                 self._register_entity(ekey)
                 new_rows += 1
         if new_rows:
-            _derive.mark_matrix_stale(self._G)
+            _derive.bump_structure(self._G)
 
     def has_presence(self, u: str, layer_tuple: tuple[str, ...]) -> bool:
         """Check whether the graph holds the entity ``(u, aa)``.

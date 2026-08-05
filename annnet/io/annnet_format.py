@@ -963,9 +963,10 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
     """Load incidence matrix, entity index, and merged edges from v2 layout."""
     import zarr
 
-    # 1. Sparse incidence matrix. Persisted only for stoichiometric graphs; when
-    # absent it is rebuilt from the edge records on first access (records are the
-    # source of truth for everything except explicit coeffs).
+    # 1. Sparse incidence matrix. The graph derives its own from the store, so
+    # this is not installed anywhere. It is read because a file written before
+    # the coefficient table existed records an explicit coefficient nowhere
+    # else, and step 7 recovers those from it.
     if (path / 'incidence.zarr').exists():
         try:
             inc_store = zarr.DirectoryStore(str(path / 'incidence.zarr'))
@@ -978,16 +979,10 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
         data = inc_root['data'][:]
         shape = tuple(inc_root.attrs['shape'])
 
-        coo = sp.coo_array((data, (row, col)), shape=shape, dtype=np.float32)
-        # CSR is the format the lazy matrix cache uses; building a DOK here just to
-        # hand it to the setter meant an O(nnz) Python-dict build on every read.
-        matrix = coo.tocsr()
-        incidence_loaded = True
+        # A column is an edge, so the recovery reads this by column.
+        matrix = sp.coo_array((data, (row, col)), shape=shape, dtype=np.float32).tocsc()
     else:
-        # No stored incidence: the store the install fills holds every entity
-        # and every edge a rebuild reads, so the first read builds one.
         matrix = None
-        incidence_loaded = False
 
     # 2. Entity index — translate layer_id back to tuple coords.
     # Read columns once and iterate via zip over arrays instead of yielding one
@@ -1200,7 +1195,6 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
     # edges in the order the file records rather than in the order it lists them.
     edge_columns.sort(key=lambda item: item[0])
     graph._install_structure(
-        matrix=matrix,
         definitions=(
             entity_definitions,
             [edge_definitions[eid] for _column, eid in edge_columns],
@@ -1209,21 +1203,21 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
 
     # 7. Coefficients a legacy file kept only inside its matrix. This needs the
     # installed structure, because a column names its members by row.
-    if not coeff_path.exists() and incidence_loaded:
-        _recover_legacy_coeffs(graph)
+    if not coeff_path.exists() and matrix is not None:
+        _recover_legacy_coeffs(graph, matrix)
 
 
-def _recover_legacy_coeffs(graph) -> None:
+def _recover_legacy_coeffs(graph, csc) -> None:
     """Recover the coefficients a legacy file kept only inside its matrix.
 
     A file written before the coefficient table existed records an explicit
     coefficient nowhere else. So a column the edge cannot derive from its weight
     and its directedness carries one, and the edge takes the column as it stands.
+
+    The matrix is the one the file holds, not the one the graph derives. The
+    derived one says exactly what the store says, so reading it here would
+    recover nothing.
     """
-    matrix = graph.X()
-    if matrix is None:
-        return
-    csc = matrix.tocsc()
     n_cols = csc.shape[1]
     for edge in _structure.iter_edges(graph, include_placeholders=True):
         column = _structure.edge_column(graph, edge.id)

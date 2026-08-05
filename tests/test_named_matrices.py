@@ -83,6 +83,18 @@ def test_every_row_of_the_laplacian_sums_to_zero():
     assert np.allclose(np.asarray(G.L.sum(axis=1)).ravel(), 0.0)
 
 
+def test_the_laplacian_names_the_entity_of_each_row():
+    """Both axes are entities, so the view maps rows and carries no column map."""
+    G = _mixed()
+    view = G.matrices.laplacian()
+    assert list(view.entity_of_row) == S.entity_keys(G)
+    assert view.edge_of_column == []
+    # The degree on the diagonal is the row sum of the adjacency, which on a
+    # directed graph is what leaves the entity. B has one edge out and one in.
+    assert view.matrix[view.row_of_entity[('B', ('_',))], view.row_of_entity[('B', ('_',))]] == 1.0
+    assert view.matrix[view.row_of_entity[('C', ('_',))], view.row_of_entity[('C', ('_',))]] == 0.0
+
+
 # ---------------------------------------------------------------------------
 # The shapes the specification calls out
 # ---------------------------------------------------------------------------

@@ -105,14 +105,17 @@ def _gather_members(store, edge_slots: np.ndarray):
     return store.member_ent[index], store.member_coef[index], store.member_role[index], columns
 
 
-def _view(store, matrix, entity_slots, edge_slots, row_lookup) -> MatrixView:
+def _view(store, matrix, entity_slots, edge_slots=None) -> MatrixView:
     """Build a view. The column maps stay mutable so an append can extend them.
 
     Rebuilding the identity-to-column map on every append would cost the number of
     columns, which would make a loop of appends quadratic however cheap the matrix
     itself is. So the map is grown in place instead.
+
+    A matrix whose columns are not edges passes no ``edge_slots`` and gets no
+    column maps, which is what the adjacency and the Laplacian do.
     """
-    edge_ids = store.edge_ids_at(edge_slots)
+    edge_ids = [] if edge_slots is None else store.edge_ids_at(edge_slots)
     entity_keys = tuple(store.entity_keys_at(entity_slots))
     return MatrixView(
         matrix=matrix,
@@ -150,30 +153,7 @@ def incidence(store, *, kinds=None, signed: bool = True) -> MatrixView:
     entity_slots, row_lookup = _row_lookup(store)
     edge_slots = _selected_edge_slots(store, kinds)
     matrix = _incidence_matrix(store, entity_slots.size, edge_slots, row_lookup, signed)
-    return _view(store, matrix, entity_slots, edge_slots, row_lookup)
-
-
-def structural_incidence(store):
-    """Materialize the signed incidence matrix of the structural edges, in CSR.
-
-    This is the matrix the graph exposes as ``X()``. A row is an entity and a
-    column is a structural edge, both in the order the store gives them, so the
-    positions agree with the ones the query facade answers with, and the matrix
-    is exactly as large as the store is.
-
-    Unlike :func:`incidence`, this returns the matrix alone. The graph maps
-    identity to position through the store, not through a view.
-    """
-    entity_slots, row_lookup = _row_lookup(store)
-    edge_slots = _selected_edge_slots(store, None)
-    entities, coefficients, _roles, columns = _gather_members(store, edge_slots)
-    height, width = int(entity_slots.size), int(edge_slots.size)
-    matrix = sp.coo_array(
-        (coefficients.astype(np.float32), (row_lookup[entities], columns)),
-        shape=(height, width),
-    ).tocsr()
-    matrix.eliminate_zeros()
-    return matrix
+    return _view(store, matrix, entity_slots, edge_slots)
 
 
 def _adjacency_pairs(store, edge_slots: np.ndarray, row_lookup: np.ndarray):
@@ -261,13 +241,8 @@ def _adjacency_pairs(store, edge_slots: np.ndarray, row_lookup: np.ndarray):
     return np.concatenate(rows), np.concatenate(cols), np.concatenate(data)
 
 
-def adjacency(store, *, kinds=(ST.BINARY, ST.NODE_EDGE)) -> MatrixView:
-    """Materialize the adjacency matrix over the edges that join two entities.
-
-    A self-loop lands on the diagonal. A boundary edge is left out, because it
-    joins nothing. A hyperedge is left out by default, because projecting one onto
-    pairs is a choice that belongs to the caller rather than to this matrix.
-    """
+def _adjacency_matrix(store, *, kinds=(ST.BINARY, ST.NODE_EDGE)):
+    """Return the adjacency matrix and the entity slots its rows stand for."""
     entity_slots, row_lookup = _row_lookup(store)
     edge_slots = _selected_edge_slots(store, kinds)
     rows, columns, data = _adjacency_pairs(store, edge_slots, row_lookup)
@@ -276,8 +251,29 @@ def adjacency(store, *, kinds=(ST.BINARY, ST.NODE_EDGE)) -> MatrixView:
         (data, (rows.astype(np.int64), columns.astype(np.int64))), shape=(size, size)
     ).tocsr()
     matrix.eliminate_zeros()
-    view = _view(store, matrix, entity_slots, edge_slots, row_lookup)
-    return view._replace(column_of_edge={}, edge_of_column=[])
+    return matrix, entity_slots
+
+
+def adjacency(store, **kwargs) -> MatrixView:
+    """Materialize the adjacency matrix over the edges that join two entities.
+
+    A self-loop lands on the diagonal. A boundary edge is left out, because it
+    joins nothing. A hyperedge is left out by default, because projecting one onto
+    pairs is a choice that belongs to the caller rather than to this matrix.
+
+    Both axes are entities, so the view carries no column map.
+    """
+    matrix, entity_slots = _adjacency_matrix(store, **kwargs)
+    return _view(store, matrix, entity_slots)
+
+
+def _laplacian_matrix(store, **kwargs):
+    """Return the Laplacian and the entity slots its rows stand for."""
+    matrix, entity_slots = _adjacency_matrix(store, **kwargs)
+    degrees = np.asarray(matrix.sum(axis=1)).ravel()
+    size = matrix.shape[0]
+    degree_matrix = sp.diags_array(degrees, shape=(size, size), format='csr', dtype=np.float32)
+    return (degree_matrix - matrix).tocsr(), entity_slots
 
 
 def laplacian(store, **kwargs) -> MatrixView:
@@ -287,11 +283,8 @@ def laplacian(store, **kwargs) -> MatrixView:
     used for. A self-loop is on the diagonal of the adjacency, so it raises the
     degree and cancels itself.
     """
-    view = adjacency(store, **kwargs)
-    degrees = np.asarray(view.matrix.sum(axis=1)).ravel()
-    size = view.matrix.shape[0]
-    degree_matrix = sp.diags_array(degrees, shape=(size, size), format='csr', dtype=np.float32)
-    return view._replace(matrix=(degree_matrix - view.matrix).tocsr())
+    matrix, entity_slots = _laplacian_matrix(store, **kwargs)
+    return _view(store, matrix, entity_slots)
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +311,7 @@ class _CscBuffer:
         self.nnz = 0
 
     @classmethod
-    def of(cls, matrix) -> '_CscBuffer':
+    def of(cls, matrix) -> _CscBuffer:
         """Take over a matrix that is already built, so an append can extend it.
 
         Filling a buffer a column at a time costs a Python call and a sort per
@@ -397,10 +390,46 @@ def _column_entries(store, edge_slot: int, row_lookup: np.ndarray, signed: bool)
     return unique[keep].astype(np.int32), summed[keep]
 
 
-class _Entry(NamedTuple):
-    view: MatrixView
-    version: int
-    buffer: object = None
+class _Entry:
+    """One cached matrix, and what it takes to name the positions it holds.
+
+    The identity maps of a view cost a Python entry per row and per column,
+    which is more than the matrix itself costs to build. Most callers want the
+    matrix alone — that is what the graph asks for on every read — so the maps
+    are built by the first call that asks for them and not before.
+    """
+
+    def __init__(self, store, matrix, version, *, entity_slots, edge_slots=None, buffer=None):
+        self.store = store
+        self.matrix = matrix
+        self.version = version
+        self.entity_slots = entity_slots
+        self.edge_slots = edge_slots
+        self.buffer = buffer
+        self._view = None
+
+    def view(self) -> MatrixView:
+        """Return the view of this matrix, building its maps at most once."""
+        if self._view is None:
+            self._view = _view(self.store, self.matrix, self.entity_slots, self.edge_slots)
+        elif self._view.matrix is not self.matrix:
+            self._view = self._view._replace(matrix=self.matrix)
+        return self._view
+
+    def note_appended(self, edge_slots) -> None:
+        """Record the columns an extend has just added to the matrix.
+
+        Growing the map in place is what keeps a run of appends linear. A map
+        that was never built stays unbuilt, because the slots it would be built
+        from are recorded here too.
+        """
+        if self._view is not None:
+            column_of_edge = self._view.column_of_edge
+            edge_of_column = self._view.edge_of_column
+            for edge_id in self.store.edge_ids_at(edge_slots):
+                column_of_edge[edge_id] = len(edge_of_column)
+                edge_of_column.append(edge_id)
+        self.edge_slots = np.concatenate((self.edge_slots, edge_slots))
 
 
 class MatrixCache:
@@ -439,26 +468,23 @@ class MatrixCache:
             return None
         return tail
 
-    def _cached(self, name: tuple, build, extend):
+    def _cached(self, name: tuple, build, extend) -> _Entry:
         version = self._store.structure_version
         entry = self._entries.get(name)
         if entry is not None:
             if entry.version == version:
-                return entry.view
+                return entry
             appended = self._appended_since(entry.version)
-            if appended is not None:
-                extended = extend(entry, np.asarray(appended, dtype=np.int64))
-                if extended is not None:
-                    self.extends += 1
-                    self._entries[name] = extended._replace(version=version)
-                    return extended.view
-        view, buffer = build()
+            if appended is not None and extend(entry, np.asarray(appended, dtype=np.int64)):
+                self.extends += 1
+                entry.version = version
+                return entry
+        entry = build()
         self.rebuilds += 1
-        self._entries[name] = _Entry(view, version, buffer)
-        return view
+        self._entries[name] = entry
+        return entry
 
-    def incidence(self, *, kinds=None, signed: bool = True) -> MatrixView:
-        """Return the incidence matrix, extending the cache after an append."""
+    def _incidence(self, kinds, signed: bool) -> _Entry:
         name = ('incidence', None if kinds is None else tuple(sorted(kinds)), signed)
 
         def build():
@@ -468,69 +494,64 @@ class MatrixCache:
             buffer = _CscBuffer.of(
                 _incidence_matrix(store, entity_slots.size, edge_slots, row_lookup, signed)
             )
-            view = _view(store, buffer.matrix(), entity_slots, edge_slots, row_lookup)
-            return view, (buffer, row_lookup)
+            return _Entry(
+                store,
+                buffer.matrix(),
+                store.structure_version,
+                entity_slots=entity_slots,
+                edge_slots=edge_slots,
+                buffer=(buffer, row_lookup),
+            )
 
         def extend(entry, appended):
             store = self._store
-            buffer, row_lookup = entry.buffer
             selected = _selected(store, appended, kinds)
-            if selected.size == 0:
-                return entry
-            view = entry.view
-            for slot in selected:
-                buffer.append_column(*_column_entries(store, int(slot), row_lookup, signed))
-                edge_id = store.edge_id(int(slot))
-                view.column_of_edge[edge_id] = len(view.edge_of_column)
-                view.edge_of_column.append(edge_id)
-            return entry._replace(view=view._replace(matrix=buffer.matrix()))
+            if selected.size:
+                buffer, row_lookup = entry.buffer
+                for slot in selected:
+                    buffer.append_column(*_column_entries(store, int(slot), row_lookup, signed))
+                entry.matrix = buffer.matrix()
+                entry.note_appended(selected)
+            return True
 
         return self._cached(name, build, extend)
 
-    def adjacency(self, **kwargs) -> MatrixView:
-        """Return the adjacency matrix. An append extends it in place."""
-        name = ('adjacency', tuple(sorted(kwargs.items())))
+    def incidence(self, *, kinds=None, signed: bool = True) -> MatrixView:
+        """Return the incidence matrix and the maps that name its positions."""
+        return self._incidence(kinds, signed).view()
 
+    def incidence_matrix(self, *, kinds=None, signed: bool = True):
+        """Return the incidence matrix alone, extending the cache after an append."""
+        return self._incidence(kinds, signed).matrix
+
+    # An appended edge adds entries to rows that already exist, so neither of the
+    # two matrices below has an append-only structure to exploit and both
+    # rebuild. The fast path belongs to a matrix whose columns are edges.
+
+    def _square(self, name: str, build_matrix, kwargs) -> _Entry:
         def build():
-            return adjacency(self._store, **kwargs), None
+            store = self._store
+            matrix, entity_slots = build_matrix(store, **kwargs)
+            return _Entry(store, matrix, store.structure_version, entity_slots=entity_slots)
 
-        # An appended edge adds entries to rows that already exist, so an
-        # adjacency matrix has no append-only structure to exploit and it
-        # rebuilds. The fast path belongs to a matrix whose columns are edges.
-        return self._cached(name, build, lambda entry, appended: None)
+        return self._cached((name, tuple(sorted(kwargs.items()))), build, lambda entry, _: False)
+
+    def adjacency(self, **kwargs) -> MatrixView:
+        """Return the adjacency matrix and the map from an entity to its row."""
+        return self._square('adjacency', _adjacency_matrix, kwargs).view()
+
+    def adjacency_matrix(self, **kwargs):
+        """Return the adjacency matrix alone."""
+        return self._square('adjacency', _adjacency_matrix, kwargs).matrix
 
     def laplacian(self, **kwargs) -> MatrixView:
         """Return the Laplacian. It follows the adjacency, so it is built from it."""
-        name = ('laplacian', tuple(sorted(kwargs.items())))
+        return self._square('laplacian', _laplacian_matrix, kwargs).view()
 
-        def build():
-            return laplacian(self._store, **kwargs), None
-
-        return self._cached(name, build, lambda entry, appended: None)
+    def laplacian_matrix(self, **kwargs):
+        """Return the Laplacian alone."""
+        return self._square('laplacian', _laplacian_matrix, kwargs).matrix
 
     def drop(self) -> None:
         """Forget every cached matrix. A cache is always safe to drop."""
         self._entries.clear()
-
-
-# ---------------------------------------------------------------------------
-# The named matrices
-# ---------------------------------------------------------------------------
-# One member list feeds several purpose-built matrices. Each name below selects the
-# edges that belong in it, so no matrix has to carry a convention that another one
-# needs. The public API of the graph exposes these as G.B, G.H, G.S, G.A and G.L.
-
-
-def binary_incidence(store) -> MatrixView:
-    """The incidence matrix of the binary edges, which the public API calls ``B``."""
-    return incidence(store, kinds=(ST.BINARY, ST.NODE_EDGE), signed=True)
-
-
-def hypergraph_incidence(store) -> MatrixView:
-    """The incidence matrix of the hyperedges, which the public API calls ``H``."""
-    return incidence(store, kinds=(ST.HYPER,), signed=False)
-
-
-def signed_incidence(store) -> MatrixView:
-    """The coefficient incidence matrix of every edge, which the public API calls ``S``."""
-    return incidence(store, kinds=None, signed=True)

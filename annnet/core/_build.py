@@ -109,7 +109,7 @@ def rebuild_store(g):
     return store_from_definitions(g, *S.definitions_of(g))
 
 
-def install_structure(g, *, matrix, store=None, definitions=None) -> None:
+def install_structure(g, *, store=None, definitions=None) -> None:
     """Install canonical structural state on ``g`` and rebuild every derived index.
 
     This installs a whole graph at once rather than changing one element. Copy,
@@ -121,16 +121,15 @@ def install_structure(g, *, matrix, store=None, definitions=None) -> None:
     caller parsed the graph from a file and holds no store of its own: it is the
     ``(entities, edges)`` pair :func:`store_from_definitions` takes.
 
-    Pass ``matrix=None`` when the caller holds no materialized matrix. It then
-    rebuilds from the store on the first read.
+    No caller hands over a matrix. The matrix of a graph is derived from the
+    store it is given here, so a graph that never reads one never builds one,
+    and one that does builds it from the store rather than from whatever the
+    caller happened to hold.
     """
     from . import _mutate
 
     g._store = store_from_definitions(g, *definitions) if store is None else store
-    if matrix is None:
-        g._mark_matrix_dirty()
-    else:
-        g._matrix = matrix
+    g._mark_structure_changed()
     D.invalidate_sparse_caches(g)
     _mutate.sync_aspects(g)
 

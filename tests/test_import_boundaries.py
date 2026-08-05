@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from annnet.core._state import (
-    CO_MAINTAINED_FIELDS,
     DERIVED_FIELDS,
     SOT_FIELDS,
 )
@@ -32,15 +31,12 @@ FACADE_MODULE = 'annnet.core._structure'
 # edit here. The extra names below hold the same state under a different door.
 EXTRA_STORE_FIELDS = (
     '_store',
-    '_matrix_cache',
-    '_matrix_dirty',
+    '_matrix',
     '_supra_index_cache',
     '_vertex_key_index',
 )
 PRIVATE_STORE_FIELDS = frozenset(
-    name
-    for name in SOT_FIELDS + CO_MAINTAINED_FIELDS + DERIVED_FIELDS + EXTRA_STORE_FIELDS
-    if name.startswith('_')
+    name for name in SOT_FIELDS + DERIVED_FIELDS + EXTRA_STORE_FIELDS if name.startswith('_')
 )
 
 # Functions that still touch the canonical store from outside the core. The list

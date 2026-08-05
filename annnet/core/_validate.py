@@ -91,12 +91,13 @@ def _check_slice_membership(g, problems) -> None:
 
 
 def _check_materialized_matrix(g, problems) -> None:
-    """The matrix the graph holds is the one its member lists imply.
+    """The matrix the graph answers with is the one its member lists imply.
 
-    The store builds its own matrix, and the slot check above compares that one
-    against the member lists. A graph may hold a matrix it was handed instead of
-    one it derived, and this is the rule that catches a handed one that says
-    something else.
+    The graph derives its matrix rather than holding one it was handed, so this
+    compares two derivations of the same thing: the one the matrix builder makes
+    in a single gather over the store arrays, and the one the query facade reads
+    member list by member list. A cached matrix the store has outgrown, and a
+    builder that places an entry wrongly, both show up here.
     """
     raw = _materialized_matrix(g, problems)
     if raw is None:

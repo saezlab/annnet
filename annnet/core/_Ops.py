@@ -191,16 +191,12 @@ class Operations:
         ordered_vertices = self._ordered_flat_vertex_ids(vertex_ids)
         ordered_edges = self._ordered_edge_ids(edge_ids)
         row_keys = self._ordered_selection_rows(ordered_vertices, ordered_edges)
-        row_indexes = [_structure.entity_row(self, ekey) for ekey in row_keys]
-        col_indexes = [_structure.edge_column(self, eid) for eid in ordered_edges]
 
         new = self.__class__(directed=self.directed)
-        matrix = self._get_csr()[row_indexes, :][:, col_indexes].todok()
 
         weight_overrides = edge_weight_overrides or {}
         _build.install_structure(
             new,
-            matrix=matrix,
             # The store selects the same elements in the same order, so it numbers
             # its slots as the new graph numbers its rows and columns.
             store=self._store.select(row_keys, ordered_edges, weights=weight_overrides),
@@ -695,7 +691,6 @@ class Operations:
 
         _build.install_structure(
             new,
-            matrix=self._matrix.copy(),
             # A copy of the slot arrays keeps every slot at the address it had,
             # and it costs a memory copy rather than a pass over every edge.
             store=self._store.copy(),

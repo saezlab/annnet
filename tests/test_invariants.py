@@ -12,6 +12,9 @@ that document.
 
 from __future__ import annotations
 
+import contextlib
+from unittest import mock
+
 import numpy as np
 import pytest
 import scipy.sparse as sp
@@ -22,6 +25,20 @@ from annnet.core._records import build_dataframe_from_rows
 from ._fixtures import CASE_NAMES, build_case
 
 FLAT = ('_',)
+
+
+@contextlib.contextmanager
+def a_matrix_that_lies(graph, dense):
+    """Make the graph answer with a matrix its store does not imply.
+
+    The graph derives its matrix from the store, so no caller can hand it one
+    that disagrees. What can disagree is a cached matrix the store has outgrown,
+    or a builder that places an entry wrongly, and both look like this from where
+    the checker stands.
+    """
+    matrix = sp.csr_array(dense)
+    with mock.patch.object(type(graph), '_matrix', property(lambda _self: matrix)):
+        yield
 
 
 def problems_of(graph) -> list[str]:
@@ -327,13 +344,13 @@ def test_rule_5_an_undirected_edge_without_coefficients_has_one_sign(case, edge_
 
 
 def test_rule_5_reports_a_column_whose_signs_contradict_the_directedness():
-    """A directly assigned matrix is the real way this rule breaks."""
+    """A matrix that says something else is the real way this rule breaks."""
     G = build_case('binary_directed')
     dense = G.X().toarray()
     column = G.idx.edge_to_col('e_ab')
     dense[:, column] = np.abs(dense[:, column])  # two positive entries on a directed edge
-    G._matrix = sp.csr_array(dense)
-    assert_reports(G, 'e_ab')
+    with a_matrix_that_lies(G, dense):
+        assert_reports(G, 'e_ab')
 
 
 def test_rule_5_leaves_an_edge_with_explicit_coefficients_alone():
@@ -389,8 +406,8 @@ def test_rule_7_reports_a_nonzero_on_a_row_that_holds_no_entity():
     dense = np.zeros((shape[0] + 2, shape[1]), dtype=np.float32)
     dense[: shape[0], :] = G.X().toarray()
     dense[-1, 0] = 1.0
-    G._matrix = sp.csr_array(dense)
-    assert_reports(G, 'row')
+    with a_matrix_that_lies(G, dense):
+        assert_reports(G, 'row')
 
 
 @pytest.mark.parametrize('case', CASE_NAMES)
@@ -415,8 +432,8 @@ def test_rule_8_reports_a_matrix_cell_that_the_store_does_not_imply():
     G = build_case('binary_directed')
     dense = G.X().toarray()
     dense[G.idx.entity_to_row('C'), G.idx.edge_to_col('e_ab')] = 9.0
-    G._matrix = sp.csr_array(dense)
-    assert_reports(G, 'e_ab')
+    with a_matrix_that_lies(G, dense):
+        assert_reports(G, 'e_ab')
 
 
 # ---------------------------------------------------------------------------

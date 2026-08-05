@@ -1991,37 +1991,27 @@ class AnnNet(
 
     @property
     def _matrix(self):
-        """Incidence matrix, rebuilt lazily from records when marked dirty.
+        """The signed incidence matrix of every structural edge.
 
-        Records (``_edges`` + entity row indices) are the complete source of
-        truth, so the matrix is a warm cache: mutation marks it dirty instead of
-        patching cells, and the next read materializes a compact CSR once.
+        This is the same matrix as :attr:`S`, and it comes from the same cache.
+        The store holds every entity, every edge and the coefficient of every
+        member, so the matrix is derived from it and nothing keeps the two in
+        step: a read after a write extends the cached matrix by the columns the
+        write appended, and rebuilds it when the write was anything else.
         """
-        if self._matrix_dirty:
-            self._matrix_cache = _derive.rebuild_matrix(self)
-            self._matrix_dirty = False
-        return self._matrix_cache
+        return self.matrices.signed_matrix()
 
-    @_matrix.setter
-    def _matrix(self, value) -> None:
-        self._matrix_cache = value
-        self._matrix_dirty = False
+    def _mark_structure_changed(self) -> None:
+        """Drop the caches that a structural change invalidates.
 
-    def _mark_matrix_dirty(self) -> None:
-        """Flag the incidence cache for lazy rebuild from records.
+        The matrix is not one of them. It is keyed to the clock of the store,
+        which every write to the store advances, so it needs no hook here. What
+        does is the supra (vertex-layer) index, which is keyed to nothing, and
+        the structural clock that the version-keyed caches read.
 
-        Also drops the cached supra (vertex-layer) index and advances the structural
-        clock, so version-keyed derived caches (CSR/CSC/adjacency, hyperedge lists)
-        rebuild on next read.
-
-        Note this is *not* the only structural-mutation hook: the removal paths
-        (``_mutate.remove_edge`` / ``remove_edges_bulk`` / ``remove_vertices_bulk`` /
-        ``remove_orphan_node_layers``) reshape the matrix through
-        ``_derive.mark_matrix_stale`` and never come through here. Those helpers bump
-        the structural clock themselves — ``_derive.bump_structure`` is the single
-        point of truth, not this method.
+        The removal paths in ``_mutate`` bump the clock through
+        ``_derive.bump_structure`` and never come through here.
         """
-        self._matrix_dirty = True
         self._supra_index_cache = None
         _derive.bump_structure(self)
 
@@ -2030,14 +2020,15 @@ class AnnNet(
 
         Returns
         -------
-        scipy.sparse.dok_matrix
-            Internal incidence matrix. Rows are entities; columns are
-            structural edges.
+        scipy.sparse.csc_array
+            Incidence matrix derived from the store. Rows are entities; columns
+            are structural edges.
 
         Notes
         -----
-        The returned matrix is the live internal DOK matrix. Treat it as
-        read-only unless you are implementing core internals.
+        The returned matrix is the cached one rather than a copy. Treat it as
+        read-only: writing to it changes what every other reader sees, and the
+        next structural write drops it.
         """
         return self._matrix
 
@@ -2056,7 +2047,7 @@ class AnnNet(
             Rows are entities and columns are binary edges, both in the order
             the store holds them.
         """
-        return self.matrices.binary().matrix
+        return self.matrices.binary_matrix()
 
     @property
     def H(self):
@@ -2068,7 +2059,7 @@ class AnnNet(
             Unsigned, so an entry reports that a hyperedge holds an entity
             rather than which side it holds it on.
         """
-        return self.matrices.hypergraph().matrix
+        return self.matrices.hypergraph_matrix()
 
     @property
     def S(self):
@@ -2080,7 +2071,7 @@ class AnnNet(
             Signed, so the two entries of a self-loop cancel and a
             stoichiometric column carries the coefficients the user set.
         """
-        return self.matrices.signed().matrix
+        return self.matrices.signed_matrix()
 
     @property
     def A(self):
@@ -2092,7 +2083,7 @@ class AnnNet(
             A self-loop lands on the diagonal. A boundary edge joins nothing and
             a hyperedge names more than two entities, so neither is here.
         """
-        return self.matrices.adjacency().matrix
+        return self.matrices.adjacency_matrix()
 
     @property
     def L(self):
@@ -2103,7 +2094,7 @@ class AnnNet(
         scipy.sparse.sparray
             Every row sums to zero.
         """
-        return self.matrices.laplacian().matrix
+        return self.matrices.laplacian_matrix()
 
     @property
     def matrices(self):

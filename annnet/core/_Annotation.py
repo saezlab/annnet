@@ -696,7 +696,7 @@ class AttributesClass:
             from . import _mutate
 
             _mutate.replace_edge_coeffs(self, edge_id, coeffs)
-            self._mark_matrix_dirty()
+            self._mark_structure_changed()
             self._invalidate_sparse_caches()
 
         if tie_case:

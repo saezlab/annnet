@@ -18,14 +18,9 @@ SOT_FIELDS = (
     '_slices',
 )
 
-# Warm-cached canonical projection. The store holds every entity, every edge and
-# the coefficient each member takes, so the incidence matrix is fully derivable
-# from it. It is nonetheless kept warm rather than re-derived per use, for
-# linear-algebra speed, and input-output may assign it directly. So: derived in
-# principle, co-maintained in practice.
-CO_MAINTAINED_FIELDS = ('_matrix',)
-
-# Purely derived / cached state — rebuilt by ``_derive`` from the SoT, never hand-patched.
+# Purely derived / cached state — rebuilt by ``_derive`` from the SoT, never
+# hand-patched. The incidence matrix is one of these: it lives in the matrix
+# cache of the store, which is why no field of the graph holds it.
 DERIVED_FIELDS = ('_csr_cache',)
 
 
@@ -54,13 +49,9 @@ def init_state(g, *, directed=None, aspects=None) -> None:
     g._vertex_key_fields = None
     g._vertex_key_index = {}
 
-    # The incidence matrix is derived state, so init builds nothing.
-    # ``_matrix_cache`` holds the last materialized matrix and ``_matrix_dirty``
-    # signals a pending build. Starting dirty with an empty cache keeps a matrix
-    # library out of the canonical store: a graph that never reads a matrix never
-    # builds one.
-    g._matrix_cache = None
-    g._matrix_dirty = True
+    # The incidence matrix is derived state, so init builds nothing and holds
+    # no field for it. It is materialized on the first read and kept in the
+    # matrix cache of the store, against the clock of that store.
     g._csr_cache = None
 
     g._next_edge_id = 0

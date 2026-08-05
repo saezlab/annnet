@@ -96,7 +96,7 @@ def add_vertex(g, vertex_id, slice=None, layer=None, **attributes):
 
     if g._store.entity_slot(key) is None:
         register_entity(g, key)
-        D.mark_matrix_stale(g)
+        D.bump_structure(g)
 
     if slice not in g._slices:
         g._slices[slice] = SliceRecord()
@@ -122,7 +122,7 @@ def register_edge_as_entity(g, edge_id):
     if g._store.entity_slot(ekey) is not None:
         return
     register_entity(g, ekey, 'edge_entity')
-    D.mark_matrix_stale(g)
+    D.bump_structure(g)
 
 
 def register_entity_as_edge(g, entity_id) -> None:
@@ -381,11 +381,9 @@ def add_edge(
                 add_vertex(g, node[0], layer=node[1], slice=slice)
             else:
                 add_vertex(g, node, slice=slice)
-    D.mark_matrix_stale(g)
-
-    # 6. The incidence matrix is derived from the store, so nothing here holds a
-    #    column. Marking the cache dirty lets the next reader rebuild it.
-    g._mark_matrix_dirty()
+    # 6. The incidence matrix is derived from the store and keyed to its clock,
+    #    so nothing here holds a column and nothing here has to invalidate one.
+    g._mark_structure_changed()
 
     # 7. Compute src_store / tgt_store
     if etype == 'binary':
@@ -511,7 +509,7 @@ def remove_edge(g, edge_id):
     if not S.has_edge(g, edge_id):
         raise KeyError(f'Edge {edge_id} not found')
 
-    D.mark_matrix_stale(g)
+    D.bump_structure(g)
     D.invalidate_sparse_caches(g)
 
     # The column of an edge is its position among the structural ones, so
@@ -545,7 +543,7 @@ def remove_edges_bulk(g, edge_ids):
     if not drop:
         return
 
-    D.mark_matrix_stale(g)
+    D.bump_structure(g)
     D.invalidate_sparse_caches(g)
 
     drop_edges(g, drop)
@@ -599,7 +597,7 @@ def _rewrite_sides(g, eid, source, target, *, directed=None, kind=None) -> None:
             reference.directed,
         ),
     )
-    g._mark_matrix_dirty()
+    g._mark_structure_changed()
 
 
 def set_edge_definition(g, eid, src, tgt, etype):
@@ -650,8 +648,7 @@ def set_entity_to_idx(g, mapping):
         for vid, _row in sorted(dict(mapping).items(), key=lambda item: int(item[1]))
     ]
     g._store = _build.store_from_definitions(g, entities, S.definitions_of(g)[1])
-    g._mark_matrix_dirty()
-    D.mark_matrix_stale(g)
+    g._mark_structure_changed()
 
 
 def set_entity_types(g, mapping):
@@ -719,7 +716,7 @@ def set_edge_coeffs(g, edge_id, coeffs):
         # several coords on one edge is ambiguous, so leave it for the caller to key.
         resolved[hits[0] if hits and len(hits) == 1 else vid] = float(coeff)
     base.update(resolved)
-    g._mark_matrix_dirty()
+    g._mark_structure_changed()
     D.invalidate_sparse_caches(g)
     store.set_edge_coefficients(edge_id, {n: v for n, v in base.items() if v != 0.0})
 
@@ -797,7 +794,7 @@ def reverse_directions(g):
     for reference in S.iter_edges(g):
         if reference.directed:
             store.reverse_edge(reference.id)
-    g._mark_matrix_dirty()
+    g._mark_structure_changed()
     D.invalidate_sparse_caches(g)
 
 
@@ -823,7 +820,7 @@ def make_undirected(g, *, drop_flexible=True, update_default=True):
             store.set_edge_policy(edge_id, None)
     if update_default:
         g.directed = False
-    g._mark_matrix_dirty()
+    g._mark_structure_changed()
     D.invalidate_sparse_caches(g)
     return g
 
@@ -896,7 +893,7 @@ def remove_vertices_bulk(g, vertex_ids):
     if drop_es:
         remove_edges_bulk(g, drop_es)
 
-    D.mark_matrix_stale(g)
+    D.bump_structure(g)
     D.invalidate_sparse_caches(g)
     drop_entities(g, drop_keys)
 
@@ -924,7 +921,7 @@ def remove_orphan_node_layers(g, drop_keys):
     if not drop_keys:
         return
 
-    D.mark_matrix_stale(g)
+    D.bump_structure(g)
     D.invalidate_sparse_caches(g)
     drop_entities(g, drop_keys)
 
@@ -1047,7 +1044,7 @@ def batch_add_vertices(g, vertices, layer=None, slice=None, default_attrs=None):
             store.add_entity(ekey, ST.NODE)
             new_rows += 1
     if new_rows:
-        D.mark_matrix_stale(g)
+        D.bump_structure(g)
 
     # --- slice ---
     g.slices._ensure_slice(slice)['vertices'].update(vid for vid, _ in norm)
@@ -1340,15 +1337,15 @@ def batch_add_edges(
         return []
 
     g._next_edge_id = _next_id
-    D.mark_matrix_stale(g)
+    D.bump_structure(g)
     if _added:
-        D.mark_matrix_stale(g)
+        D.bump_structure(g)
 
-    # Incidence is a lazy cache derived from the store written above, so the
-    # batch never patches matrix cells — it just marks the cache dirty and lets
-    # the next reader rebuild a compact CSR from the store in one pass.
+    # Incidence is derived from the store written above, so the batch never
+    # patches matrix cells. A read after it extends the cached matrix by the
+    # columns these edges appended.
     if out_ids:
-        g._mark_matrix_dirty()
+        g._mark_structure_changed()
         g._invalidate_sparse_caches()
 
     for sid, eids in _slice_eids.items():
@@ -1373,7 +1370,7 @@ def batch_add_edges(
             slot = _edge_slot(eid)
             if slot is not None and int(_slot.edge_kind[slot]) == ST.BINARY:
                 _slot.set_edge_kind(eid, ST.NODE_EDGE)
-        D.mark_matrix_stale(g)
+        D.bump_structure(g)
 
     g._ensure_edge_rows_bulk(entity_out + out_ids)
 
@@ -1511,7 +1508,7 @@ def batch_add_hyperedges(
             if _slot.entity_slot(ekey) is None:
                 _slot.add_entity(ekey, ST.NODE)
 
-    D.mark_matrix_stale(g)
+    D.bump_structure(g)
 
     slices = g._slices
 
@@ -1594,7 +1591,7 @@ def batch_add_hyperedges(
 
         out_ids.append(e_id)
 
-    g._mark_matrix_dirty()
+    g._mark_structure_changed()
     g._invalidate_sparse_caches()
     g._ensure_edge_rows_bulk(out_ids)
     if attrs_batch:
