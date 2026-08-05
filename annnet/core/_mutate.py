@@ -1093,15 +1093,16 @@ def batch_add_edges(
     pending_attrs = {}
 
     # Single-pass bulk builder. Each input item is normalized, its endpoint
-    # entities ensured, and its edge written in one iteration — no intermediate
-    # ``norm`` dict copy and no separate scans. Rows, columns and the incidence
-    # matrix are all derived from the store, so the loop only needs the ordering
-    # guarantee that an entity is added before the edge that names it.
+    # entities ensured, and its edge spec built in one iteration — no
+    # intermediate ``norm`` dict copy and no separate scans. Rows, columns and
+    # the incidence matrix are all derived from the store, so the loop only needs
+    # the ordering guarantee that an entity is added before the edge that names
+    # it.
     #
     # An endpoint the graph has not met yet becomes a node here, written to the
-    # store inline rather than through the general door. The edge is written
-    # inline too: the loop already holds both endpoint keys and the coefficient
-    # each of them takes.
+    # store inline rather than through the general door. The edges go in
+    # together once the loop ends: the store grows each of its arrays once for
+    # the whole batch, where a write per edge grew them once per edge.
     _slot = g._store
     _entity_slot = _slot.entity_slot
     _edge_slot = _slot.edge_slot
@@ -1119,6 +1120,8 @@ def batch_add_edges(
     _slice_eids: dict = {}
     _slice_vids: dict = {}
     _slice_weights: list = []
+    _specs: list = []
+    _spec_at: dict = {}
 
     def _ensure_endpoint(vid, et):
         """Register the entity one endpoint names, and return its key."""
@@ -1273,26 +1276,42 @@ def batch_add_edges(
         # Two endpoints are two member entries, and the loop already holds both.
         # An edge the graph already holds keeps the policy it carries, because
         # this write says nothing about one; everything else it stated is
-        # replaced.
+        # replaced. An id the batch names twice is replaced where it stands, so
+        # it keeps the column its first mention took, which is the column a
+        # remove and an add would have given it back.
         weight = float(w) if w is not None else 1.0
-        old_slot = _edge_slot(edge_id)
-        policy = None
-        if old_slot is not None:
-            policy = _slot.edge_policy.get(old_slot)
-            _slot.remove_edge(edge_id)
-        _slot.add_edge(
+        at = _spec_at.get(edge_id)
+        if at is None:
+            old_slot = _edge_slot(edge_id)
+            policy = None
+            if old_slot is not None:
+                policy = _slot.edge_policy.get(old_slot)
+                _slot.remove_edge(edge_id)
+        else:
+            policy = _specs[at][8]
+        spec = (
             edge_id,
             (
                 (source_key, weight, ST.SOURCE),
                 (target_key, -weight if is_dir else weight, ST.TARGET),
             ),
-            kind=ST.BINARY,
-            directed=is_dir,
-            weight=w,
-            ml_kind=ml_kind,
-            ml_layers=ml_layers,
-            direction_policy=policy,
+            ST.BINARY,
+            is_dir,
+            w,
+            False,
+            ml_kind,
+            ml_layers,
+            policy,
         )
+        if at is None:
+            _spec_at[edge_id] = len(_specs)
+            _specs.append(spec)
+        else:
+            _specs[at] = spec
+        if len(_specs) >= ST.BULK_CHUNK:
+            _slot.add_edges(_specs)
+            _specs = []
+            _spec_at = {}
         _added += 1
 
         # ── slice membership (tracks bare vertex ids) ──────────────────────────
@@ -1332,6 +1351,9 @@ def batch_add_edges(
 
     if not out_ids and not entity_out:
         return []
+
+    if _specs:
+        _slot.add_edges(_specs)
 
     g._next_edge_id = _next_id
     D.bump_structure(g)
@@ -1511,6 +1533,8 @@ def batch_add_hyperedges(
 
     out_ids = []
     attrs_batch = {}
+    specs: list = []
+    spec_at: dict = {}
 
     for d in items:
         members = d.get('members')
@@ -1552,21 +1576,38 @@ def batch_add_hyperedges(
         member_entries = [(key, w, role) for key in source_keys]
         target_coefficient = -w if is_dir else w
         member_entries += [(key, target_coefficient, ST.TARGET) for key in target_keys]
-        old_slot = _slot.edge_slot(e_id)
-        policy = None
-        if old_slot is not None:
-            policy = _slot.edge_policy.get(old_slot)
-            _slot.remove_edge(e_id)
-        _slot.add_edge(
+        # The edges go in together once the loop ends, in chunks, for the reason
+        # ``ST.BULK_CHUNK`` gives. An id the batch names twice is replaced where it
+        # stands, so it keeps the column its first mention took.
+        at = spec_at.get(e_id)
+        if at is None:
+            old_slot = _slot.edge_slot(e_id)
+            policy = None
+            if old_slot is not None:
+                policy = _slot.edge_policy.get(old_slot)
+                _slot.remove_edge(e_id)
+        else:
+            policy = specs[at][8]
+        spec = (
             e_id,
             member_entries,
-            kind=ST.HYPER,
-            directed=is_dir,
-            weight=w,
-            ml_kind=ml_kind_for_e,
-            ml_layers=ml_layers_for_e,
-            direction_policy=policy,
+            ST.HYPER,
+            is_dir,
+            w,
+            False,
+            ml_kind_for_e,
+            ml_layers_for_e,
+            policy,
         )
+        if at is None:
+            spec_at[e_id] = len(specs)
+            specs.append(spec)
+        else:
+            specs[at] = spec
+        if len(specs) >= ST.BULK_CHUNK:
+            _slot.add_edges(specs)
+            specs = []
+            spec_at = {}
 
         if slice_local is not None:
             if slice_local not in slices:
@@ -1587,6 +1628,9 @@ def batch_add_hyperedges(
             attrs_batch[e_id] = merged
 
         out_ids.append(e_id)
+
+    if specs:
+        _slot.add_edges(specs)
 
     g._mark_structure_changed()
     g._invalidate_sparse_caches()
