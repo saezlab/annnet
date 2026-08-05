@@ -71,6 +71,7 @@ cases/
 io_formats.py  serialization round-trip benchmark
 adapters.py    graph-library conversion benchmark
 bisect_read_path.py  the read path of ANY commit, against a reference in the same process
+bisect_write_path.py the write path of ANY commit, in absolute milliseconds
 environment.py reproducibility metadata
 reporting/     Markdown renderer, plot renderer, artifact CSVs, regeneration CLI
   specsheet.py spec-sheet PDF + charts (self-contained, subprocess-per-cell)
@@ -97,24 +98,33 @@ reporting/     Markdown renderer, plot renderer, artifact CSVs, regeneration CLI
 
 ## Attributing a change to a commit
 
-Everything above measures the tree it lives in. `bisect_read_path.py` measures
-whichever tree is on `PYTHONPATH`, so it can be pointed at an old commit:
+Everything above measures the tree it lives in. `bisect_read_path.py` and
+`bisect_write_path.py` measure whichever tree is on `PYTHONPATH`, so either can
+be pointed at an old commit:
 
 ```bash
 git worktree add /tmp/wt-<sha> <sha>
 PYTHONPATH=/tmp/wt-<sha> python benchmarks/bisect_read_path.py <sha>
+PYTHONPATH=/tmp/wt-<sha> python benchmarks/bisect_write_path.py <sha>
 ```
 
-Run it by path, not as `python -m benchmarks.bisect_read_path`. The `-m` form
-puts the working directory first on `sys.path`, ahead of `PYTHONPATH`, so from a
-checkout it measures that checkout and labels the answer with the worktree it
-never imported. The answer names the `annnet` it reached under `measured`, so
-check that field before trusting a row.
+Run either by path, not as `python -m benchmarks.bisect_read_path`. The `-m`
+form puts the working directory first on `sys.path`, ahead of `PYTHONPATH`, so
+from a checkout it measures that checkout and labels the answer with the
+worktree it never imported. The answer names the `annnet` it reached under
+`measured`, so check that field before trusting a row.
 
-It reports the ratio of `build`, `degree`, `neighbors`, `has_edge` and
-`enumerate_edges` against networkx **built and queried in the same process**. An
-absolute number does not survive a change of machine or a busy one, so only a
-ratio measured beside its reference is comparable between two runs of this.
+The read-path probe reports the ratio of `build`, `degree`, `neighbors`,
+`has_edge` and `enumerate_edges` against networkx **built and queried in the
+same process**. An absolute number does not survive a change of machine or a
+busy one, so only a ratio measured beside its reference is comparable between
+two runs of this.
+
+The write-path probe reports absolute milliseconds for a bulk load, a copy, a
+subgraph, and runs of appends and removes with a matrix read after each,
+because a write has no reference to be measured against — networkx does not
+build the same thing. So alternate the two trees, run each more than once, and
+read the ranges rather than a single figure.
 
 ## Fairness notes
 
