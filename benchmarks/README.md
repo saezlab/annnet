@@ -70,6 +70,7 @@ cases/
   accessors.py     lazy adapter accessor cache and conversion costs
 io_formats.py  serialization round-trip benchmark
 adapters.py    graph-library conversion benchmark
+bisect_read_path.py  the read path of ANY commit, against a reference in the same process
 environment.py reproducibility metadata
 reporting/     Markdown renderer, plot renderer, artifact CSVs, regeneration CLI
   specsheet.py spec-sheet PDF + charts (self-contained, subprocess-per-cell)
@@ -93,6 +94,21 @@ reporting/     Markdown renderer, plot renderer, artifact CSVs, regeneration CLI
   AnnNet/NetworkX and AnnNet/igraph ratio heatmaps, optional AnnNet/graph-tool
   heatmap from the Pixi `gt` environment, memory scaling charts, wall-time
   summaries for every extra dimension, plus IO and adapter conversion plots.
+
+## Attributing a change to a commit
+
+Everything above measures the tree it lives in. `bisect_read_path.py` measures
+whichever tree is on `PYTHONPATH`, so it can be pointed at an old commit:
+
+```bash
+git worktree add /tmp/wt-<sha> <sha>
+PYTHONPATH=/tmp/wt-<sha> python -m benchmarks.bisect_read_path <sha>
+```
+
+It reports the ratio of `build`, `degree`, `neighbors`, `has_edge` and
+`enumerate_edges` against networkx **built and queried in the same process**. An
+absolute number does not survive a change of machine or a busy one, so only a
+ratio measured beside its reference is comparable between two runs of this.
 
 ## Fairness notes
 
