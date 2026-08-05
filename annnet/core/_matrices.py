@@ -112,8 +112,8 @@ def _view(store, matrix, entity_slots, edge_slots, row_lookup) -> MatrixView:
     columns, which would make a loop of appends quadratic however cheap the matrix
     itself is. So the map is grown in place instead.
     """
-    edge_ids = [store.edge_id(int(slot)) for slot in edge_slots]
-    entity_keys = tuple(store.entity_key(int(slot)) for slot in entity_slots)
+    edge_ids = store.edge_ids_at(edge_slots)
+    entity_keys = tuple(store.entity_keys_at(entity_slots))
     return MatrixView(
         matrix=matrix,
         row_of_entity={key: row for row, key in enumerate(entity_keys)},
@@ -121,6 +121,23 @@ def _view(store, matrix, entity_slots, edge_slots, row_lookup) -> MatrixView:
         entity_of_row=entity_keys,
         edge_of_column=edge_ids,
     )
+
+
+def _incidence_matrix(store, n_rows: int, edge_slots, row_lookup, signed: bool):
+    """Build the incidence matrix of the selected edges, in one gather, as CSC.
+
+    Every member entry of every selected edge is placed in one pass. The two
+    entries a self-loop puts in one cell are summed by the conversion, which is
+    where they cancel, and the zero they leave is then dropped.
+    """
+    entities, coefficients, _roles, columns = _gather_members(store, edge_slots)
+    rows = row_lookup[entities]
+    data = coefficients.astype(np.float32) if signed else np.ones(rows.size, dtype=np.float32)
+    matrix = sp.coo_array(
+        (data, (rows, columns)), shape=(int(n_rows), int(edge_slots.size))
+    ).tocsc()
+    matrix.eliminate_zeros()
+    return matrix
 
 
 def incidence(store, *, kinds=None, signed: bool = True) -> MatrixView:
@@ -132,12 +149,7 @@ def incidence(store, *, kinds=None, signed: bool = True) -> MatrixView:
     """
     entity_slots, row_lookup = _row_lookup(store)
     edge_slots = _selected_edge_slots(store, kinds)
-    entities, coefficients, _roles, columns = _gather_members(store, edge_slots)
-    rows = row_lookup[entities]
-    data = coefficients.astype(np.float32) if signed else np.ones(rows.size, dtype=np.float32)
-    shape = (int(entity_slots.size), int(edge_slots.size))
-    matrix = sp.coo_array((data, (rows, columns)), shape=shape).tocsc()
-    matrix.eliminate_zeros()
+    matrix = _incidence_matrix(store, entity_slots.size, edge_slots, row_lookup, signed)
     return _view(store, matrix, entity_slots, edge_slots, row_lookup)
 
 
@@ -305,6 +317,27 @@ class _CscBuffer:
         self.n_cols = 0
         self.nnz = 0
 
+    @classmethod
+    def of(cls, matrix) -> '_CscBuffer':
+        """Take over a matrix that is already built, so an append can extend it.
+
+        Filling a buffer a column at a time costs a Python call and a sort per
+        edge, which is two orders of magnitude more than placing every member
+        entry of every edge in one pass. So a build goes through
+        :func:`_incidence_matrix` and hands the result here.
+
+        The arrays are copied rather than aliased, because the buffer writes
+        past the end of what it holds and a matrix handed out earlier must not
+        see that.
+        """
+        buffer = cls(matrix.shape[0])
+        buffer.data = np.array(matrix.data, dtype=np.float32)
+        buffer.indices = np.array(matrix.indices, dtype=np.int32)
+        buffer.indptr = np.array(matrix.indptr, dtype=np.int32)
+        buffer.n_cols = int(matrix.shape[1])
+        buffer.nnz = int(matrix.nnz)
+        return buffer
+
     def append_column(self, rows: np.ndarray, values: np.ndarray) -> None:
         """Add one column, given its row indices and their values."""
         width = int(rows.size)
@@ -432,9 +465,9 @@ class MatrixCache:
             store = self._store
             entity_slots, row_lookup = _row_lookup(store)
             edge_slots = _selected_edge_slots(store, kinds)
-            buffer = _CscBuffer(int(entity_slots.size))
-            for slot in edge_slots:
-                buffer.append_column(*_column_entries(store, int(slot), row_lookup, signed))
+            buffer = _CscBuffer.of(
+                _incidence_matrix(store, entity_slots.size, edge_slots, row_lookup, signed)
+            )
             view = _view(store, buffer.matrix(), entity_slots, edge_slots, row_lookup)
             return view, (buffer, row_lookup)
 

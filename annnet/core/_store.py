@@ -111,6 +111,15 @@ def _grown(array: np.ndarray, target: int, fill=0) -> np.ndarray:
     return out
 
 
+def _as_indexes(slots) -> list:
+    """Return ``slots`` as a list of Python integers, whatever it arrives as.
+
+    A numpy array indexes a Python list only through its scalars, and converting
+    the whole array once costs far less than converting one element at a time.
+    """
+    return slots.tolist() if isinstance(slots, np.ndarray) else [int(slot) for slot in slots]
+
+
 class CoreState:
     """The canonical store of one graph.
 
@@ -349,6 +358,14 @@ class CoreState:
         for slot, key in enumerate(self._entity_key):
             if key is not None:
                 yield slot, key
+
+    def entity_keys_at(self, slots) -> list:
+        """Return the key of each of ``slots``, in the order given.
+
+        Building a matrix asks for every row at once, so this answers them
+        together rather than one call per entity.
+        """
+        return list(map(self._entity_key.__getitem__, _as_indexes(slots)))
 
     def _rows(self):
         """Return the row of each live slot and the slot of each row, against the clock.
@@ -757,6 +774,14 @@ class CoreState:
     def live_edge_ids(self) -> list[str]:
         """Return the live edge ids in slot order."""
         return [edge_id for _slot, edge_id in self.live_edges()]
+
+    def edge_ids_at(self, slots) -> list:
+        """Return the id of each of ``slots``, in the order given.
+
+        Building a matrix asks for every column at once, so this answers them
+        together rather than one call per edge.
+        """
+        return list(map(self._edge_id.__getitem__, _as_indexes(slots)))
 
     def live_edge_slots(self) -> np.ndarray:
         """Return the live edge slots in slot order."""

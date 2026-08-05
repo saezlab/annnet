@@ -93,6 +93,60 @@ def test_a_delete_rebuilds_the_cache_rather_than_extending_it():
     assert cache.rebuilds == 2, 'a delete is not an append, so the cache rebuilds'
 
 
+def _awkward_store():
+    """A store holding every shape whose column is not one entry per member.
+
+    A self-loop names one entity twice, so its column holds one row twice. A
+    hyperedge holds a wide side. A boundary edge holds one side only.
+    """
+    store = ST.CoreState(directed=True)
+    for name in 'ABCD':
+        store.add_entity(key(name))
+    edges = [
+        ('binary', [(key('A'), 2.5, ST.SOURCE), (key('B'), -2.5, ST.TARGET)], ST.BINARY),
+        ('loop', [(key('C'), 1.0, ST.SOURCE), (key('C'), -1.0, ST.TARGET)], ST.BINARY),
+        (
+            'hyper',
+            [
+                (key('A'), 1.0, ST.SOURCE),
+                (key('B'), 1.0, ST.SOURCE),
+                (key('D'), -2.0, ST.TARGET),
+            ],
+            ST.HYPER,
+        ),
+        ('boundary', [(key('D'), 1.0, ST.SOURCE)], ST.BINARY),
+    ]
+    return store, edges
+
+
+@pytest.mark.parametrize('signed', [True, False])
+def test_an_extended_matrix_says_what_a_rebuilt_one_says(signed):
+    """The two build paths differ, so they are pinned against each other.
+
+    A build places every member entry of every edge at once and lets the
+    conversion sum the entries that share a cell. An append adds one column at a
+    time and sums them itself. A self-loop is where the two summations have to
+    agree, because it is the only shape that puts two entries in one cell.
+    """
+    store, edges = _awkward_store()
+    cache = M.MatrixCache(store)
+    for edge_id, members, kind in edges:
+        store.add_edge(edge_id, members, kind=kind, directed=True, weight=1.0)
+        cache.incidence(signed=signed)
+    extended = cache.incidence(signed=signed)
+    assert cache.extends >= 1, 'the appends must extend the cache, not rebuild it'
+
+    rebuilt = M.MatrixCache(store).incidence(signed=signed)
+    assert (extended.matrix.toarray() == rebuilt.matrix.toarray()).all()
+    assert extended.edge_of_column == rebuilt.edge_of_column
+    assert extended.column_of_edge == rebuilt.column_of_edge
+    assert extended.entity_of_row == rebuilt.entity_of_row
+
+    # And against the build that answers without a cache at all.
+    uncached = M.incidence(store, signed=signed)
+    assert (extended.matrix.toarray() == uncached.matrix.toarray()).all()
+
+
 def test_a_warm_read_returns_the_same_object_until_the_next_write():
     store = ST.CoreState(directed=True)
     store.add_entity(key('A'))
