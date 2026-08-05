@@ -54,3 +54,42 @@ def test_var_row_decreases_when_edge_removed():
     G.add_edges([('A', 'B'), ('B', 'C')])
     G.remove_edges('edge_0')
     assert G.var.shape[0] == G.ne == 1
+
+
+# A row is written and taken away when the table is read, not when the call is
+# made. These fix what a reader sees, whichever order the writes arrived in.
+
+
+def test_an_edge_added_and_removed_before_the_table_is_read_leaves_no_row():
+    G = AnnNet(directed=False)
+    G.add_vertices(['A', 'B', 'C'])
+    G.add_edges([('A', 'B'), ('B', 'C')])
+    G.remove_edges('edge_0')
+    assert G.var.shape[0] == G.ne == 1
+    assert set(G.var['edge_id'].to_list()) == {'edge_1'}
+
+
+def test_an_edge_added_again_after_a_removal_carries_none_of_its_old_attributes():
+    G = AnnNet(directed=False)
+    G.add_vertices(['A', 'B'])
+    G.add_edges('A', 'B', edge_id='e1', confidence=0.9)
+    assert G.var.shape[0] == 1
+
+    G.remove_edges('e1')
+    G.add_edges('A', 'B', edge_id='e1')
+    rows = G.var.rows(named=True)
+    assert len(rows) == G.ne == 1
+    assert rows[0]['edge_id'] == 'e1'
+    assert rows[0]['confidence'] is None
+
+
+def test_a_vertex_added_again_after_a_removal_carries_none_of_its_old_attributes():
+    G = AnnNet(directed=False)
+    G.add_vertices([{'vertex_id': 'A', 'score': 1.0}, {'vertex_id': 'B'}])
+    assert G.obs.shape[0] == 2
+
+    G.remove_vertices('A')
+    G.add_vertices(['A'])
+    rows = {row['vertex_id']: row for row in G.obs.rows(named=True)}
+    assert set(rows) == {'A', 'B'}
+    assert rows['A']['score'] is None

@@ -11,8 +11,13 @@ from .._support.dataframe_backend import (
     empty_dataframe,
     dataframe_columns,
     dataframe_to_rows,
+    dataframe_drop_rows,
     dataframe_append_rows,
 )
+
+# Tells a missing key from one whose value is ``None``, which every pending row
+# carries: the pending buffers are dicts used as insertion-ordered sets.
+_ABSENT = object()
 
 
 class CacheManager:
@@ -694,12 +699,18 @@ class IndexMapping:
         self._next_edge_id += 1
         return edge_id
 
-    # --- Buffered attribute-row insertion -------------------------------------
+    # --- Buffered attribute-row insertion and removal --------------------------
     # ``add_vertices``/``add_edges`` must guarantee a row per entity in obs/var
     # (the anndata symmetry). Appending one row to a columnar (Polars) table per
     # call is O(n) -> O(n^2). Instead we buffer new id-only rows and flush them in
     # one batch when the table is read (via the vertex_attributes/edge_attributes
     # property getters on AnnNet). Membership stays O(1) via a maintained id-set.
+    #
+    # A removal is buffered the same way and for the same reason. Filtering a
+    # frame costs the call rather than the rows, so a hundred single removes paid
+    # a hundred filters where the set they name needs one. The two buffers flush
+    # together: the drops go first, then the appends, so an id removed and added
+    # again before a read ends with the fresh row and not the stale one.
 
     def _ensure_vertex_table(self) -> None:
         df = self._vertex_attributes
@@ -714,6 +725,7 @@ class IndexMapping:
             if df is not None and 'vertex_id' in dataframe_columns(df):
                 ids = {r.get('vertex_id') for r in dataframe_to_rows(df)}
                 ids.discard(None)
+            ids.difference_update(self._pending_vertex_drops)
             ids.update(self._pending_vertex_ids)
             self._vertex_attr_ids = ids
             self._vertex_attr_df_id = id(df)
@@ -729,21 +741,42 @@ class IndexMapping:
         if vertex_id in ids:
             return
         ids.add(vertex_id)
-        self._pending_vertex_ids.append(vertex_id)
+        self._pending_vertex_ids[vertex_id] = None
+
+    def _drop_vertex_rows(self, vertex_ids) -> None:
+        """Take the rows of these vertices out of the table, at the next read."""
+        drop = set(vertex_ids)
+        if not drop:
+            return
+        self._vertex_id_set().difference_update(drop)
+        pend = self._pending_vertex_ids
+        # A row that was never written needs no filter to take it away again, so
+        # only a vertex the table already holds is worth a drop. The walk goes
+        # over what is being dropped and not over what is pending, because a set
+        # operation against the keys of a dict copies the whole dict first.
+        for vertex_id in drop:
+            if pend.pop(vertex_id, _ABSENT) is _ABSENT:
+                self._pending_vertex_drops.add(vertex_id)
 
     def _flush_vertex_rows(self) -> None:
+        drop = self._pending_vertex_drops
         pend = self._pending_vertex_ids
-        if not pend:
+        if not drop and not pend:
             return
-        self._pending_vertex_ids = []
+        self._pending_vertex_drops = set()
+        self._pending_vertex_ids = {}
         df = self._vertex_attributes
-        if df is None or 'vertex_id' not in dataframe_columns(df):
-            df = empty_dataframe({'vertex_id': 'text'}, backend=self._annotations_backend)
-            cols = ['vertex_id']
-        else:
-            cols = list(dataframe_columns(df))
-        rows = [{**dict.fromkeys(cols), 'vertex_id': v} for v in pend]
-        self._vertex_attributes = dataframe_append_rows(df, rows)
+        if drop:
+            df = dataframe_drop_rows(df, 'vertex_id', drop)
+        if pend:
+            if df is None or 'vertex_id' not in dataframe_columns(df):
+                df = empty_dataframe({'vertex_id': 'text'}, backend=self._annotations_backend)
+                cols = ['vertex_id']
+            else:
+                cols = list(dataframe_columns(df))
+            rows = [{**dict.fromkeys(cols), 'vertex_id': v} for v in pend]
+            df = dataframe_append_rows(df, rows)
+        self._vertex_attributes = df
         self._vertex_attr_df_id = id(self._vertex_attributes)
 
     def _edge_id_set(self):
@@ -754,6 +787,7 @@ class IndexMapping:
             if df is not None and 'edge_id' in dataframe_columns(df):
                 ids = {r.get('edge_id') for r in dataframe_to_rows(df)}
                 ids.discard(None)
+            ids.difference_update(self._pending_edge_drops)
             ids.update(self._pending_edge_ids)
             self._edge_attr_ids = ids
             self._edge_attr_df_id = id(df)
@@ -769,7 +803,7 @@ class IndexMapping:
         if edge_id in ids:
             return
         ids.add(edge_id)
-        self._pending_edge_ids.append(edge_id)
+        self._pending_edge_ids[edge_id] = None
 
     def _ensure_edge_rows_bulk(self, edge_ids) -> None:
         if not edge_ids:
@@ -779,21 +813,42 @@ class IndexMapping:
         if not new:
             return
         ids.update(new)
-        self._pending_edge_ids.extend(new)
+        self._pending_edge_ids.update(dict.fromkeys(new))
+
+    def _drop_edge_rows(self, edge_ids) -> None:
+        """Take the rows of these edges out of the table, at the next read."""
+        drop = set(edge_ids)
+        if not drop:
+            return
+        self._edge_id_set().difference_update(drop)
+        pend = self._pending_edge_ids
+        # A row that was never written needs no filter to take it away again, so
+        # only an edge the table already holds is worth a drop. The walk goes
+        # over what is being dropped and not over what is pending, because a set
+        # operation against the keys of a dict copies the whole dict first.
+        for edge_id in drop:
+            if pend.pop(edge_id, _ABSENT) is _ABSENT:
+                self._pending_edge_drops.add(edge_id)
 
     def _flush_edge_rows(self) -> None:
+        drop = self._pending_edge_drops
         pend = self._pending_edge_ids
-        if not pend:
+        if not drop and not pend:
             return
-        self._pending_edge_ids = []
+        self._pending_edge_drops = set()
+        self._pending_edge_ids = {}
         df = self._edge_attributes
-        if df is None or 'edge_id' not in dataframe_columns(df):
-            df = empty_dataframe({'edge_id': 'text'}, backend=self._annotations_backend)
-            cols = ['edge_id']
-        else:
-            cols = list(dataframe_columns(df))
-        rows = [{**dict.fromkeys(cols), 'edge_id': eid} for eid in pend]
-        self._edge_attributes = dataframe_append_rows(df, rows)
+        if drop:
+            df = dataframe_drop_rows(df, 'edge_id', drop)
+        if pend:
+            if df is None or 'edge_id' not in dataframe_columns(df):
+                df = empty_dataframe({'edge_id': 'text'}, backend=self._annotations_backend)
+                cols = ['edge_id']
+            else:
+                cols = list(dataframe_columns(df))
+            rows = [{**dict.fromkeys(cols), 'edge_id': eid} for eid in pend]
+            df = dataframe_append_rows(df, rows)
+        self._edge_attributes = df
         self._edge_attr_df_id = id(self._edge_attributes)
 
     def _vertex_key_enabled(self) -> bool:

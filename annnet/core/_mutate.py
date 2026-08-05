@@ -553,9 +553,11 @@ def remove_edges_bulk(g, edge_ids):
         for eid in drop:
             d.pop(eid, None)
 
-    # A drop already leaves a frame that names no edge alone, so asking for the
-    # schema first only reads it twice.
-    g.edge_attributes = dataframe_drop_rows(g.edge_attributes, 'edge_id', drop)
+    # The edge table takes the removal the way it takes an insertion: buffered,
+    # and applied by the next read. A filter costs the call rather than the rows,
+    # so removing edges one at a time paid for one filter each where the set they
+    # name needs one filter between them.
+    g._drop_edge_rows(drop)
     g.edge_slice_attributes = dataframe_drop_rows(g.edge_slice_attributes, 'edge_id', drop)
 
     drop_orphan_edge_entities(g, drop)
@@ -894,7 +896,7 @@ def remove_vertices_bulk(g, vertex_ids):
     D.invalidate_sparse_caches(g)
     drop_entities(g, drop_keys)
 
-    g.vertex_attributes = dataframe_drop_rows(g.vertex_attributes, 'vertex_id', drop_vertex_ids)
+    g._drop_vertex_rows(drop_vertex_ids)
 
     for slice_data in g._slices.values():
         slice_data['vertices'].difference_update(drop_vertex_ids)

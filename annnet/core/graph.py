@@ -453,12 +453,17 @@ class AnnNet(
             self.slice_edge_weights.pop(slice_id, None)
 
     def _init_annotation_tables(self, annotations):
-        # Buffered vertex/edge attribute tables: backing frame + pending id rows
-        # (see IndexMapping._ensure_*_row / _flush_*_rows for the rationale).
+        # Buffered vertex/edge attribute tables: backing frame, pending id rows
+        # and pending row removals (see IndexMapping._ensure_*_row /
+        # _drop_*_rows / _flush_*_rows for the rationale).
         self._vertex_attributes = None
         self._edge_attributes = None
-        self._pending_vertex_ids: list = []
-        self._pending_edge_ids: list = []
+        # Insertion-ordered sets: a pending id is written once however many
+        # times it is asked for, and a drop takes it out in one step.
+        self._pending_vertex_ids: dict = {}
+        self._pending_edge_ids: dict = {}
+        self._pending_vertex_drops: set = set()
+        self._pending_edge_drops: set = set()
         self._vertex_attr_ids = None
         self._edge_attr_ids = None
         self._vertex_attr_df_id = None
@@ -505,8 +510,8 @@ class AnnNet(
 
     @property
     def vertex_attributes(self):
-        """Vertex (obs) attribute table; flushes buffered id-only rows on read."""
-        if self._pending_vertex_ids:
+        """Vertex (obs) attribute table; flushes buffered row writes on read."""
+        if self._pending_vertex_ids or self._pending_vertex_drops:
             self._flush_vertex_rows()
         return self._vertex_attributes
 
@@ -514,14 +519,15 @@ class AnnNet(
     def vertex_attributes(self, value):
         """Replace the vertex attribute table and clear buffered row state."""
         self._vertex_attributes = value
-        self._pending_vertex_ids = []
+        self._pending_vertex_ids = {}
+        self._pending_vertex_drops = set()
         self._vertex_attr_ids = None
         self._vertex_attr_df_id = None
 
     @property
     def edge_attributes(self):
-        """Edge (var) attribute table; flushes buffered id-only rows on read."""
-        if self._pending_edge_ids:
+        """Edge (var) attribute table; flushes buffered row writes on read."""
+        if self._pending_edge_ids or self._pending_edge_drops:
             self._flush_edge_rows()
         return self._edge_attributes
 
@@ -529,7 +535,8 @@ class AnnNet(
     def edge_attributes(self, value):
         """Replace the edge attribute table and clear buffered row state."""
         self._edge_attributes = value
-        self._pending_edge_ids = []
+        self._pending_edge_ids = {}
+        self._pending_edge_drops = set()
         self._edge_attr_ids = None
         self._edge_attr_df_id = None
 
