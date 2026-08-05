@@ -715,54 +715,60 @@ def endpoint_form(graph, key):
     return key if store_of(graph).aspects != ('_',) else key[0]
 
 
-def _slot_incident(store, key, *, ordered: bool = True):
-    """Yield ``(edge_slot, on_source, on_target, directed)`` for the edges of one entity.
+def _by_slot(array):
+    """Return a per-slot store array as a buffer over the same memory.
 
-    The store keeps an index from an entity to the edges that name it, so this
-    costs the degree of the entity rather than a scan over every edge. The roles
-    come from the member list of each edge, which is where a self-loop shows up as
-    both sides at once.
-
-    Set ``ordered`` to False when the caller collects the result into a set, so
-    that the slots do not have to be sorted first.
-
-    The index carries the sides the entity takes as well as the edges, so this
-    reads no member list at all. It is what makes a traversal cost the degree of
-    the entity rather than the members of every edge that touches it.
+    A traversal reads one element of ``edge_directed`` and one of ``edge_kind``
+    per incident edge, and reading a numpy scalar costs about twice what reading
+    the same byte through a buffer does. The buffer views the live array rather
+    than copying it, so it needs no invalidation: a walk that does not write
+    cannot see the array grow underneath it.
     """
-    slot = store.entity_slot(key)
-    edge_directed = store.edge_directed
-    graph_directed = True if store.directed is None else bool(store.directed)
-
-    incident = store._entity_edges.get(slot, {})
-    for edge_slot, (sides, peer) in sorted(incident.items()) if ordered else incident.items():
-        declared = int(edge_directed[edge_slot])
-        directed = bool(declared) if declared != _INHERIT else graph_directed
-        yield edge_slot, bool(sides & _ON_SOURCE), bool(sides & _ON_TARGET), directed, peer
+    return memoryview(array)
 
 
 def _slot_entity_edges(store, key, direction: str) -> tuple:
+    # The store keeps an index from an entity to the edges that name it, so this
+    # costs the degree of the entity rather than a scan over every edge. The
+    # index carries the sides the entity takes as well as the edges, so no member
+    # list is read at all. Slot order is column order, so sorting the slots is
+    # what puts the result in column order.
     wants_out = direction in ('out', 'both')
     wants_in = direction in ('in', 'both')
-    # ``_slot_incident`` already walks the edges in slot order, which is column
-    # order, so the result needs no sort of its own.
+    incident = store._entity_edges.get(store.entity_slot(key))
+    if not incident:
+        return ()
+    edge_directed = _by_slot(store.edge_directed)
+    graph_directed = True if store.directed is None else bool(store.directed)
     edge_id = store.edge_id
-    return tuple(
-        edge_id(edge_slot)
-        for edge_slot, on_source, on_target, directed, _peer in _slot_incident(store, key)
-        if not directed or (wants_out and on_source) or (wants_in and on_target)
-    )
+
+    found = []
+    for edge_slot, (sides, _peer) in sorted(incident.items()):
+        declared = edge_directed[edge_slot]
+        directed = bool(declared) if declared != _INHERIT else graph_directed
+        if not directed or (wants_out and sides & _ON_SOURCE) or (wants_in and sides & _ON_TARGET):
+            found.append(edge_id(edge_slot))
+    return tuple(found)
 
 
 def _slot_neighbors(store, key, direction: str) -> list:
     # Which entities an edge leads to can only come from its member list, so this
     # reads one per incident edge. It reads it once and adds the keys straight to
     # the result, because the two sides as sets would be built and thrown away.
+    #
+    # The walk over the incident edges is written out here rather than shared with
+    # ``_slot_entity_edges``: a generator that yields once per edge costs about as
+    # much again as the body of the loop it feeds.
     wants_out = direction in ('out', 'both')
     wants_in = direction in ('in', 'both')
-    entity_is_edge = _SLOT_ENTITY_KIND.get(int(store.entity_kind[store.entity_slot(key)])) == (
-        EDGE_ENTITY
-    )
+    slot = store.entity_slot(key)
+    incident = store._entity_edges.get(slot)
+    if not incident:
+        return []
+    entity_is_edge = _SLOT_ENTITY_KIND.get(int(store.entity_kind[slot])) == EDGE_ENTITY
+    edge_directed = _by_slot(store.edge_directed)
+    edge_kind = _by_slot(store.edge_kind)
+    graph_directed = True if store.directed is None else bool(store.directed)
     member_start = store.member_start
     member_len = store.member_len
     member_ent = store.member_ent
@@ -770,9 +776,11 @@ def _slot_neighbors(store, key, direction: str) -> list:
     entity_key_of_slot = store._entity_key
     found = set()
 
-    for edge_slot, on_source, on_target, directed, peer in _slot_incident(
-        store, key, ordered=False
-    ):
+    for edge_slot, (sides, peer) in incident.items():
+        declared = edge_directed[edge_slot]
+        directed = bool(declared) if declared != _INHERIT else graph_directed
+        on_source = sides & _ON_SOURCE
+        on_target = sides & _ON_TARGET
         if peer is not None:
             # The index already names the entity on the other entry, so an edge
             # of two entries needs no member list. This is the common shape.
@@ -784,7 +792,7 @@ def _slot_neighbors(store, key, direction: str) -> list:
                     and (
                         direction == 'in'
                         or entity_is_edge
-                        or _SLOT_EDGE_KIND.get(int(store.edge_kind[edge_slot])) == HYPER
+                        or _SLOT_EDGE_KIND.get(edge_kind[edge_slot]) == HYPER
                     )
                 )
             ):
@@ -794,7 +802,7 @@ def _slot_neighbors(store, key, direction: str) -> list:
                 found.add(member)
             continue
         if directed:
-            if _SLOT_EDGE_KIND.get(int(store.edge_kind[edge_slot])) == HYPER:
+            if _SLOT_EDGE_KIND.get(edge_kind[edge_slot]) == HYPER:
                 take_target = wants_out and on_source
                 take_source = wants_in and on_target and not take_target
             else:

@@ -7,7 +7,14 @@ commit in a ``git worktree``:
 .. code-block:: bash
 
     git worktree add /tmp/wt-<sha> <sha>
-    PYTHONPATH=/tmp/wt-<sha> python -m benchmarks.bisect_read_path <sha>
+    PYTHONPATH=/tmp/wt-<sha> python benchmarks/bisect_read_path.py <sha>
+
+**Run it by path and not as ``-m benchmarks.bisect_read_path``.** The ``-m`` form
+puts the working directory first on ``sys.path``, ahead of ``PYTHONPATH``, so
+run from a checkout it measures that checkout and reports the label of the
+worktree it never imported. Running the file by path puts ``benchmarks/`` first
+instead, and no tree lives there. The answer carries ``annnet`` under
+``measured``, so a run that reached the wrong tree says so.
 
 Two rules make the answers comparable across commits and across machines.
 
@@ -132,8 +139,11 @@ def measure(label: str = '') -> dict:
     after = _measure(networkx_build(names, edges), networkx_ops)
     reference = {op: min(value, after[op]) for op, value in reference.items()}
 
+    import annnet
+
     return {
         'label': label,
+        'measured': annnet.__file__,
         'ratio': {op: subject[op] / reference[op] for op in subject},
         'annnet_us': {op: subject[op] * 1e6 for op in subject},
         'reference_us': {op: reference[op] * 1e6 for op in reference},

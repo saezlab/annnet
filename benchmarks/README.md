@@ -102,8 +102,14 @@ whichever tree is on `PYTHONPATH`, so it can be pointed at an old commit:
 
 ```bash
 git worktree add /tmp/wt-<sha> <sha>
-PYTHONPATH=/tmp/wt-<sha> python -m benchmarks.bisect_read_path <sha>
+PYTHONPATH=/tmp/wt-<sha> python benchmarks/bisect_read_path.py <sha>
 ```
+
+Run it by path, not as `python -m benchmarks.bisect_read_path`. The `-m` form
+puts the working directory first on `sys.path`, ahead of `PYTHONPATH`, so from a
+checkout it measures that checkout and labels the answer with the worktree it
+never imported. The answer names the `annnet` it reached under `measured`, so
+check that field before trusting a row.
 
 It reports the ratio of `build`, `degree`, `neighbors`, `has_edge` and
 `enumerate_edges` against networkx **built and queried in the same process**. An

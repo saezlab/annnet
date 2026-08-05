@@ -238,6 +238,49 @@ def test_entity_edges_accepts_an_entity_key_in_a_multilayer_graph():
     assert set(S.entity_edges(G, ('A', ('t1',)), 'in')) == {'e_couple'}
 
 
+def _mixed_chain(length: int) -> AnnNet:
+    """A directed chain whose even edges declare themselves undirected.
+
+    Every fixture of the operation matrix holds fewer edges than the store
+    allocates up front, so none of them ever sees the edge arrays grow. This one
+    is long enough to force the growth twice over, and it mixes the two ways an
+    edge can answer for its directedness: a declared value, and the default of
+    the graph.
+    """
+    G = AnnNet(directed=True)
+    G.add_vertices([f'v{i}' for i in range(length + 1)])
+    G.add_edges(
+        [
+            {
+                'source': f'v{i}',
+                'target': f'v{i + 1}',
+                'edge_id': f'e{i}',
+                **({'edge_directed': False} if i % 2 == 0 else {}),
+            }
+            for i in range(length)
+        ]
+    )
+    return G
+
+
+def test_entity_edges_reads_the_directedness_of_an_edge_the_arrays_have_outgrown():
+    G = _mixed_chain(20)
+    # ``e9`` is directed and runs into ``v10``; ``e10`` declares itself
+    # undirected and so counts in both directions.
+    assert set(S.entity_edges(G, 'v10', 'out')) == {'e10'}
+    assert set(S.entity_edges(G, 'v10', 'in')) == {'e9', 'e10'}
+    assert set(S.entity_edges(G, 'v11', 'out')) == {'e10', 'e11'}
+
+
+def test_neighbors_reads_the_directedness_of_an_edge_the_arrays_have_outgrown():
+    G = _mixed_chain(20)
+    # An unqualified query walks an undirected edge both ways and a directed one
+    # forwards only, so ``v9`` is reached from ``v10`` only when asked for.
+    assert set(S.neighbors(G, 'v10', 'both')) == {'v11'}
+    assert set(S.neighbors(G, 'v10', 'in')) == {'v9', 'v11'}
+    assert set(S.neighbors(G, 'v11', 'both')) == {'v10', 'v12'}
+
+
 def test_entity_edges_rejects_an_unknown_direction():
     G = build_case('binary_directed')
     with pytest.raises(ValueError):
