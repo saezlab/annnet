@@ -120,7 +120,8 @@ graphviz = ["graphviz"]
 
 # IO modules
 excel    = ["openpyxl>=3.1"]          # used by excel.py
-sbml     = ["lxml>=4.9"]              # used by sbml.py
+sbml     = ["lxml>=4.9", "python-libsbml>=5.20"]   # used by sbml.py
+notebook = ["ipython>=8.0"]           # used by cx2.show_cx2(inline=True)
 parquet  = ["pyarrow>=10"]            # used by parquet.py
 zarr_io  = ["zarr>=2.18", "numcodecs>=0.12"]  # used by annnet_format.py
 
@@ -145,6 +146,7 @@ io = [
   "zarr>=2.18",
   "numcodecs>=0.12",
   "lxml>=4.9",      # for SBML adapter
+  "python-libsbml>=5.20",   # for SBML adapter
   "toml>=0.10",     # for metadata loading
 ]
 
@@ -180,6 +182,8 @@ all = [
   "narwhals>=1.9",
   "anndata>=0.12",
   "mudata>=0.3",
+  "python-libsbml>=5.20",
+  "ipython>=8.0",
   # graphtool is not on PyPI
 ]
 

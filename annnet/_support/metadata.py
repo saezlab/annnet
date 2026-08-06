@@ -6,6 +6,7 @@ import re
 from html import escape
 from typing import Any
 from pathlib import Path
+import tomllib
 from importlib import metadata as importlib_metadata
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -19,11 +20,6 @@ from .optional_components import (
     component_names,
     component_status,
 )
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    import tomli as tomllib  # type: ignore[no-redef]
 
 __all__ = [
     'get_latest_version',
