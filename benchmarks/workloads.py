@@ -556,18 +556,18 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
         pass
 
     # G.ig.* wrapper tax with a node arg (guards the cached name->index map;
-    # a bulk node arg was O(V*k) before caching).
+    # a bulk node arg was O(V*k) before caching). The keyword is igraph's word.
     try:
         import igraph as _ig  # noqa: F401
 
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            G.ig.degree(nodes=['v0'])  # prime the conversion + name-index cache
+            G.ig.degree(vertices=['v0'])  # prime the conversion + name-index cache
             recs.append(
                 rec(
                     'backend_proxy',
                     'ig_call_cache_hit',
-                    time=harness.time_repeat(lambda: G.ig.degree(nodes=['v0'])),
+                    time=harness.time_repeat(lambda: G.ig.degree(vertices=['v0'])),
                     note='G.ig.* wrapper tax (1 node arg) with caches warm; ~O(1) in V',
                 )
             )

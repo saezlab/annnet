@@ -212,3 +212,24 @@ def test_report_renders_the_new_sections(tmp_path) -> None:
     assert 'Attribute storage' in text
     assert 'single_element_add' in text
     json.dumps(payload)
+
+
+def test_the_annnet_feature_workload_records_every_group_it_names() -> None:
+    """The suite runs on this package, and a call it gets wrong skips the lot.
+
+    The runner catches an error from one workload and skips the engine it came
+    from, so a single wrong keyword empties the AnnNet column of the whole
+    report and nothing says so. This walks the feature workload for real.
+    """
+    rows = workloads.annnet_features(_tiny_scale(), samples=1)
+    assert rows, 'the feature workload recorded nothing'
+    assert all(row['engine'] == 'annnet' for row in rows)
+    assert not [row for row in rows if row.get('status') == 'error']
+    groups = {row['group'] for row in _ok(rows)}
+    assert {'layers', 'slices'} <= groups, groups
+
+
+def test_the_annnet_only_workload_reports_no_error() -> None:
+    rows = workloads.annnet_only(_tiny_scale(), samples=1)
+    assert rows, 'the AnnNet-only workload recorded nothing'
+    assert not [row for row in rows if row.get('status') == 'error']

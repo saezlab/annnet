@@ -11,13 +11,15 @@ if TYPE_CHECKING:
 class _IGBackendAccessor(_BackendAccessorBase):
     """igraph backend accessor attached to an AnnNet instance."""
 
+    # The parameter names igraph gives a node argument, not the ones this
+    # package gives it. A call goes to igraph, so these are its words.
     NODE_KEYS = {
         'source',
         'target',
         'u',
         'v',
-        'node',
-        'nodes',
+        'vertex',
+        'vertices',
         'vs',
         'to',
         'fr',
