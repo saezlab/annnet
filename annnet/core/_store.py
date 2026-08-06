@@ -271,6 +271,47 @@ class CoreState:
         self._structural_cache = None
         self._rows_cache = None
 
+        # Buffers over the three per-slot arrays a traversal reads one element
+        # of per incident edge. See :meth:`slot_buffers`.
+        self._slot_buffers = None
+
+    def __getstate__(self):
+        # A buffer cannot be pickled, and it is a cache of what the arrays
+        # beside it already hold.
+        state = self.__dict__.copy()
+        state['_slot_buffers'] = None
+        return state
+
+    def slot_buffers(self):
+        """Return buffers over ``entity_kind``, ``edge_kind`` and ``edge_directed``.
+
+        A traversal reads one element of each per incident edge, and reading a
+        numpy scalar costs about twice what reading the same byte through a
+        buffer does. Building a buffer costs about as much again as the reads it
+        saves over one walk, so the three are kept and rebuilt only when an array
+        behind one is replaced — which growing it is the only way to do.
+        """
+        held = self._slot_buffers
+        entity_kind = self.entity_kind
+        edge_kind = self.edge_kind
+        edge_directed = self.edge_directed
+        if (
+            held is None
+            or held[0] is not entity_kind
+            or held[1] is not edge_kind
+            or held[2] is not edge_directed
+        ):
+            held = (
+                entity_kind,
+                edge_kind,
+                edge_directed,
+                memoryview(entity_kind),
+                memoryview(edge_kind),
+                memoryview(edge_directed),
+            )
+            self._slot_buffers = held
+        return held[3], held[4], held[5]
+
     # -- clock ------------------------------------------------------------
 
     def _bump(self) -> int:
@@ -1323,6 +1364,7 @@ class CoreState:
         other.append_log_from_version = self.append_log_from_version
         other._structural_cache = None
         other._rows_cache = None
+        other._slot_buffers = None
         return other
 
     def __repr__(self) -> str:

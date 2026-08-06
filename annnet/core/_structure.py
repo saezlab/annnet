@@ -131,8 +131,12 @@ def is_slot_backed(graph) -> bool:
 
 
 def store_of(graph):
-    """Return the slot store behind a graph, or the graph when it is one."""
-    return graph if hasattr(graph, 'member_start') else graph._store
+    """Return the slot store behind a graph, or the graph when it is one.
+
+    A store holds no store of its own, so asking for one and taking the argument
+    when it has none answers both cases in a single lookup.
+    """
+    return getattr(graph, '_store', graph)
 
 
 _SLOT_ENTITY_KIND = {0: NODE, 1: EDGE_ENTITY}
@@ -715,18 +719,6 @@ def endpoint_form(graph, key):
     return key if store_of(graph).aspects != ('_',) else key[0]
 
 
-def _by_slot(array):
-    """Return a per-slot store array as a buffer over the same memory.
-
-    A traversal reads one element of ``edge_directed`` and one of ``edge_kind``
-    per incident edge, and reading a numpy scalar costs about twice what reading
-    the same byte through a buffer does. The buffer views the live array rather
-    than copying it, so it needs no invalidation: a walk that does not write
-    cannot see the array grow underneath it.
-    """
-    return memoryview(array)
-
-
 def _slot_entity_edges(store, key, direction: str) -> tuple:
     # The store keeps an index from an entity to the edges that name it, so this
     # costs the degree of the entity rather than a scan over every edge. The
@@ -738,7 +730,7 @@ def _slot_entity_edges(store, key, direction: str) -> tuple:
     incident = store._entity_edges.get(store.entity_slot(key))
     if not incident:
         return ()
-    edge_directed = _by_slot(store.edge_directed)
+    _, _, edge_directed = store.slot_buffers()
     graph_directed = True if store.directed is None else bool(store.directed)
     edge_id = store.edge_id
 
@@ -765,9 +757,8 @@ def _slot_neighbors(store, key, direction: str) -> list:
     incident = store._entity_edges.get(slot)
     if not incident:
         return []
-    entity_is_edge = _SLOT_ENTITY_KIND.get(int(store.entity_kind[slot])) == EDGE_ENTITY
-    edge_directed = _by_slot(store.edge_directed)
-    edge_kind = _by_slot(store.edge_kind)
+    entity_kind, edge_kind, edge_directed = store.slot_buffers()
+    entity_is_edge = _SLOT_ENTITY_KIND.get(entity_kind[slot]) == EDGE_ENTITY
     graph_directed = True if store.directed is None else bool(store.directed)
     member_start = store.member_start
     member_len = store.member_len
@@ -848,10 +839,10 @@ def neighbors(graph, ref, direction: str = 'both') -> list:
     if direction not in DIRECTIONS:
         raise ValueError(f'direction must be one of {DIRECTIONS}, got {direction!r}')
     store = store_of(graph)
-    key = _slot_key(store, ref)
-    if store.entity_slot(key) is None:
-        return []
-    return _slot_neighbors(store, key, direction)
+    # An entity the store does not hold has no slot, no slot has incident edges,
+    # and an entity with none answers the same as one the store never had. So the
+    # walk resolves the slot once and the existence check is that resolution.
+    return _slot_neighbors(store, _slot_key(store, ref), direction)
 
 
 def entity_edges(graph, ref, direction: str = 'both') -> tuple:
