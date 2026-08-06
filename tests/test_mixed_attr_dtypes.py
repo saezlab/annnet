@@ -34,12 +34,19 @@ def test_a_float_widens_an_int_vertex_attribute() -> None:
     assert G.attrs.get_vertex_attrs('B')['val'] == 45.6
 
 
-def test_a_string_widens_an_int_vertex_attribute() -> None:
+def test_a_string_and_an_int_sit_in_one_attribute() -> None:
+    """The store keeps each value as it was written; only the table widens.
+
+    A column of a dataframe carries one type, so a table that holds both has to
+    widen to the one that holds either. The store holds a cell per element, so
+    nothing is converted to make room for its neighbour.
+    """
     G = two_vertices()
     G.attrs.set_vertex_attrs('A', val=45)
     G.attrs.set_vertex_attrs('B', val='x')
-    assert G.attrs.get_vertex_attrs('A')['val'] == '45'
+    assert G.attrs.get_vertex_attrs('A')['val'] == 45
     assert G.attrs.get_vertex_attrs('B')['val'] == 'x'
+    assert [row['val'] for row in dataframe_to_rows(G.obs)] == ['45', 'x']
 
 
 def test_a_float_widens_an_int_edge_attribute() -> None:

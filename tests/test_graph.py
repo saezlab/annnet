@@ -335,10 +335,10 @@ class TestGraphBasics(unittest.TestCase):
             self.g.slices.remove('default')
 
     def test_audit_attributes(self):
-        # create mismatch intentionally
+        # The two tables are derived, so a stray row cannot be stated: the audit
+        # finds nothing to report about either of them.
         self.g.add_vertices('a1')
         self.g.add_edges('a1', 'a2', weight=1.0)
-        # add stray row in _vertex_table (keep schema identical: only 'vertex_id')
         self.g._vertex_table = pl.concat(
             [
                 self.g._vertex_table,
@@ -347,7 +347,8 @@ class TestGraphBasics(unittest.TestCase):
             how='vertical',
         )
         audit = self.g.attrs.audit_attributes()
-        self.assertIn('ghost', audit['extra_vertex_rows'])
+        self.assertEqual(audit['extra_vertex_rows'], [])
+        self.assertEqual(audit['missing_vertex_rows'], [])
         self.assertIsInstance(audit['missing_edge_rows'], list)
         self.assertIsInstance(audit['invalid_edge_slice_rows'], list)
 

@@ -505,26 +505,20 @@ def test_edge_subgraph_multilayer_hyperedge_preserves_supra_members_without_plac
     )
 
 
-# ── _row_attrs (exercised via views.layers on a graph with layer attrs) ─
+# ── the attributes of named elements, read out of the columns ─
 
 
-def test_row_attrs_cache_helper_direct() -> None:
-    """`_row_attrs` is an internal cache helper used by views. Hit it
-    directly across miss/hit/empty paths."""
+def test_the_attributes_of_named_elements_come_out_of_the_columns() -> None:
+    """The store answers about the elements asked for, and only those."""
     G = AnnNet(directed=True)
     G.add_vertices(['A', 'B'], kind='gene')
-    df = G._vertex_table
 
-    # Miss-then-hit on the same key (exercises the cache populate + cache
-    # hit branches).
-    first = G._row_attrs(df, 'vertex_id', 'A')
-    second = G._row_attrs(df, 'vertex_id', 'A')
-    assert first == second
-    assert first.get('kind') == 'gene'
+    rows = G._attr_store.node_attr_rows(['A'])
+    assert rows == {'A': {'kind': 'gene'}}
 
-    # Unknown key falls through to the not-found branch.
-    assert G._row_attrs(df, 'vertex_id', 'ghost') == {}
+    # An id the graph does not hold is not a row of the result.
+    assert G._attr_store.node_attr_rows(['ghost']) == {}
 
-    # None df + missing column branches.
-    assert G._row_attrs(None, 'vertex_id', 'A') == {}
-    assert G._row_attrs(df, 'no_such_column', 'A') == {}
+    # An attribute no node carries is no column, which is not the same as a
+    # column every node leaves empty.
+    assert G._attr_store.node_attr_map('no_such_attribute') is None

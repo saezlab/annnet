@@ -310,19 +310,11 @@ class GraphView:
         if copy_attributes:
             return subG
 
-        def _id_only_table(df, id_col: str):
-            rows = []
-            if df is not None:
-                for row in dataframe_to_rows(df):
-                    key = row.get(id_col)
-                    if key is not None:
-                        rows.append({id_col: key})
-            if rows:
-                return dataframe_from_rows(rows)
-            return empty_dataframe({id_col: 'text'}, backend=self._graph._annotations_backend)
-
-        subG._vertex_table = _id_only_table(subG._vertex_table, 'vertex_id')
-        subG._edge_table = _id_only_table(subG._edge_table, 'edge_id')
+        # The rows stay, because an element of the subgraph is a row of its
+        # tables. What goes is every attribute the caller asked not to carry
+        # over, which is every column beside the id.
+        subG._attr_store.drop_node_columns()
+        subG._attr_store.drop_edge_columns()
         return subG
 
     def subview(self, vertices=None, edges=None, slices=None, predicate=None):
@@ -503,7 +495,7 @@ class ViewsClass:
                 tail.append(None)
                 members.append(None)
 
-        edge_attrs_map = self._rows_attr_map(self._edge_table, 'edge_id')
+        edge_attrs_map = self._attr_store.edge_attr_rows()
         slice_attrs_map = {}
         if slice is not None:
             for row in dataframe_to_rows(self.edge_slice_attributes):
@@ -799,25 +791,27 @@ class ElementSequence:
         """
         raise NotImplementedError
 
-    @staticmethod
-    def _column_of_table(table, id_column: str, name: str) -> dict | None:
-        """Read one column of an attribute table into a mapping from id."""
-        if table is None or name not in dataframe_columns(table):
-            return None
-        return {
-            row.get(id_column): row.get(name)
-            for row in dataframe_to_rows(table)
-            if row.get(id_column) is not None
-        }
-
     def _intrinsic(self, name: str, ids):
         """Return one structural field of the named elements, or ``_MISSING``."""
         if name in (self.id_key, self.id_column):
             return list(ids)
         return _MISSING
 
+    def _attribute_vector(self, name: str):
+        """Return the whole column of this axis as the store holds it, or None."""
+        raise NotImplementedError
+
     def column(self, name: str, default=None):
-        """Return one attribute of every element of this sequence, as a vector."""
+        """Return one attribute of every element of this sequence, as a vector.
+
+        A read of the whole axis is a slice of the array the store holds, so it
+        costs no walk over the elements. A subsequence, and a caller that names
+        a value for the elements that carry none, are read element by element.
+        """
+        if self._ids is None and default is None and name not in self.intrinsic_names:
+            vector = self._attribute_vector(name)
+            if vector is not None:
+                return vector
         ids = self.ids
         found = self._intrinsic(name, ids)
         if found is not _MISSING:
@@ -885,7 +879,10 @@ class NodeSequence(ElementSequence):
         return tuple(self._graph.vertices())
 
     def _attribute_map(self, name: str) -> dict | None:
-        return self._column_of_table(self._graph._vertex_table, 'vertex_id', name)
+        return self._graph._attr_store.node_attr_map(name)
+
+    def _attribute_vector(self, name: str):
+        return self._graph._attr_store.node_vector(name)
 
     def _write_column(self, name: str, values: dict) -> None:
         self._graph.attrs.set_vertex_attrs_bulk(
@@ -916,7 +913,10 @@ class EdgeSequence(ElementSequence):
         return _MISSING
 
     def _attribute_map(self, name: str) -> dict | None:
-        return self._column_of_table(self._graph._edge_table, 'edge_id', name)
+        return self._graph._attr_store.edge_attr_map(name)
+
+    def _attribute_vector(self, name: str):
+        return self._graph._attr_store.edge_vector(name)
 
     def _write_column(self, name: str, values: dict) -> None:
         self._graph.attrs.set_edge_attrs_bulk(

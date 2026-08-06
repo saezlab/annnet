@@ -454,8 +454,10 @@ class LayerAccessor:
                 current=flat._current_slice,
             )
             self.slice_edge_weights = flat.slice_edge_weights
-            self._vertex_table = flat._vertex_table
-            self._edge_table = flat._edge_table
+            # The store of the flat graph is now the store of this one, so every
+            # slot addresses the same element in both and the columns move as
+            # they stand.
+            self._G._attr_store.copy_columns_from(flat._attr_store)
             self.slice_attributes = flat.slice_attributes
             self.edge_slice_attributes = flat.edge_slice_attributes
             self.layer_attributes = flat.layer_attributes
@@ -1368,7 +1370,7 @@ class LayerAccessor:
             include_coupling=include_coupling,
         )
 
-        from ._Ops import Operations, _hyper_def
+        from ._Ops import _hyper_def
 
         G_src = self._G
         G_cls = G_src.__class__
@@ -1380,7 +1382,7 @@ class LayerAccessor:
             aspects=new_aspects,
         )
 
-        va_lookup = Operations._rows_attr_map(G_src, G_src._vertex_table, 'vertex_id', V)
+        va_lookup = G_src._attr_store.node_attr_rows(V)
         v_rows = [{'vertex_id': vid, **va_lookup.get(vid, {})} for vid in V]
         if v_rows:
             g._add_vertices_bulk(v_rows, layer=aa, slice=g._default_slice)
@@ -1402,9 +1404,7 @@ class LayerAccessor:
                     ):
                         extra_endpoints.add(ep)
             extra_bare = {bare for (bare, _) in extra_endpoints}
-            extra_attrs = Operations._rows_attr_map(
-                G_src, G_src._vertex_table, 'vertex_id', extra_bare
-            )
+            extra_attrs = G_src._attr_store.node_attr_rows(extra_bare)
             # Group by layer coord so each call is one bulk insert.
             by_coord: dict = {}
             for bare_vid, coord in extra_endpoints:

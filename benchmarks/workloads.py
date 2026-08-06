@@ -780,9 +780,10 @@ def attribute_ops(scale, *, backend='auto', samples=5) -> list[dict]:
     G.add_vertices([{'vertex_id': f'v{i}', 'score': float(i)} for i in range(n)])
 
     def attr_column_op():
-        table = G.obs
-        column = table['score'] if 'score' in table.columns else None
-        return None if column is None else float(column.sum())
+        # The public column read, which is what a user does the operation on.
+        # Reading the table instead would measure the materialization and not
+        # the operation.
+        return float(G.N['score'].sum())
 
     def dataframe_column_op():
         return float(values.sum())

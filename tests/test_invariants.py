@@ -454,20 +454,29 @@ def test_rule_9_holds_on_every_case(case):
     assert {row['edge_id'] for row in table_rows(G.var)} <= edge_ids
 
 
-def test_rule_9_reports_a_node_row_for_a_node_that_does_not_exist():
+def test_a_node_row_for_a_node_that_does_not_exist_cannot_be_stated():
+    """The graph derives the node table, so a row it holds names a node it holds.
+
+    A caller that hands over a table with a row for a node the graph does not
+    hold states nothing by it: the row addresses no element, so no column takes
+    the values and the table comes back without it.
+    """
     G = build_case('binary_directed')
     rows = table_rows(G.obs)
     rows.append({**rows[0], 'vertex_id': 'ghost'})
     G._vertex_table = build_dataframe_from_rows(rows)
-    assert_reports(G, 'ghost')
+    assert 'ghost' not in {row['vertex_id'] for row in table_rows(G.obs)}
+    assert problems_of(G) == []
 
 
-def test_rule_9_reports_an_edge_row_for_an_edge_that_does_not_exist():
+def test_an_edge_row_for_an_edge_that_does_not_exist_cannot_be_stated():
+    """The same holds of the edge table, for the same reason."""
     G = build_case('binary_directed')
     rows = table_rows(G.var)
     rows.append({**rows[0], 'edge_id': 'ghost'})
     G._edge_table = build_dataframe_from_rows(rows)
-    assert_reports(G, 'ghost')
+    assert 'ghost' not in {row['edge_id'] for row in table_rows(G.var)}
+    assert problems_of(G) == []
 
 
 # ---------------------------------------------------------------------------

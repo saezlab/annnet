@@ -129,6 +129,9 @@ def install_structure(g, *, store=None, definitions=None) -> None:
     from . import _mutate
 
     g._store = store_from_definitions(g, *definitions) if store is None else store
+    # The attribute columns are indexed by slot, so they belong to the store
+    # they were written against and the new one starts without them.
+    g._attr_store.rebind(g._store)
     g._mark_structure_changed()
     D.invalidate_sparse_caches(g)
     _mutate.sync_aspects(g)

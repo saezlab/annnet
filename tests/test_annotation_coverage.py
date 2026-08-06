@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import narwhals as nw
 import pytest
 
 from annnet.core._Annotation import AttributesAccessor, AttributesClass
@@ -336,62 +335,6 @@ def test_get_graph_attributes_returns_shallow_copy() -> None:
     out['mutated'] = True
     # mutating the returned dict must not affect the graph.
     assert 'mutated' not in G.attrs.get_graph_attributes()
-
-
-# ── _dtype_for_value branches ──────────────────────────────────────────
-
-
-def test_dtype_for_value_covers_each_python_type() -> None:
-    G = _toy()
-    assert AttributesClass._dtype_for_value(G, None) is nw.Unknown
-    assert AttributesClass._dtype_for_value(G, True) is nw.Boolean
-    assert AttributesClass._dtype_for_value(G, 7) is nw.Int64
-    assert AttributesClass._dtype_for_value(G, 3.14) is nw.Float64
-    assert AttributesClass._dtype_for_value(G, b'bytes') is nw.Binary
-    assert AttributesClass._dtype_for_value(G, 'string') is nw.String
-    # list / tuple → List(inner)
-    out = AttributesClass._dtype_for_value(G, [1, 2])
-    assert isinstance(out, nw.List)
-    # dict → Object
-    assert AttributesClass._dtype_for_value(G, {'k': 1}) is nw.Object
-    # empty list inner falls back to String
-    out_empty = AttributesClass._dtype_for_value(G, [])
-    assert isinstance(out_empty, nw.List)
-
-
-def test_is_null_dtype_recognises_unknown() -> None:
-    G = _toy()
-    assert AttributesClass._is_null_dtype(G, nw.Unknown) is True
-    assert AttributesClass._is_null_dtype(G, nw.Int64) is False
-
-
-# ── _sanitize_value_for_nw ────────────────────────────────────────────
-
-
-def test_sanitize_value_for_nw_json_serializes_containers() -> None:
-    G = _toy()
-    assert AttributesClass._sanitize_value_for_nw(G, [1, 2]) == '[1, 2]'
-    assert AttributesClass._sanitize_value_for_nw(G, {'a': 1}) == '{"a": 1}'
-    assert AttributesClass._sanitize_value_for_nw(G, 'plain') == 'plain'
-    assert AttributesClass._sanitize_value_for_nw(G, 42) == 42
-
-
-# ── _is_binary_type ───────────────────────────────────────────────────
-
-
-def test_is_binary_type_detects_narwhals_binary() -> None:
-    G = _toy()
-    assert AttributesClass._is_binary_type(G, nw.Binary) is True
-
-
-def test_is_binary_type_detects_via_string_substring() -> None:
-    G = _toy()
-
-    class FakeDType:
-        def __str__(self):
-            return 'blob[1024]'
-
-    assert AttributesClass._is_binary_type(G, FakeDType()) is True
 
 
 # ── AttributesAccessor forwarders ─────────────────────────────────────

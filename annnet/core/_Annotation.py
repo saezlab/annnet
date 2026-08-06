@@ -1,9 +1,16 @@
-"""Attribute storage and accessors."""
+"""The public attribute surface of a graph.
+
+The generic attributes of a node and of an edge live in the column store of
+``_attrs``, and everything here that reads or writes one goes through it. This
+module holds no storage of its own for them.
+
+The two contextual tables that are still frames — the attributes of a slice, and
+the attributes of one edge inside one slice — are held by the graph and written
+through the upsert helpers at the end of this module.
+"""
 
 import math
 from typing import Any
-
-import narwhals as nw
 
 from . import _structure
 from .._support.dataframe_backend import (
@@ -12,20 +19,6 @@ from .._support.dataframe_backend import (
     dataframe_filter_eq,
     dataframe_upsert_rows,
 )
-
-_NUMERIC_NW_DTYPES = {
-    nw.Int8,
-    nw.Int16,
-    nw.Int32,
-    nw.Int64,
-    nw.UInt8,
-    nw.UInt16,
-    nw.UInt32,
-    nw.UInt64,
-    nw.Float32,
-    nw.Float64,
-}
-_NUMERIC_DTYPES = _NUMERIC_NW_DTYPES
 
 
 def _check_reserved_collision(reserved, attrs, *, kind, allow=()):
@@ -110,7 +103,7 @@ class AttributesClass:
                         f'Composite key collision on {self._vertex_key_fields}: {new_key} owned by {owner}'
                     )
 
-        self._vertex_table = self._upsert_row(self._vertex_table, vertex_id, clean)
+        self._attr_store.set_node_attrs(vertex_id, clean)
 
         watched = self._variables_watched_by_vertices()
         if watched and any(k in watched for k in clean):
@@ -169,7 +162,8 @@ class AttributesClass:
                             f'Composite key collision on {self._vertex_key_fields}: {new_key} owned by {owner}'
                         )
 
-        self._vertex_table = self._upsert_rows_bulk(self._vertex_table, clean_updates)
+        for vid, attrs in clean_updates.items():
+            self._attr_store.set_node_attrs(vid, attrs)
 
         watched = self._variables_watched_by_vertices()
         if watched:
@@ -208,14 +202,7 @@ class AttributesClass:
         -------
         Any
         """
-        df = self._vertex_table
-        if df is None or key not in dataframe_columns(df):
-            return default
-        rows = dataframe_to_rows(dataframe_filter_eq(df, 'vertex_id', vertex_id))
-        if not rows:
-            return default
-        val = rows[0].get(key, None)
-        return default if val is None else val
+        return self._attr_store.node_attr(vertex_id, key, default)
 
     def set_edge_attrs(self, edge_id, **attrs):
         """Upsert pure edge attributes (non-structural) into the edge DF.
@@ -237,7 +224,7 @@ class AttributesClass:
         _check_reserved_collision(self._EDGE_RESERVED, attrs, kind='edge')
         clean = dict(attrs)
         if clean:
-            self._edge_table = self._upsert_row(self._edge_table, edge_id, clean)
+            self._attr_store.set_edge_attrs(edge_id, clean)
         pol = self.edge_direction_policy.get(edge_id)
         if pol and pol.get('scope', 'edge') == 'edge' and pol['var'] in clean:
             self._apply_flexible_direction(edge_id)
@@ -264,7 +251,8 @@ class AttributesClass:
         if not clean_updates:
             return
 
-        self._edge_table = self._upsert_rows_bulk(self._edge_table, clean_updates)
+        for eid, attrs in clean_updates.items():
+            self._attr_store.set_edge_attrs(eid, attrs)
 
         policy_map = self.edge_direction_policy
         affected_edges = set()
@@ -291,14 +279,7 @@ class AttributesClass:
         -------
         Any
         """
-        df = self._edge_table
-        if df is None or key not in dataframe_columns(df):
-            return default
-        rows = dataframe_to_rows(dataframe_filter_eq(df, 'edge_id', edge_id))
-        if not rows:
-            return default
-        val = rows[0].get(key, None)
-        return default if val is None else val
+        return self._attr_store.edge_attr(edge_id, key, default)
 
     def set_slice_attrs(self, slice_id, **attrs):
         """Upsert pure slice attributes.
@@ -511,29 +492,23 @@ class AttributesClass:
             - `missing_vertex_rows`
             - `missing_edge_rows`
             - `invalid_edge_slice_rows`
+
+        Notes
+        -----
+        The node table and the edge table are derived from columns addressed by
+        slot, so a row of either names an element the graph holds and every
+        element the graph holds has one. The first four lists are therefore
+        always empty, and what this still finds is an edge-by-slice row that
+        names a slice or an edge the graph does not hold.
         """
         vertex_ids = {
             ref.id for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE
         }
         edge_ids = {ref.id for ref in _structure.iter_edges(self)}
-        na, ea, ela = self._vertex_table, self._edge_table, self.edge_slice_attributes
+        ela = self.edge_slice_attributes
 
-        if na is not None and 'vertex_id' in dataframe_columns(na):
-            vertex_attr_ids = {
-                row.get('vertex_id')
-                for row in dataframe_to_rows(na)
-                if row.get('vertex_id') is not None
-            }
-        else:
-            vertex_attr_ids = set()
-        if ea is not None and 'edge_id' in dataframe_columns(ea):
-            edge_attr_ids = {
-                row.get('edge_id')
-                for row in dataframe_to_rows(ea)
-                if row.get('edge_id') is not None
-            }
-        else:
-            edge_attr_ids = set()
+        vertex_attr_ids = set(self._attr_store.node_ids())
+        edge_attr_ids = set(self._attr_store.edge_ids())
 
         bad_edge_slice = []
         if ela is not None and {'slice_id', 'edge_id'} <= set(dataframe_columns(ela)):
@@ -550,67 +525,10 @@ class AttributesClass:
             'invalid_edge_slice_rows': bad_edge_slice,
         }
 
-    # ── dtype / schema helpers ────────────────────────────────────────────────
-
-    def _dtype_for_value(self, v, *, prefer='narwhals'):
-        import enum
-
-        if v is None:
-            return nw.Unknown
-        if isinstance(v, bool):
-            return nw.Boolean
-        if isinstance(v, int) and not isinstance(v, bool):
-            return nw.Int64
-        if isinstance(v, float):
-            return nw.Float64
-        if isinstance(v, enum.Enum):
-            return nw.Object
-        if isinstance(v, (bytes, bytearray)):
-            return nw.Binary
-        if isinstance(v, (list, tuple)):
-            inner = self._dtype_for_value(v[0], prefer='narwhals') if len(v) else nw.String
-            return nw.List(nw.String if inner == nw.Unknown else inner)
-        if isinstance(v, dict):
-            return nw.Object
-        return nw.String
-
-    def _is_null_dtype(self, dtype) -> bool:
-        if dtype == nw.Unknown:
-            return True
-        dt_type = type(dtype) if not isinstance(dtype, type) else dtype
-        return dt_type == nw.Unknown
-
-    def _ensure_attr_columns(self, df, attrs: dict) -> nw.DataFrame[Any]:
-        nw_df = nw.from_native(df, eager_only=True)
-        schema = nw_df.collect_schema()
-        for col, val in attrs.items():
-            target = self._dtype_for_value(val, prefer='narwhals')
-            if col not in schema:
-                try:
-                    nw_df = nw_df.with_columns(nw.lit(None).cast(target).alias(col))
-                except (AttributeError, TypeError, ValueError):
-                    nw_df = nw_df.with_columns(nw.lit(None).alias(col))
-            else:
-                cur = schema[col]
-                if self._is_null_dtype(cur) and not self._is_null_dtype(target):
-                    try:
-                        nw_df = nw_df.with_columns(nw.col(col).cast(target))
-                    except (AttributeError, TypeError, ValueError):
-                        pass
-        return nw_df
-
-    def _sanitize_value_for_nw(self, v):
-        if isinstance(v, (list, tuple, dict)):
-            import json
-
-            return json.dumps(v, ensure_ascii=False)
-        return v
-
-    def _is_binary_type(self, dt) -> bool:
-        if isinstance(dt, (nw.Binary, nw.dtypes.Binary)):
-            return True
-        s = str(dt).lower()
-        return any(kw in s for kw in ('binary', 'blob', 'byte'))
+    # ── the two contextual tables ────────────────────────────────────────────
+    # The slice table and the edge-by-slice table are frames still, keyed by the
+    # level they belong to. Their rows are written whole, so a write states the
+    # key columns and the values together.
 
     def _upsert_row(self, df: 'object', idx: Any, attrs: dict) -> 'object':
         if not isinstance(attrs, dict) or not attrs:
@@ -619,49 +537,24 @@ class AttributesClass:
         if {'slice_id', 'edge_id'} <= cols:
             key_cols = ('slice_id', 'edge_id')
             key_vals = {'slice_id': idx[0], 'edge_id': idx[1]}
-            df_id_name = '_edge_slice_attr_df_id'
-        elif 'vertex_id' in cols:
-            key_cols = ('vertex_id',)
-            key_vals = {'vertex_id': idx}
-            df_id_name = '_vertex_attr_df_id'
-        elif 'edge_id' in cols:
-            key_cols = ('edge_id',)
-            key_vals = {'edge_id': idx}
-            df_id_name = '_edge_attr_df_id'
         elif 'slice_id' in cols:
             key_cols = ('slice_id',)
             key_vals = {'slice_id': idx}
-            df_id_name = '_slice_attr_df_id'
         else:
             raise ValueError('Cannot infer key columns from DataFrame schema')
-        out = dataframe_upsert_rows(df, [{**key_vals, **attrs}], key_cols)
-        setattr(self, df_id_name, id(out))
-        return out
+        return dataframe_upsert_rows(df, [{**key_vals, **attrs}], key_cols)
 
     def _upsert_rows_bulk(self, df: 'object', updates: dict) -> 'object':
         if not updates:
             return df
         cols = set(dataframe_columns(df))
-        if {'slice_id', 'edge_id'} <= cols:
-            join_keys = ('slice_id', 'edge_id')
-        elif 'vertex_id' in cols:
-            join_keys = ('vertex_id',)
-        elif 'edge_id' in cols:
-            join_keys = ('edge_id',)
-        else:
-            join_keys = ('slice_id',)
-
-        update_records = []
-        for idx, attrs in updates.items():
-            if isinstance(idx, tuple):
-                record = {'slice_id': idx[0], 'edge_id': idx[1], **attrs}
-            elif 'vertex_id' in cols:
-                record = {'vertex_id': idx, **attrs}
-            elif 'edge_id' in cols:
-                record = {'edge_id': idx, **attrs}
-            else:
-                record = {'slice_id': idx, **attrs}
-            update_records.append(record)
+        join_keys = ('slice_id', 'edge_id') if {'slice_id', 'edge_id'} <= cols else ('slice_id',)
+        update_records = [
+            {'slice_id': idx[0], 'edge_id': idx[1], **attrs}
+            if isinstance(idx, tuple)
+            else {'slice_id': idx, **attrs}
+            for idx, attrs in updates.items()
+        ]
         return dataframe_upsert_rows(df, update_records, join_keys)
 
     def _variables_watched_by_vertices(self):
@@ -759,10 +652,7 @@ class AttributesClass:
             Attribute dictionary for that edge. Empty if not found.
         """
         eid = _structure.edge_at_column(self, edge) if isinstance(edge, int) else edge
-        rows = dataframe_to_rows(dataframe_filter_eq(self._edge_table, 'edge_id', eid))
-        if not rows:
-            return {}
-        return {k: v for k, v in rows[0].items() if k != 'edge_id' and v is not None}
+        return self._attr_store.edge_attrs(eid)
 
     def get_vertex_attrs(self, vertex) -> dict:
         """Return the full attribute dict for a single vertex.
@@ -777,10 +667,7 @@ class AttributesClass:
         dict
             Attribute dictionary for that vertex. Empty if not found.
         """
-        rows = dataframe_to_rows(dataframe_filter_eq(self._vertex_table, 'vertex_id', vertex))
-        if not rows:
-            return {}
-        return {k: v for k, v in rows[0].items() if k != 'vertex_id' and v is not None}
+        return self._attr_store.node_attrs(vertex)
 
     def get_attr_edges(self, indexes=None) -> dict:
         """Retrieve edge attributes as a dictionary.
@@ -835,17 +722,10 @@ class AttributesClass:
         dict[str, Any]
             Mapping of `edge_id` to attribute values.
         """
-        df = self._edge_table
-        if df is None:
-            return {}
-        rows = dataframe_to_rows(df)
-        if key not in dataframe_columns(df):
-            return {r.get('edge_id'): default for r in rows if r.get('edge_id') is not None}
-        return {
-            r.get('edge_id'): (r.get(key) if r.get(key) is not None else default)
-            for r in rows
-            if r.get('edge_id') is not None
-        }
+        column = self._attr_store.edge_attr_map(key)
+        if column is None:
+            return dict.fromkeys(self._attr_store.edge_ids(), default)
+        return {edge_id: (default if value is None else value) for edge_id, value in column.items()}
 
     def get_edges_by_attr(self, key: str, value) -> list:
         """Retrieve all edges where a given attribute equals a specific value.
@@ -862,13 +742,10 @@ class AttributesClass:
         list[str]
             Edge IDs where the attribute equals `value`.
         """
-        df = self._edge_table
-        if df is None or key not in dataframe_columns(df):
+        column = self._attr_store.edge_attr_map(key)
+        if column is None:
             return []
-        rows = dataframe_to_rows(df)
-        return [
-            r.get('edge_id') for r in rows if r.get('edge_id') is not None and r.get(key) == value
-        ]
+        return [edge_id for edge_id, held in column.items() if held == value]
 
     def get_graph_attributes(self) -> dict:
         """Return a shallow copy of the graph-level attributes dictionary.

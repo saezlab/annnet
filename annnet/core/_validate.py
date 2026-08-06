@@ -50,26 +50,11 @@ def _is_store(g) -> bool:
 # The canonical store holds the topology alone. Slices, the attribute tables and
 # a materialized matrix belong to the graph around it, so the rules that tie
 # those to the topology are checked here, through the query facade.
-
-
-def _check_table_levels(g, problems) -> None:
-    """The node table stays node-level and the edge table stays edge-level."""
-    entity_ids = {ref.id for ref in S.iter_entities(g)}
-    edge_ids = {ref.id for ref in S.iter_edges(g, include_placeholders=True)}
-    for label, table, key_column, known in (
-        ('obs', g._vertex_table, 'vertex_id', entity_ids),
-        ('var', g._edge_table, 'edge_id', edge_ids),
-    ):
-        if table is None:
-            continue
-        try:
-            rows = table.to_dicts() if hasattr(table, 'to_dicts') else list(table.rows(named=True))
-        except (AttributeError, TypeError):  # pragma: no cover - unknown backend
-            continue
-        for row in rows:
-            key = row.get(key_column)
-            if key is not None and key not in known:
-                problems.append(f'{label} holds a row for {key!r}, which the store does not hold')
+#
+# One rule that used to sit here is gone rather than passing: the node table
+# stays node-level and the edge table stays edge-level. The graph derives both
+# tables from columns indexed by slot, so a row that names an element the store
+# does not hold cannot be written, and there is nothing left to check.
 
 
 def _check_slice_membership(g, problems) -> None:
@@ -416,7 +401,6 @@ SLOT_CHECKS: tuple = tuple(_slot_check(check) for check in SLOT_CHECKS_IMPL)
 # may hand a bare store instead of a graph, which holds none of what these read,
 # so they run only for a graph.
 GRAPH_CHECKS = (
-    _check_table_levels,
     _check_slice_membership,
     _check_materialized_matrix,
 )

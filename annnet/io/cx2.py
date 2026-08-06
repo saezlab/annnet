@@ -861,9 +861,10 @@ def from_cx2(
 
         # --- Vertices ---
         vmeta = manifest.get('vertices', {})
+        # The attribute rows are applied once the structure they annotate is
+        # back: the graph addresses an attribute by the element that carries it,
+        # so a row for a vertex it does not hold yet names nothing.
         v_rows = _normalize_rows(vmeta.get('attributes', []))
-        if v_rows:
-            G._vertex_table = _rows_to_df(v_rows)
         if vmeta.get('types'):
             kinds = {}
             for vid, kind in vmeta['types'].items():
@@ -876,10 +877,7 @@ def from_cx2(
         # --- Edges + hyperedges ---
         emeta = manifest.get('edges', {})
 
-        # _edge_table
         e_rows = _normalize_rows(emeta.get('attributes', []))
-        if e_rows:
-            G._edge_table = _rows_to_df(e_rows)
 
         # Reconstruct the graph structure from the manifest (the authoritative
         # source). Declare aspects first so multilayer supra-node coordinates
@@ -951,6 +949,13 @@ def from_cx2(
 
         if emeta.get('direction_policy'):
             G.edge_direction_policy.update(emeta['direction_policy'])
+
+        # Every vertex and every edge the manifest names is back, so the
+        # attribute rows have something to attach to.
+        if v_rows:
+            G._vertex_table = _rows_to_df(v_rows)
+        if e_rows:
+            G._edge_table = _rows_to_df(e_rows)
 
         # --- Layers (Kivela): edge_kind + edge_layers (edges now exist) ---
         kiv = emeta.get('kivela', {})

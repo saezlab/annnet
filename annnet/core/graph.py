@@ -9,6 +9,7 @@ import numpy as np
 
 from . import _build, _state, _derive, _mutate, _identity, _validate, _structure
 from ._Ops import Operations, OperationsAccessor
+from ._attrs import AttributeStore
 from ._Views import GraphView, ViewsClass, EdgeSequence, NodeSequence, ViewsAccessor
 from ._Layers import LayerAccessor
 from ._Matrix import CacheManager, IndexManager, IndexMapping, MatrixNamespace
@@ -26,6 +27,7 @@ from .._support.dataframe_backend import (
     dataframe_height,
     dataframe_columns,
     dataframe_to_rows,
+    rename_dataframe_columns,
     select_dataframe_backend,
 )
 
@@ -39,6 +41,19 @@ else:
     _NXBackendAccessor = Any
 
 # ===================================
+
+
+def _renamed_id(table, id_column: str):
+    """Return ``table`` with its id column named the way this graph names it.
+
+    A reader that speaks another vocabulary hands over a table whose key column
+    is called ``id``. The column store addresses a row by the id it carries, so
+    the column has to be found before the row can be read.
+    """
+    columns = dataframe_columns(table)
+    if id_column in columns or 'id' not in columns:
+        return table
+    return rename_dataframe_columns(table, {'id': id_column})
 
 
 def _is_multilayer_endpoint(v) -> bool:
@@ -489,23 +504,14 @@ class AnnNet(
             self.slice_edge_weights.pop(slice_id, None)
 
     def _init_annotation_tables(self, annotations):
-        # Buffered vertex/edge attribute tables: backing frame, pending id rows
-        # and pending row removals (see IndexMapping._ensure_*_row /
-        # _drop_*_rows / _flush_*_rows for the rationale).
-        self._vertex_attributes = None
-        self._edge_attributes = None
+        # The generic node and edge attributes live in the slot-indexed column
+        # store. The graph holds no table of its own for them: ``_vertex_table``
+        # and ``_edge_table`` are built from those columns when a reader asks.
+        self._attr_store = AttributeStore(
+            self._store, node_id_column='vertex_id', edge_id_column='edge_id'
+        )
         self._edge_slice_attributes = None
-        # Insertion-ordered sets: a pending id is written once however many
-        # times it is asked for, and a drop takes it out in one step.
-        self._pending_vertex_ids: dict = {}
-        self._pending_edge_ids: dict = {}
-        self._pending_vertex_drops: set = set()
-        self._pending_edge_drops: set = set()
         self._pending_edge_slice_drops: set = set()
-        self._vertex_attr_ids = None
-        self._edge_attr_ids = None
-        self._vertex_attr_df_id = None
-        self._edge_attr_df_id = None
 
         # 1) If user provided tables, keep them (we’ll wrap with Narwhals in ops)
         if annotations is not None:
@@ -518,8 +524,6 @@ class AnnNet(
 
         # 2) Otherwise, create empty tables with the centrally selected backend.
         backend = self._annotations_backend
-        self._vertex_table = empty_dataframe({'vertex_id': 'text'}, backend=backend)
-        self._edge_table = empty_dataframe({'edge_id': 'text'}, backend=backend)
         self.slice_attributes = empty_dataframe({'slice_id': 'text'}, backend=backend)
         self.edge_slice_attributes = empty_dataframe(
             {'slice_id': 'text', 'edge_id': 'text', 'weight': 'float'},
@@ -548,35 +552,36 @@ class AnnNet(
 
     @property
     def _vertex_table(self):
-        """Vertex (obs) attribute table; flushes buffered row writes on read."""
-        if self._pending_vertex_ids or self._pending_vertex_drops:
-            self._flush_vertex_rows()
-        return self._vertex_attributes
+        """The node table, built from the attribute columns when it is read.
+
+        The graph stores columns and not a frame, so this is a table for the
+        caller. One build serves every read until the next write.
+        """
+        return self._attr_store.obs(backend=self._annotations_backend)
 
     @_vertex_table.setter
     def _vertex_table(self, value):
-        """Replace the vertex attribute table and clear buffered row state."""
-        self._vertex_attributes = value
-        self._pending_vertex_ids = {}
-        self._pending_vertex_drops = set()
-        self._vertex_attr_ids = None
-        self._vertex_attr_df_id = None
+        """Give the attribute columns what the rows of a table say.
+
+        A caller that holds a whole table states the node attributes of the
+        graph with it. A row for a node the graph does not hold names nothing,
+        so it is left out.
+        """
+        self._attr_store.load_node_rows(
+            () if value is None else dataframe_to_rows(_renamed_id(value, 'vertex_id'))
+        )
 
     @property
     def _edge_table(self):
-        """Edge (var) attribute table; flushes buffered row writes on read."""
-        if self._pending_edge_ids or self._pending_edge_drops:
-            self._flush_edge_rows()
-        return self._edge_attributes
+        """The edge table, built from the attribute columns when it is read."""
+        return self._attr_store.var(backend=self._annotations_backend)
 
     @_edge_table.setter
     def _edge_table(self, value):
-        """Replace the edge attribute table and clear buffered row state."""
-        self._edge_attributes = value
-        self._pending_edge_ids = {}
-        self._pending_edge_drops = set()
-        self._edge_attr_ids = None
-        self._edge_attr_df_id = None
+        """Give the attribute columns what the rows of a table say."""
+        self._attr_store.load_edge_rows(
+            () if value is None else dataframe_to_rows(_renamed_id(value, 'edge_id'))
+        )
 
     @property
     def edge_slice_attributes(self):

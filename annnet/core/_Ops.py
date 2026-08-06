@@ -9,7 +9,6 @@ from . import _build, _mutate, _structure
 from ._stored_kinds import STORED_EDGE_KIND
 from .._support.dataframe_backend import (
     clone_dataframe,
-    dataframe_height,
     dataframe_columns,
     dataframe_to_rows,
     dataframe_filter_in,
@@ -119,11 +118,11 @@ def _require_one_layer_registry(left, right) -> None:
 def _take_attributes(target, source, vertex_ids, edge_ids) -> None:
     """Copy the attributes of the named elements from one graph to another."""
     if vertex_ids:
-        rows = Operations._rows_attr_map(source, source._vertex_table, 'vertex_id', vertex_ids)
+        rows = source._attr_store.node_attr_rows(vertex_ids)
         if rows:
             target.attrs.set_vertex_attrs_bulk(rows)
     if edge_ids:
-        rows = Operations._rows_attr_map(source, source._edge_table, 'edge_id', edge_ids)
+        rows = source._attr_store.edge_attr_rows(edge_ids)
         if rows:
             target.attrs.set_edge_attrs_bulk(rows)
 
@@ -160,30 +159,6 @@ class Operations:
 
     def _copy_graph_attributes(self, new) -> None:
         new.graph_attributes = self.graph_attributes.copy()
-
-    def _rows_attr_map(self, df, key_col: str, keys=None) -> dict:
-        if df is None or key_col not in dataframe_columns(df) or dataframe_height(df) == 0:
-            return {}
-        cache = getattr(self, '_row_attr_cache', None)
-        if cache is None:
-            cache = {}
-            self._row_attr_cache = cache
-        cache_key = (id(df), key_col)
-        mapping = cache.get(cache_key)
-        if mapping is None:
-            mapping = {}
-            for row in dataframe_to_rows(df):
-                kval = row.get(key_col)
-                if kval is None:
-                    continue
-                d = dict(row)
-                d.pop(key_col, None)
-                mapping[kval] = d
-            cache[cache_key] = mapping
-        if keys is None:
-            return mapping
-        wanted = set(keys)
-        return {k: v for k, v in mapping.items() if k in wanted}
 
     def _filter_attr_table(self, df, key_col: str, keys):
         if df is None or key_col not in dataframe_columns(df):
@@ -257,10 +232,16 @@ class Operations:
             current=active_slice if active_slice is not None else self._default_slice,
         )
 
-        new._vertex_table = self._filter_attr_table(
-            self._vertex_table, 'vertex_id', ordered_vertices
+        # The selection numbers its slots afresh, so the columns are carried over
+        # by id and not by address.
+        new._attr_store.load_node_rows(
+            {'vertex_id': vertex_id, **attrs}
+            for vertex_id, attrs in self._attr_store.node_attr_rows(ordered_vertices).items()
         )
-        new._edge_table = self._filter_attr_table(self._edge_table, 'edge_id', ordered_edges)
+        new._attr_store.load_edge_rows(
+            {'edge_id': edge_id, **attrs}
+            for edge_id, attrs in self._attr_store.edge_attr_rows(ordered_edges).items()
+        )
         new.slice_attributes = self._filter_attr_table(
             self.slice_attributes, 'slice_id', list(new._slices.keys())
         )
@@ -337,9 +318,7 @@ class Operations:
                 directed=self.directed,
                 aspects=new_aspects,
             )
-            bare_vid_attrs = self._rows_attr_map(
-                self._vertex_table, 'vertex_id', {self._bare_vid(v) for v in V}
-            )
+            bare_vid_attrs = self._attr_store.node_attr_rows({self._bare_vid(v) for v in V})
             for node in V:
                 if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
                     bare_vid, layer_coord = node
@@ -348,7 +327,7 @@ class Operations:
                 g.add_vertices(bare_vid, layer=layer_coord, **bare_vid_attrs.get(bare_vid, {}))
         else:
             g = G(directed=self.directed)
-            va_lookup = self._rows_attr_map(self._vertex_table, 'vertex_id', V)
+            va_lookup = self._attr_store.node_attr_rows(V)
             v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
             g._add_vertices_bulk(v_rows, slice=g._default_slice)
 
@@ -419,7 +398,7 @@ class Operations:
             else:
                 hyper_payload.append(payload)
 
-        va_lookup = self._rows_attr_map(self._vertex_table, 'vertex_id', V)
+        va_lookup = self._attr_store.node_attr_rows(V)
         v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
 
         G = self.__class__
@@ -720,7 +699,7 @@ class Operations:
         g.slices.add(slice_id, **slice_meta['attributes'])
         g.slices.active = slice_id
 
-        va_lookup = self._rows_attr_map(self._vertex_table, 'vertex_id', V)
+        va_lookup = self._attr_store.node_attr_rows(V)
         if new_aspects is not None:
             by_id = _structure.entities_by_id(self)
             for vid in V:
@@ -737,7 +716,7 @@ class Operations:
             v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
             g._add_vertices_bulk(v_rows, slice=slice_id)
 
-        e_attrs = self._rows_attr_map(self._edge_table, 'edge_id', E)
+        e_attrs = self._attr_store.edge_attr_rows(E)
         eff_w = {}
         if resolve_slice_weights:
             df = self.edge_slice_attributes
@@ -771,27 +750,6 @@ class Operations:
 
         self._copy_graph_attributes(g)
         return g
-
-    def _row_attrs(self, df, key_col: str, key):
-        if df is None or key_col not in dataframe_columns(df) or dataframe_height(df) == 0:
-            return {}
-        cache = getattr(self, '_row_attr_cache', None)
-        if cache is None:
-            cache = {}
-            self._row_attr_cache = cache
-        cache_key = (id(df), key_col)
-        mapping = cache.get(cache_key)
-        if mapping is None:
-            mapping = {}
-            for row in dataframe_to_rows(df):
-                kval = row.get(key_col)
-                if kval is None:
-                    continue
-                d = dict(row)
-                d.pop(key_col, None)
-                mapping[kval] = d
-            cache[cache_key] = mapping
-        return mapping.get(key, {})
 
     def copy(self, history: bool = False):
         """Deep copy of the entire AnnNet.
@@ -833,8 +791,9 @@ class Operations:
 
         new.slice_edge_weights = {lid: m.copy() for lid, m in self.slice_edge_weights.items()}
 
-        new._vertex_table = _share_or_clone_table(self._vertex_table)
-        new._edge_table = _share_or_clone_table(self._edge_table)
+        # A copy keeps every slot at the address it had, so the columns are
+        # copied as they stand rather than replayed row by row.
+        new._attr_store.copy_columns_from(self._attr_store)
         new.slice_attributes = _share_or_clone_table(self.slice_attributes)
         new.edge_slice_attributes = _share_or_clone_table(self.edge_slice_attributes)
         new.layer_attributes = _share_or_clone_table(self.layer_attributes)

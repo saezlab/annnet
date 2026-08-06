@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-import sys as _sys
-
 from . import _store as ST, _matrices, _structure
 from ._records import _external_entity_kind
 from ._stored_kinds import STORED_ENTITY_KIND
 from .._support.dataframe_backend import (
-    empty_dataframe,
-    dataframe_columns,
     dataframe_drop_rows,
-    dataframe_append_rows,
-    dataframe_column_values,
 )
 
 # Tells a missing key from one whose value is ``None``, which every pending row
@@ -699,176 +693,11 @@ class IndexMapping:
         self._next_edge_id += 1
         return edge_id
 
-    # --- Buffered attribute-row insertion and removal --------------------------
-    # ``add_vertices``/``add_edges`` must guarantee a row per entity in obs/var
-    # (the anndata symmetry). Appending one row to a columnar (Polars) table per
-    # call is O(n) -> O(n^2). Instead we buffer new id-only rows and flush them in
-    # one batch when the table is read (via the _vertex_table/_edge_table
-    # property getters on AnnNet). Membership stays O(1) via a maintained id-set.
-    #
-    # A removal is buffered the same way and for the same reason. Filtering a
-    # frame costs the call rather than the rows, so a hundred single removes paid
-    # a hundred filters where the set they name needs one. The two buffers flush
-    # together: the drops go first, then the appends, so an id removed and added
-    # again before a read ends with the fresh row and not the stale one.
-
-    def _ensure_vertex_table(self) -> None:
-        df = self._vertex_attributes
-        if df is None or 'vertex_id' not in dataframe_columns(df):
-            self._vertex_table = empty_dataframe({'vertex_id': 'text'})
-
-    def _vertex_id_set(self):
-        ids = self._built_vertex_id_set()
-        if ids is None:
-            df = self._vertex_attributes
-            ids = set(dataframe_column_values(df, 'vertex_id'))
-            ids.discard(None)
-            ids.difference_update(self._pending_vertex_drops)
-            ids.update(self._pending_vertex_ids)
-            self._vertex_attr_ids = ids
-            self._vertex_attr_df_id = id(df)
-        return ids
-
-    def _built_vertex_id_set(self):
-        """The id set if it is built and current, and ``None`` if it is neither.
-
-        Building it is a pass over the table, and a drop does not need one: the
-        build subtracts what is pending, so a drop recorded against a set that
-        was never built is still true of the set when it is.
-        """
-        ids = getattr(self, '_vertex_attr_ids', None)
-        if ids is None or getattr(self, '_vertex_attr_df_id', None) != id(self._vertex_attributes):
-            return None
-        return ids
-
-    def _ensure_vertex_row(self, vertex_id: str) -> None:
-        if isinstance(vertex_id, str):
-            try:
-                vertex_id = _sys.intern(vertex_id)
-            except (AttributeError, TypeError):
-                pass
-        ids = self._vertex_id_set()
-        if vertex_id in ids:
-            return
-        ids.add(vertex_id)
-        self._pending_vertex_ids[vertex_id] = None
-
-    def _drop_vertex_rows(self, vertex_ids) -> None:
-        """Take the rows of these vertices out of the table, at the next read."""
-        drop = set(vertex_ids)
-        if not drop:
-            return
-        ids = self._built_vertex_id_set()
-        if ids is not None:
-            ids.difference_update(drop)
-        pend = self._pending_vertex_ids
-        # A row that was never written needs no filter to take it away again, so
-        # only a vertex the table already holds is worth a drop. The walk goes
-        # over what is being dropped and not over what is pending, because a set
-        # operation against the keys of a dict copies the whole dict first.
-        for vertex_id in drop:
-            if pend.pop(vertex_id, _ABSENT) is _ABSENT:
-                self._pending_vertex_drops.add(vertex_id)
-
-    def _flush_vertex_rows(self) -> None:
-        drop = self._pending_vertex_drops
-        pend = self._pending_vertex_ids
-        if not drop and not pend:
-            return
-        self._pending_vertex_drops = set()
-        self._pending_vertex_ids = {}
-        df = self._vertex_attributes
-        if drop:
-            df = dataframe_drop_rows(df, 'vertex_id', drop)
-        if pend:
-            if df is None or 'vertex_id' not in dataframe_columns(df):
-                df = empty_dataframe({'vertex_id': 'text'}, backend=self._annotations_backend)
-                cols = ['vertex_id']
-            else:
-                cols = list(dataframe_columns(df))
-            rows = [{**dict.fromkeys(cols), 'vertex_id': v} for v in pend]
-            df = dataframe_append_rows(df, rows)
-        self._vertex_attributes = df
-        self._vertex_attr_df_id = id(self._vertex_attributes)
-
-    def _edge_id_set(self):
-        ids = self._built_edge_id_set()
-        if ids is None:
-            df = self._edge_attributes
-            ids = set(dataframe_column_values(df, 'edge_id'))
-            ids.discard(None)
-            ids.difference_update(self._pending_edge_drops)
-            ids.update(self._pending_edge_ids)
-            self._edge_attr_ids = ids
-            self._edge_attr_df_id = id(df)
-        return ids
-
-    def _built_edge_id_set(self):
-        """The id set if it is built and current, and ``None`` if it is neither."""
-        ids = getattr(self, '_edge_attr_ids', None)
-        if ids is None or getattr(self, '_edge_attr_df_id', None) != id(self._edge_attributes):
-            return None
-        return ids
-
-    def _ensure_edge_row(self, edge_id: str) -> None:
-        if isinstance(edge_id, str):
-            try:
-                edge_id = _sys.intern(edge_id)
-            except (AttributeError, TypeError):
-                pass
-        ids = self._edge_id_set()
-        if edge_id in ids:
-            return
-        ids.add(edge_id)
-        self._pending_edge_ids[edge_id] = None
-
-    def _ensure_edge_rows_bulk(self, edge_ids) -> None:
-        if not edge_ids:
-            return
-        ids = self._edge_id_set()
-        new = [eid for eid in edge_ids if eid not in ids]
-        if not new:
-            return
-        ids.update(new)
-        self._pending_edge_ids.update(dict.fromkeys(new))
-
-    def _drop_edge_rows(self, edge_ids) -> None:
-        """Take the rows of these edges out of the table, at the next read."""
-        drop = set(edge_ids)
-        if not drop:
-            return
-        ids = self._built_edge_id_set()
-        if ids is not None:
-            ids.difference_update(drop)
-        pend = self._pending_edge_ids
-        # A row that was never written needs no filter to take it away again, so
-        # only an edge the table already holds is worth a drop. The walk goes
-        # over what is being dropped and not over what is pending, because a set
-        # operation against the keys of a dict copies the whole dict first.
-        for edge_id in drop:
-            if pend.pop(edge_id, _ABSENT) is _ABSENT:
-                self._pending_edge_drops.add(edge_id)
-
-    def _flush_edge_rows(self) -> None:
-        drop = self._pending_edge_drops
-        pend = self._pending_edge_ids
-        if not drop and not pend:
-            return
-        self._pending_edge_drops = set()
-        self._pending_edge_ids = {}
-        df = self._edge_attributes
-        if drop:
-            df = dataframe_drop_rows(df, 'edge_id', drop)
-        if pend:
-            if df is None or 'edge_id' not in dataframe_columns(df):
-                df = empty_dataframe({'edge_id': 'text'}, backend=self._annotations_backend)
-                cols = ['edge_id']
-            else:
-                cols = list(dataframe_columns(df))
-            rows = [{**dict.fromkeys(cols), 'edge_id': eid} for eid in pend]
-            df = dataframe_append_rows(df, rows)
-        self._edge_attributes = df
-        self._edge_attr_df_id = id(self._edge_attributes)
+    # --- Buffered edge-slice row removal -------------------------------------
+    # The edge-by-slice table is a frame, so filtering it costs the call rather
+    # than the rows it drops. A hundred single removes paid a hundred filters
+    # where the set they name needs one, so a removal is buffered and applied by
+    # the next read.
 
     def _drop_edge_slice_rows(self, edge_ids) -> None:
         """Take the rows of these edges out of the edge-slice table, at the next read.

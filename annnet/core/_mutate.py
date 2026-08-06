@@ -10,11 +10,6 @@ from ._records import (
     SliceRecord,
     _internal_entity_kind,
 )
-from .._support.dataframe_backend import (
-    is_polars_dataframe,
-    dataframe_upsert_rows,
-    polars_upsert_vertices,
-)
 
 # ---------------------------------------------------------------------------
 # Writing the canonical store
@@ -99,11 +94,8 @@ def add_vertex(g, vertex_id, slice=None, layer=None, **attributes):
         g._slices[slice] = SliceRecord()
     g._slices[slice]['vertices'].add(vertex_id)
 
-    g._ensure_vertex_table()
-    g._ensure_vertex_row(vertex_id)
-
     if attributes:
-        g._vertex_table = g._upsert_row(g._vertex_table, vertex_id, attributes)
+        g._attr_store.set_node_attrs(vertex_id, attributes)
 
     return vertex_id
 
@@ -147,7 +139,6 @@ def ensure_edge_entity_placeholder(g, edge_id, slice=None, **attributes):
         g.slices._ensure_slice(slice)['edges'].add(edge_id)
     if attributes:
         g.attrs.set_edge_attrs(edge_id, **attributes)
-    g._ensure_edge_row(edge_id)
     return edge_id
 
 
@@ -461,10 +452,9 @@ def add_edge(
         store.set_edge_directed(edge_id, True)
         g._apply_flexible_direction(edge_id)
 
-    # 14. Attributes + ensure var row
+    # 14. Attributes
     if attrs:
         g.attrs.set_edge_attrs(edge_id, **attrs)
-    g._ensure_edge_row(edge_id)
 
     return edge_id
 
@@ -531,11 +521,11 @@ def remove_edges_bulk(g, edge_ids):
         for eid in drop:
             d.pop(eid, None)
 
-    # Both attribute tables take the removal the way they take an insertion:
-    # buffered, and applied by the next read. A filter costs the call rather
-    # than the rows, so removing edges one at a time paid for one filter each
-    # where the set they name needs one filter between them.
-    g._drop_edge_rows(drop)
+    # The generic attributes of a removed edge go with the slot the store frees.
+    # The edge-by-slice table is a frame still, and takes the removal buffered:
+    # a filter costs the call rather than the rows, so removing edges one at a
+    # time paid for one filter each where the set they name needs one between
+    # them.
     g._drop_edge_slice_rows(drop)
 
     drop_orphan_edge_entities(g, drop)
@@ -857,8 +847,6 @@ def remove_vertices_bulk(g, vertex_ids):
     D.invalidate_sparse_caches(g)
     drop_entities(g, drop_keys)
 
-    g._drop_vertex_rows(drop_vertex_ids)
-
     for slice_data in g._slices.values():
         slice_data['vertices'].difference_update(drop_vertex_ids)
 
@@ -1007,34 +995,14 @@ def batch_add_vertices(g, vertices, layer=None, slice=None, default_attrs=None):
     # --- slice ---
     g.slices._ensure_slice(slice)['vertices'].update(vid for vid, _ in norm)
 
-    # --- attribute table (Polars fast path) ---
-    g._ensure_vertex_table()
-    if is_polars_dataframe(g._vertex_table):
-        keys = {k for _, attrs in norm for k in attrs}
-        df = g._vertex_table
-        if keys:
-            df = g._ensure_attr_columns(df, dict.fromkeys(keys))
-        if is_polars_dataframe(df):
-            result = polars_upsert_vertices(df, norm)
-            if result is not None:
-                g._vertex_table = result
-                return
-
-    # --- generic fallback (pandas / pyarrow, or polars with non-string vids) ---
-    # Non-string vids (e.g. multilayer supra-node tuples) live in the store only
-    # and stay out of the obs table. The polars backend cannot represent tuples
-    # in a String-typed vertex_id column anyway.
-    df2 = g._vertex_table
-
-    rows = [
-        {'vertex_id': vid, **{k: _sanitize(v) for k, v in attrs.items()}}
-        for vid, attrs in norm
-        if isinstance(vid, str)
-    ]
-    if rows:
-        df2 = dataframe_upsert_rows(df2, rows, ('vertex_id',))
-
-    g._vertex_table = df2
+    # --- attributes ---
+    # A cell each, straight into the columns. There is no table to rebuild and no
+    # backend to take a fast path for: a non-string id names a supra-node, which
+    # the node table does not hold a row for either way.
+    attr_store = g._attr_store
+    for vid, attrs in norm:
+        if attrs and isinstance(vid, str):
+            attr_store.set_node_attrs(vid, {k: _sanitize(v) for k, v in attrs.items()})
 
 
 def batch_add_edges(
@@ -1386,8 +1354,6 @@ def batch_add_edges(
                 _slot.set_edge_kind(eid, ST.NODE_EDGE)
         D.bump_structure(g)
 
-    g._ensure_edge_rows_bulk(entity_out + out_ids)
-
     return entity_out + out_ids
 
 
@@ -1629,7 +1595,6 @@ def batch_add_hyperedges(
 
     g._mark_structure_changed()
     g._invalidate_sparse_caches()
-    g._ensure_edge_rows_bulk(out_ids)
     if attrs_batch:
         g.attrs.set_edge_attrs_bulk(attrs_batch)
 
