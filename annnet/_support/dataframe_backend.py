@@ -159,10 +159,18 @@ def dataframe_columns(df) -> list[str]:
 
 
 def dataframe_column_values(df, column: str) -> list[Any]:
-    """Return one dataframe column as a Python list."""
-    if df is None or column not in dataframe_columns(df):
+    """Return one dataframe column as a Python list.
+
+    One column is read as one column. The shape before this built every row of
+    the frame as a dict and then read one key out of each, which costs the width
+    of the frame where the caller asked for a single column of it.
+    """
+    if df is None:
         return []
-    return [row.get(column) for row in dataframe_to_rows(df)]
+    frame = _to_nw(df)
+    if column not in frame.columns:
+        return []
+    return frame[column].to_list()
 
 
 def dataframe_select_to_numpy(df, columns: list[str]):

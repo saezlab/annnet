@@ -10,9 +10,9 @@ from ._stored_kinds import STORED_ENTITY_KIND
 from .._support.dataframe_backend import (
     empty_dataframe,
     dataframe_columns,
-    dataframe_to_rows,
     dataframe_drop_rows,
     dataframe_append_rows,
+    dataframe_column_values,
 )
 
 # Tells a missing key from one whose value is ``None``, which every pending row
@@ -718,17 +718,27 @@ class IndexMapping:
             self.vertex_attributes = empty_dataframe({'vertex_id': 'text'})
 
     def _vertex_id_set(self):
-        df = self._vertex_attributes
-        ids = getattr(self, '_vertex_attr_ids', None)
-        if ids is None or getattr(self, '_vertex_attr_df_id', None) != id(df):
-            ids = set()
-            if df is not None and 'vertex_id' in dataframe_columns(df):
-                ids = {r.get('vertex_id') for r in dataframe_to_rows(df)}
-                ids.discard(None)
+        ids = self._built_vertex_id_set()
+        if ids is None:
+            df = self._vertex_attributes
+            ids = set(dataframe_column_values(df, 'vertex_id'))
+            ids.discard(None)
             ids.difference_update(self._pending_vertex_drops)
             ids.update(self._pending_vertex_ids)
             self._vertex_attr_ids = ids
             self._vertex_attr_df_id = id(df)
+        return ids
+
+    def _built_vertex_id_set(self):
+        """The id set if it is built and current, and ``None`` if it is neither.
+
+        Building it is a pass over the table, and a drop does not need one: the
+        build subtracts what is pending, so a drop recorded against a set that
+        was never built is still true of the set when it is.
+        """
+        ids = getattr(self, '_vertex_attr_ids', None)
+        if ids is None or getattr(self, '_vertex_attr_df_id', None) != id(self._vertex_attributes):
+            return None
         return ids
 
     def _ensure_vertex_row(self, vertex_id: str) -> None:
@@ -748,7 +758,9 @@ class IndexMapping:
         drop = set(vertex_ids)
         if not drop:
             return
-        self._vertex_id_set().difference_update(drop)
+        ids = self._built_vertex_id_set()
+        if ids is not None:
+            ids.difference_update(drop)
         pend = self._pending_vertex_ids
         # A row that was never written needs no filter to take it away again, so
         # only a vertex the table already holds is worth a drop. The walk goes
@@ -780,17 +792,22 @@ class IndexMapping:
         self._vertex_attr_df_id = id(self._vertex_attributes)
 
     def _edge_id_set(self):
-        df = self._edge_attributes
-        ids = getattr(self, '_edge_attr_ids', None)
-        if ids is None or getattr(self, '_edge_attr_df_id', None) != id(df):
-            ids = set()
-            if df is not None and 'edge_id' in dataframe_columns(df):
-                ids = {r.get('edge_id') for r in dataframe_to_rows(df)}
-                ids.discard(None)
+        ids = self._built_edge_id_set()
+        if ids is None:
+            df = self._edge_attributes
+            ids = set(dataframe_column_values(df, 'edge_id'))
+            ids.discard(None)
             ids.difference_update(self._pending_edge_drops)
             ids.update(self._pending_edge_ids)
             self._edge_attr_ids = ids
             self._edge_attr_df_id = id(df)
+        return ids
+
+    def _built_edge_id_set(self):
+        """The id set if it is built and current, and ``None`` if it is neither."""
+        ids = getattr(self, '_edge_attr_ids', None)
+        if ids is None or getattr(self, '_edge_attr_df_id', None) != id(self._edge_attributes):
+            return None
         return ids
 
     def _ensure_edge_row(self, edge_id: str) -> None:
@@ -820,7 +837,9 @@ class IndexMapping:
         drop = set(edge_ids)
         if not drop:
             return
-        self._edge_id_set().difference_update(drop)
+        ids = self._built_edge_id_set()
+        if ids is not None:
+            ids.difference_update(drop)
         pend = self._pending_edge_ids
         # A row that was never written needs no filter to take it away again, so
         # only an edge the table already holds is worth a drop. The walk goes
