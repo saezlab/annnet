@@ -102,7 +102,7 @@ def _path_size(p: str) -> int:
 
 def run(n_vertices: int = 2000, n_edges: int = 10000, samples: int = 5) -> list[dict]:
     G = build_graph(n_vertices, n_edges)
-    n_e = G.number_of_edges()
+    n_e = G.ecount()
     recs: list[dict] = []
 
     for name, write, read, _is_dir, note in _formats():
@@ -121,7 +121,7 @@ def run(n_vertices: int = 2000, n_edges: int = 10000, samples: int = 5) -> list[
                 lambda _p=path, _r=read: _r(_p), samples=samples
             ).as_dict()
             G2 = read(path)
-            rec['edges_ok'] = G2.number_of_edges() == n_e
+            rec['edges_ok'] = G2.ecount() == n_e
         except Exception as e:
             rec['error'] = f'{type(e).__name__}: {e}'
         finally:
