@@ -17,9 +17,11 @@ from ._Slices import SliceManager
 from ._History import History, HistoryAccessor
 from ._records import (
     EdgeView,
+    VertexView,
+    _external_entity_kind,
 )
 from ._Annotation import AttributesClass, AttributesAccessor
-from ._stored_kinds import STORED_EDGE_KIND
+from ._stored_kinds import STORED_EDGE_KIND, STORED_ENTITY_KIND
 from ..algorithms.traversal import Traversal
 from .._support.dataframe_backend import (
     clone_dataframe,
@@ -293,10 +295,18 @@ class AnnNet(
         'write',
         'view',
         'global_count',
+        'get_vertex',
         'get_edge',
+        'neighbors',
         'edge_list',
         'make_undirected',
         'is_multilayer',
+        'A',
+        'B',
+        'H',
+        'S',
+        'L',
+        'matrices',
     )
 
     _BLOCKED_LEGACY_API = frozenset(
@@ -1397,6 +1407,46 @@ class AnnNet(
         return len(orphans)
 
     # Basic queries & metrics
+
+    def get_vertex(self, vertex_id: str) -> VertexView:
+        """Return a :class:`VertexView` for one vertex.
+
+        Parameters
+        ----------
+        vertex_id : str
+            Vertex identifier. A lookup takes an id and nothing else. A caller
+            holding a row of the incidence matrix asks
+            ``G.idx.row_to_entity(row)`` for the identity on it, and a caller
+            who wants the n-th vertex of a sequence writes ``G.N[n]``.
+
+        Returns
+        -------
+        VertexView
+            A string-shaped record equal to the id. ``kind``, ``layers`` and
+            ``attrs`` are exposed as attributes.
+
+        Raises
+        ------
+        TypeError
+            If the argument is not an id.
+        KeyError
+            If the id is unknown.
+        """
+        if not isinstance(vertex_id, str):
+            raise TypeError(
+                f'get_vertex takes a vertex id, not {type(vertex_id).__name__}. For the '
+                f'vertex on a matrix row, use G.idx.row_to_entity(row).'
+            )
+        keys = self._store.entity_keys_of_id(vertex_id)
+        if not keys:
+            raise KeyError(f'Unknown vertex id: {vertex_id}')
+        ref = _structure.entity_ref(self, keys[0])
+        return VertexView(
+            vertex_id,
+            kind=_external_entity_kind(STORED_ENTITY_KIND[ref.kind]),
+            layers=tuple(layer for _id, layer in keys),
+            attrs=self._attr_store.node_attrs(vertex_id),
+        )
 
     def get_edge(self, edge_id: str) -> EdgeView:
         """Return an :class:`EdgeView` for one edge.

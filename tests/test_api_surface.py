@@ -199,8 +199,10 @@ def test_an_edge_lookup_takes_an_id(chain):
 
 
 def test_the_position_lookup_of_a_node_is_gone(chain):
-    """``G.N[0]`` is how a caller asks for the n-th node now."""
-    assert not hasattr(chain, 'get_vertex')
+    """``get_vertex`` takes an id. ``G.N[0]`` asks for the n-th node."""
+    with pytest.raises(TypeError):
+        chain.get_vertex(0)
+    assert chain.get_vertex(chain.N[0]) == chain.N[0]
 
 
 # ---------------------------------------------------------------------------

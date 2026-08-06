@@ -1,4 +1,14 @@
-"""annnet public package API."""
+"""The public surface of the package.
+
+``__all__`` is the curated list of what a user may name at the top level, and it
+is built from the three registries below rather than written out again, so a name
+cannot appear in one and not the other. A name that is not in one of them is not
+public, whatever module holds it.
+
+Every entry resolves on first use. Importing the package therefore costs the
+metadata alone, and a graph backend, a dataframe backend or an input-output
+format is imported by the call that needs it.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +23,7 @@ from importlib.metadata import (
 # eager-import cost. Runtime behaviour is unchanged.
 if TYPE_CHECKING:
     from annnet.core.graph import AnnNet
-    from annnet.core._records import EdgeType
+    from annnet.core._records import EdgeType, EdgeView, VertexView
     from annnet.algorithms.traversal import Traversal
 
     Graph = AnnNet
@@ -40,6 +50,8 @@ _lazy_objects: dict[str, tuple[str, str]] = {
     'AnnNet': ('annnet.core.graph', 'AnnNet'),
     'Graph': ('annnet.core.graph', 'AnnNet'),
     'EdgeType': ('annnet.core._records', 'EdgeType'),
+    'EdgeView': ('annnet.core._records', 'EdgeView'),
+    'VertexView': ('annnet.core._records', 'VertexView'),
     'Traversal': ('annnet.algorithms.traversal', 'Traversal'),
 }
 

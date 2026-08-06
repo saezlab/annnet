@@ -99,6 +99,29 @@ class EdgeView(tuple):
         )
 
 
+class VertexView(str):
+    """String-shaped vertex record returned by :meth:`AnnNet.get_vertex`.
+
+    A vertex is its id, so this is the id, and everything the graph holds about
+    it hangs off that. An edge is a pair, which is why :class:`EdgeView` is a
+    tuple and this is a string.
+    """
+
+    def __new__(cls, vertex_id, *, kind, layers, attrs):
+        self = super().__new__(cls, vertex_id)
+        self.vertex_id = vertex_id
+        self.kind = kind
+        self.layers = layers
+        self.attrs = attrs
+        return self
+
+    def __repr__(self) -> str:
+        return (
+            f'VertexView(vertex_id={self.vertex_id!r}, kind={self.kind!r}, '
+            f'layers={self.layers!r}, attrs={self.attrs!r})'
+        )
+
+
 def _external_entity_kind(kind: str) -> str:
     return 'edge' if kind == 'edge_entity' else kind
 
