@@ -14,6 +14,10 @@ from .._support.dataframe_backend import (
     dataframe_write_parquet,
 )
 
+_VAR_POSITIONAL = inspect.Parameter.VAR_POSITIONAL
+_VAR_KEYWORD = inspect.Parameter.VAR_KEYWORD
+_time = time.time
+
 
 class GraphDiff:
     """Set difference between two graph snapshots (vertices/edges/slices added/removed)."""
@@ -87,12 +91,29 @@ class GraphDiff:
 class History:
     """Mutation logging, version counter, snapshots, and diffs (mixed into AnnNet)."""
 
+    # The second the stamp of the last event fell in, and the text of it. Class
+    # attributes so that no constructor and no copy has to know about them.
+    _iso_second = -1
+    _iso_prefix = ''
+
     def _bump_version(self) -> int:
         self._version += 1
         return self._version
 
     def _utcnow_iso(self) -> str:
-        return datetime.now(UTC).isoformat(timespec='microseconds').replace('+00:00', 'Z')
+        """The current instant, as ``YYYY-MM-DDTHH:MM:SS.ffffffZ``.
+
+        Everything but the fraction is the same for every event of one second,
+        and formatting a whole datetime is 1.1 of the 1.3 microseconds this used
+        to cost — against a logged mutation of about four. So the second is
+        formatted when it changes and the fraction is appended to it.
+        """
+        now = _time()
+        whole = int(now)
+        if whole != self._iso_second:
+            self._iso_prefix = datetime.fromtimestamp(whole, UTC).isoformat(timespec='seconds')[:19]
+            self._iso_second = whole
+        return f'{self._iso_prefix}.{int((now - whole) * 1_000_000):06d}Z'
 
     def _jsonify(self, x):
         if x is None or isinstance(x, (bool, int, float, str)):
@@ -161,6 +182,12 @@ class History:
         def deco(fn):
             op = name or fn.__name__
             sig = inspect.signature(fn)
+            # A method that takes nothing but ``*args`` and ``**kwargs`` binds to
+            # exactly those two names, whatever the caller passes. Working that
+            # out through ``inspect`` costs 1.8 microseconds a call, against a
+            # single remove of about 10, and it arrives at the dict written here.
+            kinds = [p.kind for p in sig.parameters.values()]
+            star_only = kinds == [_VAR_POSITIONAL, _VAR_KEYWORD]
 
             @wraps(fn)
             def wrapper(*args, **kwargs):
@@ -170,10 +197,13 @@ class History:
                     return result
                 # Capture args only when logging; summarize big collections so a
                 # bulk add_edges([...10k...]) does not pay an O(n) serialization.
-                bound = sig.bind(*args, **kwargs)
-                bound.apply_defaults()
                 summ = self._summarize_arg
-                payload = {k: summ(v) for k, v in bound.arguments.items() if k != 'self'}
+                if star_only:
+                    payload = {'args': summ(args), 'kwargs': summ(kwargs)}
+                else:
+                    bound = sig.bind(*args, **kwargs)
+                    bound.apply_defaults()
+                    payload = {k: summ(v) for k, v in bound.arguments.items() if k != 'self'}
                 payload['result'] = summ(result)
                 self._log_event(op, **payload)
                 return result
