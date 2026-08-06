@@ -25,11 +25,11 @@ class TestAnnNetIO(unittest.TestCase):
         # Build a tiny directed graph with a slice + hyperedge
         G = AnnNet(directed=True)
 
-        # Vertices (two in slice1)
-        G.add_vertices('v1', slice='slice1')
-        G.add_vertices('v2', slice='slice1')
-        G.add_vertices('v3')
-        G.add_vertices('v4')
+        # Nodes (two in slice1)
+        G.add_nodes('v1', slice='slice1')
+        G.add_nodes('v2', slice='slice1')
+        G.add_nodes('v3')
+        G.add_nodes('v4')
 
         # Edges
         G.add_edges('v1', 'v2', edge_id='e1', weight=1.5)
@@ -121,9 +121,9 @@ class TestAnnNetIO(unittest.TestCase):
             # Multilayer edge kind dict preserved
             self.assertEqual(self.G.edge_kind, G2.edge_kind)
 
-            # slices: same edge sets, vertex sets
+            # slices: same edge sets, node sets
             for lid in self.G._slices:
-                self.assertEqual(self.G._slices[lid]['vertices'], G2._slices[lid]['vertices'])
+                self.assertEqual(self.G._slices[lid]['nodes'], G2._slices[lid]['nodes'])
                 self.assertEqual(self.G._slices[lid]['edges'], G2._slices[lid]['edges'])
                 self.assertEqual(
                     self.G.slice_edge_weights.get(lid, {}), G2.slice_edge_weights.get(lid, {})
@@ -223,8 +223,8 @@ class TestAnnNetIO(unittest.TestCase):
         0.1 is not float32-exact, which previously made every column look like
         stoichiometry."""
         G = AnnNet(directed=True)
-        G.add_vertices('a')
-        G.add_vertices('b')
+        G.add_nodes('a')
+        G.add_nodes('b')
         G.add_edges('a', 'b', edge_id='e', weight=0.1)
         out = Path(self.tmpdir) / 'plain.annnet'
         annnet_write(G, out, overwrite=True)
@@ -337,7 +337,7 @@ class TestAnnNetIO(unittest.TestCase):
             self.G.aspects = ['time', 'transport']
             self.G.elem_layers = {'time': ['t1', 't2'], 'transport': ['bus', 'train']}
 
-            # Vertex Presence: (u, layer_tuple)
+            # Node Presence: (u, layer_tuple)
             self.G._restore_supra_nodes(
                 {
                     ('v1', ('t1', 'bus')),
@@ -377,7 +377,7 @@ class TestAnnNetIO(unittest.TestCase):
             self.assertEqual(G2.aspects, ['time', 'transport'])
             self.assertEqual(G2.elem_layers, self.G.elem_layers)
 
-            # Vertex Presence — _VM now includes basal flat-graph entries too
+            # Node Presence — _VM now includes basal flat-graph entries too
             self.assertGreaterEqual(len(G2._VM), 3)
             self.assertIn(('v1', ('t1', 'bus')), G2._VM)
             self.assertIn(('v2', ('t2', 'train')), G2._VM)
@@ -414,11 +414,11 @@ class TestAnnNetIO(unittest.TestCase):
 
             slices_dir = root / 'slices'
             self.assertTrue((slices_dir / 'registry.parquet').exists())
-            self.assertTrue((slices_dir / 'vertex_memberships.parquet').exists())
+            self.assertTrue((slices_dir / 'node_memberships.parquet').exists())
             self.assertTrue((slices_dir / 'edge_memberships.parquet').exists())
 
             reg = pl.read_parquet(slices_dir / 'registry.parquet')
-            vmem = pl.read_parquet(slices_dir / 'vertex_memberships.parquet')
+            vmem = pl.read_parquet(slices_dir / 'node_memberships.parquet')
             emem = pl.read_parquet(slices_dir / 'edge_memberships.parquet')
 
             self.assertGreaterEqual(reg.height, 1)
@@ -426,7 +426,7 @@ class TestAnnNetIO(unittest.TestCase):
             self.assertNotIn('attributes', reg.columns)
 
             # slice1 must have at least v1,v2
-            vset = set(vmem.filter(pl.col('slice_id') == 'slice1')['vertex_id'].to_list())
+            vset = set(vmem.filter(pl.col('slice_id') == 'slice1')['node_id'].to_list())
             self.assertTrue({'v1', 'v2'}.issubset(vset))
 
             # edges exist in memberships as well
@@ -503,7 +503,7 @@ class TestAnnNetIO(unittest.TestCase):
             # VM is empty?
             self.assertEqual(len(G2._VM), 0)
             # Verify the file was actually written (the empty schema parquet)
-            self.assertTrue((root / 'layers' / 'vertex_presence.parquet').exists())
+            self.assertTrue((root / 'layers' / 'node_presence.parquet').exists())
             # Verify attribute files were NOT written (optimization check)
             self.assertFalse((root / 'layers' / 'tuple_layer_attributes.parquet').exists())
 
@@ -511,19 +511,19 @@ class TestAnnNetIO(unittest.TestCase):
 
     def test_write_read_large_sparse_graph(self):
         def _test(use_archive):
-            n_vertices = 10_000
+            n_nodes = 10_000
             n_edges = 100_000
 
             G = AnnNet(directed=True)
 
-            G.add_vertices({'vertex_id': f'v{i}'} for i in range(n_vertices))
+            G.add_nodes({'node_id': f'v{i}'} for i in range(n_nodes))
 
             bulk = []
             for i in range(n_edges):
                 bulk.append(
                     {
-                        'source': f'v{i % n_vertices}',
-                        'target': f'v{(i * 37) % n_vertices}',
+                        'source': f'v{i % n_nodes}',
+                        'target': f'v{(i * 37) % n_nodes}',
                         'weight': float(i % 7),
                         'edge_type': 'regular',
                     }
@@ -549,7 +549,7 @@ class TestAnnNetIO(unittest.TestCase):
             # nnz, not len(): the incidence cache is CSR (as for a freshly-built
             # graph) — len() is only defined on the legacy DOK format.
             self.assertLessEqual(G2._matrix.nnz, int(n_edges * 2))
-            self.assertLess(G2._matrix.nnz, n_vertices * 50)
+            self.assertLess(G2._matrix.nnz, n_nodes * 50)
 
         self._test_both_modes(_test)
 

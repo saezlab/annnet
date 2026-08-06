@@ -34,9 +34,9 @@ annnet tracks several kinds of multilayer state:
 
 - which aspects exist
 - which elementary layers belong to each aspect
-- which vertices are present in which layer tuples
+- which nodes are present in which layer tuples
 - whether edges are intra-layer, inter-layer, or coupling edges
-- layer-level and vertex-layer annotations
+- layer-level and node-layer annotations
 
 That lets the package describe the multilayer graph explicitly instead of
 encoding layer membership indirectly in names or attributes.
@@ -44,10 +44,10 @@ encoding layer membership indirectly in names or attributes.
 ## Supra representations
 
 For computation, the multilayer graph can be unfolded into supra structures over
-`(vertex, layer)` pairs.
+`(node, layer)` pairs.
 
 - Supra incidence uses the same sign logic as the monolayer incidence model.
-- Supra adjacency expresses relations between vertex-layer pairs.
+- Supra adjacency expresses relations between node-layer pairs.
 - Derived operators such as Laplacians or transition operators can then be built
   in the usual matrix form.
 
@@ -58,11 +58,11 @@ structures that replace the graph.
 
 A plain collection of annotated edges cannot easily distinguish:
 
-- a vertex missing from a layer
-- a vertex present but isolated in a layer
+- a node missing from a layer
+- a node present but isolated in a layer
 - an intra-layer edge
 - an inter-layer edge
-- a coupling edge connecting the same vertex across layers
+- a coupling edge connecting the same node across layers
 
 annnet models those distinctions directly.
 

@@ -18,15 +18,15 @@ from annnet.core.graph import AnnNet
 
 
 def _single_aspect_two_layer() -> AnnNet:
-    """Two vertices A, B present in both layers, with one intra edge per layer."""
+    """Two nodes A, B present in both layers, with one intra edge per layer."""
     G = AnnNet(directed=False)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         G.layers.set_aspects(['t'], {'t': ['t1', 't2']})
-        G.add_vertices(['A'], layer={'t': 't1'})
-        G.add_vertices(['B'], layer={'t': 't1'})
-        G.add_vertices(['A'], layer={'t': 't2'})
-        G.add_vertices(['B'], layer={'t': 't2'})
+        G.add_nodes(['A'], layer={'t': 't1'})
+        G.add_nodes(['B'], layer={'t': 't1'})
+        G.add_nodes(['A'], layer={'t': 't2'})
+        G.add_nodes(['B'], layer={'t': 't2'})
         G.add_edges(('A', ('t1',)), ('B', ('t1',)), edge_id='e_t1', weight=1.0)
         G.add_edges(('A', ('t2',)), ('B', ('t2',)), edge_id='e_t2', weight=1.0)
     return G
@@ -44,30 +44,30 @@ def _single_aspect_with_coupling() -> AnnNet:
 # ── layer set operations ──────────────────────────────────────────────
 
 
-def test_layer_union_aggregates_vertices_and_edges() -> None:
+def test_layer_union_aggregates_nodes_and_edges() -> None:
     G = _single_aspect_two_layer()
     out = G.layers.layer_union([('t1',), ('t2',)])
-    assert {'A', 'B'} <= out['vertices']
+    assert {'A', 'B'} <= out['nodes']
     assert {'e_t1', 'e_t2'} <= out['edges']
 
 
 def test_layer_union_empty_input_returns_empty_sets() -> None:
     G = _single_aspect_two_layer()
     out = G.layers.layer_union([])
-    assert out == {'vertices': set(), 'edges': set()}
+    assert out == {'nodes': set(), 'edges': set()}
 
 
 def test_layer_intersection_keeps_common_elements_only() -> None:
     G = _single_aspect_two_layer()
     out = G.layers.layer_intersection([('t1',), ('t2',)])
-    assert {'A', 'B'} <= out['vertices']
+    assert {'A', 'B'} <= out['nodes']
     assert out['edges'] == set()
 
 
 def test_layer_intersection_empty_input_returns_empty_sets() -> None:
     G = _single_aspect_two_layer()
     out = G.layers.layer_intersection([])
-    assert out == {'vertices': set(), 'edges': set()}
+    assert out == {'nodes': set(), 'edges': set()}
 
 
 def test_layer_difference_subtracts_b_from_a() -> None:
@@ -146,7 +146,7 @@ def test_set_layer_attrs_and_get_round_trip() -> None:
     assert G.layers.attrs(('t1',)).get('note') == 'alpha'
 
 
-def test_set_vertex_layer_attrs_and_get_round_trip() -> None:
+def test_set_node_layer_attrs_and_get_round_trip() -> None:
     G = _single_aspect_two_layer()
     G.layers.set_node_attrs('A', ('t1',), state='active')
     assert G.layers.node_attrs('A', ('t1',)).get('state') == 'active'
@@ -161,13 +161,13 @@ def test_iter_layers_yields_each_elementary_layer() -> None:
     assert out
 
 
-def test_iter_vertex_layers_yields_layers_containing_the_vertex() -> None:
+def test_iter_node_layers_yields_layers_containing_the_node() -> None:
     G = _single_aspect_two_layer()
-    out = list(G.layers.iter_vertex_layers('A'))
+    out = list(G.layers.iter_node_layers('A'))
     assert out
 
 
-def test_has_presence_returns_true_for_existing_vertex_layer() -> None:
+def test_has_presence_returns_true_for_existing_node_layer() -> None:
     G = _single_aspect_two_layer()
     assert G.layers.has_presence('A', ('t1',)) is True
 
@@ -331,7 +331,7 @@ def test_algebraic_connectivity_returns_zero_for_trivial_graph() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         G.layers.set_aspects(['t'], {'t': ['t1']})
-        G.add_vertices(['A'], layer={'t': 't1'})
+        G.add_nodes(['A'], layer={'t': 't1'})
     lam2, fiedler = G.layers.algebraic_connectivity()
     assert lam2 == 0.0
     assert fiedler is None
@@ -441,17 +441,17 @@ def test_multislice_modularity_rejects_wrong_partition_length() -> None:
 # ── tensor view & flattening ────────────────────────────────────────
 
 
-def test_tensor_index_returns_consistent_vertex_and_layer_maps() -> None:
+def test_tensor_index_returns_consistent_node_and_layer_maps() -> None:
     G = _single_aspect_two_layer()
-    vertices, layers, v2i, l2i = G.layers.tensor_index()
-    assert sorted(v2i.values()) == list(range(len(vertices)))
+    nodes, layers, v2i, l2i = G.layers.tensor_index()
+    assert sorted(v2i.values()) == list(range(len(nodes)))
     assert sorted(l2i.values()) == list(range(len(layers)))
 
 
 def test_adjacency_tensor_view_carries_expected_keys() -> None:
     G = _single_aspect_two_layer()
     view = G.layers.adjacency_tensor_view()
-    for key in ('vertices', 'layers', 'ui', 'ai', 'vi', 'bi', 'w'):
+    for key in ('nodes', 'layers', 'ui', 'ai', 'vi', 'bi', 'w'):
         assert key in view
 
 
@@ -471,7 +471,7 @@ def test_unflatten_from_supra_returns_tensor_view_dict() -> None:
     G = _single_aspect_with_coupling()
     A = G.layers.supra_adjacency()
     view = G.layers.unflatten_from_supra(A)
-    for key in ('vertices', 'layers', 'ui', 'w'):
+    for key in ('nodes', 'layers', 'ui', 'w'):
         assert key in view
 
 

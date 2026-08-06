@@ -217,7 +217,7 @@ def test_a_long_churn_keeps_identity_and_address_in_step(store):
 # Rekey
 # ---------------------------------------------------------------------------
 # An identity may change while an address does not. That is what lets a graph
-# declare aspects over the vertices it already holds without touching a member
+# declare aspects over the nodes it already holds without touching a member
 # list or a matrix position.
 
 

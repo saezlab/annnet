@@ -16,7 +16,7 @@ def extra_dimensions(
     backend: str = 'auto',
     samples: int = 3,
     groups: tuple[str, ...] | None = None,
-    max_vertices: int = 2_500,
+    max_nodes: int = 2_500,
     max_edges: int = 10_000,
     max_accessor_repeats: int = 5,
 ) -> list[dict]:
@@ -26,7 +26,7 @@ def extra_dimensions(
     kwargs = {
         'backend': backend,
         'samples': samples,
-        'max_vertices': max_vertices,
+        'max_nodes': max_nodes,
         'max_edges': max_edges,
         'max_accessor_repeats': max_accessor_repeats,
     }

@@ -28,8 +28,8 @@ class TestDataFrameAdapter(unittest.TestCase):
         from annnet import AnnNet
 
         G = AnnNet(directed=True, annotations_backend='pandas')
-        G.add_vertices('a', label='A')
-        G.add_vertices('b', label='B')
+        G.add_nodes('a', label='A')
+        G.add_nodes('b', label='B')
         G.add_edges('a', 'b', weight=2.0)
 
         exported = to_dataframes(G)
@@ -43,7 +43,7 @@ class TestDataFrameAdapter(unittest.TestCase):
     def setUpClass(cls):
         """Set up test data once for all tests."""
         cls.nodes_data = {
-            'vertex_id': ['user_001', 'user_002', 'user_003', 'user_004', 'user_005'],
+            'node_id': ['user_001', 'user_002', 'user_003', 'user_004', 'user_005'],
             'username': ['alice', 'bob', 'charlie', 'diana', 'eve'],
             'verified': [True, False, True, False, True],
             'followers_count': [15000, 230, 89000, 1200, 45000],
@@ -74,7 +74,7 @@ class TestDataFrameAdapter(unittest.TestCase):
                 'group_books',
                 'group_books',
             ],
-            'vertex_id': ['user_001', 'user_003', 'user_005', 'user_002', 'user_004', 'user_005'],
+            'node_id': ['user_001', 'user_003', 'user_005', 'user_002', 'user_004', 'user_005'],
             'role': ['member', 'member', 'member', 'member', 'member', 'member'],
             'weight': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
             'directed': [False, False, False, False, False, False],
@@ -83,12 +83,12 @@ class TestDataFrameAdapter(unittest.TestCase):
     def _assert_graph_structure(
         self,
         G,
-        expected_vertices: int,
+        expected_nodes: int,
         expected_edges: int | None = None,
         expected_hyperedges: int | None = None,
     ):
         """Helper to verify graph structure."""
-        self.assertEqual(len(list(G.vertices())), expected_vertices)
+        self.assertEqual(len(list(G.nodes())), expected_nodes)
         if expected_edges is not None:
             binary_edges = sum(
                 1 for eid, (_, _, etype) in G.edge_definitions.items() if etype != 'hyper'
@@ -115,9 +115,7 @@ class TestDataFrameAdapter(unittest.TestCase):
             exploded_hyperedges=True,
         )
 
-        self._assert_graph_structure(
-            G, expected_vertices=5, expected_edges=6, expected_hyperedges=2
-        )
+        self._assert_graph_structure(G, expected_nodes=5, expected_edges=6, expected_hyperedges=2)
 
     def test_polars_input(self):
         """Polars DataFrames should be accepted as input."""
@@ -133,9 +131,7 @@ class TestDataFrameAdapter(unittest.TestCase):
             exploded_hyperedges=True,
         )
 
-        self._assert_graph_structure(
-            G, expected_vertices=5, expected_edges=6, expected_hyperedges=2
-        )
+        self._assert_graph_structure(G, expected_nodes=5, expected_edges=6, expected_hyperedges=2)
 
     def test_pyarrow_input(self):
         """PyArrow Tables should be accepted as input."""
@@ -151,9 +147,7 @@ class TestDataFrameAdapter(unittest.TestCase):
             exploded_hyperedges=True,
         )
 
-        self._assert_graph_structure(
-            G, expected_vertices=5, expected_edges=6, expected_hyperedges=2
-        )
+        self._assert_graph_structure(G, expected_nodes=5, expected_edges=6, expected_hyperedges=2)
 
     def test_mixed_backend_inputs(self):
         """Mixed DataFrame types should work together."""
@@ -169,9 +163,7 @@ class TestDataFrameAdapter(unittest.TestCase):
             exploded_hyperedges=True,
         )
 
-        self._assert_graph_structure(
-            G, expected_vertices=5, expected_edges=6, expected_hyperedges=2
-        )
+        self._assert_graph_structure(G, expected_nodes=5, expected_edges=6, expected_hyperedges=2)
 
     # -------------------------------------------------------------------------
     # Round-trip tests
@@ -200,7 +192,7 @@ class TestDataFrameAdapter(unittest.TestCase):
             exploded_hyperedges=True,
         )
 
-        self.assertEqual(len(list(G1.vertices())), len(list(G2.vertices())))
+        self.assertEqual(len(list(G1.nodes())), len(list(G2.nodes())))
         self.assertEqual(len(G1.hyperedge_definitions), len(G2.hyperedge_definitions))
 
     def test_roundtrip_pandas_to_polars(self):
@@ -212,7 +204,7 @@ class TestDataFrameAdapter(unittest.TestCase):
         exported = to_dataframes(G1)
         G2 = from_dataframes(nodes=exported['nodes'], edges=exported['edges'])
 
-        self.assertEqual(len(list(G1.vertices())), len(list(G2.vertices())))
+        self.assertEqual(len(list(G1.nodes())), len(list(G2.nodes())))
 
     # -------------------------------------------------------------------------
     # Hyperedge format tests
@@ -245,7 +237,7 @@ class TestDataFrameAdapter(unittest.TestCase):
             exploded_hyperedges=False,
         )
 
-        self._assert_graph_structure(G, expected_vertices=5, expected_hyperedges=2)
+        self._assert_graph_structure(G, expected_nodes=5, expected_hyperedges=2)
 
     def test_export_compact_hyperedges(self):
         """Export should produce valid compact hyperedge format."""
@@ -275,7 +267,7 @@ class TestDataFrameAdapter(unittest.TestCase):
 
         exported = to_dataframes(G, explode_hyperedges=True)
 
-        self.assertIn('vertex_id', exported['hyperedges'].columns)
+        self.assertIn('node_id', exported['hyperedges'].columns)
         self.assertIn('role', exported['hyperedges'].columns)
         self.assertEqual(exported['hyperedges'].height, 6)  # 3 + 3 members
 
@@ -283,8 +275,8 @@ class TestDataFrameAdapter(unittest.TestCase):
     # Attribute tests
     # -------------------------------------------------------------------------
 
-    def test_vertex_attributes_preserved(self):
-        """Vertex attributes should survive round-trip."""
+    def test_node_attributes_preserved(self):
+        """Node attributes should survive round-trip."""
         nodes = pd.DataFrame(self.nodes_data)
 
         G = from_dataframes(nodes=nodes)
@@ -317,7 +309,7 @@ class TestDataFrameAdapter(unittest.TestCase):
         """public_only=True should filter out __prefixed attributes."""
         nodes = pl.DataFrame(
             {
-                'vertex_id': ['a', 'b'],
+                'node_id': ['a', 'b'],
                 'name': ['Alice', 'Bob'],
                 '__internal_id': [123, 456],
             }
@@ -335,19 +327,19 @@ class TestDataFrameAdapter(unittest.TestCase):
 
     def test_empty_dataframes(self):
         """Empty DataFrames should not crash."""
-        empty_nodes = pd.DataFrame({'vertex_id': []})
+        empty_nodes = pd.DataFrame({'node_id': []})
         empty_edges = pd.DataFrame({'source': [], 'target': []})
 
         G = from_dataframes(nodes=empty_nodes, edges=empty_edges)
 
-        self.assertEqual(len(list(G.vertices())), 0)
+        self.assertEqual(len(list(G.nodes())), 0)
         self.assertEqual(len(G.edge_definitions), 0)
 
     def test_none_inputs(self):
         """None inputs should be handled gracefully."""
         G = from_dataframes(nodes=None, edges=None)
 
-        self.assertEqual(len(list(G.vertices())), 0)
+        self.assertEqual(len(list(G.nodes())), 0)
 
     def test_nodes_only(self):
         """AnnNet with only nodes, no edges."""
@@ -355,10 +347,10 @@ class TestDataFrameAdapter(unittest.TestCase):
 
         G = from_dataframes(nodes=nodes)
 
-        self._assert_graph_structure(G, expected_vertices=5, expected_edges=0)
+        self._assert_graph_structure(G, expected_nodes=5, expected_edges=0)
 
     def test_edges_only(self):
-        """AnnNet with edges but no explicit nodes (vertices created implicitly)."""
+        """AnnNet with edges but no explicit nodes (nodes created implicitly)."""
         edges = pd.DataFrame(
             {
                 'source': ['a', 'b'],
@@ -368,21 +360,21 @@ class TestDataFrameAdapter(unittest.TestCase):
 
         G = from_dataframes(edges=edges)
 
-        vertices = list(G.vertices())
-        self.assertGreaterEqual(len(vertices), 2)
+        nodes = list(G.nodes())
+        self.assertGreaterEqual(len(nodes), 2)
 
     # -------------------------------------------------------------------------
     # Validation tests
     # -------------------------------------------------------------------------
 
-    def test_missing_vertex_id_column_raises(self):
-        """Nodes DataFrame without vertex_id should raise ValueError."""
+    def test_missing_node_id_column_raises(self):
+        """Nodes DataFrame without node_id should raise ValueError."""
         bad_nodes = pd.DataFrame({'name': ['alice', 'bob']})
 
         with self.assertRaises(ValueError) as ctx:
             from_dataframes(nodes=bad_nodes)
 
-        self.assertIn('vertex_id', str(ctx.exception))
+        self.assertIn('node_id', str(ctx.exception))
 
     def test_missing_source_target_columns_raises(self):
         """Edges DataFrame without source/target should raise ValueError."""
@@ -395,7 +387,7 @@ class TestDataFrameAdapter(unittest.TestCase):
 
     def test_missing_edge_id_in_hyperedges_raises(self):
         """Hyperedges DataFrame without edge_id should raise ValueError."""
-        bad_hyperedges = pd.DataFrame({'vertex_id': ['a', 'b'], 'role': ['member', 'member']})
+        bad_hyperedges = pd.DataFrame({'node_id': ['a', 'b'], 'role': ['member', 'member']})
 
         with self.assertRaises(ValueError) as ctx:
             from_dataframes(hyperedges=bad_hyperedges, exploded_hyperedges=True)

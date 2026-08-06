@@ -60,7 +60,7 @@ class TestNetworkXAdapter(unittest.TestCase):
         self.assertIn('slices', manifest)
         self.assertIn('slice_weights', manifest)
 
-        # Vertex names likely stored as node labels in nx – just sanity check
+        # Node names likely stored as node labels in nx – just sanity check
         # (We don't assert exact count since hyperedge handling can vary.)
         self.assertTrue(any(n in {'A', 'B', 'C'} for n in nxG.nodes))
 
@@ -133,12 +133,12 @@ class TestNetworkXAdapter(unittest.TestCase):
         """Attributes beginning with '__' should not appear in the manifest or nx graph data."""
         g = _BUILD_GRAPH()
 
-        # Inject a private attribute on a vertex and edge if builder supports it
+        # Inject a private attribute on a node and edge if builder supports it
         # We try best-effort – if the API doesn't allow, just proceed; export should not crash
         try:
-            # Vertex private attr
-            if hasattr(g, 'set_vertex_attr'):
-                g.set_vertex_attr('A', '__secret_tag', 42)
+            # Node private attr
+            if hasattr(g, 'set_node_attr'):
+                g.set_node_attr('A', '__secret_tag', 42)
             # Edge private attr on an arbitrary default-slice edge
             any_eid = next(iter(manifest_eid for manifest_eid in g.edge_weights.keys()))
             if hasattr(g, 'set_edge_attr'):
@@ -152,8 +152,8 @@ class TestNetworkXAdapter(unittest.TestCase):
         def _has_private(d):
             return any(str(k).startswith('__') for k in (d or {}).keys())
 
-        # Vertex attrs
-        vattrs = manifest.get('vertex_attrs', {})
+        # Node attrs
+        vattrs = manifest.get('node_attrs', {})
         self.assertFalse(any(_has_private(vattrs.get(v, {})) for v in vattrs))
 
         # Edge attrs
@@ -175,7 +175,7 @@ class TestNetworkXAdapter(unittest.TestCase):
         rng = random.Random(7)
         N, E = 2000, 10_000
         G = AnnNet(directed=True)
-        G.add_vertices([f'v{i}' for i in range(N)])
+        G.add_nodes([f'v{i}' for i in range(N)])
         G.add_edges([(f'v{rng.randrange(N)}', f'v{rng.randrange(N)}') for _ in range(E)])
         nxG, _ = to_nx(G, directed=True, hyperedge_mode='skip')
 

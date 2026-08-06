@@ -1,7 +1,7 @@
 """Targeted coverage for ``annnet.core._Ops`` (SCV-5).
 
 Covers ``reverse``, ``subgraph_from_slice``, ``memory_usage``,
-``vertex_incidence_matrix``, ``get_vertex_incidence_matrix_as_lists``,
+``node_incidence_matrix``, ``get_node_incidence_matrix_as_lists``,
 and the ``G.ops`` accessor's flat forwarders. Existing tests already
 exercise ``copy`` / ``subgraph`` / ``edge_subgraph`` / ``extract_subgraph``;
 this file fills the analytics gap.
@@ -24,7 +24,7 @@ from annnet.core.graph import AnnNet
 def _mixed_graph() -> AnnNet:
     """Directed graph with binary, undirected, and hyperedges + a slice."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges('A', 'B', edge_id='e_dir', weight=2.0)
     G.add_edges('B', 'C', edge_id='e_undir', directed=False, weight=1.0)
     G.add_edges([{'src': ['A', 'B', 'C'], 'edge_id': 'h_und'}])
@@ -112,48 +112,48 @@ def test_memory_usage_returns_positive_integer() -> None:
 # ── incidence matrix forms ──────────────────────────────────────────────
 
 
-def test_vertex_incidence_matrix_dense_binary_mask() -> None:
+def test_node_incidence_matrix_dense_binary_mask() -> None:
     G = _mixed_graph()
-    M = G.ops.vertex_incidence_matrix(values=False, sparse=False)
+    M = G.ops.node_incidence_matrix(values=False, sparse=False)
     assert isinstance(M, np.ndarray)
     # Binary mask: all non-zero entries are exactly 1.
     nz = M[M != 0]
     assert ((nz == 1) | (nz == -1)).all() or (nz == 1).all() or set(np.unique(nz)).issubset({0, 1})
 
 
-def test_vertex_incidence_matrix_dense_values() -> None:
+def test_node_incidence_matrix_dense_values() -> None:
     G = _mixed_graph()
-    M = G.ops.vertex_incidence_matrix(values=True, sparse=False)
+    M = G.ops.node_incidence_matrix(values=True, sparse=False)
     assert isinstance(M, np.ndarray)
 
 
-def test_vertex_incidence_matrix_sparse_returns_csr() -> None:
+def test_node_incidence_matrix_sparse_returns_csr() -> None:
     G = _mixed_graph()
-    M = G.ops.vertex_incidence_matrix(values=False, sparse=True)
+    M = G.ops.node_incidence_matrix(values=False, sparse=True)
     assert sp.issparse(M) and M.format == 'csr'
 
 
-def test_ops_incidence_alias_matches_vertex_incidence_matrix() -> None:
+def test_ops_incidence_alias_matches_node_incidence_matrix() -> None:
     G = _mixed_graph()
     a = G.ops.incidence(values=True, sparse=False)
-    b = G.ops.vertex_incidence_matrix(values=True, sparse=False)
+    b = G.ops.node_incidence_matrix(values=True, sparse=False)
     assert np.array_equal(a, b)
 
 
-def test_get_vertex_incidence_matrix_as_lists_returns_indices_by_default() -> None:
+def test_get_node_incidence_matrix_as_lists_returns_indices_by_default() -> None:
     G = _mixed_graph()
-    out = G.ops.get_vertex_incidence_matrix_as_lists()
+    out = G.ops.get_node_incidence_matrix_as_lists()
     assert isinstance(out, dict)
-    # Every vertex should map to a list of incident column indices.
-    for v in G.vertices():
+    # Every node should map to a list of incident column indices.
+    for v in G.nodes():
         assert v in out
         assert isinstance(out[v], list)
 
 
-def test_get_vertex_incidence_matrix_as_lists_can_return_values() -> None:
+def test_get_node_incidence_matrix_as_lists_can_return_values() -> None:
     G = _mixed_graph()
-    out = G.ops.get_vertex_incidence_matrix_as_lists(values=True)
-    for v in G.vertices():
+    out = G.ops.get_node_incidence_matrix_as_lists(values=True)
+    for v in G.nodes():
         assert v in out
         for x in out[v]:
             assert isinstance(x, (int, float))
@@ -162,7 +162,7 @@ def test_get_vertex_incidence_matrix_as_lists_can_return_values() -> None:
 def test_ops_incidence_as_lists_alias_matches() -> None:
     G = _mixed_graph()
     a = G.ops.incidence_as_lists()
-    b = G.ops.get_vertex_incidence_matrix_as_lists()
+    b = G.ops.get_node_incidence_matrix_as_lists()
     assert a == b
 
 
@@ -179,7 +179,7 @@ def test_ops_subgraph_and_edge_subgraph_forwarders() -> None:
 
 def test_subgraph_preserves_graph_attributes() -> None:
     G = AnnNet(project='proj1', stage='draft')
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
 
     H = G.ops.subgraph({'A', 'B'})
@@ -189,8 +189,8 @@ def test_subgraph_preserves_graph_attributes() -> None:
 
 def test_edge_subgraph_does_not_leak_constructor_capacity_into_graph_attributes() -> None:
     G = AnnNet(aspects={'time': ['t1']}, project='demo')
-    G.add_vertices('A', layer='t1')
-    G.add_vertices('B', layer='t1')
+    G.add_nodes('A', layer='t1')
+    G.add_nodes('B', layer='t1')
     G.add_edges(('A', ('t1',)), ('B', ('t1',)), edge_id='e1')
 
     H = G.ops.edge_subgraph(['e1'])
@@ -202,18 +202,18 @@ def test_edge_subgraph_does_not_leak_constructor_capacity_into_graph_attributes(
 
 def test_ops_extract_and_extract_subgraph_aliases_match() -> None:
     G = _mixed_graph()
-    a = G.ops.extract(vertices=['A', 'B'])
-    b = G.ops.extract_subgraph(vertices=['A', 'B'])
-    assert set(a.vertices()) == set(b.vertices())
+    a = G.ops.extract(nodes=['A', 'B'])
+    b = G.ops.extract_subgraph(nodes=['A', 'B'])
+    assert set(a.nodes()) == set(b.nodes())
 
 
 def test_ops_copy_returns_independent_graph() -> None:
     G = _mixed_graph()
     H = G.ops.copy()
     assert H is not G
-    assert set(H.vertices()) == set(G.vertices())
-    H.add_vertices(['Z'])
-    assert 'Z' not in G.vertices()
+    assert set(H.nodes()) == set(G.nodes())
+    H.add_nodes(['Z'])
+    assert 'Z' not in G.nodes()
 
 
 def test_ops_reverse_via_accessor() -> None:
@@ -233,7 +233,7 @@ def test_ops_memory_usage_forwarder() -> None:
 def test_extract_subgraph_no_filters_returns_copy() -> None:
     G = _mixed_graph()
     H = G.ops.extract_subgraph()
-    assert set(H.vertices()) == set(G.vertices())
+    assert set(H.nodes()) == set(G.nodes())
     assert H is not G
 
 
@@ -245,10 +245,10 @@ def test_extract_subgraph_edge_indices_are_resolved() -> None:
     assert S.has_edge(H, 'e_undir')
 
 
-def test_extract_subgraph_vertex_filter_only_path() -> None:
+def test_extract_subgraph_node_filter_only_path() -> None:
     G = _mixed_graph()
-    H = G.ops.extract_subgraph(vertices=['A', 'B'])
-    assert set(H.vertices()) == {'A', 'B'}
+    H = G.ops.extract_subgraph(nodes=['A', 'B'])
+    assert set(H.nodes()) == {'A', 'B'}
 
 
 def test_extract_subgraph_edge_filter_only_path() -> None:
@@ -259,7 +259,7 @@ def test_extract_subgraph_edge_filter_only_path() -> None:
 
 def test_extract_subgraph_both_filters_keeps_only_endpoint_safe_edges() -> None:
     G = _mixed_graph()
-    H = G.ops.extract_subgraph(vertices={'A', 'B'}, edges={'e_dir', 'e_undir'})
+    H = G.ops.extract_subgraph(nodes={'A', 'B'}, edges={'e_dir', 'e_undir'})
     # e_dir = (A, B) — both endpoints in V → kept.
     # e_undir = (B, C) — C not in V → dropped.
     assert S.has_edge(H, 'e_dir')
@@ -269,7 +269,7 @@ def test_extract_subgraph_both_filters_keeps_only_endpoint_safe_edges() -> None:
 def test_extract_subgraph_both_filters_keeps_hyperedge_when_all_members_in_v() -> None:
     G = _mixed_graph()
     H = G.ops.extract_subgraph(
-        vertices={'A', 'B', 'C'},
+        nodes={'A', 'B', 'C'},
         edges={'h_und', 'h_dir', 'e_dir', 'e_undir'},
     )
     assert S.has_edge(H, 'h_und')
@@ -283,7 +283,7 @@ def test_copy_with_history_flag() -> None:
     G = _mixed_graph()
     H = G.ops.copy(history=True)
     assert H is not G
-    assert set(H.vertices()) == set(G.vertices())
+    assert set(H.nodes()) == set(G.nodes())
 
 
 # ── multilayer subgraph_from_slice ──────────────────────────────────────
@@ -292,8 +292,8 @@ def test_copy_with_history_flag() -> None:
 def _multilayer_slice_graph() -> AnnNet:
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A', 'B'], layer={'condition': 'healthy'})
-    G.add_vertices(['C'], layer={'condition': 'treated'})
+    G.add_nodes(['A', 'B'], layer={'condition': 'healthy'})
+    G.add_nodes(['C'], layer={'condition': 'treated'})
     G.add_edges(
         ('A', ('healthy',)),
         ('B', ('healthy',)),
@@ -315,7 +315,7 @@ def test_subgraph_from_slice_multilayer_with_binary_edges_only() -> None:
     """Cover the binary-edge branch of the multilayer subgraph_from_slice path."""
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy']})
-    G.add_vertices(['A', 'B', 'C'], layer={'condition': 'healthy'})
+    G.add_nodes(['A', 'B', 'C'], layer={'condition': 'healthy'})
     G.add_edges(
         ('A', ('healthy',)),
         ('B', ('healthy',)),
@@ -334,11 +334,11 @@ def test_subgraph_from_slice_multilayer_with_binary_edges_only() -> None:
     assert S.has_edge(H, 'e2')
 
 
-def test_multilayer_subgraph_from_slice_preserves_graph_attributes_and_real_supra_vertices():
+def test_multilayer_subgraph_from_slice_preserves_graph_attributes_and_real_supra_nodes():
     G = AnnNet(directed=True, project='sliceproj')
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A', 'B'], layer={'condition': 'healthy'}, slice='S1')
-    G.add_vertices(['C'], layer={'condition': 'treated'}, slice='S1')
+    G.add_nodes(['A', 'B'], layer={'condition': 'healthy'}, slice='S1')
+    G.add_nodes(['C'], layer={'condition': 'treated'}, slice='S1')
     G.add_edges(
         [
             {
@@ -356,7 +356,7 @@ def test_multilayer_subgraph_from_slice_preserves_graph_attributes_and_real_supr
     msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
     assert not any('placeholder layer' in msg for msg in msgs), msgs
     assert H.graph_attributes['project'] == 'sliceproj'
-    assert set(H.supra_vertices()) == {
+    assert set(H.supra_nodes()) == {
         ('A', ('healthy',)),
         ('B', ('healthy',)),
         ('C', ('treated',)),
@@ -372,8 +372,8 @@ def test_multilayer_subgraph_from_slice_preserves_graph_attributes_and_real_supr
 def _multilayer_with_supra_edges() -> AnnNet:
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A', 'B', 'C'], layer={'condition': 'healthy'})
-    G.add_vertices(['D'], layer={'condition': 'treated'})
+    G.add_nodes(['A', 'B', 'C'], layer={'condition': 'healthy'})
+    G.add_nodes(['D'], layer={'condition': 'treated'})
     # Binary supra-node edges.
     G.add_edges(
         ('A', ('healthy',)),
@@ -404,7 +404,7 @@ def test_edge_subgraph_multilayer_preserves_supra_node_edges() -> None:
 def test_extract_subgraph_multilayer_with_both_filters() -> None:
     G = _multilayer_with_supra_edges()
     H = G.ops.extract_subgraph(
-        vertices={'A', 'B', 'C'},
+        nodes={'A', 'B', 'C'},
         edges={'e_intra1', 'e_intra2', 'e_inter'},
     )
     # e_intra1 (A→B) and e_intra2 (B→C) — both endpoints in V → kept.
@@ -424,7 +424,7 @@ def test_copy_multilayer_preserves_aspects_and_layer_attrs() -> None:
 
 def test_copy_multilayer_does_not_emit_placeholder_reassignment_warning() -> None:
     G = AnnNet(aspects={'time': ['t1']})
-    G.add_vertices('A', layer='t1')
+    G.add_nodes('A', layer='t1')
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
@@ -440,7 +440,7 @@ def test_subgraph_on_multilayer_with_hyperedge_via_supra_members() -> None:
     through ``subgraph``."""
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy']})
-    G.add_vertices(['A', 'B', 'C'], layer={'condition': 'healthy'})
+    G.add_nodes(['A', 'B', 'C'], layer={'condition': 'healthy'})
     G.add_edges(
         [
             {
@@ -461,7 +461,7 @@ def test_edge_subgraph_multilayer_with_hyperedge_via_supra_members() -> None:
     """Same as above but through the edge_subgraph branch."""
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy']})
-    G.add_vertices(['A', 'B', 'C'], layer={'condition': 'healthy'})
+    G.add_nodes(['A', 'B', 'C'], layer={'condition': 'healthy'})
     G.add_edges(
         [
             {
@@ -478,8 +478,8 @@ def test_edge_subgraph_multilayer_with_hyperedge_via_supra_members() -> None:
 def test_edge_subgraph_multilayer_hyperedge_preserves_supra_members_without_placeholder_warnings():
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A', 'B'], layer={'condition': 'healthy'})
-    G.add_vertices(['C'], layer={'condition': 'treated'})
+    G.add_nodes(['A', 'B'], layer={'condition': 'healthy'})
+    G.add_nodes(['C'], layer={'condition': 'treated'})
     G.add_edges(
         [
             {
@@ -495,7 +495,7 @@ def test_edge_subgraph_multilayer_hyperedge_preserves_supra_members_without_plac
 
     msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
     assert not any('placeholder layer' in msg for msg in msgs), msgs
-    assert set(H.supra_vertices()) == {
+    assert set(H.supra_nodes()) == {
         ('A', ('healthy',)),
         ('B', ('healthy',)),
         ('C', ('treated',)),
@@ -511,7 +511,7 @@ def test_edge_subgraph_multilayer_hyperedge_preserves_supra_members_without_plac
 def test_the_attributes_of_named_elements_come_out_of_the_columns() -> None:
     """The store answers about the elements asked for, and only those."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'], kind='gene')
+    G.add_nodes(['A', 'B'], kind='gene')
 
     rows = G._attr_store.node_attr_rows(['A'])
     assert rows == {'A': {'kind': 'gene'}}

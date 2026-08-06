@@ -23,11 +23,11 @@ from ._records import (
 # facade, because the facade answers about a finished graph and these are what
 # finish it. The gateway owns the store, so it is the one place that may.
 
-_SLOT_ENTITY_KIND = {'vertex': ST.NODE, 'edge_entity': ST.EDGE_ENTITY}
+_SLOT_ENTITY_KIND = {'node': ST.NODE, 'edge_entity': ST.EDGE_ENTITY}
 _SLOT_EDGE_KIND = {
     'binary': ST.BINARY,
     'hyper': ST.HYPER,
-    'vertex_edge': ST.NODE_EDGE,
+    'node_edge': ST.NODE_EDGE,
     'edge_placeholder': ST.PLACEHOLDER,
 }
 
@@ -53,7 +53,7 @@ def sync_aspects(g) -> None:
 # ---------------------------------------------------------------------------
 
 
-def register_entity(g, ekey, kind: str = 'vertex') -> None:
+def register_entity(g, ekey, kind: str = 'node') -> None:
     """Give the graph an entity, or change the kind of one it already holds."""
     store = g._store
     slot = store.entity_slot(ekey)
@@ -74,17 +74,17 @@ def remove_entity(g, ekey) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Vertices
+# Nodes
 # ---------------------------------------------------------------------------
 
 
-def add_vertex(g, vertex_id, slice=None, layer=None, **attributes):
-    """Add or update a vertex; returns its id."""
+def add_node(g, node_id, slice=None, layer=None, **attributes):
+    """Add or update a node; returns its id."""
     if slice is None:
         slice = g._current_slice
 
-    coord = I.resolve_vertex_insert_coord(g, layer, vertex_ids=vertex_id, context='add_vertex')
-    key = (vertex_id, coord)
+    coord = I.resolve_node_insert_coord(g, layer, node_ids=node_id, context='add_node')
+    key = (node_id, coord)
 
     if g._store.entity_slot(key) is None:
         register_entity(g, key)
@@ -92,12 +92,12 @@ def add_vertex(g, vertex_id, slice=None, layer=None, **attributes):
 
     if slice not in g._slices:
         g._slices[slice] = SliceRecord()
-    g._slices[slice]['vertices'].add(vertex_id)
+    g._slices[slice]['nodes'].add(node_id)
 
     if attributes:
-        g._attr_store.set_node_attrs(vertex_id, attributes)
+        g._attr_store.set_node_attrs(node_id, attributes)
 
-    return vertex_id
+    return node_id
 
 
 # ---------------------------------------------------------------------------
@@ -312,7 +312,7 @@ def add_edge(
         bare_total = bare_src + bare_tgt
         if bare_total:
             I.ensure_placeholder_layers_declared(g)
-            I.warn_placeholder_vertex_assignment(g, bare_total, context='add_edges')
+            I.warn_placeholder_node_assignment(g, bare_total, context='add_edges')
 
     # 2. Resolve direction
     if directed is not None:
@@ -366,9 +366,9 @@ def add_edge(
         ekey = I.resolve_ekey(g, node)
         if store.entity_slot(ekey) is None:
             if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
-                add_vertex(g, node[0], layer=node[1], slice=slice)
+                add_node(g, node[0], layer=node[1], slice=slice)
             else:
-                add_vertex(g, node, slice=slice)
+                add_node(g, node, slice=slice)
     # 6. The incidence matrix is derived from the store and keyed to its clock,
     #    so nothing here holds a column and nothing here has to invalidate one.
     g._mark_structure_changed()
@@ -377,7 +377,7 @@ def add_edge(
     if etype == 'binary':
         src_store = next(iter(src_nodes))
         tgt_store = next(iter(tgt_nodes)) if tgt_nodes else None
-        edge_kind = 'vertex_edge' if as_entity else 'binary'
+        edge_kind = 'node_edge' if as_entity else 'binary'
     else:
         src_store = frozenset(src_nodes) if src_nodes else None
         tgt_store = frozenset(tgt_nodes) if tgt_nodes else None
@@ -438,7 +438,7 @@ def add_edge(
             slices[slice] = SliceRecord()
         slices[slice]['edges'].add(edge_id)
         for n in endpoint_set:
-            slices[slice]['vertices'].add(n[0] if isinstance(n, tuple) else n)
+            slices[slice]['nodes'].add(n[0] if isinstance(n, tuple) else n)
 
     # 12. Propagate
     if propagate == 'shared':
@@ -467,7 +467,7 @@ def add_edge(
 def propagate_to_shared_slices(g, edge_id, source, target):
     """Add an edge to slices that already contain both endpoints."""
     for slice_data in g._slices.values():
-        sv = slice_data['vertices']
+        sv = slice_data['nodes']
         if I.slice_contains_endpoint(g, sv, source) and I.slice_contains_endpoint(g, sv, target):
             slice_data['edges'].add(edge_id)
 
@@ -475,15 +475,15 @@ def propagate_to_shared_slices(g, edge_id, source, target):
 def propagate_to_all_slices(g, edge_id, source, target):
     """Propagate an edge to slices containing either endpoint, adding the other endpoint as needed."""
     for slice_data in g._slices.values():
-        sv = slice_data['vertices']
+        sv = slice_data['nodes']
         source_present = I.slice_contains_endpoint(g, sv, source)
         target_present = I.slice_contains_endpoint(g, sv, target)
         if source_present or target_present:
             slice_data['edges'].add(edge_id)
             if source_present:
-                I.add_endpoint_to_slice_vertices(g, sv, target)
+                I.add_endpoint_to_slice_nodes(g, sv, target)
             if target_present:
-                I.add_endpoint_to_slice_vertices(g, sv, source)
+                I.add_endpoint_to_slice_nodes(g, sv, source)
 
 
 # ---------------------------------------------------------------------------
@@ -629,7 +629,7 @@ def remap_entity_keys(g, remap):
 
     A reader needs this when the coordinate a file stored for an entity only
     makes sense once the aspects the same file declares are known, and declaring
-    aspects over a flat graph needs it for every vertex it already holds.
+    aspects over a flat graph needs it for every node it already holds.
 
     An identity changes and an address does not, so this changes the store rather
     than rebuilding it. Every member list and every position survives, which is
@@ -651,9 +651,9 @@ def set_edge_coeffs(g, edge_id, coeffs):
     # holds too.
     base = {S.endpoint_form(g, key): value for key, value in S.edge_members(g, edge_id).items()}
     # On a multilayer graph the endpoints above are supra-node keys ``(vid, coord)``,
-    # while callers key coefficients by bare vertex id (from_sbml passes raw SBML
+    # while callers key coefficients by bare node id (from_sbml passes raw SBML
     # species ids). The two spellings never collide, so without resolving them the
-    # update *adds* a second entry for the same vertex and the rebuilt column sums
+    # update *adds* a second entry for the same node and the rebuilt column sums
     # both — inflating every coefficient by the derived +/- weight.
     by_vid = {}
     for key in base:
@@ -791,9 +791,9 @@ def drop_orphan_edge_entities(g, edge_ids) -> None:
     """Remove the entity of an edge-entity whose edge has just been removed.
 
     An edge-entity is one identity on both axes: the entity is the edge. Once the
-    edge is gone the entity names nothing, so it goes the way a removed vertex
+    edge is gone the entity names nothing, so it goes the way a removed node
     goes, and an edge that held it as an endpoint goes with it. That is the same
-    cascade a vertex removal runs, and it is why this calls it.
+    cascade a node removal runs, and it is why this calls it.
     """
     orphans = [
         edge_id
@@ -801,7 +801,7 @@ def drop_orphan_edge_entities(g, edge_ids) -> None:
         if not S.has_edge(g, edge_id) and S.has_entity_id(g, edge_id, kind=S.EDGE_ENTITY)
     ]
     if orphans:
-        remove_vertices_bulk(g, orphans)
+        remove_nodes_bulk(g, orphans)
 
 
 def drop_entities(g, keys) -> None:
@@ -816,11 +816,11 @@ def drop_entities(g, keys) -> None:
             store.remove_entity(key)
 
 
-def remove_vertices_bulk(g, vertex_ids):
-    """Remove many vertices, their incident edges, and compact entity rows."""
+def remove_nodes_bulk(g, node_ids):
+    """Remove many nodes, their incident edges, and compact entity rows."""
     drop_keys = set()
-    drop_vertex_ids = set()
-    for vid in vertex_ids:
+    drop_node_ids = set()
+    for vid in node_ids:
         try:
             ekey = I.resolve_ekey(g, vid)
         except (KeyError, ValueError, TypeError):
@@ -828,16 +828,16 @@ def remove_vertices_bulk(g, vertex_ids):
         if g._store.entity_slot(ekey) is None:
             continue
         drop_keys.add(ekey)
-        drop_vertex_ids.add(ekey[0] if isinstance(ekey, tuple) and len(ekey) == 2 else ekey)
+        drop_node_ids.add(ekey[0] if isinstance(ekey, tuple) and len(ekey) == 2 else ekey)
 
     if not drop_keys:
         return
 
-    # A vertex id names one entity per layer, and removing the id removes the
+    # A node id names one entity per layer, and removing the id removes the
     # edges of every one of them. The store keeps the edges each entity takes
     # part in, so this costs their degree rather than a pass over every edge.
     drop_es: set = set()
-    for vid in drop_vertex_ids:
+    for vid in drop_node_ids:
         drop_es |= S.edges_of_id(g, vid)
 
     if drop_es:
@@ -848,16 +848,16 @@ def remove_vertices_bulk(g, vertex_ids):
     drop_entities(g, drop_keys)
 
     for slice_data in g._slices.values():
-        slice_data['vertices'].difference_update(drop_vertex_ids)
+        slice_data['nodes'].difference_update(drop_node_ids)
 
 
 def remove_orphan_node_layers(g, drop_keys):
-    """Drop specific ``(vid, layer)`` vertex entities that carry no incident edges.
+    """Drop specific ``(vid, layer)`` node entities that carry no incident edges.
 
-    Unlike :func:`remove_vertices_bulk` (which drops every edge touching the bare
-    vertex id, and the vertex-attribute row for that id), this removes only the
-    given node-layer entity rows and compacts the incidence matrix. The vertex id
-    itself survives through its other node-layers, so ``_vertex_table``,
+    Unlike :func:`remove_nodes_bulk` (which drops every edge touching the bare
+    node id, and the node-attribute row for that id), this removes only the
+    given node-layer entity rows and compacts the incidence matrix. The node id
+    itself survives through its other node-layers, so ``_node_table``,
     slice membership, and incident edges are all left untouched.
 
     Callers MUST guarantee every key in ``drop_keys`` is an orphan node-layer
@@ -929,24 +929,24 @@ _HYPER_BATCH_RESERVED_KEYS = frozenset(
 )
 
 
-def batch_add_vertices(g, vertices, layer=None, slice=None, default_attrs=None):
-    """Add many vertices through the bulk mutation path."""
+def batch_add_nodes(g, nodes, layer=None, slice=None, default_attrs=None):
+    """Add many nodes through the bulk mutation path."""
     slice = slice or g._current_slice
     default_attrs = default_attrs or {}
 
     # --- normalize input ---
     norm = []
-    for it in vertices:
+    for it in nodes:
         if isinstance(it, dict):
-            if it.get('vertex_id'):
-                vid = it['vertex_id']
-                _id_keys = {'vertex_id'}
+            if it.get('node_id'):
+                vid = it['node_id']
+                _id_keys = {'node_id'}
             elif it.get('id'):
                 vid = it['id']
-                _id_keys = {'vertex_id', 'id'}
+                _id_keys = {'node_id', 'id'}
             elif it.get('name'):
                 vid = it['name']
-                _id_keys = {'vertex_id', 'id', 'name'}
+                _id_keys = {'node_id', 'id', 'name'}
             else:
                 vid = None
             if vid is None:
@@ -978,8 +978,8 @@ def batch_add_vertices(g, vertices, layer=None, slice=None, default_attrs=None):
     # Written straight to the store rather than through the general door, which
     # re-checks the kind of an entity the graph already holds. Nothing here
     # changes a kind, so only the unseen keys are added.
-    coord = g._resolve_vertex_insert_coord(
-        layer, vertex_ids=[vid for vid, _ in norm], context='_add_vertices_batch'
+    coord = g._resolve_node_insert_coord(
+        layer, node_ids=[vid for vid, _ in norm], context='_add_nodes_batch'
     )
     store = g._store
     entity_slot = store.entity_slot
@@ -993,7 +993,7 @@ def batch_add_vertices(g, vertices, layer=None, slice=None, default_attrs=None):
         D.bump_structure(g)
 
     # --- slice ---
-    g.slices._ensure_slice(slice)['vertices'].update(vid for vid, _ in norm)
+    g.slices._ensure_slice(slice)['nodes'].update(vid for vid, _ in norm)
 
     # --- attributes ---
     # A cell each, straight into the columns. There is no table to rebuild and no
@@ -1065,11 +1065,11 @@ def batch_add_edges(
         else:
             ekey = (
                 vid,
-                g._resolve_vertex_insert_coord(None, vertex_ids=vid, context='_add_edges_batch'),
+                g._resolve_node_insert_coord(None, node_ids=vid, context='_add_edges_batch'),
             )
         if _entity_slot(ekey) is None:
             if (
-                (et == 'vertex_edge' or et == 'edge_placeholder')
+                (et == 'node_edge' or et == 'edge_placeholder')
                 and isinstance(vid, str)
                 and vid.startswith('edge_')
             ):
@@ -1191,7 +1191,7 @@ def batch_add_edges(
         # ── ensure endpoint entities exist ─────────────────────────────────────
         # A flat graph keys an entity by its id and the placeholder coordinate,
         # so an endpoint the store already holds is answered by its key alone.
-        # A load names each of its vertices many times and the general path is
+        # A load names each of its nodes many times and the general path is
         # only needed for the first, which is where it registers the entity.
         if _flat and type(s) is str and type(t) is str:
             source_key = (s, _flat_coord)
@@ -1277,7 +1277,7 @@ def batch_add_edges(
             _spec_at = {}
         _added += 1
 
-        # ── slice membership (tracks bare vertex ids) ──────────────────────────
+        # ── slice membership (tracks bare node ids) ──────────────────────────
         if slice_local is not None:
             s_bare = s[0] if isinstance(s, tuple) else s
             t_bare = t[0] if isinstance(t, tuple) else t
@@ -1333,7 +1333,7 @@ def batch_add_edges(
     for sid, eids in _slice_eids.items():
         g.slices._ensure_slice(sid)['edges'].update(eids)
     for sid, vids in _slice_vids.items():
-        g._slices[sid]['vertices'].update(vids)
+        g._slices[sid]['nodes'].update(vids)
     for sid, eid, sw in _slice_weights:
         g.attrs.set_edge_slice_attrs(sid, eid, weight=sw)
 
@@ -1459,13 +1459,13 @@ def batch_add_hyperedges(
         # No layer hint. If the vid already lives in exactly one real
         # layer (i.e. it was previously inserted), reuse that coord
         # instead of forking a placeholder copy — this is what previously
-        # produced the "Ambiguous bare vertex_id" failures.
+        # produced the "Ambiguous bare node_id" failures.
         if g._aspects != ('_',):
             placeholder = g._placeholder_layer_coord()
             real_keys = [k for k in _slot.entity_keys_of_id(u) if k[1] != placeholder]
             if len(real_keys) == 1:
                 return u, real_keys[0][1]
-        coord = g._resolve_vertex_insert_coord(None, vertex_ids=u, context='_add_hyperedges_batch')
+        coord = g._resolve_node_insert_coord(None, node_ids=u, context='_add_hyperedges_batch')
         return u, coord
 
     # Resolve every member endpoint up-front and stash the resolved keys
@@ -1576,10 +1576,10 @@ def batch_add_hyperedges(
             slices[slice_local]['edges'].add(e_id)
             # Slice membership tracks bare vids, not (vid, layer) keys.
             if resolved_members is not None:
-                slices[slice_local]['vertices'].update(k[0] for k in resolved_members)
+                slices[slice_local]['nodes'].update(k[0] for k in resolved_members)
             else:
-                slices[slice_local]['vertices'].update(k[0] for k in resolved_head)
-                slices[slice_local]['vertices'].update(k[0] for k in resolved_tail)
+                slices[slice_local]['nodes'].update(k[0] for k in resolved_head)
+                slices[slice_local]['nodes'].update(k[0] for k in resolved_tail)
 
         sub_attrs = d.get('attributes') or d.get('attrs') or {}
         flat_attrs = {k: v for k, v in d.items() if k not in _HYPER_BATCH_RESERVED_KEYS}

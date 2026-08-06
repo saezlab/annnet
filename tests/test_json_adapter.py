@@ -9,7 +9,7 @@ from annnet.io.json_format import (
     write_ndjson,
 )  # JSON (JavaScript Object Notation), NDJSON (Newline-Delimited JSON)
 
-from .conftest import assert_edge_attrs_equal, assert_graphs_equal, assert_vertex_attrs_equal
+from .conftest import assert_edge_attrs_equal, assert_graphs_equal, assert_node_attrs_equal
 
 
 class TestJSONAdapter:
@@ -26,7 +26,7 @@ class TestJSONAdapter:
         to_json(G, tmpdir_fixture / 'graph.json', public_only=False, indent=2)
         G2 = from_json(tmpdir_fixture / 'graph.json')
         assert_graphs_equal(G, G2, check_slices=True, check_hyperedges=True)
-        assert_vertex_attrs_equal(G, G2, 'A')
+        assert_node_attrs_equal(G, G2, 'A')
         assert_edge_attrs_equal(G, G2, 'e1', ignore_private=False)
 
     def test_hyperedges_preservation(self, complex_graph, tmpdir_fixture):
@@ -52,11 +52,11 @@ class TestJSONAdapter:
 
     def test_public_only_filter(self, complex_graph, tmpdir_fixture):
         G = complex_graph
-        G.attrs.set_vertex_attrs('A', __internal_flag='hidden')
+        G.attrs.set_node_attrs('A', __internal_flag='hidden')
         G.attrs.set_edge_attrs('e1', __internal='private')
         to_json(G, tmpdir_fixture / 'graph.json', public_only=True)
         G2 = from_json(tmpdir_fixture / 'graph.json')
-        attrs_a = G2.attrs.get_vertex_attrs('A') or {}
+        attrs_a = G2.attrs.get_node_attrs('A') or {}
         assert '__secret' not in attrs_a
 
     def test_from_json_multilayer_scales(self, tmpdir_fixture):
@@ -77,7 +77,7 @@ class TestJSONAdapter:
         G.layers.set_aspects(['cond'], {'cond': lids})
         vids = [f'v{i}' for i in range(N)]
         for lid in lids:
-            G.add_vertices(vids, layer=(lid,))
+            G.add_nodes(vids, layer=(lid,))
         G.add_edges(
             [
                 (

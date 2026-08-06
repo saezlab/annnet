@@ -20,7 +20,7 @@ preferred style in new code is manager-first.
 A slice is a named graph context attached to the same underlying object. A slice
 can store:
 
-- vertex memberships
+- node memberships
 - edge memberships
 - slice-level metadata
 - edge-level overrides such as slice-specific weights
@@ -57,7 +57,7 @@ A view is a filtered, read-only lens over the graph for inspection or
 computation without materializing a new object.
 
 - `G.view(...)` creates a filtered view.
-- `G.subgraph(...)` materializes a vertex-induced graph.
+- `G.subgraph(...)` materializes a node-induced graph.
 - `G.edge_subgraph(...)` materializes an edge-induced graph.
 - `G.extract_subgraph(...)` combines both filters.
 
@@ -71,12 +71,12 @@ need several analysis states over one graph, use slices.
 
 ## Placeholder layer coordinates
 
-When aspects are declared before every vertex has an explicit coordinate,
+When aspects are declared before every node has an explicit coordinate,
 AnnNet uses the placeholder layer tuple `('_', ..., '_')`.
 
-- Declaring aspects on an existing flat graph lifts existing vertices to the
+- Declaring aspects on an existing flat graph lifts existing nodes to the
   placeholder tuple and emits a warning.
-- Adding vertices to a layered graph without `layer=` places them at the
+- Adding nodes to a layered graph without `layer=` places them at the
   placeholder tuple and emits a warning.
 - Structural edge construction in layered graphs still requires explicit
-  supra-node endpoints such as `(vertex_id, layer_tuple)`.
+  supra-node endpoints such as `(node_id, layer_tuple)`.

@@ -20,7 +20,7 @@ def _cached_signature(fn):
 
 
 class _BackendAccessorBase:
-    VERTEX_LABEL_FIELDS = ('name', 'label', 'title', 'slug', 'external_id', 'string_id')
+    NODE_LABEL_FIELDS = ('name', 'label', 'title', 'slug', 'external_id', 'string_id')
     _ADAPTER_EXPORTS = {
         'nx': ('annnet.adapters.networkx_adapter', 'to_nx'),
         'ig': ('annnet.adapters.igraph_adapter', 'to_igraph'),
@@ -41,7 +41,7 @@ class _BackendAccessorBase:
             return tuple(sorted(value))
         return value
 
-    def _vertex_row_maps(self):
+    def _node_row_maps(self):
         id_to_row = {}
         row_to_id = {}
         for ref in _structure.iter_entities(self._G):
@@ -52,7 +52,7 @@ class _BackendAccessorBase:
             row_to_id[row] = ref.id
         return id_to_row, row_to_id
 
-    def _vertex_row_to_id(self, row_idx: int):
+    def _node_row_to_id(self, row_idx: int):
         try:
             ekey = _structure.entity_key_of_row(self._G, row_idx)
             if _structure.entity_ref(self._G, ekey).kind != _structure.NODE:
@@ -65,32 +65,32 @@ class _BackendAccessorBase:
         try:
             if getattr(self._G, 'default_label_field', None):
                 return self._G.default_label_field
-            va = getattr(self._G, '_vertex_table', None)
+            va = getattr(self._G, '_node_table', None)
             cols = dataframe_columns(va) if va is not None else []
-            for col in self.VERTEX_LABEL_FIELDS:
+            for col in self.NODE_LABEL_FIELDS:
                 if col in cols:
                     return col
         except Exception:  # noqa: BLE001
             pass
         return None
 
-    def _vertex_id_col(self) -> str:
+    def _node_id_col(self) -> str:
         try:
-            va = self._G._vertex_table
+            va = self._G._node_table
             cols = dataframe_columns(va)
-            for key in ('vertex_id', 'id', 'vid'):
+            for key in ('node_id', 'id', 'vid'):
                 if key in cols:
                     return key
         except Exception:  # noqa: BLE001
             pass
-        return 'vertex_id'
+        return 'node_id'
 
-    def _lookup_vertex_id_by_label(self, label_field: str, value):
+    def _lookup_node_id_by_label(self, label_field: str, value):
         try:
-            va = self._G._vertex_table
+            va = self._G._node_table
             if va is None or label_field not in dataframe_columns(va):
                 return None
-            id_col = self._vertex_id_col()
+            id_col = self._node_id_col()
             rows = dataframe_to_rows(dataframe_filter_eq(va, label_field, value))
             if rows:
                 return rows[0].get(id_col)
@@ -209,20 +209,20 @@ class _BackendAccessorBase:
         module_name, export_name = self._ADAPTER_EXPORTS[backend]
         return getattr(import_module(module_name), export_name)
 
-    def _coerce_vertex_iterable(self, obj, coerce_one):
+    def _coerce_node_iterable(self, obj, coerce_one):
         if isinstance(obj, (list, tuple, set)):
             coerced = [coerce_one(value) for value in obj]
             return type(obj)(coerced) if not isinstance(obj, set) else set(coerced)
         return coerce_one(obj)
 
-    def _coerce_vertex_kwargs(self, kwargs: dict, coerce_many):
+    def _coerce_node_kwargs(self, kwargs: dict, coerce_many):
         for key in list(kwargs.keys()):
-            if key in self.VERTEX_KEYS:
+            if key in self.NODE_KEYS:
                 kwargs[key] = coerce_many(kwargs[key])
 
-    def _coerce_vertex_bound(self, bound, coerce_many):
+    def _coerce_node_bound(self, bound, coerce_many):
         for key in list(bound.arguments.keys()):
-            if key in self.VERTEX_KEYS:
+            if key in self.NODE_KEYS:
                 bound.arguments[key] = coerce_many(bound.arguments[key])
 
     def _edge_attr_aggregator(self, key, aggregations: dict | None):

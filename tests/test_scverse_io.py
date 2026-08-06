@@ -13,7 +13,7 @@ from annnet.experimental.scverse import (
     to_spatialdata,
 )
 
-from .conftest import assert_edge_attrs_equal, assert_graphs_equal, assert_vertex_attrs_equal
+from .conftest import assert_edge_attrs_equal, assert_graphs_equal, assert_node_attrs_equal
 
 ad = pytest.importorskip('anndata')
 mudata = pytest.importorskip('mudata')
@@ -21,10 +21,10 @@ mudata = pytest.importorskip('mudata')
 
 def _build_multilayer_graph() -> AnnNet:
     g = AnnNet(aspects={'condition': ['healthy', 'treated']}, directed=True)
-    g.add_vertices('A', layer=('healthy',))
-    g.add_vertices('A', layer=('treated',))
-    g.add_vertices('B', layer=('healthy',))
-    g.add_vertices('B', layer=('treated',))
+    g.add_nodes('A', layer=('healthy',))
+    g.add_nodes('A', layer=('treated',))
+    g.add_nodes('B', layer=('healthy',))
+    g.add_nodes('B', layer=('treated',))
     g.add_edges(('A', ('healthy',)), ('B', ('healthy',)), edge_id='e_h')
     g.add_edges(('A', ('treated',)), ('B', ('treated',)), edge_id='e_t')
     g.layers.set_node_attrs('A', ('healthy',), abundance=3.5)
@@ -44,7 +44,7 @@ def test_to_anndata_roundtrip_complex_graph(complex_graph):
     g2 = from_anndata(adata)
 
     assert_graphs_equal(complex_graph, g2, check_slices=True, check_hyperedges=True)
-    assert_vertex_attrs_equal(complex_graph, g2, 'A')
+    assert_node_attrs_equal(complex_graph, g2, 'A')
     assert_edge_attrs_equal(complex_graph, g2, 'e1', ignore_private=False)
     assert g2.uns == complex_graph.uns
 
@@ -72,20 +72,20 @@ def test_from_anndata_generic_binary_graph():
 
     g = from_anndata(obs_df)
 
-    assert set(g.vertices()) == {'A', 'B', 'C'}
+    assert set(g.nodes()) == {'A', 'B', 'C'}
     assert set(g.edges()) == {'e1', 'e2'}
     assert g.edge_weights['e2'] == 2.0
     assert g.attrs.get_attr_edge('e1', 'relation') == 'ab'
-    assert g.attrs.get_attr_vertex('B', 'score') == 2.0
+    assert g.attrs.get_attr_node('B', 'score') == 2.0
 
 
-def test_multilayer_anndata_roundtrip_preserves_supra_vertices():
+def test_multilayer_anndata_roundtrip_preserves_supra_nodes():
     g = _build_multilayer_graph()
 
     adata = to_anndata(g)
 
     assert adata.n_obs == 4
-    assert 'annnet_vertex_id' in adata.obs.columns
+    assert 'annnet_node_id' in adata.obs.columns
     assert 'annnet_layer_condition' in adata.obs.columns
 
     g2 = from_anndata(adata)

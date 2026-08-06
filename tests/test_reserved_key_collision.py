@@ -1,7 +1,7 @@
 """Setting a reserved key as a user attribute must raise, not silently drop.
 
 Reserved names exist for clear structural reasons: they're either column
-names of the underlying tables (``vertex_id``, ``edge_id``, ``slice_id``,
+names of the underlying tables (``node_id``, ``edge_id``, ``slice_id``,
 ``weight``), structural-edge fields (``source``, ``target``, ``directed``,
 ``edge_type``, ``slice``), or input-shape signal keys for ``add_edges``
 (``members``, ``head``, ``tail``, ``flexible``, ``slice_weight``, ``kind``).
@@ -19,7 +19,7 @@ from annnet.core.graph import AnnNet
 
 def _graph_with_edge():
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     return G
 
@@ -36,14 +36,14 @@ def test_set_edge_attrs_bulk_raises_on_reserved_key():
         G.attrs.set_edge_attrs_bulk({'e1': {'members': ['x']}})
 
 
-def test_set_vertex_attrs_bulk_raises_on_reserved_key():
-    """The single-form for vertex/slice can't collide on the only reserved
-    key (``vertex_id``/``slice_id``) — those collide with the positional
+def test_set_node_attrs_bulk_raises_on_reserved_key():
+    """The single-form for node/slice can't collide on the only reserved
+    key (``node_id``/``slice_id``) — those collide with the positional
     parameter. The bulk form is the real surface for collisions."""
     G = AnnNet(directed=False)
-    G.add_vertices(['A'])
+    G.add_nodes(['A'])
     with pytest.raises(ValueError, match='reserved'):
-        G.attrs.set_vertex_attrs_bulk({'A': {'vertex_id': 'B'}})
+        G.attrs.set_node_attrs_bulk({'A': {'node_id': 'B'}})
 
 
 def test_set_edge_slice_attrs_allows_weight_but_raises_on_others():

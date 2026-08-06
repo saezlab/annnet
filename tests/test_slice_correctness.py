@@ -12,7 +12,7 @@ from annnet.core.graph import AnnNet
 
 def _build_graph():
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.0)
     G.slices.add('treated')
     return G

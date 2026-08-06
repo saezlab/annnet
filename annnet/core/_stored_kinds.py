@@ -10,13 +10,13 @@ from __future__ import annotations
 from . import _structure as S
 
 STORED_ENTITY_KIND = {
-    S.NODE: 'vertex',
+    S.NODE: 'node',
     S.EDGE_ENTITY: 'edge_entity',
 }
 
 STORED_EDGE_KIND = {
     S.BINARY: 'binary',
     S.HYPER: 'hyper',
-    S.NODE_EDGE: 'vertex_edge',
+    S.NODE_EDGE: 'node_edge',
     S.PLACEHOLDER: 'edge_placeholder',
 }

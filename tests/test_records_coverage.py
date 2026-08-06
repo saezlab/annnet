@@ -70,12 +70,12 @@ def test_df_filter_not_equal_drops_matching_rows() -> None:
 
 
 def test_slice_record_dict_style_get_returns_field_value() -> None:
-    sr = SliceRecord(vertices={'a'}, edges=set(), attributes={'k': 1})
-    assert sr['vertices'] == {'a'}
+    sr = SliceRecord(nodes={'a'}, edges=set(), attributes={'k': 1})
+    assert sr['nodes'] == {'a'}
     sr['edges'] = {'e1'}
     assert sr.edges == {'e1'}
     # default-returning .get path
-    assert sr.get('vertices') == {'a'}
+    assert sr.get('nodes') == {'a'}
     assert sr.get('nonexistent', 'fallback') == 'fallback'
 
 
@@ -130,9 +130,9 @@ def test_edge_view_repr_contains_every_named_field() -> None:
 
 def test_external_entity_kind_translates_edge_entity_to_edge() -> None:
     assert _external_entity_kind('edge_entity') == 'edge'
-    assert _external_entity_kind('vertex') == 'vertex'
+    assert _external_entity_kind('node') == 'node'
 
 
 def test_internal_entity_kind_translates_edge_to_edge_entity() -> None:
     assert _internal_entity_kind('edge') == 'edge_entity'
-    assert _internal_entity_kind('vertex') == 'vertex'
+    assert _internal_entity_kind('node') == 'node'

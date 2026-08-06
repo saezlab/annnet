@@ -319,7 +319,7 @@ def write_records_csv(records: list[dict], plots_dir: Path) -> Path:
         'backend',
         'op',
         'status',
-        'n_vertices',
+        'n_nodes',
         'n_edges',
         'median_s',
         'mean_s',
@@ -341,7 +341,7 @@ def write_records_csv(records: list[dict], plots_dir: Path) -> Path:
                     'backend': r.get('backend'),
                     'op': r.get('op'),
                     'status': r.get('status', 'ok' if (r.get('time') or r.get('memory')) else ''),
-                    'n_vertices': r.get('n_vertices'),
+                    'n_nodes': r.get('n_nodes'),
                     'n_edges': r.get('n_edges'),
                     'median_s': t.get('median_s'),
                     'mean_s': t.get('mean_s'),
@@ -449,11 +449,11 @@ def _plot_backend_grouped(records: list[dict], path: Path, title: str) -> Path |
     ops = ordered(
         {r['op'] for r in records},
         {
-            'add_vertices_bulk': 0,
+            'add_nodes_bulk': 0,
             'add_edges_bulk': 1,
             'remove_edges_fraction': 2,
-            'remove_vertices_fraction': 3,
-            'set_vertex_attrs_bulk': 4,
+            'remove_nodes_fraction': 3,
+            'set_node_attrs_bulk': 4,
             'set_edge_attrs_bulk': 5,
         },
     )

@@ -27,7 +27,7 @@ focused special-topic notebooks.
 
     ---
 
-    Attach metadata to vertices and edges, then inspect dataframe-like views.
+    Attach metadata to nodes and edges, then inspect dataframe-like views.
 
     [Open notebook](notebooks/tutos/02_attributes_and_views.ipynb)
 
@@ -100,7 +100,7 @@ focused special-topic notebooks.
 
     ---
 
-    Compare edge-scope and vertex-scope orientation policies on mixed graphs.
+    Compare edge-scope and node-scope orientation policies on mixed graphs.
 
     [Open notebook](notebooks/special/sp03_flexible_edge_orientation.ipynb)
 

@@ -32,62 +32,62 @@ class Traversal:
         """
         return S.neighbors(self, entity_id, 'both')
 
-    def out_neighbors(self, vertex_id):
-        """Return outward neighbors of a vertex.
+    def out_neighbors(self, node_id):
+        """Return outward neighbors of a node.
 
         Parameters
         ----------
-        vertex_id : str
-            Vertex identifier.
+        node_id : str
+            Node identifier.
 
         Returns
         -------
         list[str]
             Neighbor identifiers reachable via outgoing or undirected edges.
         """
-        return S.neighbors(self, vertex_id, 'out')
+        return S.neighbors(self, node_id, 'out')
 
-    def successors(self, vertex_id):
+    def successors(self, node_id):
         """Alias for :meth:`out_neighbors`.
 
         Parameters
         ----------
-        vertex_id : str
-            Vertex identifier.
+        node_id : str
+            Node identifier.
 
         Returns
         -------
         list[str]
             Successor identifiers.
         """
-        return self.out_neighbors(vertex_id)
+        return self.out_neighbors(node_id)
 
-    def in_neighbors(self, vertex_id):
-        """Return inward neighbors of a vertex.
+    def in_neighbors(self, node_id):
+        """Return inward neighbors of a node.
 
         Parameters
         ----------
-        vertex_id : str
-            Vertex identifier.
+        node_id : str
+            Node identifier.
 
         Returns
         -------
         list[str]
             Neighbor identifiers reachable via incoming or undirected edges.
         """
-        return S.neighbors(self, vertex_id, 'in')
+        return S.neighbors(self, node_id, 'in')
 
-    def predecessors(self, vertex_id):
+    def predecessors(self, node_id):
         """Alias for :meth:`in_neighbors`.
 
         Parameters
         ----------
-        vertex_id : str
-            Vertex identifier.
+        node_id : str
+            Node identifier.
 
         Returns
         -------
         list[str]
             Predecessor identifiers.
         """
-        return self.in_neighbors(vertex_id)
+        return self.in_neighbors(node_id)

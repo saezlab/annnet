@@ -6,7 +6,7 @@ Provides:
     from_graphtool(gtG, manifest=None) -> AnnNet
 
 graph-tool only gets what it can natively represent:
-    - vertices (type 'vertex')
+    - nodes (type 'node')
     - simple binary edges with a global directedness + a 'weight' edge property
 Everything else (hyperedges, per-edge directedness, multilayer, slices,
 all attribute tables, etc.) is preserved in `manifest`.
@@ -23,9 +23,10 @@ except ImportError:
 
 from ..core import _structure
 from ._common import (
+    stored_key,
     _rows_to_df,
+    _iter_node_ids,
     empty_dataframe,
-    _iter_vertex_ids,
     dataframe_to_rows,
     _iter_edge_records,
     serialize_edge_layers,
@@ -46,7 +47,7 @@ if TYPE_CHECKING:
 def _serialize_slice_data(graph: AnnNet) -> dict[str, dict]:
     return {
         slice_id: {
-            'vertices': list(graph.slices.vertices(slice_id)),
+            'nodes': list(graph.slices.nodes(slice_id)),
             'edges': list(graph.slices.edges(slice_id)),
             'attributes': graph.slices.info(slice_id).get('attributes', {}),
         }
@@ -57,7 +58,7 @@ def _serialize_slice_data(graph: AnnNet) -> dict[str, dict]:
 def to_graphtool(
     G: AnnNet,
     *,
-    vertex_id_property: str = 'id',
+    node_id_property: str = 'id',
     edge_id_property: str = 'id',
     weight_property: str = 'weight',
 ) -> tuple[gt.Graph, dict]:
@@ -65,9 +66,9 @@ def to_graphtool(
     Convert an AnnNet AnnNet -> (graph_tool.AnnNet, manifest).
 
     graph-tool graph:
-      - vertices: only entities whose kind is a node
-      - edges: only binary edges whose endpoints are such vertices
-      - vertex property vp[vertex_id_property] = AnnNet vertex id
+      - nodes: only entities whose kind is a node
+      - edges: only binary edges whose endpoints are such nodes
+      - node property vp[node_id_property] = AnnNet node id
       - edge property   ep[edge_id_property]   = AnnNet edge id
       - edge property   ep[weight_property]    = edge weight (float)
 
@@ -78,7 +79,7 @@ def to_graphtool(
     if gt is None:
         raise RuntimeError('graph-tool is not installed; cannot call to_graphtool')
 
-    def _project_vertex_id(node):
+    def _project_node_id(node):
         if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
             return node[0]
         return node
@@ -87,21 +88,21 @@ def to_graphtool(
     directed = bool(G.directed) if G.directed is not None else True
     gtG = gt.Graph(directed=directed)
 
-    # 2) vertices (only type 'vertex') — list materialised once and reused
-    # for the manifest's 'vertices.types' section too.
-    vmap = {}  # annnet_id -> gt.Vertex
+    # 2) nodes (only type 'node') — list materialised once and reused
+    # for the manifest's 'nodes.types' section too.
+    vmap = {}  # annnet_id -> gt.Node
     vp_id = gtG.new_vertex_property('string')
 
-    vertex_ids = list(_iter_vertex_ids(G))
+    node_ids = list(_iter_node_ids(G))
 
-    for u in vertex_ids:
+    for u in node_ids:
         v = gtG.add_vertex()
         vmap[u] = v
         vp_id[v] = str(u)
 
-    gtG.vp[vertex_id_property] = vp_id
+    gtG.vp[node_id_property] = vp_id
 
-    # 3) edges (only binary edges between such vertices)
+    # 3) edges (only binary edges between such nodes)
     ep_id = gtG.new_edge_property('string')
     ep_w = gtG.new_edge_property('double')
 
@@ -160,7 +161,7 @@ def to_graphtool(
         if rec.weight is not None:
             edges_weights[eid] = rec.weight
 
-        u, v = _project_vertex_id(rec.src), _project_vertex_id(rec.tgt)
+        u, v = _project_node_id(rec.src), _project_node_id(rec.tgt)
         if u not in vmap or v not in vmap:
             continue
 
@@ -182,13 +183,13 @@ def to_graphtool(
 
     # 4) attribute tables as rows (DF [DataFrame] -> list[dict])
 
-    vert_rows = dataframe_to_rows(getattr(G, '_vertex_table', empty_dataframe({})))
+    vert_rows = dataframe_to_rows(getattr(G, '_node_table', empty_dataframe({})))
     edge_rows = dataframe_to_rows(getattr(G, '_edge_table', empty_dataframe({})))
     slice_rows = dataframe_to_rows(getattr(G, 'slice_attributes', empty_dataframe({})))
     edge_slice_rows = dataframe_to_rows(getattr(G, 'edge_slice_attributes', empty_dataframe({})))
     layer_attr_rows = dataframe_to_rows(getattr(G, 'layer_attributes', empty_dataframe({})))
 
-    # 5) slices internal structure (vertex/edge sets + attributes)
+    # 5) slices internal structure (node/edge sets + attributes)
     slices_data = _serialize_slice_data(G)
     slice_membership, slice_weights = collect_slice_manifest(G)
 
@@ -207,8 +208,8 @@ def to_graphtool(
             'directed': directed,
             'attributes': dict(getattr(G, 'graph_attributes', {})),
         },
-        'vertices': {
-            'types': dict.fromkeys(vertex_ids, 'vertex'),
+        'nodes': {
+            'types': dict.fromkeys(node_ids, 'node'),
             'attributes': vert_rows,
         },
         'edges': {
@@ -232,7 +233,7 @@ def to_graphtool(
         },
         'multilayer': multilayer_manifest,
         'tables': {
-            '_vertex_table': vert_rows,
+            '_node_table': vert_rows,
             '_edge_table': edge_rows,
             'slice_attributes': slice_rows,
             'edge_slice_attributes': edge_slice_rows,
@@ -250,19 +251,19 @@ def from_graphtool(
     gtG: gt.Graph,
     manifest: dict | None = None,
     *,
-    vertex_id_property: str = 'id',
+    node_id_property: str = 'id',
     edge_id_property: str = 'id',
     weight_property: str = 'weight',
 ) -> AnnNet:
     """
     Convert graph_tool.AnnNet (+ optional manifest) back into AnnNet AnnNet.
 
-    - Vertices: from vertex property `vertex_id_property` if present, else numeric index.
+    - Nodes: from node property `node_id_property` if present, else numeric index.
     - Edges:    from edges in gtG; edge_id from edge property `edge_id_property` if present,
                 else auto; weight from edge property `weight_property` if present, else 1.0.
 
     If `manifest` is provided, rehydrates:
-      - all attribute tables (vertex/edge/slice/edge_slice/layer),
+      - all attribute tables (node/edge/slice/edge_slice/layer),
       - _slices internal structure,
       - hyperedges,
       - edge_directed and edge_direction_policy,
@@ -278,16 +279,16 @@ def from_graphtool(
     directed = bool(gtG.is_directed())
     G = AnnNet(directed=directed)
 
-    # 1) vertices — bulk collect, single insert
-    vp = gtG.vp.get(vertex_id_property, None)
+    # 1) nodes — bulk collect, single insert
+    vp = gtG.vp.get(node_id_property, None)
     v_to_id: dict[Any, str] = {}
-    vertex_buf: list[str] = []
+    node_buf: list[str] = []
     for v in gtG.vertices():
         vid = str(vp[v]) if vp is not None else str(int(v))
         v_to_id[v] = vid
-        vertex_buf.append(vid)
-    if vertex_buf:
-        G._add_vertices_bulk([{'vertex_id': v} for v in vertex_buf])
+        node_buf.append(vid)
+    if node_buf:
+        G._add_nodes_bulk([{'node_id': v} for v in node_buf])
 
     # 2) edges — bulk collect, single insert
     ep_id = gtG.ep.get(edge_id_property, None)
@@ -314,11 +315,11 @@ def from_graphtool(
     gmeta = manifest.get('graph', {})
     G.graph_attributes = dict(gmeta.get('attributes', {}))
 
-    # ----- vertices -----
-    vmeta = manifest.get('vertices', {})
+    # ----- nodes -----
+    vmeta = stored_key(manifest, 'nodes', {})
     v_rows = vmeta.get('attributes', [])
     if v_rows:
-        G._vertex_table = _rows_to_df(v_rows)
+        G._node_table = _rows_to_df(v_rows)
     v_types = vmeta.get('types', {})
     if v_types:
         G._set_entity_kinds_by_id(v_types)
@@ -393,8 +394,8 @@ def from_graphtool(
             if slice_id not in existing_slices:
                 G.slices.add(slice_id, **(info.get('attributes') or {}))
                 existing_slices.add(slice_id)
-            for vertex_id in info.get('vertices', []):
-                G.slices.add_vertex_to_slice(slice_id, vertex_id)
+            for node_id in stored_key(info, 'nodes', []):
+                G.slices.add_node_to_slice(slice_id, node_id)
     restore_slice_manifest(
         G,
         smeta.get('memberships')

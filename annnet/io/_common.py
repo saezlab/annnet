@@ -10,12 +10,13 @@ from __future__ import annotations
 
 from ..core import _structure
 from ..core._structure import (
+    _iter_node_ids,
     _is_directed_eid,
-    _iter_vertex_ids,
     _iter_edge_records,
 )
 from .._support.graph_records import _rows_to_df
 from .._support.serialization import (
+    stored as stored_key,
     endpoint_coeff_map,
     serialize_endpoint,
     deserialize_endpoint,
@@ -52,17 +53,23 @@ from .._support.dataframe_backend import (
 # here and a reader maps forward. A file written today therefore stays readable
 # by a version that no longer holds records.
 STORED_ENTITY_KIND = {
-    _structure.NODE: 'vertex',
+    _structure.NODE: 'node',
     _structure.EDGE_ENTITY: 'edge_entity',
 }
 STORED_EDGE_KIND = {
     _structure.BINARY: 'binary',
     _structure.HYPER: 'hyper',
-    _structure.NODE_EDGE: 'vertex_edge',
+    _structure.NODE_EDGE: 'node_edge',
     _structure.PLACEHOLDER: 'edge_placeholder',
 }
 LOADED_ENTITY_KIND = {stored: kind for kind, stored in STORED_ENTITY_KIND.items()}
 LOADED_EDGE_KIND = {stored: kind for kind, stored in STORED_EDGE_KIND.items()}
+
+# The package said "vertex" where it now says "node", and a file written before
+# the rename holds the old word. A reader takes both spellings and a writer
+# emits the new one, which is the only direction that has to hold.
+LOADED_ENTITY_KIND['vertex'] = _structure.NODE
+LOADED_EDGE_KIND['vertex_edge'] = _structure.NODE_EDGE
 
 __all__ = [
     'LOADED_EDGE_KIND',
@@ -70,6 +77,7 @@ __all__ = [
     'STORED_EDGE_KIND',
     'STORED_ENTITY_KIND',
     'collect_slice_manifest',
+    'stored_key',
     'dataframe_column_is_numeric',
     'dataframe_column_values',
     'dataframe_columns',
@@ -98,6 +106,6 @@ __all__ = [
     'serialize_multilayer_manifest',
     '_is_directed_eid',
     '_iter_edge_records',
-    '_iter_vertex_ids',
+    '_iter_node_ids',
     '_rows_to_df',
 ]

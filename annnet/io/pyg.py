@@ -5,7 +5,7 @@ Provides:
     to_pyg(G) -> torch_geometric.data.HeteroData
 
 PyTorch Geometric represents graph data as tensors. This adapter exports AnnNet
-vertices and edges into a heterogeneous graph structure suitable for downstream
+nodes and edges into a heterogeneous graph structure suitable for downstream
 GNN workflows.
 
 AnnNet-specific structures such as slices, multilayer metadata, hyperedge
@@ -22,7 +22,7 @@ import torch
 from torch_geometric.data import HeteroData
 
 from ._common import (
-    _iter_vertex_ids,
+    _iter_node_ids,
     dataframe_to_rows,
 )
 
@@ -125,9 +125,9 @@ def to_pyg(
 ) -> HeteroData:
     """Export AnnNet → torch_geometric.data.HeteroData.
 
-    Builds a heterogeneous graph: vertices are grouped into node types by their
+    Builds a heterogeneous graph: nodes are grouped into node types by their
     ``kind`` attribute and edges into relation types by their endpoint kinds, so
-    AnnNet's entity/edge typing is preserved. Selected vertex/edge attribute
+    AnnNet's entity/edge typing is preserved. Selected node/edge attribute
     columns become node/edge feature tensors, and slice membership is carried as
     boolean masks. Hyperedges have no native PyG equivalent and are handled per
     ``hyperedge_mode``.
@@ -136,7 +136,7 @@ def to_pyg(
     ----------
     graph : AnnNet
     node_features : dict[str, list[str]], optional
-        Per node-kind, the vertex-attribute columns to stack into the node
+        Per node-kind, the node-attribute columns to stack into the node
         feature tensor ``x``. Kinds absent from the mapping get no features.
     edge_features : dict[tuple[str, str, str], list[str]], optional
         Per relation triple ``(src_kind, relation, dst_kind)``, the edge-attribute
@@ -169,15 +169,15 @@ def to_pyg(
     }
 
     # Build attribute lookup maps
-    vert_rows = dataframe_to_rows(getattr(graph, '_vertex_table', None))
+    vert_rows = dataframe_to_rows(getattr(graph, '_node_table', None))
     edge_rows = dataframe_to_rows(getattr(graph, '_edge_table', None))
 
     v_attrs_map: dict[str, dict] = {}
     if vert_rows:
         id_col = None
         if vert_rows[0]:
-            if 'vertex_id' in vert_rows[0]:
-                id_col = 'vertex_id'
+            if 'node_id' in vert_rows[0]:
+                id_col = 'node_id'
             elif 'id' in vert_rows[0]:
                 id_col = 'id'
 
@@ -200,18 +200,18 @@ def to_pyg(
                 eid = str(r.get(id_col))
                 e_attrs_map[eid] = r
 
-    # Group vertices by kind
-    kind_to_vertices: dict[str, list[str]] = {}
-    for uid in _iter_vertex_ids(graph):
+    # Group nodes by kind
+    kind_to_nodes: dict[str, list[str]] = {}
+    for uid in _iter_node_ids(graph):
         row = v_attrs_map.get(str(uid), {})
         kind = row.get('kind') or 'default'
 
-        if kind not in kind_to_vertices:
-            kind_to_vertices[kind] = []
-        kind_to_vertices[kind].append(str(uid))
+        if kind not in kind_to_nodes:
+            kind_to_nodes[kind] = []
+        kind_to_nodes[kind].append(str(uid))
 
     # Process nodes by kind
-    for kind, vids in kind_to_vertices.items():
+    for kind, vids in kind_to_nodes.items():
         n = len(vids)
 
         idx_map = dict(zip(vids, range(n), strict=False))
@@ -228,7 +228,7 @@ def to_pyg(
         # Slice mask
         if slice_id is not None:
             try:
-                members = set(graph.slices.vertices(slice_id))
+                members = set(graph.slices.nodes(slice_id))
             except Exception:  # noqa: BLE001
                 members = set()
 
@@ -256,7 +256,7 @@ def to_pyg(
 
     def _bare(endpoint):
         # Multilayer endpoints are (vid, layer_coord) tuples; collapse to
-        # bare vid for kind / attribute lookups (kind is per vertex_id,
+        # bare vid for kind / attribute lookups (kind is per node_id,
         # not per supra-node).
         if isinstance(endpoint, tuple) and len(endpoint) == 2 and isinstance(endpoint[0], str):
             return endpoint[0]

@@ -8,18 +8,18 @@ def accessor_dimensions(
     *,
     backend: str = 'auto',
     samples: int = 3,
-    max_vertices: int = 2_500,
+    max_nodes: int = 2_500,
     max_edges: int = 10_000,
     max_accessor_repeats: int = 5,
 ) -> list[dict]:
     original = scale
     scale = capped_scale(
         scale,
-        max_vertices=max_vertices,
+        max_nodes=max_nodes,
         max_edges=max_edges,
         max_accessor_repeats=max_accessor_repeats,
     )
-    graph, _vertices, _pairs, _edge_ids = build_annnet_graph(scale, backend=backend)
+    graph, _nodes, _pairs, _edge_ids = build_annnet_graph(scale, backend=backend)
     repeats = max(1, scale.accessor_repeats)
     suffix = scale_note(original, scale)
 
@@ -63,10 +63,10 @@ def accessor_dimensions(
         return total
 
     def nx_after_mutation_number_of_nodes():
-        fresh, _vertices, _pairs, _edge_ids = build_annnet_graph(scale, backend=backend)
+        fresh, _nodes, _pairs, _edge_ids = build_annnet_graph(scale, backend=backend)
         fresh.nx.clear()
         before = fresh.nx.number_of_nodes(fresh)
-        fresh.add_vertices('cache_invalidation_vertex')
+        fresh.add_nodes('cache_invalidation_node')
         return before, fresh.nx.number_of_nodes(fresh)
 
     def ig_cold_vcount():
@@ -102,10 +102,10 @@ def accessor_dimensions(
         return total
 
     def ig_after_mutation_vcount():
-        fresh, _vertices, _pairs, _edge_ids = build_annnet_graph(scale, backend=backend)
+        fresh, _nodes, _pairs, _edge_ids = build_annnet_graph(scale, backend=backend)
         fresh.ig.clear()
         before = fresh.ig.vcount()
-        fresh.add_vertices('cache_invalidation_vertex')
+        fresh.add_nodes('cache_invalidation_node')
         return before, fresh.ig.vcount()
 
     def gt_cold_components():
@@ -148,10 +148,10 @@ def accessor_dimensions(
         return total
 
     def gt_after_mutation_components():
-        fresh, _vertices, _pairs, _edge_ids = build_annnet_graph(scale, backend=backend)
+        fresh, _nodes, _pairs, _edge_ids = build_annnet_graph(scale, backend=backend)
         fresh.gt.clear()
         _labels, before_hist = fresh.gt.topology.label_components()
-        fresh.add_vertices('cache_invalidation_vertex')
+        fresh.add_nodes('cache_invalidation_node')
         _labels, after_hist = fresh.gt.topology.label_components()
         return len(before_hist), len(after_hist)
 

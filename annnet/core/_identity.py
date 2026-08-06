@@ -6,7 +6,7 @@ import warnings
 
 
 def is_explicit_entity_key(value) -> bool:
-    """Return True when ``value`` is an explicit ``(vertex_id, layer_coord)`` key."""
+    """Return True when ``value`` is an explicit ``(node_id, layer_coord)`` key."""
     return (
         isinstance(value, tuple)
         and len(value) == 2
@@ -34,24 +34,24 @@ def ensure_placeholder_layers_declared(g) -> tuple:
     return coord
 
 
-def warn_placeholder_vertex_assignment(g, vertex_ids, *, context: str) -> None:
-    """Warn that vertices were assigned to the placeholder layer tuple."""
+def warn_placeholder_node_assignment(g, node_ids, *, context: str) -> None:
+    """Warn that nodes were assigned to the placeholder layer tuple."""
     coord = placeholder_layer_coord(g)
-    if isinstance(vertex_ids, str):
+    if isinstance(node_ids, str):
         warnings.warn(
-            f'{context}: vertex {vertex_ids!r} was assigned to placeholder layer '
+            f'{context}: node {node_ids!r} was assigned to placeholder layer '
             f'{coord!r}. Pass layer= to place it explicitly.',
             UserWarning,
             stacklevel=3,
         )
         return
-    vids = list(vertex_ids)
+    vids = list(node_ids)
     if not vids:
         return
     sample = ', '.join(repr(v) for v in vids[:3])
     suffix = '' if len(vids) <= 3 else ', ...'
     warnings.warn(
-        f'{context}: {len(vids)} vertices were assigned to placeholder layer '
+        f'{context}: {len(vids)} nodes were assigned to placeholder layer '
         f'{coord!r} ({sample}{suffix}). Pass layer= to place them explicitly.',
         UserWarning,
         stacklevel=3,
@@ -112,7 +112,7 @@ def _keys_of_id(g, vid) -> list:
 
 
 def resolve_ekey(g, vid_or_key) -> tuple:
-    """Resolve a vertex identifier to an internal ``(vid, layer_coord)`` key."""
+    """Resolve a node identifier to an internal ``(vid, layer_coord)`` key."""
     if isinstance(vid_or_key, str):
         if g._aspects == ('_',):
             return (vid_or_key, ('_',))
@@ -121,27 +121,27 @@ def resolve_ekey(g, vid_or_key) -> tuple:
             return matches[0]
         if len(matches) > 1:
             raise ValueError(
-                f'Ambiguous bare vertex_id {vid_or_key!r} in multilayer graph; '
-                f'use an explicit (vertex_id, layer_coord) tuple. Choices: {matches!r}'
+                f'Ambiguous bare node_id {vid_or_key!r} in multilayer graph; '
+                f'use an explicit (node_id, layer_coord) tuple. Choices: {matches!r}'
             )
         return (vid_or_key, placeholder_layer_coord(g))
     if is_explicit_entity_key(vid_or_key):
         vid, layer_coord = vid_or_key
         return (vid, make_layer_coord(g, layer_coord))
     raise TypeError(
-        f'vertex_id must be str or (str, tuple[str,...]), got {type(vid_or_key).__name__!r}'
+        f'node_id must be str or (str, tuple[str,...]), got {type(vid_or_key).__name__!r}'
     )
 
 
-def resolve_vertex_insert_coord(g, layer_spec, *, vertex_ids=None, context='add_vertex') -> tuple:
-    """Resolve layer placement for vertex insertion, with placeholder fallback."""
+def resolve_node_insert_coord(g, layer_spec, *, node_ids=None, context='add_node') -> tuple:
+    """Resolve layer placement for node insertion, with placeholder fallback."""
     if layer_spec is not None:
         return make_layer_coord(g, layer_spec)
     if g._aspects == ('_',):
         return ('_',)
     coord = ensure_placeholder_layers_declared(g)
-    if vertex_ids is not None:
-        warn_placeholder_vertex_assignment(g, vertex_ids, context=context)
+    if node_ids is not None:
+        warn_placeholder_node_assignment(g, node_ids, context=context)
     return coord
 
 
@@ -150,8 +150,8 @@ def resolve_vertex_insert_coord(g, layer_spec, *, vertex_ids=None, context='add_
 # ---------------------------------------------------------------------------
 
 
-def endpoint_slice_vertex_ids(g, endpoint) -> set[str]:
-    """Map an endpoint identity to the bare vertex ids used by slice membership."""
+def endpoint_slice_node_ids(g, endpoint) -> set[str]:
+    """Map an endpoint identity to the bare node ids used by slice membership."""
     if endpoint is None:
         return set()
     if isinstance(endpoint, str):
@@ -161,17 +161,17 @@ def endpoint_slice_vertex_ids(g, endpoint) -> set[str]:
     if isinstance(endpoint, (set, frozenset, list, tuple)):
         out: set[str] = set()
         for member in endpoint:
-            out.update(endpoint_slice_vertex_ids(g, member))
+            out.update(endpoint_slice_node_ids(g, member))
         return out
     return set()
 
 
-def slice_contains_endpoint(g, slice_vertices, endpoint) -> bool:
-    """Return True when the slice contains every bare vertex id for an endpoint."""
-    vids = endpoint_slice_vertex_ids(g, endpoint)
-    return bool(vids) and vids <= slice_vertices
+def slice_contains_endpoint(g, slice_nodes, endpoint) -> bool:
+    """Return True when the slice contains every bare node id for an endpoint."""
+    vids = endpoint_slice_node_ids(g, endpoint)
+    return bool(vids) and vids <= slice_nodes
 
 
-def add_endpoint_to_slice_vertices(g, slice_vertices, endpoint) -> None:
-    """Add the bare vertex ids represented by an endpoint to a slice membership set."""
-    slice_vertices.update(endpoint_slice_vertex_ids(g, endpoint))
+def add_endpoint_to_slice_nodes(g, slice_nodes, endpoint) -> None:
+    """Add the bare node ids represented by an endpoint to a slice membership set."""
+    slice_nodes.update(endpoint_slice_node_ids(g, endpoint))

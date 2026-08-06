@@ -22,28 +22,28 @@ from annnet.core.graph import AnnNet
 
 def _toy_directed() -> AnnNet:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.5)
     G.add_edges('B', 'C', edge_id='e2', weight=2.0)
-    # NB: do not set a vertex attr called ``name`` — it collides with the
-    # igraph native vertex-ID column of the same name (latent bug in
+    # NB: do not set a node attr called ``name`` — it collides with the
+    # igraph native node-ID column of the same name (latent bug in
     # ``_export_binary_graph``; surfaced during Wave 8 but out of scope to
     # fix here — would require a rename or skip).
-    G.attrs.set_vertex_attrs('A', label='alpha')
+    G.attrs.set_node_attrs('A', label='alpha')
     G.attrs.set_edge_attrs('e1', label='alpha')
     return G
 
 
 def _toy_with_undirected_hyper() -> AnnNet:
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges(['A', 'B', 'C'], edge_id='h1')
     return G
 
 
 def _toy_with_directed_hyper() -> AnnNet:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges(src=['A', 'B'], tgt=['C', 'D'], edge_id='h1')
     return G
 
@@ -87,7 +87,7 @@ def test_export_binary_graph_directed_round_trip() -> None:
 
 def test_export_binary_graph_undirected_emits_each_edge_once() -> None:
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.0)
     out = _export_binary_graph(G, directed=False, skip_hyperedges=True)
     assert out.ecount() == 1
@@ -96,7 +96,7 @@ def test_export_binary_graph_undirected_emits_each_edge_once() -> None:
 def test_export_binary_graph_undirected_into_directed_emits_two_edges() -> None:
     """An undirected AnnNet edge → two directed igraph edges."""
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.0)
     out = _export_binary_graph(G, directed=True, skip_hyperedges=True)
     # one undirected source edge → two directed copies
@@ -119,9 +119,9 @@ def test_export_binary_graph_expands_directed_hyperedge_to_cartesian() -> None:
 
 def test_export_binary_graph_public_only_strips_double_underscore_attrs() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.0)
-    G.attrs.set_vertex_attrs('A', __secret='nope', name='alpha')  # nosec B106
+    G.attrs.set_node_attrs('A', __secret='nope', name='alpha')  # nosec B106
     out = _export_binary_graph(G, directed=True, skip_hyperedges=True, public_only=True)
     # __secret was stripped; name preserved
     assert '__secret' not in out.vs.attributes()
@@ -164,11 +164,11 @@ def test_to_igraph_reify_with_directed_hyperedge_attaches_head_tail_roles() -> N
 
 def test_to_igraph_with_public_only_strips_underscore_attrs() -> None:
     G = _toy_directed()
-    G.attrs.set_vertex_attrs('A', __secret='nope')  # nosec B106
+    G.attrs.set_node_attrs('A', __secret='nope')  # nosec B106
     G.attrs.set_edge_attrs('e1', __secret='nope')  # nosec B106
     igG, manifest = to_igraph(G, public_only=True)
-    # The manifest's vertex_attrs / edge_attrs sections strip __ keys.
-    for v_attrs in manifest['vertex_attrs'].values():
+    # The manifest's node_attrs / edge_attrs sections strip __ keys.
+    for v_attrs in manifest['node_attrs'].values():
         assert all(not str(k).startswith('__') for k in v_attrs)
 
 
@@ -188,7 +188,7 @@ def test_to_igraph_from_igraph_round_trip_basic() -> None:
     G = _toy_directed()
     igG, manifest = to_igraph(G)
     H = from_igraph(igG, manifest)
-    assert set(H.vertices()) == {'A', 'B', 'C'}
+    assert set(H.nodes()) == {'A', 'B', 'C'}
     assert H.ne == 2
 
 
@@ -219,8 +219,8 @@ def test_to_igraph_from_igraph_round_trip_with_slices() -> None:
 def test_to_igraph_from_igraph_round_trip_with_multilayer() -> None:
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A'], layer={'condition': 'healthy'})
-    G.add_vertices(['B'], layer={'condition': 'treated'})
+    G.add_nodes(['A'], layer={'condition': 'healthy'})
+    G.add_nodes(['B'], layer={'condition': 'treated'})
     igG, manifest = to_igraph(G)
     H = from_igraph(igG, manifest)
     assert H.is_multilayer
@@ -296,7 +296,7 @@ def test_from_ig_without_manifest_basic_round_trip() -> None:
     G = _toy_directed()
     igG, _ = to_igraph(G)
     H = _from_ig_without_manifest(igG)
-    assert set(H.vertices()) == {'A', 'B', 'C'}
+    assert set(H.nodes()) == {'A', 'B', 'C'}
     assert H.ne >= 2
 
 

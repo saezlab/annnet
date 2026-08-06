@@ -29,7 +29,7 @@ ANNNET_UNS_KEY = '__annnet__'
 ANNNET_ENCODING = 'annnet-scverse'
 ANNNET_VERSION = 1
 
-_OBS_VERTEX_ID_COL = 'annnet_vertex_id'
+_OBS_NODE_ID_COL = 'annnet_node_id'
 _OBS_LAYER_PREFIX = 'annnet_layer_'
 _STRUCTURAL_VAR_COLUMNS = {
     'source',
@@ -92,8 +92,8 @@ def copy_graph_uns(graph_uns: dict[str, Any]) -> dict[str, Any]:
         return dict(graph_uns or {})
 
 
-def _vertex_entities(graph) -> list[tuple[str, tuple[str, ...], int]]:
-    """Return vertex entities in row order as (vertex_id, layer_coord, row_idx)."""
+def _node_entities(graph) -> list[tuple[str, tuple[str, ...], int]]:
+    """Return node entities in row order as (node_id, layer_coord, row_idx)."""
     return [
         (ref.id, ref.layer, _structure.entity_row(graph, ref.key))
         for ref in _structure.iter_entities(graph)
@@ -101,11 +101,11 @@ def _vertex_entities(graph) -> list[tuple[str, tuple[str, ...], int]]:
     ]
 
 
-def _vertex_obs_name(vertex_id: str, layer_coord: tuple[str, ...], *, is_multilayer: bool) -> str:
-    """Build a stable AnnData obs name for a vertex entity."""
+def _node_obs_name(node_id: str, layer_coord: tuple[str, ...], *, is_multilayer: bool) -> str:
+    """Build a stable AnnData obs name for a node entity."""
     if not is_multilayer:
-        return str(vertex_id)
-    payload = serialize_endpoint((vertex_id, layer_coord))
+        return str(node_id)
+    payload = serialize_endpoint((node_id, layer_coord))
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
@@ -168,17 +168,17 @@ def _attr_map(
 
 
 def build_obs_dataframe(graph, *, include_private: bool) -> pd.DataFrame:
-    """Materialize AnnNet vertex entities into an AnnData obs dataframe."""
-    vertex_attrs = _attr_map(
-        graph_table_rows(graph._vertex_table), 'vertex_id', include_private=include_private
+    """Materialize AnnNet node entities into an AnnData obs dataframe."""
+    node_attrs = _attr_map(
+        graph_table_rows(graph._node_table), 'node_id', include_private=include_private
     )
     rows: list[dict[str, Any]] = []
     index: list[str] = []
     is_multilayer = bool(graph.aspects)
-    for vertex_id, layer_coord, _row_idx in _vertex_entities(graph):
-        index.append(_vertex_obs_name(vertex_id, layer_coord, is_multilayer=is_multilayer))
-        row = dict(vertex_attrs.get(vertex_id, {}))
-        row[_OBS_VERTEX_ID_COL] = vertex_id
+    for node_id, layer_coord, _row_idx in _node_entities(graph):
+        index.append(_node_obs_name(node_id, layer_coord, is_multilayer=is_multilayer))
+        row = dict(node_attrs.get(node_id, {}))
+        row[_OBS_NODE_ID_COL] = node_id
         if is_multilayer:
             for aspect, value in zip(graph.aspects, layer_coord, strict=False):
                 row[f'{_OBS_LAYER_PREFIX}{aspect}'] = value
@@ -229,9 +229,9 @@ def build_var_dataframe(graph, *, include_private: bool) -> pd.DataFrame:
     return var
 
 
-def build_vertex_incidence(graph) -> sparse.csr_matrix:
-    """Return the vertex-only incidence matrix aligned to the exported obs rows."""
-    row_indexes = [row_idx for _vertex_id, _layer, row_idx in _vertex_entities(graph)]
+def build_node_incidence(graph) -> sparse.csr_matrix:
+    """Return the node-only incidence matrix aligned to the exported obs rows."""
+    row_indexes = [row_idx for _node_id, _layer, row_idx in _node_entities(graph)]
     col_indexes = [_structure.edge_column(graph, edge_id) for edge_id in graph.edges()]
     matrix = graph.S.tocsr()
     if not row_indexes:
@@ -255,7 +255,7 @@ def build_annnet_manifest(graph) -> dict[str, Any]:
         'directed': graph.directed,
         'active_slice': graph.slices.active,
         'graph_uns': copy_graph_uns(graph.uns),
-        'vertex_attrs': graph_table_rows(graph._vertex_table),
+        'node_attrs': graph_table_rows(graph._node_table),
         'edge_attrs': graph_table_rows(graph._edge_table),
         'slice_attrs': graph_table_rows(graph.slice_attributes),
         'edge_slice_attrs': graph_table_rows(graph.edge_slice_attributes),
@@ -265,8 +265,8 @@ def build_annnet_manifest(graph) -> dict[str, Any]:
     }
 
 
-def add_vertices_from_obs(graph, obs: pd.DataFrame) -> None:
-    """Restore vertices from AnnData.obs using the AnnNet structural columns when present."""
+def add_nodes_from_obs(graph, obs: pd.DataFrame) -> None:
+    """Restore nodes from AnnData.obs using the AnnNet structural columns when present."""
     layer_cols = [col for col in obs.columns if str(col).startswith(_OBS_LAYER_PREFIX)]
     if layer_cols:
         aspects = [str(col)[len(_OBS_LAYER_PREFIX) :] for col in layer_cols]
@@ -281,21 +281,21 @@ def add_vertices_from_obs(graph, obs: pd.DataFrame) -> None:
             for aspect in aspects
         }
         graph.layers.set_aspects(aspects, elem_layers)
-        # Bucket vertices by layer tuple, then bulk-add per group —
-        # per-row add_vertices is O(rows) graph mutations.
+        # Bucket nodes by layer tuple, then bulk-add per group —
+        # per-row add_nodes is O(rows) graph mutations.
         by_layer: dict[tuple, list[str]] = {}
         for obs_name, row in obs.iterrows():
-            vertex_id = row.get(_OBS_VERTEX_ID_COL, obs_name)
+            node_id = row.get(_OBS_NODE_ID_COL, obs_name)
             layer = tuple(str(row[f'{_OBS_LAYER_PREFIX}{aspect}']) for aspect in aspects)
-            by_layer.setdefault(layer, []).append(str(vertex_id))
+            by_layer.setdefault(layer, []).append(str(node_id))
         for layer, vids in by_layer.items():
-            graph.add_vertices(vids, layer=layer)
+            graph.add_nodes(vids, layer=layer)
         return
 
     # Flat graph: one bulk call.
-    vids = [str(row.get(_OBS_VERTEX_ID_COL, obs_name)) for obs_name, row in obs.iterrows()]
+    vids = [str(row.get(_OBS_NODE_ID_COL, obs_name)) for obs_name, row in obs.iterrows()]
     if vids:
-        graph.add_vertices(vids)
+        graph.add_nodes(vids)
 
 
 def restore_multilayer(graph, manifest: dict[str, Any]) -> None:
@@ -313,16 +313,16 @@ def restore_multilayer(graph, manifest: dict[str, Any]) -> None:
 
 
 def restore_attrs_from_manifest(graph, manifest: dict[str, Any]) -> None:
-    """Restore graph, vertex, edge, slice, and edge-slice attributes from the manifest."""
+    """Restore graph, node, edge, slice, and edge-slice attributes from the manifest."""
     graph.uns.update(copy_graph_uns(manifest.get('graph_uns', {})))
 
-    vertex_updates = {
-        row['vertex_id']: {k: v for k, v in row.items() if k != 'vertex_id' and not is_nullish(v)}
-        for row in manifest.get('vertex_attrs', [])
-        if row.get('vertex_id') is not None
+    node_updates = {
+        row['node_id']: {k: v for k, v in row.items() if k != 'node_id' and not is_nullish(v)}
+        for row in manifest.get('node_attrs', [])
+        if row.get('node_id') is not None
     }
-    if vertex_updates:
-        graph.attrs.set_vertex_attrs_bulk(vertex_updates)
+    if node_updates:
+        graph.attrs.set_node_attrs_bulk(node_updates)
 
     edge_updates = {
         row['edge_id']: {k: v for k, v in row.items() if k != 'edge_id' and not is_nullish(v)}
@@ -375,21 +375,21 @@ def infer_directed_from_var(var: pd.DataFrame) -> bool | None:
     return values[0] if all(v == values[0] for v in values) else None
 
 
-def restore_vertices_from_obs_attrs(graph, obs: pd.DataFrame) -> None:
-    """Restore vertex attributes from AnnData.obs columns in the generic path."""
+def restore_nodes_from_obs_attrs(graph, obs: pd.DataFrame) -> None:
+    """Restore node attributes from AnnData.obs columns in the generic path."""
     layer_cols = {col for col in obs.columns if str(col).startswith(_OBS_LAYER_PREFIX)}
     updates: dict[str, dict[str, Any]] = {}
     for obs_name, row in obs.iterrows():
-        vertex_id = str(row.get(_OBS_VERTEX_ID_COL, obs_name))
+        node_id = str(row.get(_OBS_NODE_ID_COL, obs_name))
         attrs = {}
         for key, value in row.items():
-            if key == _OBS_VERTEX_ID_COL or key in layer_cols or is_nullish(value):
+            if key == _OBS_NODE_ID_COL or key in layer_cols or is_nullish(value):
                 continue
             attrs[str(key)] = value
         if attrs:
-            updates.setdefault(vertex_id, {}).update(attrs)
+            updates.setdefault(node_id, {}).update(attrs)
     if updates:
-        graph.attrs.set_vertex_attrs_bulk(updates)
+        graph.attrs.set_node_attrs_bulk(updates)
 
 
 def add_edges_from_var(graph, var: pd.DataFrame) -> None:

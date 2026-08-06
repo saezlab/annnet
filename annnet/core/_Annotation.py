@@ -35,7 +35,7 @@ def _check_reserved_collision(reserved, attrs, *, kind, allow=()):
 
 
 class AttributesClass:
-    """Attribute accessors and upsert helpers (graph/vertex/edge/slice/edge-slice)."""
+    """Attribute accessors and upsert helpers (graph/node/edge/slice/edge-slice)."""
 
     def set_graph_attribute(self, key, value):
         """Set a graph-level attribute.
@@ -65,67 +65,67 @@ class AttributesClass:
         """
         return self.graph_attributes.get(key, default)
 
-    def set_vertex_attrs(self, vertex_id, **attrs):
-        """Upsert pure vertex attributes (non-structural) into the vertex table.
+    def set_node_attrs(self, node_id, **attrs):
+        """Upsert pure node attributes (non-structural) into the node table.
 
         Parameters
         ----------
-        vertex_id : str
-            Vertex identifier.
+        node_id : str
+            Node identifier.
         **attrs
             Attribute key/value pairs.
 
         Raises
         ------
         ValueError
-            If any key is structurally reserved (e.g. ``vertex_id``).
+            If any key is structurally reserved (e.g. ``node_id``).
         """
-        _check_reserved_collision(self._vertex_RESERVED, attrs, kind='vertex')
+        _check_reserved_collision(self._node_RESERVED, attrs, kind='node')
         clean = dict(attrs)
         if not clean:
             return
 
-        if self._vertex_key_enabled():
-            old_key = self._current_key_of_vertex(vertex_id)
+        if self._node_key_enabled():
+            old_key = self._current_key_of_node(node_id)
             merged = {
                 f: (
                     clean[f]
                     if f in clean
-                    else AttributesClass.get_attr_vertex(self, vertex_id, f, None)
+                    else AttributesClass.get_attr_node(self, node_id, f, None)
                 )
-                for f in self._vertex_key_fields
+                for f in self._node_key_fields
             }
             new_key = self._build_key_from_attrs(merged)
             if new_key is not None:
-                owner = self._vertex_key_index.get(new_key)
-                if owner is not None and owner != vertex_id:
+                owner = self._node_key_index.get(new_key)
+                if owner is not None and owner != node_id:
                     raise ValueError(
-                        f'Composite key collision on {self._vertex_key_fields}: {new_key} owned by {owner}'
+                        f'Composite key collision on {self._node_key_fields}: {new_key} owned by {owner}'
                     )
 
-        self._attr_store.set_node_attrs(vertex_id, clean)
+        self._attr_store.set_node_attrs(node_id, clean)
 
-        watched = self._variables_watched_by_vertices()
+        watched = self._variables_watched_by_nodes()
         if watched and any(k in watched for k in clean):
-            for eid in self._incident_flexible_edges(vertex_id):
+            for eid in self._incident_flexible_edges(node_id):
                 self._apply_flexible_direction(eid)
 
-        if self._vertex_key_enabled():
-            new_key = self._current_key_of_vertex(vertex_id)
+        if self._node_key_enabled():
+            new_key = self._current_key_of_node(node_id)
             old_key = old_key if 'old_key' in locals() else None
             if old_key != new_key:
-                if old_key is not None and self._vertex_key_index.get(old_key) == vertex_id:
-                    self._vertex_key_index.pop(old_key, None)
+                if old_key is not None and self._node_key_index.get(old_key) == node_id:
+                    self._node_key_index.pop(old_key, None)
                 if new_key is not None:
-                    self._vertex_key_index[new_key] = vertex_id
+                    self._node_key_index[new_key] = node_id
 
-    def set_vertex_attrs_bulk(self, updates):
-        """Upsert vertex attributes in bulk.
+    def set_node_attrs_bulk(self, updates):
+        """Upsert node attributes in bulk.
 
         Parameters
         ----------
         updates : dict[str, dict] | Iterable[tuple[str, dict]]
-            Mapping or iterable of `(vertex_id, attrs)` pairs.
+            Mapping or iterable of `(node_id, attrs)` pairs.
         """
         if not updates:
             return
@@ -133,66 +133,66 @@ class AttributesClass:
             updates = dict(updates)
         for vid, attrs in updates.items():
             if not isinstance(attrs, dict):
-                raise TypeError(f'vertex bulk attrs must be dict, got {type(attrs)} for {vid}')
+                raise TypeError(f'node bulk attrs must be dict, got {type(attrs)} for {vid}')
         for _vid, attrs in updates.items():
-            _check_reserved_collision(self._vertex_RESERVED, attrs, kind='vertex')
+            _check_reserved_collision(self._node_RESERVED, attrs, kind='node')
 
         clean_updates = {vid: dict(attrs) for vid, attrs in updates.items() if attrs}
         if not clean_updates:
             return
 
-        if self._vertex_key_enabled():
-            old_keys = {vid: self._current_key_of_vertex(vid) for vid in clean_updates}
+        if self._node_key_enabled():
+            old_keys = {vid: self._current_key_of_node(vid) for vid in clean_updates}
             new_keys = {}
             for vid, attrs in clean_updates.items():
                 merged = {
                     f: (
                         attrs[f]
                         if f in attrs
-                        else AttributesClass.get_attr_vertex(self, vid, f, None)
+                        else AttributesClass.get_attr_node(self, vid, f, None)
                     )
-                    for f in self._vertex_key_fields
+                    for f in self._node_key_fields
                 }
                 new_keys[vid] = self._build_key_from_attrs(merged)
             for vid, new_key in new_keys.items():
                 if new_key is not None:
-                    owner = self._vertex_key_index.get(new_key)
+                    owner = self._node_key_index.get(new_key)
                     if owner is not None and owner != vid:
                         raise ValueError(
-                            f'Composite key collision on {self._vertex_key_fields}: {new_key} owned by {owner}'
+                            f'Composite key collision on {self._node_key_fields}: {new_key} owned by {owner}'
                         )
 
         for vid, attrs in clean_updates.items():
             self._attr_store.set_node_attrs(vid, attrs)
 
-        watched = self._variables_watched_by_vertices()
+        watched = self._variables_watched_by_nodes()
         if watched:
-            affected_vertices = {
+            affected_nodes = {
                 vid for vid, attrs in clean_updates.items() if any(k in watched for k in attrs)
             }
-            if affected_vertices:
+            if affected_nodes:
                 affected_edges = set()
-                for vid in affected_vertices:
+                for vid in affected_nodes:
                     affected_edges.update(self._incident_flexible_edges(vid))
                 for eid in affected_edges:
                     self._apply_flexible_direction(eid)
 
-        if self._vertex_key_enabled():
+        if self._node_key_enabled():
             for vid in clean_updates:
                 new_key, old_key = new_keys[vid], old_keys[vid]
                 if old_key != new_key:
-                    if old_key is not None and self._vertex_key_index.get(old_key) == vid:
-                        self._vertex_key_index.pop(old_key, None)
+                    if old_key is not None and self._node_key_index.get(old_key) == vid:
+                        self._node_key_index.pop(old_key, None)
                     if new_key is not None:
-                        self._vertex_key_index[new_key] = vid
+                        self._node_key_index[new_key] = vid
 
-    def get_attr_vertex(self, vertex_id, key, default=None):
-        """Get a single vertex attribute (scalar) or default if missing.
+    def get_attr_node(self, node_id, key, default=None):
+        """Get a single node attribute (scalar) or default if missing.
 
         Parameters
         ----------
-        vertex_id : str
-            Vertex identifier.
+        node_id : str
+            Node identifier.
         key : str
             Attribute name.
         default : Any, optional
@@ -202,7 +202,7 @@ class AttributesClass:
         -------
         Any
         """
-        return self._attr_store.node_attr(vertex_id, key, default)
+        return self._attr_store.node_attr(node_id, key, default)
 
     def set_edge_attrs(self, edge_id, **attrs):
         """Upsert pure edge attributes (non-structural) into the edge DF.
@@ -487,9 +487,9 @@ class AttributesClass:
         -------
         dict
             Summary with keys:
-            - `extra_vertex_rows`
+            - `extra_node_rows`
             - `extra_edge_rows`
-            - `missing_vertex_rows`
+            - `missing_node_rows`
             - `missing_edge_rows`
             - `invalid_edge_slice_rows`
 
@@ -501,13 +501,11 @@ class AttributesClass:
         always empty, and what this still finds is an edge-by-slice row that
         names a slice or an edge the graph does not hold.
         """
-        vertex_ids = {
-            ref.id for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE
-        }
+        node_ids = {ref.id for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE}
         edge_ids = {ref.id for ref in _structure.iter_edges(self)}
         ela = self.edge_slice_attributes
 
-        vertex_attr_ids = set(self._attr_store.node_ids())
+        node_attr_ids = set(self._attr_store.node_ids())
         edge_attr_ids = set(self._attr_store.edge_ids())
 
         bad_edge_slice = []
@@ -518,9 +516,9 @@ class AttributesClass:
                     bad_edge_slice.append((lid, eid))
 
         return {
-            'extra_vertex_rows': [i for i in vertex_attr_ids if i not in vertex_ids],
+            'extra_node_rows': [i for i in node_attr_ids if i not in node_ids],
             'extra_edge_rows': [i for i in edge_attr_ids if i not in edge_ids],
-            'missing_vertex_rows': [i for i in vertex_ids if i not in vertex_attr_ids],
+            'missing_node_rows': [i for i in node_ids if i not in node_attr_ids],
             'missing_edge_rows': [i for i in edge_ids if i not in edge_attr_ids],
             'invalid_edge_slice_rows': bad_edge_slice,
         }
@@ -557,11 +555,11 @@ class AttributesClass:
         ]
         return dataframe_upsert_rows(df, update_records, join_keys)
 
-    def _variables_watched_by_vertices(self):
+    def _variables_watched_by_nodes(self):
         return {
             p['var']
             for p in self.edge_direction_policy.values()
-            if p.get('scope', 'edge') == 'vertex'
+            if p.get('scope', 'edge') == 'node'
         }
 
     def _incident_flexible_edges(self, v):
@@ -602,8 +600,8 @@ class AttributesClass:
                 tie_case = True
             cond = x > T
         else:
-            xs = AttributesClass.get_attr_vertex(self, src, var, None)
-            xt = AttributesClass.get_attr_vertex(self, tgt, var, None)
+            xs = AttributesClass.get_attr_node(self, src, var, None)
+            xt = AttributesClass.get_attr_node(self, tgt, var, None)
             if xs is None or xt is None:
                 return
             if xs == xt:
@@ -654,20 +652,20 @@ class AttributesClass:
         eid = _structure.edge_at_column(self, edge) if isinstance(edge, int) else edge
         return self._attr_store.edge_attrs(eid)
 
-    def get_vertex_attrs(self, vertex) -> dict:
-        """Return the full attribute dict for a single vertex.
+    def get_node_attrs(self, node) -> dict:
+        """Return the full attribute dict for a single node.
 
         Parameters
         ----------
-        vertex : str
-            Vertex ID.
+        node : str
+            Node ID.
 
         Returns
         -------
         dict
-            Attribute dictionary for that vertex. Empty if not found.
+            Attribute dictionary for that node. Empty if not found.
         """
-        return self._attr_store.node_attrs(vertex)
+        return self._attr_store.node_attrs(node)
 
     def get_attr_edges(self, indexes=None) -> dict:
         """Retrieve edge attributes as a dictionary.
@@ -688,24 +686,24 @@ class AttributesClass:
             rows = [row for row in rows if row.get('edge_id') in wanted]
         return {r.get('edge_id'): dict(r) for r in rows if r.get('edge_id') is not None}
 
-    def get_attr_vertices(self, vertices=None) -> dict:
-        """Retrieve vertex (vertex) attributes as a dictionary.
+    def get_attr_nodes(self, nodes=None) -> dict:
+        """Retrieve node (node) attributes as a dictionary.
 
         Parameters
         ----------
-        vertices : Iterable[str] | None, optional
-            Vertex IDs to retrieve. If None, returns all vertices.
+        nodes : Iterable[str] | None, optional
+            Node IDs to retrieve. If None, returns all nodes.
 
         Returns
         -------
         dict[str, dict]
-            Mapping of `vertex_id` to attribute dictionaries.
+            Mapping of `node_id` to attribute dictionaries.
         """
-        rows = dataframe_to_rows(self._vertex_table)
-        if vertices is not None:
-            wanted = set(vertices)
-            rows = [row for row in rows if row.get('vertex_id') in wanted]
-        return {r.get('vertex_id'): dict(r) for r in rows if r.get('vertex_id') is not None}
+        rows = dataframe_to_rows(self._node_table)
+        if nodes is not None:
+            wanted = set(nodes)
+            rows = [row for row in rows if row.get('node_id') in wanted]
+        return {r.get('node_id'): dict(r) for r in rows if r.get('node_id') is not None}
 
     def get_attr_from_edges(self, key: str, default=None) -> dict:
         """Extract a specific attribute column for all edges.
@@ -800,11 +798,11 @@ _ATTR_DELEGATED = (
     'set_graph_attribute',
     'get_graph_attribute',
     'get_graph_attributes',
-    'set_vertex_attrs',
-    'set_vertex_attrs_bulk',
-    'get_vertex_attrs',
-    'get_attr_vertex',
-    'get_attr_vertices',
+    'set_node_attrs',
+    'set_node_attrs_bulk',
+    'get_node_attrs',
+    'get_attr_node',
+    'get_attr_nodes',
     'set_edge_attrs',
     'set_edge_attrs_bulk',
     'get_edge_attrs',
@@ -825,7 +823,7 @@ _ATTR_DELEGATED = (
 
 
 class AttributesAccessor:
-    """Namespace for graph, vertex, edge, and slice annotations (``G.attrs``)."""
+    """Namespace for graph, node, edge, and slice annotations (``G.attrs``)."""
 
     __slots__ = ('_G',)
 

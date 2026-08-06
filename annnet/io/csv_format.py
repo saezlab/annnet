@@ -71,7 +71,7 @@ WGT_COLS = ['weight', 'w']
 DIR_COLS = ['directed', 'is_directed', 'dir', 'orientation']
 SLICE_COLS = ['slice', 'slices']
 EDGE_ID_COLS = ['edge', 'edge_id', 'id']
-VERTEX_ID_COLS = ['vertex', 'vertex_id', 'id', 'name', 'label']
+NODE_ID_COLS = ['node', 'node_id', 'id', 'name', 'label']
 NEIGH_COLS = ['neighbors', 'nbrs', 'adj', 'adjacency', 'neighbors_out', 'neighbors_in']
 MEMBERS_COLS = ['members', 'verts', 'participants']
 HEAD_COLS = ['head', 'heads']
@@ -87,7 +87,7 @@ RESERVED = set(
     + DIR_COLS
     + SLICE_COLS
     + EDGE_ID_COLS
-    + VERTEX_ID_COLS
+    + NODE_ID_COLS
     + NEIGH_COLS
     + MEMBERS_COLS
     + HEAD_COLS
@@ -220,7 +220,7 @@ def _detect_schema(df) -> str:
     if any(c in cols for c in SRC_COLS) and any(c in cols for c in DST_COLS):
         return 'edge_list'
 
-    # Heuristic: if first column is a vertex id and remaining many numeric -> incidence
+    # Heuristic: if first column is a node id and remaining many numeric -> incidence
     width = dataframe_width(df)
     height = dataframe_height(df)
     names = _columns(df)
@@ -273,7 +273,7 @@ def from_csv(
     schema : {'auto','edge_list','hyperedge','incidence','adjacency','lil'}, default 'auto'
         Parsing mode. 'auto' tries to infer the schema from columns and types.
     default_slice : str or None, optional
-        slice to register vertices/edges when none is specified in the data.
+        slice to register nodes/edges when none is specified in the data.
     default_directed : bool or None, optional
         Default directedness for binary edges when not implied by data.
     default_weight : float, default 1.0
@@ -627,10 +627,10 @@ def _ingest_edge_list(
         (c, c.partition(':')[2]) for c in _columns(df) if c.lower().startswith('weight:')
     ]
 
-    # Single-pass scan: bucket vertex IDs, edge rows, and per-slice weight
-    # overrides. Bulk-apply at the end — per-row add_vertices/add_edges +
+    # Single-pass scan: bucket node IDs, edge rows, and per-slice weight
+    # overrides. Bulk-apply at the end — per-row add_nodes/add_edges +
     # set_edge_slice_attrs would be O(N) graph operations.
-    unique_vertices: set = set()
+    unique_nodes: set = set()
     edge_rows: list = []
     slice_weight_overrides: dict = {}  # {slice_id: {(u, v, slice_id): weight}}
 
@@ -654,8 +654,8 @@ def _ingest_edge_list(
 
         pure_attrs = {k: row[k] for k in attrs_cols if row[k] is not None}
 
-        unique_vertices.add(u)
-        unique_vertices.add(v)
+        unique_nodes.add(u)
+        unique_nodes.add(v)
 
         if not slices:
             edge_rows.append(
@@ -689,8 +689,8 @@ def _ingest_edge_list(
                         except (TypeError, ValueError):
                             pass
 
-    if unique_vertices:
-        G.add_vertices(sorted(unique_vertices))
+    if unique_nodes:
+        G.add_nodes(sorted(unique_nodes))
 
     if edge_rows:
         added_eids = G._add_edges_bulk(edge_rows)
@@ -725,9 +725,9 @@ def _ingest_hyperedge(
 ):
     """Parse hyperedge tables (members OR head/tail).
 
-    Bulk-collects vertices and hyperedge specs into Python lists, then issues
-    one `_add_vertices_bulk` + one `add_hyperedges_bulk` call. Previously the
-    per-member `G.add_vertices(ent)` + per-slice `G.add_edges(...)` made this
+    Bulk-collects nodes and hyperedge specs into Python lists, then issues
+    one `_add_nodes_bulk` + one `add_hyperedges_bulk` call. Previously the
+    per-member `G.add_nodes(ent)` + per-slice `G.add_edges(...)` made this
     O(N×M) in dataframe-concat work.
     """
     mcol = _pick_first(df, MEMBERS_COLS)
@@ -744,7 +744,7 @@ def _ingest_hyperedge(
 
     attrs_cols = _attr_columns(df, [c for c in [mcol, hcol, tcol, wcol, lcol] if c])
 
-    unique_vertices: set = set()
+    unique_nodes: set = set()
     hyperedges_bulk: list = []
     attrs_pending: dict = {}
 
@@ -764,7 +764,7 @@ def _ingest_hyperedge(
 
         if mcol:
             members = list(_split_set(row[mcol]))
-            unique_vertices.update(members)
+            unique_nodes.update(members)
             for L in slices:
                 spec = {
                     'members': members,
@@ -780,8 +780,8 @@ def _ingest_hyperedge(
         else:
             head = list(_split_set(row[hcol])) if hcol else []
             tail = list(_split_set(row[tcol])) if tcol else []
-            unique_vertices.update(head)
-            unique_vertices.update(tail)
+            unique_nodes.update(head)
+            unique_nodes.update(tail)
             for L in slices:
                 spec = {
                     'head': head,
@@ -797,8 +797,8 @@ def _ingest_hyperedge(
         if pure_attrs:
             attrs_pending[len(hyperedges_bulk) - 1] = pure_attrs
 
-    if unique_vertices:
-        G._add_vertices_bulk([{'vertex_id': v} for v in sorted(unique_vertices)])
+    if unique_nodes:
+        G._add_nodes_bulk([{'node_id': v} for v in sorted(unique_nodes)])
     if hyperedges_bulk:
         added_eids = G.add_hyperedges_bulk(hyperedges_bulk)
         if attrs_pending and added_eids:
@@ -818,17 +818,17 @@ def _ingest_incidence(
 ):
     """Parse incidence matrices (first col = entity id, remaining numeric edge columns)."""
     columns = _columns(df)
-    idcol = _pick_first(df, VERTEX_ID_COLS) or columns[0]
+    idcol = _pick_first(df, NODE_ID_COLS) or columns[0]
     if idcol != columns[0]:
         df = rename_dataframe_columns(df, {idcol: columns[0]})
         columns = _columns(df)
         idcol = columns[0]
 
-    # Create / ensure all vertices — bulk
+    # Create / ensure all nodes — bulk
     id_values = dataframe_column_values(df, idcol)
-    vertices_bulk = [_norm(nid) for nid in id_values if _norm(nid)]
-    if vertices_bulk:
-        G._add_vertices_bulk([{'vertex_id': v} for v in vertices_bulk])
+    nodes_bulk = [_norm(nid) for nid in id_values if _norm(nid)]
+    if nodes_bulk:
+        G._add_nodes_bulk([{'node_id': v} for v in nodes_bulk])
 
     # Each remaining column is an edge column; determine kind per column.
     # Collect binary edges + hyperedges into bulk buckets, then issue one
@@ -906,10 +906,10 @@ def _ingest_adjacency(
         row_labels = [str(i) for i in range(dataframe_height(df))]
         mat_cols = columns
 
-    # Ensure all vertices exist — bulk
-    vertices_bulk = [v for v in row_labels if v]
-    if vertices_bulk:
-        G._add_vertices_bulk([{'vertex_id': v} for v in vertices_bulk])
+    # Ensure all nodes exist — bulk
+    nodes_bulk = [v for v in row_labels if v]
+    if nodes_bulk:
+        G._add_nodes_bulk([{'node_id': v} for v in nodes_bulk])
     for c in mat_cols:
         if not _is_numeric_column(df, c):
             raise ValueError('Adjacency ingest: non-numeric column detected in matrix region.')
@@ -959,8 +959,8 @@ def _ingest_lil(
     default_directed: bool | None,
     default_weight: float,
 ):
-    """Parse LIL-style neighbor tables: one row per vertex with a neighbors column."""
-    idcol = _pick_first(df, VERTEX_ID_COLS) or _columns(df)[0]
+    """Parse LIL-style neighbor tables: one row per node with a neighbors column."""
+    idcol = _pick_first(df, NODE_ID_COLS) or _columns(df)[0]
     ncol = _pick_first(df, NEIGH_COLS)
     wcol = _pick_first(df, WGT_COLS)
     dcol = _pick_first(df, DIR_COLS)
@@ -971,9 +971,9 @@ def _ingest_lil(
 
     attrs_cols = _attr_columns(df, [c for c in [idcol, ncol, wcol, dcol, lcol] if c])
 
-    # Bulk-collect vertices and edges; previously per-vertex `add_vertices`
+    # Bulk-collect nodes and edges; previously per-node `add_nodes`
     # and per-(neighbour × slice) `add_edges` made this O(N) graph ops.
-    unique_vertices: set = set()
+    unique_nodes: set = set()
     edge_rows: list = []
     attrs_pending: dict = {}  # spec_idx -> attrs
 
@@ -981,7 +981,7 @@ def _ingest_lil(
         u = _norm(row[idcol])
         if not u:
             continue
-        unique_vertices.add(u)
+        unique_nodes.add(u)
         nbrs = _split_set(row[ncol])
         w_default = (
             float(row[wcol])
@@ -998,7 +998,7 @@ def _ingest_lil(
         for v in nbrs:
             if not v:
                 continue
-            unique_vertices.add(v)
+            unique_nodes.add(v)
             if not slices:
                 edge_rows.append(
                     {
@@ -1025,8 +1025,8 @@ def _ingest_lil(
                     if pure_attrs:
                         attrs_pending[len(edge_rows) - 1] = pure_attrs
 
-    if unique_vertices:
-        G._add_vertices_bulk([{'vertex_id': v} for v in sorted(unique_vertices)])
+    if unique_nodes:
+        G._add_nodes_bulk([{'node_id': v} for v in sorted(unique_nodes)])
     if edge_rows:
         added_eids = G._add_edges_bulk(edge_rows)
         if attrs_pending and added_eids:

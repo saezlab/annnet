@@ -5,13 +5,13 @@ the semantically-comparable operations behind one interface.
 
 Fairness rules baked in here:
 
-* All engines are fed an identical vertex list and ``(src, tgt, weight)``
+* All engines are fed an identical node list and ``(src, tgt, weight)``
   edge list from :func:`make_data`, so no engine gets an easier input.
 * Query closures perform a single representative call (one ``degree``, one
   ``neighbors``, one ``has_edge``); the harness repeats them. This isolates
   per-call overhead — the thing that actually differs between a dict-of-dicts
   (NetworkX), C adjacency libraries (igraph / graph-tool) and an incidence
-  matrix (AnnNet) — from the degree of any particular vertex (the ring input
+  matrix (AnnNet) — from the degree of any particular node (the ring input
   keeps degree constant across scale on purpose).
 * Comparisons are only ever drawn between these adapters. AnnNet's unique
   capabilities live in ``workloads.py`` as an AnnNet-only section, never as a
@@ -30,14 +30,14 @@ from collections.abc import Callable
 # ---------------------------------------------------------------------------
 # Shared, deterministic graph data
 # ---------------------------------------------------------------------------
-def make_data(n_vertices: int, n_edges: int) -> tuple[list[str], list[tuple[str, str, float]]]:
+def make_data(n_nodes: int, n_edges: int) -> tuple[list[str], list[tuple[str, str, float]]]:
     """A deterministic ring-like directed graph shared by every engine.
 
-    Constant per-vertex degree (~2) is intentional: it lets query benchmarks
+    Constant per-node degree (~2) is intentional: it lets query benchmarks
     measure per-call overhead rather than the cost of a fat adjacency list.
     """
-    names = [f'v{i}' for i in range(n_vertices)]
-    edges = [(f'v{i % n_vertices}', f'v{(i + 1) % n_vertices}', 1.0) for i in range(n_edges)]
+    names = [f'v{i}' for i in range(n_nodes)]
+    edges = [(f'v{i % n_nodes}', f'v{(i + 1) % n_nodes}', 1.0) for i in range(n_edges)]
     return names, edges
 
 
@@ -128,7 +128,7 @@ class AnnNetEngine(Engine):
 
         def build():
             G = AnnNet(directed=directed, annotations_backend=backend)
-            G.add_vertices(({'vertex_id': v} for v in names), slice='base')
+            G.add_nodes(({'node_id': v} for v in names), slice='base')
             G.add_edges({'source': u, 'target': v, 'weight': w} for (u, v, w) in edges)
             return G
 
@@ -152,7 +152,7 @@ class AnnNetEngine(Engine):
 
         def with_probe_nodes():
             G = build()
-            G.add_vertices(probes, slice='base')
+            G.add_nodes(probes, slice='base')
             return G
 
         def with_probe_edges():

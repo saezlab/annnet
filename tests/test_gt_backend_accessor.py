@@ -19,8 +19,8 @@ def gt_backend(G):
 # ---- Simple graph builder ----
 def build_small():
     G = AnnNet()
-    G.add_vertices('a')
-    G.add_vertices('b')
+    G.add_nodes('a')
+    G.add_nodes('b')
     G.add_edges('a', 'b', weight=3.0)
     return G
 
@@ -43,8 +43,8 @@ class TestGTBackendAccessor(unittest.TestCase):
 
     def test_label_components(self):
         G = AnnNet()
-        G.add_vertices('x')
-        G.add_vertices('y')
+        G.add_nodes('x')
+        G.add_nodes('y')
         G.add_edges('x', 'y')
 
         # directed=False ensures we look for Weakly Connected Components (1 component)
@@ -56,19 +56,19 @@ class TestGTBackendAccessor(unittest.TestCase):
         vp = comp
         gtg = G.gt.backend()
 
-        # Check both vertices are in the same component
+        # Check both nodes are in the same component
         comp_id_0 = int(vp[gtg.vertex(0)])
         comp_id_1 = int(vp[gtg.vertex(1)])
         self.assertEqual(comp_id_0, comp_id_1)
 
     def test_direct_unique_algorithm_without_explicit_graph_arg(self):
         G = AnnNet()
-        G.add_vertices('x')
-        G.add_vertices('y')
+        G.add_nodes('x')
+        G.add_nodes('y')
         G.add_edges('x', 'y')
 
-        # label_largest_component returns a VertexPropertyMap (bool per vertex).
-        # directed=False → weakly-connected components; both vertices are in the same WCC.
+        # label_largest_component returns a VertexPropertyMap (bool per node).
+        # directed=False → weakly-connected components; both nodes are in the same WCC.
         comp = G.gt.label_largest_component(directed=False)
         self.assertEqual(int(comp.a.sum()), 2)
 
@@ -77,7 +77,7 @@ class TestGTBackendAccessor(unittest.TestCase):
     def test_betweenness(self):
         G = AnnNet()
         for v in ['a', 'b', 'c']:
-            G.add_vertices(v)
+            G.add_nodes(v)
         G.add_edges('a', 'b')
         G.add_edges('b', 'c')
 
@@ -97,7 +97,7 @@ class TestGTBackendAccessor(unittest.TestCase):
     def test_clustering(self):
         G = AnnNet()
         for v in ['a', 'b', 'c']:
-            G.add_vertices(v)
+            G.add_nodes(v)
         G.add_edges('a', 'b')
         G.add_edges('b', 'c')
         G.add_edges('c', 'a')  # triangle → clustering = 1.0
@@ -112,8 +112,8 @@ class TestGTBackendAccessor(unittest.TestCase):
 
     def test_max_flow(self):
         G = AnnNet()
-        G.add_vertices('s')
-        G.add_vertices('t')
+        G.add_nodes('s')
+        G.add_nodes('t')
         eid = G.add_edges('s', 't')
 
         # Add capacity as edge attribute
@@ -134,13 +134,13 @@ class TestGTBackendAccessor(unittest.TestCase):
 
     def test_generation_line_graph(self):
         g = AnnNet()
-        g.add_vertices('a')
-        g.add_vertices('b')
+        g.add_nodes('a')
+        g.add_nodes('b')
         g.add_edges('a', 'b')
 
         lg, *_ = g.gt.generation.line_graph(g)
 
-        # line graph of 1 edge has 1 vertex
+        # line graph of 1 edge has 1 node
         self.assertEqual(lg.num_vertices(), 1)
 
     # --- search: BFS ---
@@ -151,19 +151,19 @@ class TestGTBackendAccessor(unittest.TestCase):
         order = []
 
         class Visitor(search.BFSVisitor):
-            def discover_vertex(self, u):
+            def discover_node(self, u):
                 order.append(int(u))
 
-        G.gt.search.bfs_search(G, g.vertex(0), Visitor())
+        G.gt.search.bfs_search(G, g.node(0), Visitor())
         self.assertEqual(order[0], 0)
 
-    # --- util: random_permute_vertices ---
+    # --- util: random_permute_nodes ---
 
-    def test_random_permute_vertices(self):
+    def test_random_permute_nodes(self):
         G = build_small()
         gtg = G.gt.backend()
         G.gt.generation.random_rewire(G)
-        # graph stays isomorphic: still 2 vertices
+        # graph stays isomorphic: still 2 nodes
         self.assertEqual(gtg.num_vertices(), 2)
 
 

@@ -150,7 +150,7 @@ def _build_attr_map(df, key_col: str) -> dict:
 def to_parquet(graph: AnnNet, path):
     """Write lossless GraphDir:
 
-      vertices.parquet, edges.parquet, slices.parquet, edge_slices.parquet, manifest.json
+      nodes.parquet, edges.parquet, slices.parquet, edge_slices.parquet, manifest.json
     Wide tables (attrs as columns). Hyperedges stored with 'kind' and head/tail/members lists.
     """
     path = Path(path)
@@ -178,17 +178,17 @@ def to_parquet(graph: AnnNet, path):
         w = _edge_weights.get(eid)
         return 1.0 if w is None else float(w)
 
-    # vertices
-    v_attr_map = _build_attr_map(getattr(graph, '_vertex_table', None), 'vertex_id')
+    # nodes
+    v_attr_map = _build_attr_map(getattr(graph, '_node_table', None), 'node_id')
     v_rows = []
-    for v in graph.vertices():
-        row = {'vertex_id': v}
+    for v in graph.nodes():
+        row = {'node_id': v}
         attrs = v_attr_map.get(v)
         if attrs:
             row.update(attrs)
         v_rows.append(row)
-    vertex_df = _rows_to_df(v_rows) if v_rows else _empty_table(['vertex_id'])
-    dataframe_write_parquet(vertex_df, path / 'vertices.parquet')
+    node_df = _rows_to_df(v_rows) if v_rows else _empty_table(['node_id'])
+    dataframe_write_parquet(node_df, path / 'nodes.parquet')
 
     # edges
     e_attr_map = _build_attr_map(getattr(graph, '_edge_table', None), 'edge_id')
@@ -338,7 +338,7 @@ def from_parquet(path) -> AnnNet:
     from ..core import AnnNet
 
     path = Path(path)
-    V = dataframe_read_parquet(path / 'vertices.parquet')
+    V = dataframe_read_parquet(path / 'nodes.parquet')
     E = dataframe_read_parquet(path / 'edges.parquet')
     L = (
         dataframe_read_parquet(path / 'slices.parquet')
@@ -364,14 +364,14 @@ def from_parquet(path) -> AnnNet:
             H.layers.set_aspects(list(_asp), _ml.get('elem_layers') or None)
 
     # -------------------------
-    # Vertices (bulk)
+    # Nodes (bulk)
     # -------------------------
-    # Convert vertices DF to dict rows once and bulk add
+    # Convert nodes DF to dict rows once and bulk add
     v_rows = []
     for rec in dataframe_to_rows(V):
         v_rows.append(dict(rec))
     if v_rows:
-        H._add_vertices_bulk(v_rows)
+        H._add_nodes_bulk(v_rows)
 
     # -------------------------
     # Edges (bulk, columnar)

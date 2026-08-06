@@ -15,9 +15,9 @@ except Exception:
 
 def build_small():
     G = AnnNet()
-    G.add_vertices('a')
-    G.add_vertices('b')
-    G.add_vertices('c')
+    G.add_nodes('a')
+    G.add_nodes('b')
+    G.add_nodes('c')
     G.add_edges('a', 'b', weight=3.0)
     G.add_edges('b', 'c', weight=2.0)
     return G
@@ -25,8 +25,8 @@ def build_small():
 
 def build_parallel():
     G = AnnNet()
-    G.add_vertices('x')
-    G.add_vertices('y')
+    G.add_nodes('x')
+    G.add_nodes('y')
     G.add_edges('x', 'y', weight=10.0)
     G.add_edges('x', 'y', weight=1.0)
     return G
@@ -58,7 +58,7 @@ class TestIGBackendAccessor(unittest.TestCase):
         self.assertAlmostEqual(d[0][0], 5.0)
 
     @unittest.skipUnless(HAS_IG, 'python-igraph not installed')
-    def test_bad_vertex_label(self):
+    def test_bad_node_label(self):
         G = build_small()
         with self.assertRaises((KeyError, ValueError)):
             G.ig.distances(source='ZZZ', target='a', weights='weight')
@@ -104,7 +104,7 @@ class TestIGBackendAccessor(unittest.TestCase):
         self.assertEqual(len(igG.es.attributes()), 0)
 
     @unittest.skipUnless(HAS_IG, 'python-igraph not installed')
-    def test_vertex_iterable_coercion(self):
+    def test_node_iterable_coercion(self):
         G = build_small()
         paths = G.ig.get_shortest_paths(v='a', to=['c'], weights='weight')
         igG = G.ig.backend()

@@ -552,7 +552,7 @@ class IndexManager:
         Returns
         -------
         str
-            `'vertex'` or `'edge'`.
+            `'node'` or `'edge'`.
 
         Raises
         ------
@@ -561,8 +561,8 @@ class IndexManager:
         """
         return _entity_kind(_structure.entity_ref(self._G, entity_id).kind)
 
-    def is_vertex(self, entity_id):
-        """Check whether an entity ID refers to a vertex.
+    def is_node(self, entity_id):
+        """Check whether an entity ID refers to a node.
 
         Parameters
         ----------
@@ -573,7 +573,7 @@ class IndexManager:
         -------
         bool
         """
-        return self.entity_type(entity_id) == 'vertex'
+        return self.entity_type(entity_id) == 'node'
 
     def is_edge_entity(self, entity_id):
         """Check whether an entity ID refers to an edge-entity.
@@ -603,21 +603,21 @@ class IndexManager:
         """
         return _structure.has_entity(self._G, entity_id)
 
-    def has_vertex(self, vertex_id: str) -> bool:
-        """Check if an ID exists and is a vertex.
+    def has_node(self, node_id: str) -> bool:
+        """Check if an ID exists and is a node.
 
         Parameters
         ----------
-        vertex_id : str
-            Vertex identifier.
+        node_id : str
+            Node identifier.
 
         Returns
         -------
         bool
         """
-        if not _structure.has_entity(self._G, vertex_id):
+        if not _structure.has_entity(self._G, node_id):
             return False
-        return _structure.entity_ref(self._G, vertex_id).kind == _structure.NODE
+        return _structure.entity_ref(self._G, node_id).kind == _structure.NODE
 
     def has_edge_id(self, edge_id: str) -> bool:
         """Check if an edge ID exists.
@@ -645,7 +645,7 @@ class IndexManager:
         return _structure.edge_count(self._G)
 
     def entity_count(self) -> int:
-        """Return the number of entities (vertices + edge-entities).
+        """Return the number of entities (nodes + edge-entities).
 
         Returns
         -------
@@ -653,8 +653,8 @@ class IndexManager:
         """
         return _structure.entity_count(self._G)
 
-    def vertex_count(self) -> int:
-        """Return the number of true vertices (excludes edge-entities).
+    def node_count(self) -> int:
+        """Return the number of true nodes (excludes edge-entities).
 
         Returns
         -------
@@ -669,7 +669,7 @@ class IndexManager:
         -------
         dict
         """
-        counts = {'vertex': 0, 'edge': 0}
+        counts = {'node': 0, 'edge': 0}
         for ref in _structure.iter_entities(self._G):
             k = _entity_kind(ref.kind)
             counts[k] = counts.get(k, 0) + 1
@@ -677,7 +677,7 @@ class IndexManager:
         n_edges = _structure.edge_count(self._G)
         return {
             'n_entities': n_ents,
-            'n_vertices': counts['vertex'],
+            'n_nodes': counts['node'],
             'n_edge_entities': counts['edge'],
             'n_edges': n_edges,
             'max_row': n_ents - 1,
@@ -717,21 +717,21 @@ class IndexMapping:
             self._edge_slice_attributes, 'edge_id', drop
         )
 
-    def _vertex_key_enabled(self) -> bool:
-        return bool(self._vertex_key_fields)
+    def _node_key_enabled(self) -> bool:
+        return bool(self._node_key_fields)
 
     def _build_key_from_attrs(self, attrs: dict) -> tuple | None:
-        if not self._vertex_key_fields:
+        if not self._node_key_fields:
             return None
         vals = []
-        for f in self._vertex_key_fields:
+        for f in self._node_key_fields:
             if f not in attrs or attrs[f] is None:
                 return None
             vals.append(attrs[f])
         return tuple(vals)
 
-    def _current_key_of_vertex(self, vertex_id) -> tuple | None:
-        if not self._vertex_key_fields:
+    def _current_key_of_node(self, node_id) -> tuple | None:
+        if not self._node_key_fields:
             return None
-        cur = {f: self.attrs.get_attr_vertex(vertex_id, f, None) for f in self._vertex_key_fields}
+        cur = {f: self.attrs.get_attr_node(node_id, f, None) for f in self._node_key_fields}
         return self._build_key_from_attrs(cur)

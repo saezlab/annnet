@@ -76,8 +76,8 @@ def to_json(
 
     Lossless vs your core (IDs, attrs, parallel, hyperedges, slices).
     """
-    vertex_attrs = _attrs_by_id(
-        getattr(graph, '_vertex_table', None), 'vertex_id', public_only=public_only
+    node_attrs = _attrs_by_id(
+        getattr(graph, '_node_table', None), 'node_id', public_only=public_only
     )
     edge_attrs = _attrs_by_id(
         getattr(graph, '_edge_table', None), 'edge_id', public_only=public_only
@@ -85,9 +85,9 @@ def to_json(
 
     # nodes
     nodes = []
-    for v in graph.vertices():
+    for v in graph.nodes():
         row = {'id': v}
-        row.update(vertex_attrs.get(v, {}))
+        row.update(node_attrs.get(v, {}))
         nodes.append(row)
 
     # edges + hyperedges
@@ -266,28 +266,28 @@ def from_json(path: str | Path) -> AnnNet:
         if elem_layers:
             H.layers.set_elementary_layers(elem_layers)
 
-    # vertices
+    # nodes
     if aspects:
-        vertex_attrs_pending = {}
+        node_attrs_pending = {}
         for nd in doc.get('nodes', []):
             vid = nd.get('id')
             if vid is None:
                 continue
             vattrs = {k: v for k, v in nd.items() if k != 'id'}
             if vattrs:
-                vertex_attrs_pending[vid] = vattrs
+                node_attrs_pending[vid] = vattrs
     else:
-        vertex_attrs_pending = {}
-        vertex_dicts = []
+        node_attrs_pending = {}
+        node_dicts = []
         for nd in doc.get('nodes', []):
             vid = nd.get('id')
             if vid is None:
                 continue
-            row = {'vertex_id': vid}
+            row = {'node_id': vid}
             row.update({k: v for k, v in nd.items() if k != 'id'})
-            vertex_dicts.append(row)
-        if vertex_dicts:
-            H._add_vertices_bulk(vertex_dicts)
+            node_dicts.append(row)
+        if node_dicts:
+            H._add_nodes_bulk(node_dicts)
 
     # edges (binary) — bulk path supports both flat IDs and supra-node tuples.
     # `_add_edges_batch` builds the endpoint cache by detecting
@@ -392,8 +392,8 @@ def from_json(path: str | Path) -> AnnNet:
         rows_to_table=_rows_to_df,
         deserialize_edge_layers=deserialize_edge_layers,
     )
-    if vertex_attrs_pending:
-        H.attrs.set_vertex_attrs_bulk(vertex_attrs_pending)
+    if node_attrs_pending:
+        H.attrs.set_node_attrs_bulk(node_attrs_pending)
 
     return H
 
@@ -407,13 +407,13 @@ def write_ndjson(graph: AnnNet, dir_path):
     import json
 
     os.makedirs(dir_path, exist_ok=True)
-    vertex_attrs = _attrs_by_id(getattr(graph, '_vertex_table', None), 'vertex_id')
+    node_attrs = _attrs_by_id(getattr(graph, '_node_table', None), 'node_id')
     edge_attrs = _attrs_by_id(getattr(graph, '_edge_table', None), 'edge_id')
 
     with open(f'{dir_path}/nodes.ndjson', 'w', encoding='utf-8') as f:
-        for v in graph.vertices():
+        for v in graph.nodes():
             obj = {'id': v}
-            obj.update(vertex_attrs.get(v, {}))
+            obj.update(node_attrs.get(v, {}))
             f.write(json.dumps(obj, ensure_ascii=False) + '\n')
 
     with (

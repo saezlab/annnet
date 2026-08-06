@@ -7,7 +7,7 @@ annnet uses a sparse incidence matrix because it can represent ordinary edges, h
 - Let `V` be the set of entities and `E` the set of edges.
 - The incidence matrix is `B ∈ R^{|V|×|E|}`.
 - Each column is one edge.
-- Each row is one entity. In annnet, entities include both ordinary vertices and edge-entities.
+- Each row is one entity. In annnet, entities include both ordinary nodes and edge-entities.
 
 Sign convention:
 
@@ -46,7 +46,7 @@ If you relied on the old shape, the migration is:
 
 - Hyperedges become columns with more than two non-zero entries.
 - Parallel edges become additional columns with the same endpoint set but different edge IDs.
-- Vertex-to-edge and edge-to-edge relations work because edge-entities live in the same row space as ordinary vertices.
+- Node-to-edge and edge-to-edge relations work because edge-entities live in the same row space as ordinary nodes.
 - Stoichiometric coefficients can be written directly into the corresponding incidence column.
 
 ## Example
@@ -77,7 +77,7 @@ There is no need to reify hyperedges into auxiliary nodes unless you export to a
 
 ## Edge-entities
 
-AnnNet can represent vertex→edge and edge→edge relations because edges can
+AnnNet can represent node→edge and edge→edge relations because edges can
 themselves appear in the entity row space.
 
 ```python
@@ -114,5 +114,5 @@ Other directed operators are possible, but these constructions capture the main 
 
 ## Multilayer extension
 
-For multilayer graphs, the same logic is applied to the supra incidence matrix over `(vertex, layer)` pairs. See [Multilayer and multi-aspect graphs](math-multilayer.md).
+For multilayer graphs, the same logic is applied to the supra incidence matrix over `(node, layer)` pairs. See [Multilayer and multi-aspect graphs](math-multilayer.md).
 

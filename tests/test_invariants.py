@@ -450,7 +450,7 @@ def test_rule_9_holds_on_every_case(case):
     # the rule is that no row names something absent, not that every row names
     # something structural.
     edge_ids = {ref.id for ref in S.iter_edges(G, include_placeholders=True)}
-    assert {row['vertex_id'] for row in table_rows(G.obs)} <= node_ids
+    assert {row['node_id'] for row in table_rows(G.obs)} <= node_ids
     assert {row['edge_id'] for row in table_rows(G.var)} <= edge_ids
 
 
@@ -463,9 +463,9 @@ def test_a_node_row_for_a_node_that_does_not_exist_cannot_be_stated():
     """
     G = build_case('binary_directed')
     rows = table_rows(G.obs)
-    rows.append({**rows[0], 'vertex_id': 'ghost'})
-    G._vertex_table = build_dataframe_from_rows(rows)
-    assert 'ghost' not in {row['vertex_id'] for row in table_rows(G.obs)}
+    rows.append({**rows[0], 'node_id': 'ghost'})
+    G._node_table = build_dataframe_from_rows(rows)
+    assert 'ghost' not in {row['node_id'] for row in table_rows(G.obs)}
     assert problems_of(G) == []
 
 
@@ -496,13 +496,13 @@ def test_rule_10_reports_a_slice_that_holds_an_unknown_edge():
 
 def test_rule_10_reports_a_slice_that_holds_an_unknown_node():
     G = build_case('sliced')
-    G._slices['left'].vertices.add('ghost')
+    G._slices['left'].nodes.add('ghost')
     assert_reports(G, 'ghost')
 
 
 def test_rule_10_reports_a_slice_that_holds_a_non_identity_node():
     G = build_case('sliced')
-    G._slices['left'].vertices.add(3)
+    G._slices['left'].nodes.add(3)
     assert_reports(G, 'bare')
 
 
@@ -514,7 +514,7 @@ def test_rule_10_reports_a_slice_that_holds_a_non_identity_node():
 def test_rule_11_a_removed_node_leaves_no_address_that_resolves_to_it():
     G = build_case('binary_directed')
     removed_row = G.idx.entity_to_row('A')
-    G.remove_vertex('A')
+    G.remove_node('A')
     assert problems_of(G) == []
     assert not S.has_entity(G, 'A')
     rows = S.entity_keys(G)

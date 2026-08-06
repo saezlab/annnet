@@ -37,7 +37,7 @@ exposes higher-level constructs such as slices and multilayer structure without 
 
     ---
 
-    Store vertex, edge, slice, layer, and edge-slice metadata in indexed tabular structures instead of flat per-object dictionaries.
+    Store node, edge, slice, layer, and edge-slice metadata in indexed tabular structures instead of flat per-object dictionaries.
 
 -   __Named slices for conditions and views__
 
@@ -49,7 +49,7 @@ exposes higher-level constructs such as slices and multilayer structure without 
 
     ---
 
-    Work with aspects, layer tuples, vertex-layer membership, intra-layer edges, inter-layer edges, and coupling structure as part of the core model.
+    Work with aspects, layer tuples, node-layer membership, intra-layer edges, inter-layer edges, and coupling structure as part of the core model.
 
 -   __Interoperability without losing the source of truth__
 

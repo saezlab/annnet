@@ -173,8 +173,8 @@ def test_a_subgraph_takes_the_weight_the_slice_gives_an_edge():
     G = build_case('binary_directed')
     G.slices.add('heavy')
     G.slices.add_edge_to_slice('heavy', 'e_ab')
-    for vertex_id in ('A', 'B'):
-        G.slices.add_vertex_to_slice('heavy', vertex_id)
+    for node_id in ('A', 'B'):
+        G.slices.add_node_to_slice('heavy', node_id)
     G.attrs.set_edge_slice_attrs('heavy', 'e_ab', weight=10.0)
     H = G.subgraph_from_slice('heavy')
     assert S.edge_members(H._store, 'e_ab') == pytest.approx(
@@ -184,7 +184,7 @@ def test_a_subgraph_takes_the_weight_the_slice_gives_an_edge():
 
 
 def test_declaring_aspects_moves_the_keys_and_keeps_every_slot():
-    """Every vertex changes identity and none changes address."""
+    """Every node changes identity and none changes address."""
     import warnings
 
     G = build_case('binary_directed')
@@ -194,7 +194,7 @@ def test_declaring_aspects_moves_the_keys_and_keeps_every_slot():
         warnings.simplefilter('ignore', UserWarning)
         G.layers.set_aspects(['cond', 'time'], {'cond': ['ctrl'], 'time': ['t0']})
     after = {key[0]: slot for slot, key in G._store.live_entities()}
-    assert after == before, 'a vertex changes identity, not address'
+    assert after == before, 'a node changes identity, not address'
     assert {key[1] for _slot, key in G._store.live_entities()} == {('_', '_')}
     assert _snapshot(G._store)['sides'] != sides_before, 'the identities did move'
     assert V.validate_internal_consistency(G._store, strict=False) == []
@@ -231,37 +231,37 @@ def test_the_default_direction_of_a_graph_reaches_the_store():
 def test_a_write_to_a_copy_leaves_the_graph_it_came_from_alone():
     G = build_case('binary_directed')
     H = G.ops.copy()
-    H.add_vertices(['Z'])
+    H.add_nodes(['Z'])
     H.remove_edges('e_ab')
-    assert 'Z' not in set(G.vertices())
+    assert 'Z' not in set(G.nodes())
     assert 'e_ab' in set(S.edge_ids(G._store))
 
 
-def test_removing_a_vertex_frees_its_slot_and_moves_no_other():
+def test_removing_a_node_frees_its_slot_and_moves_no_other():
     """The record store renumbers its rows on a delete. The slot store does not."""
     G = build_case('binary_directed')
     before = dict(G._store.live_entities())
     dropped = G._store.entity_slot(('A', ('_',)))
-    G.remove_vertices(['A'])
+    G.remove_nodes(['A'])
     after = dict(G._store.live_entities())
     assert set(after) == set(before) - {dropped}
     assert all(after[slot] == before[slot] for slot in after)
     assert V.validate_internal_consistency(G._store, strict=False) == []
-    _assert_incremental_matches_rebuild(G, 'remove_vertices')
+    _assert_incremental_matches_rebuild(G, 'remove_nodes')
 
 
 @pytest.mark.parametrize('case', CASE_NAMES)
-def test_removing_every_vertex_empties_the_store(case):
+def test_removing_every_node_empties_the_store(case):
     G = build_case(case)
-    G.remove_vertices([ref.key for ref in S.iter_entities(G) if ref.kind == S.NODE])
+    G.remove_nodes([ref.key for ref in S.iter_entities(G) if ref.kind == S.NODE])
     assert V.validate_internal_consistency(G._store, strict=False) == []
     _assert_incremental_matches_rebuild(G, case)
 
 
 def test_a_sequence_of_mutations_reaches_the_store():
     G = build_case('binary_directed')
-    G.add_vertices(['D', 'E'])
-    _assert_incremental_matches_rebuild(G, 'add_vertices')
+    G.add_nodes(['D', 'E'])
+    _assert_incremental_matches_rebuild(G, 'add_nodes')
 
     G.add_edges('C', 'D', edge_id='e_cd')
     _assert_incremental_matches_rebuild(G, 'add_edges')
@@ -269,8 +269,8 @@ def test_a_sequence_of_mutations_reaches_the_store():
     G.remove_edges('e_ab')
     _assert_incremental_matches_rebuild(G, 'remove_edges')
 
-    G.remove_vertices(['E'])
-    _assert_incremental_matches_rebuild(G, 'remove_vertices')
+    G.remove_nodes(['E'])
+    _assert_incremental_matches_rebuild(G, 'remove_nodes')
 
     G.make_undirected()
     _assert_incremental_matches_rebuild(G, 'make_undirected')
@@ -287,7 +287,7 @@ def test_setting_the_kind_of_an_entity_reaches_the_store():
     assert S.entity_ref(G._store, ('B', ('_',))).kind == S.EDGE_ENTITY
     _assert_incremental_matches_rebuild(G, 'set_entity_kinds')
 
-    G._set_entity_kinds({('Z', ('_',)): 'vertex'})
+    G._set_entity_kinds({('Z', ('_',)): 'node'})
     assert S.has_entity(G._store, ('Z', ('_',)))
     _assert_incremental_matches_rebuild(G, 'set_entity_kinds/new')
 

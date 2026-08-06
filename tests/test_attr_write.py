@@ -137,8 +137,8 @@ def graph_with_scores(n_nodes: int):
     from annnet.core.graph import AnnNet
 
     graph = AnnNet(directed=True)
-    graph.add_vertices([f'v{index}' for index in range(n_nodes)])
-    graph.attrs.set_vertex_attrs_bulk(
+    graph.add_nodes([f'v{index}' for index in range(n_nodes)])
+    graph.attrs.set_node_attrs_bulk(
         {f'v{index}': {'score': float(index)} for index in range(n_nodes)}
     )
     return graph
@@ -148,9 +148,9 @@ def test_a_write_through_the_graph_does_not_build_a_table():
     graph = graph_with_scores(8)
     _ = graph.obs
     builds = graph._attr_store.table_builds
-    graph.attrs.set_vertex_attrs('v3', score=99.0)
+    graph.attrs.set_node_attrs('v3', score=99.0)
     assert graph._attr_store.table_builds == builds, 'a write must not build a table'
-    assert graph.attrs.get_attr_vertex('v3', 'score') == 99.0
+    assert graph.attrs.get_attr_node('v3', 'score') == 99.0
 
 
 def test_reading_one_column_through_the_graph_builds_no_table():
@@ -162,25 +162,25 @@ def test_reading_one_column_through_the_graph_builds_no_table():
 
 def test_the_node_table_holds_one_row_per_node_without_being_stated():
     graph = graph_with_scores(4)
-    graph.add_vertices('late')
-    rows = attribute_rows(graph.obs, 'vertex_id')
+    graph.add_nodes('late')
+    rows = attribute_rows(graph.obs, 'node_id')
     assert set(rows) == {'v0', 'v1', 'v2', 'v3', 'late'}
     assert rows['late']['score'] is None
 
 
 def test_a_removed_node_leaves_no_row_behind():
     graph = graph_with_scores(4)
-    graph.remove_vertices('v2')
-    assert 'v2' not in attribute_rows(graph.obs, 'vertex_id')
+    graph.remove_nodes('v2')
+    assert 'v2' not in attribute_rows(graph.obs, 'node_id')
 
 
 def test_a_caller_that_writes_into_obs_changes_nothing_the_graph_holds():
     """The table is built for the caller, so it is not the storage of the graph."""
     graph = graph_with_scores(3)
     table = graph.obs
-    rows = attribute_rows(table, 'vertex_id')
+    rows = attribute_rows(table, 'node_id')
     rows['v0']['score'] = 99.0
-    assert graph.attrs.get_attr_vertex('v0', 'score') == 0.0
+    assert graph.attrs.get_attr_node('v0', 'score') == 0.0
 
 
 def attribute_rows(table, id_column: str) -> dict:
@@ -202,7 +202,7 @@ def test_the_cost_of_one_write_through_the_graph_does_not_grow_with_the_node_cou
             gc.collect()
             gc.disable()
             start = time.perf_counter_ns()
-            graph.attrs.set_vertex_attrs(f'v{n_nodes // 2}', score=1.0)
+            graph.attrs.set_node_attrs(f'v{n_nodes // 2}', score=1.0)
             elapsed = time.perf_counter_ns() - start
             gc.enable()
             times.append(elapsed / 1e9)

@@ -70,13 +70,13 @@ def test_build_attr_map_skips_records_without_key_and_dedupes() -> None:
 
     df = dataframe_from_rows(
         [
-            {'vertex_id': 'A', 'name': 'alice'},
-            {'vertex_id': 'B', 'name': 'bob'},
-            {'vertex_id': None, 'name': 'no-key'},  # skipped
-            {'vertex_id': 'A', 'name': 'duplicate'},  # 'A' already in map → skipped
+            {'node_id': 'A', 'name': 'alice'},
+            {'node_id': 'B', 'name': 'bob'},
+            {'node_id': None, 'name': 'no-key'},  # skipped
+            {'node_id': 'A', 'name': 'duplicate'},  # 'A' already in map → skipped
         ]
     )
-    out = _build_attr_map(df, 'vertex_id')
+    out = _build_attr_map(df, 'node_id')
     assert out == {'A': {'name': 'alice'}, 'B': {'name': 'bob'}}
 
 
@@ -155,9 +155,9 @@ def test_round_trip_empty_graph(tmp_path: Path) -> None:
 
 def test_round_trip_simple_directed_graph_with_attrs(tmp_path: Path) -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
-    G.attrs.set_vertex_attrs('A', color='red')
-    G.attrs.set_vertex_attrs('B', color='blue')
+    G.add_nodes(['A', 'B', 'C'])
+    G.attrs.set_node_attrs('A', color='red')
+    G.attrs.set_node_attrs('B', color='blue')
     G.add_edges('A', 'B', edge_id='e1', weight=2.0)
     G.add_edges('B', 'C', edge_id='e2', weight=3.0)
     G.attrs.set_edge_attrs('e1', label='alpha')
@@ -165,24 +165,24 @@ def test_round_trip_simple_directed_graph_with_attrs(tmp_path: Path) -> None:
     p = tmp_path / 'simple'
     to_parquet(G, p)
     H = from_parquet(p)
-    assert set(H.vertices()) == {'A', 'B', 'C'}
+    assert set(H.nodes()) == {'A', 'B', 'C'}
     assert H.ne == 2
 
 
 def test_round_trip_with_undirected_hyperedge(tmp_path: Path) -> None:
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges(['A', 'B', 'C'], edge_id='h1')
     p = tmp_path / 'hyper'
     to_parquet(G, p)
     H = from_parquet(p)
-    assert set(H.vertices()) >= {'A', 'B', 'C'}
+    assert set(H.nodes()) >= {'A', 'B', 'C'}
     assert H.ne == 1
 
 
 def test_round_trip_with_directed_hyperedge(tmp_path: Path) -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges(src=['A', 'B'], tgt=['C', 'D'], edge_id='h1')
     p = tmp_path / 'dhyper'
     to_parquet(G, p)
@@ -192,7 +192,7 @@ def test_round_trip_with_directed_hyperedge(tmp_path: Path) -> None:
 
 def test_round_trip_with_slices_and_per_slice_weights(tmp_path: Path) -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.slices.add('s1')
     G.add_edges('A', 'B', edge_id='e1', slice='s1', weight=1.0)
     G.add_edges('B', 'C', edge_id='e2', slice='s1', weight=2.0)
@@ -209,13 +209,13 @@ def test_round_trip_with_slices_and_per_slice_weights(tmp_path: Path) -> None:
 def test_round_trip_with_multilayer_graph_via_manifest(tmp_path: Path) -> None:
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A'], layer={'condition': 'healthy'})
-    G.add_vertices(['B'], layer={'condition': 'treated'})
+    G.add_nodes(['A'], layer={'condition': 'healthy'})
+    G.add_nodes(['B'], layer={'condition': 'treated'})
 
     p = tmp_path / 'multilayer'
     to_parquet(G, p)
     H = from_parquet(p)
-    assert set(H.vertices()) == {'A', 'B'}
+    assert set(H.nodes()) == {'A', 'B'}
     assert H.is_multilayer
     assert tuple(H.layers.list_aspects()) == ('condition',)
 
@@ -223,7 +223,7 @@ def test_round_trip_with_multilayer_graph_via_manifest(tmp_path: Path) -> None:
 def test_round_trip_with_hyper_edge_attrs(tmp_path: Path) -> None:
     """Hyperedge attrs survive serialization and reattach in from_parquet."""
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges(['A', 'B', 'C'], edge_id='h1')
     G.attrs.set_edge_attrs('h1', confidence=0.95, label='triple')
 
@@ -238,7 +238,7 @@ def test_round_trip_with_hyper_edge_attrs(tmp_path: Path) -> None:
 
 def test_round_trip_with_per_slice_weight_round_trips_weight(tmp_path: Path) -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.slices.add('s1')
     G.add_edges('A', 'B', edge_id='e1', slice='s1', weight=1.0)
     G.attrs.set_edge_slice_attrs('s1', 'e1', weight=42.0)
@@ -256,11 +256,11 @@ def test_build_attr_map_iterates_only_dict_records() -> None:
 
     df = dataframe_from_rows(
         [
-            {'vertex_id': 'A', 'color': 'red'},
-            {'vertex_id': 'B', 'color': 'blue'},
+            {'node_id': 'A', 'color': 'red'},
+            {'node_id': 'B', 'color': 'blue'},
         ]
     )
-    out = _build_attr_map(df, 'vertex_id')
+    out = _build_attr_map(df, 'node_id')
     assert set(out) == {'A', 'B'}
 
 
@@ -294,11 +294,11 @@ def test_build_attr_map_skips_records_missing_the_key_column() -> None:
 
     df = dataframe_from_rows(
         [
-            {'name': 'alice'},  # no 'vertex_id' column at all
+            {'name': 'alice'},  # no 'node_id' column at all
             {'name': 'bob'},
         ]
     )
-    out = _build_attr_map(df, 'vertex_id')
+    out = _build_attr_map(df, 'node_id')
     assert out == {}
 
 

@@ -15,9 +15,9 @@ from annnet.core import _structure as S
 
 
 def _build_graph() -> AnnNet:
-    """Small directed graph with a vertex-edge entity and one binary edge."""
+    """Small directed graph with a node-edge entity and one binary edge."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', weight=2.5)
     G.add_edges('B', 'C', edge_id='e2', weight=1.5)
     # An edge-entity (acts as an endpoint) so coverage exercises both kinds.
@@ -143,7 +143,7 @@ def test_cache_info_reports_uncached_and_cached_states() -> None:
 # ── IndexManager ───────────────────────────────────────────────────────
 
 
-def test_idx_entity_to_row_round_trips_vertex_and_edge_entity() -> None:
+def test_idx_entity_to_row_round_trips_node_and_edge_entity() -> None:
     G = _build_graph()
     a_row = G.idx.entity_to_row('A')
     assert G.idx.row_to_entity(a_row) == 'A'
@@ -154,8 +154,8 @@ def test_idx_entity_to_row_round_trips_vertex_and_edge_entity() -> None:
 
 def test_idx_entity_to_row_raises_on_unknown() -> None:
     G = _build_graph()
-    with pytest.raises(KeyError, match='not_a_vertex'):
-        G.idx.entity_to_row('not_a_vertex')
+    with pytest.raises(KeyError, match='not_a_node'):
+        G.idx.entity_to_row('not_a_node')
 
 
 def test_idx_row_to_entity_raises_on_unknown_row() -> None:
@@ -197,9 +197,9 @@ def test_idx_edges_to_cols_and_cols_to_edges_round_trip() -> None:
     assert G.idx.cols_to_edges(cols) == ['e1', 'e2']
 
 
-def test_idx_entity_type_distinguishes_vertex_and_edge_entity() -> None:
+def test_idx_entity_type_distinguishes_node_and_edge_entity() -> None:
     G = _build_graph()
-    assert G.idx.entity_type('A') == 'vertex'
+    assert G.idx.entity_type('A') == 'node'
     assert G.idx.entity_type('EE1') == 'edge'
 
 
@@ -209,23 +209,23 @@ def test_idx_entity_type_raises_on_unknown() -> None:
         G.idx.entity_type('ghost')
 
 
-def test_idx_is_vertex_and_is_edge_entity() -> None:
+def test_idx_is_node_and_is_edge_entity() -> None:
     G = _build_graph()
-    assert G.idx.is_vertex('A') is True
-    assert G.idx.is_vertex('EE1') is False
+    assert G.idx.is_node('A') is True
+    assert G.idx.is_node('EE1') is False
     assert G.idx.is_edge_entity('EE1') is True
     assert G.idx.is_edge_entity('A') is False
 
 
-def test_idx_has_entity_has_vertex_has_edge_id() -> None:
+def test_idx_has_entity_has_node_has_edge_id() -> None:
     G = _build_graph()
     assert G.idx.has_entity('A') is True
     assert G.idx.has_entity('EE1') is True
     assert G.idx.has_entity('missing') is False
 
-    assert G.idx.has_vertex('A') is True
-    assert G.idx.has_vertex('EE1') is False  # edge-entity, not vertex
-    assert G.idx.has_vertex('missing') is False
+    assert G.idx.has_node('A') is True
+    assert G.idx.has_node('EE1') is False  # edge-entity, not node
+    assert G.idx.has_node('missing') is False
 
     assert G.idx.has_edge_id('e1') is True
     assert G.idx.has_edge_id('EE1') is False  # col_idx < 0
@@ -236,13 +236,13 @@ def test_idx_count_helpers_match_graph_shape() -> None:
     G = _build_graph()
     assert G.idx.edge_count() == G.ne
     assert G.idx.entity_count() == S.entity_count(G)
-    assert G.idx.vertex_count() == G.nv_supra
+    assert G.idx.node_count() == G.nv_supra
 
 
-def test_idx_stats_includes_vertex_and_edge_entity_counts() -> None:
+def test_idx_stats_includes_node_and_edge_entity_counts() -> None:
     G = _build_graph()
     stats = G.idx.stats()
-    assert stats['n_vertices'] == 3
+    assert stats['n_nodes'] == 3
     assert stats['n_edge_entities'] == 1
     assert stats['n_edges'] == 2
     assert stats['n_entities'] == 4

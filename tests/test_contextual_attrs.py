@@ -134,7 +134,7 @@ def public_graph():
 
     G = AnnNet(directed=True)
     G.layers.set_aspects(['phase'], {'phase': ['t0']})
-    G.add_vertices(['A', 'B'], layer=('t0',))
+    G.add_nodes(['A', 'B'], layer=('t0',))
     G.add_edges(
         [{'source': ('A', ('t0',)), 'target': ('B', ('t0',)), 'edge_id': 'e0'}],
         default_edge_directed=True,

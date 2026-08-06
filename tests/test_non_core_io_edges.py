@@ -15,9 +15,9 @@ from annnet.core import _structure as S
 
 def test_dataframe_export_options_and_private_attr_filtering():
     graph = AnnNet(directed=None)
-    graph.add_vertices('A', label='alpha', __private='hidden')
-    graph.add_vertices('B')
-    graph.add_vertices('C')
+    graph.add_nodes('A', label='alpha', __private='hidden')
+    graph.add_nodes('B')
+    graph.add_nodes('C')
     graph.add_edges('A', 'B', edge_id='e1', directed=None, relation='activates')
     graph._set_edge_field('e1', 'weight', None)
     graph.add_edges(src=['A', 'B'], tgt=['C'], edge_id='h1', weight=2.5, directed=True)
@@ -45,13 +45,13 @@ def test_dataframe_export_options_and_private_attr_filtering():
 
 
 def test_from_dataframes_validation_and_slice_weight_edge_cases():
-    with pytest.raises(ValueError, match='vertex_id'):
+    with pytest.raises(ValueError, match='node_id'):
         dataframes.from_dataframes(nodes=dataframe_from_rows([{'id': 'A'}]))
     with pytest.raises(ValueError, match='source.*target'):
         dataframes.from_dataframes(edges=dataframe_from_rows([{'source': 'A'}]))
     with pytest.raises(ValueError, match='edge_id'):
         dataframes.from_dataframes(hyperedges=dataframe_from_rows([{'members': ['A']}]))
-    with pytest.raises(ValueError, match='edge_id.*vertex_id'):
+    with pytest.raises(ValueError, match='edge_id.*node_id'):
         dataframes.from_dataframes(
             hyperedges=dataframe_from_rows([{'edge_id': 'h1'}]),
             exploded_hyperedges=True,
@@ -60,14 +60,14 @@ def test_from_dataframes_validation_and_slice_weight_edge_cases():
         dataframes.from_dataframes(slices=dataframe_from_rows([{'slice_id': 's1'}]))
 
     graph = dataframes.from_dataframes(
-        nodes=dataframe_from_rows([{'vertex_id': 'A'}, {'vertex_id': 'B'}, {'vertex_id': 'C'}]),
+        nodes=dataframe_from_rows([{'node_id': 'A'}, {'node_id': 'B'}, {'node_id': 'C'}]),
         edges=dataframe_from_rows(
             [{'source': 'A', 'target': 'B', 'edge_id': 'e1', 'directed': False}]
         ),
         hyperedges=dataframe_from_rows(
             [
-                {'edge_id': 'h1', 'vertex_id': 'A', 'role': 'member', 'directed': False},
-                {'edge_id': 'h1', 'vertex_id': 'C', 'role': 'member', 'directed': False},
+                {'edge_id': 'h1', 'node_id': 'A', 'role': 'member', 'directed': False},
+                {'edge_id': 'h1', 'node_id': 'C', 'role': 'member', 'directed': False},
             ]
         ),
         slices=dataframe_from_rows(
@@ -108,13 +108,13 @@ def test_graphml_sanitize_restore_and_gexf_smoke(tmp_path):
     assert nx_graph.nodes['A']['payload'] == ['x']
 
     ann = AnnNet()
-    ann.add_vertices('A')
-    ann.add_vertices('B')
+    ann.add_nodes('A')
+    ann.add_nodes('B')
     ann.add_edges('A', 'B', edge_id='e1')
     out = tmp_path / 'graph.gexf'
     graphml.to_gexf(ann, out)
     restored = graphml.from_gexf(out)
-    assert set(restored.vertices()) == {'A', 'B'}
+    assert set(restored.nodes()) == {'A', 'B'}
 
 
 def test_sif_helpers_and_manifest_without_file(tmp_path):
@@ -122,13 +122,13 @@ def test_sif_helpers_and_manifest_without_file(tmp_path):
     assert sif._split_sif_line('A|rel||B\n', '|') == ['A', 'rel', 'B']
 
     graph = AnnNet()
-    graph.add_vertices('A', label='alpha')
-    graph.add_vertices('B')
+    graph.add_nodes('A', label='alpha')
+    graph.add_nodes('B')
     graph.add_edges('A', 'B', edge_id='e1', weight=2.0, relation='binds')
     graph.add_edges(src=['A', 'B'], edge_id='h1', directed=False, weight=4.0)
     graph._restore_supra_nodes({('A', ('layer',))})
 
-    assert sif._safe_vertex_attr_rows(SimpleNamespace(_vertex_table=None)) == []
+    assert sif._safe_node_attr_rows(SimpleNamespace(_node_table=None)) == []
     assert (
         sif._get_edge_weight(SimpleNamespace(_edges={'bad': SimpleNamespace(weight='x')}), 'bad')
         == 1.0
@@ -149,8 +149,8 @@ def test_sif_helpers_and_manifest_without_file(tmp_path):
         read_nodes_sidecar=True,
         relation_attr='interaction',
     )
-    assert {'A', 'B'}.issubset(set(restored.vertices()))
-    assert restored.attrs.get_attr_vertex('A', 'active') is True
+    assert {'A', 'B'}.issubset(set(restored.nodes()))
+    assert restored.attrs.get_attr_node('A', 'active') is True
 
 
 def test_sif_from_manifest_restores_hyperedges_slices_and_multilayer(tmp_path):
@@ -178,7 +178,7 @@ def test_sif_from_manifest_restores_hyperedges_slices_and_multilayer(tmp_path):
             }
         },
         'slices': {'s1': {'edges': ['e1'], 'weights': {'e1': 9.0}}},
-        'vertex_attrs': {'A': {'active': True}},
+        'node_attrs': {'A': {'active': True}},
         'multilayer': {
             'aspects': ['time'],
             'elem_layers': {'time': ['t1']},
@@ -234,8 +234,8 @@ def test_json_multilayer_and_malformed_entries_roundtrip(tmp_path):
         'edges': [
             {
                 'id': 'e1',
-                'source': {'kind': 'supra', 'vertex': 'A', 'layer': ['t1']},
-                'target': {'kind': 'supra', 'vertex': 'B', 'layer': ['t1']},
+                'source': {'kind': 'supra', 'node': 'A', 'layer': ['t1']},
+                'target': {'kind': 'supra', 'node': 'B', 'layer': ['t1']},
                 'directed': True,
                 'weight': 2.0,
                 'category': 'observed',

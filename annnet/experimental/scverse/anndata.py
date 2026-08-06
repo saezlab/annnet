@@ -10,18 +10,18 @@ from ...core import AnnNet
 from ._shared import (
     ANNNET_UNS_KEY,
     add_edges_from_var,
+    add_nodes_from_obs,
     obs_spatial_matrix,
     require_dependency,
     restore_multilayer,
     build_obs_dataframe,
     build_var_dataframe,
-    add_vertices_from_obs,
+    build_node_incidence,
     build_annnet_manifest,
-    build_vertex_incidence,
     infer_directed_from_var,
     restore_attrs_from_manifest,
     restore_edge_attrs_from_var,
-    restore_vertices_from_obs_attrs,
+    restore_nodes_from_obs_attrs,
 )
 
 
@@ -33,8 +33,8 @@ def to_anndata(
 ) -> Any:
     """Export an AnnNet graph as an AnnData object.
 
-    `obs` stores vertex-entity rows, `var` stores structural edge rows, and
-    `X` stores the vertex-by-edge incidence matrix. AnnNet-only concepts such
+    `obs` stores node-entity rows, `var` stores structural edge rows, and
+    `X` stores the node-by-edge incidence matrix. AnnNet-only concepts such
     as slices, multilayer state, and raw attribute tables are preserved in
     `uns["__annnet__"]`.
     """
@@ -51,7 +51,7 @@ def to_anndata(
         kwargs['obsm'] = {key: value}
 
     return ad.AnnData(
-        X=build_vertex_incidence(graph),
+        X=build_node_incidence(graph),
         obs=obs,
         var=var,
         uns=uns,
@@ -82,8 +82,8 @@ def from_anndata(
     if not isinstance(var, pd.DataFrame):
         var = pd.DataFrame(var)
 
-    add_vertices_from_obs(graph, obs)
-    restore_vertices_from_obs_attrs(graph, obs)
+    add_nodes_from_obs(graph, obs)
+    restore_nodes_from_obs_attrs(graph, obs)
     add_edges_from_var(graph, var)
     restore_edge_attrs_from_var(graph, var)
 

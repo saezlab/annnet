@@ -27,7 +27,7 @@ All graph-owned backend accessors provide:
 
 NetworkX and igraph accessors also provide:
 
-- `peek_vertices(k=10)`: return a small sample of backend vertex identifiers.
+- `peek_nodes(k=10)`: return a small sample of backend node identifiers.
 
 ## Algorithm Dispatch
 
@@ -40,7 +40,7 @@ distances = G.ig.distances(source="a", target="c", weights="weight")
 
 In these calls AnnNet projects the graph to the backend, replaces the `G`
 argument with the projected backend graph where needed, calls the backend
-function, and maps vertex identifiers back where supported.
+function, and maps node identifiers back where supported.
 
 ## NetworkX Options
 

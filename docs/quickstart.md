@@ -16,7 +16,7 @@ G.slices.add("toy")
 G.slices.active = "toy"
 
 for v in ["A", "B", "C", "D"]:
-    G.add_vertices(v, label=v, kind="gene")
+    G.add_nodes(v, label=v, kind="gene")
 
 # Binary edges (directed + undirected)
 G.add_edges("A", "B", weight=2.0, directed=True, relation="activates")

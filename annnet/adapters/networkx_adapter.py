@@ -6,7 +6,7 @@ Provides:
     from_nx(nxG)  -> AnnNet
 
 NetworkX natively represents:
-    - vertices/nodes
+    - nodes/nodes
     - binary edges
     - graph, node, and edge attributes
     - directed, undirected, simple, and multigraph structures
@@ -112,14 +112,14 @@ def _export_binary_graph(
     """
     G = nx.MultiDiGraph() if directed else nx.MultiGraph()
 
-    # BATCH READ VERTEX ATTRIBUTES
-    v_rows = _rows_like(graph._vertex_table)
+    # BATCH READ NODE ATTRIBUTES
+    v_rows = _rows_like(graph._node_table)
     v_attrs_map = {}
     for row in v_rows:
-        vid = row.get('vertex_id')
+        vid = row.get('node_id')
         if vid:
             attrs = dict(row)
-            attrs.pop('vertex_id', None)
+            attrs.pop('node_id', None)
             if public_only:
                 attrs = {
                     k: _serialize_value(v) for k, v in attrs.items() if not str(k).startswith('__')
@@ -144,8 +144,8 @@ def _export_binary_graph(
                 attrs = {k: _serialize_value(v) for k, v in attrs.items()}
             e_attrs_map[eid] = attrs
 
-    # ADD VERTICES WITH CACHED ATTRIBUTES
-    for v in graph.vertices():
+    # ADD NODES WITH CACHED ATTRIBUTES
+    for v in graph.nodes():
         v_attr = v_attrs_map.get(v, {})
         G.add_node(v, **v_attr)
 
@@ -245,7 +245,7 @@ def to_nx(
     """Export AnnNet → (networkx.AnnNet, manifest).
 
     Manifest preserves hyperedges with per-endpoint coefficients, slices,
-    vertex/edge attrs, and stable edge IDs.
+    node/edge attrs, and stable edge IDs.
 
     Parameters
     ----------
@@ -288,21 +288,21 @@ def to_nx(
                 pass
 
     # HOIST LOOKUPS
-    vertex_attributes_df = graph._vertex_table
+    node_attributes_df = graph._node_table
     edge_attributes_df = graph._edge_table
 
-    # Vertex attributes - BATCH READ
-    vertex_attrs = {}
-    v_rows = _rows_like(vertex_attributes_df)
+    # Node attributes - BATCH READ
+    node_attrs = {}
+    v_rows = _rows_like(node_attributes_df)
     for row in v_rows:
-        v = row.get('vertex_id')
+        v = row.get('node_id')
         if v is None:
             continue
         attrs = dict(row)
-        attrs.pop('vertex_id', None)
+        attrs.pop('node_id', None)
         if public_only:
             attrs = {k: v for k, v in attrs.items() if not str(k).startswith('__')}
-        vertex_attrs[v] = _attrs_to_dict(attrs)
+        node_attrs[v] = _attrs_to_dict(attrs)
 
     # Edge attributes - BATCH READ
     edge_attrs = {}
@@ -475,7 +475,7 @@ def to_nx(
         'edges': manifest_edges,
         'weights': weights_map,
         'slices': slices_section,
-        'vertex_attrs': vertex_attrs,
+        'node_attrs': node_attrs,
         'edge_attrs': edge_attrs,
         'slice_weights': slice_weights,
         'edge_directed': edge_directed_dict,
@@ -513,11 +513,11 @@ def from_nx(
     H = AnnNet()
     timings = {}
 
-    known_vertices = set()
+    known_nodes = set()
     existing_eids = set()
     edge_directed_cache = manifest.get('edge_directed', {}) or {}
     weights_cache = manifest.get('weights', {}) or {}
-    vertex_attrs_cache = manifest.get('vertex_attrs', {}) or {}
+    node_attrs_cache = manifest.get('node_attrs', {}) or {}
     edge_attrs_cache = manifest.get('edge_attrs', {}) or {}
     slices_cache = manifest.get('slices', {}) or {}
     slice_weights_cache = manifest.get('slice_weights', {}) or {}
@@ -531,17 +531,17 @@ def from_nx(
     if _asp and tuple(H.aspects) != tuple(_asp):
         H.layers.set_aspects(list(_asp), mm.get('elem_layers') or None)
 
-    def add_vertex_once(v):
+    def add_node_once(v):
         # Multilayer endpoints/members are (vid, layer_coord) supra-node keys, but
-        # the vertex ENTITY is keyed by the bare vid; its layer placement is
+        # the node ENTITY is keyed by the bare vid; its layer placement is
         # restored from the manifest below. Collapsing here avoids registering a
-        # duplicate vertex per (vid, layer).
+        # duplicate node per (vid, layer).
         if isinstance(v, tuple):
             v = v[0]
-        if v not in known_vertices:
-            known_vertices.add(v)
+        if v not in known_nodes:
+            known_nodes.add(v)
 
-    with _time('nx_vertices', timings):
+    with _time('nx_nodes', timings):
         for v, d in nxG.nodes(data=True):
             if hyperedge == 'reified':
                 d = d or {}
@@ -549,11 +549,11 @@ def from_nx(
                     continue
                 if isinstance(v, str) and v.startswith(reify_prefix):
                     continue
-            add_vertex_once(v)
+            add_node_once(v)
 
-    # BULK INSERT VERTICES ONCE
-    if known_vertices:
-        H._add_vertices_bulk([{'vertex_id': v} for v in known_vertices])
+    # BULK INSERT NODES ONCE
+    if known_nodes:
+        H._add_nodes_bulk([{'node_id': v} for v in known_nodes])
 
     regular_edges_bulk = []
     hyperedges_bulk = []
@@ -568,10 +568,10 @@ def from_nx(
                 if isinstance(head_map, dict) and isinstance(tail_map, dict):
                     head = list(head_map)
                     tail = list(tail_map)
-                    all_vertices = set(head) | set(tail)
+                    all_nodes = set(head) | set(tail)
 
-                    for x in all_vertices:
-                        add_vertex_once(x)
+                    for x in all_nodes:
+                        add_node_once(x)
 
                     # BUILD ATTRIBUTES INLINE. Only emit the stoichiometry coeff
                     # maps when they carry real (non-unit) coefficients: their keys
@@ -605,7 +605,7 @@ def from_nx(
                     else:
                         hyperedges_bulk.append(
                             {
-                                'members': list(all_vertices),
+                                'members': list(all_nodes),
                                 'edge_id': eid,
                                 'edge_directed': False,
                                 'weight': weights_cache.get(eid, 1.0),
@@ -654,10 +654,10 @@ def from_nx(
     # from the first incoming row may then reject Int64 values from a
     # later row); bulk inference avoids both.
     with _time('attrs', timings):
-        if vertex_attrs_cache:
-            v_updates = {vid: a for vid, a in vertex_attrs_cache.items() if a}
+        if node_attrs_cache:
+            v_updates = {vid: a for vid, a in node_attrs_cache.items() if a}
             if v_updates:
-                H.attrs.set_vertex_attrs_bulk(v_updates)
+                H.attrs.set_node_attrs_bulk(v_updates)
 
         if edge_attrs_cache:
             e_updates = {eid: a for eid, a in edge_attrs_cache.items() if a}
@@ -681,9 +681,9 @@ def from_nx(
                 if eid in existing_eids:
                     continue
 
-                all_vertices = set(head_map) | set(tail_map)
-                for x in all_vertices:
-                    add_vertex_once(x)
+                all_nodes = set(head_map) | set(tail_map)
+                for x in all_nodes:
+                    add_node_once(x)
 
                 # BUILD ATTRIBUTES INLINE. Only emit stoichiometry coeff maps when
                 # they carry real (non-unit) coefficients — their keys are member
@@ -717,7 +717,7 @@ def from_nx(
                 else:
                     reified_hyperedges_bulk.append(
                         {
-                            'members': list(all_vertices),
+                            'members': list(all_nodes),
                             'edge_id': eid,
                             'edge_directed': False,
                             'attributes': attrs,
@@ -810,8 +810,8 @@ def _from_nx_without_manifest(
 ):
     """Best-effort import from a bare NetworkX graph (no manifest).
 
-    Bulk-batched: collect vertices, edges, and attributes into lists, then
-    issue exactly one bulk insert call per kind. Previous per-vertex /
+    Bulk-batched: collect nodes, edges, and attributes into lists, then
+    issue exactly one bulk insert call per kind. Previous per-node /
     per-edge inserts were O(N²) in dataframe-concat work and timed out at
     medium scale (85K edges → 600s+).
 
@@ -824,15 +824,15 @@ def _from_nx_without_manifest(
 
     H = AnnNet()
 
-    # 1) Collect vertices + their attrs (skip HE nodes if reified)
-    vertex_buf: list[str] = []
-    vertex_seen: set = set()
-    vertex_attrs_buf: dict[str, dict] = {}
+    # 1) Collect nodes + their attrs (skip HE nodes if reified)
+    node_buf: list[str] = []
+    node_seen: set = set()
+    node_attrs_buf: dict[str, dict] = {}
 
-    def _add_vertex(v):
-        if v not in vertex_seen:
-            vertex_seen.add(v)
-            vertex_buf.append(v)
+    def _add_node(v):
+        if v not in node_seen:
+            node_seen.add(v)
+            node_buf.append(v)
 
     for v, d in nxG.nodes(data=True):
         if hyperedge == 'reified':
@@ -840,9 +840,9 @@ def _from_nx_without_manifest(
                 continue
             if isinstance(v, str) and str(v).startswith(reify_prefix):
                 continue
-        _add_vertex(v)
+        _add_node(v)
         if d:
-            vertex_attrs_buf[v] = dict(d)
+            node_attrs_buf[v] = dict(d)
 
     # 2) Optionally collect reified hyperedges
     membership_edges: set = set()
@@ -866,7 +866,7 @@ def _from_nx_without_manifest(
                 except (TypeError, ValueError):
                     edge_weight = 1.0
             for x in set(head_map) | set(tail_map):
-                _add_vertex(x)
+                _add_node(x)
 
             attrs = {}
             if directed:
@@ -933,8 +933,8 @@ def _from_nx_without_manifest(
 
         e_directed = bool(d.get('directed', is_dir))
         w = d.get('weight', d.get('__weight', 1.0))
-        _add_vertex(u)
-        _add_vertex(v)
+        _add_node(u)
+        _add_node(v)
 
         binary_edges_bulk.append(
             {
@@ -954,16 +954,16 @@ def _from_nx_without_manifest(
                 edge_attrs_buf[eid] = clean
 
     # 4) BULK INSERTS — one call per kind. This is what the manifest path
-    # already does; the bare path was previously calling add_vertices /
+    # already does; the bare path was previously calling add_nodes /
     # add_edges / set_*_attrs once per element.
-    if vertex_buf:
-        H._add_vertices_bulk([{'vertex_id': v} for v in vertex_buf])
+    if node_buf:
+        H._add_nodes_bulk([{'node_id': v} for v in node_buf])
     if binary_edges_bulk:
         H._add_edges_bulk(binary_edges_bulk, default_edge_directed=is_dir)
     if hyperedges_bulk:
         H.add_hyperedges_bulk(hyperedges_bulk)
-    if vertex_attrs_buf:
-        H.attrs.set_vertex_attrs_bulk(vertex_attrs_buf)
+    if node_attrs_buf:
+        H.attrs.set_node_attrs_bulk(node_attrs_buf)
     if edge_attrs_buf or hyperedge_attrs_buf:
         merged_edge_attrs = {**edge_attrs_buf, **hyperedge_attrs_buf}
         H.attrs.set_edge_attrs_bulk(merged_edge_attrs)

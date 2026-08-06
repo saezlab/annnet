@@ -15,18 +15,18 @@ if TYPE_CHECKING:
 
 
 class SliceMembership(TypedDict):
-    vertices: set[str]
+    nodes: set[str]
     edges: set[str]
 
 
 class SliceInfo(TypedDict):
-    vertices: set[str]
+    nodes: set[str]
     edges: set[str]
     attributes: dict[str, Any]
 
 
 class SliceStats(TypedDict):
-    vertices: int
+    nodes: int
     edges: int
     attributes: dict[str, Any]
 
@@ -153,7 +153,7 @@ class SliceManager:
         G._slices[lid]['edges'].add(eid)
 
     def add_edges(self, slice_id: str | None, edge_ids: Iterable[str]) -> None:
-        """Attach many existing edges to a slice and include their incident vertices."""
+        """Attach many existing edges to a slice and include their incident nodes."""
         G = self._G
         sid = slice_id if slice_id is not None else G._current_slice
         data = self._ensure_slice(sid)
@@ -171,14 +171,14 @@ class SliceManager:
         for eid in add_edges:
             sides = _structure.edge_sides(G, eid)
             verts.update(_bare(member) for member in sides.source | sides.target)
-        data['vertices'].update(verts)
+        data['nodes'].update(verts)
 
     def attach_edges(self, slice_id: str, edge_ids: Iterable[str]) -> None:
-        """Attach every edge the graph holds to a slice, and derive no vertices.
+        """Attach every edge the graph holds to a slice, and derive no nodes.
 
         Unlike :meth:`add_edges`, this keeps an edge that occupies no column, so a
-        placeholder edge survives a round trip. It also leaves the vertex
-        memberships alone. A reader that restores the vertex memberships from the
+        placeholder edge survives a round trip. It also leaves the node
+        memberships alone. A reader that restores the node memberships from the
         file itself needs both, and deriving them again is the dearest loop of a
         load.
         """
@@ -222,13 +222,13 @@ class SliceManager:
         return len(self._G._slices)
 
     def info(self, slice_id: str) -> SliceInfo:
-        """Vertices, edges, and attributes of a slice."""
+        """Nodes, edges, and attributes of a slice."""
         G = self._G
         if slice_id not in G._slices:
             raise KeyError(f'slice {slice_id} not found')
         data = G._slices[slice_id]
         return {
-            'vertices': data['vertices'].copy(),
+            'nodes': data['nodes'].copy(),
             'edges': data['edges'].copy(),
             'attributes': self._slice_attrs(slice_id),
         }
@@ -241,9 +241,9 @@ class SliceManager:
         """
         return self._slice_attrs(slice_id)
 
-    def vertices(self, slice_id: str) -> set[str]:
-        """Return a copy of the vertex IDs in a slice."""
-        return self._G._slices[slice_id]['vertices'].copy()
+    def nodes(self, slice_id: str) -> set[str]:
+        """Return a copy of the node IDs in a slice."""
+        return self._G._slices[slice_id]['nodes'].copy()
 
     def edges(self, slice_id: str) -> set[str]:
         """Return a copy of the edge IDs in a slice."""
@@ -252,42 +252,42 @@ class SliceManager:
     # ── set operations ────────────────────────────────────────────────────────
 
     def union(self, slice_ids: Iterable[str]) -> SliceMembership:
-        """Return the union of vertices and edges across multiple slices."""
+        """Return the union of nodes and edges across multiple slices."""
         G = self._G
         uv: set[str] = set()
         ue: set[str] = set()
         for sid in slice_ids:
             if sid in G._slices:
-                uv.update(G._slices[sid]['vertices'])
+                uv.update(G._slices[sid]['nodes'])
                 ue.update(G._slices[sid]['edges'])
-        return {'vertices': uv, 'edges': ue}
+        return {'nodes': uv, 'edges': ue}
 
     def intersect(self, slice_ids: list[str]) -> SliceMembership:
-        """Return the intersection of vertices and edges across multiple slices."""
+        """Return the intersection of nodes and edges across multiple slices."""
         G = self._G
         if not slice_ids:
-            return {'vertices': set(), 'edges': set()}
+            return {'nodes': set(), 'edges': set()}
         if len(slice_ids) == 1:
             data = G._slices.get(slice_ids[0], SliceRecord())
-            return {'vertices': data['vertices'].copy(), 'edges': data['edges'].copy()}
-        common_v = G._slices[slice_ids[0]]['vertices'].copy()
+            return {'nodes': data['nodes'].copy(), 'edges': data['edges'].copy()}
+        common_v = G._slices[slice_ids[0]]['nodes'].copy()
         common_e = G._slices[slice_ids[0]]['edges'].copy()
         for sid in slice_ids[1:]:
             if sid in G._slices:
-                common_v &= G._slices[sid]['vertices']
+                common_v &= G._slices[sid]['nodes']
                 common_e &= G._slices[sid]['edges']
             else:
-                return {'vertices': set(), 'edges': set()}
-        return {'vertices': common_v, 'edges': common_e}
+                return {'nodes': set(), 'edges': set()}
+        return {'nodes': common_v, 'edges': common_e}
 
     def difference(self, slice_a: str, slice_b: str) -> SliceMembership:
-        """Return the vertices and edges present in one slice but not another."""
+        """Return the nodes and edges present in one slice but not another."""
         G = self._G
         if slice_a not in G._slices or slice_b not in G._slices:
             raise KeyError('One or both slices not found')
         s1, s2 = G._slices[slice_a], G._slices[slice_b]
         return {
-            'vertices': s1['vertices'] - s2['vertices'],
+            'nodes': s1['nodes'] - s2['nodes'],
             'edges': s1['edges'] - s2['edges'],
         }
 
@@ -299,26 +299,26 @@ class SliceManager:
         if result_slice_id in G._slices:
             raise ValueError(f'slice {result_slice_id} already exists')
         data = self._ensure_slice(result_slice_id, **attributes)
-        data['vertices'] = operation_result['vertices'].copy()
+        data['nodes'] = operation_result['nodes'].copy()
         data['edges'] = operation_result['edges'].copy()
         return result_slice_id
 
-    def add_vertex_to_slice(self, lid: str, vid: str) -> None:
-        """Attach an existing vertex to a slice.
+    def add_node_to_slice(self, lid: str, vid: str) -> None:
+        """Attach an existing node to a slice.
 
         Raises
         ------
         KeyError
-            If the slice or vertex does not exist.
+            If the slice or node does not exist.
         """
         G = self._G
         if lid not in G._slices:
             raise KeyError(f'slice {lid!r} does not exist')
-        # A slice names a vertex by its bare id, so the id alone is the question.
+        # A slice names a node by its bare id, so the id alone is the question.
         # In a multilayer graph that id may stand for an entity in every layer.
         if not _structure.has_entity_id(G, vid):
-            raise KeyError(f'vertex {vid!r} does not exist')
-        G._slices[lid]['vertices'].add(vid)
+            raise KeyError(f'node {vid!r} does not exist')
+        G._slices[lid]['nodes'].add(vid)
 
     # ── set-op creation helpers ───────────────────────────────────────────────
 
@@ -358,7 +358,7 @@ class SliceManager:
             result = self.intersect(source_slice_ids)
         else:
             raise ValueError(f'Unknown aggregation method: {method}')
-        data['vertices'] = result['vertices']
+        data['nodes'] = result['nodes']
         data['edges'] = result['edges']
         return target_slice_id
 
@@ -368,19 +368,19 @@ class SliceManager:
         """Return per-slice counts and attributes."""
         return {
             sid: {
-                'vertices': len(data['vertices']),
+                'nodes': len(data['nodes']),
                 'edges': len(data['edges']),
                 'attributes': self._slice_attrs(sid),
             }
             for sid, data in self.get_slices_dict(include_default=include_default).items()
         }
 
-    def vertex_presence(self, vertex_id: str, include_default: bool = False) -> list[str]:
-        """List slices that contain a given vertex."""
+    def node_presence(self, node_id: str, include_default: bool = False) -> list[str]:
+        """List slices that contain a given node."""
         return [
             sid
             for sid, data in self.get_slices_dict(include_default=include_default).items()
-            if vertex_id in data['vertices']
+            if node_id in data['nodes']
         ]
 
     def edge_presence(
@@ -511,7 +511,7 @@ class SliceManager:
             if cur not in G._slices or nxt not in G._slices:
                 raise KeyError('One or more slices not found')
             cd, nd = G._slices[cur], G._slices[nxt]
-            key = 'edges' if metric == 'edge_change' else 'vertices'
+            key = 'edges' if metric == 'edge_change' else 'nodes'
             added = len(nd[key] - cd[key])
             removed = len(cd[key] - nd[key])
             changes.append({'added': added, 'removed': removed, 'net_change': added - removed})
@@ -525,7 +525,7 @@ class SliceManager:
         lines = [f'slices: {len(stats)}']
         for i, (sid, info) in enumerate(stats.items()):
             prefix = '├─' if i < len(stats) - 1 else '└─'
-            lines.append(f'{prefix} {sid}: {info["vertices"]} vertices, {info["edges"]} edges')
+            lines.append(f'{prefix} {sid}: {info["nodes"]} nodes, {info["edges"]} edges')
         return '\n'.join(lines)
 
     def __repr__(self) -> str:

@@ -6,9 +6,9 @@ Provides:
     from_igraph(igG)  -> AnnNet
 
 igraph natively represents:
-    - vertices
+    - nodes
     - binary edges
-    - graph, vertex, and edge attributes
+    - graph, node, and edge attributes
 
 AnnNet-specific structures such as hyperedges, slices, multilayer metadata,
 per-edge directedness, and richer attribute tables are preserved through
@@ -50,8 +50,8 @@ def _export_binary_graph(
 ):
     """Export AnnNet to igraph.AnnNet without manifest.
 
-    igraph requires integer vertex indices; external vertex IDs are preserved
-    in vertex attribute 'name'. Edge IDs stored in edge attribute 'eid'.
+    igraph requires integer node indices; external node IDs are preserved
+    in node attribute 'name'. Edge IDs stored in edge attribute 'eid'.
 
     Parameters
     ----------
@@ -74,19 +74,19 @@ def _export_binary_graph(
     """
     import igraph as ig
 
-    # When a slice filter is active we restrict to vertices that belong to
+    # When a slice filter is active we restrict to nodes that belong to
     # the slice AND to edges in the slice. Without this, callers that ask
-    # for `slice='signaling'` get the full vertex set with only the slice's
+    # for `slice='signaling'` get the full node set with only the slice's
     # edges, which yields a degenerate "signaling subgraph" full of
-    # singleton vertices from every other compartment/layer.
-    slice_vertex_set: set[str] | None = None
+    # singleton nodes from every other compartment/layer.
+    slice_node_set: set[str] | None = None
     slice_edge_set: set[str] | None = None
     if slice_filter:
-        slice_vertex_set = set()
+        slice_node_set = set()
         slice_edge_set = set()
         for lid in slice_filter:
             try:
-                slice_vertex_set.update(graph.slices.vertices(lid))
+                slice_node_set.update(graph.slices.nodes(lid))
             except Exception:  # noqa: BLE001
                 pass
             try:
@@ -94,11 +94,11 @@ def _export_binary_graph(
             except Exception:  # noqa: BLE001
                 pass
 
-    # Build the vertex universe robustly
-    # Start with declared vertices
-    base_vertices = set(graph.vertices())
-    if slice_vertex_set is not None:
-        base_vertices &= slice_vertex_set
+    # Build the node universe robustly
+    # Start with declared nodes
+    base_nodes = set(graph.nodes())
+    if slice_node_set is not None:
+        base_nodes &= slice_node_set
 
     # Ensure endpoints that appear in edges are also included
     endpoints = set()
@@ -112,30 +112,30 @@ def _export_binary_graph(
             T = set() if rec.tgt is None else {rec.tgt}
         endpoints.update(S)
         endpoints.update(T)
-    if slice_vertex_set is not None:
-        endpoints &= slice_vertex_set
+    if slice_node_set is not None:
+        endpoints &= slice_node_set
 
-    vertices = list(dict.fromkeys(list(base_vertices) + list(endpoints)))  # stable order
-    vidx = {v: i for i, v in enumerate(vertices)}
+    nodes = list(dict.fromkeys(list(base_nodes) + list(endpoints)))  # stable order
+    vidx = {v: i for i, v in enumerate(nodes)}
 
-    # Create igraph graph and set vertex 'name'
+    # Create igraph graph and set node 'name'
     G = ig.Graph(directed=bool(directed))
-    G.add_vertices(len(vertices))
-    G.vs['name'] = vertices
+    G.add_vertices(len(nodes))
+    G.vs['name'] = nodes
 
-    # Attach vertex attributes (works for both vertices and edge-entities)
-    vtab = getattr(graph, '_vertex_table', None)
+    # Attach node attributes (works for both nodes and edge-entities)
+    vtab = getattr(graph, '_node_table', None)
     # Pre-scan to a dict for O(1) lookup
     vattr_map = {}
     if vtab is not None:
         for row in dataframe_to_rows(vtab):
             d = dict(row)
-            vid = d.pop('vertex_id', None)
+            vid = d.pop('node_id', None)
             if vid is not None:
                 vattr_map[vid] = d
 
     processed_vattrs = {}
-    for v in vertices:
+    for v in nodes:
         v_attr = dict(vattr_map.get(v, {}))
         if public_only:
             v_attr = {
@@ -143,7 +143,7 @@ def _export_binary_graph(
             }
         else:
             v_attr = {k: _serialize_value(val) for k, val in v_attr.items()}
-        # igraph reserves the 'name' vertex attribute for vertex IDs;
+        # igraph reserves the 'name' node attribute for node IDs;
         # rename any user attr called 'name' so it doesn't clobber them.
         if 'name' in v_attr:
             v_attr['__attr_name'] = v_attr.pop('name')
@@ -151,7 +151,7 @@ def _export_binary_graph(
 
     all_vattr_keys = set().union(*processed_vattrs.values()) if processed_vattrs else set()
     for k in all_vattr_keys:
-        G.vs[k] = [processed_vattrs[v].get(k) for v in vertices]
+        G.vs[k] = [processed_vattrs[v].get(k) for v in nodes]
 
     # Helper: directedness per edge-id (fallback if helper missing)
     def _is_dir_eid(g, eid):
@@ -163,7 +163,7 @@ def _export_binary_graph(
                 return bool(rec.directed)
             return bool(getattr(g, 'directed', True))
 
-    # Add edges (binary & vertex-edge). Hyperedges: skip or expand
+    # Add edges (binary & node-edge). Hyperedges: skip or expand
     eattr_map = {}
     for row in _rows_like(getattr(graph, '_edge_table', None)):
         eid = row.get('edge_id')
@@ -311,21 +311,21 @@ def to_igraph(
         slice_filter=_slice_filter_for_export,
     )
 
-    # -------------- collect vertex/edge attrs for manifest --------------
-    _raw_vertex_attrs = {
-        row['vertex_id']: {k: v for k, v in row.items() if k != 'vertex_id'}
-        for row in _rows_like(getattr(graph, '_vertex_table', None))
-        if row.get('vertex_id') is not None
+    # -------------- collect node/edge attrs for manifest --------------
+    _raw_node_attrs = {
+        row['node_id']: {k: v for k, v in row.items() if k != 'node_id'}
+        for row in _rows_like(getattr(graph, '_node_table', None))
+        if row.get('node_id') is not None
     }
-    vertex_attrs = {
+    node_attrs = {
         v: _attrs_to_dict(
             {
                 k: val
-                for k, val in _raw_vertex_attrs.get(v, {}).items()
+                for k, val in _raw_node_attrs.get(v, {}).items()
                 if not public_only or not str(k).startswith('__')
             }
         )
-        for v in graph.vertices()
+        for v in graph.nodes()
     }
 
     _raw_edge_attrs = {
@@ -404,13 +404,13 @@ def to_igraph(
                 for eid in eids:
                     allowed.add(eid)
 
-        # ensure we have a 'name' attribute for vertices
+        # ensure we have a 'name' attribute for nodes
         if 'name' not in igG.vs.attributes():
             igG.vs['name'] = list(range(igG.vcount()))
         names = list(igG.vs['name'])
         name_to_idx = {str(n): i for i, n in enumerate(names)}
 
-        def ensure_vertex(name: str) -> int:
+        def ensure_node(name: str) -> int:
             sname = str(name)
             if sname in name_to_idx:
                 return name_to_idx[sname]
@@ -432,7 +432,7 @@ def to_igraph(
 
             head_map, tail_map = spec[0], spec[1]
             he_name = f'{reify_prefix}{eid}'
-            he_idx = ensure_vertex(he_name)
+            he_idx = ensure_node(he_name)
 
             # copy selected edge attrs to HE node (public only)
             he_attrs = edge_attrs.get(eid, {}) or {}
@@ -449,12 +449,12 @@ def to_igraph(
             if he_directed_flag:
                 # tail -> HE
                 for u, coeff in (tail_map or {}).items():
-                    ui = ensure_vertex(u)
+                    ui = ensure_node(u)
                     new_edges.append((ui, he_idx))
                     payloads.append({'role': 'tail', 'coeff': float(coeff), 'membership_of': eid})
                 # HE -> head
                 for v, coeff in (head_map or {}).items():
-                    vi = ensure_vertex(v)
+                    vi = ensure_node(v)
                     new_edges.append((he_idx, vi))
                     payloads.append({'role': 'head', 'coeff': float(coeff), 'membership_of': eid})
             else:
@@ -463,7 +463,7 @@ def to_igraph(
                 members.update(head_map or {})
                 if directed:  # directed container: add both directions
                     for u, coeff in members.items():
-                        ui = ensure_vertex(u)
+                        ui = ensure_node(u)
                         new_edges.append((ui, he_idx))
                         payloads.append(
                             {'role': 'member', 'coeff': float(coeff), 'membership_of': eid}
@@ -474,7 +474,7 @@ def to_igraph(
                         )
                 else:  # undirected container: one edge is enough
                     for u, coeff in members.items():
-                        ui = ensure_vertex(u)
+                        ui = ensure_node(u)
                         new_edges.append((ui, he_idx))
                         payloads.append(
                             {'role': 'member', 'coeff': float(coeff), 'membership_of': eid}
@@ -493,7 +493,7 @@ def to_igraph(
         'edges': manifest_edges,
         'weights': base_weights,
         'slices': slices_section,
-        'vertex_attrs': vertex_attrs,
+        'node_attrs': node_attrs,
         'edge_attrs': edge_attrs,
         'slice_weights': slice_weights,
         'edge_directed': edge_directed_dict,
@@ -520,7 +520,7 @@ def _ig_collect_reified(
 
     Returns
     -------
-      - hyperdefs: list of (eid, directed:bool, head_map:dict, tail_map:dict, he_node_attrs:dict, he_vertex_index)
+      - hyperdefs: list of (eid, directed:bool, head_map:dict, tail_map:dict, he_node_attrs:dict, he_node_index)
       - membership_edge_idx: set of edge indices that are membership edges (to skip for binary import)
 
     """
@@ -599,23 +599,23 @@ def from_igraph(
     from ..core import AnnNet
 
     H = AnnNet()
-    known_vertices = set()
+    known_nodes = set()
 
-    def ensure_vertex(vertex_id):
-        if vertex_id in known_vertices:
+    def ensure_node(node_id):
+        if node_id in known_nodes:
             return
-        H.add_vertices(vertex_id)
-        known_vertices.add(vertex_id)
+        H.add_nodes(node_id)
+        known_nodes.add(node_id)
 
     # -------- helper: scan reified HE nodes in igG (used only if hyperedge == "reified") --------
     def _ig_collect_reified(ig):
         """Return list of tuples:
 
           (eid, directed, head_map, tail_map, he_attrs, he_index)
-        where head_map/tail_map are {vertex_id: coeff}.
+        where head_map/tail_map are {node_id: coeff}.
         """
         out = []
-        # names for external vertex IDs
+        # names for external node IDs
         names = ig.vs['name'] if 'name' in ig.vs.attributes() else list(range(ig.vcount()))
         name_of = lambda idx: names[idx]
 
@@ -705,32 +705,32 @@ def from_igraph(
 
         return out
 
-    # -------- vertices (from manifest = SSOT) --------
-    # Collect all vertex IDs referenced by manifest (attrs + edges)
-    vertex_ids = set()
+    # -------- nodes (from manifest = SSOT) --------
+    # Collect all node IDs referenced by manifest (attrs + edges)
+    node_ids = set()
 
-    for vid in (manifest.get('vertex_attrs', {}) or {}).keys():
-        vertex_ids.add(vid)
+    for vid in (manifest.get('node_attrs', {}) or {}).keys():
+        node_ids.add(vid)
 
     edges_def = manifest.get('edges', {}) or {}
     for _eid, defn in edges_def.items():
         kind = defn[-1]
         if kind == 'regular':
             u, v = defn[0], defn[1]
-            vertex_ids.add(u)
-            vertex_ids.add(v)
+            node_ids.add(u)
+            node_ids.add(v)
         elif kind == 'hyper':
             head_map, tail_map = defn[0], defn[1]
             if isinstance(head_map, dict):
                 for u in head_map.keys():
-                    vertex_ids.add(u)
+                    node_ids.add(u)
             if isinstance(tail_map, dict):
                 for v in tail_map.keys():
-                    vertex_ids.add(v)
+                    node_ids.add(v)
 
-    # Add vertices now (no he:: nodes will be included since they aren't in the manifest)
-    if vertex_ids:
-        H._add_vertices_bulk([{'vertex_id': v} for v in vertex_ids])
+    # Add nodes now (no he:: nodes will be included since they aren't in the manifest)
+    if node_ids:
+        H._add_nodes_bulk([{'node_id': v} for v in node_ids])
 
     # -------- edges/hyperedges (from manifest = SSOT) --------
     edge_directed_cache = manifest.get('edge_directed', {}) or {}
@@ -801,12 +801,12 @@ def from_igraph(
         deserialize_edge_layers=deserialize_edge_layers,
     )
 
-    # -------- restore vertex/edge attrs (bulk, not per-element) --------
-    vertex_attrs_cache = manifest.get('vertex_attrs', {}) or {}
-    if vertex_attrs_cache:
-        v_updates = {vid: a for vid, a in vertex_attrs_cache.items() if a}
+    # -------- restore node/edge attrs (bulk, not per-element) --------
+    node_attrs_cache = manifest.get('node_attrs', {}) or {}
+    if node_attrs_cache:
+        v_updates = {vid: a for vid, a in node_attrs_cache.items() if a}
         if v_updates:
-            H.attrs.set_vertex_attrs_bulk(v_updates)
+            H.attrs.set_node_attrs_bulk(v_updates)
 
     edge_attrs_cache = manifest.get('edge_attrs', {}) or {}
     if edge_attrs_cache:
@@ -822,9 +822,9 @@ def from_igraph(
         for eid, directed, head_map, tail_map, he_attrs, _hi in hyperdefs:
             if eid in existing_eids:
                 continue
-            # ensure vertices
+            # ensure nodes
             for x in set(head_map) | set(tail_map):
-                ensure_vertex(x)
+                ensure_node(x)
 
             if directed:
                 H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
@@ -861,11 +861,11 @@ def _from_ig_without_manifest(
 ):
     """Best-effort import from a *plain* igraph.AnnNet (no manifest).
 
-    Bulk-batched: collect vertices, edges, hyperedges, and attribute maps into
+    Bulk-batched: collect nodes, edges, hyperedges, and attribute maps into
     Python lists/dicts, then issue exactly one bulk call per kind. Previous
     per-element inserts were O(N²) in dataframe-concat work.
 
-    Preserves all vertex/edge attributes.
+    Preserves all node/edge attributes.
     hyperedge: "none" | "reified"
       When "reified", rebuild true hyperedges and skip membership edges.
     """
@@ -873,30 +873,30 @@ def _from_ig_without_manifest(
 
     H = AnnNet()
 
-    # 1) Vertices + their attrs (column-wise read from igraph)
+    # 1) Nodes + their attrs (column-wise read from igraph)
     igvs_attrs = igG.vs.attributes()
     names = igG.vs['name'] if 'name' in igvs_attrs else list(range(igG.vcount()))
     user_vattr_keys = [k for k in igvs_attrs if k != 'name']
     user_vattr_cols = {k: igG.vs[k] for k in user_vattr_keys}
 
-    vertex_buf: list = []
-    vertex_seen: set = set()
-    vertex_attrs_buf: dict = {}
+    node_buf: list = []
+    node_seen: set = set()
+    node_attrs_buf: dict = {}
 
-    def _add_vertex(v):
-        if v not in vertex_seen:
-            vertex_seen.add(v)
-            vertex_buf.append(v)
+    def _add_node(v):
+        if v not in node_seen:
+            node_seen.add(v)
+            node_buf.append(v)
 
     for i, vid in enumerate(names):
-        _add_vertex(vid)
+        _add_node(vid)
         vattrs = {
             k: user_vattr_cols[k][i] for k in user_vattr_keys if user_vattr_cols[k][i] is not None
         }
         if '__attr_name' in vattrs:
             vattrs['name'] = vattrs.pop('__attr_name')
         if vattrs:
-            vertex_attrs_buf[vid] = vattrs
+            node_attrs_buf[vid] = vattrs
 
     # 2) Optionally collect reified hyperedges
     membership_idx: set = set()
@@ -914,7 +914,7 @@ def _from_ig_without_manifest(
         )
         for eid, directed, head_map, tail_map, _he_attrs, hi in hyperdefs:
             for x in set(head_map) | set(tail_map):
-                _add_vertex(x)
+                _add_node(x)
 
             attrs = {}
             if directed:
@@ -975,8 +975,8 @@ def _from_ig_without_manifest(
         e_directed = bool(d.get('directed', is_dir))
         w = d.get('weight', d.get('__weight', 1.0))
 
-        _add_vertex(src)
-        _add_vertex(dst)
+        _add_node(src)
+        _add_node(dst)
         binary_edges_bulk.append(
             {
                 'source': src,
@@ -995,14 +995,14 @@ def _from_ig_without_manifest(
                 edge_attrs_buf[eid] = clean
 
     # 4) BULK INSERTS
-    if vertex_buf:
-        H._add_vertices_bulk([{'vertex_id': v} for v in vertex_buf])
+    if node_buf:
+        H._add_nodes_bulk([{'node_id': v} for v in node_buf])
     if binary_edges_bulk:
         H._add_edges_bulk(binary_edges_bulk, default_edge_directed=is_dir)
     if hyperedges_bulk:
         H.add_hyperedges_bulk(hyperedges_bulk)
-    if vertex_attrs_buf:
-        H.attrs.set_vertex_attrs_bulk(vertex_attrs_buf)
+    if node_attrs_buf:
+        H.attrs.set_node_attrs_bulk(node_attrs_buf)
     if edge_attrs_buf or hyperedge_attrs_buf:
         H.attrs.set_edge_attrs_bulk({**edge_attrs_buf, **hyperedge_attrs_buf})
 

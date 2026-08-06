@@ -39,7 +39,7 @@ DIRECTIONS = ('in', 'out', 'both')
 _EDGE_KIND_OF_RECORD = {
     'binary': BINARY,
     'hyper': HYPER,
-    'vertex_edge': NODE_EDGE,
+    'node_edge': NODE_EDGE,
     'edge_placeholder': PLACEHOLDER,
 }
 
@@ -952,7 +952,7 @@ class EdgeShape(NamedTuple):
 _ADAPTER_EDGE_TYPE = {
     BINARY: 'binary',
     HYPER: 'hyper',
-    NODE_EDGE: 'vertex_edge',
+    NODE_EDGE: 'node_edge',
     PLACEHOLDER: 'edge_placeholder',
 }
 
@@ -978,17 +978,17 @@ def _is_directed_eid(graph, eid):
         return True
 
 
-def _iter_vertex_ids(graph):
-    """Yield vertex ids in stable graph/entity order."""
+def _iter_node_ids(graph):
+    """Yield node ids in stable graph/entity order."""
     if getattr(graph, '_store', None) is not None:
         yield from node_ids(graph)
         return
 
     try:
-        yield from graph.vertices()
+        yield from graph.nodes()
         return
     except AttributeError as exc:
-        raise AttributeError('Graph does not expose an adapter-readable vertex store') from exc
+        raise AttributeError('Graph does not expose an adapter-readable node store') from exc
 
 
 def edge_shape(graph, edge_id: str) -> EdgeShape:

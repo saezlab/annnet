@@ -24,7 +24,7 @@ annnet aims to combine graph expressiveness, annotation-centric data handling, a
 
 - Rich graph semantics: directed and undirected edges, parallel edges, self-loops, hyperedges, and edge-as-entity semantic.
 - Multilayer and slice-aware modeling: represent layers, aspects, inter-layer links, and named graph slices.
-- Annotated tables throughout: keep structured metadata for vertices, edges, slices, layers, and graph-level state, using Narwhals-compatible dataframes.
+- Annotated tables throughout: keep structured metadata for nodes, edges, slices, layers, and graph-level state, using Narwhals-compatible dataframes.
 - Interoperability without friction: import/export with NetworkX, igraph, graph-tool, GraphML, GEXF, SIF, SBML, CX2 (Cytoscape exchange format v2), Excel/CSV/TSV/JSON, Parquet graph directories, and DataFrames.
 - Algorithm interoperability: seamless, lazy calls into NetworkX/igraph/graph‑tool via the graph-owned `G.nx`, `G.ig`, and `G.gt` accessors.
 - Stable storage: persist graphs in a lossless `.annnet` layout built from Zarr, Parquet, and JSON.
@@ -46,7 +46,7 @@ The base package keeps the required runtime small. Only `numpy`, `scipy`, and `n
 - Hyperedges, including directed head-to-tail hyperedges
 - Signed and weighted relations with rich node and edge annotations
 - Efficient indexing, lookup helpers, and slice-based views
-- Edge-, vertex-, and graph-level semantics in the same container
+- Edge-, node-, and graph-level semantics in the same container
 
 ### Data and file interoperability
 
@@ -148,9 +148,9 @@ G.slices.add_slice("train")
 G.slices.add_slice("eval")
 G.slices.active = "toy"
 
-# Add vertices with attributes
+# Add nodes with attributes
 for v in ["A", "B", "C", "D"]:
-    G.add_vertices(v, label=v, kind="gene")
+    G.add_nodes(v, label=v, kind="gene")
 
 # 1) Binary directed edge
 e_dir = G.add_edges("A", "B", weight=2.0, directed=True, relation="activates")
@@ -164,9 +164,9 @@ e_loop = G.add_edges("D", "D", weight=0.5, directed=True, relation="self")
 # 4) Parallel edge
 e_parallel = G.add_edges("A", "B", weight=5.0, parallel="parallel", relation="alternative")
 
-# 5) Vertex-edge hybrid relation
+# 5) Node-edge hybrid relation
 G.add_edges(edge_id="edge_e1", as_entity=True, description="signal")
-e_vx = G.add_edges("edge_e1", "C", directed=True, as_entity=True, channel="edge->vertex")
+e_vx = G.add_edges("edge_e1", "C", directed=True, as_entity=True, channel="edge->node")
 
 # 6) Undirected hyperedge (3-way membership)
 e_hyper_undir = G.add_edges(["A", "C", "D"], weight=1.0, directed=False, tag="complex")
@@ -285,7 +285,7 @@ Layout highlights:
 - `manifest.json` stores versioning, counts, and slice metadata
 - `structure/incidence.zarr` stores sparse topology data
 - `structure/*.parquet` stores structural indices and edge definitions
-- `tables/*.parquet` stores vertex, edge, and slice annotations
+- `tables/*.parquet` stores node, edge, and slice annotations
 - `layers/`, `slices/`, `audit/`, and `uns/` keep multilayer state, slice state, history, and unstructured metadata
 
 ## Package Overview

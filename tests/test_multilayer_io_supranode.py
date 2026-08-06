@@ -32,12 +32,12 @@ def _build_two_aspect_graph():
     mem = ('signaling', 'member')
     mon = ('signaling', 'monomer')
     reg = ('regulatory', 'monomer')
-    G.add_vertices(
-        [{'vertex_id': 'prot:A', 'kind': 'protein'}, {'vertex_id': 'prot:B', 'kind': 'protein'}],
+    G.add_nodes(
+        [{'node_id': 'prot:A', 'kind': 'protein'}, {'node_id': 'prot:B', 'kind': 'protein'}],
         layer=mem,
     )
-    G.add_vertices([{'vertex_id': 'prot:C', 'kind': 'protein'}], layer=mon)
-    G.add_vertices([{'vertex_id': 'gene:G', 'kind': 'gene'}], layer=reg)
+    G.add_nodes([{'node_id': 'prot:C', 'kind': 'protein'}], layer=mon)
+    G.add_nodes([{'node_id': 'gene:G', 'kind': 'gene'}], layer=reg)
     # binary edge with supra-node endpoints (crosses the complex aspect)
     G.add_edges(
         [
@@ -97,7 +97,7 @@ def test_from_cx2_multilayer_roundtrip(tmp_path):
         annnet.to_cx2(G, path=p, hyperedges=mode)
         H = annnet.from_cx2(p)
         assert H.layers.list_aspects() == ('mechanism', 'complex'), mode
-        assert H.global_count('vertices') == G.global_count('vertices'), mode
+        assert H.global_count('nodes') == G.global_count('nodes'), mode
         assert H.global_count('edges') == G.global_count('edges'), mode
         # no spurious ('_', '_') placeholder node-layers reintroduced on restore
         assert _node_layer_count(H) == _node_layer_count(G), mode
@@ -128,7 +128,7 @@ def test_parquet_multilayer_supranode_roundtrip(tmp_path):
     H = annnet.from_parquet(p)
 
     assert H.layers.list_aspects() == ('mechanism', 'complex')
-    assert H.global_count('vertices') == G.global_count('vertices')
+    assert H.global_count('nodes') == G.global_count('nodes')
     assert H.global_count('edges') == G.global_count('edges')
     assert _node_layer_count(H) == _node_layer_count(G)
 
@@ -143,10 +143,10 @@ def test_parquet_multilayer_supranode_roundtrip(tmp_path):
 
 def test_multilayer_restore_preserves_legitimate_placeholder(tmp_path):
     # The placeholder cleanup must only remove spurious ('_', '_') memberships.
-    # A vertex genuinely stored at the placeholder (here, connected by an edge)
+    # A node genuinely stored at the placeholder (here, connected by an edge)
     # is listed in the manifest VM and is non-orphan, so it must survive.
     G = _build_two_aspect_graph()
-    G.add_vertices([{'vertex_id': 'boundary', 'kind': 'protein'}])  # -> placeholder
+    G.add_nodes([{'node_id': 'boundary', 'kind': 'protein'}])  # -> placeholder
     G.add_edges(
         [{'source': 'boundary', 'target': ('prot:C', ('signaling', 'monomer')), 'weight': 1.0}],
         default_edge_directed=True,
@@ -157,7 +157,7 @@ def test_multilayer_restore_preserves_legitimate_placeholder(tmp_path):
     p = str(tmp_path / 'g')
     annnet.to_parquet(G, p)
     H = annnet.from_parquet(p)
-    assert S.has_entity(H, ('boundary', ph)), 'legitimate placeholder vertex was dropped'
+    assert S.has_entity(H, ('boundary', ph)), 'legitimate placeholder node was dropped'
     assert _node_layer_count(H) == _node_layer_count(G)
     assert H.global_count('edges') == G.global_count('edges')
 
@@ -165,7 +165,7 @@ def test_multilayer_restore_preserves_legitimate_placeholder(tmp_path):
 def test_sif_multilayer_supranode_roundtrip(tmp_path):
     # Previously from_sif rebuilt structure from the SIF text, which stored
     # ``str((vid, layer_coord))`` reprs for supra-node endpoints -> one spurious
-    # vertex per repr string, hyperedges lost, aspects lost. Now multilayer graphs
+    # node per repr string, hyperedges lost, aspects lost. Now multilayer graphs
     # are reconstructed authoritatively from the manifest.
     G = _build_two_aspect_graph()
     p = str(tmp_path / 'g.sif')
@@ -174,7 +174,7 @@ def test_sif_multilayer_supranode_roundtrip(tmp_path):
     H = annnet.from_sif(p, manifest=mp)
 
     assert H.layers.list_aspects() == ('mechanism', 'complex')
-    assert H.global_count('vertices') == G.global_count('vertices')
+    assert H.global_count('nodes') == G.global_count('nodes')
     assert H.global_count('edges') == G.global_count('edges')
     assert _node_layer_count(H) == _node_layer_count(G)
 
@@ -212,7 +212,7 @@ def test_dataframes_multilayer_roundtrip():
     G = _build_two_aspect_graph()
     H = annnet.from_dataframes(annnet.to_dataframes(G))
     assert H.layers.list_aspects() == ('mechanism', 'complex')
-    assert H.global_count('vertices') == G.global_count('vertices')
+    assert H.global_count('nodes') == G.global_count('nodes')
     assert H.global_count('edges') == G.global_count('edges')
     assert _node_layer_count(H) == _node_layer_count(G)
     cpx = H.hyperedge_definitions['cpx:X']
@@ -224,10 +224,10 @@ def test_dataframes_multilayer_roundtrip():
 def test_to_dataframes_bare_vid_roundtrip_unchanged():
     # Non-multilayer graphs must keep readable bare-vid endpoints and round-trip.
     G = annnet.AnnNet(directed=True)
-    G.add_vertices([{'vertex_id': v} for v in 'ABCD'])
+    G.add_nodes([{'node_id': v} for v in 'ABCD'])
     G.add_edges([{'source': 'A', 'target': 'B', 'edge_id': 'e1', 'weight': 2.0}])
     G.add_edges([{'edge_id': 'h1', 'members': ['B', 'C', 'D'], 'weight': 1.0}])
     H = annnet.from_dataframes(annnet.to_dataframes(G))
-    assert H.global_count('vertices') == 4
+    assert H.global_count('nodes') == 4
     assert H.global_count('edges') == 2
     assert len(H.hyperedge_definitions) == 1

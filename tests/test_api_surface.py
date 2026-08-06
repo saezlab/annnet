@@ -30,11 +30,11 @@ from annnet import AnnNet
 def chain() -> AnnNet:
     """Three nodes, two directed edges, one attribute on each axis."""
     G = AnnNet(directed=True)
-    G.add_vertices(
+    G.add_nodes(
         [
-            {'vertex_id': 'a', 'kind': 'left'},
-            {'vertex_id': 'b', 'kind': 'middle'},
-            {'vertex_id': 'c', 'kind': 'right'},
+            {'node_id': 'a', 'kind': 'left'},
+            {'node_id': 'b', 'kind': 'middle'},
+            {'node_id': 'c', 'kind': 'right'},
         ]
     )
     G.add_edges('a', 'b', edge_id='e_ab', weight=1.0, label='first')
@@ -87,7 +87,7 @@ def test_the_supra_count_is_an_option_of_the_node_count(chain):
 
 @pytest.mark.parametrize(
     'name',
-    ['num_vertices', 'num_edges', 'number_of_vertices', 'number_of_edges', 'global_vertex_count'],
+    ['num_nodes', 'num_edges', 'number_of_nodes', 'number_of_edges', 'global_node_count'],
 )
 def test_the_old_count_aliases_are_gone(chain, name):
     """One name per count. The aliases the old code carried are removed."""
@@ -199,10 +199,10 @@ def test_an_edge_lookup_takes_an_id(chain):
 
 
 def test_the_position_lookup_of_a_node_is_gone(chain):
-    """``get_vertex`` takes an id. ``G.N[0]`` asks for the n-th node."""
+    """``get_node`` takes an id. ``G.N[0]`` asks for the n-th node."""
     with pytest.raises(TypeError):
-        chain.get_vertex(0)
-    assert chain.get_vertex(chain.N[0]) == chain.N[0]
+        chain.get_node(0)
+    assert chain.get_node(chain.N[0]) == chain.N[0]
 
 
 # ---------------------------------------------------------------------------
@@ -213,9 +213,9 @@ def test_the_position_lookup_of_a_node_is_gone(chain):
 def test_one_node_and_a_list_of_one_node_agree():
     """A single element is accepted wherever a collection is."""
     single = AnnNet(directed=True)
-    single.add_vertices('a')
+    single.add_nodes('a')
     listed = AnnNet(directed=True)
-    listed.add_vertices(['a'])
+    listed.add_nodes(['a'])
     assert list(single.N) == list(listed.N) == ['a']
 
 
@@ -230,9 +230,9 @@ def test_one_edge_and_a_list_of_one_edge_agree():
 
 def test_one_node_and_a_list_of_one_node_agree_on_removal(chain):
     single = chain.ops.copy()
-    single.remove_vertices('a')
+    single.remove_nodes('a')
     listed = chain.ops.copy()
-    listed.remove_vertices(['a'])
+    listed.remove_nodes(['a'])
     assert list(single.N) == list(listed.N)
 
 
@@ -249,14 +249,14 @@ def test_obs_and_var_are_materialized_each_time(chain):
 
 def test_the_stored_attribute_frames_are_gone(chain):
     """``obs`` and ``var`` are the only names for the two tables."""
-    assert not hasattr(chain, 'vertex_attributes')
+    assert not hasattr(chain, 'node_attributes')
     assert not hasattr(chain, 'edge_attributes')
 
 
 def test_a_column_write_shows_up_in_the_next_materialization(chain):
     """A write through the cheap path reaches the table the slow path builds."""
     chain.N['kind'] = ['x', 'y', 'z']
-    rows = {row['vertex_id']: row for row in chain.obs.to_dicts()}
+    rows = {row['node_id']: row for row in chain.obs.to_dicts()}
     assert [rows[v]['kind'] for v in ('a', 'b', 'c')] == ['x', 'y', 'z']
 
 

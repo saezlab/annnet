@@ -41,14 +41,14 @@ import json
 import time
 import inspect
 
-N_VERTICES = 1000
+N_NODES = 1000
 N_EDGES = 4000
 
 
 def make_data() -> tuple[list[str], list[tuple[str, str, float]]]:
     """The ring the baseline measured, shared by both engines."""
-    names = [f'v{i}' for i in range(N_VERTICES)]
-    edges = [(f'v{i % N_VERTICES}', f'v{(i + 1) % N_VERTICES}', 1.0) for i in range(N_EDGES)]
+    names = [f'v{i}' for i in range(N_NODES)]
+    edges = [(f'v{i % N_NODES}', f'v{(i + 1) % N_NODES}', 1.0) for i in range(N_EDGES)]
     return names, edges
 
 
@@ -62,7 +62,7 @@ def annnet_build(names, edges):
 
     def build():
         graph = AnnNet(**kwargs)
-        graph.add_vertices(({'vertex_id': v} for v in names), slice='base')
+        graph.add_nodes(({'node_id': v} for v in names), slice='base')
         graph.add_edges({'source': u, 'target': v, 'weight': w} for (u, v, w) in edges)
         return graph
 

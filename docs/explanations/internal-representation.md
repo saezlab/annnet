@@ -32,14 +32,14 @@ They play distinct roles.
 The key is a tuple:
 
 ```python
-(vertex_id, layer_coord)
+(node_id, layer_coord)
 ```
 
 where `layer_coord` is itself a tuple of aspect values.
 
 Examples:
 
-- flat graph vertex: `("TP53", ("_",))`
+- flat graph node: `("TP53", ("_",))`
 - two-aspect supra-node: `("TP53", ("treated", "t1"))`
 
 The value is an `EntityRecord`, currently:
@@ -50,10 +50,10 @@ EntityRecord(row_idx: int, kind: str)
 
 `kind` distinguishes at least:
 
-- `"vertex"`
+- `"node"`
 - `"edge_entity"`
 
-This means that rows belong to entities, not just to plain vertices.
+This means that rows belong to entities, not just to plain nodes.
 
 ### `_edges`
 
@@ -79,7 +79,7 @@ Important fields:
 
 - `etype`
   Structural edge type, currently distinguishing binary, hyper, and
-  vertex-edge cases.
+  node-edge cases.
 - `src` and `tgt`
   The current internal field names for structural source and target endpoint
   sets. Public-facing docs should use "source" and "target" terminology even
@@ -134,21 +134,21 @@ truth together with the registries above.
 Consequences:
 
 - a matrix entry alone does not tell you whether a column is binary or hyper
-- a matrix entry alone does not tell you whether a row is a vertex or an
+- a matrix entry alone does not tell you whether a row is a node or an
   edge-entity
 - a matrix entry alone does not carry multilayer metadata
 
 That information lives in the records. The matrix holds incidence; the records
 hold semantics.
 
-## Row key: `(vertex_id, layer_coord)`
+## Row key: `(node_id, layer_coord)`
 
 The clean invariant is:
 
-- one row represents one vertex-layer state
+- one row represents one node-layer state
 
-That is why `_entities` is keyed by `(vertex_id, layer_coord)` rather than by
-plain vertex id.
+That is why `_entities` is keyed by `(node_id, layer_coord)` rather than by
+plain node id.
 
 For flat graphs, the layer coordinate is the basal placeholder:
 
@@ -159,7 +159,7 @@ For flat graphs, the layer coordinate is the basal placeholder:
 For layered graphs, the coordinate is a tuple over declared aspects.
 
 This avoids mixing two row meanings inside one matrix. There is no separate
-"global vertex row" once the graph is in the layered model. A vertex without
+"global node row" once the graph is in the layered model. A node without
 explicit multilayer placement is represented at the placeholder coordinate,
 not as a structurally different kind of row.
 
@@ -176,12 +176,12 @@ is not just an implementation accident. It is a valid fallback coordinate.
 It appears in three important situations:
 
 1. flat graphs before aspects are declared
-2. layered graphs when old flat vertices are lifted into the layered model
-3. layered graphs when the user adds vertices without an explicit `layer=`
+2. layered graphs when old flat nodes are lifted into the layered model
+3. layered graphs when the user adds nodes without an explicit `layer=`
 
 This keeps the row invariant intact:
 
-- every row still represents one `(vertex, layer_coord)`
+- every row still represents one `(node, layer_coord)`
 
 The placeholder exists only as long as some graph state still references it.
 When nothing refers to it anymore, it can be dropped from the active layer
@@ -210,7 +210,7 @@ They matter for performance, but the semantics still come from `EdgeRecord`.
 AnnNet keeps attributes in dataframe-like tables, not inside the structural
 records:
 
-- `vertex_attributes`
+- `node_attributes`
 - `edge_attributes`
 - `slice_attributes`
 - `edge_slice_attributes`
@@ -226,8 +226,8 @@ Structural state answers questions like:
 
 Attribute tables answer questions like:
 
-- what annotation value is attached to this vertex or edge?
-- what label or score does this vertex carry?
+- what annotation value is attached to this node or edge?
+- what label or score does this node carry?
 - what metadata is attached to this edge?
 - which slice-specific edge weight should be used?
 - what slice-specific override applies here?
@@ -247,7 +247,7 @@ That separation is one of the core design choices in AnnNet.
 Slice state lives in `_slices`, which maps slice identifiers to membership and
 metadata:
 
-- vertex membership
+- node membership
 - edge membership
 - slice attributes
 

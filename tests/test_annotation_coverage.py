@@ -13,7 +13,7 @@ from annnet.core.graph import AnnNet
 
 def _toy() -> AnnNet:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.0)
     G.add_edges('B', 'C', edge_id='e2', weight=2.0)
     G.slices.add('s1')
@@ -23,39 +23,39 @@ def _toy() -> AnnNet:
 # ── bulk attribute setters ─────────────────────────────────────────────
 
 
-def test_set_vertex_attrs_bulk_dict_input_writes_each_row() -> None:
+def test_set_node_attrs_bulk_dict_input_writes_each_row() -> None:
     G = _toy()
-    G.attrs.set_vertex_attrs_bulk({'A': {'color': 'red'}, 'B': {'color': 'blue'}})
-    assert G.attrs.get_attr_vertex('A', 'color') == 'red'
-    assert G.attrs.get_attr_vertex('B', 'color') == 'blue'
+    G.attrs.set_node_attrs_bulk({'A': {'color': 'red'}, 'B': {'color': 'blue'}})
+    assert G.attrs.get_attr_node('A', 'color') == 'red'
+    assert G.attrs.get_attr_node('B', 'color') == 'blue'
 
 
-def test_set_vertex_attrs_bulk_accepts_iterable_of_pairs() -> None:
+def test_set_node_attrs_bulk_accepts_iterable_of_pairs() -> None:
     G = _toy()
-    G.attrs.set_vertex_attrs_bulk([('A', {'color': 'red'}), ('B', {'color': 'blue'})])
-    assert G.attrs.get_attr_vertex('A', 'color') == 'red'
+    G.attrs.set_node_attrs_bulk([('A', {'color': 'red'}), ('B', {'color': 'blue'})])
+    assert G.attrs.get_attr_node('A', 'color') == 'red'
 
 
-def test_set_vertex_attrs_bulk_rejects_non_dict_attrs() -> None:
+def test_set_node_attrs_bulk_rejects_non_dict_attrs() -> None:
     G = _toy()
     with pytest.raises(TypeError, match='must be dict'):
-        G.attrs.set_vertex_attrs_bulk({'A': 'not-a-dict'})
+        G.attrs.set_node_attrs_bulk({'A': 'not-a-dict'})
 
 
-def test_set_vertex_attrs_bulk_rejects_reserved_keys() -> None:
+def test_set_node_attrs_bulk_rejects_reserved_keys() -> None:
     G = _toy()
     with pytest.raises(ValueError, match='reserved'):
-        G.attrs.set_vertex_attrs_bulk({'A': {'vertex_id': 'X'}})
+        G.attrs.set_node_attrs_bulk({'A': {'node_id': 'X'}})
 
 
-def test_set_vertex_attrs_bulk_noop_on_empty_input() -> None:
+def test_set_node_attrs_bulk_noop_on_empty_input() -> None:
     G = _toy()
-    G.attrs.set_vertex_attrs_bulk({})  # must not raise
+    G.attrs.set_node_attrs_bulk({})  # must not raise
 
 
-def test_set_vertex_attrs_bulk_noop_when_all_attrs_dicts_empty() -> None:
+def test_set_node_attrs_bulk_noop_when_all_attrs_dicts_empty() -> None:
     G = _toy()
-    G.attrs.set_vertex_attrs_bulk({'A': {}, 'B': {}})  # filtered out
+    G.attrs.set_node_attrs_bulk({'A': {}, 'B': {}})  # filtered out
 
 
 def test_set_edge_attrs_bulk_dict_input_writes_each_row() -> None:
@@ -201,9 +201,9 @@ def test_audit_attributes_returns_expected_shape_on_clean_graph() -> None:
     G = _toy()
     out = AttributesClass.audit_attributes(G)
     for key in (
-        'extra_vertex_rows',
+        'extra_node_rows',
         'extra_edge_rows',
-        'missing_vertex_rows',
+        'missing_node_rows',
         'missing_edge_rows',
         'invalid_edge_slice_rows',
     ):
@@ -213,22 +213,22 @@ def test_audit_attributes_returns_expected_shape_on_clean_graph() -> None:
 def test_audit_attributes_returns_lists_for_each_category() -> None:
     """Smoke-test that audit_attributes runs and returns the documented shape."""
     G = _toy()
-    G.attrs.set_vertex_attrs('A', color='red')
+    G.attrs.set_node_attrs('A', color='red')
     G.attrs.set_edge_attrs('e1', label='alpha')
     out = AttributesClass.audit_attributes(G)
     # The lists must be defined (empty or populated, exact contents depend on
-    # whether vertex/edge insert auto-creates an attr row in this backend).
+    # whether node/edge insert auto-creates an attr row in this backend).
     for key in (
-        'extra_vertex_rows',
+        'extra_node_rows',
         'extra_edge_rows',
-        'missing_vertex_rows',
+        'missing_node_rows',
         'missing_edge_rows',
         'invalid_edge_slice_rows',
     ):
         assert isinstance(out[key], list)
 
 
-# ── get_edge_attrs / get_vertex_attrs ─────────────────────────────────
+# ── get_edge_attrs / get_node_attrs ─────────────────────────────────
 
 
 def test_get_edge_attrs_by_int_index_uses_col_to_edge() -> None:
@@ -250,18 +250,18 @@ def test_get_edge_attrs_empty_for_unknown_id() -> None:
     assert G.attrs.get_edge_attrs('no-such') == {}
 
 
-def test_get_vertex_attrs_returns_dict_with_attrs() -> None:
+def test_get_node_attrs_returns_dict_with_attrs() -> None:
     G = _toy()
-    G.attrs.set_vertex_attrs('A', color='red')
-    assert G.attrs.get_vertex_attrs('A').get('color') == 'red'
+    G.attrs.set_node_attrs('A', color='red')
+    assert G.attrs.get_node_attrs('A').get('color') == 'red'
 
 
-def test_get_vertex_attrs_empty_for_unknown() -> None:
+def test_get_node_attrs_empty_for_unknown() -> None:
     G = _toy()
-    assert G.attrs.get_vertex_attrs('no-such') == {}
+    assert G.attrs.get_node_attrs('no-such') == {}
 
 
-# ── get_attr_edges / get_attr_vertices ────────────────────────────────
+# ── get_attr_edges / get_attr_nodes ────────────────────────────────
 
 
 def test_get_attr_edges_with_no_indexes_returns_all() -> None:
@@ -279,19 +279,19 @@ def test_get_attr_edges_with_indexes_filters_to_those_eids() -> None:
     assert set(out) == {'e1'}
 
 
-def test_get_attr_vertices_with_no_filter_returns_all() -> None:
+def test_get_attr_nodes_with_no_filter_returns_all() -> None:
     G = _toy()
-    G.attrs.set_vertex_attrs('A', color='red')
-    G.attrs.set_vertex_attrs('B', color='blue')
-    out = G.attrs.get_attr_vertices()
+    G.attrs.set_node_attrs('A', color='red')
+    G.attrs.set_node_attrs('B', color='blue')
+    out = G.attrs.get_attr_nodes()
     assert {'A', 'B'}.issubset(out)
 
 
-def test_get_attr_vertices_with_filter_restricts() -> None:
+def test_get_attr_nodes_with_filter_restricts() -> None:
     G = _toy()
-    G.attrs.set_vertex_attrs('A', color='red')
-    G.attrs.set_vertex_attrs('B', color='blue')
-    out = G.attrs.get_attr_vertices(vertices={'A'})
+    G.attrs.set_node_attrs('A', color='red')
+    G.attrs.set_node_attrs('B', color='blue')
+    out = G.attrs.get_attr_nodes(nodes={'A'})
     assert set(out) == {'A'}
 
 
@@ -346,10 +346,10 @@ def test_attributes_accessor_forwards_all_public_methods() -> None:
     a.set_graph_attribute('study', 'demo')
     assert a.get_graph_attribute('study') == 'demo'
     assert a.get_graph_attributes()['study'] == 'demo'
-    a.set_vertex_attrs('A', color='red')
-    assert a.get_attr_vertex('A', 'color') == 'red'
-    assert a.get_vertex_attrs('A').get('color') == 'red'
-    assert a.get_attr_vertices().get('A', {}).get('color') == 'red'
+    a.set_node_attrs('A', color='red')
+    assert a.get_attr_node('A', 'color') == 'red'
+    assert a.get_node_attrs('A').get('color') == 'red'
+    assert a.get_attr_nodes().get('A', {}).get('color') == 'red'
     a.set_edge_attrs('e1', label='alpha')
     assert a.get_attr_edge('e1', 'label') == 'alpha'
     assert a.get_edge_attrs('e1').get('label') == 'alpha'
@@ -363,7 +363,7 @@ def test_attributes_accessor_forwards_all_public_methods() -> None:
 def test_attributes_accessor_forwards_bulk_and_slice_helpers() -> None:
     G = _toy()
     a = G.attrs
-    a.set_vertex_attrs_bulk({'A': {'color': 'red'}})
+    a.set_node_attrs_bulk({'A': {'color': 'red'}})
     a.set_edge_attrs_bulk({'e1': {'label': 'alpha'}})
     a.set_edge_slice_attrs('s1', 'e1', weight=2.0)
     a.set_edge_slice_attrs_bulk('s1', {'e1': {'weight': 3.0}})
@@ -373,38 +373,38 @@ def test_attributes_accessor_forwards_bulk_and_slice_helpers() -> None:
     assert a.get_effective_edge_weight('e1', slice='s1') == 4.0
 
 
-# ── composite vertex key (covers the _vertex_key_enabled branches) ───
+# ── composite node key (covers the _node_key_enabled branches) ───
 
 
-def test_set_vertex_attrs_with_composite_key_writes_and_indexes() -> None:
+def test_set_node_attrs_with_composite_key_writes_and_indexes() -> None:
     G = _toy()
-    G.set_vertex_key('name')
-    G.attrs.set_vertex_attrs('A', name='alice')
-    assert G.attrs.get_attr_vertex('A', 'name') == 'alice'
+    G.set_node_key('name')
+    G.attrs.set_node_attrs('A', name='alice')
+    assert G.attrs.get_attr_node('A', 'name') == 'alice'
 
 
-def test_set_vertex_attrs_with_composite_key_rejects_collision() -> None:
+def test_set_node_attrs_with_composite_key_rejects_collision() -> None:
     G = _toy()
-    G.set_vertex_key('name')
-    G.attrs.set_vertex_attrs('A', name='alice')
+    G.set_node_key('name')
+    G.attrs.set_node_attrs('A', name='alice')
     with pytest.raises(ValueError, match='Composite key collision'):
-        G.attrs.set_vertex_attrs('B', name='alice')  # 'alice' already owned by A
+        G.attrs.set_node_attrs('B', name='alice')  # 'alice' already owned by A
 
 
-def test_set_vertex_attrs_bulk_with_composite_key_writes_all() -> None:
+def test_set_node_attrs_bulk_with_composite_key_writes_all() -> None:
     G = _toy()
-    G.set_vertex_key('name')
-    G.attrs.set_vertex_attrs_bulk({'A': {'name': 'alice'}, 'B': {'name': 'bob'}})
-    assert G.attrs.get_attr_vertex('A', 'name') == 'alice'
-    assert G.attrs.get_attr_vertex('B', 'name') == 'bob'
+    G.set_node_key('name')
+    G.attrs.set_node_attrs_bulk({'A': {'name': 'alice'}, 'B': {'name': 'bob'}})
+    assert G.attrs.get_attr_node('A', 'name') == 'alice'
+    assert G.attrs.get_attr_node('B', 'name') == 'bob'
 
 
-def test_set_vertex_attrs_bulk_with_composite_key_rejects_collision() -> None:
+def test_set_node_attrs_bulk_with_composite_key_rejects_collision() -> None:
     G = _toy()
-    G.set_vertex_key('name')
-    G.attrs.set_vertex_attrs('A', name='alice')
+    G.set_node_key('name')
+    G.attrs.set_node_attrs('A', name='alice')
     with pytest.raises(ValueError, match='Composite key collision'):
-        G.attrs.set_vertex_attrs_bulk({'B': {'name': 'alice'}})
+        G.attrs.set_node_attrs_bulk({'B': {'name': 'alice'}})
 
 
 # ── flexible edge direction policy (covers _apply_flexible_direction) ─
@@ -414,7 +414,7 @@ def test_flexible_edge_with_edge_scope_policy_applies_on_attr_change() -> None:
     """Setting an edge attribute that an edge-scope policy watches flips
     the orientation in the incidence matrix."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges(
         'A',
         'B',
@@ -431,9 +431,9 @@ def test_flexible_edge_with_edge_scope_policy_applies_on_attr_change() -> None:
     G.attrs.set_edge_attrs('e1', temperature=20.0)
 
 
-def test_flexible_edge_with_vertex_scope_policy_applies_on_vertex_change() -> None:
+def test_flexible_edge_with_node_scope_policy_applies_on_node_change() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges(
         'A',
         'B',
@@ -442,18 +442,18 @@ def test_flexible_edge_with_vertex_scope_policy_applies_on_vertex_change() -> No
         flexible={
             'var': 'level',
             'threshold': 5.0,
-            'scope': 'vertex',
+            'scope': 'node',
             'above': 's->t',
         },
     )
-    # change a vertex attr watched by the policy
-    G.attrs.set_vertex_attrs('A', level=10.0)
-    G.attrs.set_vertex_attrs('B', level=2.0)
+    # change a node attr watched by the policy
+    G.attrs.set_node_attrs('A', level=10.0)
+    G.attrs.set_node_attrs('B', level=2.0)
 
 
 def test_flexible_edge_tie_handling_keep_does_nothing() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges(
         'A',
         'B',
@@ -472,7 +472,7 @@ def test_flexible_edge_tie_handling_keep_does_nothing() -> None:
 
 def test_flexible_edge_tie_handling_undirected() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges(
         'A',
         'B',
@@ -490,7 +490,7 @@ def test_flexible_edge_tie_handling_undirected() -> None:
 
 def test_flexible_edge_attrs_bulk_triggers_apply() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges(
         'A',
         'B',
@@ -501,17 +501,17 @@ def test_flexible_edge_attrs_bulk_triggers_apply() -> None:
     G.attrs.set_edge_attrs_bulk({'e1': {'x': 10.0}})
 
 
-def test_flexible_edge_vertex_attrs_bulk_triggers_apply() -> None:
+def test_flexible_edge_node_attrs_bulk_triggers_apply() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges(
         'A',
         'B',
         edge_id='e1',
         weight=1.0,
-        flexible={'var': 'level', 'threshold': 5.0, 'scope': 'vertex'},
+        flexible={'var': 'level', 'threshold': 5.0, 'scope': 'node'},
     )
-    G.attrs.set_vertex_attrs_bulk({'A': {'level': 10.0}, 'B': {'level': 2.0}})
+    G.attrs.set_node_attrs_bulk({'A': {'level': 10.0}, 'B': {'level': 2.0}})
 
 
 # Touch the accessor class import for symmetry.

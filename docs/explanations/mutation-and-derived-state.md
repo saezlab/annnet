@@ -13,7 +13,7 @@ This page explains how that rule shows up in practice.
 
 The scalar mutation API in `graph.py` works against the canonical stores.
 
-Typical `add_vertices(...)` flow:
+Typical `add_nodes(...)` flow:
 
 1. normalize the layer coordinate
 2. resolve placeholder behavior if needed
@@ -43,7 +43,7 @@ It is not.
 
 The bulk methods:
 
-- `add_vertices(...)`
+- `add_nodes(...)`
 - `add_edges(...)`
 - batched slice membership operations
 
@@ -107,7 +107,7 @@ Mutation therefore has to answer two different questions:
 2. in which slices should that structure be considered present?
 
 This is why edge insertion includes propagation logic and why slices carry both
-vertex and edge memberships.
+node and edge memberships.
 
 The structural edge is global. Slice membership is contextual.
 
@@ -130,7 +130,7 @@ entity registry.
 Placeholder coordinates are not a loose convention. They are a disciplined
 fallback.
 
-When vertices are inserted without explicit layer placement in a layered graph,
+When nodes are inserted without explicit layer placement in a layered graph,
 AnnNet:
 
 - assigns the placeholder coordinate
@@ -139,7 +139,7 @@ AnnNet:
 
 When aspects are declared over an existing flat graph, the same logic is used:
 
-- previous flat vertices are lifted into the placeholder coordinate
+- previous flat nodes are lifted into the placeholder coordinate
 - the graph becomes multilayer without inventing a second row semantics
 
 This is a subtle but important design choice. It prevents the matrix from

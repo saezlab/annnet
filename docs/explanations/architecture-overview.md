@@ -40,7 +40,7 @@ The `annnet.core` package is where the in-memory model lives.
   Shared low-level structures such as `EntityRecord`, `EdgeRecord`, and
   `SliceRecord`, plus record-oriented helpers used across the core.
 - `_Annotation.py`
-  Attribute storage and upsert logic for graph-, vertex-, edge-, slice-, and
+  Attribute storage and upsert logic for graph-, node-, edge-, slice-, and
   edge-slice-level metadata.
 - `_Layers.py`
   Multi-aspect and multilayer semantics: aspect declarations, elementary

@@ -3,7 +3,7 @@
 This builds a fixture graph that exercises every observable the format is
 supposed to preserve (multilayer aspects + elementary layers, intra/inter/
 coupling/hyper edges, slice membership + per-slice weights + slice attrs,
-vertex/edge/layer attribute tables, history snapshots, composite-vertex-key
+node/edge/layer attribute tables, history snapshots, composite-node-key
 indexing, edge direction policies, graph-level uns metadata), then runs
 build → write → read → write → read and asserts equality on every
 state-bearing field.
@@ -50,32 +50,32 @@ def _build_fixture() -> AnnNet:
     # Per layer-tuple attrs.
     G.layers.set_attrs(('sig', 't0'), note='intra-signaling at baseline')
 
-    # Vertices: protein has presence in multiple layer combinations.
-    G.add_vertices(
+    # Nodes: protein has presence in multiple layer combinations.
+    G.add_nodes(
         [
-            {'vertex_id': 'prot:A', 'kind': 'protein', 'sym': 'A', 'score': 0.1},
-            {'vertex_id': 'prot:B', 'kind': 'protein', 'sym': 'B', 'score': 0.4},
-            {'vertex_id': 'prot:C', 'kind': 'protein', 'sym': 'C', 'score': 0.7},
+            {'node_id': 'prot:A', 'kind': 'protein', 'sym': 'A', 'score': 0.1},
+            {'node_id': 'prot:B', 'kind': 'protein', 'sym': 'B', 'score': 0.4},
+            {'node_id': 'prot:C', 'kind': 'protein', 'sym': 'C', 'score': 0.7},
         ],
         layer=('sig', 't0'),
     )
-    G.add_vertices(
+    G.add_nodes(
         [
-            {'vertex_id': 'prot:A', 'kind': 'protein', 'sym': 'A', 'score': 0.1},
-            {'vertex_id': 'prot:B', 'kind': 'protein', 'sym': 'B', 'score': 0.4},
+            {'node_id': 'prot:A', 'kind': 'protein', 'sym': 'A', 'score': 0.1},
+            {'node_id': 'prot:B', 'kind': 'protein', 'sym': 'B', 'score': 0.4},
         ],
         layer=('cpx', 't0'),
     )
-    G.add_vertices(
-        [{'vertex_id': 'gene:A', 'kind': 'gene', 'sym': 'A'}],
+    G.add_nodes(
+        [{'node_id': 'gene:A', 'kind': 'gene', 'sym': 'A'}],
         layer=('reg', 't0'),
     )
-    G.add_vertices(
-        [{'vertex_id': 'prot:A', 'kind': 'protein', 'sym': 'A', 'score': 0.2}],
+    G.add_nodes(
+        [{'node_id': 'prot:A', 'kind': 'protein', 'sym': 'A', 'score': 0.2}],
         layer=('sig', 't1'),
     )
 
-    # Per-(vertex, layer) attrs (state_attrs).
+    # Per-(node, layer) attrs (state_attrs).
     G.layers.set_node_attrs('prot:A', ('sig', 't0'), abundance=12.5)
     G.layers.set_node_attrs('prot:A', ('sig', 't1'), abundance=18.0)
 
@@ -174,11 +174,11 @@ def _build_fixture() -> AnnNet:
 
     # Slices (overlay; orthogonal to layers).
     G.slices.add('cytosol', source='HPA')
-    G.slices.add_vertex_to_slice('cytosol', 'prot:A')
-    G.slices.add_vertex_to_slice('cytosol', 'prot:B')
+    G.slices.add_node_to_slice('cytosol', 'prot:A')
+    G.slices.add_node_to_slice('cytosol', 'prot:B')
     G.slices.add_edges('cytosol', ['e_sig_AB'])
     G.slices.add('nucleus', source='HPA')
-    G.slices.add_vertex_to_slice('nucleus', 'gene:A')
+    G.slices.add_node_to_slice('nucleus', 'gene:A')
 
     # Per-slice edge weight override.
     G.attrs.set_edge_slice_attrs('cytosol', 'e_sig_AB', weight=0.75)
@@ -261,7 +261,7 @@ def _slice_state(g: AnnNet):
     for sid in g.slices.list(include_default=True):
         rec = g._slices[sid]
         out[sid] = {
-            'vertices': sorted(rec['vertices']),
+            'nodes': sorted(rec['nodes']),
             'edges': sorted(rec['edges']),
             'edge_weights': dict(g.slice_edge_weights.get(sid, {})),
         }
@@ -282,7 +282,7 @@ def _full_snapshot(g: AnnNet):
         'edges': _edge_state(g),
         'edge_columns': S.edge_ids(g),
         'matrix': _matrix_state(g),
-        '_vertex_table': _df_state(g._vertex_table),
+        '_node_table': _df_state(g._node_table),
         '_edge_table': _df_state(g._edge_table),
         'slice_attributes': _df_state(g.slice_attributes),
         'edge_slice_attributes': _df_state(g.edge_slice_attributes),

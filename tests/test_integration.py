@@ -20,8 +20,8 @@ class TestIntegration:
         G = AnnNet(directed=False)
         proteins = ['TP53', 'MDM2', 'ATM', 'CHEK2', 'p21']
         for p in proteins:
-            G.add_vertices(p)
-            G.attrs.set_vertex_attrs(p, type='protein', organism='human')
+            G.add_nodes(p)
+            G.attrs.set_node_attrs(p, type='protein', organism='human')
         interactions = [
             ('TP53', 'MDM2', 'inhibition'),
             ('MDM2', 'TP53', 'ubiquitination'),
@@ -40,7 +40,7 @@ class TestIntegration:
         assert (tmpdir_fixture / 'interactions.csv').exists()
         assert (tmpdir_fixture / 'network_archive').exists()
         G_sif = from_sif(tmpdir_fixture / 'network.sif')
-        assert len(list(G_sif.vertices())) == len(proteins)
+        assert len(list(G_sif.nodes())) == len(proteins)
 
     def test_multi_slice_network(self, tmpdir_fixture):
         from annnet.core.graph import AnnNet
@@ -48,7 +48,7 @@ class TestIntegration:
         G = AnnNet(directed=True)
         users = ['Alice', 'Bob', 'Charlie', 'David']
         for u in users:
-            G.add_vertices(u)
+            G.add_nodes(u)
         G.slices.add('friendship')
         G.slices.add('collaboration')
         G.slices.add('mentorship')

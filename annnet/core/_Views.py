@@ -19,9 +19,9 @@ from .._support.dataframe_backend import (
 class GraphView:
     """Lazy, filtered view into a graph; materialize() for a concrete subgraph."""
 
-    def __init__(self, graph, vertices=None, edges=None, slices=None, predicate=None):
+    def __init__(self, graph, nodes=None, edges=None, slices=None, predicate=None):
         self._graph = graph
-        self._vertices_filter = vertices
+        self._nodes_filter = nodes
         self._edges_filter = edges
         self._predicate = predicate
         if slices is None:
@@ -30,13 +30,13 @@ class GraphView:
             self._slices = [slices]
         else:
             self._slices = list(slices)
-        self._vertex_ids_cache = None
+        self._node_ids_cache = None
         self._edge_ids_cache = None
         self._computed = False
 
     @property
     def obs(self):
-        """Return the filtered vertex attribute table for this view.
+        """Return the filtered node attribute table for this view.
 
         Returns
         -------
@@ -45,13 +45,13 @@ class GraphView:
         Notes
         -----
         Materialized from the node table of the graph and filtered by the
-        vertex ids of this view. It is a table for the caller, not the storage
+        node ids of this view. It is a table for the caller, not the storage
         of the graph.
         """
-        vertex_ids = self.vertex_ids
-        if vertex_ids is None:
-            return clone_dataframe(self._graph._vertex_table)
-        return dataframe_filter_in(self._graph._vertex_table, 'vertex_id', vertex_ids)
+        node_ids = self.node_ids
+        if node_ids is None:
+            return clone_dataframe(self._graph._node_table)
+        return dataframe_filter_in(self._graph._node_table, 'node_id', node_ids)
 
     @property
     def var(self):
@@ -80,12 +80,12 @@ class GraphView:
         -------
         scipy.sparse.dok_matrix
         """
-        vertex_ids = self.vertex_ids
+        node_ids = self.node_ids
         edge_ids = self.edge_ids
-        if vertex_ids is not None:
+        if node_ids is not None:
             rows = [
                 _structure.entity_row(self._graph, nid)
-                for nid in vertex_ids
+                for nid in node_ids
                 if _structure.has_entity(self._graph, nid)
             ]
         else:
@@ -105,17 +105,17 @@ class GraphView:
         return sp.dok_array((len(rows), len(cols)), dtype=self._graph._matrix.dtype)
 
     @property
-    def vertex_ids(self):
-        """Get filtered vertex IDs (cached).
+    def node_ids(self):
+        """Get filtered node IDs (cached).
 
         Returns
         -------
         set[str] | None
-            None means no vertex filter (full graph).
+            None means no node filter (full graph).
         """
         if not self._computed:
             self._compute_ids()
-        return self._vertex_ids_cache
+        return self._node_ids_cache
 
     @property
     def edge_ids(self):
@@ -131,17 +131,17 @@ class GraphView:
         return self._edge_ids_cache
 
     @property
-    def vertex_count(self):
-        """Return the number of vertices in this view.
+    def node_count(self):
+        """Return the number of nodes in this view.
 
         Returns
         -------
         int
         """
-        vertex_ids = self.vertex_ids
-        if vertex_ids is None:
+        node_ids = self.node_ids
+        if node_ids is None:
             return _structure.node_count(self._graph)
-        return len(vertex_ids)
+        return len(node_ids)
 
     @property
     def edge_count(self):
@@ -157,42 +157,42 @@ class GraphView:
         return len(edge_ids)
 
     def _compute_ids(self):
-        vertex_ids = None
+        node_ids = None
         edge_ids = None
 
         if self._slices is not None:
-            vertex_ids = set()
+            node_ids = set()
             edge_ids = set()
             for slice_id in self._slices:
                 if slice_id in self._graph._slices:
-                    vertex_ids.update(self._graph._slices[slice_id]['vertices'])
+                    node_ids.update(self._graph._slices[slice_id]['nodes'])
                     edge_ids.update(self._graph._slices[slice_id]['edges'])
 
-        if self._vertices_filter is not None:
-            candidate_vertices = (
-                vertex_ids
-                if vertex_ids is not None
+        if self._nodes_filter is not None:
+            candidate_nodes = (
+                node_ids
+                if node_ids is not None
                 else {
                     ref.id
                     for ref in _structure.iter_entities(self._graph)
                     if ref.kind == _structure.NODE
                 }
             )
-            if callable(self._vertices_filter):
+            if callable(self._nodes_filter):
                 filtered = set()
-                for vid in candidate_vertices:
+                for vid in candidate_nodes:
                     try:
-                        if self._vertices_filter(vid):
+                        if self._nodes_filter(vid):
                             filtered.add(vid)
                     except (AttributeError, KeyError, TypeError, ValueError):
                         pass
-                vertex_ids = filtered
+                node_ids = filtered
             else:
-                specified = set(self._vertices_filter)
-                vertex_ids = (
-                    (vertex_ids & specified)
-                    if vertex_ids is not None
-                    else (specified & candidate_vertices)
+                specified = set(self._nodes_filter)
+                node_ids = (
+                    (node_ids & specified)
+                    if node_ids is not None
+                    else (specified & candidate_nodes)
                 )
 
         if self._edges_filter is not None:
@@ -218,17 +218,17 @@ class GraphView:
                     else (specified & candidate_edges)
                 )
 
-        if self._predicate is not None and vertex_ids is not None:
+        if self._predicate is not None and node_ids is not None:
             filtered = set()
-            for vid in vertex_ids:
+            for vid in node_ids:
                 try:
                     if self._predicate(vid):
                         filtered.add(vid)
                 except (AttributeError, KeyError, TypeError, ValueError):
                     pass
-            vertex_ids = filtered
+            node_ids = filtered
 
-        if vertex_ids is not None and edge_ids is not None:
+        if node_ids is not None and edge_ids is not None:
             filtered = set()
             for eid in edge_ids:
                 if not _structure.has_edge(self._graph, eid):
@@ -236,7 +236,7 @@ class GraphView:
                 if not _structure.carries_structure(self._graph, eid):
                     continue
                 sides = _structure.edge_sides(self._graph, eid)
-                if not (sides.source <= vertex_ids and sides.target <= vertex_ids):
+                if not (sides.source <= node_ids and sides.target <= node_ids):
                     continue
                 # A binary edge needs both of its sides. A hyperedge with no target
                 # side is undirected, and its one side is the whole edge.
@@ -245,7 +245,7 @@ class GraphView:
                     filtered.add(eid)
             edge_ids = filtered
 
-        self._vertex_ids_cache = vertex_ids
+        self._node_ids_cache = node_ids
         self._edge_ids_cache = edge_ids
         self._computed = True
 
@@ -271,13 +271,13 @@ class GraphView:
             df = dataframe_filter_in(df, 'edge_id', edge_ids)
         return df
 
-    def vertices_df(self, **kwargs):
-        """Return a vertex DataFrame view filtered to this view's vertices.
+    def nodes_df(self, **kwargs):
+        """Return a node DataFrame view filtered to this view's nodes.
 
         Parameters
         ----------
         **kwargs
-            Passed through to `AnnNet.vertices_view()`.
+            Passed through to `AnnNet.nodes_view()`.
 
         Returns
         -------
@@ -285,12 +285,12 @@ class GraphView:
 
         Notes
         -----
-        Uses `AnnNet.vertices_view()` and then filters by the view's vertex IDs.
+        Uses `AnnNet.nodes_view()` and then filters by the view's node IDs.
         """
-        df = self._graph.views.vertices(**kwargs)
-        vertex_ids = self.vertex_ids
-        if vertex_ids is not None:
-            df = dataframe_filter_in(df, 'vertex_id', vertex_ids)
+        df = self._graph.views.nodes(**kwargs)
+        node_ids = self.node_ids
+        if node_ids is not None:
+            df = dataframe_filter_in(df, 'node_id', node_ids)
         return df
 
     def materialize(self, copy_attributes=True):
@@ -299,14 +299,14 @@ class GraphView:
         Parameters
         ----------
         copy_attributes : bool, optional
-            If True, copy vertex/edge attributes into the new graph.
+            If True, copy node/edge attributes into the new graph.
 
         Returns
         -------
         AnnNet
             Materialized subgraph.
         """
-        subG = self._graph.ops.extract_subgraph(vertices=self.vertex_ids, edges=self.edge_ids)
+        subG = self._graph.ops.extract_subgraph(nodes=self.node_ids, edges=self.edge_ids)
         if copy_attributes:
             return subG
 
@@ -317,19 +317,19 @@ class GraphView:
         subG._attr_store.drop_edge_columns()
         return subG
 
-    def subview(self, vertices=None, edges=None, slices=None, predicate=None):
+    def subview(self, nodes=None, edges=None, slices=None, predicate=None):
         """Create a new GraphView by further restricting this view.
 
         Parameters
         ----------
-        vertices : Iterable[str] | callable | None
-            Vertex IDs or predicate; intersects with current view if provided.
+        nodes : Iterable[str] | callable | None
+            Node IDs or predicate; intersects with current view if provided.
         edges : Iterable[str] | callable | None
             Edge IDs or predicate; intersects with current view if provided.
         slices : Iterable[str] | None
             Slice IDs to include. Defaults to current view's slices if None.
         predicate : callable | None
-            Additional vertex predicate applied in conjunction with existing filters.
+            Additional node predicate applied in conjunction with existing filters.
 
         Returns
         -------
@@ -339,17 +339,17 @@ class GraphView:
         -----
         Predicates are combined with logical AND.
         """
-        base_vertices = self.vertex_ids
+        base_nodes = self.node_ids
         base_edges = self.edge_ids
 
-        if vertices is None:
-            new_vertices, vertex_pred = base_vertices, None
-        elif callable(vertices):
-            new_vertices, vertex_pred = base_vertices, vertices
+        if nodes is None:
+            new_nodes, node_pred = base_nodes, None
+        elif callable(nodes):
+            new_nodes, node_pred = base_nodes, nodes
         else:
-            to_set = set(vertices)
-            new_vertices = (set(base_vertices) & to_set) if base_vertices is not None else to_set
-            vertex_pred = None
+            to_set = set(nodes)
+            new_nodes = (set(base_nodes) & to_set) if base_nodes is not None else to_set
+            node_pred = None
 
         if edges is None or callable(edges):
             new_edges = base_edges
@@ -361,7 +361,7 @@ class GraphView:
 
         def combined_pred(v):
             ok = True
-            for pred in (self._predicate, predicate, vertex_pred):
+            for pred in (self._predicate, predicate, node_pred):
                 if pred:
                     try:
                         ok = ok and bool(pred(v))
@@ -369,10 +369,10 @@ class GraphView:
                         ok = False
             return ok
 
-        final_pred = combined_pred if (self._predicate or predicate or vertex_pred) else None
+        final_pred = combined_pred if (self._predicate or predicate or node_pred) else None
         return GraphView(
             self._graph,
-            vertices=new_vertices,
+            nodes=new_nodes,
             edges=new_edges,
             slices=new_slices,
             predicate=final_pred,
@@ -388,17 +388,17 @@ class GraphView:
         lines = [
             'GraphView Summary',
             '─' * 30,
-            f'vertices: {self.vertex_count}',
+            f'nodes: {self.node_count}',
             f'Edges: {self.edge_count}',
         ]
         filters = []
         if self._slices:
             filters.append(f'slices={self._slices}')
-        if self._vertices_filter:
+        if self._nodes_filter:
             filters.append(
-                'vertices=<predicate>'
-                if callable(self._vertices_filter)
-                else f'vertices={len(list(self._vertices_filter))} specified'
+                'nodes=<predicate>'
+                if callable(self._nodes_filter)
+                else f'nodes={len(list(self._nodes_filter))} specified'
             )
         if self._edges_filter:
             filters.append(
@@ -412,10 +412,10 @@ class GraphView:
         return '\n'.join(lines)
 
     def __repr__(self):
-        return f'GraphView(vertices={self.vertex_count}, edges={self.edge_count})'
+        return f'GraphView(nodes={self.node_count}, edges={self.edge_count})'
 
     def __len__(self):
-        return self.vertex_count
+        return self.node_count
 
 
 class ViewsClass:
@@ -542,8 +542,8 @@ class ViewsClass:
         out = dataframe_from_rows(out_rows)
         return clone_dataframe(out) if copy else out
 
-    def vertices_view(self, copy=True):
-        """Read-only vertex attribute table.
+    def nodes_view(self, copy=True):
+        """Read-only node attribute table.
 
         Parameters
         ----------
@@ -553,11 +553,11 @@ class ViewsClass:
         Returns
         -------
         DataFrame-like
-            Columns include `vertex_id` plus pure attributes.
+            Columns include `node_id` plus pure attributes.
         """
-        df = self._vertex_table
-        if df is None or 'vertex_id' not in dataframe_columns(df):
-            out = empty_dataframe({'vertex_id': 'text'})
+        df = self._node_table
+        if df is None or 'node_id' not in dataframe_columns(df):
+            out = empty_dataframe({'node_id': 'text'})
         else:
             out = clone_dataframe(df)
         return clone_dataframe(out) if copy else out
@@ -685,9 +685,9 @@ class ViewsAccessor:
             for ref in _structure.iter_entities(self._G)
         }
 
-    def vertices(self, *args, **kwargs):
-        """Materialize the vertex table view."""
-        return ViewsClass.vertices_view(self._G, *args, **kwargs)
+    def nodes(self, *args, **kwargs):
+        """Materialize the node table view."""
+        return ViewsClass.nodes_view(self._G, *args, **kwargs)
 
     def slices(self, *args, **kwargs):
         """Materialize the slice table view."""
@@ -872,11 +872,11 @@ class NodeSequence(ElementSequence):
     """The nodes of a graph, in the order the graph holds them."""
 
     id_key = 'id'
-    id_column = 'vertex_id'
-    intrinsic_names = ('id', 'vertex_id')
+    id_column = 'node_id'
+    intrinsic_names = ('id', 'node_id')
 
     def _all_ids(self) -> tuple:
-        return tuple(self._graph.vertices())
+        return tuple(self._graph.nodes())
 
     def _attribute_map(self, name: str) -> dict | None:
         return self._graph._attr_store.node_attr_map(name)
@@ -885,7 +885,7 @@ class NodeSequence(ElementSequence):
         return self._graph._attr_store.node_vector(name)
 
     def _write_column(self, name: str, values: dict) -> None:
-        self._graph.attrs.set_vertex_attrs_bulk(
+        self._graph.attrs.set_node_attrs_bulk(
             {element: {name: value} for element, value in values.items()}
         )
 

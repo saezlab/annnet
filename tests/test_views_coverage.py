@@ -11,7 +11,7 @@ from annnet.core.graph import AnnNet
 
 def _toy_directed() -> AnnNet:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.0)
     G.add_edges('B', 'C', edge_id='e2', weight=2.0)
     G.add_edges('C', 'D', edge_id='e3', weight=3.0)
@@ -29,7 +29,7 @@ def _toy_with_slices() -> AnnNet:
 
 def _toy_with_hyperedge() -> AnnNet:
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges('A', 'B', edge_id='e1')
     G.add_edges(['A', 'B', 'C'], edge_id='h1')  # undirected hyper
     return G
@@ -38,14 +38,14 @@ def _toy_with_hyperedge() -> AnnNet:
 # ── _compute_ids exception-tolerance branches ──────────────────────────
 
 
-def test_vertex_callable_predicate_swallows_attribute_error() -> None:
+def test_node_callable_predicate_swallows_attribute_error() -> None:
     G = _toy_directed()
 
     def hostile(vid):
         raise AttributeError('boom')
 
-    v = GraphView(G, vertices=hostile)
-    assert v.vertex_ids == set()
+    v = GraphView(G, nodes=hostile)
+    assert v.node_ids == set()
 
 
 def test_edge_callable_predicate_swallows_value_error() -> None:
@@ -58,12 +58,12 @@ def test_edge_callable_predicate_swallows_value_error() -> None:
     assert v.edge_ids == set()
 
 
-def test_set_vertex_filter_intersects_with_existing_slice_filter() -> None:
+def test_set_node_filter_intersects_with_existing_slice_filter() -> None:
     G = _toy_with_slices()
-    v = GraphView(G, slices=['s1'], vertices={'A', 'B', 'C', 'D'})
+    v = GraphView(G, slices=['s1'], nodes={'A', 'B', 'C', 'D'})
     # s1 only registers A+C via e_s1; the set intersection keeps both.
-    assert v.vertex_ids is not None
-    assert v.vertex_ids.issubset({'A', 'B', 'C', 'D'})
+    assert v.node_ids is not None
+    assert v.node_ids.issubset({'A', 'B', 'C', 'D'})
 
 
 def test_set_edge_filter_intersects_with_existing_slice_filter() -> None:
@@ -79,29 +79,29 @@ def test_extra_predicate_tolerates_exceptions() -> None:
     def hostile(vid):
         raise TypeError('boom')
 
-    v = GraphView(G, vertices={'A', 'B'}, predicate=hostile)
-    assert v.vertex_ids == set()
+    v = GraphView(G, nodes={'A', 'B'}, predicate=hostile)
+    assert v.node_ids == set()
 
 
-def test_hyperedge_filter_by_vertex_connectivity_directed_hyper() -> None:
+def test_hyperedge_filter_by_node_connectivity_directed_hyper() -> None:
     """The hyper-edge branch checks src/tgt subset for directed hypers."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges(src=['A', 'B'], tgt=['C', 'D'], edge_id='h1')  # directed hyper
-    # both vertex and edge filters present → step 5 runs
-    v = GraphView(G, vertices={'A', 'B', 'C'}, edges={'h1'})
-    # vertex D is missing → h1 must drop out.
+    # both node and edge filters present → step 5 runs
+    v = GraphView(G, nodes={'A', 'B', 'C'}, edges={'h1'})
+    # node D is missing → h1 must drop out.
     assert 'h1' not in v.edge_ids
 
 
-def test_hyperedge_filter_by_vertex_connectivity_undirected_hyper_keeps_when_subset() -> None:
+def test_hyperedge_filter_by_node_connectivity_undirected_hyper_keeps_when_subset() -> None:
     G = _toy_with_hyperedge()
-    v = GraphView(G, vertices={'A', 'B', 'C'}, edges={'e1', 'h1'})
+    v = GraphView(G, nodes={'A', 'B', 'C'}, edges={'e1', 'h1'})
     # h1 members are all inside {A,B,C} → kept; e1 endpoints A,B also kept.
     assert {'e1', 'h1'}.issubset(v.edge_ids)
 
 
-# ── edges_df / vertices_df with filtering ──────────────────────────────
+# ── edges_df / nodes_df with filtering ──────────────────────────────
 
 
 def test_edges_df_filters_to_view_edge_ids() -> None:
@@ -112,22 +112,22 @@ def test_edges_df_filters_to_view_edge_ids() -> None:
     assert eids == {'e1', 'e3'}
 
 
-def test_vertices_df_filters_to_view_vertex_ids() -> None:
+def test_nodes_df_filters_to_view_node_ids() -> None:
     G = _toy_directed()
-    v = GraphView(G, vertices={'A', 'B'})
-    df = v.vertices_df()
-    vids = {row['vertex_id'] for row in df.to_dicts() if 'vertex_id' in row}
+    v = GraphView(G, nodes={'A', 'B'})
+    df = v.nodes_df()
+    vids = {row['node_id'] for row in df.to_dicts() if 'node_id' in row}
     assert vids == {'A', 'B'}
 
 
 # ── materialize: copy_attributes=False and edge_id branches ────────────
 
 
-def test_materialize_without_copying_attributes_still_includes_all_vertices() -> None:
+def test_materialize_without_copying_attributes_still_includes_all_nodes() -> None:
     G = _toy_directed()
     v = GraphView(G)
     sub = v.materialize(copy_attributes=False)
-    assert set(sub.vertices()) == {'A', 'B', 'C', 'D'}
+    assert set(sub.nodes()) == {'A', 'B', 'C', 'D'}
 
 
 def test_materialize_handles_undirected_hyperedge_path() -> None:
@@ -140,18 +140,18 @@ def test_materialize_handles_undirected_hyperedge_path() -> None:
 
 def test_materialize_handles_directed_hyperedge_path() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges(src=['A', 'B'], tgt=['C', 'D'], edge_id='h1')
     v = GraphView(G)
     sub = v.materialize(copy_attributes=False)
     assert sub.ne >= 1
 
 
-def test_materialize_skips_edges_with_vertex_outside_view() -> None:
+def test_materialize_skips_edges_with_node_outside_view() -> None:
     G = _toy_directed()
-    v = GraphView(G, vertices={'A', 'B'})  # excludes C, D
+    v = GraphView(G, nodes={'A', 'B'})  # excludes C, D
     sub = v.materialize(copy_attributes=False)
-    assert set(sub.vertices()) == {'A', 'B'}
+    assert set(sub.nodes()) == {'A', 'B'}
     # only e1 (A→B) survives.
     assert sub.ne == 1
 
@@ -159,12 +159,12 @@ def test_materialize_skips_edges_with_vertex_outside_view() -> None:
 # ── subview combination paths ──────────────────────────────────────────
 
 
-def test_subview_with_callable_vertices_predicate_keeps_base_set() -> None:
+def test_subview_with_callable_nodes_predicate_keeps_base_set() -> None:
     G = _toy_directed()
-    v = GraphView(G, vertices={'A', 'B', 'C', 'D'})
-    s = v.subview(vertices=lambda vid: vid in {'A', 'B'})
+    v = GraphView(G, nodes={'A', 'B', 'C', 'D'})
+    s = v.subview(nodes=lambda vid: vid in {'A', 'B'})
     # Predicate path retains base set with predicate applied lazily.
-    assert s.vertex_ids == {'A', 'B'}
+    assert s.node_ids == {'A', 'B'}
 
 
 def test_subview_with_callable_edges_keeps_base_set() -> None:
@@ -190,11 +190,11 @@ def test_subview_combines_existing_and_new_predicates_with_and() -> None:
     def is_short(vid):
         return len(vid) == 1
 
-    # Scope the base view to a vertex set so predicates have something
-    # to filter over (otherwise vertex_ids stays None).
-    v = GraphView(G, vertices={'A', 'B', 'C', 'D'}, predicate=starts_with_A)
+    # Scope the base view to a node set so predicates have something
+    # to filter over (otherwise node_ids stays None).
+    v = GraphView(G, nodes={'A', 'B', 'C', 'D'}, predicate=starts_with_A)
     s = v.subview(predicate=is_short)
-    assert s.vertex_ids == {'A'}
+    assert s.node_ids == {'A'}
 
 
 def test_subview_passes_through_existing_slices_when_none_given() -> None:
@@ -213,34 +213,34 @@ def test_summary_with_no_filters_says_full_graph() -> None:
     assert 'Filters: None (full graph)' in out
 
 
-def test_summary_with_slice_vertex_edge_and_predicate_filters() -> None:
+def test_summary_with_slice_node_edge_and_predicate_filters() -> None:
     G = _toy_with_slices()
     v = GraphView(
         G,
-        vertices={'A', 'B'},
+        nodes={'A', 'B'},
         edges={'e1'},
         slices=['s1'],
         predicate=lambda vid: True,
     )
     out = v.summary()
     assert 'slices=' in out
-    assert 'vertices=' in out
+    assert 'nodes=' in out
     assert 'edges=' in out
     assert 'predicate=' in out
 
 
-def test_summary_with_callable_vertices_and_edges_filters() -> None:
+def test_summary_with_callable_nodes_and_edges_filters() -> None:
     G = _toy_directed()
-    v = GraphView(G, vertices=lambda vid: True, edges=lambda eid: True)
+    v = GraphView(G, nodes=lambda vid: True, edges=lambda eid: True)
     out = v.summary()
-    assert 'vertices=<predicate>' in out
+    assert 'nodes=<predicate>' in out
     assert 'edges=<predicate>' in out
 
 
 def test_dunder_repr_and_len() -> None:
     v = GraphView(_toy_directed())
     assert 'GraphView' in repr(v)
-    assert len(v) == v.vertex_count
+    assert len(v) == v.node_count
 
 
 # ── edges_view branches (ViewsClass on AnnNet) ─────────────────────────
@@ -282,13 +282,13 @@ def test_edges_view_on_empty_graph_returns_empty_placeholder() -> None:
     assert 'edge_id' in df.columns
 
 
-# ── vertices_view edge cases ───────────────────────────────────────────
+# ── nodes_view edge cases ───────────────────────────────────────────
 
 
-def test_vertices_view_on_empty_graph_returns_empty_placeholder() -> None:
+def test_nodes_view_on_empty_graph_returns_empty_placeholder() -> None:
     G = AnnNet(directed=False)
-    df = G.views.vertices()
-    assert 'vertex_id' in df.columns
+    df = G.views.nodes()
+    assert 'node_id' in df.columns
 
 
 # ── slices_view path ──────────────────────────────────────────────────
@@ -314,7 +314,7 @@ def test_aspects_view_on_flat_graph_returns_empty_placeholder() -> None:
 def test_aspects_view_with_multilayer_graph_emits_one_row_per_aspect() -> None:
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A'], layer={'condition': 'healthy'})
+    G.add_nodes(['A'], layer={'condition': 'healthy'})
     df = G.views.aspects()
     aspects = [row['aspect'] for row in df.to_dicts()]
     assert 'condition' in aspects
@@ -330,7 +330,7 @@ def test_layers_view_on_flat_graph_returns_empty_placeholder() -> None:
 def test_layers_view_with_multilayer_graph_emits_one_row_per_layer() -> None:
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A'], layer={'condition': 'healthy'})
+    G.add_nodes(['A'], layer={'condition': 'healthy'})
     df = G.views.layers()
     assert df.height == 2  # 2 elementary layers
     cols = df.columns
@@ -345,7 +345,7 @@ def test_views_accessor_dispatches_to_class_methods() -> None:
     G = _toy_directed()
     a = ViewsAccessor(G)
     assert a.edges().height >= 1
-    assert a.vertices().height >= 1
+    assert a.nodes().height >= 1
     assert a.slices().height >= 1
     assert a.aspects() is not None
     assert a.layers() is not None

@@ -13,8 +13,8 @@ Example event:
   "version": 42,
   "ts_utc": "2025-12-05T10:30:00.123456Z",
   "mono_ns": 123456789,
-  "op": "add_vertices",
-  "vertex_id": "alice",
+  "op": "add_nodes",
+  "node_id": "alice",
   "attributes": {"age": 30},
   "result": "alice"
 }

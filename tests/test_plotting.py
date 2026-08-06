@@ -39,10 +39,10 @@ class TestHelpers(unittest.TestCase):
 class TestPlottingWithRealGraph(unittest.TestCase):
     def setUp(self):
         g = AnnNet()
-        # vertices with labels
-        g.add_vertices('A', label='alpha')
-        g.add_vertices('B', label='beta')
-        g.add_vertices('C', label='gamma')
+        # nodes with labels
+        g.add_nodes('A', label='alpha')
+        g.add_nodes('B', label='beta')
+        g.add_nodes('C', label='gamma')
         # edges with attributes embedded (non-reserved keys persist)
         e1 = g.add_edges('A', 'B', weight=2.0, interaction=+1, type='activation')
         g.add_edges('B', 'C', weight=-1.0, interaction=-1)
@@ -58,12 +58,12 @@ class TestPlottingWithRealGraph(unittest.TestCase):
         self.assertTrue(hasattr(self.g, 'edges'))
         self.assertTrue(hasattr(self.g, 'get_edge'))
 
-    def test_build_vertex_labels(self):
-        labels = plotting.build_vertex_labels(self.g, key='label')
+    def test_build_node_labels(self):
+        labels = plotting.build_node_labels(self.g, key='label')
         self.assertEqual(labels['A'], 'alpha')
         self.assertEqual(labels['B'], 'beta')
         # fallback to id if key missing (none missing here)
-        labels_ids = plotting.build_vertex_labels(self.g, key=None)
+        labels_ids = plotting.build_node_labels(self.g, key=None)
         self.assertEqual(labels_ids['A'], 'A')
 
     def test_build_edge_labels(self):
@@ -110,9 +110,9 @@ class TestBackends(unittest.TestCase):
 
     def setUp(self):
         g = AnnNet()
-        g.add_vertices('A', label='alpha')
-        g.add_vertices('B', label='beta')
-        g.add_vertices('C', label='gamma')
+        g.add_nodes('A', label='alpha')
+        g.add_nodes('B', label='beta')
+        g.add_nodes('C', label='gamma')
         g.add_edges('A', 'B', weight=2.0, interaction=+1)
         g.add_edges('B', 'C', weight=-1.0, interaction=-1)
         g.add_edges(src=['A', 'B'], tgt=['C'], weight=0.5, interaction=+1)
@@ -138,9 +138,7 @@ class TestBackends(unittest.TestCase):
     def test_plot_graphviz_and_labels_when_available(self):
         if not self.HAS_GRAPHVIZ:
             self.skipTest('graphviz package not installed')
-        Gv = plotting.plot(
-            self.g, backend='graphviz', show_vertex_labels=True, show_edge_labels=True
-        )
+        Gv = plotting.plot(self.g, backend='graphviz', show_node_labels=True, show_edge_labels=True)
         src = Gv.source
         self.assertRegex(src, r'\bA\s*\[label=A\b')
         self.assertRegex(src, r'\bB\s*\[label=B\b')
@@ -150,7 +148,7 @@ class TestBackends(unittest.TestCase):
     def test_plot_pydot_and_labels_when_available(self):
         if not self.HAS_PYDOT:
             self.skipTest('pydot package not installed')
-        Gd = plotting.plot(self.g, backend='pydot', show_vertex_labels=True, show_edge_labels=True)
+        Gd = plotting.plot(self.g, backend='pydot', show_node_labels=True, show_edge_labels=True)
         labels = [e.get('label') for e in Gd.get_edges()]
         self.assertTrue(any(lbl and re.search(r'\b2\b', lbl) for lbl in labels))
 
@@ -159,9 +157,9 @@ class TestBackends(unittest.TestCase):
         if not self.HAS_GRAPHVIZ:
             self.skipTest('graphviz package not installed')
         g = AnnNet(directed=False)
-        g.add_vertices('A')
-        g.add_vertices('B')
-        g.add_vertices('C')
+        g.add_nodes('A')
+        g.add_nodes('B')
+        g.add_nodes('C')
         g.add_edges('A', 'B', weight=1.0)
         g.add_edges('B', 'C', weight=2.0)
         Gv = plotting.to_graphviz(g)
@@ -181,9 +179,9 @@ class TestBackends(unittest.TestCase):
         if not self.HAS_PYDOT:
             self.skipTest('pydot package not installed')
         g = AnnNet(directed=False)
-        g.add_vertices('A')
-        g.add_vertices('B')
-        g.add_vertices('C')
+        g.add_nodes('A')
+        g.add_nodes('B')
+        g.add_nodes('C')
         g.add_edges('A', 'B', weight=1.0)
         g.add_edges('B', 'C', weight=2.0)
         Gd = plotting.to_pydot(g)

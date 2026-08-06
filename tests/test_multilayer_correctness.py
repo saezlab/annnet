@@ -1,6 +1,6 @@
 """Multilayer correctness.
 
-Setup: 3 vertices in layer (healthy,), one intra-layer edge between them,
+Setup: 3 nodes in layer (healthy,), one intra-layer edge between them,
 plus a coupling edge to (treated,). The basic layer query helpers must
 return non-empty results that match the underlying state.
 """
@@ -12,8 +12,8 @@ from annnet.core.graph import AnnNet
 
 def _build_graph():
     G = AnnNet(directed=True, aspects={'condition': ['healthy', 'treated']})
-    G.add_vertices(['A', 'B', 'C'], layer=('healthy',))
-    G.add_vertices(['A', 'B', 'C'], layer=('treated',))
+    G.add_nodes(['A', 'B', 'C'], layer=('healthy',))
+    G.add_nodes(['A', 'B', 'C'], layer=('treated',))
     G.add_edges(('A', ('healthy',)), ('B', ('healthy',)), edge_id='intra1')
     G.add_edges(('A', ('healthy',)), ('A', ('treated',)), edge_id='couple1')
     return G
@@ -48,7 +48,7 @@ def test_layer_edge_set_includes_coupling_when_requested():
 def test_subgraph_from_layer_tuple_preserves_intra_layer_edge():
     G = _build_graph()
     sg = G.layers.subgraph_from_layer_tuple(('healthy',))
-    # Three vertices were placed in (healthy,); the intra edge connects A-B.
+    # Three nodes were placed in (healthy,); the intra edge connects A-B.
     assert sg.nv >= 2
     assert sg.ne == 1
     assert any(eid == 'intra1' for _src, _tgt, eid, _w in sg.edge_list())

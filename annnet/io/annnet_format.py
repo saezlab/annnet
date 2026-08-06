@@ -33,6 +33,7 @@ from ._common import (
     STORED_EDGE_KIND,
     LOADED_ENTITY_KIND,
     STORED_ENTITY_KIND,
+    dataframe_columns,
     dataframe_to_rows,
     serialize_endpoint,
     dataframe_from_rows,
@@ -44,6 +45,7 @@ from ._common import (
     dataframe_read_parquet,
     dataframe_write_parquet,
     deserialize_edge_layers,
+    rename_dataframe_columns,
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
@@ -157,7 +159,7 @@ def _build_layer_dict(graph) -> _LayerDict:
         elif isinstance(ml, tuple):
             ld.intern(ml)
 
-    # 4. Per-(vertex, layer) attribute keys
+    # 4. Per-(node, layer) attribute keys
     for key in getattr(graph, '_state_attrs', {}).keys():
         if isinstance(key, tuple) and len(key) == 2 and isinstance(key[1], tuple):
             ld.intern(key[1])
@@ -224,7 +226,7 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False, 
         'matrix_shape': list(graph.S.shape),
         'incidence_stored': incidence_stored,
         'counts': {
-            'vertices': sum(
+            'nodes': sum(
                 1 for ref in _structure.iter_entities(graph) if ref.kind == _structure.NODE
             ),
             'edges': graph.ne,
@@ -555,7 +557,7 @@ def _write_structure(
 def _write_tables(graph, path: Path, compression: str):
     path.mkdir(parents=True, exist_ok=True)
 
-    dataframe_write_parquet(graph._vertex_table, path / '_vertex_table.parquet')
+    dataframe_write_parquet(graph._node_table, path / '_node_table.parquet')
     dataframe_write_parquet(graph._edge_table, path / '_edge_table.parquet')
     dataframe_write_parquet(graph.slice_attributes, path / 'slice_attributes.parquet')
     dataframe_write_parquet(graph.edge_slice_attributes, path / 'edge_slice_attributes.parquet')
@@ -590,18 +592,18 @@ def _write_multilayers(graph, path: Path, compression: str, layer_dict: _LayerDi
         )
     )
 
-    # 2. Vertex presence: (vertex_id, layer_id)
+    # 2. Node presence: (node_id, layer_id)
     vm_vids: list = []
     vm_layer_ids: list = []
     for row in multilayer.get('VM', []):
-        vm_vids.append(row.get('node') or row.get('vertex_id'))
+        vm_vids.append(row.get('node') or row.get('node_id'))
         vm_layer_ids.append(layer_dict.intern(tuple(row.get('layer') or ())))
     dataframe_write_parquet(
         dataframe_from_columns(
-            {'vertex_id': vm_vids, 'layer_id': vm_layer_ids},
-            schema={'vertex_id': 'text', 'layer_id': 'int'},
+            {'node_id': vm_vids, 'layer_id': vm_layer_ids},
+            schema={'node_id': 'text', 'layer_id': 'int'},
         ),
-        path / 'vertex_presence.parquet',
+        path / 'node_presence.parquet',
     )
 
     # 3. Edge layers: layer_1_id (always set), layer_2_id (set for inter/coupling).
@@ -658,25 +660,25 @@ def _write_multilayers(graph, path: Path, compression: str, layer_dict: _LayerDi
             path / 'tuple_layer_attributes.parquet',
         )
 
-    # 4d. Vertex-layer attributes: (vertex_id, layer_id, attributes_json)
+    # 4d. Node-layer attributes: (node_id, layer_id, attributes_json)
     if multilayer.get('node_layer_attrs'):
         vla_vids: list = []
         vla_layer_ids: list = []
         vla_attrs_json: list = []
         for row in multilayer['node_layer_attrs']:
-            vla_vids.append(row.get('node') or row.get('vertex_id'))
+            vla_vids.append(row.get('node') or row.get('node_id'))
             vla_layer_ids.append(layer_dict.intern(tuple(row.get('layer') or ())))
             vla_attrs_json.append(json.dumps(row.get('attrs') or row.get('attributes') or {}))
         dataframe_write_parquet(
             dataframe_from_columns(
                 {
-                    'vertex_id': vla_vids,
+                    'node_id': vla_vids,
                     'layer_id': vla_layer_ids,
                     'attributes': vla_attrs_json,
                 },
-                schema={'vertex_id': 'text', 'layer_id': 'int', 'attributes': 'text'},
+                schema={'node_id': 'text', 'layer_id': 'int', 'attributes': 'text'},
             ),
-            path / 'vertex_layer_attributes.parquet',
+            path / 'node_layer_attributes.parquet',
         )
 
 
@@ -693,8 +695,8 @@ def _write_slices(graph, path: Path, compression: str, layer_dict: _LayerDict):
     reg_df = _df_from_dict(registry_data)
     dataframe_write_parquet(reg_df, path / 'registry.parquet')
 
-    # Vertex memberships: (slice_id, vertex_id, vertex_layer_id).
-    # vertex ids may be bare strings or multilayer (vid, layer_coord) tuples;
+    # Node memberships: (slice_id, node_id, node_layer_id).
+    # node ids may be bare strings or multilayer (vid, layer_coord) tuples;
     # encode layer as int id for a uniform parquet schema.
     def _split_vid(vid):
         if (
@@ -710,19 +712,19 @@ def _write_slices(graph, path: Path, compression: str, layer_dict: _LayerDict):
     s_vids: list = []
     s_layer_ids: list = []
     for slice_id in graph.slices.list(include_default=True):
-        for vertex_id in graph.slices.vertices(slice_id):
-            bare, lid = _split_vid(vertex_id)
+        for node_id in graph.slices.nodes(slice_id):
+            bare, lid = _split_vid(node_id)
             s_slice_ids.append(slice_id)
             s_vids.append(bare)
             s_layer_ids.append(lid)
     vm_df = dataframe_from_columns(
-        {'slice_id': s_slice_ids, 'vertex_id': s_vids, 'vertex_layer_id': s_layer_ids},
-        schema={'slice_id': 'text', 'vertex_id': 'text', 'vertex_layer_id': 'int'},
+        {'slice_id': s_slice_ids, 'node_id': s_vids, 'node_layer_id': s_layer_ids},
+        schema={'slice_id': 'text', 'node_id': 'text', 'node_layer_id': 'int'},
     )
-    dataframe_write_parquet(vm_df, path / 'vertex_memberships.parquet')
+    dataframe_write_parquet(vm_df, path / 'node_memberships.parquet')
 
     # Edge memberships with weights
-    # Columnar (mirrors vertex memberships): building one dict per membership
+    # Columnar (mirrors node memberships): building one dict per membership
     # row and transposing dominated write() on the edge-membership table.
     em_slice_ids: list = []
     em_edge_ids: list = []
@@ -824,7 +826,7 @@ def _write_audit(graph, path: Path, compression: str):
                 {
                     'label': snap.get('label'),
                     'version': snap.get('version'),
-                    'vertex_ids': sorted(snap.get('vertex_ids', set())),
+                    'node_ids': sorted(snap.get('node_ids', set())),
                     'edge_ids': sorted(snap.get('edge_ids', set())),
                     'slice_ids': sorted(snap.get('slice_ids', set())),
                 }
@@ -1007,7 +1009,7 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
             ent_ids_col.append(r['entity_id'])
             ent_layer_col.append(r['layer_id'])
             ent_idx_col.append(r['idx'])
-            ent_type_col.append(r.get('type', 'vertex'))
+            ent_type_col.append(r.get('type', 'node'))
 
     # The canonical store is filled from these, and so is everything derived
     # from it, so the load describes each entity once.
@@ -1035,7 +1037,7 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
             # over rank normalisation.
             layer_tuple = tuple(stored) if stored is not None else placeholder
             layer_cache[lid] = layer_tuple
-        stored_kind = kind or 'vertex'
+        stored_kind = kind or 'node'
         entity_definitions.append(
             (
                 int(idx),
@@ -1248,9 +1250,45 @@ def _recover_legacy_coeffs(graph, csc) -> None:
             graph._replace_edge_coeffs(edge.id, stored)
 
 
+# The package said "vertex" where it now says "node", so an archive written
+# before the rename holds the old word in four of its member names and in two of
+# its columns. A reader takes both spellings and the writer emits the new ones
+# alone, which is the only direction that has to hold.
+_RENAMED_MEMBERS = {
+    '_node_table.parquet': '_vertex_table.parquet',
+    'node_presence.parquet': 'vertex_presence.parquet',
+    'node_memberships.parquet': 'vertex_memberships.parquet',
+    'node_layer_attributes.parquet': 'vertex_layer_attributes.parquet',
+}
+_RENAMED_COLUMNS = {'vertex_id': 'node_id', 'vertex_layer_id': 'node_layer_id'}
+
+
+def _member(path: Path, name: str) -> Path | None:
+    """Return the path of one archive member, under its name or the one it had."""
+    member = path / name
+    if member.exists():
+        return member
+    older = _RENAMED_MEMBERS.get(name)
+    if older is None:
+        return None
+    older_member = path / older
+    return older_member if older_member.exists() else None
+
+
+def _read_member(path: Path, name: str):
+    """Read one archive member, with the columns named the way the package names them."""
+    member = _member(path, name)
+    if member is None:
+        return None
+    table = dataframe_read_parquet(member)
+    held = set(dataframe_columns(table))
+    mapping = {old: new for old, new in _RENAMED_COLUMNS.items() if old in held and new not in held}
+    return rename_dataframe_columns(table, mapping) if mapping else table
+
+
 def _load_tables(graph, path: Path):
     """Load annotation tables with the configured dataframe backend."""
-    graph._vertex_table = dataframe_read_parquet(path / '_vertex_table.parquet')
+    graph._node_table = _read_member(path, '_node_table.parquet')
     graph._edge_table = dataframe_read_parquet(path / '_edge_table.parquet')
     graph.slice_attributes = dataframe_read_parquet(path / 'slice_attributes.parquet')
     graph.edge_slice_attributes = dataframe_read_parquet(path / 'edge_slice_attributes.parquet')
@@ -1264,7 +1302,7 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
         return
 
     _UNSET = object()  # sentinel for cache miss
-    legacy_flat_vertices = {
+    legacy_flat_nodes = {
         ref.id
         for ref in _structure.iter_entities(graph)
         if ref.kind == _structure.NODE and ref.layer == ('_',)
@@ -1284,7 +1322,7 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
     }
 
     # Cache resolved layer_id -> [list] coercions; at UC1 scale layer IDs
-    # repeat ~1.87M times across vertex_presence rows but only ~100 distinct
+    # repeat ~1.87M times across node_presence rows but only ~100 distinct
     # values, so caching turns a per-row tuple-to-list copy into a dict hit.
     _layer_list_cache: dict = {}
 
@@ -1297,22 +1335,22 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
         _layer_list_cache[layer_id] = out
         return out
 
-    if (path / 'vertex_presence.parquet').exists():
-        vm_df = dataframe_read_parquet(path / 'vertex_presence.parquet')
+    vm_df = _read_member(path, 'node_presence.parquet')
+    if vm_df is not None:
         # Read columns once and zip, avoiding the per-row dict allocation
         # that `dataframe_iter_rows` produces.
         try:
             import polars as _pl
 
             if isinstance(vm_df, _pl.DataFrame):
-                vids = vm_df['vertex_id'].to_list()
+                vids = vm_df['node_id'].to_list()
                 lids = vm_df['layer_id'].to_list()
             else:
                 raise TypeError('not polars')
         except (ImportError, TypeError):
             vids, lids = [], []
             for r in dataframe_iter_rows(vm_df):
-                vids.append(r['vertex_id'])
+                vids.append(r['node_id'])
                 lids.append(r['layer_id'])
         multilayer['VM'] = [
             {'node': vid, 'layer': _layer_list(lid)} for vid, lid in zip(vids, lids, strict=False)
@@ -1387,11 +1425,11 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
             for row in dataframe_iter_rows(la_df)
         ]
 
-    if (path / 'vertex_layer_attributes.parquet').exists():
-        vla_df = dataframe_read_parquet(path / 'vertex_layer_attributes.parquet')
+    vla_df = _read_member(path, 'node_layer_attributes.parquet')
+    if vla_df is not None:
         multilayer['node_layer_attrs'] = [
             {
-                'node': row['vertex_id'],
+                'node': row['node_id'],
                 'layer': _layer_list(row['layer_id']),
                 'attrs': json.loads(row['attributes']),
             }
@@ -1412,20 +1450,20 @@ def _load_multilayers(graph, path: Path, layer_dict: _LayerDict):
 
     # Native format roundtrips preserve the stored entity-index coordinates
     # exactly, even when multilayer metadata is declared afterwards.
-    if legacy_flat_vertices and graph.aspects:
+    if legacy_flat_nodes and graph.aspects:
         placeholder = tuple('_' for _ in graph.aspects)
 
         def _stored_key(key):
-            vertex_id, coord = key
-            if vertex_id in legacy_flat_vertices and coord == placeholder:
-                return (vertex_id, ('_',))
+            node_id, coord = key
+            if node_id in legacy_flat_nodes and coord == placeholder:
+                return (node_id, ('_',))
             return key
 
         graph._remap_entity_keys(
             {
                 ref.key: (ref.id, ('_',))
                 for ref in _structure.iter_entities(graph)
-                if ref.id in legacy_flat_vertices and ref.layer == placeholder
+                if ref.id in legacy_flat_nodes and ref.layer == placeholder
             }
         )
         if graph._state_attrs:
@@ -1454,22 +1492,22 @@ def _load_slices(graph, path: Path, layer_dict: _LayerDict):
             graph.slices.add(slice_id)
             existing_slices.add(slice_id)
 
-    # Vertex memberships (vertex_layer_id may be null for bare-vid memberships)
-    vertex_df = dataframe_read_parquet(path / 'vertex_memberships.parquet')
-    if reg_is_polars and isinstance(vertex_df, _pl.DataFrame):
-        vm_slice = vertex_df['slice_id'].to_list()
-        vm_bare = vertex_df['vertex_id'].to_list()
+    # Node memberships (node_layer_id may be null for bare-vid memberships)
+    node_df = _read_member(path, 'node_memberships.parquet')
+    if reg_is_polars and isinstance(node_df, _pl.DataFrame):
+        vm_slice = node_df['slice_id'].to_list()
+        vm_bare = node_df['node_id'].to_list()
         vm_lid = (
-            vertex_df['vertex_layer_id'].to_list()
-            if 'vertex_layer_id' in vertex_df.columns
+            node_df['node_layer_id'].to_list()
+            if 'node_layer_id' in node_df.columns
             else [None] * len(vm_bare)
         )
     else:
         vm_slice, vm_bare, vm_lid = [], [], []
-        for row in dataframe_iter_rows(vertex_df):
+        for row in dataframe_iter_rows(node_df):
             vm_slice.append(row['slice_id'])
-            vm_bare.append(row['vertex_id'])
-            vm_lid.append(row.get('vertex_layer_id'))
+            vm_bare.append(row['node_id'])
+            vm_lid.append(row.get('node_layer_id'))
     # Cache layer lookups, and group the entities by bare id once instead of
     # asking the graph about each membership row.
     _vlayer_cache: dict = {}
@@ -1478,14 +1516,14 @@ def _load_slices(graph, path: Path, layer_dict: _LayerDict):
         if bare not in entities_by_id:
             continue
         if layer_id is None:
-            vertex_id = bare
+            node_id = bare
         else:
             layer_tuple = _vlayer_cache.get(layer_id)
             if layer_tuple is None:
                 layer_tuple = layer_dict.get_layer(int(layer_id))
                 _vlayer_cache[layer_id] = layer_tuple
-            vertex_id = (bare, layer_tuple) if layer_tuple is not None else bare
-        graph.slices.add_vertex_to_slice(slice_id, vertex_id)
+            node_id = (bare, layer_tuple) if layer_tuple is not None else bare
+        graph.slices.add_node_to_slice(slice_id, node_id)
 
     slice_membership: dict[str, list[str]] = {}
     slice_weights: dict[str, dict[str, float]] = {}
@@ -1507,7 +1545,7 @@ def _load_slices(graph, path: Path, layer_dict: _LayerDict):
             if w is not None:
                 slice_weights.setdefault(lid, {})[eid] = w
 
-    # `attach_edges` rather than `add_edges`, because the vertex memberships are
+    # `attach_edges` rather than `add_edges`, because the node memberships are
     # already loaded above and `add_edges` drops an edge that occupies no column.
     for lid, eids in slice_membership.items():
         graph.slices.attach_edges(lid, eids)
@@ -1539,7 +1577,7 @@ def _load_audit(graph, path: Path):
             {
                 'label': snap.get('label'),
                 'version': snap.get('version'),
-                'vertex_ids': set(snap.get('vertex_ids', []) or []),
+                'node_ids': set(snap.get('node_ids', []) or []),
                 'edge_ids': set(snap.get('edge_ids', []) or []),
                 'slice_ids': set(snap.get('slice_ids', []) or []),
             }

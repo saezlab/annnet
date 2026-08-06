@@ -38,11 +38,11 @@ def _close(left, right, *, tol=1e-6) -> bool:
 
 
 def _node_ids(graph) -> list[str]:
-    return list(graph.vertices())
+    return list(graph.nodes())
 
 
 def _supra_node_keys(graph) -> list[tuple]:
-    return list(graph.supra_vertices())
+    return list(graph.supra_nodes())
 
 
 def _edge_ids(graph) -> list[str]:
@@ -178,7 +178,7 @@ def compare(left, right) -> list[str]:
 
     # The node table and the edge table.
     for label, table_name, key_column in (
-        ('obs', 'obs', 'vertex_id'),
+        ('obs', 'obs', 'node_id'),
         ('var', 'var', 'edge_id'),
     ):
         left_rows = _table_rows(getattr(left, table_name), key_column)

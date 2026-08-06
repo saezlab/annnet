@@ -37,8 +37,8 @@ def _split_sif_line(line: str, delimiter: str | None) -> list[str]:
     return line.strip().split()
 
 
-def _safe_vertex_attr_rows(graph: AnnNet):
-    va = getattr(graph, '_vertex_table', None)
+def _safe_node_attr_rows(graph: AnnNet):
+    va = getattr(graph, '_node_table', None)
     if va is None:
         return []
     return dataframe_to_rows(va)
@@ -121,7 +121,7 @@ def to_sif(
         path: Output SIF file path (if None, only manifest is returned in lossless mode)
         relation_attr: Edge attribute key for relation type
         default_relation: Default relation if attr missing
-        write_nodes: Whether to write .nodes sidecar with vertex attrs
+        write_nodes: Whether to write .nodes sidecar with node attrs
         nodes_path: Custom path for nodes sidecar (default: path + ".nodes")
         lossless: If True, return manifest with all non-SIF data
         manifest_path: If provided, write manifest to this path (only when lossless=True)
@@ -137,7 +137,7 @@ def to_sif(
             'version': '1.0',
             'binary_edges': {},
             'hyperedges': {},
-            'vertex_attrs': {},
+            'node_attrs': {},
             'edge_metadata': {},
             'slices': {},
             'multilayer': serialize_multilayer_manifest(
@@ -208,29 +208,29 @@ def to_sif(
         if write_nodes:
             sidecar = nodes_path if nodes_path is not None else (str(path) + '.nodes')
             with open(sidecar, 'w', encoding='utf-8') as nf:
-                nf.write('# nodes sidecar for SIF; format: <vertex_id>\tkey=value ...\n')
+                nf.write('# nodes sidecar for SIF; format: <node_id>\tkey=value ...\n')
 
-                vrows = _safe_vertex_attr_rows(graph)
+                vrows = _safe_node_attr_rows(graph)
                 vmap: dict[str, dict[str, object]] = {}
 
                 if vrows:
                     for row in vrows:
                         if not isinstance(row, dict):
                             continue
-                        vid_raw = row.get('vertex_id', None)
+                        vid_raw = row.get('node_id', None)
                         if vid_raw is None:
                             continue
                         vid = str(vid_raw).strip()
                         if not vid or vid.lower() == 'none':
                             continue
-                        attrs = {k: v for k, v in row.items() if k != 'vertex_id' and v is not None}
+                        attrs = {k: v for k, v in row.items() if k != 'node_id' and v is not None}
                         vmap[vid] = attrs
 
                 if not vmap:
-                    getter = getattr(graph, 'get_vertex_attrs', None)
+                    getter = getattr(graph, 'get_node_attrs', None)
                     if callable(getter):
                         try:
-                            for vid in graph.vertices():
+                            for vid in graph.nodes():
                                 if vid is None:
                                     continue
                                 svid = str(vid).strip()
@@ -241,7 +241,7 @@ def to_sif(
                         except AttributeError:
                             pass
 
-                for vid in graph.vertices():
+                for vid in graph.nodes():
                     if vid is None:
                         continue
                     svid = str(vid).strip()
@@ -255,7 +255,7 @@ def to_sif(
                         nf.write(f'{svid}\n')
 
                     if lossless and attrs:
-                        manifest['vertex_attrs'][svid] = attrs
+                        manifest['node_attrs'][svid] = attrs
 
     if lossless:
         for eid, info in graph.hyperedge_definitions.items():
@@ -336,7 +336,7 @@ def from_sif(
         - Reads binary edges from SIF file (source, relation, target)
         - Auto-generates edge IDs (edge_0, edge_1, ...)
         - All edges inherit the `directed` parameter
-        - Vertex attributes loaded from optional .nodes sidecar
+        - Node attributes loaded from optional .nodes sidecar
         - Hyperedges, per-edge directedness, and complex metadata are lost
 
     Lossless mode (manifest provided):
@@ -350,10 +350,10 @@ def from_sif(
     SIF Format:
         - Three columns: source<TAB>relation<TAB>target
         - Lines starting with comment_prefixes are ignored
-        - Vertices referenced in edges are created automatically
+        - Nodes referenced in edges are created automatically
 
     Sidecar .nodes file format (optional):
-        - One vertex per line: vertex_id<TAB>key=value<TAB>key=value...
+        - One node per line: node_id<TAB>key=value<TAB>key=value...
         - Boolean values: true/false (case-insensitive)
         - Numeric values: auto-detected floats
         - String values: everything else
@@ -364,7 +364,7 @@ def from_sif(
         directed: Default directedness for edges (overridden by manifest if provided)
         relation_attr: Edge attribute key for storing relation type
         default_relation: Default relation if not specified in file
-        read_nodes_sidecar: Whether to read .nodes sidecar file with vertex attributes
+        read_nodes_sidecar: Whether to read .nodes sidecar file with node attributes
         nodes_path: Custom path for nodes sidecar (default: path + ".nodes")
         encoding: File encoding (default: utf-8)
         delimiter: Custom delimiter (default: auto-detect TAB or whitespace)
@@ -380,7 +380,7 @@ def from_sif(
         - For full graph reconstruction (hyperedges, slices, metadata), use manifest
         - Manifest files are created by to_sif(lossless=True)
         - Edge IDs are auto-generated in standard mode, preserved in lossless mode
-        - Vertex attributes require .nodes sidecar file or manifest
+        - Node attributes require .nodes sidecar file or manifest
 
     """
     if manifest is not None and not isinstance(manifest, dict):
@@ -391,7 +391,7 @@ def from_sif(
 
     # Multilayer graphs are reconstructed authoritatively from the manifest: the
     # SIF text carries ``str((vid, layer_coord))`` reprs for supra-node endpoints,
-    # which would otherwise create one spurious vertex per repr string and lose the
+    # which would otherwise create one spurious node per repr string and lose the
     # aspects. Declare the aspects up front so supra endpoints resolve on add.
     _ml = manifest.get('multilayer', {}) if manifest else {}
     _is_ml = bool(_ml.get('aspects'))
@@ -432,7 +432,7 @@ def from_sif(
             return k, v
 
     # ===== NODES SIDECAR WITH PRE-DETECT DELIMITER =====
-    vertex_data = {}
+    node_data = {}
 
     if read_nodes_sidecar:
         sidecar = nodes_path if nodes_path is not None else (str(path) + '.nodes')
@@ -441,7 +441,7 @@ def from_sif(
         if os.path.exists(sidecar):
             # Detect delimiter once
             use_tab = None
-            vd = vertex_data  # OPT 7: Localize
+            vd = node_data  # OPT 7: Localize
 
             with open(sidecar, encoding=encoding) as nf:
                 for raw in nf:
@@ -466,10 +466,10 @@ def from_sif(
                                 attrs[k] = v
                     vd[vid] = attrs
 
-    # Merge manifest vertex attrs
-    if manifest and 'vertex_attrs' in manifest:
-        for vid, attrs in manifest['vertex_attrs'].items():
-            vertex_data.setdefault(vid, {}).update(attrs)
+    # Merge manifest node attrs
+    if manifest and 'node_attrs' in manifest:
+        for vid, attrs in manifest['node_attrs'].items():
+            node_data.setdefault(vid, {}).update(attrs)
 
     # ===== EDGES FILE WITH: INLINE + LOCALS + FAST COLLECTIONS =====
     edges_raw = []
@@ -479,7 +479,7 @@ def from_sif(
     actual_delim = delimiter if delimiter is not None else '\t'
 
     # Localize lookups
-    vd = vertex_data
+    vd = node_data
     append_edge = edges_raw.append
     comment_tuple = tuple(comment_prefixes)
 
@@ -518,10 +518,10 @@ def from_sif(
 
             append_edge((src, tgt, rel))
 
-    # ===== BULK ADD VERTICES =====
-    if vertex_data:
-        vertices_bulk = list(vertex_data.items())
-        H._add_vertices_bulk(vertices_bulk)
+    # ===== BULK ADD NODES =====
+    if node_data:
+        nodes_bulk = list(node_data.items())
+        H._add_nodes_bulk(nodes_bulk)
 
     # ===== BULK ADD EDGES WITH FAST HASHING + DELAYED EXPANSION =====
     if _is_ml and manifest and 'binary_edges' in manifest:

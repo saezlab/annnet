@@ -49,7 +49,7 @@ class TestIgraphAdapter(unittest.TestCase):
 
         # --- Round-trip back to AnnNet
         g2 = from_igraph(igG, manifest)
-        self.assertEqual(set(g2.vertices()), set(g.vertices()))
+        self.assertEqual(set(g2.nodes()), set(g.nodes()))
         for eid in g.edge_weights:
             self.assertIn(eid, g2.edge_weights)
         self.assertAlmostEqual(
@@ -61,7 +61,7 @@ class TestIgraphAdapter(unittest.TestCase):
     @unittest.skipUnless(HAS_IG, 'python-igraph not installed')
     def test_from_ig_without_manifest_scales(self):
         """Regression guard: ``_from_ig_without_manifest`` previously did
-        per-vertex / per-edge inserts (O(N²) dataframe-concat). After the
+        per-node / per-edge inserts (O(N²) dataframe-concat). After the
         bulk-batch fix, 10K-edge bare imports must finish in well under 10s.
         """
         import random
@@ -76,7 +76,7 @@ class TestIgraphAdapter(unittest.TestCase):
         rng = random.Random(7)
         N, E = 2000, 10_000
         G = AnnNet(directed=True)
-        G.add_vertices([f'v{i}' for i in range(N)])
+        G.add_nodes([f'v{i}' for i in range(N)])
         G.add_edges([(f'v{rng.randrange(N)}', f'v{rng.randrange(N)}') for _ in range(E)])
         igG, _ = to_igraph(G)
 
@@ -98,7 +98,7 @@ class TestIgraphAdapter(unittest.TestCase):
         g = _build_graph()
         igG, manifest = to_igraph(g, directed=True, hyperedge_mode='skip', public_only=True)
 
-        # Vertex names present
+        # Node names present
         self.assertTrue(set(igG.vs['name']) >= {'A', 'B', 'C'})
         # Edge count >= 2 (hyperedge skipped)
         self.assertGreaterEqual(igG.ecount(), 2)

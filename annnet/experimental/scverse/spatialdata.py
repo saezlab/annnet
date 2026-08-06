@@ -22,7 +22,7 @@ def to_spatialdata(
 
     This bridge is conservative by design: it stores the canonical AnnData
     payload as a SpatialData table without inventing fake spatial elements.
-    If vertex coordinates are present in `obs`, they are exported via
+    If node coordinates are present in `obs`, they are exported via
     `AnnData.obsm["spatial"]`.
     """
     spatialdata = require_dependency(

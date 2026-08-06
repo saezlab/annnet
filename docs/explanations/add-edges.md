@@ -34,7 +34,7 @@ G.add_edges("A", "B")
 G.add_edges("A", "B", weight=0.5, edge_id="e1", directed=True)
 ```
 
-Both endpoints must be strings. If either vertex does not exist yet, it is
+Both endpoints must be strings. If either node does not exist yet, it is
 created automatically.
 
 ### Supra-node edge (multilayer)
@@ -43,14 +43,14 @@ created automatically.
 G.add_edges(("A", ("healthy",)), ("B", ("treated",)))
 ```
 
-Each endpoint is a `(vertex_id, layer_coord_tuple)` pair. Required when the graph
+Each endpoint is a `(node_id, layer_coord_tuple)` pair. Required when the graph
 was created with `aspects=`. The multilayer kind is inferred:
 
 | Condition | Kind |
 |---|---|
-| Same vertex ID, different layers | `coupling` |
-| Same layer, different vertex IDs | `intra` |
-| Different vertex ID and layer | `inter` |
+| Same node ID, different layers | `coupling` |
+| Same layer, different node IDs | `intra` |
+| Different node ID and layer | `inter` |
 
 In a multilayer graph, passing a bare string ID raises `ValueError`.
 
@@ -90,7 +90,7 @@ This form is **single-edge only**.
 G.add_edges(None, None, as_entity=True, edge_id="virtual_e1", role="enzyme")
 ```
 
-Creates a named edge that has no incident vertices yet, but occupies a row in the
+Creates a named edge that has no incident nodes yet, but occupies a row in the
 entity space so it can later be used as an endpoint.
 `edge_id` is required here — there is nothing to derive an auto-ID from.
 

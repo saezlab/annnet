@@ -8,7 +8,7 @@ from dataclasses import dataclass
 @dataclass
 class Scale:
     name: str
-    vertices: int
+    nodes: int
     edges: int
     hyperedges: int
     slices: int
@@ -20,8 +20,8 @@ class Scale:
     annotation_density: float | None = None
 
     @property
-    def remove_vertices(self) -> int:
-        return max(1, int(self.vertices * self.remove_fraction))
+    def remove_nodes(self) -> int:
+        return max(1, int(self.nodes * self.remove_fraction))
 
     @property
     def remove_edges(self) -> int:
@@ -29,7 +29,7 @@ class Scale:
 
 
 # One source of truth for scale, shared by run.py (comparison suite) and
-# reporting/specsheet.py (headline PDF). Edge counts are ~4x vertices throughout
+# reporting/specsheet.py (headline PDF). Edge counts are ~4x nodes throughout
 # so the curve shape is consistent across the whole ladder, up to 1M V / 4M E.
 SCALES = {
     'tiny': Scale('tiny', 100, 400, 40, 2, node_attrs=4, edge_attrs=2, accessor_repeats=3),

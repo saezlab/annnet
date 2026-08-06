@@ -16,7 +16,7 @@ from annnet.core._records import EdgeView
 
 def test_binary_directed_get_edge_view():
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1', weight=2.5)
     view = G.get_edge('e1')
     assert isinstance(view, EdgeView)
@@ -31,7 +31,7 @@ def test_binary_directed_get_edge_view():
 
 def test_binary_undirected_get_edge_view():
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     view = G.get_edge('e1')
     assert view.kind == 'binary'
@@ -42,7 +42,7 @@ def test_binary_undirected_get_edge_view():
 
 def test_undirected_hyperedge_view():
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges([{'src': ['A', 'B', 'C'], 'edge_id': 'h1'}])
     view = G.get_edge('h1')
     assert view.kind == 'hyper_undirected'
@@ -55,7 +55,7 @@ def test_undirected_hyperedge_view():
 def test_directed_hyperedge_view_via_single_edge_path():
     """Single-edge ``add_edges(src=..., tgt=...)`` keeps user src/tgt orientation."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges(src=['A', 'B'], tgt=['C', 'D'], edge_id='h1')
     view = G.get_edge('h1')
     assert view.kind == 'hyper_directed'
@@ -69,7 +69,7 @@ def test_directed_hyperedge_view_via_batch_path_matches_single_edge_path():
     """Batch path now stores src/tgt consistently with the single-edge path
     (P1-G fix): user's ``src`` ends up in ``rec.src``."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges([{'src': ['A', 'B'], 'tgt': ['C', 'D'], 'edge_id': 'h1'}])
     view = G.get_edge('h1')
     assert view.kind == 'hyper_directed'
@@ -81,7 +81,7 @@ def test_directed_hyperedge_view_via_batch_path_matches_single_edge_path():
 
 def test_tuple_unpacking_back_compat():
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     S, T = G.get_edge('e1')
     assert S == frozenset(['A'])
@@ -91,7 +91,7 @@ def test_tuple_unpacking_back_compat():
 def test_a_lookup_by_position_is_refused():
     """A column of the incidence matrix is not an id, and it is not a lookup key."""
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     with pytest.raises(TypeError):
         G.get_edge(0)

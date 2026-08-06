@@ -20,11 +20,11 @@ from annnet.core.graph import AnnNet
 
 @pytest.fixture
 def simple_graph():
-    """Minimal graph with vertices and binary edges only."""
+    """Minimal graph with nodes and binary edges only."""
     G = AnnNet(directed=True)
-    G.add_vertices('A')
-    G.add_vertices('B')
-    G.add_vertices('C')
+    G.add_nodes('A')
+    G.add_nodes('B')
+    G.add_nodes('C')
 
     G.add_edges('A', 'B', edge_id='e1', weight=1.5)
     G.add_edges('B', 'C', edge_id='e2', weight=2.0)
@@ -37,16 +37,16 @@ def complex_graph():
     """Full-featured graph with all capabilities (mixed directedness)."""
     G = AnnNet(directed=None)
 
-    # Vertices with attributes
-    G.add_vertices('A')
-    G.attrs.set_vertex_attrs('A', gene='TP53', type='protein', score=0.95)
-    G.add_vertices('B')
-    G.attrs.set_vertex_attrs('B', gene='EGFR', type='protein', score=0.88)
-    G.add_vertices('C')
-    G.attrs.set_vertex_attrs('C', gene='MYC', type='protein')
-    G.add_vertices('D')
-    G.add_vertices('E')
-    G.add_vertices('node with space')
+    # Nodes with attributes
+    G.add_nodes('A')
+    G.attrs.set_node_attrs('A', gene='TP53', type='protein', score=0.95)
+    G.add_nodes('B')
+    G.attrs.set_node_attrs('B', gene='EGFR', type='protein', score=0.88)
+    G.add_nodes('C')
+    G.attrs.set_node_attrs('C', gene='MYC', type='protein')
+    G.add_nodes('D')
+    G.add_nodes('E')
+    G.add_nodes('node with space')
 
     # Binary edges (mixed directed/undirected)
     G.add_edges('A', 'B', edge_id='e1', directed=True, weight=1.5)
@@ -101,8 +101,8 @@ def tmpdir_fixture():
 
 def assert_graphs_equal(G1, G2, check_slices=True, check_hyperedges=True):
     """Assert two graphs are structurally identical."""
-    # Vertices
-    assert set(G1.vertices()) == set(G2.vertices()), 'Vertex sets differ'
+    # Nodes
+    assert set(G1.nodes()) == set(G2.nodes()), 'Node sets differ'
 
     # Edge count
     assert G1.ne == G2.ne, 'Edge counts differ'
@@ -149,16 +149,16 @@ def assert_graphs_equal(G1, G2, check_slices=True, check_hyperedges=True):
             pass
 
 
-def assert_vertex_attrs_equal(G1, G2, vertex_id, ignore_none=True):
-    """Assert vertex attributes are equal."""
-    attrs1 = G1.attrs.get_vertex_attrs(vertex_id) or {}
-    attrs2 = G2.attrs.get_vertex_attrs(vertex_id) or {}
+def assert_node_attrs_equal(G1, G2, node_id, ignore_none=True):
+    """Assert node attributes are equal."""
+    attrs1 = G1.attrs.get_node_attrs(node_id) or {}
+    attrs2 = G2.attrs.get_node_attrs(node_id) or {}
 
     if ignore_none:
         attrs1 = {k: v for k, v in attrs1.items() if v is not None}
         attrs2 = {k: v for k, v in attrs2.items() if v is not None}
 
-    assert attrs1 == attrs2, f'Vertex {vertex_id} attrs differ: {attrs1} != {attrs2}'
+    assert attrs1 == attrs2, f'Node {node_id} attrs differ: {attrs1} != {attrs2}'
 
 
 def assert_edge_attrs_equal(G1, G2, edge_id, ignore_none=True, ignore_private=False):
@@ -201,16 +201,16 @@ def pytest_configure(config):
 
 
 def build_adapter_graph() -> AnnNet:
-    """Directed graph with 3 vertices, binary+hyperedge, and two slices.
+    """Directed graph with 3 nodes, binary+hyperedge, and two slices.
 
     Identical graph used across networkx, igraph, and graphtool adapter tests
     to ensure cross-adapter comparability.
     """
     g = AnnNet(directed=True)
 
-    g.add_vertices('A', label='alpha', kind='src')
-    g.add_vertices('B', label='beta')
-    g.add_vertices('C', label='gamma', kind='sink')
+    g.add_nodes('A', label='alpha', kind='src')
+    g.add_nodes('B', label='beta')
+    g.add_nodes('C', label='gamma', kind='sink')
 
     e1 = g.add_edges('A', 'B', weight=2.0, interaction=+1, tag='ab')
     g.add_edges('B', 'C', weight=1.0, directed=False, interaction=-1)

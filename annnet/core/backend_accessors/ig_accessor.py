@@ -11,13 +11,13 @@ if TYPE_CHECKING:
 class _IGBackendAccessor(_BackendAccessorBase):
     """igraph backend accessor attached to an AnnNet instance."""
 
-    VERTEX_KEYS = {
+    NODE_KEYS = {
         'source',
         'target',
         'u',
         'v',
-        'vertex',
-        'vertices',
+        'node',
+        'nodes',
         'vs',
         'to',
         'fr',
@@ -35,7 +35,7 @@ class _IGBackendAccessor(_BackendAccessorBase):
         # returns an igraph-call wrapper for any unknown name) never sees it.
         self._name_index_cache = None
 
-    def peek_vertices(self, k: int = 10):
+    def peek_nodes(self, k: int = 10):
         igG = self._get_or_make_ig(
             directed=True,
             hyperedge_mode='skip',
@@ -130,11 +130,11 @@ class _IGBackendAccessor(_BackendAccessorBase):
                 if label_field is None and guess_labels:
                     label_field = self._infer_label_field()
                 if bound is not None:
-                    self._coerce_vertices_in_bound(bound, igG, label_field)
+                    self._coerce_nodes_in_bound(bound, igG, label_field)
                     bound.apply_defaults()
                     pargs, pkwargs = list(bound.args), dict(bound.kwargs)
                 else:
-                    self._coerce_vertices_in_kwargs(kwargs, igG, label_field)
+                    self._coerce_nodes_in_kwargs(kwargs, igG, label_field)
                     pargs, pkwargs = list(args), dict(kwargs)
             except Exception:  # noqa: BLE001
                 pargs, pkwargs = list(args), dict(kwargs)
@@ -143,12 +143,12 @@ class _IGBackendAccessor(_BackendAccessorBase):
                 raw = target(*pargs, **pkwargs)
                 return raw
             except (KeyError, ValueError) as exc:
-                sample = self.peek_vertices(5)
+                sample = self.peek_nodes(5)
                 tip = (
-                    f"{exc}. Vertices must match this graph's vertex IDs.\n"
-                    f'- If you passed labels, set _ig_label_field=<vertex label column>.\n'
+                    f"{exc}. Nodes must match this graph's node IDs.\n"
+                    f'- If you passed labels, set _ig_label_field=<node label column>.\n'
                     f"- Example: G.ig.distances(source='a', target='z', weights='weight', _ig_label_field='name')\n"
-                    f'- A few vertex IDs igraph sees: {sample}'
+                    f'- A few node IDs igraph sees: {sample}'
                 )
                 raise type(exc)(tip) from exc
 
@@ -219,7 +219,7 @@ class _IGBackendAccessor(_BackendAccessorBase):
     def _name_to_index_map(self, igG):
         # The converted igG is version-cached (stable identity until it rebuilds),
         # so memoise its name->index map instead of rebuilding it O(V) per coerced
-        # vertex (a bulk vertex arg was O(V*k) before).
+        # node (a bulk node arg was O(V*k) before).
         cached = self._name_index_cache
         if cached is not None and cached[0] is igG:
             return cached[1]
@@ -228,29 +228,27 @@ class _IGBackendAccessor(_BackendAccessorBase):
         self._name_index_cache = (igG, m)
         return m
 
-    def _coerce_vertex(self, value, igG, label_field: str | None):
+    def _coerce_node(self, value, igG, label_field: str | None):
         if isinstance(value, int) and 0 <= value < igG.vcount():
             return value
         if label_field:
-            candidate = self._lookup_vertex_id_by_label(label_field, value)
+            candidate = self._lookup_node_id_by_label(label_field, value)
             if candidate is not None:
                 value = candidate
         return self._name_to_index_map(igG).get(value, value)
 
-    def _coerce_vertex_or_iter(self, obj, igG, label_field: str | None):
-        return self._coerce_vertex_iterable(
-            obj, lambda value: self._coerce_vertex(value, igG, label_field)
+    def _coerce_node_or_iter(self, obj, igG, label_field: str | None):
+        return self._coerce_node_iterable(
+            obj, lambda value: self._coerce_node(value, igG, label_field)
         )
 
-    def _coerce_vertices_in_kwargs(self, kwargs: dict, igG, label_field: str | None):
-        self._coerce_vertex_kwargs(
-            kwargs, lambda obj: self._coerce_vertex_or_iter(obj, igG, label_field)
+    def _coerce_nodes_in_kwargs(self, kwargs: dict, igG, label_field: str | None):
+        self._coerce_node_kwargs(
+            kwargs, lambda obj: self._coerce_node_or_iter(obj, igG, label_field)
         )
 
-    def _coerce_vertices_in_bound(self, bound, igG, label_field: str | None):
-        self._coerce_vertex_bound(
-            bound, lambda obj: self._coerce_vertex_or_iter(obj, igG, label_field)
-        )
+    def _coerce_nodes_in_bound(self, bound, igG, label_field: str | None):
+        self._coerce_node_bound(bound, lambda obj: self._coerce_node_or_iter(obj, igG, label_field))
 
     def _prune_edge_attributes(self, igG, needed_attrs: set):
         removable = set(igG.es.attributes()) - set(needed_attrs)

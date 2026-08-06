@@ -3,10 +3,10 @@
 Produces a compact PDF (tables only) covering:
 
 1. Head-to-head binary-graph ops (build + core queries) — AnnNet vs NetworkX,
-   igraph and graph-tool, across three scales up to 1M vertices / 4M edges.
+   igraph and graph-tool, across three scales up to 1M nodes / 4M edges.
 2. Memory footprint of the built binary graph for the same engines/scales.
 3. AnnNet-only build time + memory for every edge type it can express
-   (binary, vertex-edge / edge-node, hyperedge, multilayer), across scales.
+   (binary, node-edge / edge-node, hyperedge, multilayer), across scales.
 
 Design for a machine with limited RAM:
 
@@ -37,7 +37,7 @@ import subprocess
 # ---------------------------------------------------------------------------
 # The scale ladder is derived from the shared benchmarks.scales source so the
 # spec sheet and the comparison suite (benchmarks.run) never drift apart.
-DEFAULT_SCALE_KEYS = ['medium', 'large', 'xlarge']  # 10K / 100K / 1M vertices
+DEFAULT_SCALE_KEYS = ['medium', 'large', 'xlarge']  # 10K / 100K / 1M nodes
 QUICK_SCALE_KEYS = ['small', 'medium']  # fast layout check
 
 
@@ -45,8 +45,7 @@ def _scales(keys: list[str]) -> list[dict]:
     from ..scales import SCALES as _SHARED
 
     return [
-        {'name': _si(_SHARED[k].vertices), 'v': _SHARED[k].vertices, 'e': _SHARED[k].edges}
-        for k in keys
+        {'name': _si(_SHARED[k].nodes), 'v': _SHARED[k].nodes, 'e': _SHARED[k].edges} for k in keys
     ]
 
 
@@ -55,7 +54,7 @@ def _scales(keys: list[str]) -> list[dict]:
 MEM_TRACEMALLOC_MAX_EDGES = 500_000
 
 ENGINES = ['annnet', 'networkx', 'igraph', 'graph-tool']
-EDGE_TYPES = ['binary', 'vertex_edge', 'hyper', 'multilayer']
+EDGE_TYPES = ['binary', 'node_edge', 'hyper', 'multilayer']
 
 RESULTS_DIR = Path(__file__).resolve().parents[1] / 'results'
 
@@ -121,7 +120,7 @@ def _annnet_type_build(kind: str, n_v: int, n_e: int):
 
         return build, n_v, n_e, 'directed binary edges'
 
-    if kind == 'vertex_edge':
+    if kind == 'node_edge':
         # Edge-node edges: each edge is also registered as an entity (as_entity).
         m = max(1, n_e // 2)  # heavier per edge; use ~half the edge budget
         edges = [
@@ -397,7 +396,7 @@ def render_pdf(results: dict, out_path: Path) -> None:
         _table(
             ax1,
             '1 · Binary graph — head-to-head (build + core queries)',
-            'Median per-call time. Same vertex/edge input fed to all comparable engines.',
+            'Median per-call time. Same node/edge input fed to all comparable engines.',
             col_labels,
             rows,
             col_widths=[0.20, 0.11] + [0.138] * 5,
@@ -450,7 +449,7 @@ def render_pdf(results: dict, out_path: Path) -> None:
         rows3 = []
         pretty = {
             'binary': 'binary',
-            'vertex_edge': 'vertex-edge (edge-node)',
+            'node_edge': 'node-edge (edge-node)',
             'hyper': 'hyperedge (arity-4)',
             'multilayer': 'multilayer (4 layers)',
         }
@@ -503,13 +502,13 @@ ENGINE_COLORS = {
 }
 TYPE_COLORS = {
     'binary': '#1f3b57',
-    'vertex_edge': '#2a9d8f',
+    'node_edge': '#2a9d8f',
     'hyper': '#e08b3b',
     'multilayer': '#8e5ea2',
 }
 TYPE_LABELS = {
     'binary': 'binary',
-    'vertex_edge': 'vertex-edge',
+    'node_edge': 'node-edge',
     'hyper': 'hyperedge (k=4)',
     'multilayer': 'multilayer (4L)',
 }

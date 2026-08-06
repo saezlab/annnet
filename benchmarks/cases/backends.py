@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from .common import (
     annnet,
+    make_nodes,
     scale_note,
     time_record,
     capped_scale,
-    make_vertices,
     make_edge_pairs,
     make_edge_records,
     build_annnet_graph,
     make_edge_attr_updates,
+    make_node_attr_updates,
     graphtool_property_type,
     make_numeric_edge_pairs,
     graphtool_property_value,
-    make_vertex_attr_updates,
     optional_module_for_engine,
 )
 
@@ -23,14 +23,14 @@ def backend_operation_dimensions(
     *,
     backend: str = 'auto',
     samples: int = 3,
-    max_vertices: int = 2_500,
+    max_nodes: int = 2_500,
     max_edges: int = 10_000,
     max_accessor_repeats: int = 5,
 ) -> list[dict]:
     original = scale
     scale = capped_scale(
         scale,
-        max_vertices=max_vertices,
+        max_nodes=max_nodes,
         max_edges=max_edges,
         max_accessor_repeats=max_accessor_repeats,
     )
@@ -64,40 +64,40 @@ def backend_operation_dimensions(
 
 def _annnet_ops(scale, backend: str):
     AnnNet = annnet()
-    vertices = make_vertices(scale.vertices)
-    pairs = make_edge_pairs(scale.vertices, scale.edges)
+    nodes = make_nodes(scale.nodes)
+    pairs = make_edge_pairs(scale.nodes, scale.edges)
     records = make_edge_records(pairs)
 
     def empty():
         return AnnNet(directed=True, annotations_backend=backend)
 
-    def add_vertices_bulk():
+    def add_nodes_bulk():
         graph = empty()
-        graph.add_vertices(vertices, slice='base')
+        graph.add_nodes(nodes, slice='base')
         return graph
 
     def add_edges_bulk():
         graph = empty()
-        graph.add_vertices(vertices, slice='base')
+        graph.add_nodes(nodes, slice='base')
         graph.add_edges(records, slice='base')
         return graph
 
     def remove_edges_fraction():
-        graph, _vertices, _pairs, edge_ids = build_annnet_graph(scale, backend=backend)
+        graph, _nodes, _pairs, edge_ids = build_annnet_graph(scale, backend=backend)
         graph.remove_edges(edge_ids[: scale.remove_edges], errors='raise')
         return graph
 
-    def remove_vertices_fraction():
-        graph, vertices, _pairs, _edge_ids = build_annnet_graph(scale, backend=backend)
-        graph.remove_vertices(vertices[: scale.remove_vertices], errors='raise')
+    def remove_nodes_fraction():
+        graph, nodes, _pairs, _edge_ids = build_annnet_graph(scale, backend=backend)
+        graph.remove_nodes(nodes[: scale.remove_nodes], errors='raise')
         return graph
 
-    def set_vertex_attrs_bulk():
+    def set_node_attrs_bulk():
         graph = empty()
-        graph.add_vertices(vertices, slice='base')
-        graph.attrs.set_vertex_attrs_bulk(
-            make_vertex_attr_updates(
-                vertices,
+        graph.add_nodes(nodes, slice='base')
+        graph.attrs.set_node_attrs_bulk(
+            make_node_attr_updates(
+                nodes,
                 attr_count=scale.node_attrs,
                 sparse_every=scale.sparse_every,
                 annotation_density=scale.annotation_density,
@@ -106,7 +106,7 @@ def _annnet_ops(scale, backend: str):
         return graph
 
     def set_edge_attrs_bulk():
-        graph, _vertices, _pairs, edge_ids = build_annnet_graph(scale, backend=backend)
+        graph, _nodes, _pairs, edge_ids = build_annnet_graph(scale, backend=backend)
         graph.attrs.set_edge_attrs_bulk(
             make_edge_attr_updates(
                 edge_ids,
@@ -118,32 +118,32 @@ def _annnet_ops(scale, backend: str):
         return graph
 
     return _operation_cases(
-        add_vertices_bulk,
+        add_nodes_bulk,
         add_edges_bulk,
         remove_edges_fraction,
-        remove_vertices_fraction,
-        set_vertex_attrs_bulk,
+        remove_nodes_fraction,
+        set_node_attrs_bulk,
         set_edge_attrs_bulk,
     )
 
 
 def _networkx_ops(scale):
-    vertices = make_vertices(scale.vertices)
-    pairs = make_edge_pairs(scale.vertices, scale.edges)
+    nodes = make_nodes(scale.nodes)
+    pairs = make_edge_pairs(scale.nodes, scale.edges)
 
     def build_graph():
         import networkx as nx
 
         graph = nx.DiGraph()
-        graph.add_nodes_from(vertices)
+        graph.add_nodes_from(nodes)
         graph.add_edges_from(pairs)
         return graph
 
-    def add_vertices_bulk():
+    def add_nodes_bulk():
         import networkx as nx
 
         graph = nx.DiGraph()
-        graph.add_nodes_from(vertices)
+        graph.add_nodes_from(nodes)
         return graph
 
     def add_edges_bulk():
@@ -154,19 +154,19 @@ def _networkx_ops(scale):
         graph.remove_edges_from(pairs[: scale.remove_edges])
         return graph
 
-    def remove_vertices_fraction():
+    def remove_nodes_fraction():
         graph = build_graph()
-        graph.remove_nodes_from(vertices[: scale.remove_vertices])
+        graph.remove_nodes_from(nodes[: scale.remove_nodes])
         return graph
 
-    def set_vertex_attrs_bulk():
+    def set_node_attrs_bulk():
         import networkx as nx
 
         graph = build_graph()
         nx.set_node_attributes(
             graph,
-            make_vertex_attr_updates(
-                vertices,
+            make_node_attr_updates(
+                nodes,
                 attr_count=scale.node_attrs,
                 sparse_every=scale.sparse_every,
                 annotation_density=scale.annotation_density,
@@ -194,34 +194,34 @@ def _networkx_ops(scale):
         return graph
 
     return _operation_cases(
-        add_vertices_bulk,
+        add_nodes_bulk,
         add_edges_bulk,
         remove_edges_fraction,
-        remove_vertices_fraction,
-        set_vertex_attrs_bulk,
+        remove_nodes_fraction,
+        set_node_attrs_bulk,
         set_edge_attrs_bulk,
     )
 
 
 def _igraph_ops(scale):
-    vertices = make_vertices(scale.vertices)
-    pairs = make_numeric_edge_pairs(scale.vertices, scale.edges)
+    nodes = make_nodes(scale.nodes)
+    pairs = make_numeric_edge_pairs(scale.nodes, scale.edges)
 
     def build_graph():
         import igraph as ig
 
         graph = ig.Graph(directed=True)
-        graph.add_vertices(scale.vertices)
-        graph.vs['name'] = vertices
+        graph.add_vertices(scale.nodes)
+        graph.vs['name'] = nodes
         graph.add_edges(pairs)
         return graph
 
-    def add_vertices_bulk():
+    def add_nodes_bulk():
         import igraph as ig
 
         graph = ig.Graph(directed=True)
-        graph.add_vertices(scale.vertices)
-        graph.vs['name'] = vertices
+        graph.add_vertices(scale.nodes)
+        graph.vs['name'] = nodes
         return graph
 
     def add_edges_bulk():
@@ -232,22 +232,22 @@ def _igraph_ops(scale):
         graph.delete_edges(list(range(min(scale.remove_edges, graph.ecount()))))
         return graph
 
-    def remove_vertices_fraction():
+    def remove_nodes_fraction():
         graph = build_graph()
-        graph.delete_vertices(list(range(min(scale.remove_vertices, graph.vcount()))))
+        graph.delete_nodes(list(range(min(scale.remove_nodes, graph.vcount()))))
         return graph
 
-    def set_vertex_attrs_bulk():
-        graph = add_vertices_bulk()
-        updates = make_vertex_attr_updates(
-            vertices,
+    def set_node_attrs_bulk():
+        graph = add_nodes_bulk()
+        updates = make_node_attr_updates(
+            nodes,
             attr_count=scale.node_attrs,
             sparse_every=scale.sparse_every,
             annotation_density=scale.annotation_density,
         )
         for attr_idx in range(scale.node_attrs):
             attr = f'node_attr_{attr_idx}'
-            graph.vs[attr] = [updates[vertex_id].get(attr) for vertex_id in vertices]
+            graph.vs[attr] = [updates[node_id].get(attr) for node_id in nodes]
         return graph
 
     def set_edge_attrs_bulk():
@@ -264,32 +264,32 @@ def _igraph_ops(scale):
         return graph
 
     return _operation_cases(
-        add_vertices_bulk,
+        add_nodes_bulk,
         add_edges_bulk,
         remove_edges_fraction,
-        remove_vertices_fraction,
-        set_vertex_attrs_bulk,
+        remove_nodes_fraction,
+        set_node_attrs_bulk,
         set_edge_attrs_bulk,
     )
 
 
 def _graphtool_ops(scale):
-    vertices = make_vertices(scale.vertices)
-    pairs = make_numeric_edge_pairs(scale.vertices, scale.edges)
+    nodes = make_nodes(scale.nodes)
+    pairs = make_numeric_edge_pairs(scale.nodes, scale.edges)
 
     def build_graph():
         import graph_tool.all as gt
 
         graph = gt.Graph(directed=True)
-        graph.add_vertex(scale.vertices)
+        graph.add_vertex(scale.nodes)
         graph.add_edge_list(pairs)
         return graph
 
-    def add_vertices_bulk():
+    def add_nodes_bulk():
         import graph_tool.all as gt
 
         graph = gt.Graph(directed=True)
-        graph.add_vertex(scale.vertices)
+        graph.add_vertex(scale.nodes)
         return graph
 
     def add_edges_bulk():
@@ -301,16 +301,16 @@ def _graphtool_ops(scale):
             graph.remove_edge(edge)
         return graph
 
-    def remove_vertices_fraction():
+    def remove_nodes_fraction():
         graph = build_graph()
-        for idx in reversed(range(min(scale.remove_vertices, graph.num_vertices()))):
+        for idx in reversed(range(min(scale.remove_nodes, graph.num_vertices()))):
             graph.remove_vertex(graph.vertex(idx))
         return graph
 
-    def set_vertex_attrs_bulk():
-        graph = add_vertices_bulk()
-        updates = make_vertex_attr_updates(
-            vertices,
+    def set_node_attrs_bulk():
+        graph = add_nodes_bulk()
+        updates = make_node_attr_updates(
+            nodes,
             attr_count=scale.node_attrs,
             sparse_every=scale.sparse_every,
             annotation_density=scale.annotation_density,
@@ -318,9 +318,9 @@ def _graphtool_ops(scale):
         for attr_idx in range(scale.node_attrs):
             attr = f'node_attr_{attr_idx}'
             prop = graph.new_vertex_property(graphtool_property_type(attr_idx))
-            for vertex in graph.vertices():
-                prop[vertex] = graphtool_property_value(
-                    updates[f'v{int(vertex)}'].get(attr),
+            for node in graph.vertices():
+                prop[node] = graphtool_property_value(
+                    updates[f'v{int(node)}'].get(attr),
                     attr_idx,
                 )
             graph.vp[attr] = prop
@@ -346,28 +346,28 @@ def _graphtool_ops(scale):
         return graph
 
     return _operation_cases(
-        add_vertices_bulk,
+        add_nodes_bulk,
         add_edges_bulk,
         remove_edges_fraction,
-        remove_vertices_fraction,
-        set_vertex_attrs_bulk,
+        remove_nodes_fraction,
+        set_node_attrs_bulk,
         set_edge_attrs_bulk,
     )
 
 
 def _operation_cases(
-    add_vertices_bulk,
+    add_nodes_bulk,
     add_edges_bulk,
     remove_edges_fraction,
-    remove_vertices_fraction,
-    set_vertex_attrs_bulk,
+    remove_nodes_fraction,
+    set_node_attrs_bulk,
     set_edge_attrs_bulk,
 ):
     return (
-        ('add_vertices_bulk', add_vertices_bulk, 'bulk vertex insertion'),
+        ('add_nodes_bulk', add_nodes_bulk, 'bulk node insertion'),
         ('add_edges_bulk', add_edges_bulk, 'bulk edge insertion'),
         ('remove_edges_fraction', remove_edges_fraction, 'remove edge fraction'),
-        ('remove_vertices_fraction', remove_vertices_fraction, 'remove vertex fraction'),
-        ('set_vertex_attrs_bulk', set_vertex_attrs_bulk, 'bulk vertex annotation write'),
+        ('remove_nodes_fraction', remove_nodes_fraction, 'remove node fraction'),
+        ('set_node_attrs_bulk', set_node_attrs_bulk, 'bulk node annotation write'),
         ('set_edge_attrs_bulk', set_edge_attrs_bulk, 'bulk edge annotation write'),
     )

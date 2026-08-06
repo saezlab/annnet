@@ -11,16 +11,16 @@ from .. import harness
 def capped_scale(
     scale,
     *,
-    max_vertices: int,
+    max_nodes: int,
     max_edges: int,
     max_accessor_repeats: int,
 ):
-    vertices = min(scale.vertices, max_vertices)
+    nodes = min(scale.nodes, max_nodes)
     edges = min(scale.edges, max_edges)
     hyperedges = min(scale.hyperedges, max(1, edges // 4))
     return replace(
         scale,
-        vertices=vertices,
+        nodes=nodes,
         edges=edges,
         hyperedges=hyperedges,
         accessor_repeats=min(scale.accessor_repeats, max_accessor_repeats),
@@ -28,9 +28,9 @@ def capped_scale(
 
 
 def scale_note(original, effective) -> str:
-    if original.vertices == effective.vertices and original.edges == effective.edges:
+    if original.nodes == effective.nodes and original.edges == effective.edges:
         return ''
-    return f'capped from {original.vertices:,} vertices/{original.edges:,} edges'
+    return f'capped from {original.nodes:,} nodes/{original.edges:,} edges'
 
 
 def time_record(
@@ -84,7 +84,7 @@ def record(
         'engine': engine,
         'backend': backend,
         'scale': scale.name,
-        'n_vertices': scale.vertices,
+        'n_nodes': scale.nodes,
         'n_edges': scale.edges,
         'group': group,
         'op': op,
@@ -104,15 +104,15 @@ def build_annnet_graph(
     scale,
     *,
     backend: str = 'auto',
-    vertex_attrs: bool = False,
+    node_attrs: bool = False,
     edge_attrs: bool = False,
 ):
     AnnNet = annnet()
-    vertices = make_vertices(scale.vertices)
-    pairs = make_edge_pairs(scale.vertices, scale.edges)
-    vertex_records = make_vertex_records(
-        vertices,
-        with_attrs=vertex_attrs,
+    nodes = make_nodes(scale.nodes)
+    pairs = make_edge_pairs(scale.nodes, scale.edges)
+    node_records = make_node_records(
+        nodes,
+        with_attrs=node_attrs,
         attr_count=scale.node_attrs,
         sparse_every=scale.sparse_every,
         annotation_density=scale.annotation_density,
@@ -125,41 +125,41 @@ def build_annnet_graph(
         annotation_density=scale.annotation_density,
     )
     graph = AnnNet(directed=True, annotations_backend=backend)
-    graph.add_vertices(vertex_records, slice='base')
+    graph.add_nodes(node_records, slice='base')
     edge_ids = graph.add_edges(edge_records, slice='base')
-    return graph, vertices, pairs, list(edge_ids)
+    return graph, nodes, pairs, list(edge_ids)
 
 
-def make_vertices(n_vertices: int) -> list[str]:
-    return [f'v{i}' for i in range(n_vertices)]
+def make_nodes(n_nodes: int) -> list[str]:
+    return [f'v{i}' for i in range(n_nodes)]
 
 
 def make_edge_pairs(
-    n_vertices: int,
+    n_nodes: int,
     n_edges: int,
     *,
     directed: bool = True,
 ) -> list[tuple[str, str]]:
-    if n_vertices < 2 or n_edges <= 0:
+    if n_nodes < 2 or n_edges <= 0:
         return []
-    max_edges = n_vertices * (n_vertices - 1)
+    max_edges = n_nodes * (n_nodes - 1)
     if not directed:
         max_edges //= 2
     target = min(n_edges, max_edges)
-    vertices = make_vertices(n_vertices)
+    nodes = make_nodes(n_nodes)
     out: list[tuple[str, str]] = []
     seen: set[tuple[int, int]] = set()
     offset = 1
-    while len(out) < target and offset < n_vertices:
-        for src_idx in range(n_vertices):
-            tgt_idx = (src_idx + offset) % n_vertices
+    while len(out) < target and offset < n_nodes:
+        for src_idx in range(n_nodes):
+            tgt_idx = (src_idx + offset) % n_nodes
             if src_idx == tgt_idx:
                 continue
             key = (src_idx, tgt_idx) if directed else tuple(sorted((src_idx, tgt_idx)))
             if key in seen:
                 continue
             seen.add(key)
-            out.append((vertices[src_idx], vertices[tgt_idx]))
+            out.append((nodes[src_idx], nodes[tgt_idx]))
             if len(out) >= target:
                 break
         offset += 1
@@ -167,12 +167,12 @@ def make_edge_pairs(
 
 
 def make_numeric_edge_pairs(
-    n_vertices: int,
+    n_nodes: int,
     n_edges: int,
     *,
     directed: bool = True,
 ) -> list[tuple[int, int]]:
-    pairs = make_edge_pairs(n_vertices, n_edges, directed=directed)
+    pairs = make_edge_pairs(n_nodes, n_edges, directed=directed)
     return [(int(src[1:]), int(tgt[1:])) for src, tgt in pairs]
 
 
@@ -206,8 +206,8 @@ def make_edge_records(
     return records
 
 
-def make_vertex_records(
-    vertices: Sequence[str],
+def make_node_records(
+    nodes: Sequence[str],
     *,
     with_attrs: bool = False,
     attr_count: int = 0,
@@ -215,8 +215,8 @@ def make_vertex_records(
     annotation_density: float | None = None,
 ) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
-    for idx, vertex_id in enumerate(vertices):
-        row: dict[str, Any] = {'vertex_id': vertex_id}
+    for idx, node_id in enumerate(nodes):
+        row: dict[str, Any] = {'node_id': node_id}
         if with_attrs:
             row.update(
                 attr_values(
@@ -231,8 +231,8 @@ def make_vertex_records(
     return records
 
 
-def make_vertex_attr_updates(
-    vertices: Sequence[str],
+def make_node_attr_updates(
+    nodes: Sequence[str],
     *,
     attr_count: int,
     sparse_every: int,
@@ -240,14 +240,14 @@ def make_vertex_attr_updates(
     prefix: str = 'node_attr',
 ) -> dict[str, dict[str, Any]]:
     return {
-        vertex_id: attr_values(
+        node_id: attr_values(
             idx,
             attr_count,
             sparse_every,
             annotation_density=annotation_density,
             prefix=prefix,
         )
-        for idx, vertex_id in enumerate(vertices)
+        for idx, node_id in enumerate(nodes)
     }
 
 

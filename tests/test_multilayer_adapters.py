@@ -38,11 +38,11 @@ class TestMultilayerAdapters(unittest.TestCase):
         # Use the constructor to set aspects — this is the proper API.
         G = AnnNet(aspects={'time': ['t1', 't2'], 'transport': ['bus', 'train']})
 
-        # 2. Vertices in their respective layers
+        # 2. Nodes in their respective layers
         # u is present in (t1, bus) and (t2, train); v is present in (t1, bus)
-        G.add_vertices('u', layer=('t1', 'bus'))
-        G.add_vertices('u', layer=('t2', 'train'))
-        G.add_vertices('v', layer=('t1', 'bus'))
+        G.add_nodes('u', layer=('t1', 'bus'))
+        G.add_nodes('u', layer=('t2', 'train'))
+        G.add_nodes('v', layer=('t1', 'bus'))
 
         # 3. Multilayer edges use explicit supra-node endpoints
         # e1: u(t1,bus) -> v(t1,bus)  => inferred intra edge
@@ -73,7 +73,7 @@ class TestMultilayerAdapters(unittest.TestCase):
         self.assertEqual(G1.aspects, G2.aspects)
         self.assertEqual(G1.elem_layers, G2.elem_layers)
 
-        # VM — G2 may have extra flat-coord entries from the vertex table load;
+        # VM — G2 may have extra flat-coord entries from the node table load;
         # the multilayer supra-node presence is the meaningful subset to check.
         self.assertTrue(G1._VM.issubset(G2._VM), f'G1._VM not subset of G2._VM: {G1._VM - G2._VM}')
 

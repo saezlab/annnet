@@ -31,7 +31,7 @@ from annnet import AnnNet
 def graph_of(nodes, edges, *, directed=True) -> AnnNet:
     """Build a flat graph from node ids and ``(source, target, edge_id)`` triples."""
     G = AnnNet(directed=directed)
-    G.add_vertices(list(nodes))
+    G.add_nodes(list(nodes))
     for source, target, edge_id in edges:
         G.add_edges(source, target, edge_id=edge_id)
     return G
@@ -166,12 +166,12 @@ def test_a_merge_in_place_takes_the_right_operand_into_the_left(left, right):
 def test_the_left_operand_keeps_its_attributes_in_a_union():
     """Two graphs can disagree about one element. The left one is the answer."""
     first = graph_of('ab', [('a', 'b', 'e_ab')])
-    first.attrs.set_vertex_attrs('a', kind='left')
+    first.attrs.set_node_attrs('a', kind='left')
     second = graph_of('ab', [('a', 'b', 'e_ab')])
-    second.attrs.set_vertex_attrs('a', kind='right')
+    second.attrs.set_node_attrs('a', kind='right')
 
     both = first | second
-    assert both.attrs.get_attr_vertex('a', 'kind') == 'left'
+    assert both.attrs.get_attr_node('a', 'kind') == 'left'
 
 
 # ---------------------------------------------------------------------------

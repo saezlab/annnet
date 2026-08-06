@@ -171,7 +171,7 @@ def test_a_warm_read_returns_the_same_object_until_the_next_write():
 
 def _chain(n_edges: int) -> AnnNet:
     G = AnnNet(directed=True)
-    G.add_vertices([f'v{i}' for i in range(n_edges + 2)])
+    G.add_nodes([f'v{i}' for i in range(n_edges + 2)])
     for i in range(n_edges):
         G.add_edges(f'v{i}', f'v{i + 1}', edge_id=f'e{i}')
     return G

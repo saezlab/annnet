@@ -71,7 +71,7 @@ class LayerAccessor:
             If given, return a sorted list for that single aspect.
         include_placeholder : bool, default False
             Include the synthetic ``'_'`` placeholder layer in the result.
-            Vertices assigned without an explicit ``layer=`` live on this
+            Nodes assigned without an explicit ``layer=`` live on this
             coordinate; most callers want it hidden.
         """
         if self._aspects == ('_',):
@@ -194,7 +194,7 @@ class LayerAccessor:
             self._layers[aspect] = values
 
         if had_existing_flat_entities:
-            # Every vertex moves to the placeholder coordinate of the new aspects.
+            # Every node moves to the placeholder coordinate of the new aspects.
             # That is a change of identity and not of address, so the gateway moves
             # the keys rather than rebuilding the store.
             _mutate.remap_entity_keys(
@@ -210,7 +210,7 @@ class LayerAccessor:
                 for (vid, coord), attrs in self._state_attrs.items()
             }
             warnings.warn(
-                f'Declared aspects {tuple(aspects)!r}; existing flat vertices were reassigned '
+                f'Declared aspects {tuple(aspects)!r}; existing flat nodes were reassigned '
                 f'to placeholder layer {new_placeholder!r}. Set explicit layer coordinates if needed.',
                 UserWarning,
                 stacklevel=2,
@@ -269,8 +269,8 @@ class LayerAccessor:
 
         Notes
         -----
-        This projects vertex identities from ``(vertex_id, layer_tuple)`` to bare
-        ``vertex_id`` strings and drops multilayer-only metadata such as aspects,
+        This projects node identities from ``(node_id, layer_tuple)`` to bare
+        ``node_id`` strings and drops multilayer-only metadata such as aspects,
         layer registries, supra-node attributes, and multilayer edge roles.
         """
         if self._aspects == ('_',):
@@ -305,15 +305,14 @@ class LayerAccessor:
             flat._history_enabled = False
 
             flat.graph_attributes = dict(self._G.graph_attributes)
-            flat._vertex_key_fields = self._vertex_key_fields
-            flat._vertex_key_index = dict(self._vertex_key_index)
-            flat.vertex_aligned = False
+            flat._node_key_fields = self._node_key_fields
+            flat._node_key_index = dict(self._node_key_index)
+            flat.node_aligned = False
 
             slice_specs = {
                 slice_id: {
-                    'vertices': {
-                        v[0] if isinstance(v, tuple) and len(v) == 2 else v
-                        for v in meta['vertices']
+                    'nodes': {
+                        v[0] if isinstance(v, tuple) and len(v) == 2 else v for v in meta['nodes']
                     },
                     'edges': set(meta['edges']),
                     'attributes': {},
@@ -327,11 +326,11 @@ class LayerAccessor:
                 current=self._current_slice,
             )
 
-            vertex_ids = sorted(
+            node_ids = sorted(
                 {ref.id for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE}
             )
-            if vertex_ids:
-                flat._add_vertices_bulk([{'vertex_id': v} for v in vertex_ids])
+            if node_ids:
+                flat._add_nodes_bulk([{'node_id': v} for v in node_ids])
 
             edge_entity_ids = sorted(
                 {
@@ -425,7 +424,7 @@ class LayerAccessor:
             flat.slice_edge_weights = {
                 lid: dict(weights) for lid, weights in self.slice_edge_weights.items()
             }
-            flat._vertex_table = _clone_table(self._vertex_table)
+            flat._node_table = _clone_table(self._node_table)
             flat._edge_table = _clone_table(self._edge_table)
             flat.slice_attributes = _clone_table(self.slice_attributes)
             flat.edge_slice_attributes = _clone_table(self.edge_slice_attributes)
@@ -462,12 +461,12 @@ class LayerAccessor:
             self.edge_slice_attributes = flat.edge_slice_attributes
             self.layer_attributes = flat.layer_attributes
             self._G.layers._all_layers = flat.layers._all_layers
-            self.vertex_aligned = flat.vertex_aligned
+            self.node_aligned = flat.node_aligned
             self._G.layers._aspect_attrs = flat.layers._aspect_attrs
             self._G.layers._layer_attrs = flat.layers._layer_attrs
             self._G.layers._state_attrs = flat.layers._state_attrs
-            self._vertex_key_fields = flat._vertex_key_fields
-            self._vertex_key_index = flat._vertex_key_index
+            self._node_key_fields = flat._node_key_fields
+            self._node_key_index = flat._node_key_index
         finally:
             self._history_enabled = history_flag
         return self._G
@@ -514,7 +513,7 @@ class LayerAccessor:
         Parameters
         ----------
         u : str
-            Vertex identifier.
+            Node identifier.
         layer_tuple : tuple[str, ...]
             Aspect tuple layer.
 
@@ -541,21 +540,21 @@ class LayerAccessor:
             if layer_tuple not in seen:
                 yield layer_tuple
 
-    def iter_vertex_layers(self, u: str):
+    def iter_node_layers(self, u: str):
         """Iterate layer tuples where ``(u, aa)`` is in ``V_M``.
 
         Parameters
         ----------
         u : str
-            Vertex identifier.
+            Node identifier.
 
         Yields
         ------
         tuple[str, ...]
             Layer tuples for ``u``.
         """
-        _, vertex_to_layers = self._layer_membership()
-        yield from vertex_to_layers.get(u, ())
+        _, node_to_layers = self._layer_membership()
+        yield from node_to_layers.get(u, ())
 
     ## Index for supra rows
 
@@ -564,7 +563,7 @@ class LayerAccessor:
     ) -> tuple[dict, list]:
         """Return ``(nl_to_row, row_to_nl)`` for the supra layout, cached.
 
-        The index is a full scan + sort of the vertex-entity population, so it is
+        The index is a full scan + sort of the node-entity population, so it is
         memoised per ``restrict_layers`` key and reused until a structural
         mutation clears ``_supra_index_cache`` (via ``_mark_matrix_dirty``).
         The returned dict/list are shared — callers treat them as read-only.
@@ -585,19 +584,19 @@ class LayerAccessor:
         """
         cache = self._supra_index_cache
         if cache is None:
-            cache = {'entries': {}, 'layer_to_vertices': None, 'vertex_to_layers': None}
+            cache = {'entries': {}, 'layer_to_nodes': None, 'node_to_layers': None}
             self._supra_index_cache = cache
         return cache
 
     def _layer_membership(self) -> tuple[dict, dict]:
-        """Return cached ``(layer_to_vertices, vertex_to_layers)`` maps.
+        """Return cached ``(layer_to_nodes, node_to_layers)`` maps.
 
-        Built in one pass over the vertex entities and reused until a structural
+        Built in one pass over the node entities and reused until a structural
         mutation clears the cache — replaces the per-call O(V) scans in
-        ``layer_vertex_set`` / ``iter_vertex_layers``.
+        ``layer_node_set`` / ``iter_node_layers``.
         """
         cache = self._supra_cache()
-        if cache['layer_to_vertices'] is None:
+        if cache['layer_to_nodes'] is None:
             l2v: dict = {}
             v2l: dict = {}
             for ref in _structure.iter_entities(self):
@@ -606,9 +605,9 @@ class LayerAccessor:
                     continue
                 l2v.setdefault(aa, set()).add(u)
                 v2l.setdefault(u, []).append(aa)
-            cache['layer_to_vertices'] = l2v
-            cache['vertex_to_layers'] = v2l
-        return cache['layer_to_vertices'], cache['vertex_to_layers']
+            cache['layer_to_nodes'] = l2v
+            cache['node_to_layers'] = v2l
+        return cache['layer_to_nodes'], cache['node_to_layers']
 
     def _compute_supra_index(
         self, restrict_layers: list[tuple[str, ...]] | None = None
@@ -625,8 +624,8 @@ class LayerAccessor:
         vm.sort(key=lambda x: (x[0], x[1]))
         return {nl: i for i, nl in enumerate(vm)}, vm
 
-    def ensure_vertex_layer_index(self, restrict_layers: list[tuple[str, ...]] | None = None):
-        """Return the number of indexed vertex–layer pairs.
+    def ensure_node_layer_index(self, restrict_layers: list[tuple[str, ...]] | None = None):
+        """Return the number of indexed node–layer pairs.
 
         Parameters
         ----------
@@ -636,7 +635,7 @@ class LayerAccessor:
         Returns
         -------
         int
-            Number of indexed vertex–layer pairs.
+            Number of indexed node–layer pairs.
 
         Notes
         -----
@@ -651,7 +650,7 @@ class LayerAccessor:
         Parameters
         ----------
         u : str
-            Vertex identifier.
+            Node identifier.
         layer_tuple : tuple[str, ...]
             Aspect tuple layer.
 
@@ -662,12 +661,12 @@ class LayerAccessor:
         Raises
         ------
         KeyError
-            If the vertex–layer pair is not indexed.
+            If the node–layer pair is not indexed.
         """
         key = (u, tuple(layer_tuple))
         nl_to_row, _ = self._build_supra_index()
         if key not in nl_to_row:
-            raise KeyError(f'vertex–layer {key!r} not in graph')
+            raise KeyError(f'node–layer {key!r} not in graph')
         return nl_to_row[key]
 
     def row_to_nl(self, row: int) -> tuple[str, tuple[str, ...]]:
@@ -691,7 +690,7 @@ class LayerAccessor:
         try:
             return row_to_nl[row]
         except (IndexError, KeyError) as err:
-            raise KeyError(f'row {row} not in vertex–layer index') from err
+            raise KeyError(f'row {row} not in node–layer index') from err
 
     ## Validation helpers
 
@@ -746,7 +745,7 @@ class LayerAccessor:
             return aa[0]
         return '×'.join(aa)
 
-    ## Aspect / layer / vertex–layer attributes
+    ## Aspect / layer / node–layer attributes
 
     def _elem_layer_id(self, aspect: str, label: str) -> str:
         if aspect not in self._aspects:
@@ -908,12 +907,12 @@ class LayerAccessor:
         return dict(self._layer_attrs.get(aa, {}))
 
     def set_node_attrs(self, u: str, layer_tuple: tuple[str, ...], **attrs):
-        """Attach metadata to a vertex–layer pair.
+        """Attach metadata to a node–layer pair.
 
         Parameters
         ----------
         u : str
-            Vertex identifier.
+            Node identifier.
         layer_tuple : tuple[str, ...]
             Aspect tuple layer.
         **attrs
@@ -935,12 +934,12 @@ class LayerAccessor:
         d.update(attrs)
 
     def node_attrs(self, u: str, layer_tuple: tuple[str, ...]) -> dict:
-        """Get metadata dict for a vertex–layer pair.
+        """Get metadata dict for a node–layer pair.
 
         Parameters
         ----------
         u : str
-            Vertex identifier.
+            Node identifier.
         layer_tuple : tuple[str, ...]
             Aspect tuple layer.
 
@@ -953,8 +952,8 @@ class LayerAccessor:
         key = (u, aa)
         return dict(self._state_attrs.get(key, {}))
 
-    def layer_vertex_set(self, layer_tuple):
-        """Vertices present in a Kivela layer.
+    def layer_node_set(self, layer_tuple):
+        """Nodes present in a Kivela layer.
 
         Parameters
         ----------
@@ -966,9 +965,9 @@ class LayerAccessor:
         set[str]
         """
         aa = tuple(layer_tuple)
-        layer_to_vertices, _ = self._layer_membership()
+        layer_to_nodes, _ = self._layer_membership()
         # Copy: callers mutate the result in-place (e.g. `V &= ...`).
-        return set(layer_to_vertices.get(aa, ()))
+        return set(layer_to_nodes.get(aa, ()))
 
     def layer_edge_set(
         self,
@@ -1066,12 +1065,12 @@ class LayerAccessor:
         Returns
         -------
         dict
-            ``{"vertices": set[str], "edges": set[str]}``.
+            ``{"nodes": set[str], "edges": set[str]}``.
         """
         Vs = []
         Es = []
         for aa in layer_tuples:
-            Vs.append(self.layer_vertex_set(aa))
+            Vs.append(self.layer_node_set(aa))
             Es.append(
                 self.layer_edge_set(
                     aa,
@@ -1080,10 +1079,10 @@ class LayerAccessor:
                 )
             )
         if not Vs:
-            return {'vertices': set(), 'edges': set()}
+            return {'nodes': set(), 'edges': set()}
         V = set().union(*Vs)
         E = set().union(*Es)
-        return {'vertices': V, 'edges': E}
+        return {'nodes': V, 'edges': E}
 
     def layer_intersection(
         self,
@@ -1106,14 +1105,14 @@ class LayerAccessor:
         Returns
         -------
         dict
-            ``{"vertices": set[str], "edges": set[str]}``.
+            ``{"nodes": set[str], "edges": set[str]}``.
         """
         layer_tuples = list(layer_tuples)
         if not layer_tuples:
-            return {'vertices': set(), 'edges': set()}
+            return {'nodes': set(), 'edges': set()}
 
         # start with first layer
-        V = self.layer_vertex_set(layer_tuples[0])
+        V = self.layer_node_set(layer_tuples[0])
         E = self.layer_edge_set(
             layer_tuples[0],
             include_inter=include_inter,
@@ -1121,14 +1120,14 @@ class LayerAccessor:
         )
 
         for aa in layer_tuples[1:]:
-            V &= self.layer_vertex_set(aa)
+            V &= self.layer_node_set(aa)
             E &= self.layer_edge_set(
                 aa,
                 include_inter=include_inter,
                 include_coupling=include_coupling,
             )
 
-        return {'vertices': V, 'edges': E}
+        return {'nodes': V, 'edges': E}
 
     def layer_difference(
         self,
@@ -1154,22 +1153,22 @@ class LayerAccessor:
         Returns
         -------
         dict
-            ``{"vertices": set[str], "edges": set[str]}``.
+            ``{"nodes": set[str], "edges": set[str]}``.
         """
-        Va = self.layer_vertex_set(layer_a)
+        Va = self.layer_node_set(layer_a)
         Ea = self.layer_edge_set(
             layer_a,
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
-        Vb = self.layer_vertex_set(layer_b)
+        Vb = self.layer_node_set(layer_b)
         Eb = self.layer_edge_set(
             layer_b,
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
         return {
-            'vertices': Va - Vb,
+            'nodes': Va - Vb,
             'edges': Ea - Eb,
         }
 
@@ -1363,7 +1362,7 @@ class LayerAccessor:
         AnnNet
         """
         aa = tuple(layer_tuple)
-        V = self.layer_vertex_set(aa)
+        V = self.layer_node_set(aa)
         E = self.layer_edge_set(
             aa,
             include_inter=include_inter,
@@ -1383,9 +1382,9 @@ class LayerAccessor:
         )
 
         va_lookup = G_src._attr_store.node_attr_rows(V)
-        v_rows = [{'vertex_id': vid, **va_lookup.get(vid, {})} for vid in V]
+        v_rows = [{'node_id': vid, **va_lookup.get(vid, {})} for vid in V]
         if v_rows:
-            g._add_vertices_bulk(v_rows, layer=aa, slice=g._default_slice)
+            g._add_nodes_bulk(v_rows, layer=aa, slice=g._default_slice)
 
         if include_inter or include_coupling:
             extra_endpoints: set = set()
@@ -1409,10 +1408,10 @@ class LayerAccessor:
             by_coord: dict = {}
             for bare_vid, coord in extra_endpoints:
                 by_coord.setdefault(coord, []).append(
-                    {'vertex_id': bare_vid, **extra_attrs.get(bare_vid, {})}
+                    {'node_id': bare_vid, **extra_attrs.get(bare_vid, {})}
                 )
             for coord, rows in by_coord.items():
-                g._add_vertices_bulk(rows, layer=coord, slice=g._default_slice)
+                g._add_nodes_bulk(rows, layer=coord, slice=g._default_slice)
 
         bin_payload, hyper_payload = [], []
         for eid in E:
@@ -1493,7 +1492,7 @@ class LayerAccessor:
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
-        return self._G.ops.extract_subgraph(vertices=res['vertices'], edges=res['edges'])
+        return self._G.ops.extract_subgraph(nodes=res['nodes'], edges=res['edges'])
 
     def subgraph_from_layer_intersection(
         self,
@@ -1522,7 +1521,7 @@ class LayerAccessor:
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
-        return self._G.ops.extract_subgraph(vertices=res['vertices'], edges=res['edges'])
+        return self._G.ops.extract_subgraph(nodes=res['nodes'], edges=res['edges'])
 
     def subgraph_from_layer_difference(
         self,
@@ -1555,14 +1554,14 @@ class LayerAccessor:
             include_inter=include_inter,
             include_coupling=include_coupling,
         )
-        return self._G.ops.extract_subgraph(vertices=res['vertices'], edges=res['edges'])
+        return self._G.ops.extract_subgraph(nodes=res['nodes'], edges=res['edges'])
 
     ## helper
 
     def _assert_presence(self, u: str, aa: tuple[str, ...]):
         if not _structure.has_entity(self, (u, aa)):
             raise KeyError(
-                f'presence missing: {(u, aa)} not in entities; add vertex to that layer first'
+                f'presence missing: {(u, aa)} not in entities; add node to that layer first'
             )
 
     ## Supra_Adjacency
@@ -1578,7 +1577,7 @@ class LayerAccessor:
         Returns
         -------
         scipy.sparse.csr_matrix
-            Supra adjacency over the chosen vertex–layer index.
+            Supra adjacency over the chosen node–layer index.
 
         Examples
         --------
@@ -1640,8 +1639,8 @@ class LayerAccessor:
             stoichiometric coefficients intact. Binary intra, inter, coupling, and
             hyperedges are all handled in a unified column-oriented representation.
 
-            Rows  : vertex-layer pairs (u, aa) — identical index to supra_adjacency,
-                    built by ensure_vertex_layer_index.
+            Rows  : node-layer pairs (u, aa) — identical index to supra_adjacency,
+                    built by ensure_node_layer_index.
             Cols  : one per selected edge, ordered as: intra edges (per layer, sorted
                     by eid), then inter/coupling edges, then unassigned hyperedges last.
 
@@ -1671,8 +1670,8 @@ class LayerAccessor:
         Returns
         -------
         B : scipy.sparse.csr_matrix
-            Shape (|V_M|, |E_selected|). Rows are vertex-layer pairs in the
-            order given by self._row_to_nl after ensure_vertex_layer_index.
+            Shape (|V_M|, |E_selected|). Rows are node-layer pairs in the
+            order given by self._row_to_nl after ensure_node_layer_index.
         edge_ids : list[str]
             Edge id for each column of B, in column order. Use this to map
             columns back to edges for interpretability.
@@ -1685,7 +1684,7 @@ class LayerAccessor:
             The hypergraph random-walk diffusion operator follows directly::
 
                 B_csr = B  (this output)
-                D_v = diag(|B| @ ones)          # vertex degree (sum of |entries| per row)
+                D_v = diag(|B| @ ones)          # node degree (sum of |entries| per row)
                 D_e = diag(|B|.T @ ones)        # edge degree (sum of |entries| per col)
                 Theta = D_v_inv @ B @ D_e_inv @ B.T
 
@@ -2063,7 +2062,7 @@ class LayerAccessor:
         else:
             raise ValueError("kind must be 'comb' or 'norm'")
 
-    ## Coupling generators (vertex-independent)
+    ## Coupling generators (node-independent)
 
     def _aspect_index(self, aspect: str) -> int:
         if aspect not in self.aspects:
@@ -2130,14 +2129,14 @@ class LayerAccessor:
             self._validate_layer_tuple(Lb)
             norm_pairs.append((La, Lb))
         # Build per-layer presence index to avoid O(|V_M|^2)
-        layer_to_vertices = {}
+        layer_to_nodes = {}
         for ref in _structure.iter_entities(self):
             if ref.kind == _structure.NODE:
-                layer_to_vertices.setdefault(ref.layer, set()).add(ref.id)
+                layer_to_nodes.setdefault(ref.layer, set()).add(ref.id)
         triples: list[tuple[str, tuple, tuple]] = []
         for La, Lb in norm_pairs:
-            Ua = layer_to_vertices.get(La, set())
-            Ub = layer_to_vertices.get(Lb, set())
+            Ua = layer_to_nodes.get(La, set())
+            Ub = layer_to_nodes.get(Lb, set())
             for u in Ua & Ub:
                 triples.append((u, La, Lb))
         return self._add_coupling_edges_bulk(triples, weight)
@@ -2152,7 +2151,7 @@ class LayerAccessor:
         aspect : str
             Aspect name to couple over.
         groups : list[list[str]]
-            Groups of elementary labels to fully connect per vertex.
+            Groups of elementary labels to fully connect per node.
         weight : float, optional
             Edge weight.
 
@@ -2199,7 +2198,7 @@ class LayerAccessor:
         int
             Number of edges added.
         """
-        # collect per vertex the matching layers actually present
+        # collect per node the matching layers actually present
         per_u = {}
         for ref in _structure.iter_entities(self):
             u, aa = ref.key
@@ -2226,30 +2225,30 @@ class LayerAccessor:
         Returns
         -------
         tuple
-            ``(vertices, layers_t, vertex_to_i, layer_to_i)``.
+            ``(nodes, layers_t, node_to_i, layer_to_i)``.
 
         Examples
         --------
         ```python
-        vertices, layers_t, v2i, l2i = G.tensor_index()
+        nodes, layers_t, v2i, l2i = G.tensor_index()
         ```
         """
         layers_t = self._normalize_layers_arg(layers)
         nl_to_row, row_to_nl = self._build_supra_index(layers_t)
-        vertices = []
+        nodes = []
         layers_list = []
-        seen_vertices = set()
+        seen_nodes = set()
         seen_layers = set()
         for u, aa in row_to_nl:
-            if u not in seen_vertices:
-                vertices.append(u)
-                seen_vertices.add(u)
+            if u not in seen_nodes:
+                nodes.append(u)
+                seen_nodes.add(u)
             if aa not in seen_layers:
                 layers_list.append(aa)
                 seen_layers.add(aa)
-        vertex_to_i = {u: i for i, u in enumerate(vertices)}
+        node_to_i = {u: i for i, u in enumerate(nodes)}
         layer_to_i = {aa: i for i, aa in enumerate(layers_list)}
-        return vertices, layers_list, vertex_to_i, layer_to_i
+        return nodes, layers_list, node_to_i, layer_to_i
 
     def adjacency_tensor_view(self, layers: list[str] | list[tuple] | None = None):
         """Sparse 4-index adjacency view.
@@ -2262,7 +2261,7 @@ class LayerAccessor:
         Returns
         -------
         dict
-            ``{"vertices","layers","vertex_to_i","layer_to_i","ui","ai","vi","bi","w"}``.
+            ``{"nodes","layers","node_to_i","layer_to_i","ui","ai","vi","bi","w"}``.
 
         Notes
         -----
@@ -2271,7 +2270,7 @@ class LayerAccessor:
 
         layers_norm = self._normalize_layers_arg(layers)
         nl_to_row, _ = self._build_supra_index(layers_norm)
-        vertices, layers_t, vertex_to_i, layer_to_i = self.tensor_index(layers)
+        nodes, layers_t, node_to_i, layer_to_i = self.tensor_index(layers)
         ui = []
         ai = []
         vi = []
@@ -2299,8 +2298,8 @@ class LayerAccessor:
             u_id = src_key[0] if isinstance(src_key, tuple) else src_key
             v_id = tgt_key[0] if isinstance(tgt_key, tuple) else tgt_key
             w = ref.weight
-            ui.extend((vertex_to_i[u_id], vertex_to_i[v_id]))
-            vi.extend((vertex_to_i[v_id], vertex_to_i[u_id]))
+            ui.extend((node_to_i[u_id], node_to_i[v_id]))
+            vi.extend((node_to_i[v_id], node_to_i[u_id]))
             a = layer_to_i[L]
             ai.extend((a, a))
             bi.extend((a, a))
@@ -2325,16 +2324,16 @@ class LayerAccessor:
             u_id = src_key[0] if isinstance(src_key, tuple) else src_key
             v_id = tgt_key[0] if isinstance(tgt_key, tuple) else tgt_key
             w = ref.weight
-            ui.extend((vertex_to_i[u_id], vertex_to_i[v_id]))
-            vi.extend((vertex_to_i[v_id], vertex_to_i[u_id]))
+            ui.extend((node_to_i[u_id], node_to_i[v_id]))
+            vi.extend((node_to_i[v_id], node_to_i[u_id]))
             ai.extend((layer_to_i[La], layer_to_i[Lb]))
             bi.extend((layer_to_i[Lb], layer_to_i[La]))
             wv.extend((w, w))
 
         return {
-            'vertices': vertices,
+            'nodes': nodes,
             'layers': layers_t,
-            'vertex_to_i': vertex_to_i,
+            'node_to_i': node_to_i,
             'layer_to_i': layer_to_i,
             'ui': np.asarray(ui, dtype=int),
             'ai': np.asarray(ai, dtype=int),
@@ -2360,7 +2359,7 @@ class LayerAccessor:
         nl_to_row, row_to_nl = self._build_supra_index(layers_t)
         n = len(row_to_nl)
         A = sp.dok_array((n, n), dtype=float)
-        vertices = tensor_view['vertices']
+        nodes = tensor_view['nodes']
         layers = tensor_view['layers']
         ui, ai, vi, bi, w = (
             tensor_view['ui'],
@@ -2370,9 +2369,9 @@ class LayerAccessor:
             tensor_view['w'],
         )
         for k in range(len(w)):
-            u = vertices[int(ui[k])]
+            u = nodes[int(ui[k])]
             aa = layers[int(ai[k])]
-            v = vertices[int(vi[k])]
+            v = nodes[int(vi[k])]
             bb = layers[int(bi[k])]
             ru = nl_to_row.get((u, aa))
             rv = nl_to_row.get((v, bb))
@@ -2398,7 +2397,7 @@ class LayerAccessor:
         """
 
         A = A.tocsr()
-        vertices, layers_t, vertex_to_i, layer_to_i = self.tensor_index(layers)
+        nodes, layers_t, node_to_i, layer_to_i = self.tensor_index(layers)
         layers_norm = self._normalize_layers_arg(layers)
         _, row_to_nl = self._build_supra_index(layers_norm)
         rows, cols = A.nonzero()
@@ -2410,14 +2409,14 @@ class LayerAccessor:
         for k in range(len(rows)):
             (u, aa) = row_to_nl[int(rows[k])]
             (v, bb) = row_to_nl[int(cols[k])]
-            ui[k] = vertex_to_i[u]
-            vi[k] = vertex_to_i[v]
+            ui[k] = node_to_i[u]
+            vi[k] = node_to_i[v]
             ai[k] = layer_to_i[aa]
             bi[k] = layer_to_i[bb]
         return {
-            'vertices': vertices,
+            'nodes': nodes,
             'layers': layers_t,
-            'vertex_to_i': vertex_to_i,
+            'node_to_i': node_to_i,
             'layer_to_i': layer_to_i,
             'ui': ui,
             'ai': ai,
@@ -2712,7 +2711,7 @@ class LayerAccessor:
         return out
 
     def participation_coefficient(self, layers: list[str] | list[tuple] | None = None):
-        """Participation coefficient per vertex.
+        """Participation coefficient per node.
 
         Parameters
         ----------
@@ -2724,24 +2723,24 @@ class LayerAccessor:
         dict[str, float]
         """
 
-        # build per-layer deg vectors and aggregate per vertex
+        # build per-layer deg vectors and aggregate per node
         layer_deg = self.layer_degree_vectors(layers)
         # aggregate k_u over layers
-        per_vertex_total = {}
-        per_vertex_by_layer = {}
+        per_node_total = {}
+        per_node_by_layer = {}
         _, row_to_nl = self._build_supra_index()
         for L, (rows, deg) in layer_deg.items():
             for i, r in enumerate(rows):
                 u, _ = row_to_nl[r]
-                per_vertex_total[u] = per_vertex_total.get(u, 0.0) + float(deg[i])
-                per_vertex_by_layer.setdefault(u, {})[L] = float(deg[i])
+                per_node_total[u] = per_node_total.get(u, 0.0) + float(deg[i])
+                per_node_by_layer.setdefault(u, {})[L] = float(deg[i])
         P = {}
-        for u, k in per_vertex_total.items():
+        for u, k in per_node_total.items():
             if k <= 0:
                 P[u] = 0.0
                 continue
             s = 0.0
-            for _L, kL in per_vertex_by_layer[u].items():
+            for _L, kL in per_node_by_layer[u].items():
                 x = kL / k
                 s += x * x
             P[u] = 1.0 - s
@@ -2769,17 +2768,17 @@ class LayerAccessor:
         # largest eigenpair of symmetric A
         vals, vecs = eigsh(A, k=1, which='LA')
         v = vecs[:, 0]
-        per_vertex = {}
+        per_node = {}
         layers_norm = self._normalize_layers_arg(layers)
         _, row_to_nl = self._build_supra_index(layers_norm)
         for i, (u, _) in enumerate(row_to_nl):
-            per_vertex[u] = per_vertex.get(u, 0.0) + float(abs(v[i]))
+            per_node[u] = per_node.get(u, 0.0) + float(abs(v[i]))
         # normalize
-        m = max(per_vertex.values()) if per_vertex else 1.0
+        m = max(per_node.values()) if per_node else 1.0
         if m > 0:
-            for u in per_vertex:
-                per_vertex[u] /= m
-        return per_vertex
+            for u in per_node:
+                per_node[u] /= m
+        return per_node
 
     ## Multislice modularity (scorer)
 

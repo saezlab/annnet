@@ -5,7 +5,7 @@ PyTorch Geometric (one-way tensor bundle), all through the public
 ``annnet.adapters`` API and the rigorous shared harness. Optional backends
 that are not installed are reported as ``skipped`` rather than failing the run.
 
-Run:  python -m benchmarks.adapters [--vertices N] [--edges N] [--samples N]
+Run:  python -m benchmarks.adapters [--nodes N] [--edges N] [--samples N]
 """
 
 from __future__ import annotations
@@ -19,11 +19,11 @@ from . import harness, environment
 from .io_formats import build_graph
 
 
-def run(n_vertices: int = 2000, n_edges: int = 10000, samples: int = 5) -> list[dict]:
+def run(n_nodes: int = 2000, n_edges: int = 10000, samples: int = 5) -> list[dict]:
     import annnet.io as aio
     import annnet.adapters as aad
 
-    G = build_graph(n_vertices, n_edges)
+    G = build_graph(n_nodes, n_edges)
     n_e = G.ecount()
     recs: list[dict] = []
 
@@ -78,14 +78,14 @@ def _fmt_t(d):
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--vertices', type=int, default=2000)
+    ap.add_argument('--nodes', type=int, default=2000)
     ap.add_argument('--edges', type=int, default=10000)
     ap.add_argument('--samples', type=int, default=5)
     ap.add_argument('--json-out', default=None)
     args = ap.parse_args()
 
-    recs = run(args.vertices, args.edges, args.samples)
-    print(f'Adapters — {args.vertices} V / {args.edges} E  (median of {args.samples})\n')
+    recs = run(args.nodes, args.edges, args.samples)
+    print(f'Adapters — {args.nodes} V / {args.edges} E  (median of {args.samples})\n')
     print(f'{"adapter":10s} {"export":>10s} {"import":>10s}  ok  note')
     print('-' * 60)
     for r in recs:

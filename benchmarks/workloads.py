@@ -4,7 +4,7 @@ Each workload yields flat *records* (plain dicts) so the report layer can pivot
 them freely. A record is one measurement of one operation on one engine at one
 scale:
 
-    {engine, backend, scale, n_vertices, n_edges, group, op,
+    {engine, backend, scale, n_nodes, n_edges, group, op,
      time: {..}|None, memory: {..}|None, note}
 
 Two groups matter:
@@ -32,7 +32,7 @@ def _record(
         'engine': engine,
         'backend': backend,
         'scale': scale.name,
-        'n_vertices': n_v,
+        'n_nodes': n_v,
         'n_edges': n_e,
         'group': group,
         'op': op,
@@ -48,8 +48,8 @@ def _record(
 def comparable(
     engine: engines.Engine, scale, *, backend=None, do_memory=True, samples=5
 ) -> list[dict]:
-    data = engines.make_data(scale.vertices, scale.edges)
-    n_v, n_e = scale.vertices, scale.edges
+    data = engines.make_data(scale.nodes, scale.edges)
+    n_v, n_e = scale.nodes, scale.edges
     build = engine.build_factory(data)
     recs: list[dict] = []
 
@@ -125,12 +125,12 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
     # --- Hyperedge construction (arity-k, no binary-graph equivalent) ------
     n_he = scale.hyperedges
     arity = 4
-    n_hv = max(arity, min(scale.vertices, n_he * 2))
+    n_hv = max(arity, min(scale.nodes, n_he * 2))
     hv_names = [f'h{i}' for i in range(n_hv)]
 
     def build_hyper():
         G = AnnNet(directed=True, annotations_backend=backend)
-        G.add_vertices(({'vertex_id': v} for v in hv_names), slice='base')
+        G.add_nodes(({'node_id': v} for v in hv_names), slice='base')
         G.add_edges(
             {
                 'source': [hv_names[(i + j) % n_hv] for j in range(arity - 1)],
@@ -164,7 +164,7 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
     # --- Multilayer (Kivela) construction ---------------------------------
     aspects = ['aspect_0', 'aspect_1']
     elem = {a: [f'{a}_e{j}' for j in range(3)] for a in aspects}  # 3x3 = 9 layers
-    n_ml_v = max(20, scale.vertices // 20)
+    n_ml_v = max(20, scale.nodes // 20)
     ml_names = [f'm{i}' for i in range(n_ml_v)]
 
     def build_multilayer():
@@ -175,10 +175,10 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
         layer_tuples = list(G.layers.iter_layers())
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            G.add_vertices(({'vertex_id': v} for v in ml_names), slice='base')
+            G.add_nodes(({'node_id': v} for v in ml_names), slice='base')
         for aa in layer_tuples:
             for v in ml_names:
-                G.add_vertices(v, layer=aa)
+                G.add_nodes(v, layer=aa)
         # intra-layer edges per layer
         for aa in layer_tuples:
             G.add_edges(
@@ -205,12 +205,12 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
 
     # --- Materialisation: incidence (dok -> csr) and adjacency ------------
     base = engines.AnnNetEngine(backend=backend).build_factory(
-        engines.make_data(scale.vertices, scale.edges)
+        engines.make_data(scale.nodes, scale.edges)
     )()
     recs.append(
         rec(
             'materialize_incidence_csr',
-            scale.vertices,
+            scale.nodes,
             scale.edges,
             group='materialize',
             time=harness.time_repeat(lambda: base._matrix.tocsr()),
@@ -225,7 +225,7 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
     recs.append(
         rec(
             'materialize_adjacency',
-            scale.vertices,
+            scale.nodes,
             scale.edges,
             group='materialize',
             time=harness.time_repeat(adjacency),
@@ -237,14 +237,14 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
     recs.append(
         rec(
             'copy',
-            scale.vertices,
+            scale.nodes,
             scale.edges,
             group='structural',
             time=harness.time_oneshot(lambda: base.ops.copy(), samples=max(3, samples // 2)),
         )
     )
 
-    sub_v = base.vertices()[: max(1, scale.vertices // 2)]
+    sub_v = base.nodes()[: max(1, scale.nodes // 2)]
     recs.append(
         rec(
             'subgraph_half',
@@ -260,16 +260,16 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
     # --- Annotations bulk write -------------------------------------------
     # Re-applying identical attrs is stable, so time_repeat isolates the write
     # path from construction (unlike timing a build-then-annotate closure).
-    vids = base.vertices()
+    vids = base.nodes()
     payload = [(v, {'kind': 'gene', 'score': i % 7}) for i, v in enumerate(vids)]
     recs.append(
         rec(
-            'annotations_vertex_bulk',
-            scale.vertices,
+            'annotations_node_bulk',
+            scale.nodes,
             scale.edges,
             group='annotations',
-            time=harness.time_repeat(lambda: base.attrs.set_vertex_attrs_bulk(payload)),
-            note='set_vertex_attrs_bulk over all vertices (write path only)',
+            time=harness.time_repeat(lambda: base.attrs.set_node_attrs_bulk(payload)),
+            note='set_node_attrs_bulk over all nodes (write path only)',
         )
     )
 
@@ -289,7 +289,7 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
         recs.append(
             rec(
                 'io_write',
-                scale.vertices,
+                scale.nodes,
                 scale.edges,
                 group='io',
                 time=harness.time_oneshot(write_once, samples=max(3, samples // 2)),
@@ -300,7 +300,7 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
         recs.append(
             rec(
                 'io_read',
-                scale.vertices,
+                scale.nodes,
                 scale.edges,
                 group='io',
                 time=harness.time_oneshot(
@@ -326,14 +326,14 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
     import warnings
 
     AnnNet = _annnet()
-    n_v, n_e = scale.vertices, scale.edges
+    n_v, n_e = scale.nodes, scale.edges
     n_slices = max(2, scale.slices)
     recs: list[dict] = []
 
     def rec(group, op, *, time=None, note=''):
         return _record('annnet', group, op, scale, n_v, n_e, backend=backend, time=time, note=note)
 
-    # --- base graph with edges/vertices distributed across N slices --------
+    # --- base graph with edges/nodes distributed across N slices --------
     sids = [f's{k}' for k in range(n_slices)]
     per = max(1, n_e // n_slices)
     with warnings.catch_warnings():
@@ -352,7 +352,7 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
                 ),
                 slice=sid,
             )
-    v0 = G.vertices()[0]
+    v0 = G.nodes()[0]
 
     # --- slices (set algebra + presence + slice-induced subgraph) ----------
     recs.append(
@@ -382,12 +382,12 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
     recs.append(
         rec(
             'slices',
-            'slice_vertex_presence',
-            time=harness.time_repeat(lambda: G.slices.vertex_presence(v0)),
-            note='vertex membership across slices',
+            'slice_node_presence',
+            time=harness.time_repeat(lambda: G.slices.node_presence(v0)),
+            note='node membership across slices',
         )
     )
-    sv = list(G.slices.vertices(sids[0]))
+    sv = list(G.slices.nodes(sids[0]))
     recs.append(
         rec(
             'slices',
@@ -449,7 +449,7 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
     )
 
     # --- algorithms / traversal (directional neighbor + edge queries) ------
-    sample = G.vertices()[: min(len(G.vertices()), 1000)]
+    sample = G.nodes()[: min(len(G.nodes()), 1000)]
     for op, fn in (
         ('out_neighbors', lambda: G.out_neighbors(v0)),
         ('in_neighbors', lambda: G.in_neighbors(v0)),
@@ -469,22 +469,22 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
             time=harness.time_oneshot(
                 lambda: [G.out_neighbors(v) for v in sample], samples=max(3, samples // 2)
             ),
-            note=f'out-neighbors over {len(sample)} vertices',
+            note=f'out-neighbors over {len(sample)} nodes',
         )
     )
     recs.append(
         rec(
             'algorithms',
             'incidence_lists',
-            time=harness.time_repeat(lambda: G.ops.get_vertex_incidence_matrix_as_lists()),
-            note='per-vertex incident edge lists',
+            time=harness.time_repeat(lambda: G.ops.get_node_incidence_matrix_as_lists()),
+            note='per-node incident edge lists',
         )
     )
 
-    # --- layers: supra (vertex-layer) index + supra operations --------------
+    # --- layers: supra (node-layer) index + supra operations --------------
     # Guards the cached supra index: nl_to_row must stay ~O(1) as V_M grows.
     n_layers = 3
-    n_lv = max(50, min(scale.vertices // 20, 20_000))  # vertices per layer
+    n_lv = max(50, min(scale.nodes // 20, 20_000))  # nodes per layer
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         Gml = AnnNet(directed=True)
@@ -504,7 +504,7 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
             'layers',
             'nl_to_row',
             time=harness.time_repeat(lambda: Gml.layers.nl_to_row('m0', aa0)),
-            note=f'single vertex-layer lookup (V_M={v_m}); must be ~O(1)',
+            note=f'single node-layer lookup (V_M={v_m}); must be ~O(1)',
         )
     )
     recs.append(
@@ -522,7 +522,7 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
             time=harness.time_oneshot(
                 lambda: Gml.layers.supra_adjacency(), samples=max(3, samples // 2)
             ),
-            note=f'supra-adjacency over {v_m} vertex-layer nodes',
+            note=f'supra-adjacency over {v_m} node-layer nodes',
         )
     )
     recs.append(
@@ -555,20 +555,20 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
     except ImportError:
         pass
 
-    # G.ig.* wrapper tax with a vertex arg (guards the cached name->index map;
-    # a bulk vertex arg was O(V*k) before caching).
+    # G.ig.* wrapper tax with a node arg (guards the cached name->index map;
+    # a bulk node arg was O(V*k) before caching).
     try:
         import igraph as _ig  # noqa: F401
 
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            G.ig.degree(vertices=['v0'])  # prime the conversion + name-index cache
+            G.ig.degree(nodes=['v0'])  # prime the conversion + name-index cache
             recs.append(
                 rec(
                     'backend_proxy',
                     'ig_call_cache_hit',
-                    time=harness.time_repeat(lambda: G.ig.degree(vertices=['v0'])),
-                    note='G.ig.* wrapper tax (1 vertex arg) with caches warm; ~O(1) in V',
+                    time=harness.time_repeat(lambda: G.ig.degree(nodes=['v0'])),
+                    note='G.ig.* wrapper tax (1 node arg) with caches warm; ~O(1) in V',
                 )
             )
     except ImportError:
@@ -610,7 +610,7 @@ def mutations(
     the measurement, and the clock covers a batch of single writes on it, so the
     reported time is per write.
     """
-    data = engines.make_data(scale.vertices, scale.edges)
+    data = engines.make_data(scale.nodes, scale.edges)
     recs: list[dict] = []
     for op, mutation in engine.mutation_ops(data, count=count).items():
         try:
@@ -627,7 +627,7 @@ def mutations(
                 'mutation',
                 op,
                 scale,
-                scale.vertices,
+                scale.nodes,
                 scale.edges,
                 backend=backend,
                 note=f'one write, batched over {count}',
@@ -641,7 +641,7 @@ def mutations(
             'mutation',
             op,
             scale,
-            scale.vertices,
+            scale.nodes,
             scale.edges,
             backend=backend,
             time=time,
@@ -677,7 +677,7 @@ def matrix_growth(scale, *, backend='auto', samples=3) -> list[dict]:
     def run(n_edges: int, read_each: bool):
         def once():
             G = AnnNet(directed=True, annotations_backend=backend)
-            G.add_vertices([f'v{i}' for i in range(n_edges + 1)])
+            G.add_nodes([f'v{i}' for i in range(n_edges + 1)])
             for i in range(n_edges):
                 G.add_edges(f'v{i}', f'v{i + 1}', edge_id=f'e{i}')
                 if read_each:
@@ -720,7 +720,7 @@ def matrix_cache_probe(scale, *, backend='auto', samples=5) -> list[dict]:
     import scipy.sparse as sp
 
     recs: list[dict] = []
-    n_rows = max(8, min(scale.vertices, 2_000))
+    n_rows = max(8, min(scale.nodes, 2_000))
     n_cols = max(8, min(scale.edges, 8_000))
 
     def column_block(count: int):
@@ -773,11 +773,11 @@ def attribute_ops(scale, *, backend='auto', samples=5) -> list[dict]:
 
     AnnNet = _annnet()
     recs: list[dict] = []
-    n = max(16, min(scale.vertices, 20_000))
+    n = max(16, min(scale.nodes, 20_000))
     values = np.arange(n, dtype=np.float64)
 
     G = AnnNet(directed=True, annotations_backend=backend)
-    G.add_vertices([{'vertex_id': f'v{i}', 'score': float(i)} for i in range(n)])
+    G.add_nodes([{'node_id': f'v{i}', 'score': float(i)} for i in range(n)])
 
     def attr_column_op():
         # The public column read, which is what a user does the operation on.
@@ -821,7 +821,7 @@ def attribute_storage_options(scale, *, backend='auto', samples=5) -> list[dict]
     import numpy as np
 
     recs: list[dict] = []
-    n = max(16, min(scale.vertices, 20_000))
+    n = max(16, min(scale.nodes, 20_000))
 
     class Columnar:
         def __init__(self, size):

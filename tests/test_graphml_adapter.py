@@ -38,11 +38,11 @@ class TestGraphMLAdapter:
         from annnet.core.graph import AnnNet
 
         G = AnnNet()
-        G.add_vertices('A')
-        G.attrs.set_vertex_attrs('A', string_val='text', int_val=42, float_val=3.14, bool_val=True)
+        G.add_nodes('A')
+        G.attrs.set_node_attrs('A', string_val='text', int_val=42, float_val=3.14, bool_val=True)
         to_graphml(G, tmpdir_fixture / 'graph.graphml')
         G2 = from_graphml(tmpdir_fixture / 'graph.graphml')
-        attrs = G2.attrs.get_vertex_attrs('A')
+        attrs = G2.attrs.get_node_attrs('A')
         assert isinstance(attrs.get('string_val'), str)
         assert isinstance(attrs.get('int_val'), int)
         assert isinstance(attrs.get('float_val'), float)

@@ -38,13 +38,13 @@ class _GTBackendAccessor(_BackendAccessorBase):
 
         return import_module(f'graph_tool.{name}')
 
-    VERTEX_KEYS = {'source', 'target', 'vertex', 'root', 'u', 'v'}
+    NODE_KEYS = {'source', 'target', 'vertex', 'root', 'u', 'v'}
 
     def __init__(self, owner):
         self._init_backend_accessor(owner, cache_attr='_gt_backend_cache')
-        # (converted_graph, id_map, vertex_ids); set here so __getattr__ never
+        # (converted_graph, id_map, node_ids); set here so __getattr__ never
         # sees it unset (it would otherwise trigger namespace module loading).
-        self._vertex_maps_cache = None
+        self._node_maps_cache = None
 
         # lazy module map (values are callables)
         self._GT_MODULES = {
@@ -109,11 +109,11 @@ class _GTBackendAccessor(_BackendAccessorBase):
             self._warn_on_loss(manifest)
         return gtG
 
-    # Vertex coercion
+    # Node coercion
 
-    def _coerce_vertices(self, bound, kwargs, gtG):
+    def _coerce_nodes(self, bound, kwargs, gtG):
         label_field = self._infer_label_field()
-        id_map, vertex_ids = self._vertex_maps(gtG)
+        id_map, node_ids = self._node_maps(gtG)
 
         def map_one(x):
             # AnnNet internal id?
@@ -121,38 +121,38 @@ class _GTBackendAccessor(_BackendAccessorBase):
                 return x
             if isinstance(x, tuple) and len(x) == 2 and isinstance(x[1], tuple):
                 vid = x[0]
-            elif x in vertex_ids:
+            elif x in node_ids:
                 vid = x
             else:
-                vid = self._lookup_vertex_id_by_label(label_field, x) if label_field else None
+                vid = self._lookup_node_id_by_label(label_field, x) if label_field else None
                 if vid is None:
-                    raise ValueError(f"Unknown vertex label '{x}' (label field '{label_field}')")
+                    raise ValueError(f"Unknown node label '{x}' (label field '{label_field}')")
             idx = id_map[vid]
             return gtG.vertex(idx)
 
-        map_obj = lambda obj: self._coerce_vertex_iterable(obj, map_one)
+        map_obj = lambda obj: self._coerce_node_iterable(obj, map_one)
 
         # Bound arguments
         if bound:
-            self._coerce_vertex_bound(bound, map_obj)
+            self._coerce_node_bound(bound, map_obj)
         # Raw kwargs
         else:
-            self._coerce_vertex_kwargs(kwargs, map_obj)
+            self._coerce_node_kwargs(kwargs, map_obj)
 
-    def _vertex_maps(self, gtG):
+    def _node_maps(self, gtG):
         # Both maps depend only on the version-cached gtG (built from the current
         # entities), so memoise by its identity instead of rebuilding O(V) per call.
-        cached = self._vertex_maps_cache
+        cached = self._node_maps_cache
         if cached is not None and cached[0] is gtG:
             return cached[1], cached[2]
         id_map = self._build_id_map(gtG)
-        vertex_ids = set(_structure.node_ids(self._G))
-        self._vertex_maps_cache = (gtG, id_map, vertex_ids)
-        return id_map, vertex_ids
+        node_ids = set(_structure.node_ids(self._G))
+        self._node_maps_cache = (gtG, id_map, node_ids)
+        return id_map, node_ids
 
     def _build_id_map(self, gtG):
         if 'id' not in gtG.vp:
-            raise RuntimeError("graph-tool backend missing vertex ID property 'id'")
+            raise RuntimeError("graph-tool backend missing node ID property 'id'")
         vp = gtG.vp['id']
         return {str(vp[v]): int(v) for v in gtG.vertices()}
 
@@ -252,9 +252,9 @@ class _GTNamespaceProxy:
             except Exception:  # noqa: BLE001
                 bound = None
 
-            # vertex coercion
+            # node coercion
             if gtG is not None:
-                parent._coerce_vertices(bound, kwargs, gtG)
+                parent._coerce_nodes(bound, kwargs, gtG)
 
             # weight property mapping
             if bound:

@@ -16,7 +16,7 @@ from annnet.core.graph import AnnNet
 def _two_slice_graph() -> AnnNet:
     """Two slices ('S1', 'S2') sharing some edges and differing on others."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.slices.add('S1')
     G.slices.add('S2')
     # binary edges
@@ -62,7 +62,7 @@ def test_remove_resets_active_to_default_when_active_was_dropped() -> None:
 
 def test_remove_drops_edge_slice_attrs_for_that_slice() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     G.slices.add('S1')
     G.slices.add_edge_to_slice('S1', 'e1')
@@ -77,7 +77,7 @@ def test_active_setter_rejects_unknown_slice() -> None:
         G.slices.active = 'nope'
 
 
-# ── info / vertices / edges error paths ─────────────────────────────────
+# ── info / nodes / edges error paths ─────────────────────────────────
 
 
 def test_info_raises_on_unknown_slice() -> None:
@@ -88,7 +88,7 @@ def test_info_raises_on_unknown_slice() -> None:
 
 def test_add_edge_to_slice_error_paths() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     with pytest.raises(KeyError, match='ghost'):
         G.slices.add_edge_to_slice('ghost', 'e1')
@@ -96,22 +96,22 @@ def test_add_edge_to_slice_error_paths() -> None:
         G.slices.add_edge_to_slice('default', 'nope')
 
 
-def test_add_vertex_to_slice_error_paths() -> None:
+def test_add_node_to_slice_error_paths() -> None:
     G = AnnNet(directed=False)
-    G.add_vertices(['A'])
+    G.add_nodes(['A'])
     G.slices.add('S1')
     with pytest.raises(KeyError, match='ghost'):
-        G.slices.add_vertex_to_slice('ghost', 'A')
+        G.slices.add_node_to_slice('ghost', 'A')
     with pytest.raises(KeyError, match='nope'):
-        G.slices.add_vertex_to_slice('S1', 'nope')
+        G.slices.add_node_to_slice('S1', 'nope')
 
 
-def test_add_vertex_to_slice_attaches_vertex() -> None:
+def test_add_node_to_slice_attaches_node() -> None:
     G = AnnNet(directed=False)
-    G.add_vertices(['A'])
+    G.add_nodes(['A'])
     G.slices.add('S1')
-    G.slices.add_vertex_to_slice('S1', 'A')
-    assert 'A' in G.slices.vertices('S1')
+    G.slices.add_node_to_slice('S1', 'A')
+    assert 'A' in G.slices.nodes('S1')
 
 
 # ── set-op creation helpers ─────────────────────────────────────────────
@@ -137,7 +137,7 @@ def test_difference_raises_on_unknown_slice() -> None:
 def test_intersect_empty_and_single() -> None:
     G = _two_slice_graph()
     empty = G.slices.intersect([])
-    assert empty == {'vertices': set(), 'edges': set()}
+    assert empty == {'nodes': set(), 'edges': set()}
     one = G.slices.intersect(['S1'])
     assert one['edges']  # non-empty
 
@@ -145,7 +145,7 @@ def test_intersect_empty_and_single() -> None:
 def test_intersect_with_unknown_slice_returns_empty() -> None:
     G = _two_slice_graph()
     out = G.slices.intersect(['S1', 'ghost'])
-    assert out == {'vertices': set(), 'edges': set()}
+    assert out == {'nodes': set(), 'edges': set()}
 
 
 # ── aggregate ───────────────────────────────────────────────────────────
@@ -191,9 +191,9 @@ def test_aggregate_unknown_method_raises() -> None:
 # ── presence queries ────────────────────────────────────────────────────
 
 
-def test_vertex_presence_lists_slices_containing_vertex() -> None:
+def test_node_presence_lists_slices_containing_node() -> None:
     G = _two_slice_graph()
-    present = G.slices.vertex_presence('B')
+    present = G.slices.node_presence('B')
     assert set(present) >= {'S1', 'S2'}  # B is endpoint of e2 (in both)
 
 
@@ -210,7 +210,7 @@ def test_edge_presence_by_endpoint_pair_returns_dict() -> None:
 
 def test_edge_presence_undirected_match_finds_reverse_orientation() -> None:
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1', directed=False)
     out = G.slices.edge_presence(
         source='B', target='A', include_default=True, undirected_match=True
@@ -253,8 +253,8 @@ def test_hyperedge_presence_argument_errors() -> None:
 def test_hyperedge_presence_multilayer_directed_match_with_bare_ids() -> None:
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A', 'B'], layer={'condition': 'healthy'}, slice='S1')
-    G.add_vertices(['C'], layer={'condition': 'treated'}, slice='S1')
+    G.add_nodes(['A', 'B'], layer={'condition': 'healthy'}, slice='S1')
+    G.add_nodes(['C'], layer={'condition': 'treated'}, slice='S1')
     G.add_edges(
         [
             {
@@ -272,8 +272,8 @@ def test_hyperedge_presence_multilayer_directed_match_with_bare_ids() -> None:
 def test_hyperedge_presence_multilayer_undirected_match_with_bare_ids() -> None:
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A', 'B'], layer={'condition': 'healthy'}, slice='S1')
-    G.add_vertices(['C'], layer={'condition': 'treated'}, slice='S1')
+    G.add_nodes(['A', 'B'], layer={'condition': 'healthy'}, slice='S1')
+    G.add_nodes(['C'], layer={'condition': 'treated'}, slice='S1')
     G.add_edges(
         [
             {
@@ -328,9 +328,9 @@ def test_temporal_dynamics_missing_slice_raises() -> None:
         G.slices.temporal_dynamics(['S1', 'ghost'])
 
 
-def test_temporal_dynamics_vertex_metric() -> None:
+def test_temporal_dynamics_node_metric() -> None:
     G = _two_slice_graph()
-    out = G.slices.temporal_dynamics(['S1', 'S2'], metric='vertex_change')
+    out = G.slices.temporal_dynamics(['S1', 'S2'], metric='node_change')
     assert len(out) == 1
 
 

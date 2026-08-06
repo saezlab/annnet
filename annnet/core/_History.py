@@ -20,13 +20,13 @@ _time = time.time
 
 
 class GraphDiff:
-    """Set difference between two graph snapshots (vertices/edges/slices added/removed)."""
+    """Set difference between two graph snapshots (nodes/edges/slices added/removed)."""
 
     def __init__(self, snapshot_a, snapshot_b):
         self.snapshot_a = snapshot_a
         self.snapshot_b = snapshot_b
-        self.vertices_added = snapshot_b['vertex_ids'] - snapshot_a['vertex_ids']
-        self.vertices_removed = snapshot_a['vertex_ids'] - snapshot_b['vertex_ids']
+        self.nodes_added = snapshot_b['node_ids'] - snapshot_a['node_ids']
+        self.nodes_removed = snapshot_a['node_ids'] - snapshot_b['node_ids']
         self.edges_added = snapshot_b['edge_ids'] - snapshot_a['edge_ids']
         self.edges_removed = snapshot_a['edge_ids'] - snapshot_b['edge_ids']
         self.slices_added = snapshot_b['slice_ids'] - snapshot_a['slice_ids']
@@ -38,13 +38,13 @@ class GraphDiff:
         Returns
         -------
         str
-            Summary text describing added/removed vertices, edges, and slices.
+            Summary text describing added/removed nodes, edges, and slices.
         """
         return '\n'.join(
             [
                 f'Diff: {self.snapshot_a["label"]} - {self.snapshot_b["label"]}',
                 '',
-                f'Vertices: {len(self.vertices_added):+d} added, {len(self.vertices_removed)} removed',
+                f'Nodes: {len(self.nodes_added):+d} added, {len(self.nodes_removed)} removed',
                 f'Edges: {len(self.edges_added):+d} added, {len(self.edges_removed)} removed',
                 f'slices: {len(self.slices_added):+d} added, {len(self.slices_removed)} removed',
             ]
@@ -58,8 +58,8 @@ class GraphDiff:
         bool
         """
         return not (
-            self.vertices_added
-            or self.vertices_removed
+            self.nodes_added
+            or self.nodes_removed
             or self.edges_added
             or self.edges_removed
             or self.slices_added
@@ -79,8 +79,8 @@ class GraphDiff:
         return {
             'snapshot_a': self.snapshot_a['label'],
             'snapshot_b': self.snapshot_b['label'],
-            'vertices_added': list(self.vertices_added),
-            'vertices_removed': list(self.vertices_removed),
+            'nodes_added': list(self.nodes_added),
+            'nodes_removed': list(self.nodes_removed),
             'edges_added': list(self.edges_added),
             'edges_removed': list(self.edges_removed),
             'slices_added': list(self.slices_added),
@@ -214,15 +214,15 @@ class History:
 
     def _install_history_hooks(self):
         to_wrap = [
-            'add_vertices',
+            'add_nodes',
             'add_edges',
-            'add_vertex',
+            'add_node',
             'add_edge',
             'add_hyperedge',
             'flatten_layers',
             'remove_edge',
-            'remove_vertex',
-            'set_vertex_attrs',
+            'remove_node',
+            'set_node_attrs',
             'set_edge_attrs',
             'set_slice_attrs',
             'set_edge_slice_attrs',
@@ -365,7 +365,7 @@ class History:
         snap = {
             'label': name,
             'version': raw['version'],
-            'vertex_ids': set(raw['vertex_ids']),
+            'node_ids': set(raw['node_ids']),
             'edge_ids': set(raw['edge_ids']),
             'slice_ids': set(raw['slice_ids']),
         }

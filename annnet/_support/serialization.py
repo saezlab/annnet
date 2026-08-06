@@ -14,6 +14,21 @@ from typing import Any
 
 from .dataframe_backend import dataframe_to_rows
 
+# The package said "vertex" where it now says "node". A manifest written before
+# the rename holds the old word, so a reader asks for both spellings and a
+# writer emits the new one alone.
+_RENAMED_KEYS = {'nodes': 'vertices'}
+
+
+def stored(mapping, key, default=None):
+    """Read one key of a stored manifest, under its name or the one it had."""
+    if key in mapping:
+        return mapping[key]
+    older = _RENAMED_KEYS.get(key)
+    if older is not None and older in mapping:
+        return mapping[older]
+    return default
+
 
 def coerce_coeff_mapping(val):
     """Normalize various serialized coefficient mappings."""
@@ -30,8 +45,8 @@ def coerce_coeff_mapping(val):
         out = {}
         for item in val:
             if isinstance(item, dict):
-                if 'vertex' in item and '__value' in item:
-                    out[item['vertex']] = {'__value': item['__value']}
+                if 'node' in item and '__value' in item:
+                    out[item['node']] = {'__value': item['__value']}
                 else:
                     for key, value in item.items():
                         out[key] = value
@@ -43,33 +58,33 @@ def coerce_coeff_mapping(val):
 
 
 def endpoint_coeff_map(edge_attrs, private_key, endpoint_set):
-    """Return ``{vertex: float_coeff}`` for one endpoint side."""
+    """Return ``{node: float_coeff}`` for one endpoint side."""
     raw_mapping = (edge_attrs or {}).get(private_key, {})
     mapping = coerce_coeff_mapping(raw_mapping)
     endpoints = list(endpoint_set or mapping.keys())
     out = {}
-    for vertex in endpoints:
-        value = mapping.get(vertex, 1.0)
+    for node in endpoints:
+        value = mapping.get(node, 1.0)
         if isinstance(value, dict):
             value = value.get('__value', 1.0)
         try:
-            out[vertex] = float(value)
+            out[node] = float(value)
         except (TypeError, ValueError):
-            out[vertex] = 1.0
+            out[node] = 1.0
     return out
 
 
 def serialize_endpoint(endpoint: Any) -> Any:
     """Convert an endpoint into a JSON-safe representation."""
     if isinstance(endpoint, tuple) and len(endpoint) == 2 and isinstance(endpoint[1], tuple):
-        return {'kind': 'supra', 'vertex': endpoint[0], 'layer': list(endpoint[1])}
+        return {'kind': 'supra', 'node': endpoint[0], 'layer': list(endpoint[1])}
     return endpoint
 
 
 def deserialize_endpoint(value: Any) -> Any:
     """Restore a structural endpoint from JSON-safe or legacy serialized forms."""
     if isinstance(value, dict) and value.get('kind') == 'supra':
-        return (value.get('vertex'), tuple(value.get('layer') or []))
+        return (value.get('node'), tuple(value.get('layer') or []))
     if isinstance(value, list) and len(value) == 2 and isinstance(value[1], list):
         return (value[0], tuple(value[1]))
     if isinstance(value, str):
@@ -146,8 +161,8 @@ def serialize_multilayer_manifest(
         if attrs:
             aspect_attrs[aspect] = attrs
 
-    # One walk over the node entities instead of calling ``iter_vertex_layers``
-    # per vertex — that helper does a full V-wide scan internally, which would
+    # One walk over the node entities instead of calling ``iter_node_layers``
+    # per node — that helper does a full V-wide scan internally, which would
     # make this loop O(V²).
     vm_rows = []
     node_layer_attrs = []
@@ -247,13 +262,13 @@ def restore_multilayer_manifest(
 
     vm_by_layer: dict = {}
     for row in manifest.get('VM', []):
-        vid = row.get('vertex_id') or row.get('node')
+        vid = row.get('node_id') or row.get('node')
         layer_tuple = _norm_cached(row.get('layer'))
         if vid is None or not layer_tuple:
             continue
         vm_by_layer.setdefault(layer_tuple, []).append(vid)
 
-    # One snapshot of the node-layer keys, kept up to date as vertices are added,
+    # One snapshot of the node-layer keys, kept up to date as nodes are added,
     # so no membership test costs a query.
     node_keys = graph._VM
     placeholder = tuple('_' for _ in graph.aspects)
@@ -272,16 +287,16 @@ def restore_multilayer_manifest(
         else:
             missing = [v for v in vids if (v, layer_tuple) not in node_keys]
         if missing:
-            graph._add_vertices_bulk(missing, layer=layer_tuple)
+            graph._add_nodes_bulk(missing, layer=layer_tuple)
             node_keys.update((v, layer_tuple) for v in missing)
 
-    # Drop spurious placeholder node-layers. Readers add vertices flat (before
+    # Drop spurious placeholder node-layers. Readers add nodes flat (before
     # aspects/VM are known), landing them at the ('_', ...) placeholder; the VM
     # pass above then ALSO places them at their real layer, doubling the
-    # node-layer count. Remove the placeholder membership for any vertex that now
+    # node-layer count. Remove the placeholder membership for any node that now
     # lives at a real layer and that the manifest never listed at the placeholder
     # — but only when it is a true orphan (no incident edges), so a genuine
-    # placeholder-anchored vertex/edge is never disturbed.
+    # placeholder-anchored node/edge is never disturbed.
     legit_placeholder = set(vm_by_layer.get(placeholder, ()))
     by_vid: dict = {}
     for u, aa in node_keys:
@@ -316,7 +331,7 @@ def restore_multilayer_manifest(
     # by the VM pass above) — avoids 40k+ public-API calls each redoing validation.
     state_attrs = graph._state_attrs
     for row in manifest.get('node_layer_attrs', []):
-        vid = row.get('vertex_id') or row.get('node')
+        vid = row.get('node_id') or row.get('node')
         layer_tuple = _norm_cached(row.get('layer'))
         attrs = row.get('attributes') or row.get('attrs') or {}
         if vid is None or not layer_tuple or not attrs:

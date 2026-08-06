@@ -45,11 +45,9 @@ N_KEPT = 600
 
 
 def payload(count: int) -> list[dict]:
-    """A batch of binary edges over a quarter as many vertices."""
-    vertices = max(2, count // 4)
-    return [
-        {'source': f'n{i % vertices}', 'target': f'n{(i * 7 + 3) % vertices}'} for i in range(count)
-    ]
+    """A batch of binary edges over a quarter as many nodes."""
+    nodes = max(2, count // 4)
+    return [{'source': f'n{i % nodes}', 'target': f'n{(i * 7 + 3) % nodes}'} for i in range(count)]
 
 
 def measure(label: str = '', rounds: int = 5) -> dict:
@@ -87,7 +85,7 @@ def measure(label: str = '', rounds: int = 5) -> dict:
         ),
         f'{N_APPENDS} appends with a read each': (lambda: held_small.ops.copy(), appends),
         f'{N_REMOVES} removes with a read each': (lambda: held_small.ops.copy(), removes),
-        f'subgraph of {N_KEPT} vertices': (
+        f'subgraph of {N_KEPT} nodes': (
             lambda: held_small,
             lambda graph: graph.ops.subgraph(kept),
         ),

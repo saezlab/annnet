@@ -121,7 +121,7 @@ def test_detect_schema_hyperedge_via_head_and_tail() -> None:
 
 
 def test_detect_schema_lil_via_neighbors() -> None:
-    df = dataframe_from_rows([{'vertex': 'a', 'neighbors': 'b|c'}])
+    df = dataframe_from_rows([{'node': 'a', 'neighbors': 'b|c'}])
     assert _detect_schema(df) == 'lil'
 
 
@@ -138,8 +138,8 @@ def test_detect_schema_edge_list_via_src_dst() -> None:
 def test_detect_schema_incidence_when_first_col_label_then_numeric() -> None:
     df = dataframe_from_rows(
         [
-            {'vertex_id': 'a', 'e1': 1, 'e2': 0, 'e3': 0, 'e4': 1},
-            {'vertex_id': 'b', 'e1': -1, 'e2': 1, 'e3': 0, 'e4': 0},
+            {'node_id': 'a', 'e1': 1, 'e2': 0, 'e3': 0, 'e4': 1},
+            {'node_id': 'b', 'e1': -1, 'e2': 1, 'e3': 0, 'e4': 0},
         ]
     )
     assert _detect_schema(df) == 'incidence'
@@ -173,7 +173,7 @@ def test_detect_schema_fallback_to_edge_list_when_unrecognized() -> None:
 # ── ingest_edge_list ───────────────────────────────────────────────────
 
 
-def test_ingest_edge_list_classic_src_dst_creates_edges_and_vertices() -> None:
+def test_ingest_edge_list_classic_src_dst_creates_edges_and_nodes() -> None:
     df = dataframe_from_rows(
         [
             {'source': 'A', 'target': 'B', 'weight': 2.5, 'color': 'red'},
@@ -182,7 +182,7 @@ def test_ingest_edge_list_classic_src_dst_creates_edges_and_vertices() -> None:
     )
     G = AnnNet(directed=True)
     _ingest_edge_list(df, G, default_slice=None, default_directed=True, default_weight=1.0)
-    assert set(G.vertices()) == {'A', 'B', 'C'}
+    assert set(G.nodes()) == {'A', 'B', 'C'}
     assert G.ne == 2
 
 
@@ -195,7 +195,7 @@ def test_ingest_edge_list_coo_triples_use_row_col_val() -> None:
     )
     G = AnnNet(directed=True)
     _ingest_edge_list(df, G, default_slice=None, default_directed=True, default_weight=1.0)
-    assert set(G.vertices()) == {'A', 'B', 'C'}
+    assert set(G.nodes()) == {'A', 'B', 'C'}
     assert G.ne == 2
 
 
@@ -250,7 +250,7 @@ def test_ingest_hyperedge_members_path_creates_undirected_hyper() -> None:
     df = dataframe_from_rows([{'members': 'A|B|C', 'weight': 2.0}])
     G = AnnNet(directed=False)
     _ingest_hyperedge(df, G, default_slice=None, default_weight=1.0)
-    assert set(G.vertices()) == {'A', 'B', 'C'}
+    assert set(G.nodes()) == {'A', 'B', 'C'}
     assert G.ne == 1
 
 
@@ -258,7 +258,7 @@ def test_ingest_hyperedge_head_tail_path_creates_directed_hyper() -> None:
     df = dataframe_from_rows([{'head': 'A|B', 'tail': 'C|D', 'weight': 1.0}])
     G = AnnNet(directed=True)
     _ingest_hyperedge(df, G, default_slice=None, default_weight=1.0)
-    assert set(G.vertices()) == {'A', 'B', 'C', 'D'}
+    assert set(G.nodes()) == {'A', 'B', 'C', 'D'}
     assert G.ne == 1
 
 
@@ -287,15 +287,15 @@ def test_ingest_incidence_handles_directed_undirected_and_hyper_columns() -> Non
     #   e4: directed hyper (two +1, two -1)         → fallback hyper (pos and neg)
     df = dataframe_from_rows(
         [
-            {'vertex_id': 'A', 'e1': 1, 'e2': 1, 'e3': 1, 'e4': 1},
-            {'vertex_id': 'B', 'e1': -1, 'e2': 1, 'e3': 1, 'e4': 1},
-            {'vertex_id': 'C', 'e1': 0, 'e2': 0, 'e3': 1, 'e4': -1},
-            {'vertex_id': 'D', 'e1': 0, 'e2': 0, 'e3': 0, 'e4': -1},
+            {'node_id': 'A', 'e1': 1, 'e2': 1, 'e3': 1, 'e4': 1},
+            {'node_id': 'B', 'e1': -1, 'e2': 1, 'e3': 1, 'e4': 1},
+            {'node_id': 'C', 'e1': 0, 'e2': 0, 'e3': 1, 'e4': -1},
+            {'node_id': 'D', 'e1': 0, 'e2': 0, 'e3': 0, 'e4': -1},
         ]
     )
     G = AnnNet(directed=True)
     _ingest_incidence(df, G, default_slice=None, default_weight=1.0)
-    assert set(G.vertices()) == {'A', 'B', 'C', 'D'}
+    assert set(G.nodes()) == {'A', 'B', 'C', 'D'}
     # The four incidence branches must produce at least 3 edges (e3 may
     # collapse depending on which branch it lands in — the goal here is
     # branch coverage, not exact edge count).
@@ -305,8 +305,8 @@ def test_ingest_incidence_handles_directed_undirected_and_hyper_columns() -> Non
 def test_ingest_incidence_skips_non_numeric_columns() -> None:
     df = dataframe_from_rows(
         [
-            {'vertex_id': 'A', 'e1': 1, 'extra': 'red'},
-            {'vertex_id': 'B', 'e1': -1, 'extra': 'blue'},
+            {'node_id': 'A', 'e1': 1, 'extra': 'red'},
+            {'node_id': 'B', 'e1': -1, 'extra': 'blue'},
         ]
     )
     G = AnnNet(directed=True)
@@ -314,17 +314,17 @@ def test_ingest_incidence_skips_non_numeric_columns() -> None:
     assert G.ne == 1  # only 'e1' becomes an edge; 'extra' skipped
 
 
-def test_ingest_incidence_uses_explicit_vertex_id_col_when_first_column() -> None:
-    # When the canonical vertex-id column is already first, no rename happens.
+def test_ingest_incidence_uses_explicit_node_id_col_when_first_column() -> None:
+    # When the canonical node-id column is already first, no rename happens.
     df = dataframe_from_rows(
         [
-            {'vertex_id': 'A', 'e1': 1},
-            {'vertex_id': 'B', 'e1': -1},
+            {'node_id': 'A', 'e1': 1},
+            {'node_id': 'B', 'e1': -1},
         ]
     )
     G = AnnNet(directed=True)
     _ingest_incidence(df, G, default_slice=None, default_weight=1.0)
-    assert set(G.vertices()) == {'A', 'B'}
+    assert set(G.nodes()) == {'A', 'B'}
 
 
 # ── ingest_adjacency ───────────────────────────────────────────────────
@@ -400,18 +400,18 @@ def test_ingest_adjacency_raises_when_rows_neq_cols() -> None:
 def test_ingest_lil_creates_edges_per_neighbor() -> None:
     df = dataframe_from_rows(
         [
-            {'vertex': 'A', 'neighbors': 'B|C', 'weight': 2.0},
-            {'vertex': 'B', 'neighbors': 'C', 'weight': 1.0},
+            {'node': 'A', 'neighbors': 'B|C', 'weight': 2.0},
+            {'node': 'B', 'neighbors': 'C', 'weight': 1.0},
         ]
     )
     G = AnnNet(directed=True)
     _ingest_lil(df, G, default_slice=None, default_directed=True, default_weight=1.0)
-    assert set(G.vertices()) == {'A', 'B', 'C'}
+    assert set(G.nodes()) == {'A', 'B', 'C'}
     assert G.ne == 3
 
 
 def test_ingest_lil_raises_when_no_neighbors_column() -> None:
-    df = dataframe_from_rows([{'vertex': 'A'}])
+    df = dataframe_from_rows([{'node': 'A'}])
     G = AnnNet(directed=True)
     with pytest.raises(ValueError, match='neighbors'):
         _ingest_lil(df, G, default_slice=None, default_directed=True, default_weight=1.0)
@@ -420,7 +420,7 @@ def test_ingest_lil_raises_when_no_neighbors_column() -> None:
 def test_ingest_lil_creates_edges_per_slice_when_slice_column_present() -> None:
     df = dataframe_from_rows(
         [
-            {'vertex': 'A', 'neighbors': 'B', 'slice': 's1|s2'},
+            {'node': 'A', 'neighbors': 'B', 'slice': 's1|s2'},
         ]
     )
     G = AnnNet(directed=True)
@@ -451,9 +451,9 @@ def test_from_dataframe_auto_dispatches_to_each_branch() -> None:
     G2 = from_dataframe(
         dataframe_from_rows(
             [
-                {'vertex_id': 'a', 'e1': 1, 'e2': 0},
-                {'vertex_id': 'b', 'e1': -1, 'e2': 1},
-                {'vertex_id': 'c', 'e1': 0, 'e2': -1},
+                {'node_id': 'a', 'e1': 1, 'e2': 0},
+                {'node_id': 'b', 'e1': -1, 'e2': 1},
+                {'node_id': 'c', 'e1': 0, 'e2': -1},
             ]
         ),
         schema='auto',
@@ -472,7 +472,7 @@ def test_from_dataframe_auto_dispatches_to_each_branch() -> None:
     assert G3.ne == 1
     # lil
     G4 = from_dataframe(
-        dataframe_from_rows([{'vertex': 'A', 'neighbors': 'B|C'}]),
+        dataframe_from_rows([{'node': 'A', 'neighbors': 'B|C'}]),
         schema='auto',
     )
     assert G4.ne == 2
@@ -491,7 +491,7 @@ def test_from_csv_reads_a_real_file(tmp_path: Path) -> None:
     p = tmp_path / 'edges.csv'
     p.write_text('source,target,weight\nA,B,1.0\nB,C,2.0\n', encoding='utf-8')
     G = from_csv(p)
-    assert set(G.vertices()) == {'A', 'B', 'C'}
+    assert set(G.nodes()) == {'A', 'B', 'C'}
     assert G.ne == 2
 
 
@@ -500,7 +500,7 @@ def test_from_csv_reads_a_real_file(tmp_path: Path) -> None:
 
 def test_edges_to_csv_writes_only_binary_edges(tmp_path: Path) -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges('A', 'B', edge_id='e1', weight=2.0)
     G.add_edges('C', 'D', edge_id='e2', weight=3.0)
     p = tmp_path / 'out.csv'
@@ -512,7 +512,7 @@ def test_edges_to_csv_writes_only_binary_edges(tmp_path: Path) -> None:
 
 def test_edges_to_csv_with_slice_filter_writes_a_file(tmp_path: Path) -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', weight=2.0, slice='s1')
     G.add_edges('B', 'C', edge_id='e2', weight=3.0, slice='s2')
     p = tmp_path / 'out.csv'
@@ -526,7 +526,7 @@ def test_edges_to_csv_with_slice_filter_writes_a_file(tmp_path: Path) -> None:
 
 def test_hyperedges_to_csv_writes_members_rows(tmp_path: Path) -> None:
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges(['A', 'B', 'C'], edge_id='h1')
     p = tmp_path / 'hyper.csv'
     hyperedges_to_csv(G, p)
@@ -541,7 +541,7 @@ def test_hyperedges_to_csv_with_no_hyperedges_writes_empty_or_header_only(
 ) -> None:
     """The writer doesn't crash on a graph with only binary edges."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     p = tmp_path / 'h.csv'
     hyperedges_to_csv(G, p)
@@ -554,7 +554,7 @@ def test_hyperedges_to_csv_with_no_hyperedges_writes_empty_or_header_only(
 def test_hyperedges_to_csv_with_directed_hyper_writes_file(tmp_path: Path) -> None:
     """Smoke-test that the directed-hyperedge path runs end-to-end."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges(src=['A', 'B'], tgt=['C', 'D'], edge_id='h1')  # directed hyper
     p = tmp_path / 'h.csv'
     hyperedges_to_csv(G, p)
@@ -566,11 +566,11 @@ def test_hyperedges_to_csv_with_directed_hyper_writes_file(tmp_path: Path) -> No
 
 def test_round_trip_edge_list_via_disk(tmp_path: Path) -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.5)
     G.add_edges('B', 'C', edge_id='e2', weight=2.0)
     p = tmp_path / 'rt.csv'
     edges_to_csv(G, p)
     G2 = from_csv(p, schema='edge_list')
-    assert set(G2.vertices()) == {'A', 'B', 'C'}
+    assert set(G2.nodes()) == {'A', 'B', 'C'}
     assert G2.ne == 2

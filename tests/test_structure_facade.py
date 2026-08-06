@@ -248,7 +248,7 @@ def _mixed_chain(length: int) -> AnnNet:
     the graph.
     """
     G = AnnNet(directed=True)
-    G.add_vertices([f'v{i}' for i in range(length + 1)])
+    G.add_nodes([f'v{i}' for i in range(length + 1)])
     G.add_edges(
         [
             {
@@ -406,7 +406,7 @@ def test_has_entity_id_asks_the_index_and_never_walks_the_graph(case, monkeypatc
     """One id lookup costs one index read, whatever the graph holds.
 
     A walk here is the whole cost of loading a file, because a slice names every
-    vertex it holds by its bare id and asks this once per name.
+    node it holds by its bare id and asks this once per name.
     """
     G = build_case(case)
     store = _build.rebuild_store(G)
@@ -442,7 +442,7 @@ def test_edges_between_reads_no_member_list_for_a_binary_edge(monkeypatch):
 def test_edges_between_leaves_out_a_hyperedge_over_the_same_two_entities():
     """A hyperedge of two members is still not an edge between them."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges([{'head': ['A'], 'tail': ['B'], 'edge_id': 'h1'}])
 
     assert S.edges_between(G, 'A', 'B') == []
@@ -490,7 +490,7 @@ def test_edge_count_leaves_out_an_edge_that_carries_no_structure():
 def test_the_facade_agrees_with_the_public_counts(case):
     G = build_case(case)
     entity_ids = {ref.id for ref in S.iter_entities(G) if ref.kind == S.NODE}
-    assert entity_ids == set(G.vertices())
+    assert entity_ids == set(G.nodes())
     assert {ref.id for ref in S.iter_edges(G)} == set(G.edges())
 
 

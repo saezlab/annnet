@@ -38,7 +38,7 @@ class FakeGraph:
         self._weights = {'e_pos': 2.0, 'e_neg': -3.0, 'h1': 0.0}
         self._attrs = {'e_pos': {'kind': 'activation'}, 'e_neg': {'kind': 'repression'}}
 
-    def vertices(self):
+    def nodes(self):
         return ['A', 'B', 'C']
 
     def edges(self):
@@ -52,8 +52,8 @@ class FakeGraph:
             'loop': (frozenset({'C'}), frozenset({'C'})),
         }[edge_id]
 
-    def get_attr_vertex(self, vertex, key, default=None):
-        return {'A': 'alpha'}.get(vertex, default)
+    def get_attr_node(self, node, key, default=None):
+        return {'A': 'alpha'}.get(node, default)
 
     def get_attr_edge(self, edge_id, key, default=None):
         return self._attrs.get(edge_id, {}).get(key, default)
@@ -326,7 +326,7 @@ def test_adapter_utils_serialization_roundtrips(tmp_path):
     }
 
     assert serialization_support.coerce_coeff_mapping(
-        '[["A", 2], {"vertex": "B", "__value": 3}]'
+        '[["A", 2], {"node": "B", "__value": 3}]'
     ) == {
         'A': 2,
         'B': {'__value': 3},
@@ -453,7 +453,7 @@ def test_plotting_helpers_with_fake_graph(tmp_path):
     assert plotting._is_true_hyperedge(frozenset({'A', 'B'}), frozenset({'A', 'B'})) is False
     assert plotting._is_true_hyperedge(frozenset({'A', 'B'}), frozenset({'C'})) is True
 
-    assert plotting.build_vertex_labels(graph, key='label')['A'] == 'alpha'
+    assert plotting.build_node_labels(graph, key='label')['A'] == 'alpha'
     edge_labels = plotting.build_edge_labels(graph, extra_keys=['kind'], layer='slice1')
     assert 'kind=activation' in edge_labels[0]
     styles = plotting.edge_style_from_weights(graph, color_mode='signed')
@@ -468,7 +468,7 @@ def test_plotting_helpers_with_fake_graph(tmp_path):
         edge_indexes=[0, 1, 2, 3],
         show_edge_labels=True,
         edge_label_keys=['kind'],
-        vertex_label_key='label',
+        node_label_key='label',
     )
     assert fig is ax.figure
     assert ax.collections

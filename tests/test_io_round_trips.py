@@ -17,7 +17,7 @@ from annnet.io import cx2 as cx2_io
 @pytest.fixture
 def graph():
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'], kind='gene')
+    G.add_nodes(['A', 'B', 'C'], kind='gene')
     G.add_edges(
         [
             {'source': 'A', 'target': 'B', 'edge_id': 'e1', 'confidence': 0.9},

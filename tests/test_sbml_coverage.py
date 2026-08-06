@@ -31,12 +31,12 @@ from tests.test_sbml_adapter import (
 class DummyGraph(BaseDummyGraph):
     """Coverage-test variant that tolerates ``(sid, attrs)`` tuples."""
 
-    def _add_vertices_bulk(self, ids, slice=None):
+    def _add_nodes_bulk(self, ids, slice=None):
         for item in ids:
             if isinstance(item, tuple):
-                self.vertices.add(item[0])
+                self.nodes.add(item[0])
             else:
-                self.vertices.add(item)
+                self.nodes.add(item)
 
 
 # ── richer dummy SBML wrappers ─────────────────────────────────────────
@@ -344,7 +344,7 @@ def test_register_species_attaches_every_metadata_field() -> None:
     )
     G = DummyGraph()
     _graph_from_sbml_model(model, graph=G, slice='default')
-    assert 'A' in G.vertices
+    assert 'A' in G.nodes
 
 
 def test_register_species_skips_species_without_id() -> None:
@@ -352,7 +352,7 @@ def test_register_species_skips_species_without_id() -> None:
     model = DummyModel(species=species, reactions=[])
     G = DummyGraph()
     _graph_from_sbml_model(model, graph=G, slice='default')
-    assert '' not in G.vertices
+    assert '' not in G.nodes
 
 
 # ── reaction edge attribute and modifier branches ────────────────────
@@ -408,7 +408,7 @@ def test_reaction_skips_endpoints_with_blank_species_id() -> None:
     _graph_from_sbml_model(model, graph=G, slice='default')
     edge = next(e for e in G.edges if e['id'] == 'R1')
     assert 'B' in edge['head']
-    # reactants empty → one-sided half-edge (empty tail), no placeholder source vertex.
+    # reactants empty → one-sided half-edge (empty tail), no placeholder source node.
     assert edge['tail'] == []
     assert BOUNDARY_SOURCE not in edge['head']
 

@@ -2,8 +2,8 @@
 
 Primary graph objects from `annnet.core.graph`.
 
-The main graph API centers on `AnnNet`/`Graph`, bulk vertex and edge
-construction with `add_vertices` and `add_edges`, graph-owned accessors
+The main graph API centers on `AnnNet`/`Graph`, bulk node and edge
+construction with `add_nodes` and `add_edges`, graph-owned accessors
 (`slices`, `layers`, `attrs`, `views`, `ops`, `idx`, `cache`), annotation
 tables (`obs`, `var`, `uns`), and backend accessors (`nx`, `ig`, `gt`).
 
@@ -14,21 +14,21 @@ tables (`obs`, `var`, `uns`), and backend accessors (`nx`, `ig`, `gt`).
       filters: public
       inherited_members: false
       members:
-        - add_vertices
+        - add_nodes
         - add_edges
-        - remove_vertices
+        - remove_nodes
         - remove_edges
-        - has_vertex
+        - has_node
         - has_edge
-        - vertices
+        - nodes
         - edges
         - degree
         - incident_edges
-        - num_vertices
+        - num_nodes
         - num_edges
         - nv
         - ne
-        - number_of_vertices
+        - number_of_nodes
         - number_of_edges
         - shape
         - V
@@ -51,7 +51,7 @@ tables (`obs`, `var`, `uns`), and backend accessors (`nx`, `ig`, `gt`).
         - write
         - view
         - global_count
-        - get_vertex
+        - get_node
         - get_edge
         - edge_list
         - make_undirected

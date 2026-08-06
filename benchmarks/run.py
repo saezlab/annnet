@@ -76,7 +76,7 @@ def _worker(args) -> int:
                 records += cases.extra_dimensions(
                     sc,
                     backend=args.backend,
-                    max_vertices=args.extra_max_vertices,
+                    max_nodes=args.extra_max_nodes,
                     max_edges=args.extra_max_edges,
                     max_accessor_repeats=args.extra_max_accessor_repeats,
                 )
@@ -122,10 +122,10 @@ def _spawn(engine, backend, scales, no_memory, no_extra, extra_caps, tmp) -> lis
     if no_extra:
         cmd += ['--no-extra']
     if extra_caps:
-        max_vertices, max_edges, max_accessor_repeats = extra_caps
+        max_nodes, max_edges, max_accessor_repeats = extra_caps
         cmd += [
-            '--extra-max-vertices',
-            str(max_vertices),
+            '--extra-max-nodes',
+            str(max_nodes),
             '--extra-max-edges',
             str(max_edges),
             '--extra-max-accessor-repeats',
@@ -183,7 +183,7 @@ def _parent(args) -> int:
                 args.no_memory,
                 args.no_extra,
                 (
-                    args.extra_max_vertices,
+                    args.extra_max_nodes,
                     args.extra_max_edges,
                     args.extra_max_accessor_repeats,
                 ),
@@ -217,7 +217,7 @@ def _parent(args) -> int:
             'backends': backends,
             'extra_dimensions': not args.no_extra,
             'extra_caps': {
-                'max_vertices': args.extra_max_vertices,
+                'max_nodes': args.extra_max_nodes,
                 'max_edges': args.extra_max_edges,
                 'max_accessor_repeats': args.extra_max_accessor_repeats,
             },
@@ -250,10 +250,10 @@ def main(argv=None) -> int:
     )
     p.add_argument('--no-extra', action='store_true', help='skip local extra benchmark dimensions')
     p.add_argument(
-        '--extra-max-vertices',
+        '--extra-max-nodes',
         type=int,
         default=2_500,
-        help='cap local extra-dimension workloads to this many vertices',
+        help='cap local extra-dimension workloads to this many nodes',
     )
     p.add_argument(
         '--extra-max-edges',

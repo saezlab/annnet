@@ -15,7 +15,7 @@ from annnet._support.graph_records import (
 from annnet.core._structure import (
     _is_directed_eid,
     _iter_edge_records,
-    _iter_vertex_ids,
+    _iter_node_ids,
 )
 from annnet.core.graph import AnnNet
 
@@ -25,7 +25,7 @@ from annnet.core.graph import AnnNet
 
 def test_is_directed_eid_reads_the_directedness_of_the_edge() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     assert _is_directed_eid(G, 'e1') is True
 
@@ -43,41 +43,41 @@ def test_is_directed_eid_handles_an_object_that_holds_no_graph() -> None:
     assert _is_directed_eid(Bare(), 'anything') is True
 
 
-# ── _iter_vertex_ids ───────────────────────────────────────────────────
+# ── _iter_node_ids ───────────────────────────────────────────────────
 
 
-def test_iter_vertex_ids_yields_only_vertex_entities_in_row_order() -> None:
+def test_iter_node_ids_yields_only_node_entities_in_row_order() -> None:
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1')
-    out = list(_iter_vertex_ids(G))
+    out = list(_iter_node_ids(G))
     assert out == ['A', 'B', 'C']
 
 
-def test_iter_vertex_ids_falls_back_to_vertices_method_when_there_is_no_store() -> None:
+def test_iter_node_ids_falls_back_to_nodes_method_when_there_is_no_store() -> None:
     class Stub:
-        def vertices(self):
+        def nodes(self):
             return ['x', 'y']
 
-    assert list(_iter_vertex_ids(Stub())) == ['x', 'y']
+    assert list(_iter_node_ids(Stub())) == ['x', 'y']
 
 
-def test_iter_vertex_ids_raises_when_no_adapter_surface() -> None:
+def test_iter_node_ids_raises_when_no_adapter_surface() -> None:
     class Bare:
         pass
 
     import pytest
 
     with pytest.raises(AttributeError):
-        list(_iter_vertex_ids(Bare()))
+        list(_iter_node_ids(Bare()))
 
 
-def test_iter_vertex_ids_skips_the_edge_entities() -> None:
+def test_iter_node_ids_skips_the_edge_entities() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['a', 'b'])
+    G.add_nodes(['a', 'b'])
     G.add_edges('a', 'b', edge_id='e1', as_entity=True)
 
-    assert list(_iter_vertex_ids(G)) == ['a', 'b']
+    assert list(_iter_node_ids(G)) == ['a', 'b']
 
 
 # ── _serialize_value ───────────────────────────────────────────────────
@@ -155,7 +155,7 @@ def test_rows_like_returns_empty_for_unrecognized_shape() -> None:
 
 def test_iter_edge_records_yields_the_edges_in_column_order() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1')
     G.add_edges('B', 'C', edge_id='e2')
     out = list(_iter_edge_records(G))
@@ -165,7 +165,7 @@ def test_iter_edge_records_yields_the_edges_in_column_order() -> None:
 
 def test_iter_edge_records_gives_each_edge_the_shape_an_adapter_reads() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', weight=2.0)
     G.add_edges([{'members': ['A', 'B', 'C'], 'edge_id': 'h1'}])
 

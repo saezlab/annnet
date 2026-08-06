@@ -31,7 +31,7 @@ class TestSBMLAdapter(unittest.TestCase):
         G = AnnNet(directed=True)
         G = _graph_from_stoich(S, mets, rxns, graph=G, preserve_stoichiometry=True)
 
-        # Vertices
+        # Nodes
         self.assertGreaterEqual(G.ncount(), 3)
 
         # Edges present
@@ -45,7 +45,7 @@ class TestSBMLAdapter(unittest.TestCase):
         self.assertEqual(hdef_R1['head'], {'C'})
         self.assertEqual(hdef_R1['tail'], {'A', 'B'})
 
-        # If we have per-vertex coefficients, incidence should reflect -2 for B
+        # If we have per-node coefficients, incidence should reflect -2 for B
         col_R1 = G.idx.edge_to_col('R1')
         row_A = G.idx.entity_to_row('A')
         row_B = G.idx.entity_to_row('B')
@@ -99,9 +99,9 @@ class TestSBMLAdapter(unittest.TestCase):
             S, mets, rxns, graph=AnnNet(directed=True), preserve_stoichiometry=True
         )
 
-        # No placeholder sink/source vertices — boundary reactions are one-sided half-edges.
-        assert set(G.vertices()) == {'A'}
-        assert BOUNDARY_SINK not in G.vertices() and BOUNDARY_SOURCE not in G.vertices()
+        # No placeholder sink/source nodes — boundary reactions are one-sided half-edges.
+        assert set(G.nodes()) == {'A'}
+        assert BOUNDARY_SINK not in G.nodes() and BOUNDARY_SOURCE not in G.nodes()
 
         # The single real metabolite is the only member; direction/sign lives in coeffs.
         assert G.hyperedge_definitions['deg']['members'] == {'A'}

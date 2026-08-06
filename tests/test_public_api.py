@@ -76,7 +76,7 @@ class TestPublicAPI:
 
     def test_namespace_accessors_resolve(self):
         G = an.AnnNet()
-        G.add_vertices(['A', 'B'])
+        G.add_nodes(['A', 'B'])
         G.add_edges([{'source': 'A', 'target': 'B', 'edge_id': 'e1'}])
 
         assert G.views is not None
@@ -93,7 +93,7 @@ class TestPublicAPI:
 
     def test_native_read_write_methods_resolve_and_roundtrip(self, tmp_path):
         G = an.AnnNet(directed=True)
-        G.add_vertices(['A', 'B'])
+        G.add_nodes(['A', 'B'])
         G.add_edges([{'source': 'A', 'target': 'B', 'edge_id': 'e1', 'weight': 1.5}])
 
         path = tmp_path / 'graph.annnet'
@@ -120,9 +120,9 @@ class TestPublicAPI:
         }
 
         for required in {
-            'add_vertices',
+            'add_nodes',
             'add_edges',
-            'remove_vertices',
+            'remove_nodes',
             'remove_edges',
             'ncount',
             'ecount',
@@ -140,12 +140,12 @@ class TestPublicAPI:
             assert required in class_public
 
         for hidden in {
-            'add_vertex',
+            'add_node',
             'add_edge',
             'add_edges_bulk',
-            'add_vertices_bulk',
+            'add_nodes_bulk',
             'add_edges_to_slice_bulk',
-            'vertices_view',
+            'nodes_view',
             'edges_view',
             'set_aspects',
             'add_slice',

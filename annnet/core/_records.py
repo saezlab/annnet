@@ -61,7 +61,7 @@ class EdgeType(Enum):
 class SliceRecord:
     """Typed slice membership record with dict-style compatibility."""
 
-    vertices: set = field(default_factory=set)
+    nodes: set = field(default_factory=set)
     edges: set = field(default_factory=set)
     attributes: dict = field(default_factory=dict)
 
@@ -99,17 +99,17 @@ class EdgeView(tuple):
         )
 
 
-class VertexView(str):
-    """String-shaped vertex record returned by :meth:`AnnNet.get_vertex`.
+class NodeView(str):
+    """String-shaped node record returned by :meth:`AnnNet.get_node`.
 
-    A vertex is its id, so this is the id, and everything the graph holds about
+    A node is its id, so this is the id, and everything the graph holds about
     it hangs off that. An edge is a pair, which is why :class:`EdgeView` is a
     tuple and this is a string.
     """
 
-    def __new__(cls, vertex_id, *, kind, layers, attrs):
-        self = super().__new__(cls, vertex_id)
-        self.vertex_id = vertex_id
+    def __new__(cls, node_id, *, kind, layers, attrs):
+        self = super().__new__(cls, node_id)
+        self.node_id = node_id
         self.kind = kind
         self.layers = layers
         self.attrs = attrs
@@ -117,7 +117,7 @@ class VertexView(str):
 
     def __repr__(self) -> str:
         return (
-            f'VertexView(vertex_id={self.vertex_id!r}, kind={self.kind!r}, '
+            f'NodeView(node_id={self.node_id!r}, kind={self.kind!r}, '
             f'layers={self.layers!r}, attrs={self.attrs!r})'
         )
 
@@ -130,7 +130,7 @@ def _internal_entity_kind(kind: str) -> str:
     return 'edge_entity' if kind == 'edge' else kind
 
 
-_vertex_RESERVED = {'vertex_id'}
+_node_RESERVED = {'node_id'}
 _EDGE_RESERVED = {
     'edge_id',
     'source',

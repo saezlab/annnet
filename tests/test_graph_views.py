@@ -14,12 +14,12 @@ from annnet.core import _structure as S
 def _build_graph():
     """Directed graph: A→B, B→C, with attributes and a slice."""
     G = AnnNet(directed=True)
-    G.add_vertices('A')
-    G.attrs.set_vertex_attrs('A', gene='TP53', score=1.0)
-    G.add_vertices('B')
-    G.attrs.set_vertex_attrs('B', gene='EGFR', score=0.5)
-    G.add_vertices('C')
-    G.attrs.set_vertex_attrs('C', gene='MYC', score=0.2)
+    G.add_nodes('A')
+    G.attrs.set_node_attrs('A', gene='TP53', score=1.0)
+    G.add_nodes('B')
+    G.attrs.set_node_attrs('B', gene='EGFR', score=0.5)
+    G.add_nodes('C')
+    G.attrs.set_node_attrs('C', gene='MYC', score=0.2)
     G.add_edges('A', 'B', edge_id='e1', weight=2.0)
     G.attrs.set_edge_attrs('e1', relation='activates')
     G.add_edges('B', 'C', edge_id='e2', weight=3.0)
@@ -32,40 +32,40 @@ def _build_graph():
 def _build_hyperedge_graph():
     G = AnnNet(directed=True)
     for v in ['A', 'B', 'C', 'D']:
-        G.add_vertices(v)
+        G.add_nodes(v)
     G.add_edges('A', 'B', edge_id='e1', weight=1.0)
     G.add_edges(src=['A', 'B'], tgt=['C'], edge_id='h1', weight=0.5)
     G.add_edges(src=['B', 'C', 'D'], edge_id='h2', weight=1.5)
     return G
 
 
-class TestGraphViewVertexFilter(unittest.TestCase):
-    def test_no_filter_returns_all_vertices(self):
+class TestGraphViewNodeFilter(unittest.TestCase):
+    def test_no_filter_returns_all_nodes(self):
         G = _build_graph()
         view = GraphView(G)
-        # No filter → vertex_ids is None (all vertices)
-        self.assertIsNone(view.vertex_ids)
-        self.assertEqual(view.vertex_count, 3)
+        # No filter → node_ids is None (all nodes)
+        self.assertIsNone(view.node_ids)
+        self.assertEqual(view.node_count, 3)
 
-    def test_list_filter_restricts_vertices(self):
+    def test_list_filter_restricts_nodes(self):
         G = _build_graph()
-        view = GraphView(G, vertices=['A', 'B'])
-        self.assertEqual(view.vertex_ids, {'A', 'B'})
-        self.assertEqual(view.vertex_count, 2)
+        view = GraphView(G, nodes=['A', 'B'])
+        self.assertEqual(view.node_ids, {'A', 'B'})
+        self.assertEqual(view.node_count, 2)
 
     def test_callable_predicate_filter(self):
         G = _build_graph()
-        # Keep only vertices whose gene attribute starts with "E"
-        view = GraphView(G, vertices=lambda v: v in ['A', 'C'])
-        ids = view.vertex_ids
+        # Keep only nodes whose gene attribute starts with "E"
+        view = GraphView(G, nodes=lambda v: v in ['A', 'C'])
+        ids = view.node_ids
         self.assertIn('A', ids)
         self.assertIn('C', ids)
         self.assertNotIn('B', ids)
 
     def test_extra_predicate_further_restricts(self):
         G = _build_graph()
-        view = GraphView(G, vertices=['A', 'B', 'C'], predicate=lambda v: v != 'C')
-        ids = view.vertex_ids
+        view = GraphView(G, nodes=['A', 'B', 'C'], predicate=lambda v: v != 'C')
+        ids = view.node_ids
         self.assertIn('A', ids)
         self.assertIn('B', ids)
         self.assertNotIn('C', ids)
@@ -96,8 +96,8 @@ class TestGraphViewSliceFilter(unittest.TestCase):
     def test_slice_filter_single(self):
         G = _build_graph()
         # "sig" slice contains only e1
-        G.slices.add_vertex_to_slice('sig', 'A')
-        G.slices.add_vertex_to_slice('sig', 'B')
+        G.slices.add_node_to_slice('sig', 'A')
+        G.slices.add_node_to_slice('sig', 'B')
         view = GraphView(G, slices='sig')
         edge_ids = view.edge_ids
         self.assertIn('e1', edge_ids)
@@ -107,10 +107,10 @@ class TestGraphViewSliceFilter(unittest.TestCase):
         G = _build_graph()
         G.slices.add('reg')
         G.slices.add_edge_to_slice('reg', 'e2')
-        G.slices.add_vertex_to_slice('sig', 'A')
-        G.slices.add_vertex_to_slice('sig', 'B')
-        G.slices.add_vertex_to_slice('reg', 'B')
-        G.slices.add_vertex_to_slice('reg', 'C')
+        G.slices.add_node_to_slice('sig', 'A')
+        G.slices.add_node_to_slice('sig', 'B')
+        G.slices.add_node_to_slice('reg', 'B')
+        G.slices.add_node_to_slice('reg', 'C')
         view = GraphView(G, slices=['sig', 'reg'])
         edge_ids = view.edge_ids
         self.assertIn('e1', edge_ids)
@@ -118,7 +118,7 @@ class TestGraphViewSliceFilter(unittest.TestCase):
 
 
 class TestGraphViewObs(unittest.TestCase):
-    """obs property returns filtered vertex attribute table."""
+    """obs property returns filtered node attribute table."""
 
     def test_obs_no_filter_returns_all(self):
         G = _build_graph()
@@ -128,22 +128,22 @@ class TestGraphViewObs(unittest.TestCase):
             rows = obs.to_dicts()
         except Exception:
             rows = obs.to_dict(orient='records')
-        vertex_ids = [r['vertex_id'] for r in rows]
-        self.assertIn('A', vertex_ids)
-        self.assertIn('B', vertex_ids)
-        self.assertIn('C', vertex_ids)
+        node_ids = [r['node_id'] for r in rows]
+        self.assertIn('A', node_ids)
+        self.assertIn('B', node_ids)
+        self.assertIn('C', node_ids)
 
     def test_obs_filtered_to_subset(self):
         G = _build_graph()
-        view = GraphView(G, vertices=['A'])
+        view = GraphView(G, nodes=['A'])
         obs = view.obs
         try:
             rows = obs.to_dicts()
         except Exception:
             rows = obs.to_dict(orient='records')
-        vertex_ids = [r['vertex_id'] for r in rows]
-        self.assertIn('A', vertex_ids)
-        self.assertNotIn('B', vertex_ids)
+        node_ids = [r['node_id'] for r in rows]
+        self.assertIn('A', node_ids)
+        self.assertNotIn('B', node_ids)
 
 
 class TestGraphViewVar(unittest.TestCase):
@@ -177,26 +177,26 @@ class TestGraphViewVar(unittest.TestCase):
 class TestGraphViewX(unittest.TestCase):
     """X property returns submatrix view."""
 
-    def test_X_shape_filtered_vertices_and_edges(self):
+    def test_X_shape_filtered_nodes_and_edges(self):
         # With explicit filters the submatrix is exactly 2×1
         G = _build_graph()
-        view = GraphView(G, vertices=['A', 'B'], edges=['e1'])
+        view = GraphView(G, nodes=['A', 'B'], edges=['e1'])
         X = view.X
         self.assertEqual(X.shape[0], 2)
         self.assertEqual(X.shape[1], 1)
 
-    def test_X_shape_vertex_edge_filter_consistent(self):
-        # Filter to A,B vertices and e1 (A→B) — C is absent, so e2 (B→C) is dropped
+    def test_X_shape_node_edge_filter_consistent(self):
+        # Filter to A,B nodes and e1 (A→B) — C is absent, so e2 (B→C) is dropped
         G = _build_graph()
-        view = GraphView(G, vertices=['A', 'B'], edges=['e1', 'e2'])
+        view = GraphView(G, nodes=['A', 'B'], edges=['e1', 'e2'])
         X = view.X
-        # e2 (B→C) is dropped because C not in vertex filter → only 1 column
+        # e2 (B→C) is dropped because C not in node filter → only 1 column
         self.assertEqual(X.shape[0], 2)
         self.assertEqual(X.shape[1], 1)
 
-    def test_X_empty_for_no_matching_vertices(self):
+    def test_X_empty_for_no_matching_nodes(self):
         G = _build_graph()
-        view = GraphView(G, vertices=[], edges=['e1'])
+        view = GraphView(G, nodes=[], edges=['e1'])
         X = view.X
         self.assertEqual(X.shape[0], 0)
 
@@ -213,7 +213,7 @@ class TestGraphViewMaterialize(unittest.TestCase):
 
     def test_materialize_preserves_explicit_edge_ids_in_flat_graph(self):
         G = AnnNet()
-        G.add_vertices(['A', 'B'])
+        G.add_nodes(['A', 'B'])
         G.add_edges('A', 'B', edge_id='e1', score=7)
 
         H = G.view().materialize()
@@ -221,18 +221,18 @@ class TestGraphViewMaterialize(unittest.TestCase):
         self.assertEqual(H.edges(), ['e1'])
         self.assertEqual(H.attrs.get_attr_edge('e1', 'score'), 7)
 
-    def test_materialize_preserves_multilayer_aspects_supra_vertices_and_edges(self):
+    def test_materialize_preserves_multilayer_aspects_supra_nodes_and_edges(self):
         G = AnnNet(aspects={'time': ['t1', 't2']})
-        G.add_vertices('A', layer='t1')
-        G.add_vertices('A', layer='t2')
-        G.add_vertices('B', layer='t1')
+        G.add_nodes('A', layer='t1')
+        G.add_nodes('A', layer='t2')
+        G.add_nodes('B', layer='t1')
         G.add_edges(('A', ('t1',)), ('B', ('t1',)), edge_id='e1')
 
         H = G.view().materialize()
 
         self.assertEqual(H.layers.list_aspects(), ('time',))
         self.assertSetEqual(
-            set(H.supra_vertices()),
+            set(H.supra_nodes()),
             {('A', ('t1',)), ('A', ('t2',)), ('B', ('t1',))},
         )
         self.assertEqual(H.edges(), ['e1'])
@@ -255,19 +255,19 @@ class TestViewNamespace(unittest.TestCase):
                 namespaced.to_dict(orient='records'),
             )
 
-    def test_materialize_vertex_filter(self):
+    def test_materialize_node_filter(self):
         G = _build_graph()
         # Only A and B → only e1 survives (both endpoints present)
-        view = GraphView(G, vertices=['A', 'B'], edges=['e1'])
+        view = GraphView(G, nodes=['A', 'B'], edges=['e1'])
         sub = view.materialize()
         self.assertEqual(sub.nv, 2)
         self.assertEqual(sub.ne, 1)
 
-    def test_materialize_copies_vertex_attrs(self):
+    def test_materialize_copies_node_attrs(self):
         G = _build_graph()
         view = GraphView(G)
         sub = view.materialize(copy_attributes=True)
-        attrs = sub.attrs.get_vertex_attrs('A') or {}
+        attrs = sub.attrs.get_node_attrs('A') or {}
         # gene attribute should survive
         self.assertIn('gene', attrs)
 
@@ -281,7 +281,7 @@ class TestViewNamespace(unittest.TestCase):
         G = _build_hyperedge_graph()
         view = GraphView(G)
         sub = view.materialize()
-        # All 4 vertices must survive the round-trip
+        # All 4 nodes must survive the round-trip
         self.assertEqual(sub.nv, G.nv)
         # At minimum the binary edge must survive
         self.assertGreaterEqual(sub.ne, 1)
@@ -290,11 +290,11 @@ class TestViewNamespace(unittest.TestCase):
 class TestGraphViewSubview(unittest.TestCase):
     """subview() further restricts an existing view."""
 
-    def test_subview_narrows_vertices(self):
+    def test_subview_narrows_nodes(self):
         G = _build_graph()
-        base = GraphView(G, vertices=['A', 'B', 'C'])
-        sub = base.subview(vertices=['A', 'B'])
-        ids = sub.vertex_ids
+        base = GraphView(G, nodes=['A', 'B', 'C'])
+        sub = base.subview(nodes=['A', 'B'])
+        ids = sub.node_ids
         self.assertIn('A', ids)
         self.assertIn('B', ids)
         self.assertNotIn('C', ids)
@@ -315,7 +315,7 @@ class TestGraphViewConvenience(unittest.TestCase):
         view = GraphView(G)
         s = view.summary()
         self.assertIsInstance(s, str)
-        self.assertIn('3', s)  # 3 vertices
+        self.assertIn('3', s)  # 3 nodes
         self.assertIn('2', s)  # 2 edges
 
     def test_repr(self):
@@ -324,9 +324,9 @@ class TestGraphViewConvenience(unittest.TestCase):
         r = repr(view)
         self.assertIn('GraphView', r)
 
-    def test_len_equals_vertex_count(self):
+    def test_len_equals_node_count(self):
         G = _build_graph()
-        view = GraphView(G, vertices=['A', 'B'])
+        view = GraphView(G, nodes=['A', 'B'])
         self.assertEqual(len(view), 2)
 
 
@@ -382,24 +382,24 @@ class TestViewsClassEdgesView(unittest.TestCase):
         self.assertIsNone(rows['h2']['target'])
 
 
-class TestViewsClassVerticesView(unittest.TestCase):
-    """ViewsClass.views.vertices() (mixin on AnnNet)."""
+class TestViewsClassNodesView(unittest.TestCase):
+    """ViewsClass.views.nodes() (mixin on AnnNet)."""
 
-    def test_basic_vertices_view(self):
+    def test_basic_nodes_view(self):
         G = _build_graph()
-        df = G.views.vertices()
+        df = G.views.nodes()
         try:
             rows = df.to_dicts()
         except Exception:
             rows = df.to_dict(orient='records')
-        vertex_ids = [r['vertex_id'] for r in rows]
-        self.assertIn('A', vertex_ids)
-        self.assertIn('B', vertex_ids)
-        self.assertIn('C', vertex_ids)
+        node_ids = [r['node_id'] for r in rows]
+        self.assertIn('A', node_ids)
+        self.assertIn('B', node_ids)
+        self.assertIn('C', node_ids)
 
-    def test_vertices_view_empty_graph(self):
+    def test_nodes_view_empty_graph(self):
         G = AnnNet(directed=True)
-        df = G.views.vertices()
+        df = G.views.nodes()
         self.assertEqual(len(df), 0)
 
 
@@ -411,16 +411,16 @@ class TestAnnNetView(unittest.TestCase):
         v = G.view()
         self.assertIsInstance(v, GraphView)
 
-    def test_view_with_vertex_list(self):
+    def test_view_with_node_list(self):
         G = _build_graph()
-        v = G.view(vertices=['A'])
-        self.assertEqual(v.vertex_ids, {'A'})
+        v = G.view(nodes=['A'])
+        self.assertEqual(v.node_ids, {'A'})
 
     def test_view_with_predicate(self):
         G = _build_graph()
         v = G.view(predicate=lambda x: x == 'B')
-        # predicate applied to all vertices; only B survives
-        # (predicate alone doesn't set vertex_ids, need vertices too)
+        # predicate applied to all nodes; only B survives
+        # (predicate alone doesn't set node_ids, need nodes too)
         # test that it doesn't raise and returns a GraphView
         self.assertIsInstance(v, GraphView)
 

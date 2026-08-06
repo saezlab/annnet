@@ -14,12 +14,12 @@ from annnet.core import _structure as S
 class _Accessor(_BackendAccessorBase):
     """Minimal concrete subclass to test the abstract base."""
 
-    VERTEX_KEYS = {'source', 'target', 'u', 'v'}
+    NODE_KEYS = {'source', 'target', 'u', 'v'}
 
 
 def _toy_accessor(directed: bool = True) -> tuple[_Accessor, AnnNet]:
     G = AnnNet(directed=directed)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.0)
     G._test_cache = {}  # type: ignore[attr-defined]
     a = _Accessor()
@@ -40,35 +40,35 @@ def test_freeze_cache_value_handles_none_set_dict_list_tuple_and_scalar() -> Non
     assert a._freeze_cache_value(7) == 7
 
 
-# ── _vertex_row_maps / _vertex_row_to_id ──────────────────────────────
+# ── _node_row_maps / _node_row_to_id ──────────────────────────────
 
 
-def test_vertex_row_maps_round_trips_id_and_row() -> None:
+def test_node_row_maps_round_trips_id_and_row() -> None:
     a, _ = _toy_accessor()
-    id_to_row, row_to_id = a._vertex_row_maps()
+    id_to_row, row_to_id = a._node_row_maps()
     assert set(id_to_row) == {'A', 'B', 'C'}
     for vid, row in id_to_row.items():
         assert row_to_id[row] == vid
 
 
-def test_vertex_row_to_id_returns_id_for_known_row() -> None:
+def test_node_row_to_id_returns_id_for_known_row() -> None:
     a, _ = _toy_accessor()
-    id_to_row, _ = a._vertex_row_maps()
+    id_to_row, _ = a._node_row_maps()
     row = id_to_row['A']
-    assert a._vertex_row_to_id(row) == 'A'
+    assert a._node_row_to_id(row) == 'A'
 
 
-def test_vertex_row_to_id_returns_none_for_unknown_row() -> None:
+def test_node_row_to_id_returns_none_for_unknown_row() -> None:
     a, _ = _toy_accessor()
-    assert a._vertex_row_to_id(99_999) is None
+    assert a._node_row_to_id(99_999) is None
 
 
-def test_vertex_row_to_id_returns_none_for_non_vertex_row() -> None:
+def test_node_row_to_id_returns_none_for_non_node_row() -> None:
     """An edge-entity holds a row, and it is filtered out."""
     a, G = _toy_accessor()
     G.add_edges('x', 'y', edge_id='ee', as_entity=True)
     row = S.entity_row(G, ('ee', ('_',)))
-    assert a._vertex_row_to_id(row) is None
+    assert a._node_row_to_id(row) is None
 
 
 # ── _infer_label_field ────────────────────────────────────────────────
@@ -82,7 +82,7 @@ def test_infer_label_field_prefers_default_label_field_when_set() -> None:
 
 def test_infer_label_field_falls_back_to_known_columns() -> None:
     a, G = _toy_accessor()
-    G.attrs.set_vertex_attrs('A', name='alice')
+    G.attrs.set_node_attrs('A', name='alice')
     assert a._infer_label_field() == 'name'
 
 
@@ -91,41 +91,41 @@ def test_infer_label_field_returns_none_when_nothing_matches() -> None:
     assert a._infer_label_field() is None
 
 
-# ── _vertex_id_col ────────────────────────────────────────────────────
+# ── _node_id_col ────────────────────────────────────────────────────
 
 
-def test_vertex_id_col_returns_vertex_id_by_default() -> None:
+def test_node_id_col_returns_node_id_by_default() -> None:
     a, _ = _toy_accessor()
-    assert a._vertex_id_col() == 'vertex_id'
+    assert a._node_id_col() == 'node_id'
 
 
-def test_vertex_id_col_returns_default_when_attribute_access_raises() -> None:
+def test_node_id_col_returns_default_when_attribute_access_raises() -> None:
     a = _Accessor()
     a._G = object()  # type: ignore[assignment]
     a._cache_attr = '_test_cache'
     a.cache_enabled = True
-    assert a._vertex_id_col() == 'vertex_id'
+    assert a._node_id_col() == 'node_id'
 
 
-# ── _lookup_vertex_id_by_label ────────────────────────────────────────
+# ── _lookup_node_id_by_label ────────────────────────────────────────
 
 
-def test_lookup_vertex_id_by_label_finds_known_value() -> None:
+def test_lookup_node_id_by_label_finds_known_value() -> None:
     a, G = _toy_accessor()
-    G.attrs.set_vertex_attrs('A', name='alice')
-    G.attrs.set_vertex_attrs('B', name='bob')
-    assert a._lookup_vertex_id_by_label('name', 'bob') == 'B'
+    G.attrs.set_node_attrs('A', name='alice')
+    G.attrs.set_node_attrs('B', name='bob')
+    assert a._lookup_node_id_by_label('name', 'bob') == 'B'
 
 
-def test_lookup_vertex_id_by_label_returns_none_for_missing_column() -> None:
+def test_lookup_node_id_by_label_returns_none_for_missing_column() -> None:
     a, _ = _toy_accessor()
-    assert a._lookup_vertex_id_by_label('not-a-col', 'x') is None
+    assert a._lookup_node_id_by_label('not-a-col', 'x') is None
 
 
-def test_lookup_vertex_id_by_label_returns_none_for_missing_value() -> None:
+def test_lookup_node_id_by_label_returns_none_for_missing_value() -> None:
     a, G = _toy_accessor()
-    G.attrs.set_vertex_attrs('A', name='alice')
-    assert a._lookup_vertex_id_by_label('name', 'nope') is None
+    G.attrs.set_node_attrs('A', name='alice')
+    assert a._lookup_node_id_by_label('name', 'nope') is None
 
 
 # ── _map_nested_output ────────────────────────────────────────────────
@@ -237,7 +237,7 @@ def test_replace_owner_graph_swaps_owner_in_args_and_kwargs() -> None:
 
 def test_warn_on_lossy_conversion_complains_when_hyperedges_dropped() -> None:
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges(['A', 'B', 'C'], edge_id='h1')  # hyperedge
     a = _Accessor()
     a._init_backend_accessor(G, cache_attr='_test_cache')
@@ -299,32 +299,32 @@ def test_adapter_export_raises_keyerror_for_unknown_backend() -> None:
         a._adapter_export('not-a-backend')
 
 
-# ── _coerce_vertex_* ──────────────────────────────────────────────────
+# ── _coerce_node_* ──────────────────────────────────────────────────
 
 
-def test_coerce_vertex_iterable_preserves_container_type() -> None:
+def test_coerce_node_iterable_preserves_container_type() -> None:
     a, _ = _toy_accessor()
     coerce = str.upper
-    assert a._coerce_vertex_iterable(['a', 'b'], coerce) == ['A', 'B']
-    assert a._coerce_vertex_iterable(('a', 'b'), coerce) == ('A', 'B')
-    assert a._coerce_vertex_iterable({'a', 'b'}, coerce) == {'A', 'B'}
-    assert a._coerce_vertex_iterable('a', coerce) == 'A'
+    assert a._coerce_node_iterable(['a', 'b'], coerce) == ['A', 'B']
+    assert a._coerce_node_iterable(('a', 'b'), coerce) == ('A', 'B')
+    assert a._coerce_node_iterable({'a', 'b'}, coerce) == {'A', 'B'}
+    assert a._coerce_node_iterable('a', coerce) == 'A'
 
 
-def test_coerce_vertex_kwargs_rewrites_only_known_keys() -> None:
+def test_coerce_node_kwargs_rewrites_only_known_keys() -> None:
     a, _ = _toy_accessor()
     kwargs = {'source': 'a', 'unrelated': 'b'}
-    a._coerce_vertex_kwargs(kwargs, lambda xs: xs.upper())
+    a._coerce_node_kwargs(kwargs, lambda xs: xs.upper())
     assert kwargs == {'source': 'A', 'unrelated': 'b'}
 
 
-def test_coerce_vertex_bound_rewrites_only_known_keys() -> None:
+def test_coerce_node_bound_rewrites_only_known_keys() -> None:
     a, _ = _toy_accessor()
 
     class Bound:
         arguments = {'u': 'x', 'irrelevant': 1}
 
-    a._coerce_vertex_bound(Bound, lambda v: v.upper())
+    a._coerce_node_bound(Bound, lambda v: v.upper())
     assert Bound.arguments == {'u': 'X', 'irrelevant': 1}
 
 

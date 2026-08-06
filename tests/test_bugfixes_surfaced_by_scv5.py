@@ -1,7 +1,7 @@
 """Regressions for two bugs surfaced during SCV-5 coverage work.
 
 1. ``hash(G.ops)`` raised ``AttributeError`` because
-   ``OperationsAccessor.__hash__`` was looking up ``self.vertices()`` /
+   ``OperationsAccessor.__hash__`` was looking up ``self.nodes()`` /
    ``self.ne`` / ``self.get_edge()`` etc. on itself instead of on the
    wrapped graph ``self._G``.
 
@@ -21,7 +21,7 @@ from annnet.core.graph import AnnNet
 
 def _toy_graph() -> AnnNet:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', weight=2.0)
     G.add_edges('B', 'C', edge_id='e2', directed=False)
     G.uns['study'] = 'demo'
@@ -40,10 +40,10 @@ def test_hash_ops_is_deterministic_for_identical_state() -> None:
     assert hash(G1.ops) == hash(G2.ops)
 
 
-def test_hash_ops_changes_when_a_vertex_is_added() -> None:
+def test_hash_ops_changes_when_a_node_is_added() -> None:
     G = _toy_graph()
     h1 = hash(G.ops)
-    G.add_vertices(['Z'])
+    G.add_nodes(['Z'])
     h2 = hash(G.ops)
     assert h1 != h2
 
@@ -57,14 +57,14 @@ def test_hash_ops_changes_when_an_edge_is_added() -> None:
 
 
 def test_hash_ops_unaffected_by_iteration_order() -> None:
-    """The hash is built from sorted vertex / edge sets — building the
+    """The hash is built from sorted node / edge sets — building the
     same graph in a different insertion order must yield the same hash."""
     G1 = AnnNet(directed=True)
-    G1.add_vertices(['A', 'B'])
+    G1.add_nodes(['A', 'B'])
     G1.add_edges('A', 'B', edge_id='e1')
 
     G2 = AnnNet(directed=True)
-    G2.add_vertices(['B', 'A'])  # reversed order
+    G2.add_nodes(['B', 'A'])  # reversed order
     G2.add_edges('A', 'B', edge_id='e1')
 
     assert hash(G1.ops) == hash(G2.ops)
@@ -76,7 +76,7 @@ def test_hash_ops_unaffected_by_iteration_order() -> None:
 def test_views_layers_view_returns_real_rows_on_multilayer_graph() -> None:
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A'], layer={'condition': 'healthy'})
+    G.add_nodes(['A'], layer={'condition': 'healthy'})
     df = G.views.layers_view()
     # Two elementary layers should produce two rows.
     height = df.height if hasattr(df, 'height') else len(df)
@@ -92,7 +92,7 @@ def test_views_layers_view_returns_real_rows_on_multilayer_graph() -> None:
 def test_views_layers_view_empty_for_flat_graph() -> None:
     """Flat (single-aspect placeholder) graphs still get the empty shape."""
     G = AnnNet(directed=False)
-    G.add_vertices(['A'])
+    G.add_nodes(['A'])
     df = G.views.layers_view()
     height = df.height if hasattr(df, 'height') else len(df)
     assert height == 0

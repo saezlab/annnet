@@ -12,12 +12,12 @@ from annnet.core._History import GraphDiff
 from annnet.core.graph import AnnNet
 
 
-def _make_snapshot(label, vertex_ids, edge_ids, slice_ids=None):
+def _make_snapshot(label, node_ids, edge_ids, slice_ids=None):
     """Minimal snapshot dict for GraphDiff construction."""
     return {
         'label': label,
         'version': 0,
-        'vertex_ids': set(vertex_ids),
+        'node_ids': set(node_ids),
         'edge_ids': set(edge_ids),
         'slice_ids': set(slice_ids or []),
     }
@@ -31,17 +31,17 @@ class TestHistoryLogging(unittest.TestCase):
         self.assertTrue(G._history_enabled)
         self.assertTrue(callable(G.history))
 
-    def test_add_vertex_logged(self):
+    def test_add_node_logged(self):
         G = AnnNet()
-        G.add_vertices('A')
+        G.add_nodes('A')
         events = G.history()
         ops = [e['op'] for e in events]
-        self.assertIn('add_vertices', ops)
+        self.assertIn('add_nodes', ops)
 
     def test_add_edge_logged(self):
         G = AnnNet()
-        G.add_vertices('A')
-        G.add_vertices('B')
+        G.add_nodes('A')
+        G.add_nodes('B')
         G.history.clear()
         G.add_edges('A', 'B')
         ops = [e['op'] for e in G.history()]
@@ -50,14 +50,14 @@ class TestHistoryLogging(unittest.TestCase):
     def test_version_increments(self):
         G = AnnNet()
         v0 = G._version
-        G.add_vertices('A')
-        G.add_vertices('B')
+        G.add_nodes('A')
+        G.add_nodes('B')
         self.assertGreater(G._version, v0)
         self.assertEqual(G._version, v0 + 2)
 
     def test_event_fields_present(self):
         G = AnnNet()
-        G.add_vertices('X')
+        G.add_nodes('X')
         evt = G.history()[-1]
         self.assertIn('version', evt)
         self.assertIn('ts_utc', evt)
@@ -67,10 +67,10 @@ class TestHistoryLogging(unittest.TestCase):
     def test_disable_and_reenable_history(self):
         G = AnnNet()
         G.history.enable(False)
-        G.add_vertices('A')
+        G.add_nodes('A')
         before = len(G.history())
         G.history.enable(True)
-        G.add_vertices('B')
+        G.add_nodes('B')
         after = len(G.history())
         self.assertEqual(after, before + 1)
 
@@ -78,22 +78,22 @@ class TestHistoryLogging(unittest.TestCase):
         G = AnnNet()
         v0 = G._version
         G.history.enable(False)
-        G.add_vertices('A')
-        G.add_vertices('B')
+        G.add_nodes('A')
+        G.add_nodes('B')
         self.assertEqual(G._version, v0 + 2)
         self.assertEqual(len(G.history()), 0)
 
     def test_clear_history(self):
         G = AnnNet()
-        G.add_vertices('A')
-        G.add_vertices('B')
+        G.add_nodes('A')
+        G.add_nodes('B')
         self.assertGreater(len(G.history()), 0)
         G.history.clear()
         self.assertEqual(len(G.history()), 0)
 
     def test_history_as_dataframe(self):
         G = AnnNet()
-        G.add_vertices('A')
+        G.add_nodes('A')
         df = G.history(as_df=True)
         # Should have at least one row and the standard columns
         self.assertGreater(len(df), 0)
@@ -104,11 +104,11 @@ class TestHistoryLogging(unittest.TestCase):
     def test_history_namespace_methods_work(self):
         G = AnnNet()
         G.history.clear()
-        G.add_vertices('A')
+        G.add_nodes('A')
         self.assertGreater(len(G.history()), 0)
         G.history.enable(False)
         before = len(G.history())
-        G.add_vertices('B')
+        G.add_nodes('B')
         self.assertEqual(len(G.history()), before)
         G.history.enable(True)
 
@@ -202,7 +202,7 @@ class TestExportHistory(unittest.TestCase):
 
     def test_export_json(self):
         G = AnnNet()
-        G.add_vertices('A')
+        G.add_nodes('A')
         path = os.path.join(self.tmpdir, 'hist.json')
         n = G.history.export(path)
         self.assertGreater(n, 0)
@@ -214,7 +214,7 @@ class TestExportHistory(unittest.TestCase):
 
     def test_export_ndjson(self):
         G = AnnNet()
-        G.add_vertices('A')
+        G.add_nodes('A')
         path = os.path.join(self.tmpdir, 'hist.ndjson')
         n = G.history.export(path)
         self.assertGreater(n, 0)
@@ -226,8 +226,8 @@ class TestExportHistory(unittest.TestCase):
     def test_export_returns_event_count(self):
         """export_history() returns the number of events written (JSON path)."""
         G = AnnNet()
-        G.add_vertices('A')
-        G.add_vertices('B')
+        G.add_nodes('A')
+        G.add_nodes('B')
         path = os.path.join(self.tmpdir, 'hist2.json')
         n = G.history.export(path)
         # The JSON export should succeed and match len(G.history())
@@ -235,14 +235,14 @@ class TestExportHistory(unittest.TestCase):
 
     def test_export_csv_serializes_nested_payloads(self):
         G = AnnNet(aspects={'condition': ['healthy', 'treated'], 'time': ['t0', 't1']})
-        G.add_vertices('A', layer=('healthy', 't0'))
-        G.add_vertices('A', layer=('treated', 't1'))
+        G.add_nodes('A', layer=('healthy', 't0'))
+        G.add_nodes('A', layer=('treated', 't1'))
         path = os.path.join(self.tmpdir, 'hist.csv')
         n = G.history.export(path)
         self.assertGreater(n, 0)
         self.assertTrue(os.path.exists(path))
         text = open(path, encoding='utf-8').read()
-        self.assertIn('add_vertices', text)
+        self.assertIn('add_nodes', text)
 
 
 class TestSnapshot(unittest.TestCase):
@@ -250,20 +250,20 @@ class TestSnapshot(unittest.TestCase):
 
     def test_snapshot_returns_dict(self):
         G = AnnNet()
-        G.add_vertices('A')
+        G.add_nodes('A')
         snap = G.history.snapshot(label='s1')
         self.assertIsInstance(snap, dict)
         self.assertEqual(snap['label'], 's1')
-        self.assertIn('vertex_ids', snap)
+        self.assertIn('node_ids', snap)
         self.assertIn('edge_ids', snap)
 
     def test_snapshot_captures_current_state(self):
         G = AnnNet()
-        G.add_vertices('A')
-        G.add_vertices('B')
+        G.add_nodes('A')
+        G.add_nodes('B')
         snap = G.history.snapshot()
-        self.assertIn('A', snap['vertex_ids'])
-        self.assertIn('B', snap['vertex_ids'])
+        self.assertIn('A', snap['node_ids'])
+        self.assertIn('B', snap['node_ids'])
 
     def test_list_snapshots(self):
         G = AnnNet()
@@ -273,35 +273,35 @@ class TestSnapshot(unittest.TestCase):
         self.assertIn('a', labels)
         self.assertIn('b', labels)
 
-    def test_diff_detects_added_vertex(self):
+    def test_diff_detects_added_node(self):
         G = AnnNet()
-        G.add_vertices('A')
+        G.add_nodes('A')
         G.history.snapshot(label='before')
-        G.add_vertices('B')
+        G.add_nodes('B')
         d = G.history.diff('before')
-        self.assertIn('B', d.vertices_added)
-        self.assertNotIn('A', d.vertices_added)
+        self.assertIn('B', d.nodes_added)
+        self.assertNotIn('A', d.nodes_added)
 
     def test_history_namespace_exposes_snapshot_ops(self):
         G = AnnNet()
-        G.add_vertices('A')
+        G.add_nodes('A')
         snap = G.history.snapshot('s1')
         self.assertEqual(snap['label'], 's1')
         self.assertEqual(len(G.history.list_snapshots()), 1)
 
-    def test_diff_detects_removed_vertex(self):
+    def test_diff_detects_removed_node(self):
         G = AnnNet()
-        G.add_vertices('A')
-        G.add_vertices('B')
+        G.add_nodes('A')
+        G.add_nodes('B')
         G.history.snapshot(label='before')
-        G.remove_vertex('B')
+        G.remove_node('B')
         d = G.history.diff('before')
-        self.assertIn('B', d.vertices_removed)
+        self.assertIn('B', d.nodes_removed)
 
     def test_diff_detects_added_edge(self):
         G = AnnNet()
-        G.add_vertices('A')
-        G.add_vertices('B')
+        G.add_nodes('A')
+        G.add_nodes('B')
         G.history.snapshot(label='before')
         G.add_edges('A', 'B', edge_id='e1')
         d = G.history.diff('before')
@@ -309,12 +309,12 @@ class TestSnapshot(unittest.TestCase):
 
     def test_diff_between_two_snapshots(self):
         G = AnnNet()
-        G.add_vertices('A')
+        G.add_nodes('A')
         G.history.snapshot(label='s1')
-        G.add_vertices('B')
+        G.add_nodes('B')
         G.history.snapshot(label='s2')
         d = G.history.diff('s1', 's2')
-        self.assertIn('B', d.vertices_added)
+        self.assertIn('B', d.nodes_added)
 
 
 class TestGraphDiff(unittest.TestCase):
@@ -325,18 +325,18 @@ class TestGraphDiff(unittest.TestCase):
         d = GraphDiff(snap, snap)
         self.assertTrue(d.is_empty())
 
-    def test_is_not_empty_after_vertex_added(self):
+    def test_is_not_empty_after_node_added(self):
         s1 = _make_snapshot('s1', ['A'], ['e1'])
         s2 = _make_snapshot('s2', ['A', 'B'], ['e1'])
         d = GraphDiff(s1, s2)
         self.assertFalse(d.is_empty())
-        self.assertIn('B', d.vertices_added)
+        self.assertIn('B', d.nodes_added)
 
-    def test_vertices_removed(self):
+    def test_nodes_removed(self):
         s1 = _make_snapshot('s1', ['A', 'B'], [])
         s2 = _make_snapshot('s2', ['A'], [])
         d = GraphDiff(s1, s2)
-        self.assertIn('B', d.vertices_removed)
+        self.assertIn('B', d.nodes_removed)
 
     def test_edges_added_and_removed(self):
         s1 = _make_snapshot('s1', ['A', 'B'], ['e1'])
@@ -373,7 +373,7 @@ class TestGraphDiff(unittest.TestCase):
         data = d.to_dict()
         self.assertEqual(data['snapshot_a'], 's1')
         self.assertEqual(data['snapshot_b'], 's2')
-        self.assertIn('B', data['vertices_added'])
+        self.assertIn('B', data['nodes_added'])
         self.assertIn('e1', data['edges_removed'])
         self.assertIn('e2', data['edges_added'])
         # Ensure all values are JSON-serializable

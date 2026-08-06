@@ -23,8 +23,9 @@ from binascii import Error as BinasciiError
 from ..core import _structure
 from ._common import (
     STORED_EDGE_KIND,
+    stored_key,
     _rows_to_df,
-    _iter_vertex_ids,
+    _iter_node_ids,
     dataframe_columns,
     dataframe_to_rows,
     serialize_edge_layers,
@@ -64,7 +65,7 @@ def _serialize_slices_public(graph) -> dict[str, dict]:
     out = {}
     for slice_id in graph.slices.list(include_default=True):
         out[slice_id] = {
-            'vertices': list(graph.slices.vertices(slice_id)),
+            'nodes': list(graph.slices.nodes(slice_id)),
             'edges': list(graph.slices.edges(slice_id)),
             'attributes': {},
         }
@@ -248,7 +249,7 @@ def to_cx2(
         )
 
     # 1. Prepare Manifest (Lossless storage of complex features)
-    vert_rows = dataframe_to_rows(getattr(G, '_vertex_table', None))
+    vert_rows = dataframe_to_rows(getattr(G, '_node_table', None))
     edge_rows = dataframe_to_rows(getattr(G, '_edge_table', None))
     slice_rows = dataframe_to_rows(getattr(G, 'slice_attributes', None))
     edge_slice_rows = dataframe_to_rows(getattr(G, 'edge_slice_attributes', None))
@@ -264,8 +265,8 @@ def to_cx2(
             'directed': bool(G.directed) if G.directed is not None else True,
             'attributes': g_attrs,
         },
-        'vertices': {
-            'types': dict.fromkeys(_iter_vertex_ids(G), 'vertex'),
+        'nodes': {
+            'types': dict.fromkeys(_iter_node_ids(G), 'node'),
             'attributes': vert_rows,
         },
         'edges': {
@@ -315,7 +316,7 @@ def to_cx2(
             serialize_edge_layers=serialize_edge_layers,
         ),
         'tables': {
-            '_vertex_table': vert_rows,
+            '_node_table': vert_rows,
             '_edge_table': edge_rows,
             'slice_attributes': slice_rows,
             'edge_slice_attributes': edge_slice_rows,
@@ -359,30 +360,30 @@ def to_cx2(
         return out
 
     # -- Nodes --
-    # We only map entities of type 'vertex' to visual nodes.
+    # We only map entities of type 'node' to visual nodes.
     current_node_id = 0
 
     # Pre-fetch attribute data for fast lookup
-    v_attrs_df = getattr(G, '_vertex_table', None)
+    v_attrs_df = getattr(G, '_node_table', None)
 
-    # Identify which vertex columns are string vs numeric (for cleaning None)
-    v_inferred_types = _infer_cx2_types(vert_rows, id_col='vertex_id')
+    # Identify which node columns are string vs numeric (for cleaning None)
+    v_inferred_types = _infer_cx2_types(vert_rows, id_col='node_id')
     v_string_cols = {col for col, dtype in v_inferred_types.items() if dtype == 'string'}
     v_numeric_cols = {
         col for col, dtype in v_inferred_types.items() if dtype in {'integer', 'long', 'double'}
     }
 
-    # Build map: vertex_id -> attribute row dict
+    # Build map: node_id -> attribute row dict
     v_attrs_map: dict[str, dict[str, Any]] = {}
     if v_attrs_df is not None and vert_rows:
         row_keys = set(vert_rows[0])
-        id_col = 'vertex_id' if 'vertex_id' in row_keys else 'id'
-        for r in vert_rows:  # vert_rows is _df_to_rows(_vertex_table)
+        id_col = 'node_id' if 'node_id' in row_keys else 'id'
+        for r in vert_rows:  # vert_rows is _df_to_rows(_node_table)
             key = r.get(id_col)
             if key is not None:
                 v_attrs_map[str(key)] = r
 
-    def _clean_vertex_attrs(attrs: dict[str, Any]) -> dict[str, Any]:
+    def _clean_node_attrs(attrs: dict[str, Any]) -> dict[str, Any]:
         """Replace None in strings with '', drop None for numeric/others."""
         out: dict[str, Any] = {}
         for k, v in attrs.items():
@@ -418,7 +419,7 @@ def to_cx2(
             attrs = dict(row)  # copy
             # get rid of id column from attributes
             attrs.pop('id', None)
-            attrs.pop('vertex_id', None)
+            attrs.pop('node_id', None)
 
             # pull layout_* into x/y/z for Cytoscape layout
             for src, dst in (('layout_x', 'x'), ('layout_y', 'y'), ('layout_z', 'z')):
@@ -432,7 +433,7 @@ def to_cx2(
                 attrs.pop(src, None)
 
             # clean None values: "" for strings, drop for numeric/others
-            attrs = _clean_vertex_attrs(attrs)
+            attrs = _clean_node_attrs(attrs)
             n_obj['v'].update(attrs)
 
         # put node coordinates at top-level (where Cytoscape expects them)
@@ -442,7 +443,7 @@ def to_cx2(
         cx_nodes.append(n_obj)
 
     # -- Edges --
-    # Only binary edges between mapped vertices
+    # Only binary edges between mapped nodes
     current_edge_id = 0
     e_attrs_df = getattr(G, '_edge_table', None)
 
@@ -461,7 +462,7 @@ def to_cx2(
 
     def _bare(x):
         # Multilayer endpoints/members are (vid, layer_coord) supra-node keys;
-        # the visual CX2 nodes are keyed by the bare vertex id (see node_map).
+        # the visual CX2 nodes are keyed by the bare node id (see node_map).
         return x[0] if isinstance(x, tuple) else x
 
     for edge in _all_edges(G):
@@ -859,11 +860,11 @@ def from_cx2(
         if visual_props:
             G.graph_attributes['__cx_visualProperties__'] = visual_props
 
-        # --- Vertices ---
-        vmeta = manifest.get('vertices', {})
+        # --- Nodes ---
+        vmeta = stored_key(manifest, 'nodes', {})
         # The attribute rows are applied once the structure they annotate is
         # back: the graph addresses an attribute by the element that carries it,
-        # so a row for a vertex it does not hold yet names nothing.
+        # so a row for a node it does not hold yet names nothing.
         v_rows = _normalize_rows(vmeta.get('attributes', []))
         if vmeta.get('types'):
             kinds = {}
@@ -889,10 +890,10 @@ def from_cx2(
         if _asp and tuple(G.aspects) != tuple(_asp):
             G.layers.set_aspects(list(_asp), mm.get('elem_layers') or None)
 
-        _vids = [r.get('vertex_id', r.get('id')) for r in v_rows]
+        _vids = [r.get('node_id', r.get('id')) for r in v_rows]
         _vids = [v for v in _vids if v is not None]
         if _vids:
-            G._add_vertices_bulk([{'vertex_id': v} for v in _vids])
+            G._add_nodes_bulk([{'node_id': v} for v in _vids])
 
         _weights = emeta.get('weights', {}) or {}
         _directed = emeta.get('directed', {}) or {}
@@ -950,10 +951,10 @@ def from_cx2(
         if emeta.get('direction_policy'):
             G.edge_direction_policy.update(emeta['direction_policy'])
 
-        # Every vertex and every edge the manifest names is back, so the
+        # Every node and every edge the manifest names is back, so the
         # attribute rows have something to attach to.
         if v_rows:
-            G._vertex_table = _rows_to_df(v_rows)
+            G._node_table = _rows_to_df(v_rows)
         if e_rows:
             G._edge_table = _rows_to_df(e_rows)
 
@@ -974,8 +975,8 @@ def from_cx2(
                 if sname not in existing_slices:
                     G.slices.add(sname)
                     existing_slices.add(sname)
-                for vid in sdata.get('vertices', []):
-                    G.slices.add_vertex_to_slice(sname, vid)
+                for vid in stored_key(sdata, 'nodes', []):
+                    G.slices.add_node_to_slice(sname, vid)
                 edge_ids = list(sdata.get('edges', []))
                 if edge_ids:
                     G.slices.add_edges(sname, edge_ids)
@@ -1017,30 +1018,30 @@ def from_cx2(
     cx2node = {}
     node_aspects = aspects.get('nodes', [])
 
-    # --- build a row map of existing vertex attributes ---
+    # --- build a row map of existing node attributes ---
     # In manifest mode the full attr table is already set; skip reading it back (expensive).
     # We only need vmap in PATH B where G starts empty.
     if _manifest_mode:
         vmap = {}
     else:
         vmap = {}
-        existing = dataframe_to_rows(getattr(G, '_vertex_table', None))
+        existing = dataframe_to_rows(getattr(G, '_node_table', None))
         for r in existing:
-            vid = str(r.get('vertex_id', r.get('id')))
+            vid = str(r.get('node_id', r.get('id')))
             vmap[vid] = dict(r)
 
-    # --- update vertex attrs ---
-    # In manifest mode the structure (vertices, edges, hyperedges) is already
+    # --- update node attrs ---
+    # In manifest mode the structure (nodes, edges, hyperedges) is already
     # reconstructed from the manifest above; skip the visual node/edge overlay,
     # which would re-add reified hyperedge nodes and the wrong edge topology.
-    vertex_bulk_data = []
+    node_bulk_data = []
     for n in [] if _manifest_mode else node_aspects:
         cx_id = n['id']
         attrs = dict(n.get('v', {}))
         ann_id = str(attrs.get('name', cx_id))
         cx2node[cx_id] = ann_id
 
-        row = vmap.get(ann_id, {'vertex_id': ann_id})
+        row = vmap.get(ann_id, {'node_id': ann_id})
 
         # Merge attributes from Cytoscape (except display name)
         for k, v in attrs.items():
@@ -1055,30 +1056,30 @@ def from_cx2(
         if 'z' in n and n['z'] is not None:
             row['layout_z'] = float(n['z'])
 
-        vertex_bulk_data.append(row)
+        node_bulk_data.append(row)
 
-    # Single bulk vertex insert (registers entities; also upserts layout coords in manifest mode)
-    if vertex_bulk_data:
-        G._add_vertices_bulk(vertex_bulk_data)
+    # Single bulk node insert (registers entities; also upserts layout coords in manifest mode)
+    if node_bulk_data:
+        G._add_nodes_bulk(node_bulk_data)
 
     if _manifest_mode:
-        # Manifest already set the full _vertex_table; the internal bulk
+        # Manifest already set the full _node_table; the internal bulk
         # insert has upserted any
         # new layout coords into it.  Just fix the column name if needed.
-        cols = set(dataframe_columns(G._vertex_table))
-        if 'vertex_id' not in cols and 'id' in cols:
-            G._vertex_table = rename_dataframe_columns(G._vertex_table, {'id': 'vertex_id'})
+        cols = set(dataframe_columns(G._node_table))
+        if 'node_id' not in cols and 'id' in cols:
+            G._node_table = rename_dataframe_columns(G._node_table, {'id': 'node_id'})
     else:
-        # rebuild vertex table
-        if vertex_bulk_data:
-            G._vertex_table = _rows_to_df(_normalize_rows(vertex_bulk_data))
+        # rebuild node table
+        if node_bulk_data:
+            G._node_table = _rows_to_df(_normalize_rows(node_bulk_data))
         else:
-            G._vertex_table = _rows_to_df([])
+            G._node_table = _rows_to_df([])
 
-        # Normalise ID column name: prefer 'vertex_id' consistently
-        cols = set(dataframe_columns(G._vertex_table))
-        if 'vertex_id' not in cols and 'id' in cols:
-            G._vertex_table = rename_dataframe_columns(G._vertex_table, {'id': 'vertex_id'})
+        # Normalise ID column name: prefer 'node_id' consistently
+        cols = set(dataframe_columns(G._node_table))
+        if 'node_id' not in cols and 'id' in cols:
+            G._node_table = rename_dataframe_columns(G._node_table, {'id': 'node_id'})
 
     # --- edges ---
     # In manifest mode: _edge_table is already set from the manifest — skip reading it back.

@@ -45,7 +45,7 @@ class TestGraphToolAdapter(unittest.TestCase):
 
         self.assertIn('version', manifest)
         self.assertIn('graph', manifest)
-        self.assertIn('vertices', manifest)
+        self.assertIn('nodes', manifest)
         self.assertIn('edges', manifest)
         self.assertIn('slices', manifest)
         self.assertIn('multilayer', manifest)
@@ -61,9 +61,9 @@ class TestGraphToolAdapter(unittest.TestCase):
 
         self.assertEqual(g2.nv, g.nv)
 
-        self.assertIn('A', g2.vertices())
-        self.assertIn('B', g2.vertices())
-        self.assertIn('C', g2.vertices())
+        self.assertIn('A', g2.nodes())
+        self.assertIn('B', g2.nodes())
+        self.assertIn('C', g2.nodes())
 
     def test_manifest_preserves_slices(self):
         g = _BUILD_GRAPH()
@@ -117,16 +117,16 @@ class TestGraphToolAdapter(unittest.TestCase):
         w_eff = g2.attrs.get_effective_edge_weight(eid, slice='Lw')
         self.assertEqual(w_eff, 5.0)
 
-    def test_vertex_properties_in_graph(self):
+    def test_node_properties_in_graph(self):
         g = _BUILD_GRAPH()
         gtG, manifest = to_graphtool(g)
 
         self.assertIn('id', gtG.vp)
 
-        vertex_ids = [gtG.vp['id'][v] for v in gtG.vertices()]
-        self.assertIn('A', vertex_ids)
-        self.assertIn('B', vertex_ids)
-        self.assertIn('C', vertex_ids)
+        node_ids = [gtG.vp['id'][v] for v in gtG.vertices()]
+        self.assertIn('A', node_ids)
+        self.assertIn('B', node_ids)
+        self.assertIn('C', node_ids)
 
     def test_edge_properties_in_graph(self):
         g = _BUILD_GRAPH()
@@ -142,8 +142,8 @@ class TestGraphToolAdapter(unittest.TestCase):
 
     def test_directed_flag_preserved(self):
         g_dir = AnnNet(directed=True)
-        g_dir.add_vertices('X')
-        g_dir.add_vertices('Y')
+        g_dir.add_nodes('X')
+        g_dir.add_nodes('Y')
         g_dir.add_edges('X', 'Y')
 
         gtG_dir, manifest_dir = to_graphtool(g_dir)
@@ -151,25 +151,25 @@ class TestGraphToolAdapter(unittest.TestCase):
         self.assertTrue(manifest_dir['graph']['directed'])
 
         g_undir = AnnNet(directed=False)
-        g_undir.add_vertices('X')
-        g_undir.add_vertices('Y')
+        g_undir.add_nodes('X')
+        g_undir.add_nodes('Y')
         g_undir.add_edges('X', 'Y')
 
         gtG_undir, manifest_undir = to_graphtool(g_undir)
         self.assertFalse(gtG_undir.is_directed())
         self.assertFalse(manifest_undir['graph']['directed'])
 
-    def test_vertex_attributes_roundtrip(self):
+    def test_node_attributes_roundtrip(self):
         g = _BUILD_GRAPH()
         gtG, manifest = to_graphtool(g)
         g2 = from_graphtool(gtG, manifest)
 
-        if hasattr(g2, '_vertex_table') and g2._vertex_table is not None:
-            v_attrs = g2._vertex_table
+        if hasattr(g2, '_node_table') and g2._node_table is not None:
+            v_attrs = g2._node_table
             if hasattr(v_attrs, 'to_dicts'):
                 rows = list(v_attrs.to_dicts())
-                vertex_ids = [r.get('vertex_id') for r in rows]
-                self.assertIn('A', vertex_ids)
+                node_ids = [r.get('node_id') for r in rows]
+                self.assertIn('A', node_ids)
 
     def test_edge_attributes_roundtrip(self):
         g = _BUILD_GRAPH()

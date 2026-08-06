@@ -44,7 +44,7 @@ class TestCSVIO(unittest.TestCase):
     def setUp(self):
         # Build a small test graph entirely in memory
         self.G = AnnNet(directed=True)
-        self.G.add_vertices(['A', 'B', 'C'])
+        self.G.add_nodes(['A', 'B', 'C'])
         # Binary edges: A->B (directed), B--C (undirected)
         self.e_ab = self.G.add_edges('A', 'B', directed=True, weight=1.0, slice='L1', color='red')
         self.e_bc = self.G.add_edges('B', 'C', directed=False, weight=2.0, slice='L1', tag='x')
@@ -142,7 +142,7 @@ class TestCSVIO(unittest.TestCase):
 
     def test_csv_ingest_paths_scale(self):
         """Regression guard: the adjacency / LIL / incidence / hyperedge
-        ingest paths used to call ``G.add_vertices(...)`` / ``G.add_edges(...)``
+        ingest paths used to call ``G.add_nodes(...)`` / ``G.add_edges(...)``
         per cell / per neighbour / per row. After the bulk-batch refactor a
         1000×1000 adjacency ingest must complete in under 30s (was minutes).
         """

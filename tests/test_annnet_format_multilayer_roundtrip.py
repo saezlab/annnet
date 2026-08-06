@@ -1,18 +1,18 @@
 """Round-trip integrity test for the native .annnet format on multilayer graphs.
 
-Covers a non-trivial graph shape: a named slice with bare-vid vertices and
+Covers a non-trivial graph shape: a named slice with bare-vid nodes and
 binary edges (PKN-style base), a multi-elementary-layer aspect, per-layer
-vertex inserts via ``G.add_vertices(..., layer=aa)``, intra-layer edges with
+node inserts via ``G.add_nodes(..., layer=aa)``, intra-layer edges with
 ``(vid, layer_coord)`` tuple endpoints via ``G.add_edges([...])``, and per
-``(vertex, layer)`` attributes.
+``(node, layer)`` attributes.
 
 Verifies that ``write`` + ``read`` is lossless for:
-    - global vertex/edge counts (slice-membership domain)
-    - explicit slice vertex and edge sets
+    - global node/edge counts (slice-membership domain)
+    - explicit slice node and edge sets
     - layer-induced edge sets
-    - per-layer vertex attributes
+    - per-layer node attributes
     - the aspects/elementary-layers structure
-    - slice membership invariant: vertex sets contain only bare vid strings
+    - slice membership invariant: node sets contain only bare vid strings
       (no leaked ``(vid, layer_coord)`` tuples)
 """
 
@@ -32,8 +32,8 @@ from annnet.core import _structure as S
 def _build_multilayer_graph():
     G = annnet.AnnNet(directed=True)
 
-    base_vertices = ['TP53', 'MDM2', 'EGFR', 'AKT1', 'PTEN', 'MYC', 'BRCA1', 'ATM']
-    G.add_vertices(base_vertices, slice='base_pkn')
+    base_nodes = ['TP53', 'MDM2', 'EGFR', 'AKT1', 'PTEN', 'MYC', 'BRCA1', 'ATM']
+    G.add_nodes(base_nodes, slice='base_pkn')
     G.add_edges(
         [
             {'source': 'EGFR', 'target': 'AKT1', 'weight': 1.0},
@@ -59,8 +59,8 @@ def _build_multilayer_graph():
     ]
     for s in samples:
         aa = (s,)
-        G.add_vertices(base_vertices, layer=aa)
-        for v in base_vertices:
+        G.add_nodes(base_nodes, layer=aa)
+        for v in base_nodes:
             G.layers.set_node_attrs(v, aa, expr=float(hash((v, s)) % 1000) / 100.0)
         G.add_edges(
             [
@@ -72,18 +72,18 @@ def _build_multilayer_graph():
     G.layers.add_elementary_layer('sample', 'consensus')
     consensus_aa = ('consensus',)
     consensus_nodes = ['TP53', 'AKT1', 'MYC']
-    G.add_vertices(consensus_nodes, layer=consensus_aa)
+    G.add_nodes(consensus_nodes, layer=consensus_aa)
     for v in consensus_nodes:
         G.layers.set_node_attrs(v, consensus_aa, score=0.42, frequency=0.66)
 
-    return G, samples, base_vertices, consensus_nodes, intra_edge_specs
+    return G, samples, base_nodes, consensus_nodes, intra_edge_specs
 
 
 def _build_multilayer_hypergraph(*, directed: bool):
     G = annnet.AnnNet(directed=directed)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A', 'B'], layer={'condition': 'healthy'})
-    G.add_vertices(['C'], layer={'condition': 'treated'})
+    G.add_nodes(['A', 'B'], layer={'condition': 'healthy'})
+    G.add_nodes(['C'], layer={'condition': 'treated'})
 
     if directed:
         G.add_edges(
@@ -110,9 +110,9 @@ def _build_multilayer_hypergraph(*, directed: bool):
 
 def _snapshot(G, samples, probe_vid, consensus_aa):
     return {
-        'nv': G.global_count('vertices'),
+        'nv': G.global_count('nodes'),
         'ne': G.global_count('edges'),
-        'slice_base_v': set(G.slices.vertices('base_pkn')),
+        'slice_base_v': set(G.slices.nodes('base_pkn')),
         'slice_base_e': set(G.slices.edges('base_pkn')),
         'intra_per_sample': {s: len(G.layers.layer_edge_set((s,))) for s in samples},
         'attr_probe': {s: G.layers.node_attrs(probe_vid, (s,)) for s in samples},
@@ -121,19 +121,19 @@ def _snapshot(G, samples, probe_vid, consensus_aa):
     }
 
 
-def _assert_no_tuple_in_slice_vertices(G):
+def _assert_no_tuple_in_slice_nodes(G):
     for sid in G.slices.list(include_default=True):
-        for v in G.slices.vertices(sid):
+        for v in G.slices.nodes(sid):
             assert isinstance(v, str), (
-                f'slice {sid!r} contains non-string vertex {v!r} '
+                f'slice {sid!r} contains non-string node {v!r} '
                 f'({type(v).__name__}); slice membership must track bare vids'
             )
 
 
 def test_annnet_format_multilayer_roundtrip(tmp_path: Path):
-    G, samples, base_vertices, consensus_nodes, _ = _build_multilayer_graph()
+    G, samples, base_nodes, consensus_nodes, _ = _build_multilayer_graph()
 
-    _assert_no_tuple_in_slice_vertices(G)
+    _assert_no_tuple_in_slice_nodes(G)
     before = _snapshot(G, samples, probe_vid='TP53', consensus_aa=('consensus',))
 
     out = tmp_path / 'graph.annnet'
@@ -141,7 +141,7 @@ def test_annnet_format_multilayer_roundtrip(tmp_path: Path):
     assert out.exists() and out.stat().st_size > 0
 
     G2 = io_read(out)
-    _assert_no_tuple_in_slice_vertices(G2)
+    _assert_no_tuple_in_slice_nodes(G2)
     after = _snapshot(G2, samples, probe_vid='TP53', consensus_aa=('consensus',))
 
     assert before == after, f'round-trip diverged:\n  before: {before}\n  after:  {after}'

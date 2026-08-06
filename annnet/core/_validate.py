@@ -62,12 +62,12 @@ def _check_slice_membership(g, problems) -> None:
     node_ids = {ref.id for ref in S.iter_entities(g)}
     edge_ids = {ref.id for ref in S.iter_edges(g, include_placeholders=True)}
     for sid, srec in g._slices.items():
-        for v in srec['vertices']:
+        for v in srec['nodes']:
             if not isinstance(v, str):
-                problems.append(f'slice {sid!r} has non-string vertex {v!r} (must be bare vid)')
+                problems.append(f'slice {sid!r} has non-string node {v!r} (must be bare vid)')
                 break
             if v not in node_ids:
-                problems.append(f'slice {sid!r} references unknown vertex {v!r}')
+                problems.append(f'slice {sid!r} references unknown node {v!r}')
                 break
         for eid in srec['edges']:
             if eid not in edge_ids:

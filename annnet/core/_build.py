@@ -28,7 +28,7 @@ def clone_slices(src_slices, *, drop_attributes=False) -> dict:
     out = {}
     for sid, meta in src_slices.items():
         out[sid] = SliceRecord(
-            vertices=set(meta['vertices']),
+            nodes=set(meta['nodes']),
             edges=set(meta['edges']),
             attributes={} if drop_attributes else dict(meta.get('attributes', {})),
         )
@@ -36,10 +36,10 @@ def clone_slices(src_slices, *, drop_attributes=False) -> dict:
 
 
 def slices_from_specs(specs) -> dict:
-    """Build a slice registry from ``{sid: {'vertices','edges','attributes'}}`` specs."""
+    """Build a slice registry from ``{sid: {'nodes','edges','attributes'}}`` specs."""
     return {
         sid: SliceRecord(
-            vertices=set(spec.get('vertices', ())),
+            nodes=set(spec.get('nodes', ())),
             edges=set(spec.get('edges', ())),
             attributes=dict(spec.get('attributes', {})),
         )

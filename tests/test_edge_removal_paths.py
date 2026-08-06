@@ -19,9 +19,9 @@ from annnet.core.graph import AnnNet
 
 
 def _graph():
-    """Four edges over four vertices, two of them weighted in a second slice."""
+    """Four edges over four nodes, two of them weighted in a second slice."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.0)
     G.add_edges('B', 'C', edge_id='e2', weight=2.0)
     G.add_edges('C', 'D', edge_id='e3', weight=3.0)
@@ -36,7 +36,7 @@ def _state(G):
     """Everything a removal touches, in a form two graphs can be compared by."""
     return {
         'edges': sorted(G.edges()),
-        'vertices': sorted(G.vertices()),
+        'nodes': sorted(G.nodes()),
         'edge_rows': sorted(r['edge_id'] for r in G._edge_table.to_dicts()),
         'edge_slice_rows': sorted(
             (r['slice_id'], r['edge_id']) for r in G.edge_slice_attributes.to_dicts()

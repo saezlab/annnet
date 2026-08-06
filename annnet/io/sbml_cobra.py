@@ -10,7 +10,7 @@ stoichiometric coefficients stored on the edge.
 
 Boundary reactions are represented as one-sided (half) edges —
 the real metabolites form the single populated endpoint set, with no placeholder
-sink/source vertex — and flagged with an ``is_boundary`` edge attribute.
+sink/source node — and flagged with an ``is_boundary`` edge attribute.
 """
 
 from __future__ import annotations
@@ -38,9 +38,9 @@ BOUNDARY_SOURCE = '__BOUNDARY_SOURCE__'
 BOUNDARY_SINK = '__BOUNDARY_SINK__'
 
 
-def _ensure_vertices(G, vertices: Iterable[str], slice: str | None) -> None:
-    # Internal bulk vertex insertion handles missing vertices efficiently.
-    G._add_vertices_bulk(list(vertices), slice=slice)
+def _ensure_nodes(G, nodes: Iterable[str], slice: str | None) -> None:
+    # Internal bulk node insertion handles missing nodes efficiently.
+    G._add_nodes_bulk(list(nodes), slice=slice)
 
 
 def _graph_from_stoich(
@@ -55,8 +55,8 @@ def _graph_from_stoich(
     G = AnnNet(directed=True) if graph is None else graph
 
     # Ensure all species exist. Boundary reactions are modelled as one-sided
-    # (half) edges rather than routed through placeholder sink/source vertices.
-    G._add_vertices_bulk(list(metabolite_ids), slice=slice)
+    # (half) edges rather than routed through placeholder sink/source nodes.
+    G._add_nodes_bulk(list(metabolite_ids), slice=slice)
 
     m, n = S.shape
     assert m == len(metabolite_ids)
@@ -73,7 +73,7 @@ def _graph_from_stoich(
 
         # Boundary reactions keep one side empty (a single real endpoint), so the
         # incidence column carries exactly the real metabolite coefficients — no
-        # placeholder vertex, no phantom cross-metabolite coupling in adjacency.
+        # placeholder node, no phantom cross-metabolite coupling in adjacency.
         boundary_kind = None
         coeffs = {metabolite_ids[i]: float(v) for i, v in enumerate(col) if v != 0.0}
 

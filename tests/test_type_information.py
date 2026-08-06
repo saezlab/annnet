@@ -42,14 +42,14 @@ def _has_annotated_signature(fn, *, must_have_return: bool = True) -> bool:
 def test_annnet_core_methods_are_annotated() -> None:
     """Spot-check that the MVP set is annotated."""
     targets = [
-        AnnNet.add_vertices,
+        AnnNet.add_nodes,
         AnnNet.add_edges,
-        AnnNet.remove_vertices,
+        AnnNet.remove_nodes,
         AnnNet.remove_edges,
         AnnNet.get_edge,
-        AnnNet.has_vertex,
+        AnnNet.has_node,
         AnnNet.has_edge,
-        AnnNet.vertices,
+        AnnNet.nodes,
         AnnNet.edges,
         AnnNet.edge_list,
         AnnNet.incident_edges,

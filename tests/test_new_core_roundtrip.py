@@ -119,14 +119,14 @@ def graph_with_every_store() -> AnnNet:
         warnings.simplefilter('ignore', UserWarning)
         G = AnnNet(directed=True)
         G.layers.set_aspects(['phase'], {'phase': ['t0', 't1']})
-        G.add_vertices(
+        G.add_nodes(
             [
-                {'vertex_id': 'A', 'kind': 'left', 'score': 0.25},
-                {'vertex_id': 'B', 'kind': 'right', 'score': 0.75},
+                {'node_id': 'A', 'kind': 'left', 'score': 0.25},
+                {'node_id': 'B', 'kind': 'right', 'score': 0.75},
             ],
             layer=('t0',),
         )
-        G.add_vertices([{'vertex_id': 'A', 'kind': 'left', 'score': 0.5}], layer=('t1',))
+        G.add_nodes([{'node_id': 'A', 'kind': 'left', 'score': 0.5}], layer=('t1',))
         G.add_edges(
             [
                 {
@@ -147,12 +147,12 @@ def graph_with_every_store() -> AnnNet:
         )
 
         # Generic: one element, one row.
-        G.attrs.set_vertex_attrs('B', note='a node value')
+        G.attrs.set_node_attrs('B', note='a node value')
         G.attrs.set_edge_attrs('e_ab', note='an edge value')
 
         # Contextual: a pair, and no row for the pairs that carry nothing.
         G.slices.add('left')
-        G.slices.add_vertex_to_slice('left', 'A')
+        G.slices.add_node_to_slice('left', 'A')
         G.slices.add_edges('left', ['e_ab'])
         G.attrs.set_slice_attrs('left', note='a slice value')
         G.attrs.set_edge_slice_attrs('left', 'e_ab', note='an edge-in-slice value')
@@ -178,7 +178,7 @@ def attribute_snapshot(graph: AnnNet) -> dict:
         'aspect_attrs': graph.layers.aspect_attrs('phase'),
         'elementary_layer_attrs': graph.layers.elementary_attrs('phase', 't0'),
         'layer_attrs': graph.layers.attrs(('t0',)),
-        'vertex_layer_attrs': graph.layers.node_attrs('A', ('t0',)),
+        'node_layer_attrs': graph.layers.node_attrs('A', ('t0',)),
         'slice_attr': graph.attrs.get_slice_attr('left', 'note'),
         'edge_slice_attr': graph.attrs.get_edge_slice_attr('left', 'e_ab', 'note'),
         'weight_in_the_slice': graph.attrs.get_effective_edge_weight('e_ab', slice='left'),

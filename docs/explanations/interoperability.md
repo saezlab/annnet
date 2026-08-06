@@ -54,7 +54,7 @@ the normal backend conversion functions. For a call like
 - projects the AnnNet graph to a NetworkX graph using the selected options
 - replaces the AnnNet `G` argument with the projected backend graph
 - dispatches the call to NetworkX
-- returns the backend result, with vertex IDs mapped back where supported
+- returns the backend result, with node IDs mapped back where supported
 
 The projected backend graph is cached and invalidated when the AnnNet graph
 version changes. `G.nx.backend(...)`, `G.ig.backend(...)`, and `G.gt.backend()`

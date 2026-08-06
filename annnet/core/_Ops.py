@@ -85,11 +85,11 @@ def _payload_has_both_sides(payload) -> bool:
     return payload['source'] is not None and payload['target'] is not None
 
 
-def _payload_inside(payload, vertex_ids, bare) -> bool:
-    """Return True when every identity of one edge payload lies in a vertex set."""
+def _payload_inside(payload, node_ids, bare) -> bool:
+    """Return True when every identity of one edge payload lies in a node set."""
     if not _payload_has_both_sides(payload):
         return False
-    return {bare(member) for member in _payload_endpoints(payload)} <= vertex_ids
+    return {bare(member) for member in _payload_endpoints(payload)} <= node_ids
 
 
 def _is_hyper(graph, eid):
@@ -115,12 +115,12 @@ def _require_one_layer_registry(left, right) -> None:
         )
 
 
-def _take_attributes(target, source, vertex_ids, edge_ids) -> None:
+def _take_attributes(target, source, node_ids, edge_ids) -> None:
     """Copy the attributes of the named elements from one graph to another."""
-    if vertex_ids:
-        rows = source._attr_store.node_attr_rows(vertex_ids)
+    if node_ids:
+        rows = source._attr_store.node_attr_rows(node_ids)
         if rows:
-            target.attrs.set_vertex_attrs_bulk(rows)
+            target.attrs.set_node_attrs_bulk(rows)
     if edge_ids:
         rows = source._attr_store.edge_attr_rows(edge_ids)
         if rows:
@@ -138,12 +138,12 @@ def _take_slices(target, source) -> None:
         held = target._slices.get(slice_id)
         if held is None:
             target._slices[slice_id] = {
-                'vertices': set(record['vertices']),
+                'nodes': set(record['nodes']),
                 'edges': set(record['edges']),
                 'attributes': dict(record['attributes']),
             }
             continue
-        held['vertices'].update(record['vertices'])
+        held['nodes'].update(record['nodes'])
         held['edges'].update(record['edges'])
         for key, value in record['attributes'].items():
             held['attributes'].setdefault(key, value)
@@ -165,27 +165,27 @@ class Operations:
             return df
         return dataframe_filter_in(df, key_col, keys)
 
-    def _flat_edge_vertices(self, edge_ids) -> set[str]:
-        vertices = set()
+    def _flat_edge_nodes(self, edge_ids) -> set[str]:
+        nodes = set()
         for eid in edge_ids:
             if not _structure.has_edge(self, eid) or not _structure.carries_structure(self, eid):
                 continue
             sides = _structure.edge_sides(self, eid)
             if not sides.source:
                 continue
-            vertices.update(sides.source)
-            vertices.update(sides.target)
-        return vertices
+            nodes.update(sides.source)
+            nodes.update(sides.target)
+        return nodes
 
-    def _ordered_flat_vertex_ids(self, vertex_ids) -> list[str]:
-        wanted = set(vertex_ids)
+    def _ordered_flat_node_ids(self, node_ids) -> list[str]:
+        wanted = set(node_ids)
         return [key[0] for key in _structure.node_keys(self) if key[0] in wanted]
 
     def _ordered_edge_ids(self, edge_ids) -> list[str]:
         wanted = set(edge_ids)
         return [edge_id for edge_id in _structure.edge_ids(self) if edge_id in wanted]
 
-    def _ordered_selection_rows(self, vertex_ids, edge_ids) -> list:
+    def _ordered_selection_rows(self, node_ids, edge_ids) -> list:
         """Return the entities a selection holds, in the row order they had.
 
         An edge-entity is one identity on both axes, so a selection that keeps
@@ -193,26 +193,26 @@ class Operations:
         that is an edge-entity with nothing to name it, which is the same shape a
         removal used to leave and which data-model rule 6 forbids.
         """
-        wanted_vertices = set(vertex_ids)
+        wanted_nodes = set(node_ids)
         wanted_edges = set(edge_ids)
         return [
             ref.key
             for ref in _structure.iter_entities(self)
-            if ref.id in (wanted_edges if ref.kind == _structure.EDGE_ENTITY else wanted_vertices)
+            if ref.id in (wanted_edges if ref.kind == _structure.EDGE_ENTITY else wanted_nodes)
         ]
 
     def _build_flat_graph_from_selection(
         self,
         *,
-        vertex_ids,
+        node_ids,
         edge_ids,
         slice_specs,
         active_slice=None,
         edge_weight_overrides=None,
     ) -> AnnNet:
-        ordered_vertices = self._ordered_flat_vertex_ids(vertex_ids)
+        ordered_nodes = self._ordered_flat_node_ids(node_ids)
         ordered_edges = self._ordered_edge_ids(edge_ids)
-        row_keys = self._ordered_selection_rows(ordered_vertices, ordered_edges)
+        row_keys = self._ordered_selection_rows(ordered_nodes, ordered_edges)
 
         new = self.__class__(directed=self.directed)
 
@@ -223,7 +223,7 @@ class Operations:
             # its slots as the new graph numbers its rows and columns.
             store=self._store.select(row_keys, ordered_edges, weights=weight_overrides),
         )
-        new.vertex_aligned = self.vertex_aligned
+        new.node_aligned = self.node_aligned
         new._next_edge_id = self._next_edge_id
 
         _build.install_slices(
@@ -235,8 +235,8 @@ class Operations:
         # The selection numbers its slots afresh, so the columns are carried over
         # by id and not by address.
         new._attr_store.load_node_rows(
-            {'vertex_id': vertex_id, **attrs}
-            for vertex_id, attrs in self._attr_store.node_attr_rows(ordered_vertices).items()
+            {'node_id': node_id, **attrs}
+            for node_id, attrs in self._attr_store.node_attr_rows(ordered_nodes).items()
         )
         new._attr_store.load_edge_rows(
             {'edge_id': edge_id, **attrs}
@@ -271,11 +271,11 @@ class Operations:
         Returns
         -------
         AnnNet
-            Subgraph containing selected edges and their incident vertices.
+            Subgraph containing selected edges and their incident nodes.
 
         Notes
         -----
-        Hyperedges are supported and retain all member vertices.
+        Hyperedges are supported and retain all member nodes.
         """
         if all(isinstance(e, int) for e in edges):
             E = {_structure.edge_at_column(self, e) for e in edges}
@@ -285,16 +285,16 @@ class Operations:
         if self._aspects == ('_',):
             E = {eid for eid in E if _structure.has_edge(self, eid)}
             E = {eid for eid in E if _structure.carries_structure(self, eid)}
-            V = self._flat_edge_vertices(E)
+            V = self._flat_edge_nodes(E)
             slice_specs = {}
             for lid, meta in self._slices.items():
                 slice_specs[lid] = {
-                    'vertices': set(meta['vertices']) & V if lid == self._default_slice else set(),
+                    'nodes': set(meta['nodes']) & V if lid == self._default_slice else set(),
                     'edges': set(meta['edges']) & E,
                     'attributes': dict(meta['attributes']),
                 }
             return self._build_flat_graph_from_selection(
-                vertex_ids=V, edge_ids=E, slice_specs=slice_specs
+                node_ids=V, edge_ids=E, slice_specs=slice_specs
             )
 
         V = set()
@@ -324,12 +324,12 @@ class Operations:
                     bare_vid, layer_coord = node
                 else:
                     bare_vid, layer_coord = node, None
-                g.add_vertices(bare_vid, layer=layer_coord, **bare_vid_attrs.get(bare_vid, {}))
+                g.add_nodes(bare_vid, layer=layer_coord, **bare_vid_attrs.get(bare_vid, {}))
         else:
             g = G(directed=self.directed)
             va_lookup = self._attr_store.node_attr_rows(V)
-            v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
-            g._add_vertices_bulk(v_rows, slice=g._default_slice)
+            v_rows = [{'node_id': v, **va_lookup.get(v, {})} for v in V]
+            g._add_nodes_bulk(v_rows, slice=g._default_slice)
 
         if bin_payload:
             g._add_edges_bulk(bin_payload, slice=g._default_slice)
@@ -346,24 +346,24 @@ class Operations:
         self._copy_graph_attributes(g)
         return g
 
-    def subgraph(self, vertices) -> AnnNet:
-        """Create a vertex-induced subgraph.
+    def subgraph(self, nodes) -> AnnNet:
+        """Create a node-induced subgraph.
 
         Parameters
         ----------
-        vertices : Iterable[str]
-            Vertex identifiers to retain.
+        nodes : Iterable[str]
+            Node identifiers to retain.
 
         Returns
         -------
         AnnNet
-            Subgraph containing only the specified vertices and their internal edges.
+            Subgraph containing only the specified nodes and their internal edges.
 
         Notes
         -----
-        For hyperedges, all member vertices must be included to retain the edge.
+        For hyperedges, all member nodes must be included to retain the edge.
         """
-        V = set(vertices)
+        V = set(nodes)
 
         if self._aspects == ('_',):
             E = set()
@@ -379,12 +379,12 @@ class Operations:
             slice_specs = {}
             for lid, meta in self._slices.items():
                 slice_specs[lid] = {
-                    'vertices': set(meta['vertices']) & V if lid == self._default_slice else set(),
+                    'nodes': set(meta['nodes']) & V if lid == self._default_slice else set(),
                     'edges': set(meta['edges']) & E,
                     'attributes': dict(meta['attributes']),
                 }
             return self._build_flat_graph_from_selection(
-                vertex_ids=V, edge_ids=E, slice_specs=slice_specs
+                node_ids=V, edge_ids=E, slice_specs=slice_specs
             )
 
         bare = self._bare_vid
@@ -399,7 +399,7 @@ class Operations:
                 hyper_payload.append(payload)
 
         va_lookup = self._attr_store.node_attr_rows(V)
-        v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
+        v_rows = [{'node_id': v, **va_lookup.get(v, {})} for v in V]
 
         G = self.__class__
         new_aspects = self._constructor_aspects()
@@ -413,13 +413,13 @@ class Operations:
                 attrs = va_lookup.get(vid, {})
                 placed = False
                 for ref in by_id.get(vid, ()):
-                    g.add_vertices(ref.id, layer=ref.layer, **attrs)
+                    g.add_nodes(ref.id, layer=ref.layer, **attrs)
                     placed = True
                 if not placed:
-                    g.add_vertices(vid, **attrs)
+                    g.add_nodes(vid, **attrs)
         else:
             g = G(directed=self.directed)
-            g._add_vertices_bulk(v_rows, slice=g._default_slice)
+            g._add_nodes_bulk(v_rows, slice=g._default_slice)
         if bin_payload:
             g._add_edges_bulk(bin_payload, slice=g._default_slice)
         if hyper_payload:
@@ -443,13 +443,13 @@ class Operations:
         self._copy_graph_attributes(g)
         return g
 
-    def extract_subgraph(self, vertices=None, edges=None) -> AnnNet:
-        """Create a subgraph based on vertex and/or edge filters.
+    def extract_subgraph(self, nodes=None, edges=None) -> AnnNet:
+        """Create a subgraph based on node and/or edge filters.
 
         Parameters
         ----------
-        vertices : Iterable[str] | None, optional
-            Vertex IDs to include. If None, no vertex filtering is applied.
+        nodes : Iterable[str] | None, optional
+            Node IDs to include. If None, no node filtering is applied.
         edges : Iterable[str] | Iterable[int] | None, optional
             Edge IDs or indices to include. If None, no edge filtering is applied.
 
@@ -463,7 +463,7 @@ class Operations:
         This is a convenience method that delegates to `subgraph()` and
         `edge_subgraph()` internally.
         """
-        if vertices is None and edges is None:
+        if nodes is None and edges is None:
             return Operations.copy(self)
 
         if edges is not None:
@@ -474,7 +474,7 @@ class Operations:
             )
         else:
             E = None
-        V = set(vertices) if vertices is not None else None
+        V = set(nodes) if nodes is not None else None
 
         if self._aspects == ('_',) and V is not None and E is not None:
             kept_edges = set()
@@ -494,12 +494,12 @@ class Operations:
             slice_specs = {}
             for lid, meta in self._slices.items():
                 slice_specs[lid] = {
-                    'vertices': set(meta['vertices']) & V if lid == self._default_slice else set(),
+                    'nodes': set(meta['nodes']) & V if lid == self._default_slice else set(),
                     'edges': set(meta['edges']) & kept_edges,
                     'attributes': dict(meta['attributes']),
                 }
             return self._build_flat_graph_from_selection(
-                vertex_ids=V, edge_ids=kept_edges, slice_specs=slice_specs
+                node_ids=V, edge_ids=kept_edges, slice_specs=slice_specs
             )
 
         if V is not None and E is None:
@@ -576,7 +576,7 @@ class Operations:
         _require_one_layer_registry(self, other)
         return Operations.extract_subgraph(
             self,
-            vertices=set(self.vertices()) & set(other.vertices()),
+            nodes=set(self.nodes()) & set(other.nodes()),
             edges=set(_structure.edge_ids(self)) & set(_structure.edge_ids(other)),
         )
 
@@ -589,7 +589,7 @@ class Operations:
         _require_one_layer_registry(self, other)
         return Operations.extract_subgraph(
             self,
-            vertices=set(self.vertices()) - set(other.vertices()),
+            nodes=set(self.nodes()) - set(other.nodes()),
             edges=set(_structure.edge_ids(self)) - set(_structure.edge_ids(other)),
         )
 
@@ -639,7 +639,7 @@ class Operations:
         Returns
         -------
         AnnNet
-            Subgraph containing the slice vertices and edges.
+            Subgraph containing the slice nodes and edges.
 
         Raises
         ------
@@ -650,7 +650,7 @@ class Operations:
             raise KeyError(f'slice {slice_id} not found')
 
         slice_meta = self._slices[slice_id]
-        V = set(slice_meta['vertices'])
+        V = set(slice_meta['nodes'])
         E = set(slice_meta['edges'])
 
         if self._aspects == ('_',):
@@ -669,16 +669,16 @@ class Operations:
                         if weight is not None:
                             weight_overrides[row['edge_id']] = float(weight)
             return self._build_flat_graph_from_selection(
-                vertex_ids=V,
+                node_ids=V,
                 edge_ids=E,
                 slice_specs={
                     self._default_slice: {
-                        'vertices': set(),
+                        'nodes': set(),
                         'edges': set(),
                         'attributes': dict(self._slices[self._default_slice]['attributes']),
                     },
                     slice_id: {
-                        'vertices': V,
+                        'nodes': V,
                         'edges': E,
                         'attributes': dict(slice_meta['attributes']),
                     },
@@ -708,13 +708,13 @@ class Operations:
                 for ref in by_id.get(vid, ()):
                     if ref.kind != _structure.NODE:
                         continue
-                    g.add_vertices(ref.id, layer=ref.layer, slice=slice_id, **attrs)
+                    g.add_nodes(ref.id, layer=ref.layer, slice=slice_id, **attrs)
                     placed = True
                 if not placed:
-                    g.add_vertices(vid, slice=slice_id, **attrs)
+                    g.add_nodes(vid, slice=slice_id, **attrs)
         else:
-            v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
-            g._add_vertices_bulk(v_rows, slice=slice_id)
+            v_rows = [{'node_id': v, **va_lookup.get(v, {})} for v in V]
+            g._add_nodes_bulk(v_rows, slice=slice_id)
 
         e_attrs = self._attr_store.edge_attr_rows(E)
         eff_w = {}
@@ -779,7 +779,7 @@ class Operations:
             # and it costs a memory copy rather than a pass over every edge.
             store=self._store.copy(),
         )
-        new.vertex_aligned = self.vertex_aligned
+        new.node_aligned = self.node_aligned
         new._next_edge_id = self._next_edge_id
 
         _build.install_slices(
@@ -839,27 +839,27 @@ class Operations:
             )
         ) * 100
         df_bytes = 0
-        for df in (self._vertex_table, self._edge_table):
+        for df in (self._node_table, self._edge_table):
             if df is not None:
                 df_bytes += dataframe_memory_usage(df)
         return matrix_bytes + dict_bytes + df_bytes
 
-    def get_vertex_incidence_matrix_as_lists(self, values: bool = False) -> dict:
-        """Materialize the vertex–edge incidence structure as Python lists.
+    def get_node_incidence_matrix_as_lists(self, values: bool = False) -> dict:
+        """Materialize the node–edge incidence structure as Python lists.
 
         Parameters
         ----------
         values : bool, optional (default=False)
-            - If `False`, returns edge indices incident to each vertex.
+            - If `False`, returns edge indices incident to each node.
             - If `True`, returns the **matrix values** (usually weights or 1/0) for
             each incident edge instead of the indices.
 
         Returns
         -------
         dict[str, list]
-            A mapping from `vertex_id` - list of incident edges (indices or values),
+            A mapping from `node_id` - list of incident edges (indices or values),
             where:
-            - Keys are vertex IDs.
+            - Keys are node IDs.
             - Values are lists of edge indices (if `values=False`) or numeric values
             from the incidence matrix (if `values=True`).
 
@@ -868,9 +868,9 @@ class Operations:
         - Internally uses the sparse incidence matrix `self._matrix`, which is stored
         as a SciPy CSR (compressed sparse row) matrix or similar.
         - The incidence matrix `M` is defined as:
-            - Rows: vertices
+            - Rows: nodes
             - Columns: edges
-            - Entry `M[i, j]` non-zero ⇨ vertex `i` is incident to edge `j`.
+            - Entry `M[i, j]` non-zero ⇨ node `i` is incident to edge `j`.
         - This is a convenient method when you want a native-Python structure for
         downstream use (e.g., exporting, iterating, or visualization).
         """
@@ -878,13 +878,13 @@ class Operations:
         csr = self._get_csr()
         for i in range(self._num_entities):
             entry = _structure.entity_key_of_row(self, i)
-            vertex_id = entry[0] if isinstance(entry, tuple) else entry
+            node_id = entry[0] if isinstance(entry, tuple) else entry
             start, end = csr.indptr[i], csr.indptr[i + 1]
-            result[vertex_id] = (csr.data[start:end] if values else csr.indices[start:end]).tolist()
+            result[node_id] = (csr.data[start:end] if values else csr.indices[start:end]).tolist()
         return result
 
-    def vertex_incidence_matrix(self, values: bool = False, sparse: bool = False):
-        """Return the vertex–edge incidence matrix in sparse or dense form.
+    def node_incidence_matrix(self, values: bool = False, sparse: bool = False):
+        """Return the node–edge incidence matrix in sparse or dense form.
 
         Parameters
         ----------
@@ -899,10 +899,10 @@ class Operations:
         Returns
         -------
         scipy.sparse.csr_matrix | numpy.ndarray
-            The vertex–edge incidence matrix `M`:
-            - Rows correspond to vertices.
+            The node–edge incidence matrix `M`:
+            - Rows correspond to nodes.
             - Columns correspond to edges.
-            - `M[i, j]` ≠ 0 indicates that vertex `i` is incident to edge `j`.
+            - `M[i, j]` ≠ 0 indicates that node `i` is incident to edge `j`.
 
         Notes
         -----
@@ -940,10 +940,10 @@ _OPS_DELEGATED = {
     'symmetric_difference': 'symmetric_difference',
     'reverse': 'reverse',
     'memory_usage': 'memory_usage',
-    'incidence': 'vertex_incidence_matrix',
-    'vertex_incidence_matrix': 'vertex_incidence_matrix',
-    'incidence_as_lists': 'get_vertex_incidence_matrix_as_lists',
-    'get_vertex_incidence_matrix_as_lists': 'get_vertex_incidence_matrix_as_lists',
+    'incidence': 'node_incidence_matrix',
+    'node_incidence_matrix': 'node_incidence_matrix',
+    'incidence_as_lists': 'get_node_incidence_matrix_as_lists',
+    'get_node_incidence_matrix_as_lists': 'get_node_incidence_matrix_as_lists',
 }
 
 
@@ -956,9 +956,9 @@ class OperationsAccessor:
         self._G = graph
 
     def __hash__(self) -> int:
-        """Structural hash over vertices, edge endpoints/direction, and graph attrs."""
+        """Structural hash over nodes, edge endpoints/direction, and graph attrs."""
         G = self._G
-        vertex_ids = tuple(sorted(G.vertices()))
+        node_ids = tuple(sorted(G.nodes()))
         edge_defs = []
         for j in range(G.ne):
             eid = _structure.edge_at_column(G, j)
@@ -968,7 +968,7 @@ class OperationsAccessor:
         graph_meta = (
             tuple(sorted(G.graph_attributes.items())) if hasattr(G, 'graph_attributes') else ()
         )
-        return hash((vertex_ids, edge_defs, graph_meta))
+        return hash((node_ids, edge_defs, graph_meta))
 
 
 def _install_ops_delegators():

@@ -33,7 +33,7 @@ def _quiet(build):
 def binary_directed() -> AnnNet:
     """Three nodes in a directed chain."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e_ab', weight=1.5)
     G.add_edges('B', 'C', edge_id='e_bc', weight=2.0)
     return G
@@ -42,7 +42,7 @@ def binary_directed() -> AnnNet:
 def binary_undirected() -> AnnNet:
     """Three nodes joined by undirected edges."""
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e_ab', weight=1.0)
     G.add_edges('B', 'C', edge_id='e_bc', weight=3.0)
     return G
@@ -51,7 +51,7 @@ def binary_undirected() -> AnnNet:
 def self_loop() -> AnnNet:
     """One node with an edge to itself, next to a plain edge."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'A', edge_id='e_loop', weight=0.5)
     G.add_edges('A', 'B', edge_id='e_ab')
     return G
@@ -60,7 +60,7 @@ def self_loop() -> AnnNet:
 def parallel_edge() -> AnnNet:
     """Two separate edges over the same pair of endpoints."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e_first', weight=1.0)
     G.add_edges('A', 'B', edge_id='e_second', weight=2.0, parallel='parallel')
     return G
@@ -74,7 +74,7 @@ def parallel_edge() -> AnnNet:
 def hyper_undirected() -> AnnNet:
     """One hyperedge over three nodes, with no direction."""
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges([{'members': ['A', 'B', 'C'], 'edge_id': 'h_abc'}])
     return G
 
@@ -86,7 +86,7 @@ def hyper_directed() -> AnnNet:
     binary edge.
     """
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges([{'source': ['A', 'B'], 'target': ['C'], 'edge_id': 'h_ab_c'}])
     return G
 
@@ -99,7 +99,7 @@ def hyper_directed() -> AnnNet:
 def edge_entity() -> AnnNet:
     """One edge that is also a node, and one edge that points at it."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='ee_ab', as_entity=True)
     G.add_edges('ee_ab', 'C', edge_id='e_meta')
     return G
@@ -113,7 +113,7 @@ def placeholder_edge() -> AnnNet:
     from "this edge is part of the topology".
     """
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e_ab')
     G._ensure_edge_entity_placeholder('e_later')
     return G
@@ -126,7 +126,7 @@ def boundary_edge() -> AnnNet:
     the direction, so the graph needs no placeholder node on the open side.
     """
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges([{'members': ['A'], 'edge_id': 'b_out'}])
     G.add_edges([{'members': ['A'], 'edge_id': 'b_in'}])
     G.add_edges('A', 'B', edge_id='e_ab')
@@ -138,7 +138,7 @@ def boundary_edge() -> AnnNet:
 def coefficient_edge() -> AnnNet:
     """One hyperedge whose members carry coefficients other than plus or minus one."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges([{'members': ['A', 'B', 'C'], 'edge_id': 'r_1'}])
     G.set_edge_coeffs('r_1', {'A': -2.0, 'B': -1.0, 'C': 3.0})
     return G
@@ -155,8 +155,8 @@ def multilayer() -> AnnNet:
     def build():
         G = AnnNet(directed=True)
         G.layers.set_aspects(['phase'], {'phase': ['t0', 't1']})
-        G.add_vertices(['A', 'B'], layer=('t0',))
-        G.add_vertices(['A', 'B'], layer=('t1',))
+        G.add_nodes(['A', 'B'], layer=('t0',))
+        G.add_nodes(['A', 'B'], layer=('t1',))
         G.add_edges(
             [
                 {'source': ('A', ('t0',)), 'target': ('B', ('t0',)), 'edge_id': 'e_t0'},
@@ -172,7 +172,7 @@ def multilayer() -> AnnNet:
 def sliced() -> AnnNet:
     """One graph whose edges split over two named slices."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e_ab')
     G.add_edges('B', 'C', edge_id='e_bc')
     G.slices.add('left')

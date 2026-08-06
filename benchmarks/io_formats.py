@@ -7,7 +7,7 @@ Formats that cannot represent a feature (e.g. SIF has no edge weights) still
 round-trip the structure; the ``edges_ok`` column reports whether the edge count
 survived the round trip.
 
-Run:  python -m benchmarks.io_formats [--vertices N] [--edges N] [--samples N]
+Run:  python -m benchmarks.io_formats [--nodes N] [--edges N] [--samples N]
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import warnings
 from . import harness, environment
 
 
-def build_graph(n_vertices: int, n_edges: int):
+def build_graph(n_nodes: int, n_edges: int):
     """A deterministic directed graph with weights + a couple of attributes."""
     from annnet.core.graph import AnnNet
 
@@ -31,8 +31,8 @@ def build_graph(n_vertices: int, n_edges: int):
         warnings.simplefilter('ignore')
         G.add_edges(
             {
-                'source': f'v{i % n_vertices}',
-                'target': f'v{(i * 13 + 1) % n_vertices}',
+                'source': f'v{i % n_nodes}',
+                'target': f'v{(i * 13 + 1) % n_nodes}',
                 'weight': float(i % 7 + 1),
                 'kind_attr': 'reg' if i % 2 else 'alt',
             }
@@ -100,8 +100,8 @@ def _path_size(p: str) -> int:
     return 0
 
 
-def run(n_vertices: int = 2000, n_edges: int = 10000, samples: int = 5) -> list[dict]:
-    G = build_graph(n_vertices, n_edges)
+def run(n_nodes: int = 2000, n_edges: int = 10000, samples: int = 5) -> list[dict]:
+    G = build_graph(n_nodes, n_edges)
     n_e = G.ecount()
     recs: list[dict] = []
 
@@ -148,14 +148,14 @@ def _fmt_b(n):
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--vertices', type=int, default=2000)
+    ap.add_argument('--nodes', type=int, default=2000)
     ap.add_argument('--edges', type=int, default=10000)
     ap.add_argument('--samples', type=int, default=5)
     ap.add_argument('--json-out', default=None)
     args = ap.parse_args()
 
-    recs = run(args.vertices, args.edges, args.samples)
-    print(f'IO formats — {args.vertices} V / {args.edges} E  (median of {args.samples})\n')
+    recs = run(args.nodes, args.edges, args.samples)
+    print(f'IO formats — {args.nodes} V / {args.edges} E  (median of {args.samples})\n')
     print(f'{"format":10s} {"write":>10s} {"read":>10s} {"size":>10s}  ok  note')
     print('-' * 64)
     for r in recs:

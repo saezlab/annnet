@@ -12,7 +12,7 @@ from benchmarks.scales import Scale
 def _tiny_scale() -> Scale:
     return Scale(
         name='unit',
-        vertices=6,
+        nodes=6,
         edges=10,
         hyperedges=2,
         slices=2,
@@ -30,7 +30,7 @@ def test_extra_dimensions_run_selected_primitive_group() -> None:
     assert {row['group'] for row in rows} == {'primitives'}
     assert {row['op'] for row in rows} >= {
         'create_empty',
-        'add_vertices_bulk',
+        'add_nodes_bulk',
         'add_edges_bulk',
         'remove_edges_fraction',
     }
@@ -43,8 +43,8 @@ def test_annotation_update_dimensions_run_on_tiny_scale() -> None:
 
     assert {row['group'] for row in rows} == {'annotation_updates'}
     assert {row['op'] for row in rows} >= {
-        'set_vertex_attrs_bulk_initial',
-        'set_vertex_attrs_bulk_update',
+        'set_node_attrs_bulk_initial',
+        'set_node_attrs_bulk_update',
         'set_edge_attrs_bulk_initial',
         'set_edge_slice_attrs_bulk',
     }
@@ -82,7 +82,7 @@ def test_report_emits_networkx_ratio_heatmap(tmp_path) -> None:
                     'op': 'build',
                     'group': 'comparable',
                     'backend': None,
-                    'n_vertices': n_edges // 4,
+                    'n_nodes': n_edges // 4,
                     'n_edges': n_edges,
                     'time': {
                         'min_s': median_s,

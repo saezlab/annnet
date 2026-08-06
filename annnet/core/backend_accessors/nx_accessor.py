@@ -15,12 +15,12 @@ _NX_CALLABLE_CACHE: dict = {}
 class _NXBackendAccessor(_BackendAccessorBase):
     """NetworkX backend accessor attached to an AnnNet instance."""
 
-    VERTEX_KEYS = {'source', 'target', 'u', 'v', 'vertex', 'vertices', 'nbunch', 'center', 'path'}
+    NODE_KEYS = {'source', 'target', 'u', 'v', 'node', 'nodes', 'nbunch', 'center', 'path'}
 
     def __init__(self, owner: AnnNet):
         self._init_backend_accessor(owner, cache_attr='_nx_backend_cache')
 
-    def peek_vertices(self, k: int = 10):
+    def peek_nodes(self, k: int = 10):
         nxG = self._get_or_make_nx(
             directed=True,
             hyperedge_mode='expand',
@@ -120,11 +120,11 @@ class _NXBackendAccessor(_BackendAccessorBase):
                 if label_field is None and guess_labels:
                     label_field = self._infer_label_field()
                 if bound is not None and nxG is not None:
-                    self._coerce_vertices_in_bound(bound, nxG, label_field)
+                    self._coerce_nodes_in_bound(bound, nxG, label_field)
                     pargs, pkwargs = bound.args, bound.kwargs
                 else:
                     if nxG is not None:
-                        self._coerce_vertices_in_kwargs(kwargs, nxG, label_field)
+                        self._coerce_nodes_in_kwargs(kwargs, nxG, label_field)
                     pargs, pkwargs = tuple(args), kwargs
             except Exception:  # noqa: BLE001
                 pargs, pkwargs = tuple(args), kwargs
@@ -135,16 +135,16 @@ class _NXBackendAccessor(_BackendAccessorBase):
 
             try:
                 raw = nx_callable(*pargs, **pkwargs)
-                return self._map_output_vertices(raw)
+                return self._map_output_nodes(raw)
             except _nx.NodeNotFound as exc:
-                sample = self.peek_vertices(5)
+                sample = self.peek_nodes(5)
                 tip = (
-                    f"{exc}. vertices must be graph's vertex IDs.\n"
-                    f'- If you passed labels, specify _nx_label_field=<vertex label column> '
+                    f"{exc}. nodes must be graph's node IDs.\n"
+                    f'- If you passed labels, specify _nx_label_field=<node label column> '
                     f'or rely on auto-guess.\n'
                     f"- Example: G.nx.shortest_path_length(G, source='a', target='z', "
                     f"weight='weight', _nx_label_field='name')\n"
-                    f'- A few vertex IDs NX sees: {sample}'
+                    f'- A few node IDs NX sees: {sample}'
                 )
                 raise _nx.NodeNotFound(tip) from exc
 
@@ -268,44 +268,42 @@ class _NXBackendAccessor(_BackendAccessorBase):
         entry, _rebuilt = self._get_or_make_cached(key, build)
         return entry['nxG']
 
-    def _coerce_vertex_id(self, value, nxG, label_field: str | None):
+    def _coerce_node_id(self, value, nxG, label_field: str | None):
         if isinstance(value, int):
-            candidate = self._vertex_row_to_id(value)
+            candidate = self._node_row_to_id(value)
             if candidate is not None:
                 value = candidate
         if value in nxG:
             return value
         if label_field:
-            candidate = self._lookup_vertex_id_by_label(label_field, value)
+            candidate = self._lookup_node_id_by_label(label_field, value)
             if candidate is not None:
                 return candidate
         return value
 
-    def _coerce_vertex_or_iter(self, obj, nxG, label_field: str | None):
-        return self._coerce_vertex_iterable(
-            obj, lambda value: self._coerce_vertex_id(value, nxG, label_field)
+    def _coerce_node_or_iter(self, obj, nxG, label_field: str | None):
+        return self._coerce_node_iterable(
+            obj, lambda value: self._coerce_node_id(value, nxG, label_field)
         )
 
-    def _coerce_vertices_in_kwargs(self, kwargs: dict, nxG, label_field: str | None):
-        self._coerce_vertex_kwargs(
-            kwargs, lambda obj: self._coerce_vertex_or_iter(obj, nxG, label_field)
+    def _coerce_nodes_in_kwargs(self, kwargs: dict, nxG, label_field: str | None):
+        self._coerce_node_kwargs(
+            kwargs, lambda obj: self._coerce_node_or_iter(obj, nxG, label_field)
         )
 
-    def _coerce_vertices_in_bound(self, bound, nxG, label_field: str | None):
-        self._coerce_vertex_bound(
-            bound, lambda obj: self._coerce_vertex_or_iter(obj, nxG, label_field)
-        )
+    def _coerce_nodes_in_bound(self, bound, nxG, label_field: str | None):
+        self._coerce_node_bound(bound, lambda obj: self._coerce_node_or_iter(obj, nxG, label_field))
 
-    def _map_output_vertices(self, obj):
+    def _map_output_nodes(self, obj):
         def map_id(value):
-            # NetworkX returns vertex IDs as the backend graph's node values.
-            # Our backend nodes are vertex-ID strings, so strings pass through
+            # NetworkX returns node IDs as the backend graph's node values.
+            # Our backend nodes are node-ID strings, so strings pass through
             # unchanged. Integers that NX produced from a relabel-to-int pass
-            # are mapped back to their vertex IDs. Resolve each int in O(1) via
+            # are mapped back to their node IDs. Resolve each int in O(1) via
             # the graph's row->entity index instead of materialising the whole
             # row->id map on every call.
             if isinstance(value, int) and not isinstance(value, bool):
-                vid = self._vertex_row_to_id(value)
+                vid = self._node_row_to_id(value)
                 if vid is not None:
                     return vid
             return value

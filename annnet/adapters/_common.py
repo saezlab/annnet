@@ -9,8 +9,8 @@ into _support modules.
 from __future__ import annotations
 
 from ..core._structure import (
+    _iter_node_ids,
     _is_directed_eid,
-    _iter_vertex_ids,
     _iter_edge_records,
 )
 from .._support.graph_records import (
@@ -20,6 +20,7 @@ from .._support.graph_records import (
     _serialize_value,
 )
 from .._support.serialization import (
+    stored as stored_key,
     endpoint_coeff_map,
     serialize_edge_layers,
     collect_slice_manifest,
@@ -39,11 +40,12 @@ __all__ = [
     '_attrs_to_dict',
     '_is_directed_eid',
     '_iter_edge_records',
-    '_iter_vertex_ids',
+    '_iter_node_ids',
     '_rows_like',
     '_rows_to_df',
     '_serialize_value',
     'collect_slice_manifest',
+    'stored_key',
     'deserialize_edge_layers',
     'endpoint_coeff_map',
     'restore_multilayer_manifest',

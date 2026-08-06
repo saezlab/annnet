@@ -33,7 +33,7 @@ EXTRA_STORE_FIELDS = (
     '_store',
     '_matrix',
     '_supra_index_cache',
-    '_vertex_key_index',
+    '_node_key_index',
 )
 PRIVATE_STORE_FIELDS = frozenset(
     name for name in SOT_FIELDS + DERIVED_FIELDS + EXTRA_STORE_FIELDS if name.startswith('_')

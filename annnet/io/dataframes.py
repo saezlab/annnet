@@ -81,10 +81,10 @@ def _hyperedge_rows(graph: AnnNet, edge_attrs: dict, *, public_only: bool, explo
 
         if explode:
             if directed:
-                for vertex_id in spec.get('head', []):
+                for node_id in spec.get('head', []):
                     row = {
                         'edge_id': eid,
-                        'vertex_id': vertex_id,
+                        'node_id': node_id,
                         'role': 'head',
                         'weight': weight,
                         'directed': True,
@@ -92,10 +92,10 @@ def _hyperedge_rows(graph: AnnNet, edge_attrs: dict, *, public_only: bool, explo
                     row.update(attr_dict)
                     yield row
 
-                for vertex_id in spec.get('tail', []):
+                for node_id in spec.get('tail', []):
                     row = {
                         'edge_id': eid,
-                        'vertex_id': vertex_id,
+                        'node_id': node_id,
                         'role': 'tail',
                         'weight': weight,
                         'directed': True,
@@ -103,10 +103,10 @@ def _hyperedge_rows(graph: AnnNet, edge_attrs: dict, *, public_only: bool, explo
                     row.update(attr_dict)
                     yield row
             else:
-                for vertex_id in spec.get('members', []):
+                for node_id in spec.get('members', []):
                     row = {
                         'edge_id': eid,
-                        'vertex_id': vertex_id,
+                        'node_id': node_id,
                         'role': 'member',
                         'weight': weight,
                         'directed': False,
@@ -140,7 +140,7 @@ def to_dataframes(
     """Export graph to DataFrames using AnnNet's selected dataframe backend.
 
     Returns a dictionary of DataFrames representing different aspects of the graph:
-    - 'nodes': Vertex IDs and attributes
+    - 'nodes': Node IDs and attributes
     - 'edges': Binary edges with source, target, weight, directed, attributes
     - 'hyperedges': Hyperedges with head/tail sets (if include_hyperedges=True)
     - 'slices': slice membership (if include_slices=True)
@@ -160,10 +160,10 @@ def to_dataframes(
     """
     result = {}
     backend = getattr(graph, '_annotations_backend', 'auto')
-    vertex_attrs = {
-        row.get('vertex_id'): row
-        for row in dataframe_to_rows(graph._vertex_table)
-        if row.get('vertex_id') is not None
+    node_attrs = {
+        row.get('node_id'): row
+        for row in dataframe_to_rows(graph._node_table)
+        if row.get('node_id') is not None
     }
     edge_attrs = {
         row.get('edge_id'): row
@@ -173,12 +173,12 @@ def to_dataframes(
 
     # 1. Nodes table
     nodes_data = []
-    for vid in graph.vertices():
-        row = {'vertex_id': vid}
-        attrs = vertex_attrs.get(vid)
+    for vid in graph.nodes():
+        row = {'node_id': vid}
+        attrs = node_attrs.get(vid)
         if attrs:
             attr_dict = dict(attrs)
-            attr_dict.pop('vertex_id', None)
+            attr_dict.pop('node_id', None)
             if public_only:
                 attr_dict = {k: v for k, v in attr_dict.items() if not str(k).startswith('__')}
             row.update(attr_dict)
@@ -186,7 +186,7 @@ def to_dataframes(
 
     result['nodes'] = dataframe_from_rows(
         nodes_data,
-        schema={'vertex_id': 'text'},
+        schema={'node_id': 'text'},
         backend=backend,
     )
 
@@ -222,7 +222,7 @@ def to_dataframes(
                 hyperedges_data,
                 schema={
                     'edge_id': 'text',
-                    'vertex_id': 'text',
+                    'node_id': 'text',
                     'role': 'text',
                     'weight': 'float',
                     'directed': 'bool',
@@ -302,7 +302,7 @@ def from_dataframes(
     Accepts DataFrames in the format produced by to_dataframes():
 
     Nodes DataFrame (optional):
-        - Required: vertex_id
+        - Required: node_id
         - Optional: any attribute columns
 
     Edges DataFrame (optional):
@@ -311,7 +311,7 @@ def from_dataframes(
 
     Hyperedges DataFrame (optional):
         - Compact format: edge_id, directed, weight, head (list), tail (list), members (list)
-        - Exploded format: edge_id, vertex_id, role, weight, directed
+        - Exploded format: edge_id, node_id, role, weight, directed
 
     slices DataFrame (optional):
         - Required: slice_id, edge_id
@@ -320,7 +320,7 @@ def from_dataframes(
         - Required: slice_id, edge_id, weight
 
     Args:
-        nodes: DataFrame with vertex_id and attributes (Pandas/Polars/PyArrow/etc.)
+        nodes: DataFrame with node_id and attributes (Pandas/Polars/PyArrow/etc.)
         edges: DataFrame with binary edges
         hyperedges: DataFrame with hyperedges
         slices: DataFrame with slice membership
@@ -358,13 +358,13 @@ def from_dataframes(
         if _asp and tuple(G.aspects) != tuple(_asp):
             G.layers.set_aspects(list(_asp), multilayer.get('elem_layers') or None)
 
-    # 1. Add vertices
+    # 1. Add nodes
     if nodes is not None:
         if dataframe_height(nodes) > 0:
-            if 'vertex_id' not in dataframe_columns(nodes):
-                raise ValueError("nodes DataFrame must have 'vertex_id' column")
+            if 'node_id' not in dataframe_columns(nodes):
+                raise ValueError("nodes DataFrame must have 'node_id' column")
 
-            G._add_vertices_bulk(dataframe_to_rows(nodes))
+            G._add_nodes_bulk(dataframe_to_rows(nodes))
 
     # 2. Add binary edges
     if edges is not None:
@@ -401,9 +401,9 @@ def from_dataframes(
             if exploded_hyperedges:
                 if 'edge_id' not in dataframe_columns(
                     hyperedges
-                ) or 'vertex_id' not in dataframe_columns(hyperedges):
+                ) or 'node_id' not in dataframe_columns(hyperedges):
                     raise ValueError(
-                        "Exploded hyperedges must have 'edge_id' and 'vertex_id' columns"
+                        "Exploded hyperedges must have 'edge_id' and 'node_id' columns"
                     )
 
                 # Group by edge_id - need to collect all rows first
@@ -411,8 +411,8 @@ def from_dataframes(
                 for row in dataframe_to_rows(hyperedges):
                     eid = row['edge_id']
                     if eid not in grouped:
-                        grouped[eid] = {'vertices': [], 'roles': [], 'directed': [], 'weights': []}
-                    grouped[eid]['vertices'].append(row['vertex_id'])
+                        grouped[eid] = {'nodes': [], 'roles': [], 'directed': [], 'weights': []}
+                    grouped[eid]['nodes'].append(row['node_id'])
                     grouped[eid]['roles'].append(row.get('role', 'member'))
                     grouped[eid]['directed'].append(row.get('directed', False))
                     grouped[eid]['weights'].append(row.get('weight', 1.0))
@@ -424,18 +424,18 @@ def from_dataframes(
                     if is_directed:
                         head = [
                             v
-                            for v, r in zip(data['vertices'], data['roles'], strict=False)
+                            for v, r in zip(data['nodes'], data['roles'], strict=False)
                             if r == 'head'
                         ]
                         tail = [
                             v
-                            for v, r in zip(data['vertices'], data['roles'], strict=False)
+                            for v, r in zip(data['nodes'], data['roles'], strict=False)
                             if r == 'tail'
                         ]
                         G.add_edges(src=head, tgt=tail, edge_id=eid, directed=True, weight=weight)
                     else:
                         G.add_edges(
-                            src=data['vertices'],
+                            src=data['nodes'],
                             edge_id=eid,
                             directed=False,
                             weight=weight,
@@ -521,7 +521,7 @@ def from_dataframes(
             for lid, mp in weights_by_slice.items():
                 G.attrs.set_edge_slice_attrs_bulk(lid, mp)
 
-    # 5. Restore the full multilayer state (vertex-layer presence, layer attrs,
+    # 5. Restore the full multilayer state (node-layer presence, layer attrs,
     # edge layers). Aspects were already declared above.
     if multilayer:
         restore_multilayer_manifest(

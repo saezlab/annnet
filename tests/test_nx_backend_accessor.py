@@ -12,9 +12,9 @@ from annnet.core.graph import AnnNet
 
 def build_small():
     G = AnnNet()
-    G.add_vertices('a')
-    G.add_vertices('b')
-    G.add_vertices('c')
+    G.add_nodes('a')
+    G.add_nodes('b')
+    G.add_nodes('c')
     G.add_edges('a', 'b', weight=3.0)
     G.add_edges('b', 'c', weight=2.0)
     return G
@@ -22,8 +22,8 @@ def build_small():
 
 def build_parallel():
     G = AnnNet()
-    G.add_vertices('x')
-    G.add_vertices('y')
+    G.add_nodes('x')
+    G.add_nodes('y')
     G.add_edges('x', 'y', weight=10.0)
     G.add_edges('x', 'y', weight=1.0)
     return G
@@ -31,8 +31,8 @@ def build_parallel():
 
 def build_directed():
     G = AnnNet(directed=True)
-    G.add_vertices('s')
-    G.add_vertices('t')
+    G.add_nodes('s')
+    G.add_nodes('t')
     G.add_edges('s', 't', capacity=5.0)
     return G
 
@@ -57,7 +57,7 @@ class TestNXBackendAccessor(unittest.TestCase):
         d = G.nx.shortest_path_length(G, source='a', target='c', weight='weight')
         self.assertAlmostEqual(d, 5.0)
 
-    # ---- integer vertex ID coercion ----
+    # ---- integer node ID coercion ----
 
     def test_shortest_path_int_ids(self):
         G = build_small()
@@ -66,9 +66,9 @@ class TestNXBackendAccessor(unittest.TestCase):
         d = G.nx.shortest_path_length(G, source=a_id, target=c_id, weight='weight')
         self.assertAlmostEqual(d, 5.0)
 
-    # ---- error for bad vertex label ----
+    # ---- error for bad node label ----
 
-    def test_bad_vertex_label(self):
+    def test_bad_node_label(self):
         G = build_small()
         with self.assertRaises(nx.NodeNotFound):
             G.nx.shortest_path_length(G, source='ZZZ', target='a')
@@ -146,13 +146,13 @@ class TestNXBackendAccessor(unittest.TestCase):
     def test_degree_centrality(self):
         G = build_small()
         dc = G.nx.degree_centrality(G)
-        # Results are keyed by vertex IDs (the README contract); see P0-7.
+        # Results are keyed by node IDs (the README contract); see P0-7.
         self.assertIn('a', dc)
         self.assertAlmostEqual(dc['b'], 1.0)
 
-    # ---- coercion of list/tuple/set of vertices ----
+    # ---- coercion of list/tuple/set of nodes ----
 
-    def test_vertex_iterable_coercion(self):
+    def test_node_iterable_coercion(self):
         G = build_small()
         res = G.nx.single_source_dijkstra_path_length(G, source='a', weight='weight')
         self.assertEqual(res['c'], 5.0)
@@ -170,8 +170,8 @@ class TestNXBackendAccessor(unittest.TestCase):
 
     def test_hyperedge_warning(self):
         G = AnnNet()
-        G.add_vertices('a')
-        G.add_vertices('b')
+        G.add_nodes('a')
+        G.add_nodes('b')
         G.add_edges(src=['a', 'b'])  # hyperedge
 
         with self.assertWarns(RuntimeWarning):
@@ -181,18 +181,18 @@ class TestNXBackendAccessor(unittest.TestCase):
 
     def test_slice_flatten_warning(self):
         G = AnnNet()
-        G.add_vertices('a', slice='s1')
-        G.add_vertices('b', slice='s2')
+        G.add_nodes('a', slice='s1')
+        G.add_nodes('b', slice='s2')
         G.add_edges('a', 'b')
 
         with self.assertWarns(RuntimeWarning):
             G.nx.backend()
 
-    # ---- verify peek_vertices gives valid vert IDs ----
+    # ---- verify peek_nodes gives valid vert IDs ----
 
-    def test_peek_vertices(self):
+    def test_peek_nodes(self):
         G = build_small()
-        out = G.nx.peek_vertices(2)
+        out = G.nx.peek_nodes(2)
         self.assertEqual(len(out), 2)
         nxG = G.nx.backend()
         for v in out:

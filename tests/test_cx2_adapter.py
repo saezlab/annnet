@@ -20,10 +20,10 @@ class TestCX2Adapter(unittest.TestCase):
         """Set up a complex AnnNet object for testing."""
         self.G = AnnNet(directed=True)
 
-        # Vertices
-        self.G.add_vertices('n1')
-        self.G.add_vertices('n2')
-        self.G.add_vertices('n3')
+        # Nodes
+        self.G.add_nodes('n1')
+        self.G.add_nodes('n2')
+        self.G.add_nodes('n3')
 
         # Binary edge
         self.G.add_edges('n1', 'n2', edge_id='e1', weight=1.5)
@@ -31,10 +31,10 @@ class TestCX2Adapter(unittest.TestCase):
         # Hyperedge — add_edge with a list src creates a hyperedge
         self.G.add_edges(['n1', 'n2', 'n3'], edge_id='he1', weight=0.5)
 
-        # Vertex attributes
-        self.G._vertex_table = pl.DataFrame(
+        # Node attributes
+        self.G._node_table = pl.DataFrame(
             {
-                'vertex_id': ['n1', 'n2', 'n3'],
+                'node_id': ['n1', 'n2', 'n3'],
                 'score': [10, 20, 30],
                 'active': [True, False, True],
                 'desc': ['A', 'B', 'C'],
@@ -50,7 +50,7 @@ class TestCX2Adapter(unittest.TestCase):
         )
 
         # Slice data for manifest testing
-        self.G._slices['slice1'] = SliceRecord(vertices={'n1', 'n2'}, edges=set(), attributes={})
+        self.G._slices['slice1'] = SliceRecord(nodes={'n1', 'n2'}, edges=set(), attributes={})
 
     def test_cx2_structure_basics(self):
         """Test that to_cx2 produces the mandatory CX2 list structure."""
@@ -68,7 +68,7 @@ class TestCX2Adapter(unittest.TestCase):
         self.assertIn('networkAttributes', aspect_names)
 
     def test_node_mapping(self):
-        """Test that only 'vertex' entities become CX2 nodes."""
+        """Test that only 'node' entities become CX2 nodes."""
         cx2_data = to_cx2(self.G)
 
         # Extract nodes aspect
@@ -136,7 +136,7 @@ class TestCX2Adapter(unittest.TestCase):
         cx2_data = to_cx2(self.G)
         G_new = from_cx2(cx2_data)
 
-        # Check Vertices
+        # Check Nodes
         self.assertEqual(len(G_new.views.entity_kinds()), len(self.G.views.entity_kinds()))
         self.assertIn('n1', G_new.views.entity_kinds())
 
@@ -145,10 +145,10 @@ class TestCX2Adapter(unittest.TestCase):
         self.assertAlmostEqual(S.edge_shape(G_new, 'e1').weight, 1.5)
 
         # Check Attributes (Polars)
-        df_new = G_new._vertex_table
+        df_new = G_new._node_table
 
         # This works reliably across Polars versions
-        score_n1 = df_new.filter(pl.col('vertex_id') == 'n1').get_column('score').item()
+        score_n1 = df_new.filter(pl.col('node_id') == 'n1').get_column('score').item()
 
         self.assertEqual(score_n1, 10)
 
@@ -167,15 +167,15 @@ class TestCX2Adapter(unittest.TestCase):
 
         G_ext = from_cx2(raw_cx2)
 
-        # Should have 1 vertex
+        # Should have 1 node
         self.assertEqual(len(G_ext.views.entity_kinds()), 1)
         self.assertIn('EXT_NODE', G_ext.views.entity_kinds())
 
         # Attributes should be loaded
-        df = G_ext._vertex_table
+        df = G_ext._node_table
         self.assertFalse(df.is_empty())
         self.assertEqual(
-            df.filter(pl.col('vertex_id') == 'EXT_NODE')['importance'].item(),
+            df.filter(pl.col('node_id') == 'EXT_NODE')['importance'].item(),
             5,
         )
 

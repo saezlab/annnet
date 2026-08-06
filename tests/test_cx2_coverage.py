@@ -52,12 +52,12 @@ def test_jsonify_recursively_unwraps_dict_set_list_tuple() -> None:
 
 def test_serialize_slices_public_returns_per_slice_dict() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.slices.add('s1')
     G.add_edges('A', 'B', edge_id='e1', slice='s1')
     out = _serialize_slices_public(G)
     assert 's1' in out
-    assert 'vertices' in out['s1']
+    assert 'nodes' in out['s1']
     assert 'edges' in out['s1']
 
 
@@ -66,14 +66,14 @@ def test_serialize_slices_public_returns_per_slice_dict() -> None:
 
 def _toy_with_undirected_hyper() -> AnnNet:
     G = AnnNet(directed=False)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges(['A', 'B', 'C'], edge_id='h1')
     return G
 
 
 def _toy_with_directed_hyper() -> AnnNet:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges(src=['A', 'B'], tgt=['C', 'D'], edge_id='h1')
     return G
 
@@ -124,7 +124,7 @@ def test_to_cx2_with_hyperedges_skip_omits_them_entirely() -> None:
 
 def test_to_cx2_writes_file_when_path_given(tmp_path: Path) -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     out_path = tmp_path / 'out.cx2.json'
     to_cx2(G, out_path)
@@ -137,8 +137,8 @@ def test_to_cx2_with_layer_arg_subgraphs_first() -> None:
     """Pass ``layer=(...)`` → exports only that elementary layer subgraph."""
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
-    G.add_vertices(['A'], layer={'condition': 'healthy'})
-    G.add_vertices(['B'], layer={'condition': 'treated'})
+    G.add_nodes(['A'], layer={'condition': 'healthy'})
+    G.add_nodes(['B'], layer={'condition': 'treated'})
     out = to_cx2(G, layer=('healthy',))
     nodes_aspect = next(a for a in out if 'nodes' in a)
     # only the 'healthy' subgraph nodes should be present (A only)
@@ -148,7 +148,7 @@ def test_to_cx2_with_layer_arg_subgraphs_first() -> None:
 
 def test_to_cx2_with_layer_must_be_tuple() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A'])
+    G.add_nodes(['A'])
     with pytest.raises(TypeError, match='layer must be a tuple'):
         to_cx2(G, layer='not-a-tuple')
 
@@ -156,11 +156,11 @@ def test_to_cx2_with_layer_must_be_tuple() -> None:
 # ── attribute cleaning and styles ──────────────────────────────────────
 
 
-def test_to_cx2_with_vertex_attributes_strings_and_layout_columns() -> None:
+def test_to_cx2_with_node_attributes_strings_and_layout_columns() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
-    G.attrs.set_vertex_attrs('A', label='alpha', layout_x=1.0, layout_y=2.0)
-    G.attrs.set_vertex_attrs('B', label='beta')
+    G.add_nodes(['A', 'B'])
+    G.attrs.set_node_attrs('A', label='alpha', layout_x=1.0, layout_y=2.0)
+    G.attrs.set_node_attrs('B', label='beta')
     G.add_edges('A', 'B', edge_id='e1')
     out = to_cx2(G)
     nodes_aspect = next(a for a in out if 'nodes' in a)
@@ -173,7 +173,7 @@ def test_to_cx2_with_vertex_attributes_strings_and_layout_columns() -> None:
 
 def test_to_cx2_with_edge_attributes_attaches_them_under_v() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     G.attrs.set_edge_attrs('e1', label='alpha', confidence=0.95)
     out = to_cx2(G)
@@ -188,33 +188,33 @@ def test_to_cx2_with_edge_attributes_attaches_them_under_v() -> None:
 
 def test_from_cx2_round_trip_via_manifest() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C'])
+    G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', weight=2.0)
     G.add_edges('B', 'C', edge_id='e2', weight=3.0)
     cx2 = to_cx2(G)
     H = from_cx2(cx2)
-    assert set(H.vertices()) == {'A', 'B', 'C'}
+    assert set(H.nodes()) == {'A', 'B', 'C'}
     assert H.ne == 2
 
 
 def test_from_cx2_reads_from_file_path(tmp_path: Path) -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     p = tmp_path / 'demo.cx2.json'
     to_cx2(G, p)
     H = from_cx2(str(p))
-    assert set(H.vertices()) == {'A', 'B'}
+    assert set(H.nodes()) == {'A', 'B'}
 
 
 def test_from_cx2_reads_from_json_string() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     cx2 = to_cx2(G)
     payload = json.dumps(cx2)
     H = from_cx2(payload)
-    assert set(H.vertices()) == {'A', 'B'}
+    assert set(H.nodes()) == {'A', 'B'}
 
 
 def test_from_cx2_invalid_string_raises_value_error() -> None:
@@ -238,7 +238,7 @@ def test_from_cx2_with_no_manifest_still_imports_basic_nodes_and_edges() -> None
         {'status': [{'success': True}]},
     ]
     H = from_cx2(cx2)
-    assert set(H.vertices()) == {'A', 'B'}
+    assert set(H.nodes()) == {'A', 'B'}
     assert H.ne == 1
 
 
@@ -284,7 +284,7 @@ def test_cx2_collect_reified_discovers_undirected_membership_edges() -> None:
 
 def test_cx2_to_cytoscapejs_emits_node_and_edge_dicts() -> None:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
     cx2 = to_cx2(G)
     cy = _cx2_to_cytoscapejs(cx2)
@@ -317,4 +317,4 @@ def test_from_cx2_skips_empty_aspect_dicts() -> None:
         {'status': [{'success': True}]},
     ]
     H = from_cx2(cx2)
-    assert 'A' in H.vertices()
+    assert 'A' in H.nodes()

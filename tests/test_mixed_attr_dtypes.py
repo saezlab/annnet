@@ -20,18 +20,18 @@ from annnet.core.graph import AnnNet
 BACKENDS = ('polars', 'pandas', 'pyarrow')
 
 
-def two_vertices() -> AnnNet:
+def two_nodes() -> AnnNet:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     return G
 
 
-def test_a_float_widens_an_int_vertex_attribute() -> None:
-    G = two_vertices()
-    G.attrs.set_vertex_attrs('A', val=45)
-    G.attrs.set_vertex_attrs('B', val=45.6)
-    assert G.attrs.get_vertex_attrs('A')['val'] == 45.0
-    assert G.attrs.get_vertex_attrs('B')['val'] == 45.6
+def test_a_float_widens_an_int_node_attribute() -> None:
+    G = two_nodes()
+    G.attrs.set_node_attrs('A', val=45)
+    G.attrs.set_node_attrs('B', val=45.6)
+    assert G.attrs.get_node_attrs('A')['val'] == 45.0
+    assert G.attrs.get_node_attrs('B')['val'] == 45.6
 
 
 def test_a_string_and_an_int_sit_in_one_attribute() -> None:
@@ -41,16 +41,16 @@ def test_a_string_and_an_int_sit_in_one_attribute() -> None:
     widen to the one that holds either. The store holds a cell per element, so
     nothing is converted to make room for its neighbour.
     """
-    G = two_vertices()
-    G.attrs.set_vertex_attrs('A', val=45)
-    G.attrs.set_vertex_attrs('B', val='x')
-    assert G.attrs.get_vertex_attrs('A')['val'] == 45
-    assert G.attrs.get_vertex_attrs('B')['val'] == 'x'
+    G = two_nodes()
+    G.attrs.set_node_attrs('A', val=45)
+    G.attrs.set_node_attrs('B', val='x')
+    assert G.attrs.get_node_attrs('A')['val'] == 45
+    assert G.attrs.get_node_attrs('B')['val'] == 'x'
     assert [row['val'] for row in dataframe_to_rows(G.obs)] == ['45', 'x']
 
 
 def test_a_float_widens_an_int_edge_attribute() -> None:
-    G = two_vertices()
+    G = two_nodes()
     G.add_edges('A', 'B', edge_id='e0')
     G.add_edges('B', 'A', edge_id='e1')
     G.attrs.set_edge_attrs('e0', val=45)
@@ -60,11 +60,11 @@ def test_a_float_widens_an_int_edge_attribute() -> None:
 
 
 def test_the_widened_column_survives_a_third_write() -> None:
-    G = two_vertices()
-    G.attrs.set_vertex_attrs('A', val=45)
-    G.attrs.set_vertex_attrs('B', val=45.6)
-    G.attrs.set_vertex_attrs('A', val=1)
-    assert G.attrs.get_vertex_attrs('A')['val'] == 1.0
+    G = two_nodes()
+    G.attrs.set_node_attrs('A', val=45)
+    G.attrs.set_node_attrs('B', val=45.6)
+    G.attrs.set_node_attrs('A', val=1)
+    assert G.attrs.get_node_attrs('A')['val'] == 1.0
 
 
 @pytest.mark.parametrize('backend', BACKENDS)

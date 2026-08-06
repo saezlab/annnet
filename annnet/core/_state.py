@@ -5,8 +5,8 @@ from __future__ import annotations
 from ._records import (
     _EDGE_RESERVED,
     SliceRecord,
+    _node_RESERVED,
     _slice_RESERVED,
-    _vertex_RESERVED,
 )
 
 # Canonical source of truth (everything else is reconstructable from these).
@@ -28,7 +28,7 @@ def init_state(g, *, directed=None, aspects=None) -> None:
     """Initialize the structural fields of an empty graph on ``g``."""
     g.directed = directed
 
-    g._vertex_RESERVED = set(_vertex_RESERVED)
+    g._node_RESERVED = set(_node_RESERVED)
     g._EDGE_RESERVED = set(_EDGE_RESERVED)
     g._slice_RESERVED = set(_slice_RESERVED)
 
@@ -45,9 +45,9 @@ def init_state(g, *, directed=None, aspects=None) -> None:
         g._aspects = tuple(aspects.keys())
         g._layers = {k: set(val) for k, val in aspects.items()}
 
-    # Composite vertex key support.
-    g._vertex_key_fields = None
-    g._vertex_key_index = {}
+    # Composite node key support.
+    g._node_key_fields = None
+    g._node_key_index = {}
 
     # The incidence matrix is derived state, so init builds nothing and holds
     # no field for it. It is materialized on the first read and kept in the
@@ -75,7 +75,7 @@ def init_state(g, *, directed=None, aspects=None) -> None:
 
     g._supra_index_cache = None
 
-    g.vertex_aligned = False
+    g.node_aligned = False
 
     # The canonical store. It is built last, because it takes the aspects the
     # graph has just declared and answers in the identity form they imply.

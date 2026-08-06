@@ -10,7 +10,7 @@ An item that names nothing but its two endpoints, or those and a weight, takes
 every other default, and its length says so because every key it could hold is
 one the writer already knows about. An endpoint of a flat graph is keyed by its
 id and the placeholder coordinate, so an endpoint the store already holds needs
-no resolution at all — which is every mention of a vertex after the first.
+no resolution at all — which is every mention of a node after the first.
 
 What these tests pin is that the two paths agree: on the batch defaults, on the
 aliases that make a two-key item, on the first key that takes an item off the
@@ -120,10 +120,10 @@ def test_a_third_key_that_names_the_slice_weight_is_still_read():
 
 def test_a_third_key_that_names_the_propagation_is_still_read():
     graph = AnnNet(directed=True)
-    graph.add_vertices(['A', 'B'])
+    graph.add_nodes(['A', 'B'])
     graph.slices.add('other')
-    graph.slices.add_vertex_to_slice('other', 'A')
-    graph.slices.add_vertex_to_slice('other', 'B')
+    graph.slices.add_node_to_slice('other', 'A')
+    graph.slices.add_node_to_slice('other', 'B')
     graph.add_edges([{'source': 'A', 'target': 'B', 'propagate': 'shared'}])
     assert 'edge_0' in graph.slices.edges('other')
 
@@ -142,26 +142,26 @@ def test_an_item_of_two_endpoints_carries_no_attribute():
     assert 'target' not in attrs
 
 
-def test_a_vertex_named_twice_in_a_batch_is_one_entity():
+def test_a_node_named_twice_in_a_batch_is_one_entity():
     graph = AnnNet(directed=True)
     graph.add_edges([{'source': 'A', 'target': 'B'}, {'source': 'A', 'target': 'C'}])
-    assert sorted(graph.vertices()) == ['A', 'B', 'C']
+    assert sorted(graph.nodes()) == ['A', 'B', 'C']
     assert sorted(graph.get_edge('edge_1').source) == ['A']
 
 
 def test_a_self_loop_resolves_both_of_its_endpoints_to_the_same_entity():
     graph = AnnNet(directed=True)
     graph.add_edges([{'source': 'A', 'target': 'A'}])
-    assert sorted(graph.vertices()) == ['A']
+    assert sorted(graph.nodes()) == ['A']
     view = graph.get_edge('edge_0')
     assert sorted(view.source) == sorted(view.target) == ['A']
 
 
-def test_a_batch_reaching_a_vertex_added_before_it_makes_no_second_entity():
+def test_a_batch_reaching_a_node_added_before_it_makes_no_second_entity():
     graph = AnnNet(directed=True)
-    graph.add_vertices(['A', 'B'])
+    graph.add_nodes(['A', 'B'])
     graph.add_edges([{'source': 'A', 'target': 'B'}])
-    assert sorted(graph.vertices()) == ['A', 'B']
+    assert sorted(graph.nodes()) == ['A', 'B']
 
 
 def test_a_multilayer_endpoint_keeps_the_layer_it_names():

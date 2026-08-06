@@ -16,14 +16,12 @@ import pytest
 import annnet
 from annnet.core.graph import AnnNet
 
-# What the contract states, section by section. The words are the ones the
-# package uses today: T085 renames "vertex" to "node" and this list moves with
-# it.
+# What the contract states, section by section.
 CONTRACT_SURFACE = {
     # 2. Add and remove elements
-    'add_vertices',
+    'add_nodes',
     'add_edges',
-    'remove_vertices',
+    'remove_nodes',
     'remove_edges',
     # 3. Counts and sequences
     'ncount',
@@ -33,7 +31,7 @@ CONTRACT_SURFACE = {
     'nv_supra',
     'shape',
     'supra_shape',
-    'supra_vertices',
+    'supra_nodes',
     'N',
     'E',
     # 4. Attributes
@@ -48,7 +46,7 @@ CONTRACT_SURFACE = {
     'L',
     'matrices',
     # 8. Lookups and traversal
-    'get_vertex',
+    'get_node',
     'get_edge',
     'neighbors',
     'degree',
@@ -69,9 +67,9 @@ CONTRACT_SURFACE = {
 # Names the object carries that the contract does not list. Each one is here on
 # purpose, and a name that is neither in the contract nor here fails the test.
 BEYOND_THE_CONTRACT = {
-    'vertices': 'the ids of every node, which section 3 shows as list(G.N)',
-    'edges': 'the ids of every edge, the same shape as vertices',
-    'has_vertex': 'a membership test by id, which the "in" operator also answers',
+    'nodes': 'the ids of every node, which section 3 shows as list(G.N)',
+    'edges': 'the ids of every edge, the same shape as nodes',
+    'has_node': 'a membership test by id, which the "in" operator also answers',
     'has_edge': 'a membership test by endpoints, which returns the ids it found',
     'edge_list': 'every edge as a tuple, which a caller writing a file wants',
     'global_count': 'one count of one kind of element, by name',
@@ -87,7 +85,7 @@ BEYOND_THE_CONTRACT = {
 @pytest.fixture
 def graph() -> AnnNet:
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B'])
+    G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e0')
     return G
 
@@ -109,19 +107,19 @@ def test_what_the_contract_removed_is_not_reachable(graph):
     """Section 10, and the removals D48 records."""
     for name in (
         'X',
-        'num_vertices',
+        'num_nodes',
         'num_edges',
-        'num_supra_vertices',
-        'number_of_vertices',
+        'num_supra_nodes',
+        'number_of_nodes',
         'number_of_edges',
-        'global_vertex_count',
+        'global_node_count',
         'global_edge_count',
         'entity_to_idx',
         'idx_to_entity',
         'edge_to_idx',
         'idx_to_edge',
         'entity_types',
-        'vertex_attributes',
+        'node_attributes',
         'edge_attributes',
     ):
         with pytest.raises(AttributeError):
@@ -137,17 +135,17 @@ def test_the_package_exports_what_it_lists(monkeypatch):
 def test_the_core_exports_the_graph_and_the_records():
     import annnet.core as core
 
-    assert core.__all__ == ['AnnNet', 'Graph', 'EdgeType', 'EdgeView', 'VertexView']
+    assert core.__all__ == ['AnnNet', 'Graph', 'EdgeType', 'EdgeView', 'NodeView']
     for name in core.__all__:
         assert hasattr(core, name)
 
 
-def test_a_vertex_lookup_takes_an_id_and_answers_with_one(graph):
-    view = graph.get_vertex('A')
+def test_a_node_lookup_takes_an_id_and_answers_with_one(graph):
+    view = graph.get_node('A')
     assert view == 'A'
-    assert view.kind == 'vertex'
+    assert view.kind == 'node'
     assert view.layers == (('_',),)
     with pytest.raises(TypeError):
-        graph.get_vertex(0)
+        graph.get_node(0)
     with pytest.raises(KeyError):
-        graph.get_vertex('ghost')
+        graph.get_node('ghost')

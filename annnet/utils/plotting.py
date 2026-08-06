@@ -11,10 +11,10 @@ import numpy as np
 from .._support.plotting_backend import select_plot_backend
 
 
-def _vertex_attr_getter(graph):
+def _node_attr_getter(graph):
     if hasattr(graph, 'attrs'):
-        return graph.attrs.get_attr_vertex
-    return graph.get_attr_vertex
+        return graph.attrs.get_attr_node
+    return graph.get_attr_node
 
 
 def _edge_attr_getter(graph):
@@ -75,14 +75,14 @@ def _suppress_repr_warnings(g: Any) -> None:
 # Label builders
 
 
-def build_vertex_labels(graph, key: str | None = None) -> dict[str, str]:
-    """Build display labels for graph vertices."""
+def build_node_labels(graph, key: str | None = None) -> dict[str, str]:
+    """Build display labels for graph nodes."""
     labels: dict[str, str] = {}
-    for vid in graph.vertices():
+    for vid in graph.nodes():
         if key is None:
             labels[vid] = str(vid)
         else:
-            labels[vid] = str(_vertex_attr_getter(graph)(vid, key, default=vid))
+            labels[vid] = str(_node_attr_getter(graph)(vid, key, default=vid))
     return labels
 
 
@@ -196,24 +196,24 @@ def edge_style_from_weights(
 
 
 def _add_nodes_graphviz(
-    Gv, node_names: Iterable[str], custom_vertex_attr: dict[str, dict[str, str]] | None = None
+    Gv, node_names: Iterable[str], custom_node_attr: dict[str, dict[str, str]] | None = None
 ):
-    custom_vertex_attr = custom_vertex_attr or {}
+    custom_node_attr = custom_node_attr or {}
     for v in node_names:
         attrs = {'shape': 'circle'}
-        attrs.update(custom_vertex_attr.get(v, {}))
+        attrs.update(custom_node_attr.get(v, {}))
         Gv.node(v, **attrs)
 
 
 def _add_nodes_pydot(
-    Gd, node_names: Iterable[str], custom_vertex_attr: dict[str, dict[str, str]] | None = None
+    Gd, node_names: Iterable[str], custom_node_attr: dict[str, dict[str, str]] | None = None
 ):
     import pydot
 
-    custom_vertex_attr = custom_vertex_attr or {}
+    custom_node_attr = custom_node_attr or {}
     for v in node_names:
         attrs = {'shape': 'circle'}
-        attrs.update(custom_vertex_attr.get(v, {}))
+        attrs.update(custom_node_attr.get(v, {}))
         Gd.add_node(pydot.Node(v, **attrs))
 
 
@@ -239,7 +239,7 @@ def to_graphviz(
     node_attr: dict[str, str] | None = None,
     edge_attr: dict[str, str] | None = None,
     custom_edge_attr: dict[int, dict[str, str]] | None = None,
-    custom_vertex_attr: dict[str, dict[str, str]] | None = None,
+    custom_node_attr: dict[str, dict[str, str]] | None = None,
     edge_indexes: list[int] | None = None,
     orphan_edges: bool = True,
     suppress_warnings: bool = True,
@@ -251,7 +251,7 @@ def to_graphviz(
         engine=layout, graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr
     )
 
-    # vertices to materialize (union of all endpoints)
+    # nodes to materialize (union of all endpoints)
     all_nodes: set[str] = set()
     eids = _edge_ids_in_order(graph)
     edges_iter = range(len(eids)) if edge_indexes is None else edge_indexes
@@ -263,7 +263,7 @@ def to_graphviz(
             continue
         all_nodes.update(map(str, S | T))
 
-    _add_nodes_graphviz(Gv, sorted(all_nodes), custom_vertex_attr)
+    _add_nodes_graphviz(Gv, sorted(all_nodes), custom_node_attr)
 
     # Second pass: add edges
     for j in range(len(eids)):
@@ -341,7 +341,7 @@ def to_pydot(
     node_attr: dict[str, str] | None = None,
     edge_attr: dict[str, str] | None = None,
     custom_edge_attr: dict[int, dict[str, str]] | None = None,
-    custom_vertex_attr: dict[str, dict[str, str]] | None = None,
+    custom_node_attr: dict[str, dict[str, str]] | None = None,
     edge_indexes: list[int] | None = None,
     orphan_edges: bool = True,
 ):
@@ -363,7 +363,7 @@ def to_pydot(
             continue
         all_nodes.update(map(str, S | T))
 
-    _add_nodes_pydot(Gd, sorted(all_nodes), custom_vertex_attr)
+    _add_nodes_pydot(Gd, sorted(all_nodes), custom_node_attr)
 
     for j in range(len(eids)):
         if edge_indexes is not None and j not in edge_indexes:
@@ -434,8 +434,8 @@ def to_matplotlib(
     ax=None,
     edge_indexes: list[int] | None = None,
     orphan_edges: bool = True,
-    show_vertex_labels: bool = True,
-    vertex_label_key: str | None = None,
+    show_node_labels: bool = True,
+    node_label_key: str | None = None,
     show_edge_labels: bool = False,
     edge_label_keys: list[str] | None = None,
     layer: str | None = None,
@@ -447,9 +447,9 @@ def to_matplotlib(
     """Draw an AnnNet graph with matplotlib and return ``(figure, axes)``.
 
     This minimal fallback renderer does not require Graphviz, pydot, or
-    NetworkX. It places vertices on a circle, draws binary directed edges as
+    NetworkX. It places nodes on a circle, draws binary directed edges as
     arrows, undirected binary edges as plain segments, and hyperedges via a
-    small center marker connected to incident vertices.
+    small center marker connected to incident nodes.
     """
     import matplotlib.pyplot as plt
 
@@ -460,23 +460,23 @@ def to_matplotlib(
 
     eids = _edge_ids_in_order(graph)
     edges = list(range(len(eids))) if edge_indexes is None else list(edge_indexes)
-    vertices: set[str] = set(map(str, graph.vertices()))
+    nodes: set[str] = set(map(str, graph.nodes()))
     for j in edges:
         S, T = graph.get_edge(eids[j])
         if not orphan_edges and (len(S) == 0 or len(T) == 0):
             continue
-        vertices.update(map(str, S | T))
+        nodes.update(map(str, S | T))
 
-    ordered_vertices = sorted(vertices)
-    n = max(1, len(ordered_vertices))
+    ordered_nodes = sorted(nodes)
+    n = max(1, len(ordered_nodes))
     positions = {
-        vertex: (math.cos(2.0 * math.pi * i / n), math.sin(2.0 * math.pi * i / n))
-        for i, vertex in enumerate(ordered_vertices)
+        node: (math.cos(2.0 * math.pi * i / n), math.sin(2.0 * math.pi * i / n))
+        for i, node in enumerate(ordered_nodes)
     }
 
-    if ordered_vertices:
-        xs = [positions[v][0] for v in ordered_vertices]
-        ys = [positions[v][1] for v in ordered_vertices]
+    if ordered_nodes:
+        xs = [positions[v][0] for v in ordered_nodes]
+        ys = [positions[v][1] for v in ordered_nodes]
         ax.scatter(
             xs,
             ys,
@@ -487,11 +487,11 @@ def to_matplotlib(
             zorder=3,
         )
 
-    if show_vertex_labels:
-        labels = build_vertex_labels(graph, key=vertex_label_key)
-        for vertex in ordered_vertices:
-            x, y = positions[vertex]
-            ax.text(x, y, str(labels.get(vertex, vertex)), ha='center', va='center', zorder=4)
+    if show_node_labels:
+        labels = build_node_labels(graph, key=node_label_key)
+        for node in ordered_nodes:
+            x, y = positions[node]
+            ax.text(x, y, str(labels.get(node, node)), ha='center', va='center', zorder=4)
 
     edge_labels = (
         build_edge_labels(graph, use_weight=True, extra_keys=edge_label_keys, layer=layer)
@@ -512,8 +512,8 @@ def to_matplotlib(
                     float(np.mean([positions[v][1] for v in incident])),
                 )
             ax.scatter([center[0]], [center[1]], s=80.0, c=hyperedge_color, marker='s', zorder=2)
-            for vertex in incident:
-                x, y = positions[vertex]
+            for node in incident:
+                x, y = positions[node]
                 ax.plot([center[0], x], [center[1], y], color=hyperedge_color, linewidth=1.0)
             if j in edge_labels:
                 ax.text(
@@ -578,8 +578,8 @@ def plot(
     layer: str | None = None,
     show_edge_labels: bool = False,
     edge_label_keys: list[str] | None = None,
-    show_vertex_labels: bool = True,
-    vertex_label_key: str | None = None,
+    show_node_labels: bool = True,
+    node_label_key: str | None = None,
     use_weight_style: bool = True,
     orphan_edges: bool = True,
     suppress_warnings: bool = True,
@@ -590,7 +590,7 @@ def plot(
     Parameters
     ----------
     graph : object
-        AnnNet-like object with `vertices()`, `get_edge()`, `get_attr_edge()`, etc.
+        AnnNet-like object with `nodes()`, `get_edge()`, `get_attr_edge()`, etc.
     backend : {'auto', 'graphviz', 'pydot', 'matplotlib'} or None, optional
         Visualization backend to use. ``None`` uses AnnNet's configured
         plotting default. ``'auto'`` prefers Graphviz, then pydot, then
@@ -603,10 +603,10 @@ def plot(
         Whether to include weight and attribute labels on edges. Default is ``False``.
     edge_label_keys : list of str, optional
         Extra edge attribute keys to display if `show_edge_labels=True`.
-    show_vertex_labels : bool, optional
-        Whether to label vertices with IDs or attributes. Default is ``True``.
-    vertex_label_key : str, optional
-        Attribute key for vertex labels. If `None`, uses vertex IDs.
+    show_node_labels : bool, optional
+        Whether to label nodes with IDs or attributes. Default is ``True``.
+    node_label_key : str, optional
+        Attribute key for node labels. If `None`, uses node IDs.
     use_weight_style : bool, optional
         Whether to style edges based on weights. Default is ``True``.
     orphan_edges : bool, optional
@@ -640,11 +640,11 @@ def plot(
     if use_weight_style:
         custom_edge_attr = edge_style_from_weights(graph, layer=layer)
 
-    # vertex labels (set via custom_vertex_attr)
-    custom_vertex_attr: dict[str, dict[str, str]] | None = None
-    if show_vertex_labels:
-        vlabels = build_vertex_labels(graph, key=vertex_label_key)
-        custom_vertex_attr = {k: {'label': v} for k, v in vlabels.items()}
+    # node labels (set via custom_node_attr)
+    custom_node_attr: dict[str, dict[str, str]] | None = None
+    if show_node_labels:
+        vlabels = build_node_labels(graph, key=node_label_key)
+        custom_node_attr = {k: {'label': v} for k, v in vlabels.items()}
 
     if backend == 'graphviz':
         G = to_graphviz(
@@ -654,7 +654,7 @@ def plot(
             node_attr=kwargs.get('node_attr', {'fixedsize': 'true'}),
             edge_attr=kwargs.get('edge_attr'),
             custom_edge_attr=custom_edge_attr,
-            custom_vertex_attr=custom_vertex_attr,
+            custom_node_attr=custom_node_attr,
             edge_indexes=kwargs.get('edge_indexes'),
             orphan_edges=orphan_edges,
             suppress_warnings=suppress_warnings,
@@ -675,7 +675,7 @@ def plot(
                 node_attr=kwargs.get('node_attr', {'fixedsize': 'true'}),
                 edge_attr=kwargs.get('edge_attr'),
                 custom_edge_attr=custom_edge_attr,
-                custom_vertex_attr=custom_vertex_attr,
+                custom_node_attr=custom_node_attr,
                 edge_indexes=kwargs.get('edge_indexes'),
                 orphan_edges=orphan_edges,
                 suppress_warnings=suppress_warnings,
@@ -690,7 +690,7 @@ def plot(
             node_attr=kwargs.get('node_attr'),
             edge_attr=kwargs.get('edge_attr'),
             custom_edge_attr=custom_edge_attr,
-            custom_vertex_attr=custom_vertex_attr,
+            custom_node_attr=custom_node_attr,
             edge_indexes=kwargs.get('edge_indexes'),
             orphan_edges=orphan_edges,
         )
@@ -717,8 +717,8 @@ def plot(
             ax=kwargs.get('ax'),
             edge_indexes=kwargs.get('edge_indexes'),
             orphan_edges=orphan_edges,
-            show_vertex_labels=show_vertex_labels,
-            vertex_label_key=vertex_label_key,
+            show_node_labels=show_node_labels,
+            node_label_key=node_label_key,
             show_edge_labels=show_edge_labels,
             edge_label_keys=edge_label_keys,
             layer=layer,

@@ -10,7 +10,7 @@ stored on the edge.
 
 Boundary reactions are represented as one-sided (half) edges —
 the real species form the single populated endpoint set, with no placeholder
-sink/source vertex — and flagged with an ``is_boundary`` edge attribute.
+sink/source node — and flagged with an ``is_boundary`` edge attribute.
 """
 
 from __future__ import annotations
@@ -105,11 +105,11 @@ def _register_compartments(G, model, default_slice: str) -> None:
         G.slices.add(cid, **attrs)
 
 
-# ── species → vertices ────────────────────────────────────────────────────────
+# ── species → nodes ────────────────────────────────────────────────────────
 
 
 def _register_species(G, model, default_slice: str, layer: str | None = None) -> dict[str, str]:
-    """Add all species as vertices into their compartment slice.
+    """Add all species as nodes into their compartment slice.
 
     Returns a mapping sid -> compartment_id for later use by reactions.
     """
@@ -157,7 +157,7 @@ def _register_species(G, model, default_slice: str, layer: str | None = None) ->
         kw = {'slice': target_slice}
         if layer is not None:
             kw['layer'] = layer
-        G._add_vertices_bulk(items, **kw)
+        G._add_nodes_bulk(items, **kw)
 
     return sid_to_compartment
 
@@ -175,7 +175,7 @@ def _graph_from_sbml_model(
 ) -> AnnNet:
     """Build an AnnNet from an SBML model using only libSBML.
 
-    Vertices  : SBML species ids assigned to their compartment slice.
+    Nodes  : SBML species ids assigned to their compartment slice.
                 Boundary placeholders go into the default slice.
     Slices    : One AnnNet slice per SBML compartment (with metadata).
     Hyperedges: reactions — tail = reactants + modifiers, head = products.
@@ -191,7 +191,7 @@ def _graph_from_sbml_model(
     _register_compartments(G, model, slice)
     sid_to_compartment = _register_species(G, model, slice, layer=layer)
     # Boundary reactions are modelled as one-sided (half) hyperedges, so no
-    # placeholder sink/source vertices are created.
+    # placeholder sink/source nodes are created.
 
     hyperedges: list[dict] = []
     coeffs_map: dict[str, dict[str, float]] = {}
@@ -245,7 +245,7 @@ def _graph_from_sbml_model(
 
         # Boundary reactions keep one side empty (a single real endpoint set), so the
         # incidence column carries exactly the real species coefficients — no placeholder
-        # vertex, no phantom cross-species coupling through a shared sink/source in adjacency.
+        # node, no phantom cross-species coupling through a shared sink/source in adjacency.
         is_boundary = False
         boundary_kind = None
 

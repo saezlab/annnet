@@ -19,8 +19,8 @@ deprecation and no alias. Each removal below names what replaces it.
   materialized matrix. `G.idx` translates a coordinate a caller already holds,
   and `G.views.entity_kinds()` reads the kind of each entity.
 - **Every position in a lookup.** `get_edge` takes an id and raises on a column.
-  `get_vertex` takes an id too, and gives back a `VertexView`. The n-th node of
-  a sequence is `G.N[n]`.
+  `get_node` takes an id too, and gives back a `NodeView`. The n-th node of a
+  sequence is `G.N[n]`.
 - **`G.X()`**, which was a second name for `G.S`, the signed coefficient
   incidence. The named matrices are `G.A`, `G.B`, `G.H`, `G.S` and `G.L`.
 - **The count aliases**: `num_vertices`, `num_edges`, `num_supra_vertices`,
@@ -46,10 +46,23 @@ deprecation and no alias. Each removal below names what replaces it.
 - The PyTorch Geometric writer moved from `annnet.adapters.pyg_adapter` to
   `annnet.io.pyg`, with no alias at the old path.
 
+### Renamed
+
+- **The package says "node", everywhere and only.** `vertex` is gone from every
+  method, parameter, attribute, column name and document: `add_vertices` is
+  `add_nodes`, `remove_vertices` is `remove_nodes`, `vertices()` is `nodes()`,
+  `has_vertex` is `has_node`, `supra_vertices` is `supra_nodes`, and `vertex_id`
+  is `node_id` in every table the package hands back. Two words for one concept
+  was the largest of the faults this release fixes, not a reason to keep it.
+  `nv`, `ne` and `nv_supra` never carried the word and do not move.
+- The native format writes the new words. Its reader takes both, so an archive
+  written before this release still loads: four member names, two columns and
+  the entity kind each map the old spelling forward.
+
 ### Added
 
 - `G.N` and `G.E`, the node sequence and the edge sequence. A string key is an
   attribute column, an integer key is a position in that sequence, and `select`
   and `find` filter it.
-- `G.get_vertex(vertex_id)`, which gives a `VertexView`: the id, the kind of the
-  vertex, the layers it lives in, and its attributes.
+- `G.get_node(node_id)`, which gives a `NodeView`: the id, the kind of the node,
+  the layers it lives in, and its attributes.

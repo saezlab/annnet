@@ -27,21 +27,21 @@ from annnet.core.graph import AnnNet
 
 def _hyper_graph():
     G = AnnNet(directed=False)
-    G.add_vertices(['a', 'b', 'c', 'd'])
+    G.add_nodes(['a', 'b', 'c', 'd'])
     G.add_edges([{'src': {'a', 'b', 'c'}, 'edge_id': 'h1'}])
     return G
 
 
 def _binary_graph():
     G = AnnNet(directed=False)
-    G.add_vertices(['a', 'b', 'c', 'd'])
+    G.add_nodes(['a', 'b', 'c', 'd'])
     G.add_edges([('a', 'b'), ('b', 'c')])
     return G
 
 
 def _mixed_graph():
     G = AnnNet(directed=False)
-    G.add_vertices(['a', 'b', 'c', 'd'])
+    G.add_nodes(['a', 'b', 'c', 'd'])
     G.add_edges([('a', 'b')])
     G.add_edges([{'src': {'a', 'c', 'd'}, 'edge_id': 'h1'}])
     return G
@@ -58,8 +58,8 @@ def _remove_binary_edge(G):
     G.remove_edges([G.edges()[0]])
 
 
-def _remove_vertex(G):
-    G.remove_vertices(['a'])
+def _remove_node(G):
+    G.remove_nodes(['a'])
 
 
 def _add_binary_edge(G):
@@ -70,8 +70,8 @@ def _add_hyperedge(G):
     G.add_edges([{'src': {'b', 'c', 'd'}, 'edge_id': 'h_new'}])
 
 
-def _add_vertex(G):
-    G.add_vertices(['z'])
+def _add_node(G):
+    G.add_nodes(['z'])
     G.add_edges([('a', 'z')])
 
 
@@ -81,7 +81,7 @@ def _add_vertex(G):
 
 
 def _probe_neighbors(G):
-    return {v: sorted(G.neighbors(v)) for v in sorted(G.vertices())}
+    return {v: sorted(G.neighbors(v)) for v in sorted(G.nodes())}
 
 
 def _probe_csr(G):
@@ -116,15 +116,15 @@ CASES = {
     'hyper/remove_hyperedge': (_hyper_graph, _remove_hyperedge),
     'hyper/add_hyperedge': (_hyper_graph, _add_hyperedge),
     'hyper/add_binary': (_hyper_graph, _add_binary_edge),
-    'hyper/remove_vertex': (_hyper_graph, _remove_vertex),
+    'hyper/remove_node': (_hyper_graph, _remove_node),
     'binary/remove_edge': (_binary_graph, _remove_binary_edge),
     'binary/add_edge': (_binary_graph, _add_binary_edge),
-    'binary/add_vertex': (_binary_graph, _add_vertex),
-    'binary/remove_vertex': (_binary_graph, _remove_vertex),
+    'binary/add_node': (_binary_graph, _add_node),
+    'binary/remove_node': (_binary_graph, _remove_node),
     'mixed/remove_hyperedge': (_mixed_graph, _remove_hyperedge),
     'mixed/remove_binary': (_mixed_graph, _remove_binary_edge),
     'mixed/add_hyperedge': (_mixed_graph, _add_hyperedge),
-    'mixed/remove_vertex': (_mixed_graph, _remove_vertex),
+    'mixed/remove_node': (_mixed_graph, _remove_node),
 }
 
 
@@ -177,7 +177,7 @@ def test_hyperedge_removal_regression():
 def test_repeated_read_mutate_cycles():
     """Interleaved reads and mutations stay consistent across many rounds."""
     G = AnnNet(directed=False)
-    G.add_vertices(['a', 'b', 'c', 'd'])
+    G.add_nodes(['a', 'b', 'c', 'd'])
 
     for i in range(5):
         eid = f'h{i}'

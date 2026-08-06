@@ -22,7 +22,7 @@ NAMES = ('B', 'H', 'S', 'A', 'L')
 def _mixed() -> AnnNet:
     """Two binary edges, one hyperedge, and a node they all name."""
     G = AnnNet(directed=True)
-    G.add_vertices(['A', 'B', 'C', 'D'])
+    G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges('A', 'B', edge_id='e_ab')
     G.add_edges('B', 'C', edge_id='e_bc')
     G.add_edges([{'members': ['A', 'C', 'D'], 'edge_id': 'h1'}])

@@ -23,7 +23,7 @@ from importlib.metadata import (
 # eager-import cost. Runtime behaviour is unchanged.
 if TYPE_CHECKING:
     from annnet.core.graph import AnnNet
-    from annnet.core._records import EdgeType, EdgeView, VertexView
+    from annnet.core._records import EdgeType, EdgeView, NodeView
     from annnet.algorithms.traversal import Traversal
 
     Graph = AnnNet
@@ -51,7 +51,7 @@ _lazy_objects: dict[str, tuple[str, str]] = {
     'Graph': ('annnet.core.graph', 'AnnNet'),
     'EdgeType': ('annnet.core._records', 'EdgeType'),
     'EdgeView': ('annnet.core._records', 'EdgeView'),
-    'VertexView': ('annnet.core._records', 'VertexView'),
+    'NodeView': ('annnet.core._records', 'NodeView'),
     'Traversal': ('annnet.algorithms.traversal', 'Traversal'),
 }
 
