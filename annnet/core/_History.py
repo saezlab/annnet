@@ -122,11 +122,40 @@ class History:
         self._history.append(evt)
 
     @staticmethod
-    def _summarize_arg(v, _limit=32):
-        """Cheap log value: large collections are summarized, not serialized."""
-        if isinstance(v, (list, tuple, set, frozenset, dict)) and len(v) > _limit:
+    def _summarize_arg(v, _limit=32, _depth=1):
+        """Cheap log value: large collections are summarized, not serialized.
+
+        The walk matters as much as the test. A batch reaches a wrapped method
+        through ``*args`` or ``**kwargs``, so the value bound to the parameter
+        is a one-element tuple or a one-entry dict and the collection worth
+        summarizing is one step inside it. Testing only the outer value let a
+        bulk ``add_edges`` log a copy of every item it was given, which is the
+        serialization the summary exists to avoid.
+
+        One step is the whole of it: both wrappers hold the caller's own
+        arguments directly, so nothing a caller passes sits deeper. Only
+        ``list``, ``tuple`` and ``dict`` are walked — a set holds hashables, and
+        a summarized element need not be one.
+
+        A container with nothing to summarize is answered with itself. Every
+        single write logs one, and rebuilding it would cost an allocation per
+        call to arrive at the same value.
+        """
+        if not isinstance(v, (list, tuple, set, frozenset, dict)):
+            return v
+        if len(v) > _limit:
             return f'<{type(v).__name__}: {len(v)} items>'
-        return v
+        if not _depth or isinstance(v, (set, frozenset)):
+            return v
+        for entry in v.values() if isinstance(v, dict) else v:
+            if isinstance(entry, (list, tuple, set, frozenset, dict)) and len(entry) > _limit:
+                break
+        else:
+            return v
+        summarize = History._summarize_arg
+        if isinstance(v, dict):
+            return {k: summarize(x, _limit, _depth - 1) for k, x in v.items()}
+        return [summarize(x, _limit, _depth - 1) for x in v]
 
     def _log_mutation(self, name=None):
         def deco(fn):

@@ -113,6 +113,48 @@ class TestHistoryLogging(unittest.TestCase):
         G.history.enable(True)
 
 
+class TestArgumentSummary(unittest.TestCase):
+    """A logged call names the collections it was given; it does not copy them.
+
+    A batch reaches a wrapped method through ``*args`` or ``**kwargs``, so the
+    value bound to the parameter is a one-element tuple or a one-entry dict and
+    the batch is one step inside it. A summary that tests only the outer value
+    never reaches the batch, and the event then holds a second copy of every
+    item of a bulk write.
+    """
+
+    @staticmethod
+    def _last(G, op):
+        return [evt for evt in G.history() if evt['op'] == op][-1]
+
+    def test_a_bulk_batch_is_summarized_and_not_copied(self):
+        G = AnnNet(directed=True)
+        G.add_edges([{'source': f'n{i}', 'target': f'n{i + 1}'} for i in range(200)])
+        evt = self._last(G, 'add_edges')
+        self.assertEqual(evt['args'], ['<list: 200 items>'])
+        self.assertEqual(evt['result'], '<list: 200 items>')
+
+    def test_a_batch_named_by_keyword_is_summarized_too(self):
+        G = AnnNet(directed=True)
+        G.add_edges(edges=[{'source': f'n{i}', 'target': f'n{i + 1}'} for i in range(200)])
+        evt = self._last(G, 'add_edges')
+        self.assertEqual(evt['kwargs'], {'edges': '<list: 200 items>'})
+
+    def test_a_small_batch_is_still_logged_in_full(self):
+        G = AnnNet(directed=True)
+        G.add_edges([{'source': 'A', 'target': 'B'}])
+        evt = self._last(G, 'add_edges')
+        self.assertEqual(evt['args'], [[{'source': 'A', 'target': 'B'}]])
+
+    def test_a_single_edge_is_still_logged_in_full(self):
+        G = AnnNet(directed=True)
+        G.add_edges('A', 'B', edge_id='e1')
+        evt = self._last(G, 'add_edges')
+        self.assertEqual(evt['args'], ['A', 'B'])
+        self.assertEqual(evt['kwargs'], {'edge_id': 'e1'})
+        self.assertEqual(evt['result'], 'e1')
+
+
 class TestMark(unittest.TestCase):
     """mark() inserts a labelled event."""
 
