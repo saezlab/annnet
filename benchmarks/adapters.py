@@ -20,6 +20,7 @@ from .io_formats import build_graph
 
 
 def run(n_vertices: int = 2000, n_edges: int = 10000, samples: int = 5) -> list[dict]:
+    import annnet.io as aio
     import annnet.adapters as aad
 
     G = build_graph(n_vertices, n_edges)
@@ -45,11 +46,14 @@ def run(n_vertices: int = 2000, n_edges: int = 10000, samples: int = 5) -> list[
             rec['error'] = f'{type(e).__name__}: {e}'
         recs.append(rec)
 
-    def _export_only(name, to_fn, note):
+    def _export_only(name, resolve, note):
+        """Export-only adapter. ``resolve`` is called inside the guard, because a
+        writer for a backend that is not installed raises when it is looked up."""
         rec = {'adapter': name, 'n_edges': n_e, 'note': note, 'direction': 'export'}
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
+                to_fn = resolve()
                 to_fn(G)
                 rec['export'] = harness.time_oneshot(lambda: to_fn(G), samples=samples).as_dict()
         except (ImportError, RuntimeError) as e:
@@ -61,7 +65,7 @@ def run(n_vertices: int = 2000, n_edges: int = 10000, samples: int = 5) -> list[
     _rt('networkx', aad.to_nx, aad.from_nx, 'DiGraph + manifest')
     _rt('igraph', aad.to_igraph, aad.from_igraph, 'igraph.Graph + manifest')
     _rt('graphtool', aad.to_graphtool, aad.from_graphtool, 'gt.Graph + manifest')
-    _export_only('pyg', aad.to_pyg, 'PyG Data (tensor bundle)')
+    _export_only('pyg', lambda: aio.to_pyg, 'PyG Data (tensor bundle)')
     return recs
 
 
