@@ -179,7 +179,7 @@ def to_parquet(graph: AnnNet, path):
         return 1.0 if w is None else float(w)
 
     # vertices
-    v_attr_map = _build_attr_map(getattr(graph, 'vertex_attributes', None), 'vertex_id')
+    v_attr_map = _build_attr_map(getattr(graph, '_vertex_table', None), 'vertex_id')
     v_rows = []
     for v in graph.vertices():
         row = {'vertex_id': v}
@@ -191,7 +191,7 @@ def to_parquet(graph: AnnNet, path):
     dataframe_write_parquet(vertex_df, path / 'vertices.parquet')
 
     # edges
-    e_attr_map = _build_attr_map(getattr(graph, 'edge_attributes', None), 'edge_id')
+    e_attr_map = _build_attr_map(getattr(graph, '_edge_table', None), 'edge_id')
     e_rows = []
     for eid, info in _hyper_defs.items():
         S = set(info.get('head', info.get('members', [])))

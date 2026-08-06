@@ -105,20 +105,16 @@ def to_graphtool(
     ep_id = gtG.new_edge_property('string')
     ep_w = gtG.new_edge_property('double')
 
-    # Pre-load edge_attributes as a dict[eid -> dict] in one pass, instead of
+    # Pre-load _edge_table as a dict[eid -> dict] in one pass, instead of
     # a per-edge polars filter (the previous implementation called
-    # `G.edge_attributes.filter(...)` once per edge — catastrophic at scale).
+    # `G._edge_table.filter(...)` once per edge — catastrophic at scale).
     edge_attr_rows: dict[str, dict] = {}
     edge_attr_cols: list[str] = []
-    if (
-        hasattr(G, 'edge_attributes')
-        and G.edge_attributes is not None
-        and G.edge_attributes.height > 0
-    ):
-        ea_id_col = 'edge_id' if 'edge_id' in G.edge_attributes.columns else 'id'
+    if hasattr(G, '_edge_table') and G._edge_table is not None and G._edge_table.height > 0:
+        ea_id_col = 'edge_id' if 'edge_id' in G._edge_table.columns else 'id'
         skip_cols = {'edge_id', 'id', edge_id_property, weight_property}
-        edge_attr_cols = [c for c in G.edge_attributes.columns if c not in skip_cols]
-        for row in dataframe_to_rows(G.edge_attributes):
+        edge_attr_cols = [c for c in G._edge_table.columns if c not in skip_cols]
+        for row in dataframe_to_rows(G._edge_table):
             rid = row.get(ea_id_col)
             if rid is not None:
                 edge_attr_rows[str(rid)] = row
@@ -126,7 +122,7 @@ def to_graphtool(
     # Prepare typed edge properties (typed by first non-null sample)
     edge_props = {}
     for col in edge_attr_cols:
-        sample = G.edge_attributes[col].drop_nulls()
+        sample = G._edge_table[col].drop_nulls()
         if len(sample) > 0:
             first_val = sample[0]
             if isinstance(first_val, (int, bool)):
@@ -186,8 +182,8 @@ def to_graphtool(
 
     # 4) attribute tables as rows (DF [DataFrame] -> list[dict])
 
-    vert_rows = dataframe_to_rows(getattr(G, 'vertex_attributes', empty_dataframe({})))
-    edge_rows = dataframe_to_rows(getattr(G, 'edge_attributes', empty_dataframe({})))
+    vert_rows = dataframe_to_rows(getattr(G, '_vertex_table', empty_dataframe({})))
+    edge_rows = dataframe_to_rows(getattr(G, '_edge_table', empty_dataframe({})))
     slice_rows = dataframe_to_rows(getattr(G, 'slice_attributes', empty_dataframe({})))
     edge_slice_rows = dataframe_to_rows(getattr(G, 'edge_slice_attributes', empty_dataframe({})))
     layer_attr_rows = dataframe_to_rows(getattr(G, 'layer_attributes', empty_dataframe({})))
@@ -236,8 +232,8 @@ def to_graphtool(
         },
         'multilayer': multilayer_manifest,
         'tables': {
-            'vertex_attributes': vert_rows,
-            'edge_attributes': edge_rows,
+            '_vertex_table': vert_rows,
+            '_edge_table': edge_rows,
             'slice_attributes': slice_rows,
             'edge_slice_attributes': edge_slice_rows,
             'layer_attributes': layer_attr_rows,
@@ -322,7 +318,7 @@ def from_graphtool(
     vmeta = manifest.get('vertices', {})
     v_rows = vmeta.get('attributes', [])
     if v_rows:
-        G.vertex_attributes = _rows_to_df(v_rows)
+        G._vertex_table = _rows_to_df(v_rows)
     v_types = vmeta.get('types', {})
     if v_types:
         G._set_entity_kinds_by_id(v_types)
@@ -331,7 +327,7 @@ def from_graphtool(
     emeta = manifest.get('edges', {})
     e_rows = emeta.get('attributes', [])
     if e_rows:
-        G.edge_attributes = _rows_to_df(e_rows)
+        G._edge_table = _rows_to_df(e_rows)
 
     weights = emeta.get('weights', {})
 

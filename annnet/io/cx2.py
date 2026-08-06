@@ -248,8 +248,8 @@ def to_cx2(
         )
 
     # 1. Prepare Manifest (Lossless storage of complex features)
-    vert_rows = dataframe_to_rows(getattr(G, 'vertex_attributes', None))
-    edge_rows = dataframe_to_rows(getattr(G, 'edge_attributes', None))
+    vert_rows = dataframe_to_rows(getattr(G, '_vertex_table', None))
+    edge_rows = dataframe_to_rows(getattr(G, '_edge_table', None))
     slice_rows = dataframe_to_rows(getattr(G, 'slice_attributes', None))
     edge_slice_rows = dataframe_to_rows(getattr(G, 'edge_slice_attributes', None))
     layer_attr_rows = dataframe_to_rows(getattr(G, 'layer_attributes', None))
@@ -315,8 +315,8 @@ def to_cx2(
             serialize_edge_layers=serialize_edge_layers,
         ),
         'tables': {
-            'vertex_attributes': vert_rows,
-            'edge_attributes': edge_rows,
+            '_vertex_table': vert_rows,
+            '_edge_table': edge_rows,
             'slice_attributes': slice_rows,
             'edge_slice_attributes': edge_slice_rows,
             'layer_attributes': layer_attr_rows,
@@ -363,7 +363,7 @@ def to_cx2(
     current_node_id = 0
 
     # Pre-fetch attribute data for fast lookup
-    v_attrs_df = getattr(G, 'vertex_attributes', None)
+    v_attrs_df = getattr(G, '_vertex_table', None)
 
     # Identify which vertex columns are string vs numeric (for cleaning None)
     v_inferred_types = _infer_cx2_types(vert_rows, id_col='vertex_id')
@@ -377,7 +377,7 @@ def to_cx2(
     if v_attrs_df is not None and vert_rows:
         row_keys = set(vert_rows[0])
         id_col = 'vertex_id' if 'vertex_id' in row_keys else 'id'
-        for r in vert_rows:  # vert_rows is _df_to_rows(vertex_attributes)
+        for r in vert_rows:  # vert_rows is _df_to_rows(_vertex_table)
             key = r.get(id_col)
             if key is not None:
                 v_attrs_map[str(key)] = r
@@ -444,9 +444,9 @@ def to_cx2(
     # -- Edges --
     # Only binary edges between mapped vertices
     current_edge_id = 0
-    e_attrs_df = getattr(G, 'edge_attributes', None)
+    e_attrs_df = getattr(G, '_edge_table', None)
 
-    # string columns in edge_attributes (for None -> "")
+    # string columns in _edge_table (for None -> "")
     e_inferred_types = _infer_cx2_types(edge_rows, id_col='edge_id')
     e_string_cols = {col for col, dtype in e_inferred_types.items() if dtype == 'string'}
 
@@ -863,7 +863,7 @@ def from_cx2(
         vmeta = manifest.get('vertices', {})
         v_rows = _normalize_rows(vmeta.get('attributes', []))
         if v_rows:
-            G.vertex_attributes = _rows_to_df(v_rows)
+            G._vertex_table = _rows_to_df(v_rows)
         if vmeta.get('types'):
             kinds = {}
             for vid, kind in vmeta['types'].items():
@@ -876,10 +876,10 @@ def from_cx2(
         # --- Edges + hyperedges ---
         emeta = manifest.get('edges', {})
 
-        # edge_attributes
+        # _edge_table
         e_rows = _normalize_rows(emeta.get('attributes', []))
         if e_rows:
-            G.edge_attributes = _rows_to_df(e_rows)
+            G._edge_table = _rows_to_df(e_rows)
 
         # Reconstruct the graph structure from the manifest (the authoritative
         # source). Declare aspects first so multilayer supra-node coordinates
@@ -1019,7 +1019,7 @@ def from_cx2(
         vmap = {}
     else:
         vmap = {}
-        existing = dataframe_to_rows(getattr(G, 'vertex_attributes', None))
+        existing = dataframe_to_rows(getattr(G, '_vertex_table', None))
         for r in existing:
             vid = str(r.get('vertex_id', r.get('id')))
             vmap[vid] = dict(r)
@@ -1057,31 +1057,31 @@ def from_cx2(
         G._add_vertices_bulk(vertex_bulk_data)
 
     if _manifest_mode:
-        # Manifest already set the full vertex_attributes; the internal bulk
+        # Manifest already set the full _vertex_table; the internal bulk
         # insert has upserted any
         # new layout coords into it.  Just fix the column name if needed.
-        cols = set(dataframe_columns(G.vertex_attributes))
+        cols = set(dataframe_columns(G._vertex_table))
         if 'vertex_id' not in cols and 'id' in cols:
-            G.vertex_attributes = rename_dataframe_columns(G.vertex_attributes, {'id': 'vertex_id'})
+            G._vertex_table = rename_dataframe_columns(G._vertex_table, {'id': 'vertex_id'})
     else:
         # rebuild vertex table
         if vertex_bulk_data:
-            G.vertex_attributes = _rows_to_df(_normalize_rows(vertex_bulk_data))
+            G._vertex_table = _rows_to_df(_normalize_rows(vertex_bulk_data))
         else:
-            G.vertex_attributes = _rows_to_df([])
+            G._vertex_table = _rows_to_df([])
 
         # Normalise ID column name: prefer 'vertex_id' consistently
-        cols = set(dataframe_columns(G.vertex_attributes))
+        cols = set(dataframe_columns(G._vertex_table))
         if 'vertex_id' not in cols and 'id' in cols:
-            G.vertex_attributes = rename_dataframe_columns(G.vertex_attributes, {'id': 'vertex_id'})
+            G._vertex_table = rename_dataframe_columns(G._vertex_table, {'id': 'vertex_id'})
 
     # --- edges ---
-    # In manifest mode: edge_attributes is already set from the manifest — skip reading it back.
+    # In manifest mode: _edge_table is already set from the manifest — skip reading it back.
     if _manifest_mode:
         emap = {}
     else:
         emap = {}
-        existing = dataframe_to_rows(getattr(G, 'edge_attributes', None))
+        existing = dataframe_to_rows(getattr(G, '_edge_table', None))
         for r in existing:
             eid = str(r.get('edge_id', r.get('id')))
             emap[eid] = dict(r)
@@ -1125,7 +1125,7 @@ def from_cx2(
 
     if not _manifest_mode:
         enorm = _normalize_rows(list(emap.values()))
-        G.edge_attributes = _rows_to_df(enorm)
+        G._edge_table = _rows_to_df(enorm)
 
     # Attach Cytoscape style blob if we captured any
     if style_aspects:

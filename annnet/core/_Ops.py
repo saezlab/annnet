@@ -119,11 +119,11 @@ def _require_one_layer_registry(left, right) -> None:
 def _take_attributes(target, source, vertex_ids, edge_ids) -> None:
     """Copy the attributes of the named elements from one graph to another."""
     if vertex_ids:
-        rows = Operations._rows_attr_map(source, source.vertex_attributes, 'vertex_id', vertex_ids)
+        rows = Operations._rows_attr_map(source, source._vertex_table, 'vertex_id', vertex_ids)
         if rows:
             target.attrs.set_vertex_attrs_bulk(rows)
     if edge_ids:
-        rows = Operations._rows_attr_map(source, source.edge_attributes, 'edge_id', edge_ids)
+        rows = Operations._rows_attr_map(source, source._edge_table, 'edge_id', edge_ids)
         if rows:
             target.attrs.set_edge_attrs_bulk(rows)
 
@@ -257,12 +257,10 @@ class Operations:
             current=active_slice if active_slice is not None else self._default_slice,
         )
 
-        new.vertex_attributes = self._filter_attr_table(
-            self.vertex_attributes, 'vertex_id', ordered_vertices
+        new._vertex_table = self._filter_attr_table(
+            self._vertex_table, 'vertex_id', ordered_vertices
         )
-        new.edge_attributes = self._filter_attr_table(
-            self.edge_attributes, 'edge_id', ordered_edges
-        )
+        new._edge_table = self._filter_attr_table(self._edge_table, 'edge_id', ordered_edges)
         new.slice_attributes = self._filter_attr_table(
             self.slice_attributes, 'slice_id', list(new._slices.keys())
         )
@@ -340,7 +338,7 @@ class Operations:
                 aspects=new_aspects,
             )
             bare_vid_attrs = self._rows_attr_map(
-                self.vertex_attributes, 'vertex_id', {self._bare_vid(v) for v in V}
+                self._vertex_table, 'vertex_id', {self._bare_vid(v) for v in V}
             )
             for node in V:
                 if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
@@ -350,7 +348,7 @@ class Operations:
                 g.add_vertices(bare_vid, layer=layer_coord, **bare_vid_attrs.get(bare_vid, {}))
         else:
             g = G(directed=self.directed)
-            va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
+            va_lookup = self._rows_attr_map(self._vertex_table, 'vertex_id', V)
             v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
             g._add_vertices_bulk(v_rows, slice=g._default_slice)
 
@@ -421,7 +419,7 @@ class Operations:
             else:
                 hyper_payload.append(payload)
 
-        va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
+        va_lookup = self._rows_attr_map(self._vertex_table, 'vertex_id', V)
         v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
 
         G = self.__class__
@@ -722,7 +720,7 @@ class Operations:
         g.slices.add(slice_id, **slice_meta['attributes'])
         g.slices.active = slice_id
 
-        va_lookup = self._rows_attr_map(self.vertex_attributes, 'vertex_id', V)
+        va_lookup = self._rows_attr_map(self._vertex_table, 'vertex_id', V)
         if new_aspects is not None:
             by_id = _structure.entities_by_id(self)
             for vid in V:
@@ -739,7 +737,7 @@ class Operations:
             v_rows = [{'vertex_id': v, **va_lookup.get(v, {})} for v in V]
             g._add_vertices_bulk(v_rows, slice=slice_id)
 
-        e_attrs = self._rows_attr_map(self.edge_attributes, 'edge_id', E)
+        e_attrs = self._rows_attr_map(self._edge_table, 'edge_id', E)
         eff_w = {}
         if resolve_slice_weights:
             df = self.edge_slice_attributes
@@ -835,8 +833,8 @@ class Operations:
 
         new.slice_edge_weights = {lid: m.copy() for lid, m in self.slice_edge_weights.items()}
 
-        new.vertex_attributes = _share_or_clone_table(self.vertex_attributes)
-        new.edge_attributes = _share_or_clone_table(self.edge_attributes)
+        new._vertex_table = _share_or_clone_table(self._vertex_table)
+        new._edge_table = _share_or_clone_table(self._edge_table)
         new.slice_attributes = _share_or_clone_table(self.slice_attributes)
         new.edge_slice_attributes = _share_or_clone_table(self.edge_slice_attributes)
         new.layer_attributes = _share_or_clone_table(self.layer_attributes)
@@ -882,7 +880,7 @@ class Operations:
             )
         ) * 100
         df_bytes = 0
-        for df in (self.vertex_attributes, self.edge_attributes):
+        for df in (self._vertex_table, self._edge_table):
             if df is not None:
                 df_bytes += dataframe_memory_usage(df)
         return matrix_bytes + dict_bytes + df_bytes

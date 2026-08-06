@@ -128,12 +128,12 @@ def test_sif_helpers_and_manifest_without_file(tmp_path):
     graph.add_edges(src=['A', 'B'], edge_id='h1', directed=False, weight=4.0)
     graph._restore_supra_nodes({('A', ('layer',))})
 
-    assert sif._safe_vertex_attr_rows(SimpleNamespace(vertex_attributes=None)) == []
+    assert sif._safe_vertex_attr_rows(SimpleNamespace(_vertex_table=None)) == []
     assert (
         sif._get_edge_weight(SimpleNamespace(_edges={'bad': SimpleNamespace(weight='x')}), 'bad')
         == 1.0
     )
-    assert sif._build_edge_attr_map(SimpleNamespace(edge_attributes=None)) is None
+    assert sif._build_edge_attr_map(SimpleNamespace(_edge_table=None)) is None
 
     _none, manifest = sif.to_sif(graph, path=None, lossless=True)
     assert manifest['hyperedges']['h1']['members']

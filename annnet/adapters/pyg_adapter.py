@@ -169,8 +169,8 @@ def to_pyg(
     }
 
     # Build attribute lookup maps
-    vert_rows = dataframe_to_rows(getattr(graph, 'vertex_attributes', None))
-    edge_rows = dataframe_to_rows(getattr(graph, 'edge_attributes', None))
+    vert_rows = dataframe_to_rows(getattr(graph, '_vertex_table', None))
+    edge_rows = dataframe_to_rows(getattr(graph, '_edge_table', None))
 
     v_attrs_map: dict[str, dict] = {}
     if vert_rows:
@@ -242,7 +242,7 @@ def to_pyg(
     try:
         from .._support.dataframe_backend import dataframe_columns  # local to avoid hard dep
 
-        edge_attr_cols = set(dataframe_columns(graph.edge_attributes) or ())
+        edge_attr_cols = set(dataframe_columns(graph._edge_table) or ())
     except Exception:  # noqa: BLE001
         edge_attr_cols = set()
     has_stoich = '__source_attr' in edge_attr_cols or '__target_attr' in edge_attr_cols

@@ -103,7 +103,7 @@ def add_vertex(g, vertex_id, slice=None, layer=None, **attributes):
     g._ensure_vertex_row(vertex_id)
 
     if attributes:
-        g.vertex_attributes = g._upsert_row(g.vertex_attributes, vertex_id, attributes)
+        g._vertex_table = g._upsert_row(g._vertex_table, vertex_id, attributes)
 
     return vertex_id
 
@@ -869,7 +869,7 @@ def remove_orphan_node_layers(g, drop_keys):
     Unlike :func:`remove_vertices_bulk` (which drops every edge touching the bare
     vertex id, and the vertex-attribute row for that id), this removes only the
     given node-layer entity rows and compacts the incidence matrix. The vertex id
-    itself survives through its other node-layers, so ``vertex_attributes``,
+    itself survives through its other node-layers, so ``_vertex_table``,
     slice membership, and incident edges are all left untouched.
 
     Callers MUST guarantee every key in ``drop_keys`` is an orphan node-layer
@@ -1009,22 +1009,22 @@ def batch_add_vertices(g, vertices, layer=None, slice=None, default_attrs=None):
 
     # --- attribute table (Polars fast path) ---
     g._ensure_vertex_table()
-    if is_polars_dataframe(g.vertex_attributes):
+    if is_polars_dataframe(g._vertex_table):
         keys = {k for _, attrs in norm for k in attrs}
-        df = g.vertex_attributes
+        df = g._vertex_table
         if keys:
             df = g._ensure_attr_columns(df, dict.fromkeys(keys))
         if is_polars_dataframe(df):
             result = polars_upsert_vertices(df, norm)
             if result is not None:
-                g.vertex_attributes = result
+                g._vertex_table = result
                 return
 
     # --- generic fallback (pandas / pyarrow, or polars with non-string vids) ---
     # Non-string vids (e.g. multilayer supra-node tuples) live in the store only
     # and stay out of the obs table. The polars backend cannot represent tuples
     # in a String-typed vertex_id column anyway.
-    df2 = g.vertex_attributes
+    df2 = g._vertex_table
 
     rows = [
         {'vertex_id': vid, **{k: _sanitize(v) for k, v in attrs.items()}}
@@ -1034,7 +1034,7 @@ def batch_add_vertices(g, vertices, layer=None, slice=None, default_attrs=None):
     if rows:
         df2 = dataframe_upsert_rows(df2, rows, ('vertex_id',))
 
-    g.vertex_attributes = df2
+    g._vertex_table = df2
 
 
 def batch_add_edges(

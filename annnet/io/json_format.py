@@ -77,10 +77,10 @@ def to_json(
     Lossless vs your core (IDs, attrs, parallel, hyperedges, slices).
     """
     vertex_attrs = _attrs_by_id(
-        getattr(graph, 'vertex_attributes', None), 'vertex_id', public_only=public_only
+        getattr(graph, '_vertex_table', None), 'vertex_id', public_only=public_only
     )
     edge_attrs = _attrs_by_id(
-        getattr(graph, 'edge_attributes', None), 'edge_id', public_only=public_only
+        getattr(graph, '_edge_table', None), 'edge_id', public_only=public_only
     )
 
     # nodes
@@ -407,8 +407,8 @@ def write_ndjson(graph: AnnNet, dir_path):
     import json
 
     os.makedirs(dir_path, exist_ok=True)
-    vertex_attrs = _attrs_by_id(getattr(graph, 'vertex_attributes', None), 'vertex_id')
-    edge_attrs = _attrs_by_id(getattr(graph, 'edge_attributes', None), 'edge_id')
+    vertex_attrs = _attrs_by_id(getattr(graph, '_vertex_table', None), 'vertex_id')
+    edge_attrs = _attrs_by_id(getattr(graph, '_edge_table', None), 'edge_id')
 
     with open(f'{dir_path}/nodes.ndjson', 'w', encoding='utf-8') as f:
         for v in graph.vertices():

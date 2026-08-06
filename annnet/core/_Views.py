@@ -44,12 +44,14 @@ class GraphView:
 
         Notes
         -----
-        Uses `AnnNet.vertex_attributes` and filters by the view's vertex IDs.
+        Materialized from the node table of the graph and filtered by the
+        vertex ids of this view. It is a table for the caller, not the storage
+        of the graph.
         """
         vertex_ids = self.vertex_ids
         if vertex_ids is None:
-            return self._graph.vertex_attributes
-        return dataframe_filter_in(self._graph.vertex_attributes, 'vertex_id', vertex_ids)
+            return clone_dataframe(self._graph._vertex_table)
+        return dataframe_filter_in(self._graph._vertex_table, 'vertex_id', vertex_ids)
 
     @property
     def var(self):
@@ -61,12 +63,14 @@ class GraphView:
 
         Notes
         -----
-        Uses `AnnNet.edge_attributes` and filters by the view's edge IDs.
+        Materialized from the edge table of the graph and filtered by the edge
+        ids of this view. It is a table for the caller, not the storage of the
+        graph.
         """
         edge_ids = self.edge_ids
         if edge_ids is None:
-            return self._graph.edge_attributes
-        return dataframe_filter_in(self._graph.edge_attributes, 'edge_id', edge_ids)
+            return clone_dataframe(self._graph._edge_table)
+        return dataframe_filter_in(self._graph._edge_table, 'edge_id', edge_ids)
 
     @property
     def X(self):
@@ -317,8 +321,8 @@ class GraphView:
                 return dataframe_from_rows(rows)
             return empty_dataframe({id_col: 'text'}, backend=self._graph._annotations_backend)
 
-        subG.vertex_attributes = _id_only_table(subG.vertex_attributes, 'vertex_id')
-        subG.edge_attributes = _id_only_table(subG.edge_attributes, 'edge_id')
+        subG._vertex_table = _id_only_table(subG._vertex_table, 'vertex_id')
+        subG._edge_table = _id_only_table(subG._edge_table, 'edge_id')
         return subG
 
     def subview(self, vertices=None, edges=None, slices=None, predicate=None):
@@ -499,7 +503,7 @@ class ViewsClass:
                 tail.append(None)
                 members.append(None)
 
-        edge_attrs_map = self._rows_attr_map(self.edge_attributes, 'edge_id')
+        edge_attrs_map = self._rows_attr_map(self._edge_table, 'edge_id')
         slice_attrs_map = {}
         if slice is not None:
             for row in dataframe_to_rows(self.edge_slice_attributes):
@@ -559,7 +563,7 @@ class ViewsClass:
         DataFrame-like
             Columns include `vertex_id` plus pure attributes.
         """
-        df = self.vertex_attributes
+        df = self._vertex_table
         if df is None or 'vertex_id' not in dataframe_columns(df):
             out = empty_dataframe({'vertex_id': 'text'})
         else:
@@ -881,7 +885,7 @@ class NodeSequence(ElementSequence):
         return tuple(self._graph.vertices())
 
     def _attribute_map(self, name: str) -> dict | None:
-        return self._column_of_table(self._graph.vertex_attributes, 'vertex_id', name)
+        return self._column_of_table(self._graph._vertex_table, 'vertex_id', name)
 
     def _write_column(self, name: str, values: dict) -> None:
         self._graph.attrs.set_vertex_attrs_bulk(
@@ -912,7 +916,7 @@ class EdgeSequence(ElementSequence):
         return _MISSING
 
     def _attribute_map(self, name: str) -> dict | None:
-        return self._column_of_table(self._graph.edge_attributes, 'edge_id', name)
+        return self._column_of_table(self._graph._edge_table, 'edge_id', name)
 
     def _write_column(self, name: str, values: dict) -> None:
         self._graph.attrs.set_edge_attrs_bulk(

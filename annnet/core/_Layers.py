@@ -425,8 +425,8 @@ class LayerAccessor:
             flat.slice_edge_weights = {
                 lid: dict(weights) for lid, weights in self.slice_edge_weights.items()
             }
-            flat.vertex_attributes = _clone_table(self.vertex_attributes)
-            flat.edge_attributes = _clone_table(self.edge_attributes)
+            flat._vertex_table = _clone_table(self._vertex_table)
+            flat._edge_table = _clone_table(self._edge_table)
             flat.slice_attributes = _clone_table(self.slice_attributes)
             flat.edge_slice_attributes = _clone_table(self.edge_slice_attributes)
 
@@ -454,8 +454,8 @@ class LayerAccessor:
                 current=flat._current_slice,
             )
             self.slice_edge_weights = flat.slice_edge_weights
-            self.vertex_attributes = flat.vertex_attributes
-            self.edge_attributes = flat.edge_attributes
+            self._vertex_table = flat._vertex_table
+            self._edge_table = flat._edge_table
             self.slice_attributes = flat.slice_attributes
             self.edge_slice_attributes = flat.edge_slice_attributes
             self.layer_attributes = flat.layer_attributes
@@ -1380,7 +1380,7 @@ class LayerAccessor:
             aspects=new_aspects,
         )
 
-        va_lookup = Operations._rows_attr_map(G_src, G_src.vertex_attributes, 'vertex_id', V)
+        va_lookup = Operations._rows_attr_map(G_src, G_src._vertex_table, 'vertex_id', V)
         v_rows = [{'vertex_id': vid, **va_lookup.get(vid, {})} for vid in V]
         if v_rows:
             g._add_vertices_bulk(v_rows, layer=aa, slice=g._default_slice)
@@ -1403,7 +1403,7 @@ class LayerAccessor:
                         extra_endpoints.add(ep)
             extra_bare = {bare for (bare, _) in extra_endpoints}
             extra_attrs = Operations._rows_attr_map(
-                G_src, G_src.vertex_attributes, 'vertex_id', extra_bare
+                G_src, G_src._vertex_table, 'vertex_id', extra_bare
             )
             # Group by layer coord so each call is one bulk insert.
             by_coord: dict = {}

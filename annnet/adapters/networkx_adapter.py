@@ -113,7 +113,7 @@ def _export_binary_graph(
     G = nx.MultiDiGraph() if directed else nx.MultiGraph()
 
     # BATCH READ VERTEX ATTRIBUTES
-    v_rows = _rows_like(graph.vertex_attributes)
+    v_rows = _rows_like(graph._vertex_table)
     v_attrs_map = {}
     for row in v_rows:
         vid = row.get('vertex_id')
@@ -129,7 +129,7 @@ def _export_binary_graph(
             v_attrs_map[vid] = attrs
 
     # BATCH READ EDGE ATTRIBUTES
-    e_rows = _rows_like(graph.edge_attributes)
+    e_rows = _rows_like(graph._edge_table)
     e_attrs_map = {}
     for row in e_rows:
         eid = row.get('edge_id')
@@ -288,8 +288,8 @@ def to_nx(
                 pass
 
     # HOIST LOOKUPS
-    vertex_attributes_df = graph.vertex_attributes
-    edge_attributes_df = graph.edge_attributes
+    vertex_attributes_df = graph._vertex_table
+    edge_attributes_df = graph._edge_table
 
     # Vertex attributes - BATCH READ
     vertex_attrs = {}

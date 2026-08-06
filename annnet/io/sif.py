@@ -38,14 +38,14 @@ def _split_sif_line(line: str, delimiter: str | None) -> list[str]:
 
 
 def _safe_vertex_attr_rows(graph: AnnNet):
-    va = getattr(graph, 'vertex_attributes', None)
+    va = getattr(graph, '_vertex_table', None)
     if va is None:
         return []
     return dataframe_to_rows(va)
 
 
 def _get_all_edge_attrs(graph: AnnNet, edge_id: str):
-    ea = getattr(graph, 'edge_attributes', None)
+    ea = getattr(graph, '_edge_table', None)
     if ea is not None:
         for row in dataframe_to_rows(ea):
             if row.get('edge_id') == edge_id:
@@ -77,7 +77,7 @@ def _get_edge_directed(graph: AnnNet, edge_id: str) -> bool:
 
 
 def _build_edge_attr_map(graph: AnnNet):
-    ea = getattr(graph, 'edge_attributes', None)
+    ea = getattr(graph, '_edge_table', None)
     if ea is None:
         return None
     rows = dataframe_to_rows(ea)
@@ -177,7 +177,7 @@ def to_sif(
                     continue
 
                 # When edge_attr_map is empty, the fallback `_get_all_edge_attrs`
-                # used to scan the entire edge_attributes dataframe per edge —
+                # used to scan the entire _edge_table dataframe per edge —
                 # quadratic and pointless (an empty map means nothing to find).
                 all_attrs = edge_attr_map.get(eid, {})
                 rel = all_attrs.get(relation_attr, default_relation)

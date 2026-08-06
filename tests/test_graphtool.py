@@ -164,8 +164,8 @@ class TestGraphToolAdapter(unittest.TestCase):
         gtG, manifest = to_graphtool(g)
         g2 = from_graphtool(gtG, manifest)
 
-        if hasattr(g2, 'vertex_attributes') and g2.vertex_attributes is not None:
-            v_attrs = g2.vertex_attributes
+        if hasattr(g2, '_vertex_table') and g2._vertex_table is not None:
+            v_attrs = g2._vertex_table
             if hasattr(v_attrs, 'to_dicts'):
                 rows = list(v_attrs.to_dicts())
                 vertex_ids = [r.get('vertex_id') for r in rows]
@@ -176,8 +176,8 @@ class TestGraphToolAdapter(unittest.TestCase):
         gtG, manifest = to_graphtool(g)
         g2 = from_graphtool(gtG, manifest)
 
-        if hasattr(g2, 'edge_attributes') and g2.edge_attributes is not None:
-            e_attrs = g2.edge_attributes
+        if hasattr(g2, '_edge_table') and g2._edge_table is not None:
+            e_attrs = g2._edge_table
             self.assertGreater(len(e_attrs), 0)
 
     def test_without_manifest_loses_hyperedges(self):

@@ -29,7 +29,7 @@ class TestGraphBasics(unittest.TestCase):
         self.g.add_vertices('v2')  # no attrs
         self.assertEqual(self.g.nv, 2)
         # row exists even if no attrs were passed
-        self.assertIn('v2', self.g.vertex_attributes.select('vertex_id').to_series().to_list())
+        self.assertIn('v2', self.g._vertex_table.select('vertex_id').to_series().to_list())
         # attribute accessible
         self.assertEqual(self.g.attrs.get_attr_vertex('v1', 'color'), 'red')
         self.assertEqual(self.g.attrs.get_attr_vertex('v1', 'value'), 3)
@@ -338,10 +338,10 @@ class TestGraphBasics(unittest.TestCase):
         # create mismatch intentionally
         self.g.add_vertices('a1')
         self.g.add_edges('a1', 'a2', weight=1.0)
-        # add stray row in vertex_attributes (keep schema identical: only 'vertex_id')
-        self.g.vertex_attributes = pl.concat(
+        # add stray row in _vertex_table (keep schema identical: only 'vertex_id')
+        self.g._vertex_table = pl.concat(
             [
-                self.g.vertex_attributes,
+                self.g._vertex_table,
                 pl.DataFrame({'vertex_id': ['ghost']}),
             ],
             how='vertical',

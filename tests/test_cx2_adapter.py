@@ -32,7 +32,7 @@ class TestCX2Adapter(unittest.TestCase):
         self.G.add_edges(['n1', 'n2', 'n3'], edge_id='he1', weight=0.5)
 
         # Vertex attributes
-        self.G.vertex_attributes = pl.DataFrame(
+        self.G._vertex_table = pl.DataFrame(
             {
                 'vertex_id': ['n1', 'n2', 'n3'],
                 'score': [10, 20, 30],
@@ -42,7 +42,7 @@ class TestCX2Adapter(unittest.TestCase):
         )
 
         # Edge attributes
-        self.G.edge_attributes = pl.DataFrame(
+        self.G._edge_table = pl.DataFrame(
             {
                 'edge_id': ['e1'],
                 'confidence': [0.99],
@@ -145,7 +145,7 @@ class TestCX2Adapter(unittest.TestCase):
         self.assertAlmostEqual(S.edge_shape(G_new, 'e1').weight, 1.5)
 
         # Check Attributes (Polars)
-        df_new = G_new.vertex_attributes
+        df_new = G_new._vertex_table
 
         # This works reliably across Polars versions
         score_n1 = df_new.filter(pl.col('vertex_id') == 'n1').get_column('score').item()
@@ -172,7 +172,7 @@ class TestCX2Adapter(unittest.TestCase):
         self.assertIn('EXT_NODE', G_ext.views.entity_kinds())
 
         # Attributes should be loaded
-        df = G_ext.vertex_attributes
+        df = G_ext._vertex_table
         self.assertFalse(df.is_empty())
         self.assertEqual(
             df.filter(pl.col('vertex_id') == 'EXT_NODE')['importance'].item(),

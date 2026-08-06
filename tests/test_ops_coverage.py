@@ -513,7 +513,7 @@ def test_row_attrs_cache_helper_direct() -> None:
     directly across miss/hit/empty paths."""
     G = AnnNet(directed=True)
     G.add_vertices(['A', 'B'], kind='gene')
-    df = G.vertex_attributes
+    df = G._vertex_table
 
     # Miss-then-hit on the same key (exercises the cache populate + cache
     # hit branches).

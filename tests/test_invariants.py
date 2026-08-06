@@ -458,7 +458,7 @@ def test_rule_9_reports_a_node_row_for_a_node_that_does_not_exist():
     G = build_case('binary_directed')
     rows = table_rows(G.obs)
     rows.append({**rows[0], 'vertex_id': 'ghost'})
-    G.vertex_attributes = build_dataframe_from_rows(rows)
+    G._vertex_table = build_dataframe_from_rows(rows)
     assert_reports(G, 'ghost')
 
 
@@ -466,7 +466,7 @@ def test_rule_9_reports_an_edge_row_for_an_edge_that_does_not_exist():
     G = build_case('binary_directed')
     rows = table_rows(G.var)
     rows.append({**rows[0], 'edge_id': 'ghost'})
-    G.edge_attributes = build_dataframe_from_rows(rows)
+    G._edge_table = build_dataframe_from_rows(rows)
     assert_reports(G, 'ghost')
 
 

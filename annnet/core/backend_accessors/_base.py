@@ -65,7 +65,7 @@ class _BackendAccessorBase:
         try:
             if getattr(self._G, 'default_label_field', None):
                 return self._G.default_label_field
-            va = getattr(self._G, 'vertex_attributes', None)
+            va = getattr(self._G, '_vertex_table', None)
             cols = dataframe_columns(va) if va is not None else []
             for col in self.VERTEX_LABEL_FIELDS:
                 if col in cols:
@@ -76,7 +76,7 @@ class _BackendAccessorBase:
 
     def _vertex_id_col(self) -> str:
         try:
-            va = self._G.vertex_attributes
+            va = self._G._vertex_table
             cols = dataframe_columns(va)
             for key in ('vertex_id', 'id', 'vid'):
                 if key in cols:
@@ -87,7 +87,7 @@ class _BackendAccessorBase:
 
     def _lookup_vertex_id_by_label(self, label_field: str, value):
         try:
-            va = self._G.vertex_attributes
+            va = self._G._vertex_table
             if va is None or label_field not in dataframe_columns(va):
                 return None
             id_col = self._vertex_id_col()

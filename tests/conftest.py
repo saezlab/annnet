@@ -164,14 +164,14 @@ def assert_vertex_attrs_equal(G1, G2, vertex_id, ignore_none=True):
 def assert_edge_attrs_equal(G1, G2, edge_id, ignore_none=True, ignore_private=False):
     """Assert edge attributes are equal."""
     try:
-        rows1 = G1.edge_attributes.filter(G1.edge_attributes['edge_id'] == edge_id).to_dicts()
+        rows1 = G1._edge_table.filter(G1._edge_table['edge_id'] == edge_id).to_dicts()
         attrs1 = dict(rows1[0]) if rows1 else {}
         attrs1.pop('edge_id', None)
     except Exception:
         attrs1 = {}
 
     try:
-        rows2 = G2.edge_attributes.filter(G2.edge_attributes['edge_id'] == edge_id).to_dicts()
+        rows2 = G2._edge_table.filter(G2._edge_table['edge_id'] == edge_id).to_dicts()
         attrs2 = dict(rows2[0]) if rows2 else {}
         attrs2.pop('edge_id', None)
     except Exception:

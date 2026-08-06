@@ -110,7 +110,7 @@ class AttributesClass:
                         f'Composite key collision on {self._vertex_key_fields}: {new_key} owned by {owner}'
                     )
 
-        self.vertex_attributes = self._upsert_row(self.vertex_attributes, vertex_id, clean)
+        self._vertex_table = self._upsert_row(self._vertex_table, vertex_id, clean)
 
         watched = self._variables_watched_by_vertices()
         if watched and any(k in watched for k in clean):
@@ -169,7 +169,7 @@ class AttributesClass:
                             f'Composite key collision on {self._vertex_key_fields}: {new_key} owned by {owner}'
                         )
 
-        self.vertex_attributes = self._upsert_rows_bulk(self.vertex_attributes, clean_updates)
+        self._vertex_table = self._upsert_rows_bulk(self._vertex_table, clean_updates)
 
         watched = self._variables_watched_by_vertices()
         if watched:
@@ -208,7 +208,7 @@ class AttributesClass:
         -------
         Any
         """
-        df = self.vertex_attributes
+        df = self._vertex_table
         if df is None or key not in dataframe_columns(df):
             return default
         rows = dataframe_to_rows(dataframe_filter_eq(df, 'vertex_id', vertex_id))
@@ -237,7 +237,7 @@ class AttributesClass:
         _check_reserved_collision(self._EDGE_RESERVED, attrs, kind='edge')
         clean = dict(attrs)
         if clean:
-            self.edge_attributes = self._upsert_row(self.edge_attributes, edge_id, clean)
+            self._edge_table = self._upsert_row(self._edge_table, edge_id, clean)
         pol = self.edge_direction_policy.get(edge_id)
         if pol and pol.get('scope', 'edge') == 'edge' and pol['var'] in clean:
             self._apply_flexible_direction(edge_id)
@@ -264,7 +264,7 @@ class AttributesClass:
         if not clean_updates:
             return
 
-        self.edge_attributes = self._upsert_rows_bulk(self.edge_attributes, clean_updates)
+        self._edge_table = self._upsert_rows_bulk(self._edge_table, clean_updates)
 
         policy_map = self.edge_direction_policy
         affected_edges = set()
@@ -291,7 +291,7 @@ class AttributesClass:
         -------
         Any
         """
-        df = self.edge_attributes
+        df = self._edge_table
         if df is None or key not in dataframe_columns(df):
             return default
         rows = dataframe_to_rows(dataframe_filter_eq(df, 'edge_id', edge_id))
@@ -486,7 +486,7 @@ class AttributesClass:
             ref.id for ref in _structure.iter_entities(self) if ref.kind == _structure.NODE
         }
         edge_ids = {ref.id for ref in _structure.iter_edges(self)}
-        na, ea, ela = self.vertex_attributes, self.edge_attributes, self.edge_slice_attributes
+        na, ea, ela = self._vertex_table, self._edge_table, self.edge_slice_attributes
 
         if na is not None and 'vertex_id' in dataframe_columns(na):
             vertex_attr_ids = {
@@ -729,7 +729,7 @@ class AttributesClass:
             Attribute dictionary for that edge. Empty if not found.
         """
         eid = _structure.edge_at_column(self, edge) if isinstance(edge, int) else edge
-        rows = dataframe_to_rows(dataframe_filter_eq(self.edge_attributes, 'edge_id', eid))
+        rows = dataframe_to_rows(dataframe_filter_eq(self._edge_table, 'edge_id', eid))
         if not rows:
             return {}
         return {k: v for k, v in rows[0].items() if k != 'edge_id' and v is not None}
@@ -747,7 +747,7 @@ class AttributesClass:
         dict
             Attribute dictionary for that vertex. Empty if not found.
         """
-        rows = dataframe_to_rows(dataframe_filter_eq(self.vertex_attributes, 'vertex_id', vertex))
+        rows = dataframe_to_rows(dataframe_filter_eq(self._vertex_table, 'vertex_id', vertex))
         if not rows:
             return {}
         return {k: v for k, v in rows[0].items() if k != 'vertex_id' and v is not None}
@@ -765,7 +765,7 @@ class AttributesClass:
         dict[str, dict]
             Mapping of `edge_id` to attribute dictionaries.
         """
-        rows = dataframe_to_rows(self.edge_attributes)
+        rows = dataframe_to_rows(self._edge_table)
         if indexes is not None:
             wanted = {_structure.edge_at_column(self, i) for i in indexes}
             rows = [row for row in rows if row.get('edge_id') in wanted]
@@ -784,7 +784,7 @@ class AttributesClass:
         dict[str, dict]
             Mapping of `vertex_id` to attribute dictionaries.
         """
-        rows = dataframe_to_rows(self.vertex_attributes)
+        rows = dataframe_to_rows(self._vertex_table)
         if vertices is not None:
             wanted = set(vertices)
             rows = [row for row in rows if row.get('vertex_id') in wanted]
@@ -805,7 +805,7 @@ class AttributesClass:
         dict[str, Any]
             Mapping of `edge_id` to attribute values.
         """
-        df = self.edge_attributes
+        df = self._edge_table
         if df is None:
             return {}
         rows = dataframe_to_rows(df)
@@ -832,7 +832,7 @@ class AttributesClass:
         list[str]
             Edge IDs where the attribute equals `value`.
         """
-        df = self.edge_attributes
+        df = self._edge_table
         if df is None or key not in dataframe_columns(df):
             return []
         rows = dataframe_to_rows(df)

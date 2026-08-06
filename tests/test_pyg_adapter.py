@@ -468,8 +468,8 @@ class TestPyGAdapter(unittest.TestCase):
         """Should work with Polars DataFrames."""
         g = _BUILD_GRAPH()
 
-        # Ensure vertex_attributes is Polars
-        if not isinstance(g.vertex_attributes, pl.DataFrame):
+        # Ensure _vertex_table is Polars
+        if not isinstance(g._vertex_table, pl.DataFrame):
             # This test assumes AnnNet uses Polars by default
             # If not, convert
             pass
@@ -484,8 +484,8 @@ class TestPyGAdapter(unittest.TestCase):
         g = _BUILD_GRAPH()
 
         # Convert to Pandas if needed
-        if HAS_POLARS and isinstance(g.vertex_attributes, pl.DataFrame):
-            g.vertex_attributes = g.vertex_attributes.to_pandas()
+        if HAS_POLARS and isinstance(g._vertex_table, pl.DataFrame):
+            g._vertex_table = g._vertex_table.to_pandas()
 
         data = to_pyg(g, node_features={'protein': ['weight', 'active']}, hyperedge_mode='skip')
 

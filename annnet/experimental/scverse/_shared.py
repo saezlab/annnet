@@ -170,7 +170,7 @@ def _attr_map(
 def build_obs_dataframe(graph, *, include_private: bool) -> pd.DataFrame:
     """Materialize AnnNet vertex entities into an AnnData obs dataframe."""
     vertex_attrs = _attr_map(
-        graph_table_rows(graph.vertex_attributes), 'vertex_id', include_private=include_private
+        graph_table_rows(graph._vertex_table), 'vertex_id', include_private=include_private
     )
     rows: list[dict[str, Any]] = []
     index: list[str] = []
@@ -196,7 +196,7 @@ def _single_endpoint(side):
 def build_var_dataframe(graph, *, include_private: bool) -> pd.DataFrame:
     """Materialize AnnNet structural edges into an AnnData var dataframe."""
     edge_attrs = _attr_map(
-        graph_table_rows(graph.edge_attributes), 'edge_id', include_private=include_private
+        graph_table_rows(graph._edge_table), 'edge_id', include_private=include_private
     )
     rows: list[dict[str, Any]] = []
     index: list[str] = []
@@ -255,8 +255,8 @@ def build_annnet_manifest(graph) -> dict[str, Any]:
         'directed': graph.directed,
         'active_slice': graph.slices.active,
         'graph_uns': copy_graph_uns(graph.uns),
-        'vertex_attrs': graph_table_rows(graph.vertex_attributes),
-        'edge_attrs': graph_table_rows(graph.edge_attributes),
+        'vertex_attrs': graph_table_rows(graph._vertex_table),
+        'edge_attrs': graph_table_rows(graph._edge_table),
         'slice_attrs': graph_table_rows(graph.slice_attributes),
         'edge_slice_attrs': graph_table_rows(graph.edge_slice_attributes),
         'slices': slices_section,

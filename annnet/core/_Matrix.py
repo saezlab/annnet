@@ -703,7 +703,7 @@ class IndexMapping:
     # ``add_vertices``/``add_edges`` must guarantee a row per entity in obs/var
     # (the anndata symmetry). Appending one row to a columnar (Polars) table per
     # call is O(n) -> O(n^2). Instead we buffer new id-only rows and flush them in
-    # one batch when the table is read (via the vertex_attributes/edge_attributes
+    # one batch when the table is read (via the _vertex_table/_edge_table
     # property getters on AnnNet). Membership stays O(1) via a maintained id-set.
     #
     # A removal is buffered the same way and for the same reason. Filtering a
@@ -715,7 +715,7 @@ class IndexMapping:
     def _ensure_vertex_table(self) -> None:
         df = self._vertex_attributes
         if df is None or 'vertex_id' not in dataframe_columns(df):
-            self.vertex_attributes = empty_dataframe({'vertex_id': 'text'})
+            self._vertex_table = empty_dataframe({'vertex_id': 'text'})
 
     def _vertex_id_set(self):
         ids = self._built_vertex_id_set()

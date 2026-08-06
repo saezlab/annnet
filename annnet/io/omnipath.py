@@ -143,9 +143,9 @@ def from_omnipath(
         - Vertices: one per unique gene symbol encountered as source or target.
         - Edges: one per interaction row, with incidence matrix weights encoding
           direction (+w source, −w target for directed; +w both for undirected).
-        - ``edge_attributes``: dataframe-backed table with one row per edge and one column
+        - ``_edge_table``: dataframe-backed table with one row per edge and one column
           per entry in ``edge_attr_cols``.
-        - ``vertex_attributes``: dataframe-backed table with one row per vertex and one column
+        - ``_vertex_table``: dataframe-backed table with one row per vertex and one column
           per ``(source:label)`` annotation pair from the requested resources.
 
     Notes

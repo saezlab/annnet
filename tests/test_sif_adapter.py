@@ -50,9 +50,7 @@ class TestSIFAdapter:
             default_relation='unknown',
         )
         G2 = from_sif(tmpdir_fixture / 'net.sif', relation_attr='interaction_type')
-        attrs = G2.edge_attributes.filter(
-            G2.edge_attributes['edge_id'].is_in(list(G2.E))
-        ).to_dicts()
+        attrs = G2._edge_table.filter(G2._edge_table['edge_id'].is_in(list(G2.E))).to_dicts()
         assert any(a.get('interaction_type') == 'phosphorylation' for a in attrs)
 
     def test_mixed_directedness(self, tmpdir_fixture):

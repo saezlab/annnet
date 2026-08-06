@@ -555,8 +555,8 @@ def _write_structure(
 def _write_tables(graph, path: Path, compression: str):
     path.mkdir(parents=True, exist_ok=True)
 
-    dataframe_write_parquet(graph.vertex_attributes, path / 'vertex_attributes.parquet')
-    dataframe_write_parquet(graph.edge_attributes, path / 'edge_attributes.parquet')
+    dataframe_write_parquet(graph._vertex_table, path / '_vertex_table.parquet')
+    dataframe_write_parquet(graph._edge_table, path / '_edge_table.parquet')
     dataframe_write_parquet(graph.slice_attributes, path / 'slice_attributes.parquet')
     dataframe_write_parquet(graph.edge_slice_attributes, path / 'edge_slice_attributes.parquet')
 
@@ -1250,8 +1250,8 @@ def _recover_legacy_coeffs(graph, csc) -> None:
 
 def _load_tables(graph, path: Path):
     """Load annotation tables with the configured dataframe backend."""
-    graph.vertex_attributes = dataframe_read_parquet(path / 'vertex_attributes.parquet')
-    graph.edge_attributes = dataframe_read_parquet(path / 'edge_attributes.parquet')
+    graph._vertex_table = dataframe_read_parquet(path / '_vertex_table.parquet')
+    graph._edge_table = dataframe_read_parquet(path / '_edge_table.parquet')
     graph.slice_attributes = dataframe_read_parquet(path / 'slice_attributes.parquet')
     graph.edge_slice_attributes = dataframe_read_parquet(path / 'edge_slice_attributes.parquet')
 

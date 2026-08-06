@@ -170,8 +170,8 @@ def graph_with_every_store() -> AnnNet:
 def attribute_snapshot(graph: AnnNet) -> dict:
     """Read back every attribute store by name."""
     return {
-        'vertex_attributes': table_rows(graph.vertex_attributes),
-        'edge_attributes': table_rows(graph.edge_attributes),
+        'node_attributes': table_rows(graph.obs),
+        'edge_attributes': table_rows(graph.var),
         'slice_attributes': table_rows(graph.slice_attributes),
         'edge_slice_attributes': table_rows(graph.edge_slice_attributes),
         'layer_attributes': table_rows(graph.layer_attributes),

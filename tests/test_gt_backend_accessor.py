@@ -117,7 +117,7 @@ class TestGTBackendAccessor(unittest.TestCase):
         eid = G.add_edges('s', 't')
 
         # Add capacity as edge attribute
-        G.edge_attributes = pl.DataFrame({'edge_id': [eid], 'capacity': [5.0]})
+        G._edge_table = pl.DataFrame({'edge_id': [eid], 'capacity': [5.0]})
 
         g = G.gt.backend()
         cap = g.ep['capacity']

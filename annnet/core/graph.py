@@ -21,6 +21,7 @@ from ._Annotation import AttributesClass, AttributesAccessor
 from ._stored_kinds import STORED_EDGE_KIND
 from ..algorithms.traversal import Traversal
 from .._support.dataframe_backend import (
+    clone_dataframe,
     empty_dataframe,
     dataframe_height,
     dataframe_columns,
@@ -515,8 +516,8 @@ class AnnNet(
 
         # 1) If user provided tables, keep them (we’ll wrap with Narwhals in ops)
         if annotations is not None:
-            self.vertex_attributes = annotations.get('vertex_attributes')
-            self.edge_attributes = annotations.get('edge_attributes')
+            self._vertex_table = annotations.get('_vertex_table')
+            self._edge_table = annotations.get('_edge_table')
             self.slice_attributes = annotations.get('slice_attributes')
             self.edge_slice_attributes = annotations.get('edge_slice_attributes')
             self.layer_attributes = annotations.get('layer_attributes')
@@ -524,8 +525,8 @@ class AnnNet(
 
         # 2) Otherwise, create empty tables with the centrally selected backend.
         backend = self._annotations_backend
-        self.vertex_attributes = empty_dataframe({'vertex_id': 'text'}, backend=backend)
-        self.edge_attributes = empty_dataframe({'edge_id': 'text'}, backend=backend)
+        self._vertex_table = empty_dataframe({'vertex_id': 'text'}, backend=backend)
+        self._edge_table = empty_dataframe({'edge_id': 'text'}, backend=backend)
         self.slice_attributes = empty_dataframe({'slice_id': 'text'}, backend=backend)
         self.edge_slice_attributes = empty_dataframe(
             {'slice_id': 'text', 'edge_id': 'text', 'weight': 'float'},
@@ -553,14 +554,14 @@ class AnnNet(
             store.directed = value
 
     @property
-    def vertex_attributes(self):
+    def _vertex_table(self):
         """Vertex (obs) attribute table; flushes buffered row writes on read."""
         if self._pending_vertex_ids or self._pending_vertex_drops:
             self._flush_vertex_rows()
         return self._vertex_attributes
 
-    @vertex_attributes.setter
-    def vertex_attributes(self, value):
+    @_vertex_table.setter
+    def _vertex_table(self, value):
         """Replace the vertex attribute table and clear buffered row state."""
         self._vertex_attributes = value
         self._pending_vertex_ids = {}
@@ -569,14 +570,14 @@ class AnnNet(
         self._vertex_attr_df_id = None
 
     @property
-    def edge_attributes(self):
+    def _edge_table(self):
         """Edge (var) attribute table; flushes buffered row writes on read."""
         if self._pending_edge_ids or self._pending_edge_drops:
             self._flush_edge_rows()
         return self._edge_attributes
 
-    @edge_attributes.setter
-    def edge_attributes(self, value):
+    @_edge_table.setter
+    def _edge_table(self, value):
         """Replace the edge attribute table and clear buffered row state."""
         self._edge_attributes = value
         self._pending_edge_ids = {}
@@ -622,11 +623,11 @@ class AnnNet(
                 return []
             return cols
 
-        obs_cols = _user_cols(self.vertex_attributes, 'vertex_id')
+        obs_cols = _user_cols(self._vertex_table, 'vertex_id')
         if obs_cols:
             lines.append(f'    obs: {obs_cols!r}')
 
-        var_cols = _user_cols(self.edge_attributes, 'edge_id')
+        var_cols = _user_cols(self._edge_table, 'edge_id')
         if var_cols:
             lines.append(f'    var: {var_cols!r}')
 
@@ -2198,42 +2199,44 @@ class AnnNet(
 
     @property
     def obs(self) -> Any:
-        """Notebook-friendly vertex attribute table.
+        """The node attribute table, materialized on each read.
 
         Returns
         -------
         DataFrame-like
+            One row per node, with the id column first.
 
         Notes
         -----
-        This is the quickest way to inspect vertex annotations in a notebook.
-        It returns the underlying vertex-attribute table unchanged.
+        This is a table built for the caller and not the storage of the graph,
+        so writing to it changes nothing. Write through :attr:`N` for a whole
+        column, or through :attr:`attrs` for one value.
+
+        A whole table is the expensive way to read one column. ``G.N["kind"]``
+        is the cheap one.
 
         Examples
         --------
         >>> G = AnnNet()
         >>> G.add_vertices([{'vertex_id': 'A', 'kind': 'gene'}])
         >>> G.obs
-        >>> G.views.vertices()
-
-        Use :attr:`obs` when you want the raw vertex table directly. Use
-        :attr:`views` when you want an explicit namespace for materialized
-        tables.
         """
-        return self.vertex_attributes
+        return clone_dataframe(self._vertex_table)
 
     @property
     def var(self) -> Any:
-        """Notebook-friendly edge attribute table.
+        """The edge attribute table, materialized on each read.
 
         Returns
         -------
         DataFrame-like
+            One row per edge, with the id column first.
 
         Notes
         -----
-        This is the direct edge-annotation table. It is often the most useful
-        object to display in a notebook after edge insertion or IO.
+        This is a table built for the caller and not the storage of the graph,
+        so writing to it changes nothing. Write through :attr:`E` for a whole
+        column, or through :attr:`attrs` for one value.
 
         Examples
         --------
@@ -2241,9 +2244,8 @@ class AnnNet(
         >>> G.add_vertices(['A', 'B'])
         >>> G.add_edges([{'source': 'A', 'target': 'B', 'edge_id': 'e1'}])
         >>> G.var
-        >>> G.views.edges()
         """
-        return self.edge_attributes
+        return clone_dataframe(self._edge_table)
 
     @property
     def uns(self) -> dict[str, Any]:
@@ -2787,7 +2789,7 @@ class AnnNet(
         self._vertex_key_fields = tuple(str(f) for f in fields)
         self._vertex_key_index.clear()
 
-        df = self.vertex_attributes
+        df = self._vertex_table
         if df is None or dataframe_height(df) == 0:
             return
 

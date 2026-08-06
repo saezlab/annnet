@@ -162,12 +162,12 @@ def to_dataframes(
     backend = getattr(graph, '_annotations_backend', 'auto')
     vertex_attrs = {
         row.get('vertex_id'): row
-        for row in dataframe_to_rows(graph.vertex_attributes)
+        for row in dataframe_to_rows(graph._vertex_table)
         if row.get('vertex_id') is not None
     }
     edge_attrs = {
         row.get('edge_id'): row
-        for row in dataframe_to_rows(graph.edge_attributes)
+        for row in dataframe_to_rows(graph._edge_table)
         if row.get('edge_id') is not None
     }
 

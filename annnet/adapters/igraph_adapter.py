@@ -124,7 +124,7 @@ def _export_binary_graph(
     G.vs['name'] = vertices
 
     # Attach vertex attributes (works for both vertices and edge-entities)
-    vtab = getattr(graph, 'vertex_attributes', None)
+    vtab = getattr(graph, '_vertex_table', None)
     # Pre-scan to a dict for O(1) lookup
     vattr_map = {}
     if vtab is not None:
@@ -165,7 +165,7 @@ def _export_binary_graph(
 
     # Add edges (binary & vertex-edge). Hyperedges: skip or expand
     eattr_map = {}
-    for row in _rows_like(getattr(graph, 'edge_attributes', None)):
+    for row in _rows_like(getattr(graph, '_edge_table', None)):
         eid = row.get('edge_id')
         if eid is not None:
             d = dict(row)
@@ -314,7 +314,7 @@ def to_igraph(
     # -------------- collect vertex/edge attrs for manifest --------------
     _raw_vertex_attrs = {
         row['vertex_id']: {k: v for k, v in row.items() if k != 'vertex_id'}
-        for row in _rows_like(getattr(graph, 'vertex_attributes', None))
+        for row in _rows_like(getattr(graph, '_vertex_table', None))
         if row.get('vertex_id') is not None
     }
     vertex_attrs = {
@@ -330,7 +330,7 @@ def to_igraph(
 
     _raw_edge_attrs = {
         row['edge_id']: {k: v for k, v in row.items() if k != 'edge_id'}
-        for row in _rows_like(getattr(graph, 'edge_attributes', None))
+        for row in _rows_like(getattr(graph, '_edge_table', None))
         if row.get('edge_id') is not None
     }
 

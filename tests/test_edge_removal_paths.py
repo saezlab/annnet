@@ -37,7 +37,7 @@ def _state(G):
     return {
         'edges': sorted(G.edges()),
         'vertices': sorted(G.vertices()),
-        'edge_rows': sorted(r['edge_id'] for r in G.edge_attributes.to_dicts()),
+        'edge_rows': sorted(r['edge_id'] for r in G._edge_table.to_dicts()),
         'edge_slice_rows': sorted(
             (r['slice_id'], r['edge_id']) for r in G.edge_slice_attributes.to_dicts()
         ),
@@ -85,7 +85,7 @@ def test_a_removal_recorded_before_the_id_set_is_built_survives_the_build():
     G._edge_attr_ids = None
     G.remove_edge('e1')
     G.add_edges('A', 'C', edge_id='e5')
-    ids = sorted(r['edge_id'] for r in G.edge_attributes.to_dicts())
+    ids = sorted(r['edge_id'] for r in G._edge_table.to_dicts())
     assert ids == ['e2', 'e3', 'e4', 'e5']
 
 

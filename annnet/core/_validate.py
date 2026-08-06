@@ -57,8 +57,8 @@ def _check_table_levels(g, problems) -> None:
     entity_ids = {ref.id for ref in S.iter_entities(g)}
     edge_ids = {ref.id for ref in S.iter_edges(g, include_placeholders=True)}
     for label, table, key_column, known in (
-        ('obs', g.vertex_attributes, 'vertex_id', entity_ids),
-        ('var', g.edge_attributes, 'edge_id', edge_ids),
+        ('obs', g._vertex_table, 'vertex_id', entity_ids),
+        ('var', g._edge_table, 'edge_id', edge_ids),
     ):
         if table is None:
             continue
