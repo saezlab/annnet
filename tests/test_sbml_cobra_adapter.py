@@ -32,10 +32,10 @@ class TestSBMLAdapter(unittest.TestCase):
         G = _graph_from_stoich(S, mets, rxns, graph=G, preserve_stoichiometry=True)
 
         # Vertices
-        self.assertGreaterEqual(G.num_vertices, 3)
+        self.assertGreaterEqual(G.ncount(), 3)
 
         # Edges present
-        self.assertEqual(G.num_edges, 2)
+        self.assertEqual(G.ecount(), 2)
         self.assertIn('R1', G.edge_to_idx)
         self.assertIn('R2', G.edge_to_idx)
 
@@ -80,7 +80,7 @@ class TestSBMLAdapter(unittest.TestCase):
         model.add_reactions([R1, R2])
 
         G = from_cobra_model(model, graph=AnnNet(directed=True))
-        self.assertEqual(G.num_edges, 2)
+        self.assertEqual(G.ecount(), 2)
         self.assertIn('R1', G.edge_to_idx)
 
     def test_boundary_reactions_are_one_sided_half_edges(self):

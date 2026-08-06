@@ -9,7 +9,7 @@ import numpy as np
 
 from . import _build, _state, _derive, _mutate, _identity, _validate, _structure
 from ._Ops import Operations, OperationsAccessor
-from ._Views import GraphView, ViewsClass, ViewsAccessor
+from ._Views import EdgeSequence, GraphView, NodeSequence, ViewsClass, ViewsAccessor
 from ._Layers import LayerAccessor
 from ._Matrix import CacheManager, IndexManager, IndexMapping, MatrixNamespace
 from ._Slices import SliceManager
@@ -149,6 +149,45 @@ class _BlockedLegacyAttribute:
         )
 
 
+def _is_endpoint_pair(item) -> bool:
+    """Return True when a value names two endpoints of one edge.
+
+    A two-element tuple is either a pair of endpoints or one ``(id, layer)``
+    entity key. A layer coordinate is itself a tuple, and an endpoint id is not,
+    so the second element says which of the two this is.
+    """
+    return (
+        isinstance(item, tuple)
+        and len(item) == 2
+        and all(isinstance(part, str) for part in item)
+    )
+
+
+def _element_operand(other):
+    """Classify the right operand of ``+=`` or ``-=``.
+
+    Returns the pair ``(kind, items)``, where ``kind`` is ``'nodes'`` or
+    ``'edges'``, or ``(None, None)`` when the operand names neither. A single
+    element is a collection of one, so both arrive here as a list.
+    """
+    if isinstance(other, str):
+        return 'nodes', [other]
+    if isinstance(other, tuple):
+        return ('edges', [other]) if _is_endpoint_pair(other) else (None, None)
+    if isinstance(other, dict):
+        return 'edges', [other]
+    if isinstance(other, (list, set, frozenset)):
+        items = list(other)
+        if not items:
+            return 'nodes', items
+        first = items[0]
+        if isinstance(first, str):
+            return 'nodes', items
+        if isinstance(first, (tuple, dict)):
+            return 'edges', items
+    return None, None
+
+
 class AnnNet(
     Operations,
     History,
@@ -213,18 +252,15 @@ class AnnNet(
         'edges',
         'degree',
         'incident_edges',
-        'num_vertices',
-        'num_edges',
-        'num_supra_vertices',
+        'ncount',
+        'ecount',
         'nv',
         'ne',
         'nv_supra',
-        'number_of_vertices',
-        'number_of_edges',
         'shape',
         'supra_shape',
         'supra_vertices',
-        'V',
+        'N',
         'E',
         'obs',
         'var',
@@ -572,7 +608,7 @@ class AnnNet(
     def __repr__(self) -> str:
         """Anndata-style multi-line summary."""
         lines = [
-            f'AnnNet object with n_vertices × n_edges = {self.num_vertices} × {self.ne}',
+            f'AnnNet object with n_vertices × n_edges = {self.nv} × {self.ne}',
             f'    directed: {self.directed}',
         ]
 
@@ -606,15 +642,23 @@ class AnnNet(
         return '\n'.join(lines)
 
     def __len__(self) -> int:
-        """Number of unique vertices (NetworkX convention)."""
-        return self.num_vertices
+        """Number of nodes, the same count as :meth:`ncount`."""
+        return self.ncount()
 
     def __iter__(self) -> Iterator[str]:
         """Iterate over vertex IDs (NetworkX convention)."""
         return iter(self.vertices())
 
     def __contains__(self, item) -> bool:
-        """Membership test on vertex IDs. ``edge in G`` is not supported."""
+        """Membership test. A string is a node and a pair is an edge.
+
+        A pair of endpoints asks whether an edge joins them. A ``(id, layer)``
+        key asks about one node on one layer, which is why the second element
+        decides which of the two a pair is.
+        """
+        if _is_endpoint_pair(item):
+            found, _edge_ids = self.has_edge(item[0], item[1])
+            return bool(found)
         try:
             ekey = self._resolve_entity_key(item)
         except (KeyError, TypeError, ValueError):
@@ -622,6 +666,77 @@ class AnnNet(
         if not _structure.has_entity(self, ekey):
             return False
         return _structure.entity_ref(self, ekey).kind == _structure.NODE
+
+    def __bool__(self) -> bool:
+        """True when the graph holds any node."""
+        return self.ncount() > 0
+
+    # ── Operators ─────────────────────────────────────────────────────────────
+    #
+    # The type of the right operand decides what an operator does, and nothing
+    # else. A string is one node, a tuple is one edge, a list holds many of
+    # either, and a graph runs set algebra over the two element sets.
+
+    def __iadd__(self, other):
+        """Add nodes or edges. ``G += "A"`` and ``G += ("A", "B")``."""
+        kind, items = _element_operand(other)
+        if kind is None:
+            return NotImplemented
+        if kind == 'nodes':
+            self.add_vertices(items)
+        else:
+            self.add_edges(items)
+        return self
+
+    def __isub__(self, other):
+        """Remove nodes or edges. ``G -= "A"`` and ``G -= ("A", "B")``."""
+        kind, items = _element_operand(other)
+        if kind is None:
+            return NotImplemented
+        if kind == 'nodes':
+            self.remove_vertices(items)
+        else:
+            self.remove_edges([self._edge_id_of_pair(item) for item in items])
+        return self
+
+    def _edge_id_of_pair(self, item):
+        """Return the id of the edge a ``(source, target)`` pair names."""
+        if isinstance(item, str):
+            return item
+        found, edge_ids = self.has_edge(item[0], item[1])
+        if not found:
+            raise KeyError(f'no edge joins {item[0]!r} and {item[1]!r}')
+        return edge_ids[0]
+
+    def __or__(self, other):
+        """Union of two graphs. The left operand wins where the two disagree."""
+        if not isinstance(other, AnnNet):
+            return NotImplemented
+        return self.ops.union(other)
+
+    def __ior__(self, other):
+        """Merge another graph into this one."""
+        if not isinstance(other, AnnNet):
+            return NotImplemented
+        return self.ops.merge(other)
+
+    def __and__(self, other):
+        """Intersection of two graphs."""
+        if not isinstance(other, AnnNet):
+            return NotImplemented
+        return self.ops.intersection(other)
+
+    def __sub__(self, other):
+        """Difference of two graphs. Use ``-=`` to remove one element."""
+        if not isinstance(other, AnnNet):
+            return NotImplemented
+        return self.ops.difference(other)
+
+    def __xor__(self, other):
+        """Symmetric difference of two graphs."""
+        if not isinstance(other, AnnNet):
+            return NotImplemented
+        return self.ops.symmetric_difference(other)
 
     def _placeholder_layer_coord(self, *args, **kwargs):
         return _identity.placeholder_layer_coord(self, *args, **kwargs)
@@ -1649,7 +1764,7 @@ class AnnNet(
         Notes
         -----
         This is a slice-membership count, not a storage count. For graph
-        storage counts, use :attr:`num_vertices` and :attr:`num_edges`.
+        storage counts, use :meth:`ncount` and :meth:`ecount`.
         """
         if kind not in {'vertices', 'edges', 'entities'}:
             raise ValueError("kind must be one of {'vertices', 'edges', 'entities'}")
@@ -1662,48 +1777,6 @@ class AnnNet(
         return len(members)
 
     # ── Backward-compat thin wrappers ─────────────────────────────────────────
-
-    def number_of_vertices(self) -> int:
-        """Return the number of vertices.
-
-        Returns
-        -------
-        int
-            Number of stored vertex entities.
-
-        See Also
-        --------
-        nv : Property alias for the same count.
-        num_vertices : Descriptive property alias for the same count.
-        """
-        return self.nv
-
-    def number_of_edges(self) -> int:
-        """Return the number of edges.
-
-        Returns
-        -------
-        int
-            Number of structural edges with incidence columns.
-
-        See Also
-        --------
-        ne : Property alias for the same count.
-        num_edges : Descriptive property alias for the same count.
-        """
-        return self.ne
-
-    def global_vertex_count(self) -> int:
-        """Unique vertices across all slices. Prefer ``global_count('vertices')``."""
-        return self.global_count('vertices')
-
-    def global_entity_count(self) -> int:
-        """Unique entities across all slices. Prefer ``global_count('entities')``."""
-        return self.global_count('entities')
-
-    def global_edge_count(self) -> int:
-        """Unique edges across all slices. Prefer ``global_count('edges')``."""
-        return self.global_count('edges')
 
     def in_edges(self, vertices):
         """Incoming edges. Prefer ``incident_edges(direction='in')``."""
@@ -1810,55 +1883,47 @@ class AnnNet(
         """
         return _structure.edge_count(self)
 
-    @property
-    def num_vertices(self) -> int:
-        """Number of unique vertices.
+    def ncount(self, *, supra: bool = False) -> int:
+        """Number of nodes.
+
+        Parameters
+        ----------
+        supra : bool, optional
+            Count supra-nodes instead of nodes. A supra-node is one node on one
+            layer coordinate, so a flat graph gives the same answer either way.
 
         Returns
         -------
         int
-            Same value as :attr:`nv`. Use :attr:`num_supra_vertices` for the
-            supra-incidence row count.
+            Node count, or supra-node count when ``supra`` is set.
         """
-        return self.nv
+        return self.nv_supra if supra else self.nv
 
-    @property
-    def num_supra_vertices(self) -> int:
-        """Number of supra-nodes (rows of the supra-incidence matrix).
-
-        Returns
-        -------
-        int
-            Same value as :attr:`nv_supra`.
-        """
-        return self.nv_supra
-
-    @property
-    def num_edges(self) -> int:
-        """Number of structural edges.
+    def ecount(self) -> int:
+        """Number of edges.
 
         Returns
         -------
         int
-            Same value as :attr:`ne`.
+            Count of structural edges.
         """
         return self.ne
 
     @property
     def shape(self) -> tuple[int, int]:
-        """Graph shape as ``(num_vertices, num_edges)``.
+        """Graph shape as ``(nv, ne)``.
 
         Returns
         -------
         tuple[int, int]
-            Unique vertex count and edge count. Use :attr:`supra_shape` for
+            Node count and edge count. Use :attr:`supra_shape` for
             ``(nv_supra, ne)``.
         """
-        return (self.num_vertices, self.ne)
+        return (self.nv, self.ne)
 
     @property
     def supra_shape(self) -> tuple[int, int]:
-        """Supra-matrix shape as ``(nv_supra, num_edges)``.
+        """Supra-matrix shape as ``(nv_supra, ne)``.
 
         Returns
         -------
@@ -1947,26 +2012,43 @@ class AnnNet(
         return self._current_key_of_vertex(vertex_id)
 
     @property
-    def V(self):
-        """All vertices as an immutable tuple.
+    def N(self):
+        """The node sequence.
 
         Returns
         -------
-        tuple[str, ...]
-            Vertex IDs in graph iteration order.
+        NodeSequence
+            The nodes in graph order. Iterating it yields ids, a string key
+            reads or writes one attribute column, an integer key gives the node
+            at that position, and ``select`` and ``find`` filter it.
+
+        Examples
+        --------
+        >>> list(G.N)
+        >>> G.N['kind']
+        >>> G.N['kind'] = values
+        >>> G.N.find(id='A')
         """
-        return tuple(self.vertices())
+        return NodeSequence(self)
 
     @property
     def E(self):
-        """All edges as an immutable tuple.
+        """The edge sequence.
 
         Returns
         -------
-        tuple[str, ...]
-            Edge identifiers in graph iteration order.
+        EdgeSequence
+            The edges in graph order, with the same keys as :attr:`N`. The
+            direction, the weight, and the kind of an edge read like a column,
+            so a filter over them needs no attribute.
+
+        Examples
+        --------
+        >>> list(G.E)
+        >>> G.E['weight']
+        >>> G.E.select(directed=True)
         """
-        return tuple(self.edges())
+        return EdgeSequence(self)
 
     # Lazy proxies
     ## Lazy NetworkX proxy

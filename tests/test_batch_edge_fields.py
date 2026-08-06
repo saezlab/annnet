@@ -170,4 +170,4 @@ def test_a_multilayer_endpoint_keeps_the_layer_it_names():
     view = graph.get_edge('edge_0')
     assert sorted(view.source) == [('A', ('healthy',))]
     assert sorted(view.target) == [('B', ('treated',))]
-    assert graph.num_supra_vertices == 2
+    assert graph.ncount(supra=True) == 2

@@ -1,7 +1,7 @@
 """Vertex-count semantics: unique vertices vs supra-nodes.
 
-``nv`` / ``num_vertices`` / ``shape`` / ``vertices()`` count UNIQUE vertices
-(deduplicated across layers). ``nv_supra`` / ``num_supra_vertices`` /
+``nv`` / ``ncount()`` / ``shape`` / ``vertices()`` count UNIQUE vertices
+(deduplicated across layers). ``nv_supra`` / ``ncount(supra=True)`` /
 ``supra_shape`` / ``supra_vertices()`` count SUPRA-NODES (one per
 ``(vertex_id, layer_coord)`` row of the supra-incidence matrix).
 """
@@ -25,7 +25,7 @@ def _build_multilayer(n_vertices: int = 2, n_layers: int = 3) -> AnnNet:
 def test_nv_counts_unique_vertices_in_multilayer():
     G = _build_multilayer(n_vertices=2, n_layers=3)
     assert G.nv == 2
-    assert G.num_vertices == 2
+    assert G.ncount() == 2
     assert len(G.vertices()) == 2
     assert set(G.vertices()) == {'v0', 'v1'}
 
@@ -35,14 +35,14 @@ def test_nv_supra_counts_supra_nodes_in_multilayer():
     # 2 vertices × 3 layers + the placeholder ('_',) carry-over from the
     # initial flat add_vertices call (still indexed as supra-nodes).
     assert G.nv_supra >= 2 * 3
-    assert G.num_supra_vertices == G.nv_supra
+    assert G.ncount(supra=True) == G.nv_supra
     assert len(G.supra_vertices()) == G.nv_supra
 
 
 def test_shape_uses_unique_vertices_supra_shape_uses_supra_nodes():
     G = _build_multilayer(n_vertices=2, n_layers=3)
     G.add_edges([('v0', 'v1')])
-    assert G.shape == (G.num_vertices, G.ne)
+    assert G.shape == (G.ncount(), G.ne)
     assert G.supra_shape == (G.nv_supra, G.ne)
     assert G.shape != G.supra_shape  # multilayer: V ≠ S
 

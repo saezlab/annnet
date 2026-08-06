@@ -103,6 +103,54 @@ def _share_or_clone_table(df):
     return None if df is None else clone_dataframe(df)
 
 
+def _require_one_layer_registry(left, right) -> None:
+    """Refuse set algebra between two graphs that place their nodes differently.
+
+    A layer coordinate is part of the identity of a node, so two graphs that
+    declare different aspects do not name the same nodes even when the bare ids
+    match. There is no answer to give, rather than a costly one.
+    """
+    if left._aspects != right._aspects:
+        raise ValueError(
+            f'set algebra needs one layer registry, got {left._aspects!r} and '
+            f'{right._aspects!r}'
+        )
+
+
+def _take_attributes(target, source, vertex_ids, edge_ids) -> None:
+    """Copy the attributes of the named elements from one graph to another."""
+    if vertex_ids:
+        rows = Operations._rows_attr_map(source, source.vertex_attributes, 'vertex_id', vertex_ids)
+        if rows:
+            target.attrs.set_vertex_attrs_bulk(rows)
+    if edge_ids:
+        rows = Operations._rows_attr_map(source, source.edge_attributes, 'edge_id', edge_ids)
+        if rows:
+            target.attrs.set_edge_attrs_bulk(rows)
+
+
+def _take_slices(target, source) -> None:
+    """Add the slice memberships of one graph to another, keeping the target's.
+
+    A slice both graphs declare keeps the attributes it has in the target, and
+    takes the members it has in the source. A slice only the source declares
+    arrives whole.
+    """
+    for slice_id, record in source._slices.items():
+        held = target._slices.get(slice_id)
+        if held is None:
+            target._slices[slice_id] = {
+                'vertices': set(record['vertices']),
+                'edges': set(record['edges']),
+                'attributes': dict(record['attributes']),
+            }
+            continue
+        held['vertices'].update(record['vertices'])
+        held['edges'].update(record['edges'])
+        for key, value in record['attributes'].items():
+            held['attributes'].setdefault(key, value)
+
+
 class Operations:
     """Topology materialization and graph-copy operations (mixed into AnnNet)."""
 
@@ -494,6 +542,87 @@ class Operations:
 
         return Operations.subgraph(Operations.edge_subgraph(self, kept_edges), set(V))
 
+    # ── Set algebra between two graphs ────────────────────────────────────────
+
+    def merge(self, other) -> AnnNet:
+        """Take every element of ``other`` that this graph does not hold.
+
+        This is the in-place union, and it is what ``G |= H`` runs. The graph on
+        the left is the answer wherever the two disagree: an element both graphs
+        hold keeps the attributes it has here, and only an element this graph
+        does not hold arrives with the attributes of ``other``.
+
+        Parameters
+        ----------
+        other : AnnNet
+            The graph to take from. It is not changed.
+
+        Returns
+        -------
+        AnnNet
+            This graph.
+        """
+        _require_one_layer_registry(self, other)
+
+        entities, edges = _structure.definitions_of(self)
+        their_entities, their_edges = _structure.definitions_of(other)
+
+        known_keys = {ref.key for ref in entities}
+        new_entities = [ref for ref in their_entities if ref.key not in known_keys]
+        known_edges = {edge.id for edge in edges}
+        new_edges = [edge for edge in their_edges if edge.id not in known_edges]
+
+        if new_entities or new_edges:
+            _build.install_structure(
+                self, definitions=(entities + new_entities, edges + new_edges)
+            )
+
+        _take_attributes(self, other, {ref.key[0] for ref in new_entities}, {e.id for e in new_edges})
+        _take_slices(self, other)
+        for key, value in other.graph_attributes.items():
+            self.graph_attributes.setdefault(key, value)
+        return self
+
+    def union(self, other) -> AnnNet:
+        """Return a graph holding every element of this graph and of ``other``.
+
+        Where the two disagree about one element, this graph is the answer. See
+        :meth:`merge`, which is the same operation without the copy.
+        """
+        return Operations.merge(Operations.copy(self), other)
+
+    def intersection(self, other) -> AnnNet:
+        """Return a graph holding the elements that both graphs hold.
+
+        An edge survives only when every node it names does, so an edge both
+        graphs hold is dropped when one of its endpoints is not shared.
+        """
+        _require_one_layer_registry(self, other)
+        return Operations.extract_subgraph(
+            self,
+            vertices=set(self.vertices()) & set(other.vertices()),
+            edges=set(_structure.edge_ids(self)) & set(_structure.edge_ids(other)),
+        )
+
+    def difference(self, other) -> AnnNet:
+        """Return a graph holding the elements ``other`` does not hold.
+
+        An edge survives only when every node it names does, so an edge that
+        keeps its own id loses its place when an endpoint goes.
+        """
+        _require_one_layer_registry(self, other)
+        return Operations.extract_subgraph(
+            self,
+            vertices=set(self.vertices()) - set(other.vertices()),
+            edges=set(_structure.edge_ids(self)) - set(_structure.edge_ids(other)),
+        )
+
+    def symmetric_difference(self, other) -> AnnNet:
+        """Return a graph holding the elements exactly one of the two holds."""
+        return Operations.merge(
+            Operations.difference(self, other), Operations.difference(other, self)
+        )
+
     def reverse(self) -> AnnNet:
         """Return a new graph with all directed edges reversed.
 
@@ -848,6 +977,11 @@ _OPS_DELEGATED = {
     'extract': 'extract_subgraph',
     'extract_subgraph': 'extract_subgraph',
     'copy': 'copy',
+    'merge': 'merge',
+    'union': 'union',
+    'intersection': 'intersection',
+    'difference': 'difference',
+    'symmetric_difference': 'symmetric_difference',
     'reverse': 'reverse',
     'memory_usage': 'memory_usage',
     'incidence': 'vertex_incidence_matrix',

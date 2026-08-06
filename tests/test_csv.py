@@ -172,7 +172,7 @@ class TestCSVIO(unittest.TestCase):
             t0 = time.perf_counter()
             G = csv_format.from_csv(adj_path)
             elapsed = time.perf_counter() - t0
-            self.assertGreater(G.num_edges, 1000)
+            self.assertGreater(G.ecount(), 1000)
             self.assertLess(
                 elapsed,
                 120.0,

@@ -183,8 +183,8 @@ class TestNetworkXAdapter(unittest.TestCase):
         H = from_nx_without_manifest(nxG)
         elapsed = time.perf_counter() - t0
 
-        self.assertEqual(H.num_vertices, N)
-        self.assertEqual(H.num_edges, E)
+        self.assertEqual(H.ncount(), N)
+        self.assertEqual(H.ecount(), E)
         self.assertLess(
             elapsed, 60.0, f'from_nx_without_manifest took {elapsed:.1f}s; expected <60s'
         )

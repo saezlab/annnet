@@ -84,8 +84,8 @@ class TestIgraphAdapter(unittest.TestCase):
         H = _from_ig_without_manifest(igG)
         elapsed = time.perf_counter() - t0
 
-        self.assertEqual(H.num_vertices, N)
-        self.assertEqual(H.num_edges, E)
+        self.assertEqual(H.ncount(), N)
+        self.assertEqual(H.ecount(), E)
         self.assertLess(
             elapsed,
             60.0,

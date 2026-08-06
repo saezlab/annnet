@@ -1,5 +1,6 @@
 """Lazy graph views and materialized table builders."""
 
+import numpy as np
 import scipy.sparse as sp
 
 from . import _structure
@@ -695,3 +696,215 @@ class ViewsAccessor:
     def layers_view(self, copy=True):
         """Materialize the layer table view."""
         return ViewsClass.layers_view(self._G, copy=copy)
+
+
+# ---------------------------------------------------------------------------
+# The node sequence and the edge sequence
+# ---------------------------------------------------------------------------
+
+
+_MISSING = object()
+
+
+class ElementSequence:
+    """One axis of a graph, read and written as a sequence.
+
+    ``G.N`` is the node sequence and ``G.E`` is the edge sequence. Both hold ids
+    in the order the graph holds them, and both answer three kinds of key:
+
+    - an integer is a position in this sequence, and gives back the id there
+    - a slice is a range of positions, and gives back a subsequence
+    - a string is an attribute name, and gives back the column as a vector
+
+    A subsequence is a sequence in its own right, so a filter and a column read
+    compose. It holds the ids it selected and reads through the same graph.
+    """
+
+    id_key = 'id'
+    id_column = 'id'
+    intrinsic_names: tuple[str, ...] = ('id',)
+
+    def __init__(self, graph, ids=None):
+        self._graph = graph
+        self._ids = None if ids is None else tuple(ids)
+
+    # -- the ids ----------------------------------------------------------
+
+    def _all_ids(self) -> tuple:
+        raise NotImplementedError
+
+    @property
+    def ids(self) -> tuple:
+        """The ids of this sequence, in order."""
+        return self._all_ids() if self._ids is None else self._ids
+
+    def _subsequence(self, ids):
+        return type(self)(self._graph, ids)
+
+    def __len__(self) -> int:
+        return len(self.ids)
+
+    def __iter__(self):
+        return iter(self.ids)
+
+    def __contains__(self, item) -> bool:
+        return item in self.ids
+
+    def __repr__(self) -> str:
+        return f'<{type(self).__name__} of {len(self)}>'
+
+    # -- the keys ---------------------------------------------------------
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            return self.column(key)
+        if isinstance(key, slice):
+            return self._subsequence(self.ids[key])
+        if isinstance(key, (int, np.integer)):
+            return self.ids[key]
+        raise TypeError(
+            f'a sequence key is an attribute name, a position, or a range of '
+            f'positions, not {type(key).__name__}'
+        )
+
+    def __setitem__(self, key, values):
+        if not isinstance(key, str):
+            raise TypeError('only an attribute column can be assigned to a sequence')
+        self.set_column(key, values)
+
+    # -- the columns ------------------------------------------------------
+
+    def _attribute_map(self, name: str) -> dict | None:
+        """Return the value of one attribute per element, or None when unknown.
+
+        An attribute no element carries is not the same as an attribute every
+        element leaves empty. The first is a mistake by the caller and the
+        second is an ordinary graph, so this says which of the two it is.
+        """
+        raise NotImplementedError
+
+    @staticmethod
+    def _column_of_table(table, id_column: str, name: str) -> dict | None:
+        """Read one column of an attribute table into a mapping from id."""
+        if table is None or name not in dataframe_columns(table):
+            return None
+        return {
+            row.get(id_column): row.get(name)
+            for row in dataframe_to_rows(table)
+            if row.get(id_column) is not None
+        }
+
+    def _intrinsic(self, name: str, ids):
+        """Return one structural field of the named elements, or ``_MISSING``."""
+        if name in (self.id_key, self.id_column):
+            return list(ids)
+        return _MISSING
+
+    def column(self, name: str, default=None):
+        """Return one attribute of every element of this sequence, as a vector."""
+        ids = self.ids
+        found = self._intrinsic(name, ids)
+        if found is not _MISSING:
+            return np.array(found, dtype=object if not found else None)
+        values = self._attribute_map(name)
+        if values is None:
+            raise KeyError(f'no attribute named {name!r} on this sequence')
+        return np.array([values.get(element, default) for element in ids])
+
+    def set_column(self, name: str, values) -> None:
+        """Set one attribute of every element of this sequence."""
+        ids = self.ids
+        if isinstance(values, (str, bytes)) or not hasattr(values, '__len__'):
+            values = [values] * len(ids)
+        values = list(values)
+        if len(values) != len(ids):
+            raise ValueError(
+                f'a column of {len(ids)} values is needed, {len(values)} were given'
+            )
+        self._write_column(name, dict(zip(ids, values, strict=True)))
+
+    def _write_column(self, name: str, values: dict) -> None:
+        raise NotImplementedError
+
+    # -- the filters ------------------------------------------------------
+
+    def _matches(self, conditions: dict) -> list:
+        ids = self.ids
+        columns = {name: self.column(name) for name in conditions}
+        keep = []
+        for position, element in enumerate(ids):
+            if all(columns[name][position] == want for name, want in conditions.items()):
+                keep.append(element)
+        return keep
+
+    def select(self, **conditions):
+        """Return the subsequence whose elements match every condition."""
+        if not conditions:
+            return self._subsequence(self.ids)
+        return self._subsequence(self._matches(conditions))
+
+    def find(self, **conditions):
+        """Return the one element that matches every condition.
+
+        A filter that matches nothing, and a filter that matches more than one
+        element, are both errors. A caller that wants either of those wants
+        :meth:`select`.
+        """
+        if not conditions:
+            raise TypeError('find needs at least one condition')
+        matched = self._matches(conditions)
+        if not matched:
+            raise KeyError(f'nothing matches {conditions!r}')
+        if len(matched) > 1:
+            raise ValueError(f'{len(matched)} elements match {conditions!r}, expected one')
+        return matched[0]
+
+
+class NodeSequence(ElementSequence):
+    """The nodes of a graph, in the order the graph holds them."""
+
+    id_key = 'id'
+    id_column = 'vertex_id'
+    intrinsic_names = ('id', 'vertex_id')
+
+    def _all_ids(self) -> tuple:
+        return tuple(self._graph.vertices())
+
+    def _attribute_map(self, name: str) -> dict | None:
+        return self._column_of_table(self._graph.vertex_attributes, 'vertex_id', name)
+
+    def _write_column(self, name: str, values: dict) -> None:
+        self._graph.attrs.set_vertex_attrs_bulk(
+            {element: {name: value} for element, value in values.items()}
+        )
+
+
+class EdgeSequence(ElementSequence):
+    """The edges of a graph, in the order the graph holds them.
+
+    An edge carries three fields that are not attributes: its direction, its
+    weight, and its kind. They read like a column, because a filter over them
+    is as common as a filter over an attribute.
+    """
+
+    id_key = 'id'
+    id_column = 'edge_id'
+    intrinsic_names = ('id', 'edge_id', 'directed', 'weight', 'kind')
+
+    def _all_ids(self) -> tuple:
+        return tuple(self._graph.edges())
+
+    def _intrinsic(self, name: str, ids):
+        if name in (self.id_key, self.id_column):
+            return list(ids)
+        if name in ('directed', 'weight', 'kind'):
+            return [getattr(self._graph.get_edge(element), name) for element in ids]
+        return _MISSING
+
+    def _attribute_map(self, name: str) -> dict | None:
+        return self._column_of_table(self._graph.edge_attributes, 'edge_id', name)
+
+    def _write_column(self, name: str, values: dict) -> None:
+        self._graph.attrs.set_edge_attrs_bulk(
+            {element: {name: value} for element, value in values.items()}
+        )

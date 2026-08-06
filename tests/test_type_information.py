@@ -64,8 +64,6 @@ def test_annnet_core_properties_have_return_types() -> None:
     property_names = [
         'nv',
         'ne',
-        'num_vertices',
-        'num_edges',
         'shape',
         'obs',
         'var',

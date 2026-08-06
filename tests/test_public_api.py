@@ -86,7 +86,7 @@ class TestPublicAPI:
         assert callable(G.history)
 
         sub = G.ops.subgraph(['A', 'B'])
-        assert sub.num_vertices == 2
+        assert sub.ncount() == 2
 
         edges_df = G.views.edges()
         assert len(edges_df) == 1
@@ -101,8 +101,8 @@ class TestPublicAPI:
         G.write(path, overwrite=True)
 
         G2 = an.AnnNet.read(path)
-        assert G2.num_vertices == 2
-        assert G2.num_edges == 1
+        assert G2.ncount() == 2
+        assert G2.ecount() == 1
         assert G2.get_edge('e1') == (frozenset({'A'}), frozenset({'B'}))
         edges_df = G2.views.edges(include_weight=True)
         try:
@@ -125,8 +125,8 @@ class TestPublicAPI:
             'add_edges',
             'remove_vertices',
             'remove_edges',
-            'num_vertices',
-            'num_edges',
+            'ncount',
+            'ecount',
             'layers',
             'slices',
             'attrs',

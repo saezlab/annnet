@@ -94,7 +94,7 @@ class TestJSONAdapter:
         H = from_json(path)
         elapsed = time.perf_counter() - t0
 
-        assert H.num_edges == E
+        assert H.ecount() == E
         assert H.nv_supra == G.nv_supra
         assert elapsed < 60.0, f'from_json multilayer took {elapsed:.1f}s; expected <60s'
 
