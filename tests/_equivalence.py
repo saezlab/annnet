@@ -62,9 +62,14 @@ def _edge_view_signature(view) -> tuple:
     )
 
 
-def _incident_signature(graph, node_id, direction) -> set:
-    """Return the edge signatures incident to one node, without the columns."""
-    return {_edge_view_signature(view) for _col, view in graph.incident_edges(node_id, direction)}
+def _incident_signature(graph, node_key, direction) -> set:
+    """Return the edge signatures incident to one supra-node, without the columns.
+
+    The argument is a supra-node key rather than a bare id, because a bare id
+    names one node in a flat graph and several in a multilayer one, and the
+    graph refuses the ambiguous case.
+    """
+    return {_edge_view_signature(view) for _col, view in graph.incident_edges(node_key, direction)}
 
 
 def _matrix_cells(graph) -> dict[tuple, float]:
@@ -151,13 +156,14 @@ def compare(left, right) -> list[str]:
             problems.append(f'get_edge({edge_id!r}) differs: {left_view} != {right_view}')
 
     # incident_edges must return the same edges in every direction.
-    for node_id in sorted(set(_node_ids(left)) & set(_node_ids(right))):
+    shared_keys = set(_supra_node_keys(left)) & set(_supra_node_keys(right))
+    for node_key in sorted(shared_keys, key=repr):
         for direction in ('in', 'out', 'both'):
-            left_inc = _incident_signature(left, node_id, direction)
-            right_inc = _incident_signature(right, node_id, direction)
+            left_inc = _incident_signature(left, node_key, direction)
+            right_inc = _incident_signature(right, node_key, direction)
             if left_inc != right_inc:
                 problems.append(
-                    f'incident_edges({node_id!r}, {direction!r}) differs: '
+                    f'incident_edges({node_key!r}, {direction!r}) differs: '
                     f'only left {_sorted_repr(left_inc - right_inc)}, '
                     f'only right {_sorted_repr(right_inc - left_inc)}'
                 )
