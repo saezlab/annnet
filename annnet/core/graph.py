@@ -860,10 +860,10 @@ class AnnNet(
             Accepted single-node forms are:
 
             - ``"A"``
-            - ``{"node_id": "A", "kind": "gene"}``
+            - ``{"node_id": "A", "kind": "source"}``
             - ``{"id": "A", ...}``
             - ``{"name": "A", ...}``
-            - ``("A", {"kind": "gene"})``
+            - ``("A", {"kind": "source"})``
 
             Accepted batch forms are iterables of the same specifications.
         slice : str, optional
@@ -898,12 +898,12 @@ class AnnNet(
         Examples
         --------
         >>> G = AnnNet()
-        >>> G.add_nodes('A', kind='gene')
+        >>> G.add_nodes('A', kind='source')
         'A'
         >>> G.add_nodes(
         ...     [
-        ...         {'node_id': 'B', 'kind': 'protein'},
-        ...         ('C', {'kind': 'metabolite'}),
+        ...         {'node_id': 'B', 'kind': 'relay'},
+        ...         ('C', {'kind': 'sink'}),
         ...     ]
         ... )
         ['B', 'C']
@@ -2262,7 +2262,7 @@ class AnnNet(
         Examples
         --------
         >>> G = AnnNet()
-        >>> G.add_nodes([{'node_id': 'A', 'kind': 'gene'}])
+        >>> G.add_nodes([{'node_id': 'A', 'kind': 'source'}])
         >>> G.obs
         """
         return clone_dataframe(self._node_table)

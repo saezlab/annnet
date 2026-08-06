@@ -176,8 +176,8 @@ def _slot_hyper_directed(store, slot) -> bool:
     """Return whether a hyperedge names a target side at all.
 
     A hyperedge that names no target side is undirected, whichever flag it was
-    declared with. That is what a boundary reaction looks like. Its members carry
-    the plain member role rather than a source role, and one entry says so.
+    declared with. That is the shape of an edge with one open side. Its members
+    carry the plain member role rather than a source role, and one entry says so.
     """
     if int(store.member_len[slot]) == 0:
         return False

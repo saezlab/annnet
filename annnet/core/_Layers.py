@@ -1752,7 +1752,7 @@ class LayerAccessor:
                 col_data.append((rows_out, vals_out))
                 edge_ids.append(eid)
 
-            # 3b. HYPER edge — read stoichiometry directly from _matrix
+            # 3b. HYPER edge — read the coefficients directly from _matrix
 
             elif kind == 'hyper':
                 raw_L = ref.ml_layers

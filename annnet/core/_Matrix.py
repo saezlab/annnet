@@ -75,10 +75,10 @@ class CacheManager:
         Notes
         -----
         For incidence matrix `B`, adjacency is computed as `A = B @ B.T`.
-        Boundary (half) edges — exchange/demand reactions flagged with the
-        ``is_boundary`` edge attribute, which carry a single real endpoint and no
-        partner — are dropped from `B` first, so they contribute neither spurious
-        inter-metabolite links nor self-loop-like diagonal terms.
+        A boundary edge names one endpoint and no partner, and the
+        ``is_boundary`` edge attribute flags it. Those columns leave `B` first,
+        so they add neither a link between two nodes that share nothing nor a
+        diagonal term that reads as a self-loop.
         """
         if self._adjacency is None or self._adjacency_version != self._G._structure_version:
             csr = self.csr

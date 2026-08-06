@@ -640,7 +640,7 @@ def remap_entity_keys(g, remap):
 
 
 def set_edge_coeffs(g, edge_id, coeffs):
-    """Overwrite an edge column's incidence coefficients (stoichiometry)."""
+    """Overwrite the incidence coefficients an edge column carries."""
     store = g._store
     slot = store.edge_slot(edge_id)
     if slot is None:
@@ -651,8 +651,9 @@ def set_edge_coeffs(g, edge_id, coeffs):
     # holds too.
     base = {S.endpoint_form(g, key): value for key, value in S.edge_members(g, edge_id).items()}
     # On a multilayer graph the endpoints above are supra-node keys ``(vid, coord)``,
-    # while callers key coefficients by bare node id (from_sbml passes raw SBML
-    # species ids). The two spellings never collide, so without resolving them the
+    # while a caller keys its coefficients by bare node id, which is the form a
+    # loader reads off a file. The two spellings never collide, so without
+    # resolving them the
     # update *adds* a second entry for the same node and the rebuilt column sums
     # both — inflating every coefficient by the derived +/- weight.
     by_vid = {}
