@@ -8,6 +8,8 @@ via attribute access.
 
 from __future__ import annotations
 
+import pytest
+
 from annnet.core.graph import AnnNet
 from annnet.core._records import EdgeView
 
@@ -86,10 +88,13 @@ def test_tuple_unpacking_back_compat():
     assert T == frozenset(['B'])
 
 
-def test_get_edge_by_index_returns_view():
+def test_a_lookup_by_position_is_refused():
+    """A column of the incidence matrix is not an id, and it is not a lookup key."""
     G = AnnNet(directed=False)
     G.add_vertices(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
-    view = G.get_edge(0)
+    with pytest.raises(TypeError):
+        G.get_edge(0)
+    view = G.get_edge(G.idx.col_to_edge(0))
     assert isinstance(view, EdgeView)
     assert view.edge_id == 'e1'

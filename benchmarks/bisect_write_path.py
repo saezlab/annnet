@@ -70,12 +70,12 @@ def measure(label: str = '', rounds: int = 5) -> dict:
     def appends(graph):
         for i in range(N_APPENDS):
             graph.add_edges([{'source': f'a{i}', 'target': f'b{i}'}])
-            graph.X()
+            _ = graph.S
 
     def removes(graph):
         for edge_id in victims:
             graph.remove_edge(edge_id)
-            graph.X()
+            _ = graph.S
 
     cases = {
         f'load {N_EDGES_LARGE} edges': (lambda: None, lambda _: loaded(large)),
@@ -83,7 +83,7 @@ def measure(label: str = '', rounds: int = 5) -> dict:
         'copy': (lambda: held_large, lambda graph: graph.ops.copy()),
         'first matrix read after a load': (
             lambda: held_large.ops.copy(),
-            lambda graph: graph.X(),
+            lambda graph: graph.S,
         ),
         f'{N_APPENDS} appends with a read each': (lambda: held_small.ops.copy(), appends),
         f'{N_REMOVES} removes with a read each': (lambda: held_small.ops.copy(), removes),

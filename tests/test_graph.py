@@ -39,7 +39,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertTrue(self.g._is_directed_edge(eid))
         self.assertIn(eid, self.g.get_edges_by_direction(True))
         # get_edge canonical form
-        S, T = self.g.get_edge(self.g.idx.edge_to_col(eid))
+        S, T = self.g.get_edge(eid)
         self.assertEqual(S, frozenset({'a'}))
         self.assertEqual(T, frozenset({'b'}))
         # matrix signs: +w at source, -w at target (directed)
@@ -55,7 +55,7 @@ class TestGraphBasics(unittest.TestCase):
     def test_add_edge_undirected_override(self):
         eid = self.g.add_edges('c', 'd', weight=1.0, directed=False)
         self.assertIn(eid, self.g.get_edges_by_direction(False))
-        S, T = self.g.get_edge(self.g.idx.edge_to_col(eid))
+        S, T = self.g.get_edge(eid)
         self.assertEqual(S, T)
         self.assertEqual(S, frozenset({'c', 'd'}))
         # matrix signs: +w on both endpoints (undirected)
@@ -147,7 +147,7 @@ class TestGraphBasics(unittest.TestCase):
     def test_hyperedge_undirected(self):
         hid = self.g.add_edges(src=['h1', 'h2', 'h3'], weight=2.0, tag='tri')
         self.assertEqual(self.g.edge_kind[hid], 'hyper')
-        S, T = self.g.get_edge(self.g.idx.edge_to_col(hid))
+        S, T = self.g.get_edge(hid)
         self.assertEqual(S, T)
         self.assertEqual(S, frozenset({'h1', 'h2', 'h3'}))
         # matrix entries are +2.0 on all three members
@@ -160,7 +160,7 @@ class TestGraphBasics(unittest.TestCase):
     def test_hyperedge_directed(self):
         hid = self.g.add_edges(src=['s1', 's2'], tgt=['t1'], weight=4.0, category='flow')
         self.assertTrue(self.g.edge_directed[hid])
-        S, T = self.g.get_edge(self.g.idx.edge_to_col(hid))
+        S, T = self.g.get_edge(hid)
         self.assertEqual(S, frozenset({'s1', 's2'}))
         self.assertEqual(T, frozenset({'t1'}))
         col = self.g.idx.edge_to_col(hid)
@@ -291,7 +291,7 @@ class TestGraphBasics(unittest.TestCase):
         # undirected also counts on both sides
         e3 = self.g.add_edges('i2', 'i4', weight=1, directed=False)
         inc = self.g.incident_edges('i2')
-        ids = {self.g.idx_to_edge[j] for j, _edge in inc}
+        ids = {edge.edge_id for _column, edge in inc}
         self.assertSetEqual(ids, {e1, e2, e3})
 
     def test_incident_edges_accepts_single_multilayer_supra_node_tuple(self):
@@ -368,7 +368,7 @@ class TestGraphBasics(unittest.TestCase):
         # Update same edge_id: flip direction flag and endpoints
         self.g.add_edges('u2', 'u3', weight=3.5, edge_id=e, directed=False)
         # Now undirected, between u2 and u3, weight 3.5
-        S, T = self.g.get_edge(self.g.idx.edge_to_col(e))
+        S, T = self.g.get_edge(e)
         self.assertEqual(S, T)
         self.assertEqual(S, frozenset({'u2', 'u3'}))
         col = self.g.idx.edge_to_col(e)

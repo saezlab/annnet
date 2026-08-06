@@ -173,7 +173,7 @@ class AnnNetEngine(Engine):
 
         def add_then_read(G, i):
             G.add_edges(u, probes[i], edge_id=f'{probes[i]}_e')
-            return G.X()
+            return G.S
 
         return {
             'single_element_add': Mutation(with_probe_nodes, add),

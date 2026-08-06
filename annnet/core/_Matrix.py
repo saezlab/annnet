@@ -342,7 +342,7 @@ class MatrixNamespace:
         return self.incidence(**SIGNED)
 
     def signed_matrix(self):
-        """Return the coefficient incidence matrix of every edge (``G.S``, ``G.X()``)."""
+        """Return the coefficient incidence matrix of every edge (``G.S``)."""
         return self.incidence_matrix(**SIGNED)
 
     def adjacency(self, **kwargs):

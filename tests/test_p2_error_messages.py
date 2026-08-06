@@ -5,8 +5,7 @@
   silent behavior.
 - ``add_edges([{'source': 'A'}])`` raises ValueError naming the missing
   field and the item index, not a bare ``KeyError``.
-- ``get_vertex(999)`` raises KeyError with the valid index range and a
-  pointer to ``vertices()``.
+- ``G.N[999]`` raises IndexError, the way any sequence does.
 - ``history.diff()`` with no args diffs the most recent snapshot vs the
   current state.
 """
@@ -62,11 +61,11 @@ def test_add_edges_missing_source_raises_value_error_with_index():
         G.add_edges([{'source': 'A', 'target': 'B'}, {'target': 'B'}])
 
 
-def test_get_vertex_out_of_range_message_is_helpful():
+def test_a_position_past_the_end_of_the_node_sequence_is_an_error():
     G = AnnNet(directed=False)
     G.add_vertices(['A', 'B'])
-    with pytest.raises(KeyError, match='row index 999'):
-        G.get_vertex(999)
+    with pytest.raises(IndexError):
+        G.N[999]
 
 
 def test_history_diff_no_args_uses_most_recent_snapshot():

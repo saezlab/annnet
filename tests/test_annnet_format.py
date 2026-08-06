@@ -266,7 +266,7 @@ class TestAnnNetIO(unittest.TestCase):
             self.assertEqual((root / 'structure' / 'incidence.zarr').exists(), matrix)
             G2 = annnet_read(out)
             self.assertEqual(S.edge_coefficients(G2, 'e1'), want)
-            loaded[matrix] = G2.X().toarray()
+            loaded[matrix] = G2.S.toarray()
         self.assertTrue((loaded[False] == loaded[True]).all())
 
     def test_zarr_incidence_group(self):

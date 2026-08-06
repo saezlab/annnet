@@ -346,7 +346,7 @@ def test_rule_5_an_undirected_edge_without_coefficients_has_one_sign(case, edge_
 def test_rule_5_reports_a_column_whose_signs_contradict_the_directedness():
     """A matrix that says something else is the real way this rule breaks."""
     G = build_case('binary_directed')
-    dense = G.X().toarray()
+    dense = G.S.toarray()
     column = G.idx.edge_to_col('e_ab')
     dense[:, column] = np.abs(dense[:, column])  # two positive entries on a directed edge
     with a_matrix_that_lies(G, dense):
@@ -392,7 +392,7 @@ def test_rule_7_every_nonzero_lands_on_a_live_row_and_a_live_column(case):
     G = build_case(case)
     live_rows = {G.idx.entity_to_row(ref.key) for ref in S.iter_entities(G)}
     live_cols = {G.idx.edge_to_col(ref.id) for ref in S.iter_edges(G)}
-    block = G.X().tocoo()
+    block = G.S.tocoo()
     for row, col, value in zip(block.row, block.col, block.data, strict=False):
         if float(value) == 0.0:
             continue
@@ -402,9 +402,9 @@ def test_rule_7_every_nonzero_lands_on_a_live_row_and_a_live_column(case):
 
 def test_rule_7_reports_a_nonzero_on_a_row_that_holds_no_entity():
     G = build_case('binary_directed')
-    shape = G.X().shape
+    shape = G.S.shape
     dense = np.zeros((shape[0] + 2, shape[1]), dtype=np.float32)
-    dense[: shape[0], :] = G.X().toarray()
+    dense[: shape[0], :] = G.S.toarray()
     dense[-1, 0] = 1.0
     with a_matrix_that_lies(G, dense):
         assert_reports(G, 'row')
@@ -413,7 +413,7 @@ def test_rule_7_reports_a_nonzero_on_a_row_that_holds_no_entity():
 @pytest.mark.parametrize('case', CASE_NAMES)
 def test_rule_8_the_matrix_equals_the_member_lists(case):
     G = build_case(case)
-    matrix = G.X().tocsc()
+    matrix = G.S.tocsc()
     for ref in S.iter_edges(G):
         column = G.idx.edge_to_col(ref.id)
         block = matrix[:, [column]].tocoo()
@@ -430,7 +430,7 @@ def test_rule_8_the_matrix_equals_the_member_lists(case):
 
 def test_rule_8_reports_a_matrix_cell_that_the_store_does_not_imply():
     G = build_case('binary_directed')
-    dense = G.X().toarray()
+    dense = G.S.toarray()
     dense[G.idx.entity_to_row('C'), G.idx.edge_to_col('e_ab')] = 9.0
     with a_matrix_that_lies(G, dense):
         assert_reports(G, 'e_ab')

@@ -277,11 +277,9 @@ class AnnNet(
         'write',
         'view',
         'global_count',
-        'get_vertex',
         'get_edge',
         'edge_list',
         'make_undirected',
-        'X',
         'is_multilayer',
     )
 
@@ -1401,67 +1399,39 @@ class AnnNet(
 
     # Basic queries & metrics
 
-    def get_vertex(self, index: int) -> str:
-        """Return the vertex identifier stored at an internal row index.
+    def get_edge(self, edge_id: str) -> EdgeView:
+        """Return an :class:`EdgeView` for one edge.
 
         Parameters
         ----------
-        index : int
-            Incidence-matrix row index.
-
-        Returns
-        -------
-        str
-            Vertex ID at ``index``.
-
-        Raises
-        ------
-        KeyError
-            If ``index`` is not a valid entity row.
-
-        Notes
-        -----
-        This is an index-level lookup. Most user code should use
-        :meth:`vertices` unless it specifically needs row-index mapping.
-        """
-        try:
-            entry = _structure.entity_key_of_row(self, index)
-        except KeyError:
-            raise KeyError(
-                f'No vertex at row index {index}; valid range is '
-                f'[0, {self.nv_supra}). Use G.vertices() to list vertex IDs.'
-            ) from None
-        return entry[0] if isinstance(entry, tuple) else entry
-
-    def get_edge(self, index: int | str) -> EdgeView:
-        """Return an :class:`EdgeView` for the requested edge.
-
-        Parameters
-        ----------
-        index : int | str
-            Incidence-matrix column index or edge ID.
+        edge_id : str
+            Edge identifier. A lookup takes an id and nothing else. A caller
+            holding a column of the incidence matrix asks
+            ``G.idx.col_to_edge(column)`` for the id on it.
 
         Returns
         -------
         EdgeView
             A tuple-shaped record. ``(source, target)`` tuple unpacking still
-            works for backward compatibility; ``edge_id``, ``kind``,
-            ``members``, ``weight`` and ``directed`` are also exposed as
-            attributes.
+            works; ``edge_id``, ``kind``, ``members``, ``weight`` and
+            ``directed`` are also exposed as attributes.
 
         Raises
         ------
+        TypeError
+            If the argument is not an id.
         KeyError
-            If an edge ID is unknown.
+            If the id is unknown.
         """
-        if isinstance(index, str):
-            eid = index
-            if not _structure.has_edge(self, eid):
-                raise KeyError(f'Unknown edge id: {eid}') from None
-        else:
-            eid = _structure.edge_at_column(self, index)
+        if not isinstance(edge_id, str):
+            raise TypeError(
+                f'get_edge takes an edge id, not {type(edge_id).__name__}. For the '
+                f'edge on a matrix column, use G.idx.col_to_edge(column).'
+            )
+        if not _structure.has_edge(self, edge_id):
+            raise KeyError(f'Unknown edge id: {edge_id}') from None
 
-        return self._edge_tuple(eid)
+        return self._edge_tuple(edge_id)
 
     def _edge_tuple(self, eid: str) -> EdgeView:
         """Return the public view of one edge.
@@ -2137,23 +2107,6 @@ class AnnNet(
         self._supra_index_cache = None
         _derive.bump_structure(self)
 
-    def X(self):
-        """Return the sparse incidence matrix.
-
-        Returns
-        -------
-        scipy.sparse.csc_array
-            Incidence matrix derived from the store. Rows are entities; columns
-            are structural edges.
-
-        Notes
-        -----
-        The returned matrix is the cached one rather than a copy. Treat it as
-        read-only: writing to it changes what every other reader sees, and the
-        next structural write drops it.
-        """
-        return self._matrix
-
     # The named matrices. Each is one purpose-built projection of the member
     # lists the store holds, so no one matrix has to carry a convention another
     # one needs. Read ``G.matrices`` for the same matrices with the maps between
@@ -2668,11 +2621,6 @@ class AnnNet(
     def _set_entity_kinds_by_id(self, mapping):
         """Set entity kinds from a ``vertex_id -> kind`` mapping (a reader door)."""
         _mutate.set_entity_types(self, mapping)
-
-    @property
-    def idx_to_edge(self) -> dict:
-        """col_idx -> edge_id."""
-        return dict(enumerate(_structure.edge_ids(self)))
 
     @property
     def edge_weights(self) -> dict:

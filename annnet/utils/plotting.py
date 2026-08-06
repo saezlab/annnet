@@ -86,6 +86,15 @@ def build_vertex_labels(graph, key: str | None = None) -> dict[str, str]:
     return labels
 
 
+def _edge_ids_in_order(graph) -> list[str]:
+    """Return the edge ids in the order the graph holds them.
+
+    A drawing indexes its edges by position, because a layout does. The graph
+    answers by id, so this is the one place the two meet.
+    """
+    return list(graph.edges())
+
+
 def build_edge_labels(
     graph,
     *,
@@ -96,8 +105,7 @@ def build_edge_labels(
     """Build display labels for graph edges."""
     extra_keys = extra_keys or []
     labels: dict[int, str] = {}
-    for j in range(graph.ne):
-        eid = graph.idx_to_edge[j]
+    for j, eid in enumerate(_edge_ids_in_order(graph)):
         parts: list[str] = []
         if use_weight:
             try:
@@ -130,7 +138,7 @@ def edge_style_from_weights(
     Parameters
     ----------
     graph : object
-        AnnNet-like object exposing `ne`, `idx_to_edge`, and
+        AnnNet-like object exposing `edges()` and
         `get_effective_edge_weight(eid, layer)` methods.
     layer : str, optional
         Layer name for retrieving edge weights. Defaults to `None`, which uses global weights.
@@ -156,10 +164,10 @@ def edge_style_from_weights(
     - Normalization is performed across all edges in the graph.
 
     """
-    eidxs = list(range(graph.ne))
+    eids = _edge_ids_in_order(graph)
+    eidxs = list(range(len(eids)))
     raw_vals: list[float] = []
-    for j in eidxs:
-        eid = graph.idx_to_edge[j]
+    for eid in eids:
         try:
             raw_vals.append(abs(float(_edge_weight_getter(graph)(eid, slice=layer))))
         except (AttributeError, KeyError, TypeError, ValueError):
@@ -172,7 +180,7 @@ def edge_style_from_weights(
     for j, xv in zip(eidxs, x, strict=False):
         pen = min_width + float(xv) * (max_width - min_width)
         if color_mode == 'signed':
-            eid = graph.idx_to_edge[j]
+            eid = eids[j]
             try:
                 w = float(_edge_weight_getter(graph)(eid, slice=layer))
             except (AttributeError, KeyError, TypeError, ValueError):
@@ -245,11 +253,12 @@ def to_graphviz(
 
     # vertices to materialize (union of all endpoints)
     all_nodes: set[str] = set()
-    edges_iter = range(graph.ne) if edge_indexes is None else edge_indexes
+    eids = _edge_ids_in_order(graph)
+    edges_iter = range(len(eids)) if edge_indexes is None else edge_indexes
 
     # First pass: collect nodes
     for j in edges_iter:
-        S, T = graph.get_edge(j)
+        S, T = graph.get_edge(eids[j])
         if not orphan_edges and (len(S) == 0 or len(T) == 0):
             continue
         all_nodes.update(map(str, S | T))
@@ -257,10 +266,10 @@ def to_graphviz(
     _add_nodes_graphviz(Gv, sorted(all_nodes), custom_vertex_attr)
 
     # Second pass: add edges
-    for j in range(graph.ne):
+    for j in range(len(eids)):
         if edge_indexes is not None and j not in edge_indexes:
             continue
-        S, T = graph.get_edge(j)
+        S, T = graph.get_edge(eids[j])
         if not orphan_edges and (len(S) == 0 or len(T) == 0):
             continue
 
@@ -307,7 +316,7 @@ def to_graphviz(
                 u = next(iter(S))
                 v = next(iter(T))
                 head = 'normal'
-                inter = _edge_attr_getter(graph)(graph.idx_to_edge[j], 'interaction', default=None)
+                inter = _edge_attr_getter(graph)(eids[j], 'interaction', default=None)
                 if isinstance(inter, (int, float)) and inter < 0:
                     head = 'tee'
                 a = {'arrowhead': head}
@@ -316,7 +325,10 @@ def to_graphviz(
 
     if suppress_warnings:
         _suppress_repr_warnings(Gv)
-    if any(_is_true_hyperedge(*graph.get_edge(j)) for j in range(graph.ne)) and graph_attr is None:
+    if (
+        any(_is_true_hyperedge(*graph.get_edge(eids[j])) for j in range(len(eids)))
+        and graph_attr is None
+    ):
         Gv.graph_attr['splines'] = 'true'
     return Gv
 
@@ -343,19 +355,20 @@ def to_pydot(
         Gd.set_edge_defaults(**edge_attr)
 
     all_nodes: set[str] = set()
-    edges_iter = range(graph.ne) if edge_indexes is None else edge_indexes
+    eids = _edge_ids_in_order(graph)
+    edges_iter = range(len(eids)) if edge_indexes is None else edge_indexes
     for j in edges_iter:
-        S, T = graph.get_edge(j)
+        S, T = graph.get_edge(eids[j])
         if not orphan_edges and (len(S) == 0 or len(T) == 0):
             continue
         all_nodes.update(map(str, S | T))
 
     _add_nodes_pydot(Gd, sorted(all_nodes), custom_vertex_attr)
 
-    for j in range(graph.ne):
+    for j in range(len(eids)):
         if edge_indexes is not None and j not in edge_indexes:
             continue
-        S, T = graph.get_edge(j)
+        S, T = graph.get_edge(eids[j])
         if not orphan_edges and (len(S) == 0 or len(T) == 0):
             continue
 
@@ -400,14 +413,17 @@ def to_pydot(
                 u = next(iter(S))
                 v = next(iter(T))
                 head = 'normal'
-                inter = _edge_attr_getter(graph)(graph.idx_to_edge[j], 'interaction', default=None)
+                inter = _edge_attr_getter(graph)(eids[j], 'interaction', default=None)
                 if isinstance(inter, (int, float)) and inter < 0:
                     head = 'tee'
                 a = {'arrowhead': head}
                 a.update(e_attr)
                 Gd.add_edge(pydot.Edge(str(u), str(v), **a))
 
-    if any(_is_true_hyperedge(*graph.get_edge(j)) for j in range(graph.ne)) and graph_attr is None:
+    if (
+        any(_is_true_hyperedge(*graph.get_edge(eids[j])) for j in range(len(eids)))
+        and graph_attr is None
+    ):
         Gd.set_splines('true')
     return Gd
 
@@ -442,10 +458,11 @@ def to_matplotlib(
     else:
         fig = ax.figure
 
-    edges = list(range(graph.ne)) if edge_indexes is None else list(edge_indexes)
+    eids = _edge_ids_in_order(graph)
+    edges = list(range(len(eids))) if edge_indexes is None else list(edge_indexes)
     vertices: set[str] = set(map(str, graph.vertices()))
     for j in edges:
-        S, T = graph.get_edge(j)
+        S, T = graph.get_edge(eids[j])
         if not orphan_edges and (len(S) == 0 or len(T) == 0):
             continue
         vertices.update(map(str, S | T))
@@ -482,7 +499,7 @@ def to_matplotlib(
         else {}
     )
     for j in edges:
-        S, T = graph.get_edge(j)
+        S, T = graph.get_edge(eids[j])
         if not orphan_edges and (len(S) == 0 or len(T) == 0):
             continue
 
@@ -684,8 +701,9 @@ def plot(
             elabels = build_edge_labels(
                 graph, use_weight=True, extra_keys=edge_label_keys, layer=layer
             )
+            eids = _edge_ids_in_order(graph)
             for j, txt in elabels.items():
-                S, T = graph.get_edge(j)
+                S, T = graph.get_edge(eids[j])
                 sv = next(iter(S)) if len(S) else f'e_{j}_source'
                 tv = next(iter(T)) if len(T) else f'e_{j}_target'
                 G.add_edge(

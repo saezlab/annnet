@@ -126,7 +126,7 @@ def test_edge_members_returns_the_member_list_of_one_edge(case, edge_id, expecte
 def test_edge_members_equals_the_incidence_column(case):
     """The member list is the incidence matrix, so the two must agree everywhere."""
     G = build_case(case)
-    matrix = G.X().tocsc()
+    matrix = G.S.tocsc()
     for ref in S.iter_edges(G):
         column = G.idx.edge_to_col(ref.id)
         block = matrix[:, [column]].tocoo()

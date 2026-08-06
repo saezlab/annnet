@@ -1,0 +1,30 @@
+[2026-08-04 22:10:55] [DEBUG] [pkg_infra.session        ] ▸ Using app logger: default
+[2026-08-04 22:10:55] [DEBUG] [pkg_infra.session        ] ▸ Session time initialized: utc=2026-08-04 20:10:55.090477+00:00, local=2026-08-04 22:10:55.090479+02:00, timezone=CEST
+[2026-08-04 22:10:55] [DEBUG] [pkg_infra.session        ] ▸ Location lookup skipped
+[2026-08-04 22:10:55] [INFO ] [pkg_infra.session        ] ▸ Creating new session...
+[2026-08-04 22:10:55] [INFO ] [pkg_infra.session        ] ▸ Session has been created
+[2026-08-04 22:10:55] [WARNING] [pkg_infra.session        ] ▸ No integration settings found for package 'annnet'.
+[2026-08-04 22:10:55] [DEBUG] [pkg_infra.session        ] ▸ get_session called with workspace=/home/denes/annnet, include_location=False, config_path=None
+[2026-08-04 22:10:55] [INFO ] [pkg_infra.session        ] ▸ Initialization of a session:
+[2026-08-04 22:10:55] [INFO ] [pkg_infra.session        ] ▸ Reusing existing session
+[2026-08-04 22:10:55] [INFO ] [pkg_infra.session        ] ▸   hostname: y
+  username: denes
+  workspace: /home/denes/annnet
+  id: f22f865e-4f84-49e2-9732-663110e258ec
+  started_at_utc: 2026-08-04 20:10:55.090477+00:00
+  started_at_local: 2026-08-04 22:10:55.090479+02:00
+  timezone: CEST
+  location: None
+[2026-08-04 22:10:55] [WARNING] [pkg_infra.session        ] ▸ No integration settings found for package 'annnet'.
+[2026-08-04 22:10:55] [DEBUG] [pkg_infra.session        ] ▸ get_session called with workspace=/home/denes/annnet, include_location=False, config_path=None
+[2026-08-04 22:10:55] [INFO ] [pkg_infra.session        ] ▸ Initialization of a session:
+[2026-08-04 22:10:55] [INFO ] [pkg_infra.session        ] ▸ Reusing existing session
+[2026-08-04 22:10:55] [INFO ] [pkg_infra.session        ] ▸   hostname: y
+  username: denes
+  workspace: /home/denes/annnet
+  id: f22f865e-4f84-49e2-9732-663110e258ec
+  started_at_utc: 2026-08-04 20:10:55.090477+00:00
+  started_at_local: 2026-08-04 22:10:55.090479+02:00
+  timezone: CEST
+  location: None
+[2026-08-04 22:10:55] [WARNING] [pkg_infra.session        ] ▸ No integration settings found for package 'annnet'.

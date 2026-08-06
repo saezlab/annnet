@@ -246,13 +246,13 @@ def graph():
 
 def test_the_graph_matrix_cancels_the_two_entries_of_a_self_loop():
     G = graph()
-    column = _column(G.X().tocsc(), G.idx.edge_to_col('e_loop'))
+    column = _column(G.S.tocsc(), G.idx.edge_to_col('e_loop'))
     assert column == {}, 'the two entries of a self-loop cancel in the incidence matrix'
 
 
 def test_the_graph_matrix_keeps_the_plain_edge_beside_it():
     G = graph()
-    column = _column(G.X().tocsc(), G.idx.edge_to_col('e_ab'))
+    column = _column(G.S.tocsc(), G.idx.edge_to_col('e_ab'))
     assert column == {
         G.idx.entity_to_row('A'): pytest.approx(1.0),
         G.idx.entity_to_row('B'): pytest.approx(-1.0),
@@ -261,8 +261,8 @@ def test_the_graph_matrix_keeps_the_plain_edge_beside_it():
 
 def test_a_placeholder_edge_occupies_no_column_of_the_graph_matrix():
     G = graph()
-    rows, columns = G.X().shape
+    rows, columns = G.S.shape
     G._ensure_edge_entity_placeholder('e_later')
     # The placeholder is an entity the graph now knows, so it takes a row. It
     # holds no members, so it takes no column.
-    assert G.X().shape == (rows + 1, columns)
+    assert G.S.shape == (rows + 1, columns)

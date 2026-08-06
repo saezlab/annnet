@@ -46,7 +46,6 @@ def test_annnet_core_methods_are_annotated() -> None:
         AnnNet.add_edges,
         AnnNet.remove_vertices,
         AnnNet.remove_edges,
-        AnnNet.get_vertex,
         AnnNet.get_edge,
         AnnNet.has_vertex,
         AnnNet.has_edge,

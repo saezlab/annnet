@@ -221,7 +221,7 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False, 
         'annnet_version': ANNNET_VERSION,
         'graph_version': graph._version,
         'directed': graph.directed,
-        'matrix_shape': list(graph.X().shape),
+        'matrix_shape': list(graph.S.shape),
         'incidence_stored': incidence_stored,
         'counts': {
             'vertices': sum(
@@ -330,7 +330,7 @@ def _write_structure(
     # 2. Sparse incidence matrix (Zarr) — only when it holds explicit coeffs;
     # otherwise it is rebuilt from records on load (see read()).
     if store_incidence:
-        coo = graph.X().tocoo()
+        coo = graph.S.tocoo()
         root = zarr.open_group(str(path / 'incidence.zarr'), mode='w')
 
         from zarr.codecs import BloscCname, BloscCodec, BloscShuffle

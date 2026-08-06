@@ -178,14 +178,14 @@ def _chain(n_edges: int) -> AnnNet:
 
 
 def test_the_graph_extends_its_matrix_after_an_append_rather_than_rebuilding():
-    """``G.X()`` is the cached matrix, which is what makes a read after a write cheap."""
+    """``G.S`` is the cached matrix, which is what makes a read after a write cheap."""
     G = _chain(4)
-    G.X()
+    _ = G.S
     cache = G.matrices.cache
     rebuilds, extends = cache.rebuilds, cache.extends
 
     G.add_edges('v0', 'v4', edge_id='extra')
-    assert G.X().shape[1] == 5
+    assert G.S.shape[1] == 5
     assert cache.rebuilds == rebuilds, 'an append must not rebuild the matrix'
     assert cache.extends == extends + 1
 
@@ -193,7 +193,7 @@ def test_the_graph_extends_its_matrix_after_an_append_rather_than_rebuilding():
 def test_reading_the_matrix_does_not_name_the_positions_in_it():
     """The maps cost more than the matrix, and arithmetic does not read them.
 
-    ``G.X()``, ``G.S`` and the rest answer with the matrix, so nothing on that
+    ``G.S``, ``G.S`` and the rest answer with the matrix, so nothing on that
     path may build the map from an entity to its row or from an edge to its
     column. ``G.matrices.signed()`` is what asks for those.
     """
@@ -201,7 +201,7 @@ def test_reading_the_matrix_does_not_name_the_positions_in_it():
     with mock.patch.object(M, '_view', wraps=M._view) as named:
         for name in ('S', 'B', 'H', 'A', 'L'):
             assert getattr(G, name) is not None
-        assert G.X() is not None
+        assert G.S is not None
         assert named.call_count == 0
         assert G.matrices.signed().column_of_edge['e0'] == 0
         assert named.call_count == 1

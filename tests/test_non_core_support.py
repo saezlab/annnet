@@ -34,20 +34,23 @@ class CursorLike:
 class FakeGraph:
     def __init__(self):
         self.ne = 4
-        self.idx_to_edge = {0: 'e_pos', 1: 'e_neg', 2: 'h1', 3: 'loop'}
+        self._edges = ['e_pos', 'e_neg', 'h1', 'loop']
         self._weights = {'e_pos': 2.0, 'e_neg': -3.0, 'h1': 0.0}
         self._attrs = {'e_pos': {'kind': 'activation'}, 'e_neg': {'kind': 'repression'}}
 
     def vertices(self):
         return ['A', 'B', 'C']
 
-    def get_edge(self, index):
-        return [
-            (frozenset({'A'}), frozenset({'B'})),
-            (frozenset({'B'}), frozenset({'C'})),
-            (frozenset({'A', 'B'}), frozenset({'C'})),
-            (frozenset({'C'}), frozenset({'C'})),
-        ][index]
+    def edges(self):
+        return list(self._edges)
+
+    def get_edge(self, edge_id):
+        return {
+            'e_pos': (frozenset({'A'}), frozenset({'B'})),
+            'e_neg': (frozenset({'B'}), frozenset({'C'})),
+            'h1': (frozenset({'A', 'B'}), frozenset({'C'})),
+            'loop': (frozenset({'C'}), frozenset({'C'})),
+        }[edge_id]
 
     def get_attr_vertex(self, vertex, key, default=None):
         return {'A': 'alpha'}.get(vertex, default)

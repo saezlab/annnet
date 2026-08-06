@@ -1004,8 +1004,8 @@ class OperationsAccessor:
         vertex_ids = tuple(sorted(G.vertices()))
         edge_defs = []
         for j in range(G.ne):
-            S, T = G.get_edge(j)
             eid = _structure.edge_at_column(G, j)
+            S, T = G.get_edge(eid)
             edge_defs.append((eid, tuple(sorted(S)), tuple(sorted(T)), G._is_directed_edge(eid)))
         edge_defs = tuple(sorted(edge_defs))
         graph_meta = (

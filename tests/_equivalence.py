@@ -79,7 +79,7 @@ def _matrix_cells(graph) -> dict[tuple, float]:
     the projection stays correct for a multilayer graph, where one node id
     covers more than one row.
     """
-    matrix = graph.X().tocsr()
+    matrix = graph.S.tocsr()
     row_of_key = {}
     for key in _supra_node_keys(graph):
         try:

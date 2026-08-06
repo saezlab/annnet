@@ -233,7 +233,7 @@ def build_vertex_incidence(graph) -> sparse.csr_matrix:
     """Return the vertex-only incidence matrix aligned to the exported obs rows."""
     row_indexes = [row_idx for _vertex_id, _layer, row_idx in _vertex_entities(graph)]
     col_indexes = [_structure.edge_column(graph, edge_id) for edge_id in graph.edges()]
-    matrix = graph.X().tocsr()
+    matrix = graph.S.tocsr()
     if not row_indexes:
         return sparse.csr_array((0, len(col_indexes)), dtype=matrix.dtype)
     if not col_indexes:

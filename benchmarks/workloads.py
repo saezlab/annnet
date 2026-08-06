@@ -681,7 +681,7 @@ def matrix_growth(scale, *, backend='auto', samples=3) -> list[dict]:
             for i in range(n_edges):
                 G.add_edges(f'v{i}', f'v{i + 1}', edge_id=f'e{i}')
                 if read_each:
-                    G.X()
+                    _ = G.S
             return G
 
         return once

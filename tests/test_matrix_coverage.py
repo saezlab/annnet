@@ -61,7 +61,7 @@ def test_set_edge_coeffs_invalidates_incidence_cache() -> None:
     before = G.ops.incidence_as_lists(values=True)
     assert G.cache.has_csr() is True
     a_idx = list(G.ops.incidence_as_lists()).index('A')
-    e1_col = next(j for j in range(G.ne) if G.get_edge(j).edge_id == 'e1')
+    e1_col = G.idx.edge_to_col('e1')
     assert before['A'][G.ops.incidence_as_lists()['A'].index(e1_col)] == 2.5
 
     G.set_edge_coeffs('e1', {'A': 4.0})

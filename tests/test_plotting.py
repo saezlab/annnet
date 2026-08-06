@@ -55,7 +55,7 @@ class TestPlottingWithRealGraph(unittest.TestCase):
         self.g = g
         # Sanity: plotting relies on these
         self.assertGreaterEqual(self.g.ne, 2)
-        self.assertTrue(hasattr(self.g, 'idx_to_edge'))
+        self.assertTrue(hasattr(self.g, 'edges'))
         self.assertTrue(hasattr(self.g, 'get_edge'))
 
     def test_build_vertex_labels(self):
