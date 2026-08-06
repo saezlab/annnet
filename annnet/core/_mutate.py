@@ -607,29 +607,12 @@ def set_edge_direction_policy(g, eid, policy):
         g._store.set_edge_policy(eid, policy)
 
 
-def set_entity_to_idx(g, mapping):
-    """Rebuild the entity registry from a ``vid -> row_idx`` map (legacy setter).
-
-    The map names every entity the graph is to hold and the row each takes, so
-    nothing of the registry survives it. Every edge names an entity, so every
-    edge is written again against the entities that are left, and one that named
-    an entity the map drops loses that endpoint. This is the one write that
-    replaces the store rather than changing it, and it goes with
-    ``entity_to_idx``.
-    """
-    from . import _build
-
-    coord = I.placeholder_layer_coord(g)
-    entities = [
-        S.EntityRef(vid, S.NODE, coord)
-        for vid, _row in sorted(dict(mapping).items(), key=lambda item: int(item[1]))
-    ]
-    g._store = _build.store_from_definitions(g, entities, S.definitions_of(g)[1])
-    g._mark_structure_changed()
-
-
 def set_entity_types(g, mapping):
-    """Set entity kinds from a ``vid -> kind`` map (legacy setter)."""
+    """Set entity kinds from a ``vid -> kind`` map.
+
+    A reader that rebuilds a graph from a file knows which of the entities it
+    read are edges in their own right, and it names them by their id.
+    """
     for vid, kind in dict(mapping).items():
         ekey = I.resolve_ekey(g, vid)
         internal = _internal_entity_kind(kind)

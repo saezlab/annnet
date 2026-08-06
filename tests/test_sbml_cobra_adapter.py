@@ -36,8 +36,8 @@ class TestSBMLAdapter(unittest.TestCase):
 
         # Edges present
         self.assertEqual(G.ecount(), 2)
-        self.assertIn('R1', G.edge_to_idx)
-        self.assertIn('R2', G.edge_to_idx)
+        self.assertIn('R1', G.E)
+        self.assertIn('R2', G.E)
 
         # Hyperedge definitions (head = products, tail = reactants)
         hdef_R1 = G.hyperedge_definitions['R1']
@@ -46,10 +46,10 @@ class TestSBMLAdapter(unittest.TestCase):
         self.assertEqual(hdef_R1['tail'], {'A', 'B'})
 
         # If we have per-vertex coefficients, incidence should reflect -2 for B
-        col_R1 = G.edge_to_idx['R1']
-        row_A = G.entity_to_idx['A']
-        row_B = G.entity_to_idx['B']
-        row_C = G.entity_to_idx['C']
+        col_R1 = G.idx.edge_to_col('R1')
+        row_A = G.idx.entity_to_row('A')
+        row_B = G.idx.entity_to_row('B')
+        row_C = G.idx.entity_to_row('C')
         self.assertAlmostEqual(G._matrix[row_A, col_R1], -1.0)
         self.assertAlmostEqual(G._matrix[row_B, col_R1], -2.0)
         self.assertAlmostEqual(G._matrix[row_C, col_R1], +1.0)
@@ -81,7 +81,7 @@ class TestSBMLAdapter(unittest.TestCase):
 
         G = from_cobra_model(model, graph=AnnNet(directed=True))
         self.assertEqual(G.ecount(), 2)
-        self.assertIn('R1', G.edge_to_idx)
+        self.assertIn('R1', G.E)
 
     def test_boundary_reactions_are_one_sided_half_edges(self):
         import numpy as np

@@ -137,8 +137,8 @@ class TestCX2Adapter(unittest.TestCase):
         G_new = from_cx2(cx2_data)
 
         # Check Vertices
-        self.assertEqual(len(G_new.entity_types), len(self.G.entity_types))
-        self.assertIn('n1', G_new.entity_types)
+        self.assertEqual(len(G_new.views.entity_kinds()), len(self.G.views.entity_kinds()))
+        self.assertIn('n1', G_new.views.entity_kinds())
 
         # Check Edges
         self.assertIn('e1', G_new.edge_definitions)
@@ -168,8 +168,8 @@ class TestCX2Adapter(unittest.TestCase):
         G_ext = from_cx2(raw_cx2)
 
         # Should have 1 vertex
-        self.assertEqual(len(G_ext.entity_types), 1)
-        self.assertIn('EXT_NODE', G_ext.entity_types)
+        self.assertEqual(len(G_ext.views.entity_kinds()), 1)
+        self.assertIn('EXT_NODE', G_ext.views.entity_kinds())
 
         # Attributes should be loaded
         df = G_ext.vertex_attributes

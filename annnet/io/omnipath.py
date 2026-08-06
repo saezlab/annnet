@@ -459,7 +459,7 @@ def from_omnipath(
     print(f'         vertices={G._num_entities}  edges={G._num_edges}')
 
     # vertex table: register all vertices
-    all_vids = [vid for vid, t in G.entity_types.items() if t == 'vertex']
+    all_vids = G.vertices()
     G._add_vertices_bulk(all_vids)
 
     # vertex annotations

@@ -51,7 +51,7 @@ class TestSIFAdapter:
         )
         G2 = from_sif(tmpdir_fixture / 'net.sif', relation_attr='interaction_type')
         attrs = G2.edge_attributes.filter(
-            G2.edge_attributes['edge_id'].is_in(list(G2.edge_to_idx.keys()))
+            G2.edge_attributes['edge_id'].is_in(list(G2.E))
         ).to_dicts()
         assert any(a.get('interaction_type') == 'phosphorylation' for a in attrs)
 

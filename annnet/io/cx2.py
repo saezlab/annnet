@@ -399,10 +399,7 @@ def to_cx2(
                 out[k] = v
         return out
 
-    for uid, utype in G.entity_types.items():
-        if utype != 'vertex':
-            continue
-
+    for uid in _structure.node_ids(G):
         cx_id = current_node_id
         current_node_id += 1
         node_map[uid] = cx_id
@@ -1000,7 +997,6 @@ def from_cx2(
         directed = net_attrs.get('directed', True)
         G = AnnNet(directed=directed)
 
-        G.entity_types = {}
         if visual_props:
             # make sure we have a dict
             if not hasattr(G, 'graph_attributes') or G.graph_attributes is None:

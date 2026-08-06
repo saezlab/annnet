@@ -9,17 +9,16 @@ import numpy as np
 
 from . import _build, _state, _derive, _mutate, _identity, _validate, _structure
 from ._Ops import Operations, OperationsAccessor
-from ._Views import EdgeSequence, GraphView, NodeSequence, ViewsClass, ViewsAccessor
+from ._Views import GraphView, ViewsClass, EdgeSequence, NodeSequence, ViewsAccessor
 from ._Layers import LayerAccessor
 from ._Matrix import CacheManager, IndexManager, IndexMapping, MatrixNamespace
 from ._Slices import SliceManager
 from ._History import History, HistoryAccessor
 from ._records import (
     EdgeView,
-    _external_entity_kind,
 )
 from ._Annotation import AttributesClass, AttributesAccessor
-from ._stored_kinds import STORED_EDGE_KIND, STORED_ENTITY_KIND
+from ._stored_kinds import STORED_EDGE_KIND
 from ..algorithms.traversal import Traversal
 from .._support.dataframe_backend import (
     empty_dataframe,
@@ -157,9 +156,7 @@ def _is_endpoint_pair(item) -> bool:
     so the second element says which of the two this is.
     """
     return (
-        isinstance(item, tuple)
-        and len(item) == 2
-        and all(isinstance(part, str) for part in item)
+        isinstance(item, tuple) and len(item) == 2 and all(isinstance(part, str) for part in item)
     )
 
 
@@ -2668,41 +2665,9 @@ class AnnNet(
     def _state_attrs(self, value) -> None:
         self.layers._state_attrs = dict(value or {})
 
-    @property
-    def entity_to_idx(self) -> dict:
-        """vertex_id -> row_idx (bare string key, first supra-node wins)."""
-        # ``iter_entities`` yields in row order, so the position is the row.
-        return {key[0]: row for row, key in enumerate(_structure.entity_keys(self))}
-
-    @entity_to_idx.setter
-    def entity_to_idx(self, mapping):
-        """Rebuild the entity registry from a ``vertex_id -> row_idx`` mapping."""
-        _mutate.set_entity_to_idx(self, mapping)
-
-    @property
-    def idx_to_entity(self) -> dict:
-        """row_idx -> vertex_id (bare string)."""
-        return {row: key[0] for row, key in enumerate(_structure.entity_keys(self))}
-
-    @property
-    def entity_types(self) -> dict:
-        """vertex_id -> kind string ('vertex' or 'edge')."""
-        return {
-            ref.id: _external_entity_kind(STORED_ENTITY_KIND[ref.kind])
-            for ref in _structure.iter_entities(self)
-        }
-
-    @entity_types.setter
-    def entity_types(self, mapping):
-        """Set entity kinds from a ``vertex_id -> kind`` mapping."""
+    def _set_entity_kinds_by_id(self, mapping):
+        """Set entity kinds from a ``vertex_id -> kind`` mapping (a reader door)."""
         _mutate.set_entity_types(self, mapping)
-
-    @property
-    def edge_to_idx(self) -> dict:
-        """edge_id -> col_idx for all edges with a matrix column."""
-        # ``iter_edges`` yields in column order and leaves out an edge that
-        # occupies no column, so the position is the column.
-        return {edge_id: col for col, edge_id in enumerate(_structure.edge_ids(self))}
 
     @property
     def idx_to_edge(self) -> dict:

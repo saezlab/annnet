@@ -108,10 +108,10 @@ def assert_graphs_equal(G1, G2, check_slices=True, check_hyperedges=True):
     assert G1.ne == G2.ne, 'Edge counts differ'
 
     # Edge IDs
-    assert set(G1.edge_to_idx.keys()) == set(G2.edge_to_idx.keys()), 'Edge IDs differ'
+    assert set(G1.E) == set(G2.E), 'Edge IDs differ'
 
     # Edge directedness and weights
-    for eid in G1.edge_to_idx.keys():
+    for eid in G1.E:
         default_dir = True if G1.directed is None else G1.directed
         dir1 = G1.edge_directed.get(eid, default_dir)
         dir2 = G2.edge_directed.get(eid, default_dir)

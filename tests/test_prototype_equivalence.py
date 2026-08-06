@@ -279,9 +279,9 @@ def test_a_sequence_of_mutations_reaches_the_store():
 def test_setting_the_kind_of_an_entity_reaches_the_store():
     """The legacy kind setters change one field, so neither rebuilds the store."""
     G = build_case('binary_directed')
-    G.entity_types = {'A': 'edge'}
+    G._set_entity_kinds_by_id({'A': 'edge'})
     assert S.entity_ref(G._store, ('A', ('_',))).kind == S.EDGE_ENTITY
-    _assert_incremental_matches_rebuild(G, 'entity_types')
+    _assert_incremental_matches_rebuild(G, 'entity kinds')
 
     G._set_entity_kinds({('B', ('_',)): 'edge_entity'})
     assert S.entity_ref(G._store, ('B', ('_',))).kind == S.EDGE_ENTITY

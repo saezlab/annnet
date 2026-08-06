@@ -56,6 +56,9 @@ class FakeAnnNet:
             self.entity_types[vid] = 'vertex'
         self._num_entities = len([k for k, v in self.entity_types.items() if v == 'vertex'])
 
+    def vertices(self):
+        return [vid for vid, kind in self.entity_types.items() if kind == 'vertex']
+
     def _resolve_entity_key(self, key):
         return key
 

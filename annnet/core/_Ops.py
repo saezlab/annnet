@@ -112,8 +112,7 @@ def _require_one_layer_registry(left, right) -> None:
     """
     if left._aspects != right._aspects:
         raise ValueError(
-            f'set algebra needs one layer registry, got {left._aspects!r} and '
-            f'{right._aspects!r}'
+            f'set algebra needs one layer registry, got {left._aspects!r} and {right._aspects!r}'
         )
 
 
@@ -573,11 +572,11 @@ class Operations:
         new_edges = [edge for edge in their_edges if edge.id not in known_edges]
 
         if new_entities or new_edges:
-            _build.install_structure(
-                self, definitions=(entities + new_entities, edges + new_edges)
-            )
+            _build.install_structure(self, definitions=(entities + new_entities, edges + new_edges))
 
-        _take_attributes(self, other, {ref.key[0] for ref in new_entities}, {e.id for e in new_edges})
+        _take_attributes(
+            self, other, {ref.key[0] for ref in new_entities}, {e.id for e in new_edges}
+        )
         _take_slices(self, other)
         for key, value in other.graph_attributes.items():
             self.graph_attributes.setdefault(key, value)

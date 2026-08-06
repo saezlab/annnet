@@ -489,7 +489,7 @@ class TestAnnNetIO(unittest.TestCase):
             self.G.elem_layers = {'time': ['t1', 't2']}
 
             # Ensure multilayer state is empty for this test
-            self.G.entity_to_idx = {}
+            self.G._install_structure(definitions=([], []))
             self.G.edge_layers = dict.fromkeys(self.G.edge_layers)
             self.G.layers._layer_attrs = {}
 

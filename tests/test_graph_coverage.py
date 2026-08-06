@@ -157,9 +157,9 @@ def test_hyperedge_definitions_setter_dict_form_undirected() -> None:
     assert rec.tgt is None
 
 
-def test_entity_types_setter_updates_recorded_kind() -> None:
+def test_the_entity_kind_door_updates_the_recorded_kind() -> None:
     G = _toy()
-    G.entity_types = {'A': 'edge'}  # mark vertex A as edge-entity
+    G._set_entity_kinds_by_id({'A': 'edge'})  # mark vertex A as edge-entity
     assert S.entity_ref(G, G._resolve_entity_key('A')).kind == S.EDGE_ENTITY
 
 
@@ -476,7 +476,7 @@ def test_marking_an_entity_as_an_edge_gives_it_the_edge_to_be() -> None:
     G = AnnNet(directed=True)
     G.add_vertices(['A', 'B'])
 
-    G.entity_types = {'A': 'edge'}
+    G._set_entity_kinds_by_id({'A': 'edge'})
 
     assert G.has_edge(edge_id='A') is True
     assert G.validate(strict=False) == []
@@ -593,12 +593,10 @@ def test_edge_definitions_returns_src_tgt_etype_per_binary_edge() -> None:
     assert out['e2'] == ('B', 'C', 'binary')
 
 
-def test_idx_to_entity_round_trips_with_entity_to_idx() -> None:
+def test_a_row_and_the_entity_on_it_name_each_other() -> None:
     G = _toy()
-    e2i = G.entity_to_idx
-    i2e = G.idx_to_entity
-    for vid, idx in e2i.items():
-        assert i2e[idx] == vid
+    for vid in G.N:
+        assert G.idx.row_to_entity(G.idx.entity_to_row(vid)) == vid
 
 
 def test_hyperedge_definitions_round_trips_through_setter() -> None:

@@ -135,7 +135,7 @@ def test_self_loops(adapter, tmpdir_fixture):
     else:
         G2 = _roundtrip_sif(G, tmpdir_fixture, 'loop')
 
-    assert 'loop' in G2.edge_to_idx
+    assert 'loop' in G2.E
 
 
 # ---------------------------------------------------------------------------
@@ -153,9 +153,9 @@ def test_parallel_edges(tmpdir_fixture):
 
     G2 = _roundtrip_json(G, tmpdir_fixture, 'parallel')
 
-    assert 'e1' in G2.edge_to_idx
-    assert 'e2' in G2.edge_to_idx
-    assert 'e3' in G2.edge_to_idx
+    assert 'e1' in G2.E
+    assert 'e2' in G2.E
+    assert 'e3' in G2.E
     assert G2.ne == 3
 
 

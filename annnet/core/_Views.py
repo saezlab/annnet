@@ -4,7 +4,8 @@ import numpy as np
 import scipy.sparse as sp
 
 from . import _structure
-from ._stored_kinds import STORED_EDGE_KIND
+from ._records import _external_entity_kind
+from ._stored_kinds import STORED_EDGE_KIND, STORED_ENTITY_KIND
 from .._support.dataframe_backend import (
     clone_dataframe,
     empty_dataframe,
@@ -677,6 +678,17 @@ class ViewsAccessor:
         """Materialize the edge table view."""
         return ViewsClass.edges_view(self._G, *args, **kwargs)
 
+    def entity_kinds(self) -> dict:
+        """Return the kind of every entity, as a mapping from its id.
+
+        An entity is a node, or an edge that is a node in its own right. The
+        answer is built on each call, so changing it changes nothing.
+        """
+        return {
+            ref.id: _external_entity_kind(STORED_ENTITY_KIND[ref.kind])
+            for ref in _structure.iter_entities(self._G)
+        }
+
     def vertices(self, *args, **kwargs):
         """Materialize the vertex table view."""
         return ViewsClass.vertices_view(self._G, *args, **kwargs)
@@ -818,9 +830,7 @@ class ElementSequence:
             values = [values] * len(ids)
         values = list(values)
         if len(values) != len(ids):
-            raise ValueError(
-                f'a column of {len(ids)} values is needed, {len(values)} were given'
-            )
+            raise ValueError(f'a column of {len(ids)} values is needed, {len(values)} were given')
         self._write_column(name, dict(zip(ids, values, strict=True)))
 
     def _write_column(self, name: str, values: dict) -> None:

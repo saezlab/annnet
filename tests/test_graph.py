@@ -39,13 +39,13 @@ class TestGraphBasics(unittest.TestCase):
         self.assertTrue(self.g._is_directed_edge(eid))
         self.assertIn(eid, self.g.get_edges_by_direction(True))
         # get_edge canonical form
-        S, T = self.g.get_edge(self.g.edge_to_idx[eid])
+        S, T = self.g.get_edge(self.g.idx.edge_to_col(eid))
         self.assertEqual(S, frozenset({'a'}))
         self.assertEqual(T, frozenset({'b'}))
         # matrix signs: +w at source, -w at target (directed)
-        ai = self.g.entity_to_idx['a']
-        bi = self.g.entity_to_idx['b']
-        col = self.g.edge_to_idx[eid]
+        ai = self.g.idx.entity_to_row('a')
+        bi = self.g.idx.entity_to_row('b')
+        col = self.g.idx.edge_to_col(eid)
         self.assertAlmostEqual(self.g._matrix[ai, col], 2.5, places=7)
         self.assertAlmostEqual(self.g._matrix[bi, col], -2.5, places=7)
         # attribute purity for edges (structural keys stripped)
@@ -55,13 +55,13 @@ class TestGraphBasics(unittest.TestCase):
     def test_add_edge_undirected_override(self):
         eid = self.g.add_edges('c', 'd', weight=1.0, directed=False)
         self.assertIn(eid, self.g.get_edges_by_direction(False))
-        S, T = self.g.get_edge(self.g.edge_to_idx[eid])
+        S, T = self.g.get_edge(self.g.idx.edge_to_col(eid))
         self.assertEqual(S, T)
         self.assertEqual(S, frozenset({'c', 'd'}))
         # matrix signs: +w on both endpoints (undirected)
-        ci = self.g.entity_to_idx['c']
-        di = self.g.entity_to_idx['d']
-        col = self.g.edge_to_idx[eid]
+        ci = self.g.idx.entity_to_row('c')
+        di = self.g.idx.entity_to_row('d')
+        col = self.g.idx.edge_to_col(eid)
         self.assertAlmostEqual(self.g._matrix[ci, col], 1.0, places=7)
         self.assertAlmostEqual(self.g._matrix[di, col], 1.0, places=7)
 
@@ -118,15 +118,15 @@ class TestGraphBasics(unittest.TestCase):
             'x', 'y', edge_id='edge_ghost', as_entity=True, weight=1.2, slice='Lx', label='meta'
         )
         # edge_ghost is registered as an entity (can be endpoint)
-        self.assertIn('edge_ghost', self.g.entity_to_idx)
-        self.assertEqual(self.g.entity_types['edge_ghost'], 'edge')
+        self.assertIn('edge_ghost', self.g.views.entity_kinds())
+        self.assertEqual(self.g.views.entity_kinds()['edge_ghost'], 'edge')
         # edge exists and has the right weight
         self.assertAlmostEqual(self.g.edge_weights[e], 1.2, places=7)
         # attributes stored as edge attrs
         self.assertEqual(self.g.attrs.get_attr_edge('edge_ghost', 'label'), 'meta')
         # can connect another edge TO this edge
         self.g.add_edges('z', 'edge_ghost', edge_id='meta_link')
-        self.assertIn('meta_link', self.g.edge_to_idx)
+        self.assertIn('meta_link', self.g.E)
         self.assertEqual(S.edge_shape(self.g, e).etype, 'vertex_edge')
 
     def test_edge_entity_placeholder_has_distinct_etype(self):
@@ -147,26 +147,26 @@ class TestGraphBasics(unittest.TestCase):
     def test_hyperedge_undirected(self):
         hid = self.g.add_edges(src=['h1', 'h2', 'h3'], weight=2.0, tag='tri')
         self.assertEqual(self.g.edge_kind[hid], 'hyper')
-        S, T = self.g.get_edge(self.g.edge_to_idx[hid])
+        S, T = self.g.get_edge(self.g.idx.edge_to_col(hid))
         self.assertEqual(S, T)
         self.assertEqual(S, frozenset({'h1', 'h2', 'h3'}))
         # matrix entries are +2.0 on all three members
-        col = self.g.edge_to_idx[hid]
+        col = self.g.idx.edge_to_col(hid)
         for v in ['h1', 'h2', 'h3']:
-            self.assertAlmostEqual(self.g._matrix[self.g.entity_to_idx[v], col], 2.0, places=7)
+            self.assertAlmostEqual(self.g._matrix[self.g.idx.entity_to_row(v), col], 2.0, places=7)
         # attribute present
         self.assertEqual(self.g.attrs.get_attr_edge(hid, 'tag'), 'tri')
 
     def test_hyperedge_directed(self):
         hid = self.g.add_edges(src=['s1', 's2'], tgt=['t1'], weight=4.0, category='flow')
         self.assertTrue(self.g.edge_directed[hid])
-        S, T = self.g.get_edge(self.g.edge_to_idx[hid])
+        S, T = self.g.get_edge(self.g.idx.edge_to_col(hid))
         self.assertEqual(S, frozenset({'s1', 's2'}))
         self.assertEqual(T, frozenset({'t1'}))
-        col = self.g.edge_to_idx[hid]
+        col = self.g.idx.edge_to_col(hid)
         for v in ['s1', 's2']:
-            self.assertAlmostEqual(self.g._matrix[self.g.entity_to_idx[v], col], 4.0, places=7)
-        self.assertAlmostEqual(self.g._matrix[self.g.entity_to_idx['t1'], col], -4.0, places=7)
+            self.assertAlmostEqual(self.g._matrix[self.g.idx.entity_to_row(v), col], 4.0, places=7)
+        self.assertAlmostEqual(self.g._matrix[self.g.idx.entity_to_row('t1'), col], -4.0, places=7)
         self.assertEqual(self.g.attrs.get_attr_edge(hid, 'category'), 'flow')
 
     def test_slices_and_activation_and_propagation(self):
@@ -320,12 +320,12 @@ class TestGraphBasics(unittest.TestCase):
     def test_remove_edge_then_vertex(self):
         e = self.g.add_edges('r1', 'r2', weight=1.0, tag='tmp')
         self.g.remove_edge(e)
-        self.assertNotIn(e, self.g.edge_to_idx)
+        self.assertNotIn(e, self.g.E)
         # removing a vertex also removes incident edges
         e2 = self.g.add_edges('r1', 'r3', weight=2.0)
         self.g.remove_vertex('r1')
-        self.assertNotIn('r1', self.g.entity_to_idx)
-        self.assertNotIn(e2, self.g.edge_to_idx)
+        self.assertNotIn('r1', self.g.views.entity_kinds())
+        self.assertNotIn(e2, self.g.E)
 
     def test_remove_slice_and_default_slice_guard(self):
         self.g.slices.add('Z')
@@ -368,12 +368,12 @@ class TestGraphBasics(unittest.TestCase):
         # Update same edge_id: flip direction flag and endpoints
         self.g.add_edges('u2', 'u3', weight=3.5, edge_id=e, directed=False)
         # Now undirected, between u2 and u3, weight 3.5
-        S, T = self.g.get_edge(self.g.edge_to_idx[e])
+        S, T = self.g.get_edge(self.g.idx.edge_to_col(e))
         self.assertEqual(S, T)
         self.assertEqual(S, frozenset({'u2', 'u3'}))
-        col = self.g.edge_to_idx[e]
-        u2i = self.g.entity_to_idx['u2']
-        u3i = self.g.entity_to_idx['u3']
+        col = self.g.idx.edge_to_col(e)
+        u2i = self.g.idx.entity_to_row('u2')
+        u3i = self.g.idx.entity_to_row('u3')
         self.assertAlmostEqual(self.g._matrix[u2i, col], 3.5, places=7)
         self.assertAlmostEqual(self.g._matrix[u3i, col], 3.5, places=7)
 
@@ -398,9 +398,9 @@ class TestGraphBasics(unittest.TestCase):
         self.assertIn('v1', set(g.vertices()))
         self.assertIn('v2', set(g.vertices()))
         self.assertEqual(g._resolve_entity_key('v1'), ('v1', ('_',)))
-        self.assertIn('e_intra', g.edge_to_idx)
-        self.assertIn('e_couple', g.edge_to_idx)
-        self.assertIn('h1', g.edge_to_idx)
+        self.assertIn('e_intra', g.E)
+        self.assertIn('e_couple', g.E)
+        self.assertIn('h1', g.E)
         # Flattened to a single layer: every edge's multilayer role is intra,
         # with no cross-layer ml_layers assignment.
         self.assertEqual(S.edge_ref(g, 'e_intra').ml_kind, 'intra')
@@ -670,9 +670,9 @@ class TestErrorPaths(unittest.TestCase):
     def test_add_edge_auto_creates_missing_vertices(self):
         # Neither X nor Y exist yet
         self.g.add_edges('X', 'Y', edge_id='auto_e')
-        self.assertIn('X', self.g.entity_to_idx)
-        self.assertIn('Y', self.g.entity_to_idx)
-        self.assertIn('auto_e', self.g.edge_to_idx)
+        self.assertIn('X', self.g.N)
+        self.assertIn('Y', self.g.N)
+        self.assertIn('auto_e', self.g.E)
 
     # ------------------------------------------------------------------ #
     # add_edge — invalid arguments                                         #

@@ -65,7 +65,7 @@ def to_graphtool(
     Convert an AnnNet AnnNet -> (graph_tool.AnnNet, manifest).
 
     graph-tool graph:
-      - vertices: only entities with entity_types[u] == "vertex"
+      - vertices: only entities whose kind is a node
       - edges: only binary edges whose endpoints are such vertices
       - vertex property vp[vertex_id_property] = AnnNet vertex id
       - edge property   ep[edge_id_property]   = AnnNet edge id
@@ -325,7 +325,7 @@ def from_graphtool(
         G.vertex_attributes = _rows_to_df(v_rows)
     v_types = vmeta.get('types', {})
     if v_types:
-        G.entity_types.update(v_types)
+        G._set_entity_kinds_by_id(v_types)
 
     # ----- edges -----
     emeta = manifest.get('edges', {})
