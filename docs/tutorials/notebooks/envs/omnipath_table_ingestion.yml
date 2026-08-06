@@ -9,5 +9,5 @@ dependencies:
       - annnet @ git+https://github.com/saezlab/annnet.git
       - graphviz
       - ipykernel>=6
-      - omnipath>=1.0
+      - omnipath-client @ git+https://github.com/saezlab/omnipath-client.git
       - polars>=0.20.0

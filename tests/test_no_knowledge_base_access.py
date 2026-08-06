@@ -145,7 +145,9 @@ def test_every_third_party_import_is_declared():
             root = module.split('.')[0]
             if root in {'annnet', ''} or module.startswith('.'):
                 continue
-            if root in standard or root in declared or root in UNDECLARABLE:
+            # A distribution name is case-insensitive and a module name is not,
+            # so the two are compared in one case.
+            if root in standard or root.lower() in declared or root in UNDECLARABLE:
                 continue
             offenders.append(f'{path.relative_to(PROJECT)} imports {root}')
     assert not offenders, 'these are imported and not declared in pyproject.toml:\n' + '\n'.join(

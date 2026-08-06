@@ -97,7 +97,6 @@ nav:
         -   CSV: reference/io/csv.md
         -   Excel: reference/io/excel.md
         -   DataFrames: reference/io/dataframes.md
-        -   OmniPath: reference/io/omnipath.md
     -   Adapters:
         -   NetworkX adapter: reference/adapters/networkx.md
         -   igraph adapter: reference/adapters/igraph.md
@@ -105,6 +104,8 @@ nav:
         -   PyTorch Geometric adapter: reference/adapters/pyg.md
     -   Utilities:
         -   Plotting: reference/utils/plotting.md
+
+-   Changelog: changelog.md
 
 -   Community:
     -   Join Us: community/index.md
@@ -128,7 +129,9 @@ markdown_extensions:
         line_spans: __span
         pygments_lang_class: true
 -   pymdownx.inlinehilite
--   pymdownx.snippets
+-   pymdownx.snippets:
+        base_path:
+        -   .
 -   pymdownx.superfences:
         custom_fences:
         -   name: mermaid

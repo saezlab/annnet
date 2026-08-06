@@ -54,7 +54,6 @@ class TestPublicAPI:
             'from_sbml',
             'from_cobra_model',
             'from_sbml_cobra',
-            'from_omnipath',
         ]:
             assert callable(getattr(an, name))
 
