@@ -8,7 +8,6 @@ import json
 from . import _store as ST, _derive as D, _identity as I, _structure as S
 from ._records import (
     SliceRecord,
-    _df_filter_not_equal,
     _internal_entity_kind,
 )
 from .._support.dataframe_backend import (
@@ -503,36 +502,14 @@ def propagate_to_all_slices(g, edge_id, source, target):
 
 
 def remove_edge(g, edge_id):
-    """Remove a single edge, its column, attributes, and slice memberships."""
+    """Remove a single edge, its column, attributes, and slice memberships.
+
+    One edge is a set of one, and the two removes agree about every step of it.
+    """
     if not S.has_edge(g, edge_id):
         raise KeyError(f'Edge {edge_id} not found')
 
-    D.bump_structure(g)
-    D.invalidate_sparse_caches(g)
-
-    # The column of an edge is its position among the structural ones, so
-    # dropping one moves every column after it and nothing has to be renumbered.
-    drop_edges(g, (edge_id,))
-
-    ea = g.edge_attributes
-    if ea is not None and hasattr(ea, 'columns'):
-        is_empty = (getattr(ea, 'height', None) == 0) or (hasattr(ea, '__len__') and len(ea) == 0)
-        if (not is_empty) and ('edge_id' in list(ea.columns)):
-            g.edge_attributes = _df_filter_not_equal(ea, 'edge_id', edge_id)
-
-    for slice_data in g._slices.values():
-        slice_data['edges'].discard(edge_id)
-
-    esa = g.edge_slice_attributes
-    if esa is not None and hasattr(esa, 'columns'):
-        is_empty = (getattr(esa, 'height', None) == 0) or (
-            hasattr(esa, '__len__') and len(esa) == 0
-        )
-        if (not is_empty) and ('edge_id' in list(esa.columns)):
-            g.edge_slice_attributes = _df_filter_not_equal(esa, 'edge_id', edge_id)
-
-    drop_orphan_edge_entities(g, (edge_id,))
-    g._rebuild_slice_edge_weights_cache()
+    remove_edges_bulk(g, (edge_id,))
 
 
 def remove_edges_bulk(g, edge_ids):
@@ -544,6 +521,8 @@ def remove_edges_bulk(g, edge_ids):
     D.bump_structure(g)
     D.invalidate_sparse_caches(g)
 
+    # The column of an edge is its position among the structural ones, so
+    # dropping one moves every column after it and nothing has to be renumbered.
     drop_edges(g, drop)
 
     for slice_data in g._slices.values():
