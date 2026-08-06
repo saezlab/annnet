@@ -1202,14 +1202,16 @@ def batch_add_edges(
                 entity_out.append(e_id)
                 continue
 
-            if len(it) == 2:
-                # A plain edge names its two endpoints and nothing else, which
-                # is what a bulk load is made of. Its length says so, because
-                # both keys it holds are reserved ones: every field below takes
-                # its default and there is no attribute to collect, so one
-                # length read stands for six lookups and the subset test at the
-                # end of the loop.
-                w = default_weight
+            _fields = len(it)
+            if _fields == 2 or (_fields == 3 and 'weight' in it):
+                # A plain edge names its two endpoints and at most a weight
+                # beside them, which is what a bulk load is made of. Its length
+                # says so, because every key it could hold is a reserved one: a
+                # length of two or three leaves every field below on its default
+                # and leaves nothing to collect as an attribute, so one length
+                # read stands for six lookups and the subset test at the end of
+                # the loop.
+                w = it['weight'] if _fields == 3 else default_weight
                 edge_type = default_edge_type
                 prop = default_propagate
                 slice_local = slice

@@ -1,9 +1,9 @@
-"""A batch item that names only its endpoints takes every default.
+"""A batch item that names its endpoints and a weight takes every other default.
 
 The bulk binary writer reads six optional fields off every item and then tests
 whether the item carries an attribute. An item that names nothing but its two
-endpoints carries none of that, and its length says so, because every key it
-could hold is one the writer already knows about.
+endpoints, or those and a weight, carries none of the rest, and its length says
+so, because every key it could hold is one the writer already knows about.
 
 That shortcut is only worth having if it gives what the long way gives. What
 these tests pin is that the two agree — on the batch defaults, on the aliases
@@ -67,6 +67,29 @@ def test_a_third_key_that_names_the_weight_is_still_read():
     graph = AnnNet(directed=True)
     graph.add_edges([{'source': 'A', 'target': 'B', 'weight': 3.0}])
     assert graph.get_edge('edge_0').weight == 3.0
+
+
+def test_a_weight_beside_two_endpoints_leaves_the_other_defaults_standing():
+    short, long = AnnNet(directed=True), AnnNet(directed=True)
+    short.add_edges([{'source': 'A', 'target': 'B', 'weight': 3.0}])
+    long.add_edges(
+        [
+            {
+                'source': 'A',
+                'target': 'B',
+                'weight': 3.0,
+                'edge_type': 'regular',
+                'propagate': 'none',
+            }
+        ]
+    )
+    assert _record(short, 'edge_0') == _record(long, 'edge_0')
+
+
+def test_a_weight_beside_two_endpoints_is_not_an_attribute():
+    graph = AnnNet(directed=True)
+    graph.add_edges([{'source': 'A', 'target': 'B', 'weight': 3.0}])
+    assert 'weight' not in graph.attrs.get_edge_attrs('edge_0')
 
 
 @pytest.mark.parametrize('field', ['edge_directed', 'directed'])
