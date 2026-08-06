@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ._base import _cached_signature, _BackendAccessorBase
 
@@ -318,7 +318,7 @@ class _NXBackendAccessor(_BackendAccessorBase):
         H = _nx.DiGraph() if directed else _nx.Graph()
         H.add_nodes_from(nxG.nodes(data=True))
 
-        buckets = {}
+        buckets: dict[Any, Any] = {}
         for u, v, _, data in nxG.edges(keys=True, data=True):
             edge_key = (u, v) if directed else tuple(sorted((u, v)))
             entry = buckets.setdefault(edge_key, {})

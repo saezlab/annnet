@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 import warnings
 import itertools
 
@@ -2129,7 +2129,7 @@ class LayerAccessor:
             self._validate_layer_tuple(Lb)
             norm_pairs.append((La, Lb))
         # Build per-layer presence index to avoid O(|V_M|^2)
-        layer_to_nodes = {}
+        layer_to_nodes: dict[Any, Any] = {}
         for ref in _structure.iter_entities(self):
             if ref.kind == _structure.NODE:
                 layer_to_nodes.setdefault(ref.layer, set()).add(ref.id)
@@ -2162,7 +2162,7 @@ class LayerAccessor:
         """
         ai = self._aspect_index(aspect)
         # Map: (u, other_aspects_tuple) -> {elem_on_aspect: full_layer_tuple}
-        buckets = {}
+        buckets: dict[Any, Any] = {}
         for ref in _structure.iter_entities(self):
             u, aa = ref.key
             if ref.kind != _structure.NODE:
@@ -2199,7 +2199,7 @@ class LayerAccessor:
             Number of edges added.
         """
         # collect per node the matching layers actually present
-        per_u = {}
+        per_u: dict[Any, Any] = {}
         for ref in _structure.iter_entities(self):
             u, aa = ref.key
             if ref.kind == _structure.NODE and self._layer_matches_filter(aa, layer_filter):
@@ -2271,11 +2271,11 @@ class LayerAccessor:
         layers_norm = self._normalize_layers_arg(layers)
         nl_to_row, _ = self._build_supra_index(layers_norm)
         nodes, layers_t, node_to_i, layer_to_i = self.tensor_index(layers)
-        ui = []
-        ai = []
-        vi = []
-        bi = []
-        wv = []
+        ui: list[Any] = []
+        ai: list[Any] = []
+        vi: list[Any] = []
+        bi: list[Any] = []
+        wv: list[Any] = []
 
         def _to_tuple(L):
             if isinstance(L, tuple):
@@ -2726,8 +2726,8 @@ class LayerAccessor:
         # build per-layer deg vectors and aggregate per node
         layer_deg = self.layer_degree_vectors(layers)
         # aggregate k_u over layers
-        per_node_total = {}
-        per_node_by_layer = {}
+        per_node_total: dict[Any, Any] = {}
+        per_node_by_layer: dict[Any, Any] = {}
         _, row_to_nl = self._build_supra_index()
         for L, (rows, deg) in layer_deg.items():
             for i, r in enumerate(rows):
@@ -2768,7 +2768,7 @@ class LayerAccessor:
         # largest eigenpair of symmetric A
         vals, vecs = eigsh(A, k=1, which='LA')
         v = vecs[:, 0]
-        per_node = {}
+        per_node: dict[Any, Any] = {}
         layers_norm = self._normalize_layers_arg(layers)
         _, row_to_nl = self._build_supra_index(layers_norm)
         for i, (u, _) in enumerate(row_to_nl):

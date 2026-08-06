@@ -8,6 +8,7 @@ and the reserved sets say which attribute names the structural columns own.
 from __future__ import annotations
 
 from enum import Enum
+from typing import Any
 from dataclasses import field, dataclass
 
 import narwhals as nw
@@ -79,6 +80,14 @@ class SliceRecord:
 class EdgeView(tuple):
     """Tuple-shaped edge record returned by :meth:`AnnNet.get_edge`."""
 
+    edge_id: str
+    kind: Any
+    source: Any
+    target: Any
+    members: Any
+    weight: float
+    directed: bool
+
     def __new__(cls, source, target, *, edge_id, kind, members, weight, directed):
         self = super().__new__(cls, (source, target))
         self.edge_id = edge_id
@@ -106,6 +115,11 @@ class NodeView(str):
     it hangs off that. An edge is a pair, which is why :class:`EdgeView` is a
     tuple and this is a string.
     """
+
+    node_id: str
+    kind: Any
+    layers: tuple
+    attrs: dict
 
     def __new__(cls, node_id, *, kind, layers, attrs):
         self = super().__new__(cls, node_id)

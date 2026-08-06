@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from . import _build, _mutate, _structure
+from ._state import GraphState
 from ._stored_kinds import STORED_EDGE_KIND
 from .._support.dataframe_backend import (
     clone_dataframe,
@@ -149,7 +150,7 @@ def _take_slices(target, source) -> None:
             held['attributes'].setdefault(key, value)
 
 
-class Operations:
+class Operations(GraphState):
     """Topology materialization and graph-copy operations (mixed into AnnNet)."""
 
     def _constructor_aspects(self):
@@ -166,7 +167,7 @@ class Operations:
         return dataframe_filter_in(df, key_col, keys)
 
     def _flat_edge_nodes(self, edge_ids) -> set[str]:
-        nodes = set()
+        nodes: set[Any] = set()
         for eid in edge_ids:
             if not _structure.has_edge(self, eid) or not _structure.carries_structure(self, eid):
                 continue

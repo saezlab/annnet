@@ -37,6 +37,12 @@ class TemporalChange(TypedDict):
     net_change: int
 
 
+# ``SliceManager`` names one of its methods ``list``, which shadows the builtin
+# inside the class body. So an annotation that means the builtin says so through
+# these aliases.
+SliceIds = list[str]
+
+
 def _bare(v):
     if isinstance(v, tuple) and len(v) == 2 and isinstance(v[1], tuple):
         return v[0]
@@ -209,7 +215,7 @@ class SliceManager:
             return G._slices
         return {k: v for k, v in G._slices.items() if k != G._default_slice}
 
-    def list(self, include_default: bool = True) -> list[str]:
+    def list(self, include_default: bool = True) -> SliceIds:
         """Slice IDs as a list."""
         return list(self.get_slices_dict(include_default=include_default).keys())
 
@@ -262,7 +268,7 @@ class SliceManager:
                 ue.update(G._slices[sid]['edges'])
         return {'nodes': uv, 'edges': ue}
 
-    def intersect(self, slice_ids: list[str]) -> SliceMembership:
+    def intersect(self, slice_ids: SliceIds) -> SliceMembership:
         """Return the intersection of nodes and edges across multiple slices."""
         G = self._G
         if not slice_ids:
@@ -326,7 +332,7 @@ class SliceManager:
         """Create a slice from the union of existing slices."""
         return self.create_slice_from_operation(name, self.union(slice_ids), **attributes)
 
-    def intersect_create(self, slice_ids: list[str], name: str, **attributes: Any) -> str:
+    def intersect_create(self, slice_ids: SliceIds, name: str, **attributes: Any) -> str:
         """Create a slice from the intersection of existing slices."""
         return self.create_slice_from_operation(name, self.intersect(slice_ids), **attributes)
 
@@ -338,7 +344,7 @@ class SliceManager:
 
     def aggregate(
         self,
-        source_slice_ids: list[str],
+        source_slice_ids: SliceIds,
         target_slice_id: str,
         method: str = 'union',
         weight_func: Any = None,
@@ -375,7 +381,7 @@ class SliceManager:
             for sid, data in self.get_slices_dict(include_default=include_default).items()
         }
 
-    def node_presence(self, node_id: str, include_default: bool = False) -> list[str]:
+    def node_presence(self, node_id: str, include_default: bool = False) -> SliceIds:
         """List slices that contain a given node."""
         return [
             sid
@@ -391,7 +397,7 @@ class SliceManager:
         *,
         include_default: bool = False,
         undirected_match: bool | None = None,
-    ) -> list[str] | dict[str, list[str]]:
+    ) -> SliceIds | dict[str, SliceIds]:
         """Slices containing an edge by id, or by (source, target) endpoint pair."""
         G = self._G
         has_id = edge_id is not None
@@ -403,11 +409,11 @@ class SliceManager:
             return [lid for lid, ldata in slices_view.items() if edge_id in ldata['edges']]
         if undirected_match is None:
             undirected_match = False
-        out: dict[str, list[str]] = {}
+        out: dict[str, SliceIds] = {}
         wanted_source = frozenset({source})
         wanted_target = frozenset({target})
         for lid, ldata in slices_view.items():
-            matches: list[str] = []
+            matches: SliceIds = []
             for eid in ldata['edges']:
                 if not _structure.has_edge(G, eid) or not _structure.carries_structure(G, eid):
                     continue
@@ -435,7 +441,7 @@ class SliceManager:
         head: Iterable[str] | None = None,
         tail: Iterable[str] | None = None,
         include_default: bool = False,
-    ) -> dict[str, list[str]]:
+    ) -> dict[str, SliceIds]:
         """Slices containing a hyperedge by undirected members or directed head+tail."""
         G = self._G
         undirected = members is not None
@@ -455,9 +461,9 @@ class SliceManager:
             if head_set & tail_set:
                 raise ValueError('head and tail must be disjoint.')
 
-        out: dict[str, list[str]] = {}
+        out: dict[str, SliceIds] = {}
         for lid, ldata in self.get_slices_dict(include_default=include_default).items():
-            matches: list[str] = []
+            matches: SliceIds = []
             for eid in ldata['edges']:
                 if not _structure.has_edge(G, eid) or not _structure.carries_structure(G, eid):
                     continue
@@ -499,7 +505,7 @@ class SliceManager:
         }
 
     def temporal_dynamics(
-        self, ordered_slices: list[str], metric: str = 'edge_change'
+        self, ordered_slices: SliceIds, metric: str = 'edge_change'
     ) -> list[TemporalChange]:
         """Summarize added and removed members across an ordered slice sequence."""
         G = self._G

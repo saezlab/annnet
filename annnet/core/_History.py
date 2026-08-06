@@ -8,6 +8,7 @@ from functools import wraps
 
 import numpy as np
 
+from ._state import GraphState
 from .._support.dataframe_backend import (
     dataframe_from_rows,
     dataframe_write_csv,
@@ -88,7 +89,7 @@ class GraphDiff:
         }
 
 
-class History:
+class History(GraphState):
     """Mutation logging, version counter, snapshots, and diffs (mixed into AnnNet)."""
 
     # The second the stamp of the last event fell in, and the text of it. Class
@@ -234,8 +235,12 @@ class History:
             if fn and getattr(fn, '__wrapped__', None) is None:
                 setattr(self, name, self._log_mutation(name)(fn))
 
-    def history(self, as_df: bool = False):
+    def _history_log_impl(self, as_df: bool = False):
         """Return the append-only mutation history.
+
+        The name carries the ``_impl`` suffix its three siblings carry, because
+        ``G.history`` is the accessor and an instance holds it. A method of the
+        same name on the mixin would be one every instance shadows.
 
         Parameters
         ----------
@@ -398,7 +403,7 @@ class HistoryAccessor:
         self._G = graph
 
     def __call__(self, *args, **kwargs):
-        return History.history(self._G, *args, **kwargs)
+        return History._history_log_impl(self._G, *args, **kwargs)
 
     def enable(self, flag: bool = True):
         """Enable or disable mutation history recording."""

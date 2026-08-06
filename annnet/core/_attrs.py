@@ -23,6 +23,8 @@ contextual attribute, and :attr:`AttributeStore.node_layer_attributes` holds it.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 from ._store import NODE as _NODE_ENTITY
@@ -506,7 +508,7 @@ class AttributeStore:
         if wanted is not None:
             wanted = set(wanted)
             pairs = [pair for pair in pairs if pair[0] in wanted]
-        out = {element_id: {} for element_id, _slot in pairs}
+        out: Any = {element_id: {} for element_id, _slot in pairs}
         for name, column in columns.items():
             size = column.size
             for element_id, slot in pairs:

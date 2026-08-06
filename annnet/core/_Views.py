@@ -4,6 +4,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from . import _structure
+from ._state import GraphState
 from ._records import _external_entity_kind
 from ._stored_kinds import STORED_EDGE_KIND, STORED_ENTITY_KIND
 from .._support.dataframe_backend import (
@@ -418,7 +419,7 @@ class GraphView:
         return self.node_count
 
 
-class ViewsClass:
+class ViewsClass(GraphState):
     """Materialized table builders mixed into ``AnnNet``."""
 
     def edges_view(

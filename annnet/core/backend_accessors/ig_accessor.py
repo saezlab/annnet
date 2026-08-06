@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ._base import _cached_signature, _BackendAccessorBase
 
@@ -265,7 +265,7 @@ class _IGBackendAccessor(_BackendAccessorBase):
         if 'name' in igG.vs.attributes():
             H.vs['name'] = igG.vs['name']
 
-        buckets = {}
+        buckets: dict[Any, Any] = {}
         for edge in igG.es:
             u, v = edge.tuple
             edge_key = (u, v) if directed else tuple(sorted((u, v)))

@@ -671,22 +671,32 @@ class CoreState:
         if len(seen) != count or not edge_slot.keys().isdisjoint(seen):
             raise KeyError(f'Duplicate edge id: {_first_repeated(ids, edge_slot)!r}')
 
-        if None in directions:
-            directions = [INHERIT if value is None else int(bool(value)) for value in directions]
-        if None in weights:
-            weights = [1.0 if value is None else value for value in weights]
+        directions = (
+            [INHERIT if value is None else int(bool(value)) for value in directions]
+            if (None in directions)
+            else list(directions)
+        )
+        weights = (
+            [1.0 if value is None else value for value in weights]
+            if (None in weights)
+            else list(weights)
+        )
 
         lengths = list(map(len, member_lists))
         flat = list(chain.from_iterable(member_lists))
         if flat:
             keys, coefficients, roles = zip(*flat, strict=True)
-            entities = list(map(entity_slot.get, keys))
-            if None in entities:
-                gap = entities.index(None)
+            resolved = list(map(entity_slot.get, keys))
+            if None in resolved:
+                gap = resolved.index(None)
                 raise KeyError(
                     f'Edge {ids[_edge_of_member(lengths, gap)]!r} names an entity the '
                     f'store does not hold: {keys[gap]!r}'
                 )
+            # Every one of them resolved, which the raise above is what makes
+            # true. Saying so here is what keeps the walks below reading a slot
+            # rather than a slot that might be missing.
+            entities: list[int] = [slot for slot in resolved if slot is not None]
         else:
             coefficients, roles, entities = (), (), []
         cursor = self._member_used + len(flat)

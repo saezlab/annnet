@@ -287,6 +287,21 @@ ignore_messages = '(Unknown target name:.*|No (directive|role) entry for "(auto)
 ignore_roles = ["ref"]
 report_level = "INFO"
 
+[tool.mypy]
+# The core is the part of the package that has to hold together on its own, so
+# it is the part that is type checked. Everything around it talks to a library
+# that ships no types.
+files = ["annnet/core"]
+mypy_path = "."
+explicit_package_bases = true
+namespace_packages = true
+# igraph, graph-tool, networkx and scipy ship no stubs, and installing a stub
+# package for each of them buys nothing here: the core reaches them through one
+# accessor and hands them nothing it built.
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
 [tool.ruff]
 extend-exclude = ["tools/*.py", "**/*.ipynb"]
 line-length = 100

@@ -13,6 +13,7 @@ import math
 from typing import Any
 
 from . import _structure
+from ._state import GraphState
 from .._support.dataframe_backend import (
     dataframe_columns,
     dataframe_to_rows,
@@ -34,7 +35,7 @@ def _check_reserved_collision(reserved, attrs, *, kind, allow=()):
         )
 
 
-class AttributesClass:
+class AttributesClass(GraphState):
     """Attribute accessors and upsert helpers (graph/node/edge/slice/edge-slice)."""
 
     def set_graph_attribute(self, key, value):

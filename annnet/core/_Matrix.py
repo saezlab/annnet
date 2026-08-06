@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from . import _store as ST, _matrices, _structure
+from ._state import GraphState
 from ._records import _external_entity_kind
 from ._stored_kinds import STORED_ENTITY_KIND
 from .._support.dataframe_backend import (
@@ -685,7 +688,7 @@ class IndexManager:
         }
 
 
-class IndexMapping:
+class IndexMapping(GraphState):
     """Internal id-generation and attribute-row helpers mixed into ``AnnNet``."""
 
     def _get_next_edge_id(self) -> str:
@@ -712,7 +715,7 @@ class IndexMapping:
         drop = self._pending_edge_slice_drops
         if not drop:
             return
-        self._pending_edge_slice_drops = set()
+        self._pending_edge_slice_drops: set[Any] = set()
         self._edge_slice_attributes = dataframe_drop_rows(
             self._edge_slice_attributes, 'edge_id', drop
         )

@@ -448,7 +448,6 @@ class AnnNet(
         self._history = []
         self._history_clock0 = time.perf_counter_ns()
         self._install_history_hooks()
-        self.history = HistoryAccessor(self)
         self._snapshots = []
 
         # Cartesian-product layer cache (set_aspects refreshes it on mutation).
@@ -817,10 +816,6 @@ class AnnNet(
     def _V(self) -> set:
         return {key[0] for key in _structure.node_keys(self)}
 
-    @property
-    def _VM(self) -> set:
-        return set(_structure.node_keys(self))
-
     def _VM_ordered(self) -> list:
         """Return the key of every node, in row order.
 
@@ -829,6 +824,10 @@ class AnnNet(
         holds them.
         """
         return _structure.node_keys(self)
+
+    @property
+    def _VM(self) -> set:
+        return set(_structure.node_keys(self))
 
     @_VM.setter
     def _VM(self, value) -> None:
@@ -2348,6 +2347,27 @@ class AnnNet(
         except AttributeError:
             self._attrs_accessor = AttributesAccessor(self)
             return self._attrs_accessor
+
+    @property
+    def history(self) -> HistoryAccessor:
+        """Mutation history and snapshot namespace.
+
+        Returns
+        -------
+        HistoryAccessor
+            Callable namespace: ``G.history()`` reads the log, and its methods
+            enable it, clear it, export it, mark it, and snapshot the graph.
+
+        Examples
+        --------
+        >>> G.history()
+        >>> G.history.snapshot('before')
+        """
+        try:
+            return self._history_accessor
+        except AttributeError:
+            self._history_accessor = HistoryAccessor(self)
+            return self._history_accessor
 
     @property
     def views(self) -> ViewsAccessor:
