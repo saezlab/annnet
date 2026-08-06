@@ -1260,8 +1260,20 @@ def batch_add_edges(
             pass
 
         # ── ensure endpoint entities exist ─────────────────────────────────────
-        source_key = _ensure_endpoint(s, edge_type)
-        target_key = _ensure_endpoint(t, edge_type)
+        # A flat graph keys an entity by its id and the placeholder coordinate,
+        # so an endpoint the store already holds is answered by its key alone.
+        # A load names each of its vertices many times and the general path is
+        # only needed for the first, which is where it registers the entity.
+        if _flat and type(s) is str and type(t) is str:
+            source_key = (s, _flat_coord)
+            target_key = (t, _flat_coord)
+            if _entity_slot(source_key) is None:
+                source_key = _ensure_endpoint(s, edge_type)
+            if _entity_slot(target_key) is None:
+                target_key = _ensure_endpoint(t, edge_type)
+        else:
+            source_key = _ensure_endpoint(s, edge_type)
+            target_key = _ensure_endpoint(t, edge_type)
 
         # ── direction ──────────────────────────────────────────────────────────
         if e_dir is not None:

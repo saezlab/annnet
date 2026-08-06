@@ -1,14 +1,20 @@
-"""A batch item that names its endpoints and a weight takes every other default.
+"""What the bulk binary writer reads off one item of a batch.
 
-The bulk binary writer reads six optional fields off every item and then tests
-whether the item carries an attribute. An item that names nothing but its two
-endpoints, or those and a weight, carries none of the rest, and its length says
-so, because every key it could hold is one the writer already knows about.
+The writer reads six optional fields off every item, tests it for an attribute,
+and resolves each of its two endpoints to an entity key. A bulk load is the same
+item shape repeated, so each of those has a short answer for the shape a load
+carries, and each short answer is only worth having if it gives what the long
+one gives.
 
-That shortcut is only worth having if it gives what the long way gives. What
-these tests pin is that the two agree — on the batch defaults, on the aliases
-that make a two-key item, and on the first key that takes the item off the
-short path again.
+An item that names nothing but its two endpoints, or those and a weight, takes
+every other default, and its length says so because every key it could hold is
+one the writer already knows about. An endpoint of a flat graph is keyed by its
+id and the placeholder coordinate, so an endpoint the store already holds needs
+no resolution at all — which is every mention of a vertex after the first.
+
+What these tests pin is that the two paths agree: on the batch defaults, on the
+aliases that make a two-key item, on the first key that takes an item off the
+short path, and on the endpoints a flat graph resolves for itself.
 """
 
 from __future__ import annotations
@@ -134,3 +140,34 @@ def test_an_item_of_two_endpoints_carries_no_attribute():
     attrs = graph.attrs.get_edge_attrs('edge_0')
     assert 'source' not in attrs
     assert 'target' not in attrs
+
+
+def test_a_vertex_named_twice_in_a_batch_is_one_entity():
+    graph = AnnNet(directed=True)
+    graph.add_edges([{'source': 'A', 'target': 'B'}, {'source': 'A', 'target': 'C'}])
+    assert sorted(graph.vertices()) == ['A', 'B', 'C']
+    assert sorted(graph.get_edge('edge_1').source) == ['A']
+
+
+def test_a_self_loop_resolves_both_of_its_endpoints_to_the_same_entity():
+    graph = AnnNet(directed=True)
+    graph.add_edges([{'source': 'A', 'target': 'A'}])
+    assert sorted(graph.vertices()) == ['A']
+    view = graph.get_edge('edge_0')
+    assert sorted(view.source) == sorted(view.target) == ['A']
+
+
+def test_a_batch_reaching_a_vertex_added_before_it_makes_no_second_entity():
+    graph = AnnNet(directed=True)
+    graph.add_vertices(['A', 'B'])
+    graph.add_edges([{'source': 'A', 'target': 'B'}])
+    assert sorted(graph.vertices()) == ['A', 'B']
+
+
+def test_a_multilayer_endpoint_keeps_the_layer_it_names():
+    graph = AnnNet(directed=True, aspects={'condition': ['healthy', 'treated']})
+    graph.add_edges([{'source': ('A', ('healthy',)), 'target': ('B', ('treated',))}])
+    view = graph.get_edge('edge_0')
+    assert sorted(view.source) == [('A', ('healthy',))]
+    assert sorted(view.target) == [('B', ('treated',))]
+    assert graph.num_supra_vertices == 2
