@@ -41,7 +41,7 @@ except Exception:
     HAS_PANDAS = False
 
 if HAS_TORCH:
-    from annnet.adapters.pyg_adapter import to_pyg
+    from annnet.io.pyg import to_pyg
 else:
     to_pyg = None
 

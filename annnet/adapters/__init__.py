@@ -14,7 +14,6 @@ _lazy_functions: dict[str, tuple[str, str]] = {
     'from_igraph': ('annnet.adapters.igraph_adapter', 'from_igraph'),
     'to_graphtool': ('annnet.adapters.graphtool_adapter', 'to_graphtool'),
     'from_graphtool': ('annnet.adapters.graphtool_adapter', 'from_graphtool'),
-    'to_pyg': ('annnet.adapters.pyg_adapter', 'to_pyg'),
 }
 
 __all__ = sorted(set(_lazy_functions) | {'available_backends'})

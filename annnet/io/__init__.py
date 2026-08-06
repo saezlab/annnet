@@ -33,6 +33,8 @@ _lazy_symbols: dict[str, tuple[str, str]] = {
     'to_cx2': ('annnet.io.cx2', 'to_cx2'),
     'from_cx2': ('annnet.io.cx2', 'from_cx2'),
     'show_cx2': ('annnet.io.cx2', 'show_cx2'),
+    # PyTorch Geometric
+    'to_pyg': ('annnet.io.pyg', 'to_pyg'),
     # Parquet
     'to_parquet': ('annnet.io.parquet', 'to_parquet'),
     'from_parquet': ('annnet.io.parquet', 'from_parquet'),
