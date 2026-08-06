@@ -1104,8 +1104,12 @@ def batch_add_edges(
     # together once the loop ends: the store grows each of its arrays once for
     # the whole batch, where a write per edge grew them once per edge.
     _slot = g._store
-    _entity_slot = _slot.entity_slot
-    _edge_slot = _slot.edge_slot
+    # Both accessors are one dict probe, and the loop makes three of them an
+    # edge, so it takes the probe rather than the method that wraps it. Neither
+    # dict is rebound while a batch is being written — only a copy of the store
+    # gives itself new ones.
+    _entity_slot = _slot._entity_slot.get
+    _edge_slot = _slot._edge_slot.get
     _flat = g._aspects == ('_',)
     _flat_coord = ('_',)
     _is_multilayer = not _flat
@@ -1198,19 +1202,35 @@ def batch_add_edges(
                 entity_out.append(e_id)
                 continue
 
-            w = it.get('weight', default_weight)
-            edge_type = it.get('edge_type', default_edge_type)
-            prop = it.get('propagate', default_propagate)
-            slice_local = it.get('slice', slice)
-            slice_w = it.get('slice_weight', default_slice_weight)
-            if 'edge_directed' in it:
-                e_dir = it['edge_directed']
-            elif 'directed' in it:
-                e_dir = it['directed']
-            else:
+            if len(it) == 2:
+                # A plain edge names its two endpoints and nothing else, which
+                # is what a bulk load is made of. Its length says so, because
+                # both keys it holds are reserved ones: every field below takes
+                # its default and there is no attribute to collect, so one
+                # length read stands for six lookups and the subset test at the
+                # end of the loop.
+                w = default_weight
+                edge_type = default_edge_type
+                prop = default_propagate
+                slice_local = slice
+                slice_w = default_slice_weight
                 e_dir = default_edge_directed
-            edge_id = it.get('edge_id')
-            _item = it
+                edge_id = None
+                _item = None
+            else:
+                w = it.get('weight', default_weight)
+                edge_type = it.get('edge_type', default_edge_type)
+                prop = it.get('propagate', default_propagate)
+                slice_local = it.get('slice', slice)
+                slice_w = it.get('slice_weight', default_slice_weight)
+                if 'edge_directed' in it:
+                    e_dir = it['edge_directed']
+                elif 'directed' in it:
+                    e_dir = it['directed']
+                else:
+                    e_dir = default_edge_directed
+                edge_id = it.get('edge_id')
+                _item = it
         elif isinstance(it, (tuple, list)):
             s = it[0]
             t = it[1]
