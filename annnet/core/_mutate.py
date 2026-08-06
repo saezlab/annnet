@@ -12,7 +12,6 @@ from ._records import (
     _internal_entity_kind,
 )
 from .._support.dataframe_backend import (
-    dataframe_drop_rows,
     is_polars_dataframe,
     dataframe_upsert_rows,
     polars_upsert_vertices,
@@ -553,12 +552,12 @@ def remove_edges_bulk(g, edge_ids):
         for eid in drop:
             d.pop(eid, None)
 
-    # The edge table takes the removal the way it takes an insertion: buffered,
-    # and applied by the next read. A filter costs the call rather than the rows,
-    # so removing edges one at a time paid for one filter each where the set they
-    # name needs one filter between them.
+    # Both attribute tables take the removal the way they take an insertion:
+    # buffered, and applied by the next read. A filter costs the call rather
+    # than the rows, so removing edges one at a time paid for one filter each
+    # where the set they name needs one filter between them.
     g._drop_edge_rows(drop)
-    g.edge_slice_attributes = dataframe_drop_rows(g.edge_slice_attributes, 'edge_id', drop)
+    g._drop_edge_slice_rows(drop)
 
     drop_orphan_edge_entities(g, drop)
 

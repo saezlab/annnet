@@ -870,6 +870,24 @@ class IndexMapping:
         self._edge_attributes = df
         self._edge_attr_df_id = id(self._edge_attributes)
 
+    def _drop_edge_slice_rows(self, edge_ids) -> None:
+        """Take the rows of these edges out of the edge-slice table, at the next read.
+
+        The table has no insertion buffer to match this one, because a row of it
+        is written whole rather than owed by an id, and the write that owns it
+        reads the table first.
+        """
+        self._pending_edge_slice_drops.update(edge_ids)
+
+    def _flush_edge_slice_rows(self) -> None:
+        drop = self._pending_edge_slice_drops
+        if not drop:
+            return
+        self._pending_edge_slice_drops = set()
+        self._edge_slice_attributes = dataframe_drop_rows(
+            self._edge_slice_attributes, 'edge_id', drop
+        )
+
     def _vertex_key_enabled(self) -> bool:
         return bool(self._vertex_key_fields)
 

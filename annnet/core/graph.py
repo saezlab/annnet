@@ -469,12 +469,14 @@ class AnnNet(
         # _drop_*_rows / _flush_*_rows for the rationale).
         self._vertex_attributes = None
         self._edge_attributes = None
+        self._edge_slice_attributes = None
         # Insertion-ordered sets: a pending id is written once however many
         # times it is asked for, and a drop takes it out in one step.
         self._pending_vertex_ids: dict = {}
         self._pending_edge_ids: dict = {}
         self._pending_vertex_drops: set = set()
         self._pending_edge_drops: set = set()
+        self._pending_edge_slice_drops: set = set()
         self._vertex_attr_ids = None
         self._edge_attr_ids = None
         self._vertex_attr_df_id = None
@@ -550,6 +552,19 @@ class AnnNet(
         self._pending_edge_drops = set()
         self._edge_attr_ids = None
         self._edge_attr_df_id = None
+
+    @property
+    def edge_slice_attributes(self):
+        """Edge-by-slice attribute table; flushes buffered row removals on read."""
+        if self._pending_edge_slice_drops:
+            self._flush_edge_slice_rows()
+        return self._edge_slice_attributes
+
+    @edge_slice_attributes.setter
+    def edge_slice_attributes(self, value):
+        """Replace the edge-by-slice table and drop what was owed against the old one."""
+        self._edge_slice_attributes = value
+        self._pending_edge_slice_drops = set()
 
     def __dir__(self):
         return sorted(set(self._PUBLIC_API))
