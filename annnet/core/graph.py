@@ -1114,7 +1114,11 @@ class AnnNet(
         batch_candidate = None
         if len(args) == 1 and not kwargs.get('tgt') and 'src' not in kwargs:
             candidate = args[0]
-            if not isinstance(candidate, (str, bytes, dict)):
+            if isinstance(candidate, dict):
+                # One edge is a batch of one. The two paths would otherwise
+                # answer differently for the same edge, stated the same way.
+                batch_candidate = [candidate]
+            elif not isinstance(candidate, (str, bytes)):
                 if isinstance(candidate, list):
                     if candidate and isinstance(candidate[0], (dict, tuple, list)):
                         batch_candidate = candidate
