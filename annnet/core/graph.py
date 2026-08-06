@@ -54,14 +54,25 @@ def _is_hyper_item(item) -> bool:
         return False
     if 'members' in item or 'head' in item or 'tail' in item:
         return True
-    # Preserve 'src'/'tgt' precedence over 'source'/'target', but avoid the
-    # eagerly-evaluated default of ``get('src', get('source'))`` on every item.
-    src_val = item.get('src')
-    if src_val is None:
+    # A batch scan calls this once per item, so the item it almost always gets
+    # decides the whole cost: it names neither alias and carries two plain
+    # strings. Two membership probes settle the aliases without reading a
+    # value, and two type tests settle the endpoints before anything
+    # list-shaped is considered.
+    if 'src' in item or 'tgt' in item:
+        # Preserve 'src'/'tgt' precedence over 'source'/'target', but avoid the
+        # eagerly-evaluated default of ``get('src', get('source'))``.
+        src_val = item.get('src')
+        if src_val is None:
+            src_val = item.get('source')
+        tgt_val = item.get('tgt')
+        if tgt_val is None:
+            tgt_val = item.get('target')
+    else:
         src_val = item.get('source')
-    tgt_val = item.get('tgt')
-    if tgt_val is None:
         tgt_val = item.get('target')
+        if type(src_val) is str and type(tgt_val) is str:
+            return False
     for val in (src_val, tgt_val):
         if (
             isinstance(val, (list, tuple, set, frozenset))
@@ -1001,13 +1012,19 @@ class AnnNet(
                 unexpected = ', '.join(sorted(kwargs))
                 raise TypeError(f'Unexpected keyword arguments for batch add_edges: {unexpected}')
 
-            kinds = set()
+            # Two flags rather than a set of two names: the scan walks the whole
+            # batch whenever it is uniform, which is the case worth paying for,
+            # and a set costs a string hash and a length read per item.
+            has_hyper = has_binary = False
             for item in batch_candidate:
-                kinds.add('hyper' if _is_hyper_item(item) else 'binary')
-                if len(kinds) > 1:
+                if _is_hyper_item(item):
+                    has_hyper = True
+                else:
+                    has_binary = True
+                if has_hyper and has_binary:
                     break
 
-            if kinds == {'hyper'}:
+            if has_hyper and not has_binary:
                 return self._add_hyperedges_batch(
                     batch_candidate,
                     slice=default_slice,
@@ -1016,7 +1033,7 @@ class AnnNet(
                     layer=default_layer,
                 )
 
-            if kinds <= {'binary'}:
+            if not has_hyper:
                 return self._add_edges_batch(
                     batch_candidate,
                     slice=default_slice,
