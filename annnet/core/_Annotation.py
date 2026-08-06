@@ -377,6 +377,36 @@ class AttributesClass:
             slice_id, [{'slice_id': slice_id, 'edge_id': edge_id, **clean}]
         )
 
+    def edge_slice(self, slice_id, edge_id) -> dict:
+        """Return every attribute one edge carries in one slice.
+
+        The level of this store is the pair, so an edge that carries nothing in
+        this slice answers with an empty mapping rather than with the
+        attributes it carries elsewhere.
+
+        Parameters
+        ----------
+        slice_id : str
+            Slice identifier.
+        edge_id : str
+            Edge identifier.
+
+        Returns
+        -------
+        dict
+        """
+        df = self.edge_slice_attributes
+        if df is None:
+            return {}
+        for row in dataframe_to_rows(df):
+            if row.get('slice_id') == slice_id and row.get('edge_id') == edge_id:
+                return {
+                    key: value
+                    for key, value in row.items()
+                    if key not in ('slice_id', 'edge_id') and value is not None
+                }
+        return {}
+
     def get_edge_slice_attr(self, slice_id, edge_id, key, default=None):
         """Get a per-slice attribute for an edge.
 
@@ -910,6 +940,7 @@ _ATTR_DELEGATED = (
     'set_edge_slice_attrs',
     'set_edge_slice_attrs_bulk',
     'get_edge_slice_attr',
+    'edge_slice',
     'set_slice_edge_weight',
     'get_effective_edge_weight',
     'audit_attributes',

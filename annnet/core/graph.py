@@ -374,13 +374,6 @@ class AnnNet(
             'layer_intersection',
             'layer_difference',
             'set_aspect_attrs',
-            'get_aspect_attrs',
-            'set_layer_attrs',
-            'get_layer_attrs',
-            'set_vertex_layer_attrs',
-            'get_vertex_layer_attrs',
-            'set_elementary_layer_attrs',
-            'get_elementary_layer_attrs',
             'list_aspects',
             'list_layers',
         }

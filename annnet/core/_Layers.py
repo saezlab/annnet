@@ -786,7 +786,7 @@ class LayerAccessor:
         # Rebuild DF; Polars will infer schema and fill missing values with nulls
         self.layer_attributes = dataframe_from_rows(new_rows, backend=self._annotations_backend)
 
-    def set_elementary_layer_attrs(self, aspect: str, label: str, /, **attrs):
+    def set_elementary_attrs(self, aspect: str, label: str, /, **attrs):
         """Attach attributes to an elementary Kivela layer.
 
         ``aspect`` and ``label`` are positional-only so user attribute
@@ -808,7 +808,7 @@ class LayerAccessor:
         lid = self._elem_layer_id(aspect, label)
         self._upsert_layer_attribute_row(lid, attrs)
 
-    def get_elementary_layer_attrs(self, aspect: str, label: str) -> dict:
+    def elementary_attrs(self, aspect: str, label: str) -> dict:
         """Get attributes for an elementary Kivela layer.
 
         Parameters
@@ -853,7 +853,7 @@ class LayerAccessor:
         d = self._aspect_attrs.setdefault(aspect, {})
         d.update(attrs)
 
-    def get_aspect_attrs(self, aspect: str) -> dict:
+    def aspect_attrs(self, aspect: str) -> dict:
         """Return a shallow copy of metadata for a Kivela aspect.
 
         Parameters
@@ -869,7 +869,7 @@ class LayerAccessor:
             raise KeyError(f'unknown aspect {aspect!r}')
         return dict(self._aspect_attrs.get(aspect, {}))
 
-    def set_layer_attrs(self, layer_tuple: tuple[str, ...], **attrs):
+    def set_attrs(self, layer_tuple: tuple[str, ...], **attrs):
         """Attach metadata to a Kivela layer.
 
         Parameters
@@ -888,7 +888,7 @@ class LayerAccessor:
         d = self._layer_attrs.setdefault(aa, {})
         d.update(attrs)
 
-    def get_layer_attrs(self, layer_tuple: tuple[str, ...]) -> dict:
+    def attrs(self, layer_tuple: tuple[str, ...]) -> dict:
         """Get metadata dict for a Kivela layer.
 
         Parameters
@@ -905,7 +905,7 @@ class LayerAccessor:
         self._validate_layer_tuple(aa)
         return dict(self._layer_attrs.get(aa, {}))
 
-    def set_vertex_layer_attrs(self, u: str, layer_tuple: tuple[str, ...], **attrs):
+    def set_node_attrs(self, u: str, layer_tuple: tuple[str, ...], **attrs):
         """Attach metadata to a vertex–layer pair.
 
         Parameters
@@ -932,7 +932,7 @@ class LayerAccessor:
         d = self._state_attrs.setdefault(key, {})
         d.update(attrs)
 
-    def get_vertex_layer_attrs(self, u: str, layer_tuple: tuple[str, ...]) -> dict:
+    def node_attrs(self, u: str, layer_tuple: tuple[str, ...]) -> dict:
         """Get metadata dict for a vertex–layer pair.
 
         Parameters

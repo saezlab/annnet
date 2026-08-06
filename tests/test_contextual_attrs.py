@@ -121,3 +121,50 @@ def test_removing_a_node_drops_its_contextual_attributes(attrs):
     attrs.set_node_layer(key('A'), ('t0',), abundance=1.0)
     attrs.forget_node(key('A'))
     assert attrs.node_layer_attrs(key('A'), ('t0',)) == {}
+
+
+# ---------------------------------------------------------------------------
+# The public entry points
+# ---------------------------------------------------------------------------
+
+
+def public_graph():
+    """A graph with one value in each contextual store, reached through the API."""
+    from annnet import AnnNet
+
+    G = AnnNet(directed=True)
+    G.layers.set_aspects(['phase'], {'phase': ['t0']})
+    G.add_vertices(['A', 'B'], layer=('t0',))
+    G.add_edges(
+        [{'source': ('A', ('t0',)), 'target': ('B', ('t0',)), 'edge_id': 'e0'}],
+        default_edge_directed=True,
+    )
+    G.slices.add('core')
+    G.slices.add_edges('core', ['e0'])
+    G.attrs.set_slice_attrs('core', kind='curated')
+    G.attrs.set_edge_slice_attrs('core', 'e0', confidence=0.9)
+    G.layers.set_attrs(('t0',), when='baseline')
+    G.layers.set_node_attrs('A', ('t0',), abundance=12.5)
+    G.layers.set_aspect_attrs('phase', description='time bin')
+    G.layers.set_elementary_attrs('phase', 't0', colour='blue')
+    G.uns['source'] = 'a file'
+    return G
+
+
+def test_each_contextual_level_has_one_entry_point():
+    """Every level of the contextual stores is reachable by name."""
+    G = public_graph()
+    assert G.slices.attrs('core') == {'kind': 'curated'}
+    assert G.attrs.edge_slice('core', 'e0') == {'confidence': 0.9}
+    assert G.layers.attrs(('t0',)) == {'when': 'baseline'}
+    assert G.layers.node_attrs('A', ('t0',)) == {'abundance': 12.5}
+    assert G.layers.aspect_attrs('phase') == {'description': 'time bin'}
+    assert G.layers.elementary_attrs('phase', 't0') == {'colour': 'blue'}
+    assert G.uns == {'source': 'a file'}
+
+
+def test_a_pair_that_carries_nothing_answers_empty():
+    """The level of a contextual store is the pair, not either half of it."""
+    G = public_graph()
+    assert G.attrs.edge_slice('other', 'e0') == {}
+    assert G.layers.node_attrs('B', ('t0',)) == {}

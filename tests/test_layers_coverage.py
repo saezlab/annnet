@@ -137,19 +137,19 @@ def test_subgraph_from_layer_difference_runs() -> None:
 def test_set_aspect_attrs_and_get_aspect_attrs_round_trip() -> None:
     G = _single_aspect_two_layer()
     G.layers.set_aspect_attrs('t', kind='temporal')
-    assert G.layers.get_aspect_attrs('t').get('kind') == 'temporal'
+    assert G.layers.aspect_attrs('t').get('kind') == 'temporal'
 
 
 def test_set_layer_attrs_and_get_round_trip() -> None:
     G = _single_aspect_two_layer()
-    G.layers.set_layer_attrs(('t1',), note='alpha')
-    assert G.layers.get_layer_attrs(('t1',)).get('note') == 'alpha'
+    G.layers.set_attrs(('t1',), note='alpha')
+    assert G.layers.attrs(('t1',)).get('note') == 'alpha'
 
 
 def test_set_vertex_layer_attrs_and_get_round_trip() -> None:
     G = _single_aspect_two_layer()
-    G.layers.set_vertex_layer_attrs('A', ('t1',), state='active')
-    assert G.layers.get_vertex_layer_attrs('A', ('t1',)).get('state') == 'active'
+    G.layers.set_node_attrs('A', ('t1',), state='active')
+    assert G.layers.node_attrs('A', ('t1',)).get('state') == 'active'
 
 
 # ── layer iteration helpers ─────────────────────────────────────────

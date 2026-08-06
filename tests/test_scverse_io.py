@@ -27,8 +27,8 @@ def _build_multilayer_graph() -> AnnNet:
     g.add_vertices('B', layer=('treated',))
     g.add_edges(('A', ('healthy',)), ('B', ('healthy',)), edge_id='e_h')
     g.add_edges(('A', ('treated',)), ('B', ('treated',)), edge_id='e_t')
-    g.layers.set_vertex_layer_attrs('A', ('healthy',), abundance=3.5)
-    g.layers.set_layer_attrs(('healthy',), cohort='ctrl')
+    g.layers.set_node_attrs('A', ('healthy',), abundance=3.5)
+    g.layers.set_attrs(('healthy',), cohort='ctrl')
     return g
 
 

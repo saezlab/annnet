@@ -44,11 +44,11 @@ def _build_fixture() -> AnnNet:
     G.layers.set_aspect_attrs('phase', description='time bin')
 
     # Elementary-layer attrs (per aspect/value).
-    G.layers.set_elementary_layer_attrs('level', 'sig', color='#1f77b4', weight=1.0)
-    G.layers.set_elementary_layer_attrs('phase', 't0', when='baseline')
+    G.layers.set_elementary_attrs('level', 'sig', color='#1f77b4', weight=1.0)
+    G.layers.set_elementary_attrs('phase', 't0', when='baseline')
 
     # Per layer-tuple attrs.
-    G.layers.set_layer_attrs(('sig', 't0'), note='intra-signaling at baseline')
+    G.layers.set_attrs(('sig', 't0'), note='intra-signaling at baseline')
 
     # Vertices: protein has presence in multiple layer combinations.
     G.add_vertices(
@@ -76,8 +76,8 @@ def _build_fixture() -> AnnNet:
     )
 
     # Per-(vertex, layer) attrs (state_attrs).
-    G.layers.set_vertex_layer_attrs('prot:A', ('sig', 't0'), abundance=12.5)
-    G.layers.set_vertex_layer_attrs('prot:A', ('sig', 't1'), abundance=18.0)
+    G.layers.set_node_attrs('prot:A', ('sig', 't0'), abundance=12.5)
+    G.layers.set_node_attrs('prot:A', ('sig', 't1'), abundance=18.0)
 
     # Edges — cover every kind.
     sig0 = ('sig', 't0')
@@ -276,7 +276,7 @@ def _full_snapshot(g: AnnNet):
         'layers_per_aspect': {
             a: sorted(g.layers.list_layers(a)) for a in g.layers.list_aspects() or ()
         },
-        'aspect_attrs': {a: g.layers.get_aspect_attrs(a) for a in g.layers.list_aspects() or ()},
+        'aspect_attrs': {a: g.layers.aspect_attrs(a) for a in g.layers.list_aspects() or ()},
         'entities': sorted(S.entity_keys(g)),
         'entity_rows': {ref.key: (row, ref.kind) for row, ref in enumerate(S.iter_entities(g))},
         'edges': _edge_state(g),

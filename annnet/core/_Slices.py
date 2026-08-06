@@ -233,6 +233,14 @@ class SliceManager:
             'attributes': self._slice_attrs(slice_id),
         }
 
+    def attrs(self, slice_id: str) -> dict[str, Any]:
+        """Return every attribute of one slice.
+
+        A slice is a level of its own, so its attributes are held apart from
+        the attributes of the nodes and the edges it holds.
+        """
+        return self._slice_attrs(slice_id)
+
     def vertices(self, slice_id: str) -> set[str]:
         """Return a copy of the vertex IDs in a slice."""
         return self._G._slices[slice_id]['vertices'].copy()

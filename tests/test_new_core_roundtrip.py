@@ -158,9 +158,9 @@ def graph_with_every_store() -> AnnNet:
         G.attrs.set_edge_slice_attrs('left', 'e_ab', note='an edge-in-slice value')
         G.attrs.set_slice_edge_weight('left', 'e_ab', 9.5)
         G.layers.set_aspect_attrs('phase', note='an aspect value')
-        G.layers.set_elementary_layer_attrs('phase', 't0', note='an elementary-layer value')
-        G.layers.set_layer_attrs(('t0',), note='a layer value')
-        G.layers.set_vertex_layer_attrs('A', ('t0',), note='a node-in-layer value')
+        G.layers.set_elementary_attrs('phase', 't0', note='an elementary-layer value')
+        G.layers.set_attrs(('t0',), note='a layer value')
+        G.layers.set_node_attrs('A', ('t0',), note='a node-in-layer value')
 
         # The graph itself.
         G.uns['note'] = 'a graph value'
@@ -175,10 +175,10 @@ def attribute_snapshot(graph: AnnNet) -> dict:
         'slice_attributes': table_rows(graph.slice_attributes),
         'edge_slice_attributes': table_rows(graph.edge_slice_attributes),
         'layer_attributes': table_rows(graph.layer_attributes),
-        'aspect_attrs': graph.layers.get_aspect_attrs('phase'),
-        'elementary_layer_attrs': graph.layers.get_elementary_layer_attrs('phase', 't0'),
-        'layer_attrs': graph.layers.get_layer_attrs(('t0',)),
-        'vertex_layer_attrs': graph.layers.get_vertex_layer_attrs('A', ('t0',)),
+        'aspect_attrs': graph.layers.aspect_attrs('phase'),
+        'elementary_layer_attrs': graph.layers.elementary_attrs('phase', 't0'),
+        'layer_attrs': graph.layers.attrs(('t0',)),
+        'vertex_layer_attrs': graph.layers.node_attrs('A', ('t0',)),
         'slice_attr': graph.attrs.get_slice_attr('left', 'note'),
         'edge_slice_attr': graph.attrs.get_edge_slice_attr('left', 'e_ab', 'note'),
         'weight_in_the_slice': graph.attrs.get_effective_edge_weight('e_ab', slice='left'),

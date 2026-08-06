@@ -142,7 +142,7 @@ def serialize_multilayer_manifest(
     """
     aspect_attrs = {}
     for aspect in graph.aspects:
-        attrs = graph.layers.get_aspect_attrs(aspect)
+        attrs = graph.layers.aspect_attrs(aspect)
         if attrs:
             aspect_attrs[aspect] = attrs
 
@@ -153,13 +153,13 @@ def serialize_multilayer_manifest(
     node_layer_attrs = []
     for uu, layer_tuple in graph._VM_ordered():
         vm_rows.append({'node': uu, 'layer': list(layer_tuple)})
-        attrs = graph.layers.get_vertex_layer_attrs(uu, layer_tuple)
+        attrs = graph.layers.node_attrs(uu, layer_tuple)
         if attrs:
             node_layer_attrs.append({'node': uu, 'layer': list(layer_tuple), 'attrs': attrs})
 
     layer_tuple_attrs = []
     for layer_tuple in graph.layers.iter_layers():
-        attrs = graph.layers.get_layer_attrs(layer_tuple)
+        attrs = graph.layers.attrs(layer_tuple)
         if attrs:
             layer_tuple_attrs.append({'layer': list(layer_tuple), 'attrs': attrs})
 
@@ -333,7 +333,7 @@ def restore_multilayer_manifest(
         layer_tuple = _normalize_layer_tuple(row.get('layer'))
         attrs = row.get('attributes') or row.get('attrs') or {}
         if layer_tuple and attrs:
-            graph.layers.set_layer_attrs(layer_tuple, **attrs)
+            graph.layers.set_attrs(layer_tuple, **attrs)
 
     layer_attr_rows = manifest.get('layer_attributes', [])
     if layer_attr_rows:
