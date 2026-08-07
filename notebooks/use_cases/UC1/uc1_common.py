@@ -81,7 +81,7 @@ def pkn_edges(G):
 
 
 def pkn_degree(edges_df):
-    """Total (in+out) degree per vertex over an edge table."""
+    """Total (in+out) degree per node over an edge table."""
     return (
         pd.concat([edges_df['source'].value_counts(), edges_df['target'].value_counts()], axis=1)
         .fillna(0)
@@ -159,7 +159,7 @@ def build_consensus_layer(patient_results, min_freq):
 
     node_df = pd.DataFrame(
         {
-            'vertex_id': v,
+            'node_id': v,
             'active_count': c,
             'patient_frequency': c / n,
             'mean_signal': float(np.mean(node_signal[v])),
@@ -204,17 +204,17 @@ def add_consensus_layer_to_graph(G, layer_label, node_df, edge_df):
     nodes = node_df[node_df['selected_for_consensus']]
     edges = edge_df[edge_df['selected_for_consensus']]
     if not nodes.empty:
-        G.add_vertices(nodes['vertex_id'].tolist(), layer=aa)
+        G.add_nodes(nodes['node_id'].tolist(), layer=aa)
         for row in nodes.itertuples(index=False):
-            G.layers.set_vertex_layer_attrs(
-                row.vertex_id,
+            G.layers.set_node_attrs(
+                row.node_id,
                 aa,
                 corneto_signal=float(row.mean_signal),
                 patient_frequency=float(row.patient_frequency),
                 active_count=int(row.active_count),
             )
     if not edges.empty:
-        keep = set(nodes['vertex_id'])
+        keep = set(nodes['node_id'])
         specs = [
             {
                 'source': (row.source, aa),

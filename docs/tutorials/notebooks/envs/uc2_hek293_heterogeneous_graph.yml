@@ -13,6 +13,7 @@ dependencies:
       - numpy>=1.24
       - networkx>=3.3
       - omnipath>=1.0
+      - omnipath-client @ git+https://github.com/saezlab/omnipath-client.git
       - pandas>=2.0
       - polars>=0.20.0
       - requests

@@ -128,7 +128,7 @@ def load():
 
 
 def edges_frame(G):
-    """Edge table with both endpoints reduced to bare vertex ids."""
+    """Edge table with both endpoints reduced to bare node ids."""
     df = G.views.edges().to_pandas()
     df['source'] = df['source'].map(bare_vid)
     df['target'] = df['target'].map(bare_vid)
