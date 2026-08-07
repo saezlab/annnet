@@ -151,10 +151,10 @@ class TestGTBackendAccessor(unittest.TestCase):
         order = []
 
         class Visitor(search.BFSVisitor):
-            def discover_node(self, u):
+            def discover_vertex(self, u):
                 order.append(int(u))
 
-        G.gt.search.bfs_search(G, g.node(0), Visitor())
+        G.gt.search.bfs_search(G, g.vertex(0), Visitor())
         self.assertEqual(order[0], 0)
 
     # --- util: random_permute_nodes ---
