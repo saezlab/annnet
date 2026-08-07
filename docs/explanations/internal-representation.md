@@ -1,35 +1,31 @@
 # Internal representation
 
-This page describes the actual in-memory model of `AnnNet` as implemented in
-`annnet.core.graph`, `annnet.core._Matrix`, `annnet.core._Ops`, and
-`annnet.core._records`.
+This page describes the in-memory model of `AnnNet`, as implemented in
+`annnet.core._store`, `annnet.core._attrs`, `annnet.core._matrices` and
+`annnet.core._structure`.
 
 The key fact is simple:
 
-- the graph has one structural source of truth
-- everything else is either an overlay, a derived index, or a compatibility
-  boundary
+- the graph has one structural source of truth, the canonical store
+- everything else is an overlay, a derived structure, or a read facade
 
 If you keep that distinction straight, the internal model is clean.
 
-## The four canonical structural stores
+## The canonical store
 
-AnnNet's structural topology is organized around four mappings:
+`annnet.core._store.CoreState` holds the structure of one graph. The graph
+object keeps it in `_store`, and nothing else holds topology.
 
-```python
-_entities: dict[tuple, EntityRecord]
-_edges: dict[str, EdgeRecord]
-_row_to_entity: dict[int, tuple]
-_col_to_edge: dict[int, str]
-```
+A caller addresses an element two ways:
 
-They play distinct roles.
+- by **identity**, which is an entity key or an edge id
+- by **slot**, which is an integer the store assigns on insert
 
-### `_entities`
+A slot is stable. The store never renumbers one, so a remove frees the slot of
+that element and leaves every other slot where it was. The store reuses a freed
+slot before it grows the arrays.
 
-`_entities` maps an internal entity key to an `EntityRecord`.
-
-The key is a tuple:
+An entity key is a tuple:
 
 ```python
 (node_id, layer_coord)
@@ -42,210 +38,108 @@ Examples:
 - flat graph node: `("TP53", ("_",))`
 - two-aspect supra-node: `("TP53", ("treated", "t1"))`
 
-The value is an `EntityRecord`, currently:
+Rows therefore belong to entities, not to plain nodes. An entity is a node or an
+edge-entity, which is the `entity_kind` array.
+
+## Topology lives in the member lists
+
+The store keeps no edge record. What an edge holds is a segment of three pooled
+arrays:
 
 ```python
-EntityRecord(row_idx: int, kind: str)
+member_ent   # which entity slot this entry names
+member_role  # SOURCE, TARGET or MEMBER
+member_coef  # the coefficient of this entry
 ```
 
-`kind` distinguishes at least:
+`member_start` and `member_len` say which segment belongs to which edge slot.
+The segments together are an incidence matrix in compressed sparse column form,
+addressed by slot. One pool holds every edge kind. A binary edge, a hyperedge
+and a node-edge therefore differ in how many entries they own, and in nothing
+else.
 
-- `"node"`
-- `"edge_entity"`
+**One entry per role.** A member entry records one role of one entity in one
+edge, not one entity. An entity that takes two roles in one edge appears twice
+in that edge. That is what keeps a self-loop distinct from a boundary edge. A
+self-loop holds two entries on one entity slot, and a boundary edge holds one.
+Without it, a directed self-loop would collapse to a single entry and look
+exactly like a one-sided edge.
 
-This means that rows belong to entities, not just to plain nodes.
+The per-edge scalars sit in arrays beside the pools: `edge_kind`,
+`edge_directed`, `edge_weight` and `edge_explicit`. Rare per-edge state stays in
+dictionaries keyed by slot: the multilayer kind, the layer tuple and the
+direction policy. That state costs nothing on an edge that does not carry it.
 
-### `_edges`
+## Indices the store maintains
 
-`_edges` maps an edge identifier to an `EdgeRecord`.
+The store maintains two lookups rather than rebuilding them, because a rebuild
+of either would make a local change cost the size of the graph:
 
-`EdgeRecord` is the canonical store for edge semantics:
+- `_id_slots` maps one bare node id to the slots it stands for. A flat graph
+  needs it for nothing, because an id names exactly one entity there. A
+  multilayer graph asks it on every resolution of a bare id.
+- `_entity_edges` maps an entity slot to the edges that touch it. It also holds
+  the sides that entity takes, and the peer on the other side when the edge has
+  exactly two entries.
 
-```python
-EdgeRecord(
-    src,
-    tgt,
-    weight,
-    directed,
-    etype,
-    col_idx,
-    ml_kind,
-    ml_layers,
-    direction_policy,
-)
-```
+Both are rebuildable from the member lists and neither is authoritative.
 
-Important fields:
+## The store holds no matrix
 
-- `etype`
-  Structural edge type, currently distinguishing binary, hyper, and
-  node-edge cases.
-- `src` and `tgt`
-  The current internal field names for structural source and target endpoint
-  sets. Public-facing docs should use "source" and "target" terminology even
-  while these record fields remain abbreviated internally.
-- `col_idx`
-  The incidence column index, or `-1` for an edge-entity placeholder with no
-  structural column yet.
-- `ml_kind` and `ml_layers`
-  Multilayer metadata. These are not a second edge store; they annotate the
-  same edge record.
+The store imports no matrix library and holds no matrix object. A matrix is
+derived state. `annnet.core._matrices` builds one: it gathers the member lists
+and remaps slots to rows.
 
-### `_row_to_entity`
+The package builds several purpose-built matrices rather than one that mixes
+every edge kind. Each named matrix decides the two awkward shapes for itself:
 
-`_row_to_entity` is the reverse lookup for the row space.
+| Matrix    | Self-loop                              | Boundary edge                   |
+|-----------|----------------------------------------|---------------------------------|
+| incidence | two entries, which sum to zero         | the single entry stays          |
+| adjacency | one diagonal entry                     | left out, so no false loop      |
+| Laplacian | follows the adjacency                  | follows the adjacency           |
 
-It answers:
+`MatrixCache` keeps a built matrix against the clock of the store. A write that
+only appends edges at the frontier extends the cached matrix instead of dropping
+it. A read after an append therefore costs the new columns and not a rebuild.
+Without that, a loop of N appends with a read after each one would be
+quadratic.
 
-- given a matrix row, which entity key owns it?
+## Attributes are slot-indexed columns
 
-This is not redundant bookkeeping for convenience. It is what allows the
-incidence matrix to stay usable as soon as you need to map matrix outputs back
-to graph objects.
+`annnet.core._attrs.AttributeStore` holds one generic attribute as one typed
+array, indexed by slot. One write lands in one cell, at any graph size, and a
+value keeps its place when another element goes away. A free slot holds a null.
 
-### `_col_to_edge`
+A value keeps the type of the write that set it. The store converts nothing, so
+an integer in a column that later takes a string stays an integer.
 
-`_col_to_edge` is the reverse lookup for the column space.
+`G.obs` and `G.var` **derive** their content. They gather the live slots of
+every column and hand the result to narwhals, so one materialization serves
+every dataframe backend. A write into the table a materialization handed back
+changes nothing the graph holds.
 
-It answers:
+A column of a dataframe has one type, so a materialized table widens where the
+columns do not. A column that holds an integer and a string materializes as an
+object column rather than a float one. A count therefore does not read back as
+`3.0`.
 
-- given a matrix column, which edge does it represent?
+**A generic node attribute belongs to a node and not to a node-layer.** A
+multilayer graph holds one entity per layer the node lives in, so one bare id
+covers several slots. A write by bare id lands in the cell of each of them, and
+the derived table shows the id once.
 
-Like `_row_to_entity`, this is part of the structural model, not just an API
-extra.
-
-## What the sparse matrix means
-
-`AnnNet` stores a sparse incidence matrix in DOK form as its editable primary
-matrix:
-
-```python
-_matrix: scipy.sparse.dok_matrix
-```
-
-The canonical interpretation is:
-
-- rows correspond to entities
-- columns correspond to edges
-
-The matrix is not the only source of truth. It is one half of the structural
-truth together with the registries above.
-
-Consequences:
-
-- a matrix entry alone does not tell you whether a column is binary or hyper
-- a matrix entry alone does not tell you whether a row is a node or an
-  edge-entity
-- a matrix entry alone does not carry multilayer metadata
-
-That information lives in the records. The matrix holds incidence; the records
-hold semantics.
-
-## Row key: `(node_id, layer_coord)`
-
-The clean invariant is:
-
-- one row represents one node-layer state
-
-That is why `_entities` is keyed by `(node_id, layer_coord)` rather than by
-plain node id.
-
-For flat graphs, the layer coordinate is the basal placeholder:
-
-```python
-("_",)
-```
-
-For layered graphs, the coordinate is a tuple over declared aspects.
-
-This avoids mixing two row meanings inside one matrix. There is no separate
-"global node row" once the graph is in the layered model. A node without
-explicit multilayer placement is represented at the placeholder coordinate,
-not as a structurally different kind of row.
-
-## Placeholder coordinates are real coordinates
-
-The placeholder tuple
-
-```python
-("_", ..., "_")
-```
-
-is not just an implementation accident. It is a valid fallback coordinate.
-
-It appears in three important situations:
-
-1. flat graphs before aspects are declared
-2. layered graphs when old flat nodes are lifted into the layered model
-3. layered graphs when the user adds nodes without an explicit `layer=`
-
-This keeps the row invariant intact:
-
-- every row still represents one `(node, layer_coord)`
-
-The placeholder exists only as long as some graph state still references it.
-When nothing refers to it anymore, it can be dropped from the active layer
-registry.
-
-## Derived adjacency indices
-
-Several indices are maintained incrementally from `_edges`:
-
-- `_adj`
-- `_src_to_edges`
-- `_tgt_to_edges`
-
-These are derived execution indices, not competing edge stores.
-
-Their role is to make common local operations efficient:
-
-- neighborhood lookups
-- endpoint-based edge existence checks
-- directional incident-edge scans
-
-They matter for performance, but the semantics still come from `EdgeRecord`.
-
-## Attribute tables are not structural state
-
-AnnNet keeps attributes in dataframe-like tables, not inside the structural
-records:
-
-- `node_attributes`
-- `edge_attributes`
-- `slice_attributes`
-- `edge_slice_attributes`
-- `layer_attributes`
-
-This is an intentional separation.
-
-Structural state answers questions like:
-
-- which row does this entity own?
-- which endpoints does this edge connect?
-- which column does this edge occupy?
-
-Attribute tables answer questions like:
-
-- what annotation value is attached to this node or edge?
-- what label or score does this node carry?
-- what metadata is attached to this edge?
-- which slice-specific edge weight should be used?
-- what slice-specific override applies here?
-- which dataframe backend owns newly-created annotation rows?
-
-Core code treats those tables through shared dataframe helpers. The graph object
-can accept Narwhals-compatible eager dataframes, while newly-created annotation
-tables follow the configured annotation backend selection. This keeps core
-annotation reads, history exports, views, adapters, and IO modules on the same
-backend policy instead of letting each call site choose Polars, pandas, or
-PyArrow independently.
-
-That separation is one of the core design choices in AnnNet.
+A contextual attribute belongs to a pair rather than to one element — one edge in
+one slice, or one node in one layer. Almost no pair carries a value, so a dense
+column per pair would waste nearly every cell. Those stores stay keyed by the
+pair, and each level has one public entry point: `G.slices.attrs`,
+`G.attrs.edge_slice`, `G.layers.attrs`, `G.layers.node_attrs`,
+`G.layers.aspect_attrs` and `G.layers.elementary_attrs`.
 
 ## Slices are overlays, not duplicate graphs
 
-Slice state lives in `_slices`, which maps slice identifiers to membership and
-metadata:
+Slice state lives in `_slices`, which maps a slice identifier to a
+`SliceRecord`:
 
 - node membership
 - edge membership
@@ -255,39 +149,33 @@ This is not another topology store. Slices do not redefine the graph
 structurally. They describe which parts of the same graph are active in a named
 context.
 
-Per-slice edge weights are handled separately through `edge_slice_attributes`
-and `slice_edge_weights`.
+`edge_slice_attributes` and `slice_edge_weights` hold the per-slice edge
+weights, separately from the rest.
 
 ## Multilayer state is also an overlay
 
-Multilayer state is carried by:
+The multilayer state sits in four places:
 
-- `_aspects`
-- `_layers`
-- `_all_layers`
-- `_state_attrs`
-- edge multilayer metadata in `EdgeRecord`
-- derived layer indices such as `_VM`, `_nl_to_row`, `_row_to_nl`
+- `_aspects` and `_layers`, the aspect and elementary-layer registry
+- the layer coordinate inside each entity key
+- the multilayer kind and layer tuple of an edge, in the store
+- the supra index, built on demand behind `G.layers.nl_to_row` and
+  `G.layers.row_to_nl`
 
-Again, the important point is that this does not replace the structural graph.
-It enriches it.
+Again, this does not replace the structural graph. It enriches it. The supra-node
+model resolves back to the same entity slots and member lists.
 
-The supra-node model still ultimately resolves back to the canonical entity
-rows and edge columns.
+## The read facade
 
-## Compatibility views
+`annnet.core._structure` is the one boundary between the canonical store and the
+rest of the package. Input-output code, adapters and bridges read topology
+through it. They never read a private store attribute of a graph.
 
-AnnNet exposes dict-like compatibility views such as:
+The facade answers questions about structure only. It reports which entities and
+edges exist, which entities an edge holds, and which edges touch an entity. It
+does not report attributes, and it never writes.
 
-- `entity_to_idx`
-- `idx_to_entity`
-- `entity_types`
-- `edge_to_idx`
-- `idx_to_edge`
-- `edge_weights`
-- `edge_definitions`
-- `hyperedge_definitions`
-- `edge_kind`
-
-These views are useful for compatibility and inspection, but they are separate
-from the canonical structural stores described above.
+Every address in the facade is an identity. A row number and a column number
+belong to one materialized matrix, so neither appears in an answer. `G.idx`
+translates a coordinate a caller already holds, in both directions, against the
+matrix the graph would build now.

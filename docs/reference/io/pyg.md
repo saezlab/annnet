@@ -1,8 +1,8 @@
-# PyTorch Geometric Adapter
+# PyTorch Geometric
 
-PyG conversion helpers from `annnet.adapters.pyg_adapter`.
+PyTorch Geometric conversion helpers from `annnet.io.pyg`.
 
-::: annnet.adapters.pyg_adapter
+::: annnet.io.pyg
     options:
       filters: public
       show_root_heading: true

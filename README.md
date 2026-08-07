@@ -143,9 +143,9 @@ import annnet as an
 G = an.Graph(directed=True)  # default direction; can be overridden per-edge
 
 # Create slices and set active
-G.slices.add_slice("toy")
-G.slices.add_slice("train")
-G.slices.add_slice("eval")
+G.slices.add("toy")
+G.slices.add("train")
+G.slices.add("eval")
 G.slices.active = "toy"
 
 # Add nodes with attributes
@@ -206,7 +206,7 @@ nxG = G.nx.backend(
 )
 
 # igraph interoperability
-pagerank = G.ig.pagerank(G)
+pagerank = G.ig.pagerank()
 ```
 
 
@@ -247,8 +247,8 @@ import annnet as an
 an.io.to_graphml(G, "graph.graphml", directed=True, hyperedge_mode="reify")
 G2 = an.io.from_graphml("graph.graphml")
 
-an.io.to_sif(G, "graph.sif", lossless=True)
-G3 = an.io.from_sif("graph.sif", manifest_path="graph.sif.manifest.json")
+an.io.to_sif(G, "graph.sif", lossless=True, manifest_path="graph.sif.manifest.json")
+G3 = an.io.from_sif("graph.sif", manifest="graph.sif.manifest.json")
 
 # JSON / NDJSON
 an.io.to_json(G, "graph.json")
