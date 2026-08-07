@@ -1,0 +1,29 @@
+[workspace]
+name = "annnet-use-cases"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+
+[dependencies]
+python = "3.11.*"
+ipykernel = ">=6"
+ipywidgets = ">=8"
+jupyterlab = ">=4"
+matplotlib = ">=3.5"
+networkx = ">=3.3"
+numpy = ">=1.24"
+pandas = ">=2.0"
+polars = ">=0.20"
+pyreadr = "*"
+scikit-learn = "*"
+graphviz = "*"
+pip = "*"
+
+[pypi-dependencies]
+corneto = { version = "*", extras = ["plot"] }
+annnet = { path = "../..", editable = true, extras = ["polars", "networkx", "zarr_io", "pyg", "plot", "notebook"] }
+
+[tasks]
+check-uc1-imports = 'python -c "import annnet, corneto, matplotlib, numpy, pandas, networkx; from corneto.methods import signaling; print(\"UC1 imports OK\")"'
+check-uc2-imports = 'python -c "import annnet, matplotlib, numpy, pandas, polars, pyreadr, sklearn, torch, torch_geometric; print(\"UC2 imports OK\")"'
+register-kernel = 'python -m ipykernel install --user --name annnet-use-cases --display-name "AnnNet use cases (pixi)"'
+lab = 'jupyter lab UC1.ipynb UC2.ipynb'
