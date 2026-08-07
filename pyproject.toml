@@ -211,6 +211,8 @@ include = [
   "pyproject.toml",
   "README.md",
   "CHANGELOG.md",
+  "DEPENDENTS.md",
+  "dependents.toml",
   "LICENSE",
   "docs/**/*.ipynb",
   "docs/**/*.md",

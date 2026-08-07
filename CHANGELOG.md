@@ -3,6 +3,11 @@
 The package is before its first stable release, so a removed name carries no
 deprecation and no alias. Each removal below names what replaces it.
 
+A removal also lands in every package that bridges to AnnNet, and none of them
+is in this test suite. `DEPENDENTS.md` says who those packages are and what to
+do about it, and `tests/test_dependents.py` fails the build when a name one of
+them calls goes away.
+
 ## Unreleased
 
 ### Removed

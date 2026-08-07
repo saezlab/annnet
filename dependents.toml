@@ -1,0 +1,71 @@
+# The packages that call AnnNet, and the names each one calls.
+#
+# AnnNet is before its first stable release, so a removed name carries no
+# deprecation and no alias (CHANGELOG.md). The cost of that choice is that a
+# rename lands silently in every package that bridges to us, and none of them
+# is in this repository's test suite. This file is what makes the cost visible:
+# `tests/test_dependents.py` asserts that every name below still resolves on the
+# public surface, so a rename fails the build here and names who to tell.
+#
+# The register is a promise to the packages listed, not a description of them.
+# It goes stale in one direction only: a bridge may call more than it lists, so
+# a passing gate is not proof that a package works. See DEPENDENTS.md.
+
+[[package]]
+name = "omnipath-client"
+owner = "Saez lab"
+repository = "https://github.com/saezlab/omnipath-client"
+contact = "ours — push directly"
+modules = ["omnipath_client/_graph.py", "omnipath_client/cosmos/_annnet.py"]
+verified_against = "1fea29f"
+# `to_annnet`, `annotate_nodes` and `cosmos.to_annnet` build a graph from a
+# table. They write and never read, so the list is short.
+calls = [
+    "AnnNet",
+    "add_nodes",
+    "add_edges",
+    "attrs.set_node_attrs_bulk",
+    "slices.add",
+    "slices.add_edges",
+    "uns",
+]
+
+[[package]]
+name = "corneto"
+owner = "Pablo Rodríguez-Mier"
+repository = "https://github.com/saezlab/corneto"
+contact = "pull request"
+modules = ["corneto/contrib/annnet.py", "corneto/methods/signaling/annnet.py"]
+verified_against = "1fea29f"
+# Two bridges. `contrib` converts a graph both ways; `methods.signaling` reads
+# and writes node-layer attributes for CellNOptDAG.
+calls = [
+    "AnnNet",
+    "N",
+    "S",
+    "nv",
+    "uns",
+    "nodes",
+    "edges",
+    "add_nodes",
+    "add_edges",
+    "get_edge",
+    "get_edges_by_direction",
+    "history.snapshot",
+    "attrs.get_node_attrs",
+    "attrs.get_edge_attrs",
+    "layers.set_aspects",
+    "layers.set_attrs",
+    "layers.set_node_attrs",
+    "layers.node_attrs",
+    "layers.layer_node_set",
+    "slices.add",
+    "slices.add_edge_to_slice",
+]
+
+# Column and key names a bridge writes into a table or reads out of one. These
+# are as much a contract as a method name, and renaming one breaks a caller the
+# same way.
+[keys]
+node = ["node_id"]
+edge = ["edge_id", "source", "target", "weight", "directed", "kind"]
