@@ -660,8 +660,9 @@ class AnnNet(
         decides which of the two a pair is.
         """
         if _is_endpoint_pair(item):
-            found, _edge_ids = self.has_edge(item[0], item[1])
-            return bool(found)
+            # Asked with two endpoints, ``has_edge`` answers with the edges too.
+            answer = self.has_edge(item[0], item[1])
+            return bool(answer[0] if isinstance(answer, tuple) else answer)
         try:
             ekey = self._resolve_entity_key(item)
         except (KeyError, TypeError, ValueError):
@@ -2629,7 +2630,7 @@ class AnnNet(
     # -------------------------------------------------------------------------
 
     @property
-    def edge_layers(self) -> dict:
+    def edge_layers(self) -> MutableMapping:
         """edge_id -> ml_layers for all edges that have a layer assignment."""
         return _EdgeFieldMap(
             self,
@@ -2644,7 +2645,7 @@ class AnnNet(
             _mutate.set_edge_field(self, eid, 'ml_layers', layers)
 
     @property
-    def edge_kind(self) -> dict:
+    def edge_kind(self) -> MutableMapping:
         """edge_id -> kind (hyper edges use 'hyper'; others use ml_kind)."""
         return _EdgeFieldMap(
             self,

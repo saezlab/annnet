@@ -117,7 +117,9 @@ class GraphState:
 
     # Slices.
     _default_slice: str
-    _current_slice: str | None
+    # Always a slice id: init sets it, and removing the active slice falls back
+    # to the default one.
+    _current_slice: str
 
     # The composite node key, when a caller declares one.
     _node_key_fields: Any
@@ -177,3 +179,16 @@ class GraphState:
     _resolve_entity_key: Any
     _upsert_row: Any
     _upsert_rows_bulk: Any
+
+    # The namespace objects, each built on the first read of its property and
+    # kept on the graph after that.
+    _attrs_accessor: Any
+    _views_accessor: Any
+    _ops_accessor: Any
+    _layer_accessor: Any
+    _slice_accessor: Any
+
+    # The backing field of a property that carries the same name without the
+    # leading underscore.
+    _edge_slice_attributes: Any
+    _pending_edge_slice_drops: set

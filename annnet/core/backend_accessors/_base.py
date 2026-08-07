@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 import inspect
 from functools import lru_cache
 from importlib import import_module
@@ -21,6 +21,9 @@ def _cached_signature(fn):
 
 class _BackendAccessorBase:
     NODE_LABEL_FIELDS = ('name', 'label', 'title', 'slug', 'external_id', 'string_id')
+
+    # Which parameters of the backend take a node. Each backend names its own.
+    NODE_KEYS: ClassVar[set[str]]
     _ADAPTER_EXPORTS = {
         'nx': ('annnet.adapters.networkx_adapter', 'to_nx'),
         'ig': ('annnet.adapters.igraph_adapter', 'to_igraph'),
@@ -63,8 +66,9 @@ class _BackendAccessorBase:
 
     def _infer_label_field(self) -> str | None:
         try:
-            if getattr(self._G, 'default_label_field', None):
-                return self._G.default_label_field
+            declared = getattr(self._G, 'default_label_field', None)
+            if declared:
+                return declared
             va = getattr(self._G, '_node_table', None)
             cols = dataframe_columns(va) if va is not None else []
             for col in self.NODE_LABEL_FIELDS:

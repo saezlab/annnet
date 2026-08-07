@@ -19,7 +19,7 @@ canonical store of one, and the answers are the same either way.
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import Any, NamedTuple
 from collections.abc import Iterator
 
 from . import _store as ST, _identity as I
@@ -71,10 +71,11 @@ class EdgeRef(NamedTuple):
     kind: str
     directed: bool
     weight: float
-    ml_kind: object = None
-    ml_layers: object = None
-    declared_directed: object = None
-    declared_weight: object = None
+    # Whatever the caller declared, so nothing here narrows it.
+    ml_kind: Any = None
+    ml_layers: Any = None
+    declared_directed: Any = None
+    declared_weight: Any = None
 
 
 class EdgeDefinition(NamedTuple):

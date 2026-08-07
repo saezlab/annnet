@@ -671,12 +671,12 @@ class CoreState:
         if len(seen) != count or not edge_slot.keys().isdisjoint(seen):
             raise KeyError(f'Duplicate edge id: {_first_repeated(ids, edge_slot)!r}')
 
-        directions = (
+        declared_directions = (
             [INHERIT if value is None else int(bool(value)) for value in directions]
             if (None in directions)
             else list(directions)
         )
-        weights = (
+        declared_weights = (
             [1.0 if value is None else value for value in weights]
             if (None in weights)
             else list(weights)
@@ -776,8 +776,8 @@ class CoreState:
         self.member_start = _grown(self.member_start, frontier)
         self.member_len = _grown(self.member_len, frontier)
         self.edge_kind[index] = kinds
-        self.edge_directed[index] = directions
-        self.edge_weight[index] = weights
+        self.edge_directed[index] = declared_directions
+        self.edge_weight[index] = declared_weights
         self.edge_explicit[index] = explicit
         self.member_start[index] = np.cumsum(widths) - widths + base
         self.member_len[index] = widths

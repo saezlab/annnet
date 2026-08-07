@@ -14,3 +14,5 @@ jobs:
             run: .venv/bin/ruff check .
         -   name: Run Ruff format check (like Black)
             run: .venv/bin/ruff format --check .
+        -   name: Run mypy over the core
+            run: .venv/bin/python -m mypy

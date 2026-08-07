@@ -95,6 +95,11 @@ class LayerAccessor:
 
     _OWN = frozenset({'_G', '_all_layers', '_aspect_attrs', '_layer_attrs', '_state_attrs'})
 
+    # A field of the graph, which ``__setattr__`` below writes there. The
+    # annotation carries no value, so it adds nothing to ``__slots__``; it says
+    # what the field holds, which one assignment of ``None`` does not.
+    _supra_index_cache: Any
+
     def __getattr__(self, name):
         if name == '_G':
             raise AttributeError(name)
@@ -1566,7 +1571,7 @@ class LayerAccessor:
 
     ## Supra_Adjacency
 
-    def supra_adjacency(self, layers: list[str] | None = None):
+    def supra_adjacency(self, layers: list[str] | list[tuple] | None = None):
         """Build the supra adjacency matrix.
 
         Parameters
@@ -1585,8 +1590,10 @@ class LayerAccessor:
         A = G.supra_adjacency()
         ```
         """
+        layers_t: list[tuple[str, ...]] | None
         if layers is not None and len(getattr(self, 'aspects', [])) == 1:
-            layers_t = [self.layer_id_to_tuple(L) for L in layers]
+            # One aspect, so every id is the label of that aspect, as a string.
+            layers_t = [self.layer_id_to_tuple(str(L)) for L in layers]
         else:
             layers_t = None if layers is None else [tuple(L) for L in layers]
         nl_to_row, row_to_nl = self._build_supra_index(layers_t)
@@ -1631,7 +1638,7 @@ class LayerAccessor:
         layers: list[str] | list[tuple[str, ...]] | None = None,
         include_inter: bool = True,
         include_coupling: bool = True,
-    ) -> tuple[sp.csr_matrix, list[str]]:
+    ) -> tuple[Any, list[str], list[str]]:
         """Build the supra-incidence matrix over selected layers.
 
             Unlike supra_adjacency, this preserves the full hyperedge structure —
@@ -1694,8 +1701,10 @@ class LayerAccessor:
             B, eids, skipped = G.supra_incidence()
         ```
         """
+        layers_t: list[tuple[str, ...]] | None
         if layers is not None and len(getattr(self, 'aspects', [])) == 1:
-            layers_t = [self.layer_id_to_tuple(L) for L in layers]
+            # One aspect, so every id is the label of that aspect, as a string.
+            layers_t = [self.layer_id_to_tuple(str(L)) for L in layers]
         else:
             layers_t = None if layers is None else [tuple(L) for L in layers]
 

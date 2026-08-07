@@ -41,6 +41,7 @@ class TemporalChange(TypedDict):
 # inside the class body. So an annotation that means the builtin says so through
 # these aliases.
 SliceIds = list[str]
+TemporalChanges = list[TemporalChange]
 
 
 def _bare(v):
@@ -506,12 +507,12 @@ class SliceManager:
 
     def temporal_dynamics(
         self, ordered_slices: SliceIds, metric: str = 'edge_change'
-    ) -> list[TemporalChange]:
+    ) -> TemporalChanges:
         """Summarize added and removed members across an ordered slice sequence."""
         G = self._G
         if len(ordered_slices) < 2:
             raise ValueError('Need at least 2 slices for temporal analysis')
-        changes: list[TemporalChange] = []
+        changes: TemporalChanges = []
         for i in range(len(ordered_slices) - 1):
             cur, nxt = ordered_slices[i], ordered_slices[i + 1]
             if cur not in G._slices or nxt not in G._slices:

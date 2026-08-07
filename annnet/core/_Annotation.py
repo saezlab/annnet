@@ -10,7 +10,7 @@ through the upsert helpers at the end of this module.
 """
 
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from . import _structure
 from ._state import GraphState
@@ -533,6 +533,7 @@ class AttributesClass(GraphState):
         if not isinstance(attrs, dict) or not attrs:
             return df
         cols = set(dataframe_columns(df))
+        key_cols: tuple[str, ...]
         if {'slice_id', 'edge_id'} <= cols:
             key_cols = ('slice_id', 'edge_id')
             key_vals = {'slice_id': idx[0], 'edge_id': idx[1]}
@@ -830,6 +831,11 @@ class AttributesAccessor:
 
     def __init__(self, graph):
         self._G = graph
+
+    if TYPE_CHECKING:  # pragma: no cover - the delegators are installed below
+
+        def __getattr__(self, name: str) -> Any:
+            """Every name of ``_ATTR_DELEGATED``, installed at import."""
 
 
 def _install_attr_delegators():

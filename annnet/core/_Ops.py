@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from . import _build, _mutate, _structure
 from ._state import GraphState
@@ -18,6 +18,28 @@ from .._support.dataframe_backend import (
 
 if TYPE_CHECKING:
     from .graph import AnnNet
+
+
+def _as_graph(mixin: Any) -> AnnNet:
+    """Say to a type checker what is true at runtime.
+
+    ``Operations`` is a mixin of ``AnnNet``, so the two are one object. A method
+    of the mixin that reads a field of the graph passes ``self`` through here.
+    """
+    return cast('AnnNet', mixin)
+
+
+def _new_graph(source: Any, *, aspects: Any = None) -> AnnNet:
+    """Return an empty graph of the class and the direction of ``source``.
+
+    ``type(source)`` is the graph class, because the mixin is never instantiated
+    on its own. Saying so here keeps every construction site in this module one
+    call, and typed.
+    """
+    graph_class = cast('type[AnnNet]', type(source))
+    if aspects is None:
+        return graph_class(directed=source.directed)
+    return graph_class(directed=source.directed, aspects=aspects)
 
 
 def _hyper_def(graph, edge_id):
@@ -215,7 +237,7 @@ class Operations(GraphState):
         ordered_edges = self._ordered_edge_ids(edge_ids)
         row_keys = self._ordered_selection_rows(ordered_nodes, ordered_edges)
 
-        new = self.__class__(directed=self.directed)
+        new = _new_graph(self)
 
         weight_overrides = edge_weight_overrides or {}
         _build.install_structure(
@@ -312,13 +334,9 @@ class Operations(GraphState):
             else:
                 hyper_payload.append(payload)
 
-        G = self.__class__
         new_aspects = self._constructor_aspects()
         if new_aspects is not None:
-            g = G(
-                directed=self.directed,
-                aspects=new_aspects,
-            )
+            g = _new_graph(self, aspects=new_aspects)
             bare_vid_attrs = self._attr_store.node_attr_rows({self._bare_vid(v) for v in V})
             for node in V:
                 if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
@@ -327,7 +345,7 @@ class Operations(GraphState):
                     bare_vid, layer_coord = node, None
                 g.add_nodes(bare_vid, layer=layer_coord, **bare_vid_attrs.get(bare_vid, {}))
         else:
-            g = G(directed=self.directed)
+            g = _new_graph(self)
             va_lookup = self._attr_store.node_attr_rows(V)
             v_rows = [{'node_id': v, **va_lookup.get(v, {})} for v in V]
             g._add_nodes_bulk(v_rows, slice=g._default_slice)
@@ -402,13 +420,9 @@ class Operations(GraphState):
         va_lookup = self._attr_store.node_attr_rows(V)
         v_rows = [{'node_id': v, **va_lookup.get(v, {})} for v in V]
 
-        G = self.__class__
         new_aspects = self._constructor_aspects()
         if new_aspects is not None:
-            g = G(
-                directed=self.directed,
-                aspects=new_aspects,
-            )
+            g = _new_graph(self, aspects=new_aspects)
             by_id = _structure.entities_by_id(self)
             for vid in V:
                 attrs = va_lookup.get(vid, {})
@@ -419,7 +433,7 @@ class Operations(GraphState):
                 if not placed:
                     g.add_nodes(vid, **attrs)
         else:
-            g = G(directed=self.directed)
+            g = _new_graph(self)
             g._add_nodes_bulk(v_rows, slice=g._default_slice)
         if bin_payload:
             g._add_edges_bulk(bin_payload, slice=g._default_slice)
@@ -503,9 +517,10 @@ class Operations(GraphState):
                 node_ids=V, edge_ids=kept_edges, slice_specs=slice_specs
             )
 
-        if V is not None and E is None:
-            return Operations.subgraph(self, V)
-        if V is None and E is not None:
+        if E is None:
+            # Both cannot be None: the top of this method returned for that.
+            return Operations.subgraph(self, cast('set', V))
+        if V is None:
             return Operations.edge_subgraph(self, E)
 
         bare = self._bare_vid
@@ -558,7 +573,7 @@ class Operations(GraphState):
         _take_slices(self, other)
         for key, value in other.graph_attributes.items():
             self.graph_attributes.setdefault(key, value)
-        return self
+        return _as_graph(self)
 
     def union(self, other) -> AnnNet:
         """Return a graph holding every element of this graph and of ``other``.
@@ -688,15 +703,11 @@ class Operations(GraphState):
                 edge_weight_overrides=weight_overrides,
             )
 
-        G = self.__class__
         new_aspects = self._constructor_aspects()
         if new_aspects is not None:
-            g = G(
-                directed=self.directed,
-                aspects=new_aspects,
-            )
+            g = _new_graph(self, aspects=new_aspects)
         else:
-            g = G(directed=self.directed)
+            g = _new_graph(self)
         g.slices.add(slice_id, **slice_meta['attributes'])
         g.slices.active = slice_id
 
@@ -770,9 +781,8 @@ class Operations(GraphState):
         -----
         O(N) Python, O(nnz) matrix; this path is optimized for speed.
         """
-        G = self.__class__
         new_aspects = self._constructor_aspects()
-        new = G(directed=self.directed, aspects=new_aspects)
+        new = _new_graph(self, aspects=new_aspects)
 
         _build.install_structure(
             new,
@@ -876,8 +886,9 @@ class Operations(GraphState):
         downstream use (e.g., exporting, iterating, or visualization).
         """
         result = {}
-        csr = self._get_csr()
-        for i in range(self._num_entities):
+        graph = _as_graph(self)
+        csr = graph._get_csr()
+        for i in range(graph._num_entities):
             entry = _structure.entity_key_of_row(self, i)
             node_id = entry[0] if isinstance(entry, tuple) else entry
             start, end = csr.indptr[i], csr.indptr[i + 1]
@@ -965,11 +976,11 @@ class OperationsAccessor:
             eid = _structure.edge_at_column(G, j)
             S, T = G.get_edge(eid)
             edge_defs.append((eid, tuple(sorted(S)), tuple(sorted(T)), G._is_directed_edge(eid)))
-        edge_defs = tuple(sorted(edge_defs))
+        ordered_defs = tuple(sorted(edge_defs))
         graph_meta = (
             tuple(sorted(G.graph_attributes.items())) if hasattr(G, 'graph_attributes') else ()
         )
-        return hash((node_ids, edge_defs, graph_meta))
+        return hash((node_ids, ordered_defs, graph_meta))
 
 
 def _install_ops_delegators():

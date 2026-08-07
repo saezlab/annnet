@@ -29,7 +29,7 @@ Without that, a loop of N appends with a read after each one would be quadratic.
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import numpy as np
 import scipy.sparse as sp
@@ -48,7 +48,8 @@ class MatrixView(NamedTuple):
     nothing else. Read a position only to index this matrix.
     """
 
-    matrix: object
+    # A scipy sparse array or a numpy array, per matrix. Nothing here reads it.
+    matrix: Any
     row_of_entity: dict
     column_of_edge: dict
     entity_of_row: tuple
