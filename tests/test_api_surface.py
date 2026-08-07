@@ -136,6 +136,35 @@ def test_assigning_a_column_that_does_not_exist_creates_it(chain):
     assert list(chain.E['score']) == [0.1, 0.2]
 
 
+def test_assigning_the_weight_column_sets_the_weight_of_each_edge(chain):
+    """The contract names ``G.E['weight'] = values`` as the vectorized write.
+
+    ``weight`` is a field of an edge and not an attribute of one, so the
+    attribute store reserves the name. The write reaches the field instead.
+    """
+    chain.E['weight'] = [3.0, 4.0]
+    assert list(chain.E['weight']) == [3.0, 4.0]
+    assert chain.get_edge('e_ab').weight == 3.0
+    assert chain.get_edge('e_bc').weight == 4.0
+
+
+def test_assigning_the_directed_column_sets_the_direction_of_each_edge(chain):
+    chain.E['directed'] = [False, True]
+    assert list(chain.E['directed']) == [False, True]
+    assert chain.get_edge('e_ab').directed is False
+
+
+def test_the_kind_of_an_edge_cannot_be_written_as_a_column(chain):
+    """It follows from how many members the edge holds, and on which sides."""
+    with pytest.raises(KeyError):
+        chain.E['kind'] = ['binary', 'binary']
+
+
+def test_the_id_of_a_node_cannot_be_written_as_a_column(chain):
+    with pytest.raises(KeyError):
+        chain.N['node_id'] = ['x', 'y', 'z']
+
+
 def test_assigning_a_column_of_the_wrong_length_is_an_error(chain):
     with pytest.raises(ValueError):
         chain.N['kind'] = ['x', 'y']

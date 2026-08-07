@@ -3,7 +3,7 @@
 import numpy as np
 import scipy.sparse as sp
 
-from . import _structure
+from . import _mutate, _structure
 from ._state import GraphState
 from ._records import _external_entity_kind
 from ._stored_kinds import STORED_EDGE_KIND, STORED_ENTITY_KIND
@@ -886,9 +886,19 @@ class NodeSequence(ElementSequence):
         return self._graph._attr_store.node_vector(name)
 
     def _write_column(self, name: str, values: dict) -> None:
+        if name in self.intrinsic_names:
+            raise KeyError(
+                f'{name!r} is the id of a node, not an attribute of one. '
+                'Renaming a node is a structural change, not a column write.'
+            )
         self._graph.attrs.set_node_attrs_bulk(
             {element: {name: value} for element, value in values.items()}
         )
+
+
+# The two intrinsic edge fields a caller may write. ``kind`` is not one: it
+# follows from how many members an edge holds and on which sides.
+_EDGE_STRUCTURAL_WRITES = frozenset({'weight', 'directed'})
 
 
 class EdgeSequence(ElementSequence):
@@ -920,6 +930,19 @@ class EdgeSequence(ElementSequence):
         return self._graph._attr_store.edge_vector(name)
 
     def _write_column(self, name: str, values: dict) -> None:
+        # ``weight`` and ``directed`` read like a column and are not attributes,
+        # so a write of either reaches the field of the edge rather than the
+        # attribute store, which reserves both names.
+        if name in _EDGE_STRUCTURAL_WRITES:
+            for element, value in values.items():
+                _mutate.set_edge_field(self._graph, element, name, value)
+            self._graph._mark_structure_changed()
+            return
+        if name in self.intrinsic_names:
+            raise KeyError(
+                f'{name!r} follows from the shape of an edge, so it cannot be written. '
+                'Set the members of the edge instead.'
+            )
         self._graph.attrs.set_edge_attrs_bulk(
             {element: {name: value} for element, value in values.items()}
         )
