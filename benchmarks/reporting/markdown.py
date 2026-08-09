@@ -551,8 +551,8 @@ def _matrix_cache(records: list[dict]) -> list[str]:
 def _attribute_options(records: list[dict]) -> list[str]:
     """The two candidate attribute stores, side by side."""
     rows = _growth_rows(records, 'attribute_options')
-    comparison = _growth_rows(records, 'attributes')
-    if not rows and not comparison:
+    baselines = _attribute_baselines(records)
+    if not rows and not baselines:
         return []
     lines = ['## Attribute storage', '']
     if rows:
@@ -578,21 +578,75 @@ def _attribute_options(records: list[dict]) -> list[str]:
                 else f'| {option} | - | - |'
             )
         lines.append('')
-    if comparison:
-        pair = {row['op']: row['time']['median_s'] * 1000.0 for row in comparison}
-        attr = pair.get('attr_column_op')
-        frame = pair.get('dataframe_column_op')
-        lines += [
-            'The same vectorized operation on an attribute column and on a dataframe',
-            'column of the same length. The requirement is that the two match.',
-            '',
-            '| attribute column ms | dataframe column ms | ratio |',
-            '|---|---|---|',
-        ]
-        lines.append(
-            f'| {attr:.4f} | {frame:.4f} | {attr / frame:.2f}x |'
-            if (attr and frame)
-            else '| - | - | - |'
-        )
-        lines.append('')
+    lines += baselines
     return lines
+
+
+# The three operations of the attribute benchmark, in the order the report shows
+# them, with the heading each takes.
+_ATTRIBUTE_OP_LABELS = (
+    ('column_read', 'read the column'),
+    ('column_op', 'sum a column already held'),
+    ('column_read_and_op', 'read and sum'),
+)
+
+
+def _attribute_baselines(records: list[dict]) -> list[str]:
+    """The same three operations, one column per named baseline.
+
+    Every number here says which library produced it, and the read is reported
+    apart from the operation, so a ratio says which of the two it comes from. A
+    baseline whose library is absent keeps its column and shows ``skipped``,
+    because a row that vanishes with a library would make a short run look like
+    a complete one.
+    """
+    rows = [row for row in records if row.get('group') == 'attributes' and row.get('baseline')]
+    if not rows:
+        return []
+
+    baselines = [
+        baseline
+        for baseline in ('annnet', 'polars', 'pandas', 'pyarrow', 'numpy')
+        if any(row['baseline'] == baseline for row in rows)
+    ]
+    held: dict[tuple[str, str], dict] = {(row['op'], row['baseline']): row for row in rows}
+    subject = 'annnet'
+
+    # The ceiling of SC-001 is against a contiguous array of the same length, so
+    # that is the ratio the table carries, and it says so in the heading rather
+    # than leaving a reader to guess which bar it is against.
+    against = 'numpy' if 'numpy' in baselines else None
+    header = ' | '.join(engine_label(baseline) + ' ms' for baseline in baselines)
+    ratio_heading = f'AnnNet / {engine_label(against)}' if against else 'ratio'
+    lines = [
+        'The same operation on an attribute column and on a column of each dataframe',
+        'library the package declares, plus a bare numpy array as the floor. The read of',
+        'the column and the operation on it are separate rows, so a ratio says which of',
+        'the two it comes from. A library that is not installed is named and skipped.',
+        '',
+        f'| operation | {header} | {ratio_heading} |',
+        '|---' * (len(baselines) + 2) + '|',
+    ]
+    for op, label in _ATTRIBUTE_OP_LABELS:
+        cells = [_attribute_cell(held.get((op, baseline))) for baseline in baselines]
+        mine = _attribute_ms(held.get((op, subject)))
+        theirs = _attribute_ms(held.get((op, against))) if against else None
+        ratio = f'{mine / theirs:.2f}x' if (mine and theirs) else '-'
+        lines.append(f'| {label} | ' + ' | '.join(cells) + f' | {ratio} |')
+    lines.append('')
+    return lines
+
+
+def _attribute_ms(row: dict | None) -> float | None:
+    if not row or row.get('status') != 'ok' or not row.get('time'):
+        return None
+    return row['time']['median_s'] * 1000.0
+
+
+def _attribute_cell(row: dict | None) -> str:
+    if row is None:
+        return '-'
+    if row.get('status') == 'skipped':
+        return 'skipped'
+    value = _attribute_ms(row)
+    return '-' if value is None else f'{value:.4f}'

@@ -26,9 +26,20 @@ from . import engines, harness
 
 
 def _record(
-    engine, group, op, scale, n_v, n_e, *, backend=None, time=None, memory=None, note=''
+    engine,
+    group,
+    op,
+    scale,
+    n_v,
+    n_e,
+    *,
+    backend=None,
+    baseline=None,
+    time=None,
+    memory=None,
+    note='',
 ) -> dict:
-    return {
+    record = {
         'engine': engine,
         'backend': backend,
         'scale': scale.name,
@@ -40,6 +51,12 @@ def _record(
         'memory': memory.as_dict() if memory is not None else None,
         'note': note,
     }
+    if baseline is not None:
+        # Which library produced the number. A record that compares AnnNet to
+        # something else has to name that something, or a reader cannot tell
+        # which bar a ratio is against.
+        record['baseline'] = baseline
+    return record
 
 
 # ---------------------------------------------------------------------------
@@ -762,50 +779,149 @@ def matrix_cache_probe(scale, *, backend='auto', samples=5) -> list[dict]:
     return recs
 
 
-def attribute_ops(scale, *, backend='auto', samples=5) -> list[dict]:
-    """Compare one vectorized operation on an attribute column to a dataframe column.
+# The baselines the attribute benchmark reports against, in the order the report
+# shows them. ``annnet`` is the subject. The three dataframe libraries are the
+# ones the package already declares and reaches through narwhals; adding a
+# backend is not this benchmark's business. ``numpy`` is the floor: an operation
+# on a contiguous array with no library above it.
+ATTRIBUTE_BASELINES = ('annnet', 'polars', 'pandas', 'pyarrow', 'numpy')
 
-    The requirement is that an attribute operation runs as fast as the same
-    operation on a dataframe column of the same length. This pair of records is
-    the evidence.
+# What each baseline is measured on, so that a reader of the report does not have
+# to open this file to find out.
+_ATTRIBUTE_BASELINE_NOTES = {
+    'annnet': 'the AnnNet node attribute column, through G.N[name]',
+    'polars': 'a polars Series of the same values',
+    'pandas': 'a pandas Series of the same values',
+    'pyarrow': 'a pyarrow ChunkedArray of the same values',
+    'numpy': 'a contiguous numpy array of the same values, no library above it',
+}
+
+# The three operations, and what each one includes. The read and the operation
+# are separate records because the read is where the cost was, and one combined
+# number hid it.
+_ATTRIBUTE_OPS = {
+    'column_read': 'read the whole column of {n} values',
+    'column_op': 'sum a column of {n} values already held',
+    'column_read_and_op': 'read the whole column of {n} values and sum it',
+}
+
+
+def _attribute_column_sources(values, backend):
+    """Return, per baseline, how to read the column and how to sum one.
+
+    Each entry is ``(read, op)``. ``read`` returns the column from whatever
+    holds it, and ``op`` sums a column it is handed. Splitting them is what lets
+    the two costs be reported apart, and it is what makes the two sides of a
+    pair do the same work: every ``op`` sums a column and nothing else, and
+    every ``read`` fetches one and nothing else.
+
+    A baseline whose library is absent is ``None``, and the caller reports it as
+    skipped and named rather than leaving the row out.
+    """
+    AnnNet = _annnet()
+    n = values.size
+    sources: dict = {}
+
+    graph = AnnNet(directed=True, annotations_backend=backend)
+    graph.add_nodes([{'node_id': f'v{i}', 'score': float(i)} for i in range(n)])
+    sources['annnet'] = (lambda: graph.N['score'], lambda column: float(column.sum()))
+
+    sources['numpy'] = (lambda: values, lambda column: float(column.sum()))
+
+    try:
+        import polars as pl
+    except ImportError:
+        sources['polars'] = None
+    else:
+        frame = pl.DataFrame({'score': values})
+        sources['polars'] = (lambda: frame['score'], lambda column: float(column.sum()))
+
+    try:
+        import pandas as pd
+    except ImportError:
+        sources['pandas'] = None
+    else:
+        pandas_frame = pd.DataFrame({'score': values})
+        sources['pandas'] = (lambda: pandas_frame['score'], lambda column: float(column.sum()))
+
+    try:
+        import pyarrow as pa
+        import pyarrow.compute as pc
+    except ImportError:
+        sources['pyarrow'] = None
+    else:
+        table = pa.table({'score': values})
+        sources['pyarrow'] = (lambda: table['score'], lambda column: float(pc.sum(column).as_py()))
+
+    return sources
+
+
+def attribute_ops(scale, *, backend='auto', samples=5) -> list[dict]:
+    """Compare a column read and a vectorized operation across every baseline.
+
+    Three records per baseline: the read of the whole column, the operation on a
+    column already held, and the two together. A ratio between two records of
+    one operation therefore says which of the two halves it comes from, which
+    the single combined record this replaces could not.
+
+    Each record names the library behind it. The record this replaces was called
+    ``dataframe_column_op`` and summed a bare numpy array, with no dataframe of
+    any kind involved, and its other side included the cost of the column read
+    while the baseline summed an array it already held. So the pair compared two
+    different amounts of work under two misleading names.
+
+    A baseline whose library is not installed is reported as skipped and named.
+    The row count of a run is a check on the run, and a row that vanishes when a
+    library does would defeat it.
     """
     import numpy as np
 
-    AnnNet = _annnet()
     recs: list[dict] = []
     n = max(16, min(scale.nodes, 20_000))
     values = np.arange(n, dtype=np.float64)
+    sources = _attribute_column_sources(values, backend)
 
-    G = AnnNet(directed=True, annotations_backend=backend)
-    G.add_nodes([{'node_id': f'v{i}', 'score': float(i)} for i in range(n)])
-
-    def attr_column_op():
-        # The public column read, which is what a user does the operation on.
-        # Reading the table instead would measure the materialization and not
-        # the operation.
-        return float(G.N['score'].sum())
-
-    def dataframe_column_op():
-        return float(values.sum())
-
-    for op, fn in (
-        ('attr_column_op', attr_column_op),
-        ('dataframe_column_op', dataframe_column_op),
-    ):
-        time = harness.time_repeat(fn, samples=max(1, samples))
-        rec = _record(
-            'annnet',
-            'attributes',
-            op,
-            scale,
-            n,
-            0,
-            backend=backend,
-            time=time,
-            note=f'sum over {n} values',
-        )
-        rec['status'] = 'ok'
-        recs.append(rec)
+    for baseline in ATTRIBUTE_BASELINES:
+        source = sources.get(baseline)
+        for op, shape in _ATTRIBUTE_OPS.items():
+            note = f'{shape.format(n=n)}; {_ATTRIBUTE_BASELINE_NOTES[baseline]}'
+            if source is None:
+                rec = _record(
+                    'annnet' if baseline == 'annnet' else baseline,
+                    'attributes',
+                    op,
+                    scale,
+                    n,
+                    0,
+                    backend=backend,
+                    baseline=baseline,
+                    note=f'{baseline} is not installed; {note}',
+                )
+                rec['status'] = 'skipped'
+                recs.append(rec)
+                continue
+            read, operate = source
+            if op == 'column_read':
+                fn = read
+            elif op == 'column_op':
+                held = read()
+                fn = lambda held=held, operate=operate: operate(held)
+            else:
+                fn = lambda read=read, operate=operate: operate(read())
+            rec = _record(
+                'annnet' if baseline == 'annnet' else baseline,
+                'attributes',
+                op,
+                scale,
+                n,
+                0,
+                backend=backend,
+                baseline=baseline,
+                time=harness.time_repeat(fn, samples=max(1, samples)),
+                note=note,
+            )
+            rec['status'] = 'ok'
+            recs.append(rec)
     return recs
 
 

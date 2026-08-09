@@ -17,6 +17,14 @@ ENGINE_LABELS = {
     'networkx': 'NetworkX',
     'igraph': 'igraph',
     'graph-tool': 'graph-tool',
+    # The attribute benchmark reports against the dataframe libraries the package
+    # declares, and against a bare array as the floor. Each is a baseline rather
+    # than a graph engine, and each is named so that a reader of the report can
+    # tell which bar a ratio is against.
+    'polars': 'polars',
+    'pandas': 'pandas',
+    'pyarrow': 'PyArrow',
+    'numpy': 'numpy array',
 }
 
 ANNNET_INTERNAL_ORDER = [
