@@ -578,3 +578,139 @@ class TestAnnNetIO(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# The shapes cycle 003 added to what a stored graph carries
+# ---------------------------------------------------------------------------
+
+
+class TestTheDirectionPolicySurvivesARoundTrip(unittest.TestCase):
+    """`FR-021`, and decision `D5` of cycle 003.
+
+    An edge may carry a flexible-direction policy: a variable and a threshold
+    that decide, at read time, which way the edge points. cx2 persists it. The
+    native format did not, so a graph that round-tripped through the package's
+    own lossless format came back without it, and no test said so.
+    """
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _round_trip(self, graph):
+        path = self.dir / 'g.annnet'
+        annnet_write(graph, path)
+        return annnet_read(path)
+
+    def test_one_policy_comes_back(self):
+        graph = AnnNet(directed=True)
+        graph.add_nodes(['a', 'b'])
+        policy = {'var': 'score', 'threshold': 1.5}
+        eid = graph.add_edges('a', 'b', flexible=policy)
+        restored = self._round_trip(graph)
+        self.assertEqual(S.edge_policies(restored)[eid], policy)
+
+    def test_every_policy_comes_back_and_nothing_else_gains_one(self):
+        graph = AnnNet(directed=True)
+        graph.add_nodes(['a', 'b', 'c'])
+        first = graph.add_edges('a', 'b', flexible={'var': 'x', 'threshold': 1.0})
+        second = graph.add_edges('b', 'c', flexible={'var': 'y', 'threshold': -2.0})
+        plain = graph.add_edges('a', 'c')
+        restored = self._round_trip(graph)
+        self.assertEqual(S.edge_policies(restored), S.edge_policies(graph))
+        self.assertIn(first, S.edge_policies(restored))
+        self.assertIn(second, S.edge_policies(restored))
+        self.assertNotIn(plain, S.edge_policies(restored))
+
+    def test_a_graph_with_no_policy_writes_no_file_for_one(self):
+        graph = AnnNet(directed=True)
+        graph.add_nodes(['a', 'b'])
+        graph.add_edges('a', 'b')
+        restored = self._round_trip(graph)
+        self.assertEqual(S.edge_policies(restored), {})
+
+    def test_a_file_written_before_the_field_existed_still_reads(self):
+        """An older archive carries no policy file, and that is not an error."""
+        graph = AnnNet(directed=True)
+        graph.add_nodes(['a', 'b'])
+        graph.add_edges('a', 'b', flexible={'var': 'score', 'threshold': 1.0})
+        path = self.dir / 'plain'
+        annnet_write(graph, path)
+        (path / 'structure' / 'edge_direction_policy.json').unlink()
+        restored = annnet_read(path)
+        self.assertEqual(S.edge_policies(restored), {})
+
+    def test_a_policy_on_a_multilayer_graph_comes_back(self):
+        graph = AnnNet(directed=True, aspects={'condition': ['healthy', 'treated']})
+        graph.add_nodes(['a', 'b'], layer=('healthy',))
+        eid = graph.add_edges('a', 'b', layer=('healthy',), flexible={'var': 'z', 'threshold': 0.5})
+        restored = self._round_trip(graph)
+        self.assertEqual(S.edge_policies(restored)[eid], {'var': 'z', 'threshold': 0.5})
+
+
+class TestEveryShapeThePackageSupportsRoundTrips(unittest.TestCase):
+    """`FR-023` and `SC-007`: the named shapes, each named, in one place.
+
+    The fixtures of ``tests/_fixtures.py`` are the package's inventory of graph
+    shapes, so the round trip is run over all of them rather than over a list
+    that has to be kept in step by hand. A shape added to that inventory is
+    covered here on the next run without an edit.
+
+    The two shapes cycle 003 added are named beside them: an edge that carries a
+    direction policy, and the boundary pair that `D6` names as what a caller
+    states instead of an asymmetric self-loop.
+    """
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _round_trip(self, graph, name):
+        path = self.dir / f'{name}.annnet'
+        annnet_write(graph, path)
+        return annnet_read(path)
+
+    def test_every_named_shape_comes_back_whole(self):
+        from ._fixtures import CASE_NAMES, build_case
+
+        for name in CASE_NAMES:
+            with self.subTest(shape=name):
+                before = build_case(name)
+                after = self._round_trip(before, name)
+                self.assertEqual(set(after.nodes()), set(before.nodes()))
+                self.assertEqual(set(after.edges()), set(before.edges()))
+                self.assertEqual(after.S.shape, before.S.shape)
+                self.assertEqual(S.edge_policies(after), S.edge_policies(before))
+                for eid in before.edges():
+                    self.assertEqual(S.edge_sides(after, eid), S.edge_sides(before, eid), eid)
+                    self.assertEqual(S.edge_ref(after, eid).kind, S.edge_ref(before, eid).kind)
+                    self.assertEqual(
+                        S.edge_ref(after, eid).directed, S.edge_ref(before, eid).directed
+                    )
+
+    def test_the_shape_this_cycle_added_to_the_format(self):
+        """An edge carrying a direction policy, which `D5` made the format keep."""
+        graph = AnnNet(directed=True)
+        graph.add_nodes(['a', 'b'])
+        eid = graph.add_edges('a', 'b', flexible={'var': 'score', 'threshold': 1.0})
+        after = self._round_trip(graph, 'policy')
+        self.assertEqual(S.edge_policies(after)[eid], {'var': 'score', 'threshold': 1.0})
+
+    def test_the_shape_this_cycle_named_instead_of_one_it_cannot_hold(self):
+        """The boundary pair of `D6`, with the two coefficients an asymmetric
+        self-loop would carry if the package could describe one."""
+        graph = AnnNet(directed=True)
+        graph.add_nodes(['A'])
+        graph.add_edges([{'members': ['A'], 'edge_id': 'out'}])
+        graph.add_edges([{'members': ['A'], 'edge_id': 'into'}])
+        graph.set_edge_coeffs('out', {'A': 2.0})
+        graph.set_edge_coeffs('into', {'A': -3.0})
+        after = self._round_trip(graph, 'boundary_pair')
+        self.assertEqual(S.edge_coefficients(after, 'out'), {'A': 2.0})
+        self.assertEqual(S.edge_coefficients(after, 'into'), {'A': -3.0})
+        self.assertEqual(after.S.shape[1], 2)

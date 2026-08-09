@@ -16,7 +16,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from annnet.core import _matrices as M, _store as ST
+import unittest
+
+from annnet.core import _matrices as M, _store as ST, _structure as S
 from annnet.core.graph import AnnNet
 
 FLAT = ('_',)
@@ -266,3 +268,112 @@ def test_a_placeholder_edge_occupies_no_column_of_the_graph_matrix():
     # The placeholder is an entity the graph now knows, so it takes a row. It
     # holds no members, so it takes no column.
     assert G.S.shape == (rows + 1, columns)
+
+
+# ---------------------------------------------------------------------------
+# What a caller can say about a self-loop, and what it cannot
+# ---------------------------------------------------------------------------
+# `FR-022`, and decision `D6` of cycle 003. The store holds a self-loop as two
+# member entries on one entity slot, and the two entries may carry different
+# coefficients. Nothing above the store can say so: a coefficient is addressed by
+# endpoint, at every layer between the public call and the file, and a self-loop
+# names one endpoint twice. `D6` records that the addressing stays as it is in
+# this cycle and names what a caller states instead, and these fix both halves of
+# it so the limit is a tested fact rather than something rediscovered.
+
+
+def _loop_graph() -> AnnNet:
+    graph = AnnNet(directed=True)
+    graph.add_nodes(['A', 'B'])
+    graph.add_edges('A', 'A', edge_id='loop')
+    return graph
+
+
+def _boundary_pair() -> AnnNet:
+    graph = AnnNet(directed=True)
+    graph.add_nodes(['A'])
+    graph.add_edges([{'members': ['A'], 'edge_id': 'out'}])
+    graph.add_edges([{'members': ['A'], 'edge_id': 'into'}])
+    graph.set_edge_coeffs('out', {'A': 2.0})
+    graph.set_edge_coeffs('into', {'A': -3.0})
+    return graph
+
+
+class TestTheStoreHoldsWhatTheCallerCannotState(unittest.TestCase):
+    def test_a_self_loop_holds_one_entry_per_role(self):
+        store = _loop_graph()._store
+        members = store.members(store.edge_slot('loop'))
+        self.assertEqual(members.entities.tolist(), [0, 0])
+        self.assertEqual(sorted(members.roles.tolist()), [-1, 1])
+
+    def test_the_two_entries_are_independent_in_the_store(self):
+        store = _loop_graph()._store
+        slot = store.edge_slot('loop')
+        members = store.members(slot)
+        members.coefficients[0] = 2.0
+        members.coefficients[1] = -3.0
+        self.assertEqual(store.members(slot).coefficients.tolist(), [2.0, -3.0])
+
+    def test_setting_a_coefficient_reaches_both_entries(self):
+        graph = _loop_graph()
+        graph.set_edge_coeffs('loop', {'A': 2.0})
+        members = graph._store.members(graph._store.edge_slot('loop'))
+        self.assertEqual(members.coefficients.tolist(), [2.0, 2.0])
+
+    def test_the_read_back_is_one_value_and_it_is_not_the_one_that_was_set(self):
+        """The sharpest form of the limit, and the reason `D6` names it.
+
+        A coefficient is addressed by endpoint on the way in and on the way out.
+        Going in, one value reaches both entries of the self-loop. Coming out,
+        the two entries are summed under the one endpoint that names them. So a
+        set followed by a get doubles the value, and no spelling of the call
+        avoids it.
+        """
+        graph = _loop_graph()
+        graph.set_edge_coeffs('loop', {'A': 2.0})
+        self.assertEqual(S.edge_coefficients(graph, 'loop'), {'A': 4.0})
+
+    def test_a_definition_states_one_coefficient_per_endpoint(self):
+        graph = _loop_graph()
+        graph.set_edge_coeffs('loop', {'A': 2.0})
+        self.assertEqual(set(S.edge_definition(graph, 'loop').coefficients), {'A'})
+
+    def test_the_record_says_what_it_cannot_describe(self):
+        self.assertIn('two different coefficients', S.EdgeDefinition.__doc__)
+        self.assertIn('self-loop', S.EdgeDefinition.__doc__)
+
+
+class TestWhatACallerStatesInstead(unittest.TestCase):
+    """`D6`: two boundary edges, which is not the same object and says so."""
+
+    def test_the_pair_carries_the_two_coefficients(self):
+        graph = _boundary_pair()
+        self.assertEqual(S.edge_coefficients(graph, 'out'), {'A': 2.0})
+        self.assertEqual(S.edge_coefficients(graph, 'into'), {'A': -3.0})
+
+    def test_the_pair_is_two_columns_and_not_one(self):
+        self.assertEqual(_boundary_pair().S.shape[1], 2)
+
+    def test_a_self_loop_column_cancels_where_the_pair_does_not(self):
+        """Why the two are not interchangeable, in one number.
+
+        The two entries of a self-loop land in one cell and cancel, so its column
+        is empty. Two boundary edges hold two cells that do not.
+        """
+        self.assertEqual(_loop_graph().S.nnz, 0)
+        self.assertEqual(_boundary_pair().S.nnz, 2)
+
+    def test_the_pair_round_trips_through_the_native_format(self):
+        import tempfile
+        from pathlib import Path
+
+        from annnet.io.annnet_format import read as annnet_read
+        from annnet.io.annnet_format import write as annnet_write
+
+        graph = _boundary_pair()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'pair.annnet'
+            annnet_write(graph, path)
+            restored = annnet_read(path)
+        self.assertEqual(S.edge_coefficients(restored, 'out'), {'A': 2.0})
+        self.assertEqual(S.edge_coefficients(restored, 'into'), {'A': -3.0})

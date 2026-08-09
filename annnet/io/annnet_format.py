@@ -319,6 +319,7 @@ def _write_structure(
         entity_index.parquet     — (entity_id, layer_id, idx, type)
         edges.parquet            — merged per-edge metadata + endpoints
         hyperedge_definitions.parquet — members / head / tail for hyperedges
+        edge_direction_policy.json    — edge_id -> the policy, for the edges with one
     """
     import json
 
@@ -328,6 +329,14 @@ def _write_structure(
 
     # 1. Layer dictionary — read first on load, before any layer_id consumer
     (path / 'layer_dict.json').write_text(json.dumps(layer_dict.to_json()))
+
+    # A flexible-direction policy says which way an edge points, and it is
+    # declared rather than derived, so a file that does not carry it loses what
+    # the user set. Almost no edge has one, so the file is written only when some
+    # edge does and a reader that finds none takes that as none.
+    policies = _structure.edge_policies(graph)
+    if policies:
+        (path / 'edge_direction_policy.json').write_text(json.dumps(policies, indent=2))
 
     # 2. Sparse incidence matrix (Zarr) — only when it holds explicit coeffs;
     # otherwise it is rebuilt from records on load (see read()).
@@ -1189,6 +1198,18 @@ def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
                 definition = definition._replace(coefficients={})
                 edge_definitions[eid] = definition
             definition.coefficients[_reassemble_endpoint(vid, lid)] = float(val)
+
+    # 5b. The flexible-direction policy of each edge that declares one. A file
+    # written before the format carried it has no such table, which reads as no
+    # edge having one.
+    policy_path = path / 'edge_direction_policy.json'
+    if policy_path.exists():
+        import json as _json
+
+        for eid, policy in _json.loads(policy_path.read_text()).items():
+            definition = edge_definitions.get(eid)
+            if definition is not None:
+                edge_definitions[eid] = definition._replace(direction_policy=policy)
 
     # 6. Install the whole structure at once. This fills the canonical store of
     # the graph from the definitions alone, so a graph read from a file answers
