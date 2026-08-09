@@ -75,8 +75,12 @@ class GraphView:
         return dataframe_filter_in(self._graph._edge_table, 'edge_id', edge_ids)
 
     @property
-    def X(self):
+    def B(self):
         """Return the filtered incidence matrix subview.
+
+        Named as the graph names it. ``X`` was the spelling of the incidence
+        matrix before cycle 002 renamed it, and it stayed here after it went
+        from the graph, so one object answered to a name the other refused.
 
         Returns
         -------

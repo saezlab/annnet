@@ -174,31 +174,31 @@ class TestGraphViewVar(unittest.TestCase):
         self.assertNotIn('e2', edge_ids)
 
 
-class TestGraphViewX(unittest.TestCase):
-    """X property returns submatrix view."""
+class TestGraphViewB(unittest.TestCase):
+    """B property returns submatrix view, under the name the graph uses."""
 
-    def test_X_shape_filtered_nodes_and_edges(self):
+    def test_B_shape_filtered_nodes_and_edges(self):
         # With explicit filters the submatrix is exactly 2×1
         G = _build_graph()
         view = GraphView(G, nodes=['A', 'B'], edges=['e1'])
-        X = view.X
-        self.assertEqual(X.shape[0], 2)
-        self.assertEqual(X.shape[1], 1)
+        B = view.B
+        self.assertEqual(B.shape[0], 2)
+        self.assertEqual(B.shape[1], 1)
 
-    def test_X_shape_node_edge_filter_consistent(self):
+    def test_B_shape_node_edge_filter_consistent(self):
         # Filter to A,B nodes and e1 (A→B) — C is absent, so e2 (B→C) is dropped
         G = _build_graph()
         view = GraphView(G, nodes=['A', 'B'], edges=['e1', 'e2'])
-        X = view.X
+        B = view.B
         # e2 (B→C) is dropped because C not in node filter → only 1 column
-        self.assertEqual(X.shape[0], 2)
-        self.assertEqual(X.shape[1], 1)
+        self.assertEqual(B.shape[0], 2)
+        self.assertEqual(B.shape[1], 1)
 
-    def test_X_empty_for_no_matching_nodes(self):
+    def test_B_empty_for_no_matching_nodes(self):
         G = _build_graph()
         view = GraphView(G, nodes=[], edges=['e1'])
-        X = view.X
-        self.assertEqual(X.shape[0], 0)
+        B = view.B
+        self.assertEqual(B.shape[0], 0)
 
 
 class TestGraphViewMaterialize(unittest.TestCase):
@@ -236,8 +236,8 @@ class TestGraphViewMaterialize(unittest.TestCase):
             {('A', ('t1',)), ('A', ('t2',)), ('B', ('t1',))},
         )
         self.assertEqual(H.edges(), ['e1'])
-        self.assertEqual(S.edge_shape(H, 'e1').src, ('A', ('t1',)))
-        self.assertEqual(S.edge_shape(H, 'e1').tgt, ('B', ('t1',)))
+        self.assertEqual(S.edge_sides(H, 'e1').source, frozenset({('A', ('t1',))}))
+        self.assertEqual(S.edge_sides(H, 'e1').target, frozenset({('B', ('t1',))}))
 
 
 class TestViewNamespace(unittest.TestCase):

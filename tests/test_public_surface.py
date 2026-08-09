@@ -123,7 +123,22 @@ def test_what_the_contract_removed_is_not_reachable(graph):
         'edge_attributes',
     ):
         with pytest.raises(AttributeError):
-            getattr(graph, name)
+            _ = getattr(graph, name)
+
+
+def test_the_lazy_view_carries_no_matrix_name_the_graph_dropped(graph):
+    """`FR-017`. ``X`` went from the graph in cycle 002 and stayed on the view.
+
+    The named matrices are the whole spelling on the graph, so they are the whole
+    spelling on a view of one. A name that resolves in one place and raises in
+    the other is worse than a name that raises in both.
+    """
+    view = graph.view(nodes=['A'])
+    assert not hasattr(view, 'X')
+    with pytest.raises(AttributeError):
+        _ = view.X
+    # And the name the graph does carry answers on the view too.
+    assert view.B.shape[0] == 1
 
 
 def test_the_package_exports_what_it_lists(monkeypatch):

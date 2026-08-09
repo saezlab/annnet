@@ -18,54 +18,48 @@ _ABSENT = object()
 
 
 class CacheManager:
-    """Derived sparse-matrix cache (CSR/CSC/adjacency), keyed on the structural clock.
+    """The named sparse formats of one graph, over the one matrix cache.
 
-    Keys on ``_structure_version`` (see ``_derive.bump_structure``), never on
-    ``_version``: that is a history counter which does not advance on removes.
+    ``G.B`` and the rest are built by :class:`_matrices.MatrixCache`, which keeps
+    them against the clock of the store and extends a cached matrix when a write
+    only appended edges at the frontier. The CSR form, the CSC form and the
+    boundary-filtered adjacency are derived from those, and they used to be kept
+    here instead, against a second clock the graph advanced itself. So one matrix
+    could be current in one cache and stale in the other, and the two between
+    them held the same entries twice.
+
+    **This holds nothing.** Every format below is an entry of the one cache, and
+    dropping that cache drops these with it.
     """
+
+    _FORMATS = ('csr', 'csc', 'adjacency')
 
     def __init__(self, graph):
         self._G = graph
-        self._csr = None
-        self._csc = None
-        self._adjacency = None
-        self._csr_version = None
-        self._csc_version = None
-        self._adjacency_version = None
+
+    @property
+    def _cache(self):
+        return self._G.matrices.cache
 
     @property
     def csr(self):
-        """Return the CSR (Compressed Sparse Row) matrix.
+        """Return the CSR (Compressed Sparse Row) incidence matrix.
 
         Returns
         -------
         scipy.sparse.csr_matrix
-
-        Notes
-        -----
-        Built and cached on first access.
         """
-        if self._csr is None or self._csr_version != self._G._structure_version:
-            self._csr = self._G._matrix.tocsr()
-            self._csr_version = self._G._structure_version
-        return self._csr
+        return self._cache.derived(('format', 'csr'), lambda: self._G._matrix.tocsr())
 
     @property
     def csc(self):
-        """Return the CSC (Compressed Sparse Column) matrix.
+        """Return the CSC (Compressed Sparse Column) incidence matrix.
 
         Returns
         -------
         scipy.sparse.csc_matrix
-
-        Notes
-        -----
-        Built and cached on first access.
         """
-        if self._csc is None or self._csc_version != self._G._structure_version:
-            self._csc = self._G._matrix.tocsc()
-            self._csc_version = self._G._structure_version
-        return self._csc
+        return self._cache.derived(('format', 'csc'), lambda: self._G._matrix.tocsc())
 
     @property
     def adjacency(self):
@@ -83,13 +77,13 @@ class CacheManager:
         so they add neither a link between two nodes that share nothing nor a
         diagonal term that reads as a self-loop.
         """
-        if self._adjacency is None or self._adjacency_version != self._G._structure_version:
-            csr = self.csr
-            keep = self._non_boundary_cols()
-            B = csr if keep is None else csr[:, keep]
-            self._adjacency = B @ B.T
-            self._adjacency_version = self._G._structure_version
-        return self._adjacency
+        return self._cache.derived(('format', 'adjacency'), self._build_adjacency)
+
+    def _build_adjacency(self):
+        csr = self.csr
+        keep = self._non_boundary_cols()
+        B = csr if keep is None else csr[:, keep]
+        return B @ B.T
 
     def _non_boundary_cols(self):
         """Integer column indices to keep for adjacency (boundary columns removed).
@@ -120,7 +114,7 @@ class CacheManager:
         -------
         bool
         """
-        return self._csr is not None and self._csr_version == self._G._structure_version
+        return self._cache.holds(('format', 'csr'))
 
     def has_csc(self) -> bool:
         """Check whether a valid CSC cache exists.
@@ -129,7 +123,7 @@ class CacheManager:
         -------
         bool
         """
-        return self._csc is not None and self._csc_version == self._G._structure_version
+        return self._cache.holds(('format', 'csc'))
 
     def has_adjacency(self) -> bool:
         """Check whether a valid adjacency cache exists.
@@ -138,7 +132,7 @@ class CacheManager:
         -------
         bool
         """
-        return self._adjacency is not None and self._adjacency_version == self._G._structure_version
+        return self._cache.holds(('format', 'adjacency'))
 
     def get_csr(self):
         """Return the cached CSR matrix.
@@ -180,15 +174,9 @@ class CacheManager:
         -------
         None
         """
-        if formats is None:
-            formats = ['csr', 'csc', 'adjacency']
-        for fmt in formats:
-            if fmt == 'csr':
-                self._csr = self._csr_version = None
-            elif fmt == 'csc':
-                self._csc = self._csc_version = None
-            elif fmt == 'adjacency':
-                self._adjacency = self._adjacency_version = None
+        for fmt in self._FORMATS if formats is None else formats:
+            if fmt in self._FORMATS:
+                self._cache.forget(('format', fmt))
 
     def build(self, formats=None):
         """Pre-build specified formats (eager caching).
@@ -203,10 +191,8 @@ class CacheManager:
         -------
         None
         """
-        if formats is None:
-            formats = ['csr', 'csc', 'adjacency']
-        for fmt in formats:
-            if fmt in ('csr', 'csc', 'adjacency'):
+        for fmt in self._FORMATS if formats is None else formats:
+            if fmt in self._FORMATS:
                 getattr(self, fmt)
 
     def clear(self):
@@ -227,9 +213,10 @@ class CacheManager:
             Status and size information for each cached format.
         """
 
-        def _fmt(matrix, version):
-            if matrix is None:
+        def _fmt(name):
+            if not self._cache.holds(('format', name)):
                 return {'cached': False}
+            matrix = getattr(self, name)
             size = sum(
                 getattr(matrix, a).nbytes
                 for a in ('data', 'indices', 'indptr')
@@ -237,17 +224,13 @@ class CacheManager:
             )
             return {
                 'cached': True,
-                'version': version,
+                'version': self._G._store.structure_version,
                 'size_mb': size / (1024**2),
                 'nnz': getattr(matrix, 'nnz', 0),
                 'shape': matrix.shape,
             }
 
-        return {
-            'csr': _fmt(self._csr, self._csr_version),
-            'csc': _fmt(self._csc, self._csc_version),
-            'adjacency': _fmt(self._adjacency, self._adjacency_version),
-        }
+        return {name: _fmt(name) for name in self._FORMATS}
 
 
 # One member list feeds several purpose-built matrices. Each selection below names
