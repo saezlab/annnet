@@ -47,7 +47,7 @@ The store keeps no edge record. What an edge holds is a segment of three pooled
 arrays:
 
 ```python
-member_ent   # which entity slot this entry names
+member_ent  # which entity slot this entry names
 member_role  # SOURCE, TARGET or MEMBER
 member_coef  # the coefficient of this entry
 ```
@@ -113,6 +113,41 @@ value keeps its place when another element goes away. A free slot holds a null.
 
 A value keeps the type of the write that set it. The store converts nothing, so
 an integer in a column that later takes a string stays an integer.
+
+### Reading a whole column borrows the array
+
+`G.N["score"]` and `G.E["w2"]` read a whole column, and on a graph whose live
+slots are contiguous the answer is the array the store holds, cut to the live
+count. Nothing is copied and nothing is walked, so the read costs what slicing
+an array costs, whatever the size of the graph and whether or not a write came
+before it.
+
+Contiguous means the slots are exactly `0 .. count-1`, which
+`CoreState.node_axis_contiguous` and `CoreState.edge_slots_contiguous` answer in
+constant time, from the freelist and the slot count. The node axis asks two
+further questions, because it is not the entity axis: the graph has to be flat,
+since a multilayer graph holds one entity per layer and shows the bare id once,
+and no entity may be an edge-entity, since the node axis leaves those out. The
+store keeps a live count of edge-entities so that the second is one read rather
+than a pass over the kind array.
+
+A graph with a freed slot falls back to gathering the live slots. It gives the
+same values in the same order and costs more, which is the trade.
+
+The columns grow when the frontier moves rather than when a value is written, so
+a column is never shorter than the live count and the slice always applies. The
+cost lands on the write path, where a growth block amortizes it.
+
+**A column read gives back a read-only array**, on every path. It is a window
+onto the canonical state, and a write through it would reach the graph with no
+validation, no clock bump and no history entry. A caller who means to change
+values copies first, which is one call and is visible in their code, and a caller
+who means to change the graph writes through `G.N["score"] = values` or
+`G.attrs.set_node_attrs`.
+
+**A column is good until the next write to the graph.** After a write, a column
+a caller still holds is stale, and what it shows is not something the package
+states. `.copy()` is the way to hold values across a change.
 
 `G.obs` and `G.var` **derive** their content. They gather the live slots of
 every column and hand the result to narwhals, so one materialization serves

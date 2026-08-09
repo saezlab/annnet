@@ -10,7 +10,42 @@ them calls goes away.
 
 ## Unreleased
 
+### Changed, and a caller can see it
+
+- **A column read gives back a read-only array.** `G.N["score"]` and
+  `G.E["weight"]` now hand back a window onto the storage rather than a copy of
+  it, which is what makes the read cost what slicing an array costs. A write
+  through that window would reach the graph with no validation, no clock bump and
+  no history entry, so it is refused:
+
+  ```python
+  column = G.N['score']
+  column.sum()  # works, as before
+  column * 2  # works, as before — the result is a new array
+  column[0] = 1.0  # ValueError: assignment destination is read-only
+  ```
+
+  To change values, copy first — `G.N["score"].copy()` is your own array — or
+  write through the entry points that already existed, `G.N["score"] = values`
+  and `G.attrs.set_node_attrs`. The rule holds on every read path, so a caller
+  never has to ask which one answered.
+
+- **A column is good until the next write to the graph.** After a write, a column
+  you are still holding is stale, and what it shows then is not something the
+  package promises. `.copy()` is the documented way to hold values across a
+  change. Code that reads and uses a column in one expression — which is nearly
+  all code — never reaches that boundary.
+
+- **The native format carries a direction policy.** A graph whose edges declare a
+  flexible-direction policy used to lose it on a round trip through `.annnet`,
+  although cx2 kept it. It now survives. A file written before this change reads
+  as before.
+
 ### Removed
+
+- **`GraphView.X`**, which was the incidence matrix under the name the graph
+  itself dropped. A view spells its matrices the way the graph does, so it is
+  `view.B`.
 
 - **`annnet.from_omnipath` and `annnet.io.from_omnipath`.** Access to one
   knowledge base belongs in the client for that knowledge base, which is what

@@ -10,6 +10,18 @@
 # The register is a promise to the packages listed, not a description of them.
 # It goes stale in one direction only: a bridge may call more than it lists, so
 # a passing gate is not proof that a package works. See DEPENDENTS.md.
+#
+# The gate checks that a name resolves. It cannot check what that name *does*,
+# so a change to behaviour under an unchanged name passes it and still reaches
+# a caller. One such change is outstanding, from cycle 003:
+#
+#   A column read — `G.N[name]`, `G.E[name]` — gives back a read-only array.
+#   A caller that writes into what a read handed it now gets a ValueError, and
+#   the fix in their code is one `.copy()`. Neither package below did so when
+#   the register was last verified.
+#
+# A behaviour note belongs here rather than only in CHANGELOG.md, because this
+# is the file a maintainer reads when they ask what they have to do about us.
 
 [[package]]
 name = "omnipath-client"
