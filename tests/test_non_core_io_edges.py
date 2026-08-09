@@ -193,8 +193,8 @@ def test_sif_from_manifest_restores_hyperedges_slices_and_multilayer(tmp_path):
     }
 
     restored = sif.from_sif(sif_path, manifest=manifest, relation_attr='relation')
-    assert S.edge_shape(restored, 'e1').directed is False
-    assert S.edge_shape(restored, 'e1').weight == 2.0
+    assert S.edge_ref(restored, 'e1').directed is False
+    assert S.edge_ref(restored, 'e1').weight == 2.0
     assert 'h1' in restored.hyperedge_definitions
     assert 's1' in restored.slices.list(include_default=True)
     assert 'e1' in restored.slices.edges('s1')

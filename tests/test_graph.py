@@ -127,22 +127,22 @@ class TestGraphBasics(unittest.TestCase):
         # can connect another edge TO this edge
         self.g.add_edges('z', 'edge_ghost', edge_id='meta_link')
         self.assertIn('meta_link', self.g.E)
-        self.assertEqual(S.edge_shape(self.g, e).etype, 'node_edge')
+        self.assertEqual(S.edge_ref(self.g, e).kind, 'node_edge')
 
     def test_edge_entity_placeholder_has_distinct_etype(self):
         eid = self.g.add_edges(edge_id='edge_stub', as_entity=True)
-        rec = S.edge_shape(self.g, eid)
-        self.assertEqual(rec.etype, 'edge_placeholder')
+        rec, sides = S.edge_ref(self.g, eid), S.edge_sides(self.g, eid)
+        self.assertEqual(rec.kind, 'placeholder')
         self.assertEqual(S.edge_column(self.g, eid), -1)
-        self.assertIsNone(rec.src)
-        self.assertIsNone(rec.tgt)
+        self.assertFalse(sides.source)
+        self.assertFalse(sides.target)
 
         self.g.add_edges('a', 'b', edge_id=eid, as_entity=True)
-        upgraded = S.edge_shape(self.g, eid)
-        self.assertEqual(upgraded.etype, 'node_edge')
+        upgraded, sides = S.edge_ref(self.g, eid), S.edge_sides(self.g, eid)
+        self.assertEqual(upgraded.kind, 'node_edge')
         self.assertGreaterEqual(S.edge_column(self.g, eid), 0)
-        self.assertEqual(upgraded.src, 'a')
-        self.assertEqual(upgraded.tgt, 'b')
+        self.assertEqual(sides.source, frozenset({'a'}))
+        self.assertEqual(sides.target, frozenset({'b'}))
 
     def test_hyperedge_undirected(self):
         hid = self.g.add_edges(src=['h1', 'h2', 'h3'], weight=2.0, tag='tri')
@@ -249,7 +249,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertEqual(out.slices.active, 'L1')
         self.assertEqual(set(out.nodes()), {'u', 'v'})
         self.assertEqual(set(out.edges()), {'e1'})
-        self.assertAlmostEqual(S.edge_shape(out, 'e1').weight, 1.25)
+        self.assertAlmostEqual(S.edge_ref(out, 'e1').weight, 1.25)
         self.assertEqual(out.attrs.get_slice_attr('L1', 'region'), 'EMEA')
         self.assertEqual(out._slices['default']['edges'], set())
         self.assertEqual(out._slices['L1']['edges'], {'e1'})

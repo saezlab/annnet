@@ -678,3 +678,42 @@ def test_the_slot_store_rejects_an_unknown_direction():
     store = _build.rebuild_store(build_case('binary_directed'))
     with pytest.raises(ValueError):
         S.entity_edges(store, ('A', FLAT), 'sideways')
+
+
+# ---------------------------------------------------------------------------
+# What the facade stopped carrying
+# ---------------------------------------------------------------------------
+
+
+def test_the_retired_edge_shape_record_is_gone():
+    """`FR-018`, and `D37` of cycle 002, which said where it would end.
+
+    ``EdgeShape`` was the five field names the adapters and the file formats
+    read off the record store, kept over the store that answers now so that
+    sixty call sites did not have to move in one cycle. It was always meant to
+    go when the last of those callers asked for an :class:`EdgeRef` instead.
+    """
+    for name in ('EdgeShape', 'edge_shape', '_iter_edge_records', '_shape_side'):
+        assert not hasattr(S, name), name
+
+
+def test_nothing_in_the_package_constructs_one():
+    import pathlib
+
+    root = pathlib.Path(S.__file__).resolve().parents[1]
+    found = [
+        path.relative_to(root).as_posix()
+        for path in root.rglob('*.py')
+        if 'EdgeShape' in path.read_text() or 'edge_shape' in path.read_text()
+    ]
+    assert found == []
+
+
+def test_an_edge_reads_as_a_reference_and_its_sides(both_stores):
+    """What the callers ask for instead: the reference, and the two sides."""
+    case, graph, _store = both_stores
+    for edge_id, reference, sides in S.iter_edge_sides(graph):
+        assert reference.id == edge_id, case
+        assert reference == S.edge_ref(graph, edge_id)
+        assert sides == S.edge_sides(graph, edge_id)
+    assert [edge_id for edge_id, _ref, _sides in S.iter_edge_sides(graph)] == S.edge_ids(graph)

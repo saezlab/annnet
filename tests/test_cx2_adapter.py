@@ -142,7 +142,7 @@ class TestCX2Adapter(unittest.TestCase):
 
         # Check Edges
         self.assertIn('e1', G_new.edge_definitions)
-        self.assertAlmostEqual(S.edge_shape(G_new, 'e1').weight, 1.5)
+        self.assertAlmostEqual(S.edge_ref(G_new, 'e1').weight, 1.5)
 
         # Check Attributes (Polars)
         df_new = G_new._node_table

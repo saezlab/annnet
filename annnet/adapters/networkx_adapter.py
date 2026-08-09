@@ -34,10 +34,10 @@ from ._common import (
     _rows_like,
     _rows_to_df,
     _attrs_to_dict,
+    iter_edge_sides,
     _is_directed_eid,
     _serialize_value,
     dataframe_to_rows,
-    _iter_edge_records,
     endpoint_coeff_map,
     serialize_edge_layers,
     collect_slice_manifest,
@@ -150,18 +150,13 @@ def _export_binary_graph(
         G.add_node(v, **v_attr)
 
     # ADD EDGES WITH CACHED ATTRIBUTES
-    for eid, rec in _iter_edge_records(graph):
-        is_hyper = rec.etype == 'hyper'
-        if is_hyper:
-            S = set(rec.src or [])
-            T = set(rec.tgt or [])
-        else:
-            S = set() if rec.src is None else {rec.src}
-            T = set() if rec.tgt is None else {rec.tgt}
+    for eid, ref, sides in iter_edge_sides(graph):
+        is_hyper = ref.kind == 'hyper'
+        S, T = set(sides.source), set(sides.target)
 
         e_attr = dict(e_attrs_map.get(eid, {}))
 
-        weight = 1.0 if rec.weight is None else rec.weight
+        weight = ref.weight
         if public_only:
             e_attr['weight'] = weight
         else:
@@ -322,16 +317,9 @@ def to_nx(
     manifest_edges: dict = {}
     weights_map: dict = {}
     edge_directed_dict: dict = {}
-    default_dir = True if graph.directed is None else bool(graph.directed)
-
-    for eid, rec in _iter_edge_records(graph):
-        is_hyper = rec.etype == 'hyper'
-        if is_hyper:
-            S = set(rec.src or [])
-            T = set(rec.tgt or [])
-        else:
-            S = set() if rec.src is None else {rec.src}
-            T = set() if rec.tgt is None else {rec.tgt}
+    for eid, ref, sides in iter_edge_sides(graph):
+        is_hyper = ref.kind == 'hyper'
+        S, T = set(sides.source), set(sides.target)
 
         if not is_hyper:
             members = S | T
@@ -352,9 +340,8 @@ def to_nx(
             tail_map = endpoint_coeff_map(eattr, '__target_attr', T)
             manifest_edges[eid] = (head_map, tail_map, 'hyper')
 
-        if rec.weight is not None:
-            weights_map[eid] = float(rec.weight)
-        edge_directed_dict[eid] = bool(rec.directed) if rec.directed is not None else default_dir
+        weights_map[eid] = float(ref.weight)
+        edge_directed_dict[eid] = bool(ref.directed)
 
     # Base NX graph (binary edges only) — reuse the precomputed directedness map
     # so `_export_binary_graph` skips the polars-backed `_is_directed_eid` probe.

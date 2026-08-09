@@ -8,10 +8,11 @@ into _support modules.
 
 from __future__ import annotations
 
+from ..core import _structure
 from ..core._structure import (
     _iter_node_ids,
+    iter_edge_sides,
     _is_directed_eid,
-    _iter_edge_records,
 )
 from .._support.graph_records import (
     _rows_like,
@@ -34,12 +35,23 @@ from .._support.dataframe_backend import (
     dataframe_to_rows,
 )
 
+# The word an adapter and a manifest use for each kind of edge. The facade names
+# the kinds and this names them again in the vocabulary the files carry, the way
+# ``annnet.io._common`` does for the entity kinds.
+STORED_EDGE_KIND = {
+    _structure.BINARY: 'binary',
+    _structure.HYPER: 'hyper',
+    _structure.NODE_EDGE: 'node_edge',
+    _structure.PLACEHOLDER: 'edge_placeholder',
+}
+
 __all__ = [
+    'STORED_EDGE_KIND',
     'dataframe_to_rows',
     'empty_dataframe',
     '_attrs_to_dict',
     '_is_directed_eid',
-    '_iter_edge_records',
+    'iter_edge_sides',
     '_iter_node_ids',
     '_rows_like',
     '_rows_to_df',

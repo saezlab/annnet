@@ -219,13 +219,13 @@ def _edge_state(g: AnnNet):
     policies = S.edge_policies(g)
     out = {}
     for ref in S.iter_edges(g, include_placeholders=True):
-        shape = S.edge_shape(g, ref.id)
+        sides = S.edge_sides(g, ref.id)
         out[ref.id] = (
-            _normalise_frozenset(shape.src),
-            _normalise_frozenset(shape.tgt),
+            _normalise_frozenset(sides.source),
+            _normalise_frozenset(sides.target),
             float(ref.weight) if ref.weight is not None else None,
             ref.directed,
-            shape.etype,
+            ref.kind,
             S.edge_column(g, ref.id),
             ref.ml_kind,
             ref.ml_layers,

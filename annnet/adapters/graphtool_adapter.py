@@ -23,12 +23,13 @@ except ImportError:
 
 from ..core import _structure
 from ._common import (
+    STORED_EDGE_KIND,
     stored_key,
     _rows_to_df,
     _iter_node_ids,
     empty_dataframe,
+    iter_edge_sides,
     dataframe_to_rows,
-    _iter_edge_records,
     serialize_edge_layers,
     collect_slice_manifest,
     restore_slice_manifest,
@@ -83,6 +84,14 @@ def to_graphtool(
         if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
             return node[0]
         return node
+
+    def _one_endpoint(side):
+        """Return the single endpoint of one side of a binary edge, or None.
+
+        A binary edge names at most one entity per side, and a boundary edge
+        names none on one of them.
+        """
+        return next(iter(side)) if side else None
 
     # 1) graph-tool AnnNet (directed flag from AnnNet)
     directed = bool(G.directed) if G.directed is not None else True
@@ -141,33 +150,31 @@ def to_graphtool(
     edge_directed: dict = {}
     hyperedges: dict = {}
 
-    for eid, rec in _iter_edge_records(G):
-        if rec.etype == 'hyper':
+    for eid, ref, sides in iter_edge_sides(G):
+        if ref.kind == 'hyper':
             hyperedges[eid] = (
-                {'directed': True, 'head': list(rec.src or []), 'tail': list(rec.tgt or [])}
-                if rec.tgt is not None
-                else {'directed': False, 'members': list(rec.src or [])}
+                {'directed': True, 'head': list(sides.source), 'tail': list(sides.target)}
+                if sides.target
+                else {'directed': False, 'members': list(sides.source)}
             )
-            if rec.directed is not None:
-                edge_directed[eid] = bool(rec.directed)
-            if rec.weight is not None:
-                edges_weights[eid] = rec.weight
+            edge_directed[eid] = bool(ref.directed)
+            edges_weights[eid] = ref.weight
             continue
 
         # binary edge → also lands in gt graph and manifest 'definitions'
-        edges_definitions[eid] = (rec.src, rec.tgt, rec.etype)
-        if rec.directed is not None:
-            edge_directed[eid] = bool(rec.directed)
-        if rec.weight is not None:
-            edges_weights[eid] = rec.weight
+        source = _one_endpoint(sides.source)
+        target = _one_endpoint(sides.target)
+        edges_definitions[eid] = (source, target, STORED_EDGE_KIND[ref.kind])
+        edge_directed[eid] = bool(ref.directed)
+        edges_weights[eid] = ref.weight
 
-        u, v = _project_node_id(rec.src), _project_node_id(rec.tgt)
+        u, v = _project_node_id(source), _project_node_id(target)
         if u not in vmap or v not in vmap:
             continue
 
         e = gtG.add_edge(vmap[u], vmap[v])
         ep_id[e] = str(eid)
-        ep_w[e] = float(1.0 if rec.weight is None else rec.weight)
+        ep_w[e] = float(ref.weight)
 
         eattr = edge_attr_rows.get(eid)
         if eattr and edge_props:

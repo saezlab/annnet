@@ -14,7 +14,7 @@ from annnet._support.graph_records import (
 )
 from annnet.core._structure import (
     _is_directed_eid,
-    _iter_edge_records,
+    iter_edge_sides,
     _iter_node_ids,
 )
 from annnet.core.graph import AnnNet
@@ -150,41 +150,44 @@ def test_rows_like_returns_empty_for_unrecognized_shape() -> None:
     assert _rows_like(['not-a-dict']) == []
 
 
-# ── _iter_edge_records ─────────────────────────────────────────────────
+# ── iter_edge_sides ────────────────────────────────────────────────────
 
 
-def test_iter_edge_records_yields_the_edges_in_column_order() -> None:
+def test_iter_edge_sides_yields_the_edges_in_column_order() -> None:
     G = AnnNet(directed=True)
     G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1')
     G.add_edges('B', 'C', edge_id='e2')
-    out = list(_iter_edge_records(G))
-    eids = [eid for eid, _ in out]
+    eids = [eid for eid, _ref, _sides in iter_edge_sides(G)]
     assert eids == ['e1', 'e2']
 
 
-def test_iter_edge_records_gives_each_edge_the_shape_an_adapter_reads() -> None:
+def test_iter_edge_sides_gives_each_edge_its_reference_and_its_two_sides() -> None:
     G = AnnNet(directed=True)
     G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', weight=2.0)
     G.add_edges([{'members': ['A', 'B', 'C'], 'edge_id': 'h1'}])
 
-    shapes = dict(_iter_edge_records(G))
-    assert (shapes['e1'].src, shapes['e1'].tgt) == ('A', 'B')
-    assert (shapes['e1'].etype, shapes['e1'].weight, shapes['e1'].directed) == ('binary', 2.0, True)
-    assert shapes['h1'].src == frozenset({'A', 'B', 'C'})
-    assert shapes['h1'].tgt is None
-    assert (shapes['h1'].etype, shapes['h1'].directed) == ('hyper', False)
+    held = {eid: (ref, sides) for eid, ref, sides in iter_edge_sides(G)}
+
+    binary_ref, binary_sides = held['e1']
+    assert (binary_sides.source, binary_sides.target) == (frozenset({'A'}), frozenset({'B'}))
+    assert (binary_ref.kind, binary_ref.weight, binary_ref.directed) == ('binary', 2.0, True)
+
+    hyper_ref, hyper_sides = held['h1']
+    assert hyper_sides.source == frozenset({'A', 'B', 'C'})
+    assert not hyper_sides.target
+    assert (hyper_ref.kind, hyper_ref.directed) == ('hyper', False)
 
 
-def test_iter_edge_records_raises_when_no_edge_store() -> None:
+def test_iter_edge_sides_raises_when_no_edge_store() -> None:
     class Bare:
         pass
 
     import pytest
 
     with pytest.raises(AttributeError):
-        list(_iter_edge_records(Bare()))
+        list(iter_edge_sides(Bare()))
 
 
 # ── _rows_to_df ────────────────────────────────────────────────────────

@@ -184,10 +184,10 @@ def test_multilayer_directed_hyperedge_roundtrip_preserves_supra_members(tmp_pat
     io_write(G, out, overwrite=True)
     G2 = io_read(out)
 
-    rec = S.edge_shape(G2, 'h1')
-    assert rec.src == frozenset({('A', ('healthy',)), ('B', ('healthy',))})
-    assert rec.tgt == frozenset({('C', ('treated',))})
-    assert {type(member).__name__ for member in rec.src | rec.tgt} == {'tuple'}
+    sides = S.edge_sides(G2, 'h1')
+    assert sides.source == frozenset({('A', ('healthy',)), ('B', ('healthy',))})
+    assert sides.target == frozenset({('C', ('treated',))})
+    assert {type(member).__name__ for member in sides.source | sides.target} == {'tuple'}
 
 
 def test_multilayer_undirected_hyperedge_roundtrip_preserves_supra_members(tmp_path: Path):
@@ -197,10 +197,12 @@ def test_multilayer_undirected_hyperedge_roundtrip_preserves_supra_members(tmp_p
     io_write(G, out, overwrite=True)
     G2 = io_read(out)
 
-    rec = S.edge_shape(G2, 'h1')
-    assert rec.src == frozenset({('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))})
-    assert rec.tgt is None
-    assert {type(member).__name__ for member in rec.src} == {'tuple'}
+    sides = S.edge_sides(G2, 'h1')
+    assert sides.source == frozenset(
+        {('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))}
+    )
+    assert not sides.target
+    assert {type(member).__name__ for member in sides.source} == {'tuple'}
 
 
 if __name__ == '__main__':

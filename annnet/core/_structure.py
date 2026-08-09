@@ -924,45 +924,14 @@ def edges_between(graph, source, target) -> list:
 
 
 # ---------------------------------------------------------------------------
-# The shape the adapters and the file formats read an edge through
+# How the adapters and the file formats read an edge
 # ---------------------------------------------------------------------------
-# They were written against the record layout the core used to keep. This is
-# what is left of it: the field names they know, over the store that answers
-# now. Every shape is built on the call that reads it, so it is a view and never
-# a second copy. It lives here because the facade is the one path from outside
-# the core to the topology of a graph, and it goes when the last of those
-# callers asks for an :class:`EdgeRef` instead.
-
-
-class EdgeShape(NamedTuple):
-    """One edge in the shape the adapters read it.
-
-    ``src`` and ``tgt`` name one endpoint each for a binary edge and a whole
-    side for a hyperedge, and a side the edge does not have is None. ``directed``
-    is the answer the graph gives, so an edge that declares nothing carries the
-    default of the graph rather than None.
-    """
-
-    src: object
-    tgt: object
-    etype: str
-    weight: float
-    directed: bool
-
-
-_ADAPTER_EDGE_TYPE = {
-    BINARY: 'binary',
-    HYPER: 'hyper',
-    NODE_EDGE: 'node_edge',
-    PLACEHOLDER: 'edge_placeholder',
-}
-
-
-def _shape_side(side, hyper: bool):
-    """Return one side of an edge in the shape an adapter reads it."""
-    if not side:
-        return None
-    return frozenset(side) if hyper or len(side) > 1 else next(iter(side))
+# They were written against the record layout the core used to keep, and for one
+# cycle they read it through a five-field record kept here over the store that
+# answers now. D37 said that record would go when the last of those callers asked
+# for an :class:`EdgeRef` instead, and this is that. What they read now is the
+# reference and the two sides, which is what the store holds and one fewer shape
+# to explain.
 
 
 def _is_directed_eid(graph, eid):
@@ -992,24 +961,20 @@ def _iter_node_ids(graph):
         raise AttributeError('Graph does not expose an adapter-readable node store') from exc
 
 
-def edge_shape(graph, edge_id: str) -> EdgeShape:
-    """Return one edge in the shape the adapters read it."""
-    reference = edge_ref(graph, edge_id)
-    sides = edge_sides(graph, edge_id)
-    hyper = reference.kind == HYPER
-    return EdgeShape(
-        _shape_side(sides.source, hyper),
-        _shape_side(sides.target, hyper),
-        _ADAPTER_EDGE_TYPE.get(reference.kind, 'binary'),
-        reference.weight,
-        reference.directed,
-    )
+def iter_edge_sides(graph):
+    """Yield ``(edge id, EdgeRef, Endpoints)`` for every structural edge, in column order.
 
+    What the adapters and the file formats read: the id to name the edge by, the
+    reference for its kind, weight and direction, and the two sides as sets of
+    entity keys. A side an edge does not have is the empty set, which is what a
+    caller building a set from it wants anyway.
 
-def _iter_edge_records(graph):
-    """Yield ``(eid, EdgeShape)`` for every structural edge, in column order."""
+    This replaced a five-field record that restated the same answers in the words
+    the record store used, and collapsed a one-endpoint side to a bare endpoint
+    so that every caller had to expand it again.
+    """
     if getattr(graph, '_store', None) is None:
         raise AttributeError('Graph does not expose an adapter-readable edge store')
 
     for reference in iter_edges(graph):
-        yield reference.id, edge_shape(graph, reference.id)
+        yield reference.id, reference, edge_sides(graph, reference.id)

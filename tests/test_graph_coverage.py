@@ -60,10 +60,10 @@ def test_make_undirected_with_directed_hyperedge_collapses_to_undirected() -> No
     G.add_nodes(['A', 'B', 'C', 'D'])
     G.add_edges(src=['A', 'B'], tgt=['C', 'D'], edge_id='h1')
     G.make_undirected()
-    rec = S.edge_shape(G, 'h1')
-    assert rec.directed is False
-    assert rec.tgt is None
-    assert set(rec.src) == {'A', 'B', 'C', 'D'}
+    sides = S.edge_sides(G, 'h1')
+    assert S.edge_ref(G, 'h1').directed is False
+    assert not sides.target
+    assert set(sides.source) == {'A', 'B', 'C', 'D'}
 
 
 def test_make_undirected_with_undirected_hyperedge_is_idempotent() -> None:
@@ -71,10 +71,10 @@ def test_make_undirected_with_undirected_hyperedge_is_idempotent() -> None:
     G.add_nodes(['A', 'B', 'C'])
     G.add_edges(['A', 'B', 'C'], edge_id='h1')
     G.make_undirected()
-    rec = S.edge_shape(G, 'h1')
-    assert rec.directed is False
-    assert rec.tgt is None
-    assert set(rec.src) == {'A', 'B', 'C'}
+    sides = S.edge_sides(G, 'h1')
+    assert S.edge_ref(G, 'h1').directed is False
+    assert not sides.target
+    assert set(sides.source) == {'A', 'B', 'C'}
 
 
 def test_make_undirected_with_drop_flexible_clears_policy() -> None:
@@ -104,7 +104,7 @@ def test_make_undirected_without_update_default_keeps_directed_attr() -> None:
 def test_edge_kind_setter_marks_edge_as_hyper() -> None:
     G = _toy()
     G.edge_kind = {'e1': 'hyper'}
-    assert S.edge_shape(G, 'e1').etype == 'hyper'
+    assert S.edge_ref(G, 'e1').kind == 'hyper'
 
 
 def test_edge_kind_setter_marks_ml_kind_for_non_hyper() -> None:
@@ -121,40 +121,43 @@ def test_edge_kind_setter_ignores_unknown_eid() -> None:
 def test_edge_definitions_setter_updates_src_tgt_etype() -> None:
     G = _toy()
     G.edge_definitions = {'e1': ('A', 'C', 'binary')}
-    rec = S.edge_shape(G, 'e1')
-    assert (rec.src, rec.tgt, rec.etype) == ('A', 'C', 'binary')
+    sides = S.edge_sides(G, 'e1')
+    assert (sides.source, sides.target, S.edge_ref(G, 'e1').kind) == (
+        frozenset({'A'}),
+        frozenset({'C'}),
+        'binary',
+    )
 
 
 def test_edge_definitions_setter_normalizes_hyper_etype_to_binary() -> None:
     G = _toy()
     G.edge_definitions = {'e1': ('A', 'B', 'hyper')}
-    assert S.edge_shape(G, 'e1').etype == 'binary'
+    assert S.edge_ref(G, 'e1').kind == 'binary'
 
 
 def test_hyperedge_definitions_setter_list_form_makes_undirected() -> None:
     G = _toy()
     G.hyperedge_definitions = {'e1': ['A', 'B', 'C']}
-    rec = S.edge_shape(G, 'e1')
-    assert rec.etype == 'hyper'
-    assert rec.tgt is None
-    assert set(rec.src) == {'A', 'B', 'C'}
+    sides = S.edge_sides(G, 'e1')
+    assert S.edge_ref(G, 'e1').kind == 'hyper'
+    assert not sides.target
+    assert set(sides.source) == {'A', 'B', 'C'}
 
 
 def test_hyperedge_definitions_setter_dict_form_directed() -> None:
     G = _toy()
     G.hyperedge_definitions = {'e1': {'directed': True, 'head': ['A'], 'tail': ['B', 'C']}}
-    rec = S.edge_shape(G, 'e1')
-    assert rec.directed is True
-    assert set(rec.src) == {'A'}
-    assert set(rec.tgt) == {'B', 'C'}
+    sides = S.edge_sides(G, 'e1')
+    assert S.edge_ref(G, 'e1').directed is True
+    assert set(sides.source) == {'A'}
+    assert set(sides.target) == {'B', 'C'}
 
 
 def test_hyperedge_definitions_setter_dict_form_undirected() -> None:
     G = _toy()
     G.hyperedge_definitions = {'e1': {'directed': False, 'members': ['A', 'B']}}
-    rec = S.edge_shape(G, 'e1')
-    assert rec.directed is False
-    assert rec.tgt is None
+    assert S.edge_ref(G, 'e1').directed is False
+    assert not S.edge_sides(G, 'e1').target
 
 
 def test_the_entity_kind_door_updates_the_recorded_kind() -> None:
@@ -370,8 +373,7 @@ def test_add_hyperedges_with_existing_eid_overwrites_in_place() -> None:
     # Now re-add 'h1' as a different hyperedge — triggers the in-place
     # overwrite branch in ``_add_hyperedges_batch``.
     G.add_edges(['B', 'C', 'D'], edge_id='h1')
-    rec = S.edge_shape(G, 'h1')
-    assert set(rec.src) == {'B', 'C', 'D'}
+    assert set(S.edge_sides(G, 'h1').source) == {'B', 'C', 'D'}
 
 
 def test_add_edges_as_entity_promotes_to_edge_entity() -> None:
@@ -379,8 +381,7 @@ def test_add_edges_as_entity_promotes_to_edge_entity() -> None:
     G = AnnNet(directed=True)
     G.add_nodes(['A', 'B', 'C'])
     G.add_edges('A', 'B', edge_id='e1', as_entity=True)
-    rec = S.edge_shape(G, 'e1')
-    assert rec.etype == 'node_edge'
+    assert S.edge_ref(G, 'e1').kind == 'node_edge'
 
 
 # ── remove_edge / remove_node (singular legacy paths) ───────────────

@@ -19,9 +19,9 @@ from pathlib import Path
 
 from ._common import (
     _rows_to_df,
+    iter_edge_sides,
     _is_directed_eid,
     dataframe_to_rows,
-    _iter_edge_records,
     endpoint_coeff_map,
     serialize_endpoint,
     deserialize_endpoint,
@@ -33,14 +33,6 @@ from ._common import (
 
 if TYPE_CHECKING:
     from ..core import AnnNet
-
-
-def _edge_endpoint_sets(rec):
-    if rec.etype == 'hyper':
-        return set(rec.src or []), set(rec.tgt or [])
-    src = set() if rec.src is None else {rec.src}
-    tgt = set() if rec.tgt is None else {rec.tgt}
-    return src, tgt
 
 
 def _is_json_serializable(value) -> bool:
@@ -93,16 +85,16 @@ def to_json(
     # edges + hyperedges
     edges = []
     hyperedges = []
-    for eid, rec in _iter_edge_records(graph):
-        S, T = _edge_endpoint_sets(rec)
-        is_hyper = rec.etype == 'hyper'
+    for eid, ref, sides in iter_edge_sides(graph):
+        S, T = set(sides.source), set(sides.target)
+        is_hyper = ref.kind == 'hyper'
 
         # attrs
         d = dict(edge_attrs.get(eid, {}))
 
         # weight + directed
         try:
-            w = float(1.0 if rec.weight is None else rec.weight)
+            w = float(ref.weight)
         except (TypeError, ValueError):
             w = 1.0
         try:
@@ -420,14 +412,14 @@ def write_ndjson(graph: AnnNet, dir_path):
         open(f'{dir_path}/edges.ndjson', 'w', encoding='utf-8') as fe,
         open(f'{dir_path}/hyperedges.ndjson', 'w', encoding='utf-8') as fh,
     ):
-        for eid, rec in _iter_edge_records(graph):
-            S, T = _edge_endpoint_sets(rec)
-            is_hyper = rec.etype == 'hyper'
+        for eid, ref, sides in iter_edge_sides(graph):
+            S, T = set(sides.source), set(sides.target)
+            is_hyper = ref.kind == 'hyper'
 
             d = dict(edge_attrs.get(eid, {}))
 
             try:
-                w = float(1.0 if rec.weight is None else rec.weight)
+                w = float(ref.weight)
             except (TypeError, ValueError):
                 w = 1.0
             try:

@@ -74,11 +74,11 @@ def test_add_hyperedges_batch_undirected_via_src_list():
         ]
     )
     assert _attr_value(G, 'h1', 'confidence') == 0.5
-    rec = S.edge_shape(G, 'h1')
-    assert rec.etype == 'hyper'
+    rec, sides = S.edge_ref(G, 'h1'), S.edge_sides(G, 'h1')
+    assert rec.kind == 'hyper'
     assert rec.directed is False
-    assert set(rec.src) == {'A', 'B', 'C'}
-    assert rec.tgt is None
+    assert set(sides.source) == {'A', 'B', 'C'}
+    assert not sides.target
 
 
 def test_add_hyperedges_batch_directed_via_src_tgt_lists():
@@ -93,11 +93,11 @@ def test_add_hyperedges_batch_directed_via_src_tgt_lists():
         ]
     )
     assert _attr_value(G, 'h2', 'pathway') == 'tca'
-    rec = S.edge_shape(G, 'h2')
-    assert rec.etype == 'hyper'
+    rec, sides = S.edge_ref(G, 'h2'), S.edge_sides(G, 'h2')
+    assert rec.kind == 'hyper'
     assert rec.directed is True
-    assert set(rec.src) == {'A'}
-    assert set(rec.tgt) == {'B', 'C', 'D'}
+    assert set(sides.source) == {'A'}
+    assert set(sides.target) == {'B', 'C', 'D'}
 
 
 def test_add_hyperedges_batch_source_target_aliases():
@@ -110,7 +110,7 @@ def test_add_hyperedges_batch_source_target_aliases():
         ]
     )
     assert _attr_value(G, 'h1', 'category') == 'complex'
-    assert S.edge_shape(G, 'h1').etype == 'hyper'
+    assert S.edge_ref(G, 'h1').kind == 'hyper'
 
 
 # ── add_edges: entity batch (already works — regression guard) ────────────

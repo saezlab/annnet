@@ -41,32 +41,32 @@ def _mixed_graph() -> AnnNet:
 def test_reverse_swaps_directed_binary_endpoints() -> None:
     G = _mixed_graph()
     R = G.ops.reverse()
-    rec_orig = S.edge_shape(G, 'e_dir')
-    rec_rev = S.edge_shape(R, 'e_dir')
-    assert (rec_orig.src, rec_orig.tgt) == (rec_rev.tgt, rec_rev.src)
+    before = S.edge_sides(G, 'e_dir')
+    after = S.edge_sides(R, 'e_dir')
+    assert (before.source, before.target) == (after.target, after.source)
 
 
 def test_reverse_leaves_undirected_binary_unchanged() -> None:
     G = _mixed_graph()
     R = G.ops.reverse()
-    a = S.edge_shape(G, 'e_undir')
-    b = S.edge_shape(R, 'e_undir')
-    assert (a.src, a.tgt) == (b.src, b.tgt)
+    a = S.edge_sides(G, 'e_undir')
+    b = S.edge_sides(R, 'e_undir')
+    assert a == b
 
 
 def test_reverse_swaps_directed_hyperedge_head_tail() -> None:
     G = _mixed_graph()
     R = G.ops.reverse()
-    a = S.edge_shape(G, 'h_dir')
-    b = S.edge_shape(R, 'h_dir')
-    assert a.src == b.tgt and a.tgt == b.src
+    a = S.edge_sides(G, 'h_dir')
+    b = S.edge_sides(R, 'h_dir')
+    assert a.source == b.target and a.target == b.source
 
 
 def test_reverse_leaves_undirected_hyperedge_unchanged() -> None:
     G = _mixed_graph()
     R = G.ops.reverse()
-    assert set(S.edge_shape(G, 'h_und').src) == set(S.edge_shape(R, 'h_und').src)
-    assert S.edge_shape(R, 'h_und').tgt is None
+    assert set(S.edge_sides(G, 'h_und').source) == set(S.edge_sides(R, 'h_und').source)
+    assert not S.edge_sides(R, 'h_und').target
 
 
 def test_reverse_returns_new_graph() -> None:
@@ -361,7 +361,7 @@ def test_multilayer_subgraph_from_slice_preserves_graph_attributes_and_real_supr
         ('B', ('healthy',)),
         ('C', ('treated',)),
     }
-    assert S.edge_shape(H, 'h1').src == frozenset(
+    assert S.edge_sides(H, 'h1').source == frozenset(
         {('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))}
     )
 
@@ -500,7 +500,7 @@ def test_edge_subgraph_multilayer_hyperedge_preserves_supra_members_without_plac
         ('B', ('healthy',)),
         ('C', ('treated',)),
     }
-    assert S.edge_shape(H, 'h1').src == frozenset(
+    assert S.edge_sides(H, 'h1').source == frozenset(
         {('A', ('healthy',)), ('B', ('healthy',)), ('C', ('treated',))}
     )
 

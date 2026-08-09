@@ -23,10 +23,10 @@ from ._common import (
     _rows_like,
     _rows_to_df,
     _attrs_to_dict,
+    iter_edge_sides,
     _is_directed_eid,
     _serialize_value,
     dataframe_to_rows,
-    _iter_edge_records,
     endpoint_coeff_map,
     serialize_edge_layers,
     collect_slice_manifest,
@@ -102,14 +102,10 @@ def _export_binary_graph(
 
     # Ensure endpoints that appear in edges are also included
     endpoints = set()
-    for eid, rec in _iter_edge_records(graph):
+    for eid, _ref, sides in iter_edge_sides(graph):
         if slice_edge_set is not None and eid not in slice_edge_set:
             continue
-        if rec.etype == 'hyper':
-            S, T = set(rec.src or []), set(rec.tgt or [])
-        else:
-            S = set() if rec.src is None else {rec.src}
-            T = set() if rec.tgt is None else {rec.tgt}
+        S, T = set(sides.source), set(sides.target)
         endpoints.update(S)
         endpoints.update(T)
     if slice_node_set is not None:
@@ -175,14 +171,10 @@ def _export_binary_graph(
     edge_tuples = []
     edge_payloads = []  # list of dicts, parallel to edge_tuples
 
-    for eid, rec in _iter_edge_records(graph):
+    for eid, ref, sides in iter_edge_sides(graph):
         if slice_edge_set is not None and eid not in slice_edge_set:
             continue
-        if rec.etype == 'hyper':
-            S, T = set(rec.src or []), set(rec.tgt or [])
-        else:
-            S = set() if rec.src is None else {rec.src}
-            T = set() if rec.tgt is None else {rec.tgt}
+        S, T = set(sides.source), set(sides.target)
 
         e_attr = dict(eattr_map.get(eid, {}))
         if public_only:
@@ -192,11 +184,11 @@ def _export_binary_graph(
         else:
             e_attr = {k: _serialize_value(val) for k, val in e_attr.items()}
 
-        weight = 1.0 if rec.weight is None else rec.weight
+        weight = ref.weight
         e_attr['weight' if public_only else '__weight'] = weight
         e_attr['eid'] = eid
 
-        is_hyper = rec.etype == 'hyper'
+        is_hyper = ref.kind == 'hyper'
         is_dir = _is_dir_eid(graph, eid)
         members = S | T
 
@@ -340,9 +332,8 @@ def to_igraph(
     manifest_edges: dict = {}
     base_weights: dict = {}
     edge_directed_dict: dict = {}
-    default_dir = True if graph.directed is None else bool(graph.directed)
 
-    for eid, rec in _iter_edge_records(graph):
+    for eid, ref, sides in iter_edge_sides(graph):
         # edge attrs (filtered for public_only)
         eattr_full = _raw_edge_attrs.get(eid, {})
         eattr_filtered = {
@@ -354,12 +345,8 @@ def to_igraph(
         edge_attrs[eid] = eattr
 
         # topology
-        is_hyper = rec.etype == 'hyper'
-        if is_hyper:
-            S, T = set(rec.src or []), set(rec.tgt or [])
-        else:
-            S = set() if rec.src is None else {rec.src}
-            T = set() if rec.tgt is None else {rec.tgt}
+        is_hyper = ref.kind == 'hyper'
+        S, T = set(sides.source), set(sides.target)
 
         if not is_hyper:
             members = S | T
@@ -379,9 +366,8 @@ def to_igraph(
             manifest_edges[eid] = (head_map, tail_map, 'hyper')
 
         # weight + directedness
-        if rec.weight is not None:
-            base_weights[eid] = float(rec.weight)
-        edge_directed_dict[eid] = bool(rec.directed) if rec.directed is not None else default_dir
+        base_weights[eid] = float(ref.weight)
+        edge_directed_dict[eid] = bool(ref.directed)
 
     # ---------- slices + per-slice weights for manifest ----------
     requested_lids = set()

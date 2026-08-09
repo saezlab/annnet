@@ -11,8 +11,8 @@ from __future__ import annotations
 from ..core import _structure
 from ..core._structure import (
     _iter_node_ids,
+    iter_edge_sides,
     _is_directed_eid,
-    _iter_edge_records,
 )
 from .._support.graph_records import _rows_to_df
 from .._support.serialization import (
@@ -105,7 +105,7 @@ __all__ = [
     'serialize_endpoint',
     'serialize_multilayer_manifest',
     '_is_directed_eid',
-    '_iter_edge_records',
+    'iter_edge_sides',
     '_iter_node_ids',
     '_rows_to_df',
 ]
