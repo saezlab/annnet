@@ -4,6 +4,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from . import _mutate, _structure
+from ._attrs import read_only
 from ._state import GraphState
 from ._records import _external_entity_kind
 from ._stored_kinds import STORED_EDGE_KIND, STORED_ENTITY_KIND
@@ -802,25 +803,49 @@ class ElementSequence:
         """Return the whole column of this axis as the store holds it, or None."""
         raise NotImplementedError
 
+    def _intrinsic_vector(self, name: str):
+        """Return one structural field of the whole axis as a vector, or None.
+
+        ``None`` means this axis has no such column to read off its arrays, and
+        the caller falls back to reading the elements. The id of an element is
+        always ``None`` here: the id column *is* the ids, and the caller has
+        them.
+        """
+        return None
+
     def column(self, name: str, default=None):
         """Return one attribute of every element of this sequence, as a vector.
 
         A read of the whole axis is a slice of the array the store holds, so it
         costs no walk over the elements. A subsequence, and a caller that names
         a value for the elements that carry none, are read element by element.
+
+        **Every path gives back a read-only array**, so that a caller never has
+        to ask which one answered. A read of the whole axis borrows the array the
+        store holds, and a write into it would reach the graph with no validation
+        and no history entry. A caller who means to change values copies.
         """
-        if self._ids is None and default is None and name not in self.intrinsic_names:
-            vector = self._attribute_vector(name)
+        if self._ids is None and default is None:
+            # Neither branch asks for the ids. Building the id tuple of the whole
+            # axis is itself a walk, so a read that never needs them must not
+            # trigger one.
+            vector = (
+                self._intrinsic_vector(name)
+                if name in self.intrinsic_names
+                else self._attribute_vector(name)
+            )
             if vector is not None:
-                return vector
+                return read_only(vector)
         ids = self.ids
         found = self._intrinsic(name, ids)
         if found is not _MISSING:
-            return np.array(found, dtype=object if not found else None)
+            if isinstance(found, np.ndarray):
+                return read_only(found)
+            return read_only(np.array(found, dtype=object if not found else None))
         values = self._attribute_map(name)
         if values is None:
             raise KeyError(f'no attribute named {name!r} on this sequence')
-        return np.array([values.get(element, default) for element in ids])
+        return read_only(np.array([values.get(element, default) for element in ids]))
 
     def set_column(self, name: str, values) -> None:
         """Set one attribute of every element of this sequence."""
@@ -900,6 +925,24 @@ class NodeSequence(ElementSequence):
 # follows from how many members an edge holds and on which sides.
 _EDGE_STRUCTURAL_WRITES = frozenset({'weight', 'directed'})
 
+# The three that read as a column. All three come off the edge arrays, so all
+# three read as one pass over them rather than as one record per edge.
+_EDGE_INTRINSIC_COLUMNS = ('directed', 'weight', 'kind')
+
+# The kind of an edge, by the code the store holds for it, in the words the
+# public record uses. The store holds the code and this is the vocabulary, which
+# is why the table is passed down rather than kept there.
+#
+# ``hyper`` stands in for the two names a hyperedge takes. Which of them it takes
+# depends on whether its members hold roles, so the direction column decides it,
+# and the two are substituted after the table is applied.
+STORED_EDGE_KIND_NAMES = tuple(
+    STORED_EDGE_KIND[_structure._SLOT_EDGE_KIND[code]]
+    for code in sorted(_structure._SLOT_EDGE_KIND)
+)
+_HYPER_KIND_NAMES = ('hyper_undirected', 'hyper_directed')
+_HYPER_KIND_LABEL = STORED_EDGE_KIND[_structure.HYPER]
+
 
 class EdgeSequence(ElementSequence):
     """The edges of a graph, in the order the graph holds them.
@@ -919,9 +962,47 @@ class EdgeSequence(ElementSequence):
     def _intrinsic(self, name: str, ids):
         if name in (self.id_key, self.id_column):
             return list(ids)
-        if name in ('directed', 'weight', 'kind'):
+        if name in _EDGE_INTRINSIC_COLUMNS:
             return [getattr(self._graph.get_edge(element), name) for element in ids]
         return _MISSING
+
+    def _intrinsic_vector(self, name: str):
+        """Return the whole intrinsic column from the edge arrays, or None.
+
+        The three fields are held differently and so they are read differently.
+        ``weight`` is the array the store holds, so the answer is a slice of it.
+        The other two are **derived from an array rather than held in one**, so
+        each is one vectorized pass that the store keeps against its clock:
+
+        - ``directed`` because an edge that declares nothing inherits the default
+          of the graph, and a hyperedge takes neither, resolving its direction
+          from whether its members hold roles,
+        - ``kind`` because it follows from the shape of the edge — the array
+          holds a code, the record shows a name, and a hyperedge shows one of two
+          names depending on that same direction.
+
+        The slice addresses the *structural* edges, which is what this sequence
+        holds. A placeholder edge occupies no column and is not one of them, so a
+        store that holds any falls back to the read element by element.
+        """
+        if name not in _EDGE_INTRINSIC_COLUMNS:
+            return None
+        store = self._graph._store
+        if not store.edge_axis_contiguous:
+            return None
+        count = store.edge_count
+        if name == 'weight':
+            return store.edge_weight[:count]
+        directed = store.edge_directed_column()[:count]
+        if name == 'directed':
+            return directed
+        kinds = store.edge_kind_column(STORED_EDGE_KIND_NAMES)[:count]
+        hyper = kinds == _HYPER_KIND_LABEL
+        if not hyper.any():
+            return kinds
+        named = kinds.astype(object)
+        named[hyper] = [_HYPER_KIND_NAMES[bool(value)] for value in directed[hyper]]
+        return named
 
     def _attribute_map(self, name: str) -> dict | None:
         return self._graph._attr_store.edge_attr_map(name)

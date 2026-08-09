@@ -4,6 +4,22 @@ One generic attribute is one typed array. The array is indexed by slot, so a val
 keeps its place when another element goes away, and one write lands in one cell. A
 free slot holds a null.
 
+**Reading a whole column borrows that array.** On a graph whose live slots are
+contiguous, the array cut to the live count *is* the answer, so the read copies
+nothing and walks nothing, and it costs what slicing an array costs whether or
+not a write came before it. A graph with a freed slot falls back to gathering the
+live slots, which gives the same values in the same order and costs more.
+
+Two things make the borrowing read possible. The store answers in constant time
+whether its slots are contiguous, and the columns grow when the frontier moves
+rather than when a value is written, so a column is never shorter than the live
+count and the slice always applies.
+
+**A read gives back a read-only array**, on every path, because it is a window
+onto the canonical state and a write through it would reach the graph with no
+validation, no clock bump and no history entry. A column is good until the next
+write to the graph; a caller who wants to hold values across a change copies.
+
 A contextual attribute belongs to a pair rather than to one element, for example
 one edge in one slice or one node in one layer. Almost no pair carries a value, so
 a dense column per pair would waste nearly every cell. Those stores therefore stay
@@ -40,6 +56,9 @@ EDGE_AXIS = 'edge'
 # list, uses an object array, which is what a dataframe backend takes anyway.
 _NUMERIC_KINDS = 'biufc'
 
+# A capacity no store reaches, so an axis that holds no column never grows one.
+_NO_COLUMNS = 1 << 62
+
 
 def _is_null(value) -> bool:
     """Return True for a cell that carries nothing.
@@ -71,6 +90,36 @@ def _column_for(value, size: int) -> np.ndarray:
     return np.full(size, None, dtype=object)
 
 
+def read_only(values: np.ndarray) -> np.ndarray:
+    """Return ``values`` with writing refused.
+
+    A column read hands back a window onto the canonical store. A write through
+    that window would reach the graph with no validation, no clock bump and no
+    history entry, which is worse than either copying or refusing. So it is
+    refused, and it is refused on every read path — the borrowing one and the
+    gathering one alike — so that a caller never has to ask which answered.
+
+    A caller who means to change values copies, which is one call and is visible
+    in their code. The entry points that write the graph are unaffected.
+    """
+    values.flags.writeable = False
+    return values
+
+
+def _borrowed(column: np.ndarray, count: int) -> np.ndarray:
+    """Return the first ``count`` cells of ``column`` without copying them.
+
+    The caller has established that the live slots are ``0 .. count-1``, so the
+    range and the elements are the same thing. Eager growth is what makes the
+    column long enough for this to hold; a column that is somehow short still
+    answers, by growing here rather than by giving back fewer values than there
+    are elements.
+    """
+    if column.size < count:  # pragma: no cover - eager growth keeps this unreachable
+        column = _grown(column, count)
+    return read_only(column[:count])
+
+
 def _grown(column: np.ndarray, size: int) -> np.ndarray:
     if size <= column.size:
         return column
@@ -97,6 +146,12 @@ class AttributeStore:
         self.node_columns: dict[str, np.ndarray] = {}
         self.edge_columns: dict[str, np.ndarray] = {}
 
+        # The capacity every column of an axis is already long enough for. It is
+        # what makes eager growth one comparison per allocation rather than one
+        # per column per allocation. See :meth:`_forget_floors`.
+        self._node_floor = 0
+        self._edge_floor = 0
+
         # Contextual stores, each keyed by its own pair.
         self.slice_attributes: dict[str, dict] = {}
         self.edge_slice_attributes: dict[tuple[str, str], dict] = {}
@@ -115,9 +170,10 @@ class AttributeStore:
         self.table_builds = 0
 
         # A freed slot must hold a null, so the store announces a free and these
-        # hooks clear the cells that belonged to the element that went away.
-        store.entity_freed_hooks.append(self._on_entity_freed)
-        store.edge_freed_hooks.append(self._on_edge_freed)
+        # hooks clear the cells that belonged to the element that went away. A
+        # new slot has to be addressable in every column before a read indexes
+        # one with a range, so the store announces that too and these grow.
+        self._follow(store)
 
     def rebind(self, store) -> None:
         """Follow the graph onto a canonical store it was handed whole.
@@ -130,12 +186,66 @@ class AttributeStore:
         if store is self._store:
             return
         self._store = store
-        store.entity_freed_hooks.append(self._on_entity_freed)
-        store.edge_freed_hooks.append(self._on_edge_freed)
+        self._follow(store)
         self.node_columns = {}
         self.edge_columns = {}
+        self._forget_floors()
         self._tables.clear()
         self._row_cache.clear()
+
+    def _follow(self, store) -> None:
+        """Subscribe to the slot lifecycle of one store."""
+        store.entity_freed_hooks.append(self._on_entity_freed)
+        store.edge_freed_hooks.append(self._on_edge_freed)
+        store.entity_capacity_hooks.append(self._on_entity_capacity)
+        store.edge_capacity_hooks.append(self._on_edge_capacity)
+
+    # -- eager growth -----------------------------------------------------
+    # A column shorter than the live count is the one thing that stops a read
+    # from being a slice: the missing values are the elements added since the
+    # column last grew, and each of them carries a null. Padding on read would
+    # copy, which is what the borrowing read exists to stop, so the columns
+    # grow when the frontier moves instead.
+    #
+    # The cost lands on the write path, where a growth block amortizes it: a
+    # column doubles, so it grows a logarithmic number of times over the life
+    # of a graph, and the announcement of a bulk write comes once per batch.
+
+    @staticmethod
+    def _grow_all(columns: dict, capacity: int) -> int:
+        """Grow every column to ``capacity`` and return the shortest one after.
+
+        The answer is the capacity up to which nothing has to be done again. A
+        column doubles when it grows, so it comes back well clear of the
+        capacity that made it grow, and the next few thousand allocations are
+        one integer comparison each.
+        """
+        floor = _NO_COLUMNS
+        for name, column in columns.items():
+            if column.size < capacity:
+                column = _grown(column, capacity)
+                columns[name] = column
+            if column.size < floor:
+                floor = column.size
+        return floor
+
+    def _on_entity_capacity(self, capacity: int) -> None:
+        if capacity > self._node_floor:
+            self._node_floor = self._grow_all(self.node_columns, capacity)
+
+    def _on_edge_capacity(self, capacity: int) -> None:
+        if capacity > self._edge_floor:
+            self._edge_floor = self._grow_all(self.edge_columns, capacity)
+
+    def _forget_floors(self) -> None:
+        """Say that nothing is known about how long the columns are.
+
+        Every path that replaces a column, or a whole set of them, calls this.
+        A column that is grown is never shortened, so growth alone never needs
+        it.
+        """
+        self._node_floor = 0
+        self._edge_floor = 0
 
     # -- generic columns --------------------------------------------------
 
@@ -144,6 +254,7 @@ class AttributeStore:
         if column is None:
             column = _column_for(value, max(8, capacity))
             columns[name] = column
+            self._forget_floors()
         column = _grown(column, capacity)
         if column.dtype.kind in _NUMERIC_KINDS and not isinstance(
             value, (int, float, np.integer, np.floating)
@@ -191,6 +302,7 @@ class AttributeStore:
         column = _empty_column(max(8, capacity), values)
         column[slots] = values
         columns[name] = column
+        self._forget_floors()
 
     def node_column(self, name: str) -> np.ndarray:
         """Return the raw node column, indexed by slot."""
@@ -301,11 +413,13 @@ class AttributeStore:
     def drop_node_columns(self) -> None:
         """Forget every generic node attribute, keeping one row per node."""
         self.node_columns = {}
+        self._forget_floors()
         self._tables.pop(NODE_AXIS, None)
 
     def drop_edge_columns(self) -> None:
         """Forget every generic edge attribute, keeping one row per edge."""
         self.edge_columns = {}
+        self._forget_floors()
         self._tables.pop(EDGE_AXIS, None)
 
     def load_node_rows(self, rows) -> None:
@@ -407,16 +521,35 @@ class AttributeStore:
         array the store already holds, not a walk over rows. ``None`` says the
         store holds no such attribute, which is not the same as one every node
         leaves empty.
+
+        The slice applies when one node of the node axis sits in each entity
+        slot, in order — which is what :attr:`CoreState.node_axis_contiguous`
+        answers, in constant time, from the freelist, the aspects and the count
+        of edge-entities. Anything else falls back to the gather, which is
+        slower and gives the same values in the same order.
         """
-        return self._vector(
-            self.node_columns.get(name), self._rows_of(NODE_AXIS, self._built_node_rows)[1]
-        )
+        column = self.node_columns.get(name)
+        if column is None:
+            return None
+        store = self._store
+        if store.node_axis_contiguous:
+            return _borrowed(column, store.entity_count)
+        return self._vector(column, self._rows_of(NODE_AXIS, self._built_node_rows)[1])
 
     def edge_vector(self, name: str):
-        """Return one edge column as a vector, aligned with :meth:`edge_ids`."""
-        return self._vector(
-            self.edge_columns.get(name), self._rows_of(EDGE_AXIS, self._built_edge_rows)[1]
-        )
+        """Return one edge column as a vector, aligned with :meth:`edge_ids`.
+
+        The edge axis holds one live edge per slot, so it asks the one question
+        the node axis asks first: whether any slot has been freed and not yet
+        reused.
+        """
+        column = self.edge_columns.get(name)
+        if column is None:
+            return None
+        store = self._store
+        if store.edge_slots_contiguous:
+            return _borrowed(column, store.edge_count)
+        return self._vector(column, self._rows_of(EDGE_AXIS, self._built_edge_rows)[1])
 
     @staticmethod
     def _vector(column, slots: np.ndarray):
@@ -428,7 +561,7 @@ class AttributeStore:
             grown = _empty_column(int(slots[-1]) + 1, column)
             grown[: column.size] = column
             column = grown
-        return column[slots]
+        return read_only(column[slots])
 
     def _rows(self, columns: dict, pairs: list[tuple], id_column: str) -> list[dict]:
         rows = []
@@ -488,6 +621,7 @@ class AttributeStore:
         """
         self.node_columns = {name: column.copy() for name, column in other.node_columns.items()}
         self.edge_columns = {name: column.copy() for name, column in other.edge_columns.items()}
+        self._forget_floors()
         self._tables.clear()
 
     def node_attr_rows(self, node_ids=None) -> dict:
