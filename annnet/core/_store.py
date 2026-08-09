@@ -241,6 +241,27 @@ class CoreState:
         self.entity_free: list[int] = []
         self.edge_free: list[int] = []
 
+        # How many live entities are edge-entities. The node axis filters those
+        # out, so a fast path over a node column has to know there are none, and
+        # counting them is a pass over the kind array rather than one read. It is
+        # maintained where an entity is allocated, freed, or changes kind.
+        self._edge_entity_count = 0
+
+        # How many live edges are placeholders. A placeholder holds no members
+        # and occupies no column, so every enumeration of the structural edges
+        # leaves it out, and a column read of an intrinsic field addresses those
+        # rather than the slots. The same reasoning as the counter above, on the
+        # other axis.
+        self._placeholder_edge_count = 0
+
+        # The resolved direction and the kind of every edge slot, against the
+        # clock. Neither is the array the store holds: a direction inherits the
+        # default of the graph, and a hyperedge takes its own from the roles of
+        # its members; a kind is a name where the array holds a code. Both are
+        # one vectorized pass, so a read after a write pays microseconds where
+        # walking the edges paid milliseconds.
+        self._intrinsic_cache: dict = {}
+
         # A derived index, maintained rather than rebuilt, so that removing an
         # entity stays local. It is rebuildable from the member lists and it is
         # never authoritative.
@@ -254,6 +275,14 @@ class CoreState:
         # announces the free and the attribute layer clears its own cells.
         self.entity_freed_hooks: list = []
         self.edge_freed_hooks: list = []
+
+        # Capacity hooks, the other half of the same idea. A structure indexed by
+        # slot has to reach the new frontier before a reader can address it with
+        # a range, so the store announces that the frontier moved and the
+        # attribute layer grows its own columns. It fires once per write and only
+        # when the frontier actually moved, so reusing a freed slot fires nothing.
+        self.entity_capacity_hooks: list = []
+        self.edge_capacity_hooks: list = []
 
         # Tier 3, the one clock.
         self.structure_version = 0
@@ -322,6 +351,17 @@ class CoreState:
         self.append_log.append(edge_slot)
         self._bump()
 
+    def _note_frontier_remove(self, edge_slot: int) -> None:
+        """Log a removal of the highest edge slot as the mirror of an append.
+
+        Such a removal takes the last column off a matrix and moves no row and
+        no other column, so a cached matrix can drop its last column instead of
+        being rebuilt. It is written as the bitwise complement of the slot, so
+        one log carries both kinds of event and an append stays a plain slot.
+        """
+        self.append_log.append(~edge_slot)
+        self._bump()
+
     def _note_change(self) -> None:
         self.append_log.clear()
         self.append_log_from_version = self._bump()
@@ -337,6 +377,89 @@ class CoreState:
     def entity_capacity(self) -> int:
         """How many entity slots the arrays can address."""
         return len(self._entity_key)
+
+    @property
+    def edge_entity_count(self) -> int:
+        """How many live entities are edge-entities.
+
+        Maintained rather than counted, so that :attr:`node_axis_contiguous` is
+        one read instead of a pass over :attr:`entity_kind`. The internal
+        validator checks it against the kinds it counts.
+        """
+        return self._edge_entity_count
+
+    def set_entity_kind(self, slot: int, kind: int) -> None:
+        """Change the kind of an entity that already has a slot.
+
+        Promoting an edge to an endpoint is the one thing that does this, and it
+        moves the edge-entity count, so the change goes through here rather than
+        into :attr:`entity_kind` directly.
+        """
+        held = int(self.entity_kind[slot])
+        if held == kind:
+            return
+        self.entity_kind[slot] = kind
+        if kind == EDGE_ENTITY:
+            self._edge_entity_count += 1
+        elif held == EDGE_ENTITY:
+            self._edge_entity_count -= 1
+
+    # -- contiguity, which is what a borrowing read is guarded by -----------
+
+    @property
+    def entity_slots_contiguous(self) -> bool:
+        """Whether the live entity slots are exactly ``0 .. entity_count-1``.
+
+        Two O(1) reads, and neither of them walks. The freelist is empty when no
+        slot has been freed and not yet reused, and the live count equals the
+        capacity when the key list holds no hole past the end. Together they say
+        that indexing a slot-addressed array with a range gives the live
+        elements, in order.
+
+        :meth:`live_entity_slots` is deliberately not part of this. It is a
+        generator over the key list and costs what the walk a caller of this
+        predicate is trying to avoid costs.
+        """
+        return not self.entity_free and self.entity_count == len(self._entity_key)
+
+    @property
+    def edge_slots_contiguous(self) -> bool:
+        """Whether the live edge slots are exactly ``0 .. edge_count-1``."""
+        return not self.edge_free and self.edge_count == len(self._edge_id)
+
+    @property
+    def placeholder_edge_count(self) -> int:
+        """How many live edges hold a name and no structure."""
+        return self._placeholder_edge_count
+
+    @property
+    def edge_axis_contiguous(self) -> bool:
+        """Whether one structural edge sits in each edge slot, in order.
+
+        The edge axis of the query facade is the structural edges, which is not
+        every live edge: a placeholder holds an id the graph knows before the
+        edge exists, occupies no column, and is left out of every enumeration.
+        So a slice over the slots fits only when the store holds none, which is
+        one read because they are counted as they arrive.
+        """
+        return self._placeholder_edge_count == 0 and self.edge_slots_contiguous
+
+    @property
+    def node_axis_contiguous(self) -> bool:
+        """Whether one node of the node axis sits in each entity slot, in order.
+
+        The node axis is not the entity axis, so it asks two questions beyond
+        :attr:`entity_slots_contiguous`. A multilayer graph holds one entity per
+        layer a node lives in and shows the bare id once, so its rows are fewer
+        than its slots. An edge-entity is an entity the node axis leaves out.
+        Both are O(1) here: the aspects are a tuple and the edge-entities are
+        counted as they arrive.
+        """
+        return (
+            self._aspects == ('_',)
+            and self._edge_entity_count == 0
+            and self.entity_slots_contiguous
+        )
 
     @property
     def aspects(self) -> tuple:
@@ -389,9 +512,13 @@ class CoreState:
             slot = len(self._entity_key)
             self._entity_key.append(key)
             self.entity_kind = _grown(self.entity_kind, slot + 1)
+            for hook in self.entity_capacity_hooks:
+                hook(slot + 1)
 
         self._entity_slot[key] = slot
         self.entity_kind[slot] = kind
+        if kind == EDGE_ENTITY:
+            self._edge_entity_count += 1
         self._entity_edges[slot] = {}
         if self._aspects != ('_',):
             self._id_slots.setdefault(key[0], []).append(slot)
@@ -412,6 +539,8 @@ class CoreState:
         dangling = [self._edge_id[edge_slot] for edge_slot in sorted(self._entity_edges[slot])]
         del self._entity_slot[key]
         self._entity_key[slot] = None
+        if int(self.entity_kind[slot]) == EDGE_ENTITY:
+            self._edge_entity_count -= 1
         self.entity_kind[slot] = NODE
         del self._entity_edges[slot]
         held = self._id_slots.get(key[0])
@@ -507,7 +636,16 @@ class CoreState:
         return self._entity_key[slots[row]]
 
     def live_entity_slots(self) -> np.ndarray:
-        """Return the live entity slots in slot order."""
+        """Return the live entity slots in slot order.
+
+        A contiguous store answers with a range, which numpy builds in one call.
+        Otherwise the slots have to be found, and that is a walk over the key
+        list in Python — 2.2 milliseconds at 100 000 entities, which is why the
+        contiguity predicate exists and why nothing that has to stay O(1) may
+        call this.
+        """
+        if self.entity_slots_contiguous:
+            return np.arange(self.entity_count, dtype=np.int64)
         return np.fromiter(
             (slot for slot, key in enumerate(self._entity_key) if key is not None),
             dtype=np.int64,
@@ -555,9 +693,13 @@ class CoreState:
                 setattr(self, name, _grown(getattr(self, name), slot + 1))
             self.member_start = _grown(self.member_start, slot + 1)
             self.member_len = _grown(self.member_len, slot + 1)
+            for hook in self.edge_capacity_hooks:
+                hook(slot + 1)
 
         self._edge_slot[edge_id] = slot
         self.edge_kind[slot] = kind
+        if kind == PLACEHOLDER:
+            self._placeholder_edge_count += 1
         self.edge_directed[slot] = INHERIT if directed is None else int(bool(directed))
         self.edge_weight[slot] = 1.0 if weight is None else weight
         self.edge_explicit[slot] = explicit_coefficients
@@ -635,12 +777,42 @@ class CoreState:
 
         A spec that names an entity the store does not hold, or an id it already
         holds, raises before anything is written, so a bad batch leaves the store
-        as it was.
+        as it was — however many edges it names, and whichever chunk the bad one
+        falls in.
 
-        A caller with more edges than one batch should carry writes them in
-        batches of :data:`BULK_CHUNK`, for the reason recorded there.
+        **A batch larger than :data:`BULK_CHUNK` is written in chunks of it**,
+        for the reason recorded there. The limit is kept here rather than by the
+        callers, so a caller that submits work in any shape gets what a caller
+        that respects the limit gets: the same slots, the same arrays, the same
+        clock and the same append log.
         """
         specs = list(specs) if not isinstance(specs, list) else specs
+        if len(specs) <= BULK_CHUNK:
+            return self._add_edges(specs)
+        # Every check the chunks would make, made once over the whole batch, so
+        # that a bad spec in the last chunk cannot leave the first ones written.
+        self._check_batch(specs)
+        slots: list[int] = []
+        for start in range(0, len(specs), BULK_CHUNK):
+            slots.extend(self._add_edges(specs[start : start + BULK_CHUNK]))
+        return slots
+
+    def _check_batch(self, specs) -> None:
+        """Raise if any spec of a batch names a duplicate id or a missing entity."""
+        ids = [spec[0] for spec in specs]
+        seen = set(ids)
+        if len(seen) != len(ids) or not self._edge_slot.keys().isdisjoint(seen):
+            raise KeyError(f'Duplicate edge id: {_first_repeated(ids, self._edge_slot)!r}')
+        entity_slot = self._entity_slot
+        for edge_id, members, *_rest in specs:
+            for entity_key, _coefficient, _role in members:
+                if entity_key not in entity_slot:
+                    raise KeyError(
+                        f'Edge {edge_id!r} names an entity the store does not hold: {entity_key!r}'
+                    )
+
+    def _add_edges(self, specs: list) -> list[int]:
+        """Write one batch, of at most :data:`BULK_CHUNK` edges."""
         if not specs:
             return []
         count = len(specs)
@@ -706,7 +878,7 @@ class CoreState:
         # removal leaves no hole behind. A store that has never freed one takes
         # the run after the frontier, and then both maps take one update.
         free = self.edge_free
-        frontier = len(edge_ids)
+        frontier = frontier_before = len(edge_ids)
         if free:
             slots = []
             reused = 0
@@ -768,6 +940,13 @@ class CoreState:
         # The arrays, each grown once and written once. A member segment starts
         # where the one before it ends, so the starts are a running sum of the
         # widths and no loop has to carry one.
+        # One announcement for the whole batch, which is what makes eager growth
+        # of the attribute columns cost a bulk load one resize per column rather
+        # than one per edge.
+        if frontier > frontier_before:
+            for hook in self.edge_capacity_hooks:
+                hook(frontier)
+
         base = self._member_used
         index = np.fromiter(slots, dtype=np.int64, count=count)
         widths = np.fromiter(lengths, dtype=np.int64, count=count)
@@ -776,6 +955,7 @@ class CoreState:
         self.member_start = _grown(self.member_start, frontier)
         self.member_len = _grown(self.member_len, frontier)
         self.edge_kind[index] = kinds
+        self._placeholder_edge_count += kinds.count(PLACEHOLDER)
         self.edge_directed[index] = declared_directions
         self.edge_weight[index] = declared_weights
         self.edge_explicit[index] = explicit
@@ -896,20 +1076,39 @@ class CoreState:
         return slot
 
     def remove_edge(self, edge_id: str) -> None:
-        """Remove one edge. No other edge changes its address or its member list."""
+        """Remove one edge. No other edge changes its address or its member list.
+
+        **A removal of the highest slot gives the slot up rather than freeing
+        it.** The slot list shrinks by one, so the frontier moves back to where
+        it was before the edge was added, exactly as the freelist would have put
+        the next edge there. What it buys is that the removal is then the mirror
+        of an append: a cached matrix drops its last column instead of being
+        rebuilt, and a store that has never freed a slot in the middle keeps the
+        contiguity a borrowing read is guarded by.
+        """
         slot = self._require_edge_slot(edge_id)
         self._unlink_members(slot)
 
         del self._edge_slot[edge_id]
         self._edge_id[slot] = None
+        if int(self.edge_kind[slot]) == PLACEHOLDER:
+            self._placeholder_edge_count -= 1
+            self.edge_kind[slot] = BINARY
         self.member_len[slot] = 0
         self.edge_ml_kind.pop(slot, None)
         self.edge_ml_layers.pop(slot, None)
         self.edge_policy.pop(slot, None)
-        self.edge_free.append(slot)
+        removed_at_frontier = slot == len(self._edge_id) - 1
+        if removed_at_frontier:
+            self._edge_id.pop()
+        else:
+            self.edge_free.append(slot)
         for hook in self.edge_freed_hooks:
             hook(slot, edge_id)
-        self._note_change()
+        if removed_at_frontier:
+            self._note_frontier_remove(slot)
+        else:
+            self._note_change()
 
     # -- changing one edge ------------------------------------------------
     # A write below changes one field of one edge and leaves its slot, its
@@ -919,7 +1118,13 @@ class CoreState:
 
     def set_edge_kind(self, edge_id: str, kind: int) -> None:
         """Set the kind of one edge."""
-        self.edge_kind[self._require_edge_slot(edge_id)] = kind
+        slot = self._require_edge_slot(edge_id)
+        held = int(self.edge_kind[slot])
+        self.edge_kind[slot] = kind
+        if kind == PLACEHOLDER and held != PLACEHOLDER:
+            self._placeholder_edge_count += 1
+        elif held == PLACEHOLDER and kind != PLACEHOLDER:
+            self._placeholder_edge_count -= 1
         self._note_change()
 
     def set_edge_ml_kind(self, edge_id: str, ml_kind) -> None:
@@ -1133,7 +1338,13 @@ class CoreState:
         return list(map(self._edge_id.__getitem__, _as_indexes(slots)))
 
     def live_edge_slots(self) -> np.ndarray:
-        """Return the live edge slots in slot order."""
+        """Return the live edge slots in slot order.
+
+        A range when no slot has been freed, and a walk otherwise. See
+        :meth:`live_entity_slots` for what the walk costs.
+        """
+        if self.edge_slots_contiguous:
+            return np.arange(self.edge_count, dtype=np.int64)
         return np.fromiter(
             (slot for slot, edge_id in enumerate(self._edge_id) if edge_id is not None),
             dtype=np.int64,
@@ -1202,6 +1413,72 @@ class CoreState:
         count separates it from a self-loop, which names one entity twice.
         """
         return self.member_count(edge_slot) == 1
+
+    # -- the intrinsic columns --------------------------------------------
+    # The weight of an edge is the array the store holds and needs nothing here.
+    # The other two are derived from an array rather than held in one, so each is
+    # one vectorized pass, kept against the clock. The pass is what makes the
+    # read after a write cost microseconds instead of the milliseconds that
+    # asking the graph for a record per edge cost.
+
+    def _intrinsic_column(self, name: str, build):
+        held = self._intrinsic_cache.get(name)
+        if held is not None and held[0] == self.structure_version:
+            return held[1]
+        column = build()
+        column.flags.writeable = False
+        self._intrinsic_cache[name] = (self.structure_version, column)
+        return column
+
+    def edge_directed_column(self) -> np.ndarray:
+        """Return the resolved direction of every edge slot, in slot order.
+
+        ``edge_directed`` holds what an edge *declares*, which is one of three
+        values, so the answer is not that array. An edge that declares nothing
+        takes the default of the graph. A hyperedge takes neither: its direction
+        follows from whether its members hold roles, exactly as one read one at a
+        time does.
+        """
+        return self._intrinsic_column('directed', self._build_directed_column)
+
+    def _build_directed_column(self) -> np.ndarray:
+        count = len(self._edge_id)
+        declared = self.edge_directed[:count]
+        default = True if self.directed is None else bool(self.directed)
+        # Declared is INHERIT, 0 or 1. With a directed default every value but 0
+        # resolves to true, and with an undirected one only 1 does, so one
+        # comparison answers the whole column.
+        column = (declared != 0) if default else (declared == 1)
+        hyper = np.flatnonzero(self.edge_kind[:count] == HYPER)
+        for slot in hyper.tolist():
+            column[slot] = self.hyper_directed(slot)
+        return column
+
+    def hyper_directed(self, slot: int) -> bool:
+        """Return whether a hyperedge names a target side at all.
+
+        A hyperedge that names no target side is undirected, whichever flag it
+        was declared with. Its members carry the plain member role rather than a
+        source role, and one entry says so.
+        """
+        if int(self.member_len[slot]) == 0:
+            return False
+        return int(self.member_role[int(self.member_start[slot])]) != MEMBER
+
+    def edge_kind_column(self, names) -> np.ndarray:
+        """Return the name of the kind of every edge slot, in slot order.
+
+        ``names`` is the code-to-name table of the caller, because the store
+        holds a code and the vocabulary of names belongs to the layer above it.
+        A cached column is reused only for the table it was built from.
+        """
+        held = self._intrinsic_cache.get('kind')
+        if held is not None and held[0] == self.structure_version and held[2] == names:
+            return held[1]
+        column = np.asarray(names)[self.edge_kind[: len(self._edge_id)]]
+        column.flags.writeable = False
+        self._intrinsic_cache['kind'] = (self.structure_version, column, names)
+        return column
 
     def is_directed(self, edge_slot: int) -> bool:
         """Return the directedness of one edge, falling back to the graph default."""
@@ -1364,10 +1641,15 @@ class CoreState:
 
         other.entity_free = list(self.entity_free)
         other.edge_free = list(self.edge_free)
+        other._edge_entity_count = self._edge_entity_count
+        other._placeholder_edge_count = self._placeholder_edge_count
+        other._intrinsic_cache = {}
         other._entity_edges = {slot: dict(edges) for slot, edges in self._entity_edges.items()}
 
         other.entity_freed_hooks = []
         other.edge_freed_hooks = []
+        other.entity_capacity_hooks = []
+        other.edge_capacity_hooks = []
 
         other.structure_version = self.structure_version
         other.append_log = list(self.append_log)

@@ -296,6 +296,33 @@ def _check_edge_entity_slots(store, problems) -> None:
             problems.append(f'entity {key[0]!r} is marked as an edge but no edge carries that id')
 
 
+def _check_edge_entity_count(store, problems) -> None:
+    """The maintained edge-entity count is the number of slots that hold one.
+
+    A borrowing read of a node column is guarded by that count being zero, so a
+    count that has drifted from the kinds would let a fast path answer a graph it
+    does not fit.
+    """
+    from . import _store as S_
+
+    counted = sum(
+        1 for slot, _key in store.live_entities() if int(store.entity_kind[slot]) == S_.EDGE_ENTITY
+    )
+    if store.edge_entity_count != counted:
+        problems.append(
+            f'the store counts {store.edge_entity_count} edge-entities and holds {counted}'
+        )
+
+    placeholders = sum(
+        1 for slot, _id in store.live_edges() if int(store.edge_kind[slot]) == S_.PLACEHOLDER
+    )
+    if store.placeholder_edge_count != placeholders:
+        problems.append(
+            f'the store counts {store.placeholder_edge_count} placeholder edges '
+            f'and holds {placeholders}'
+        )
+
+
 def _check_incidence_index(store, problems) -> None:
     """The entity-to-edge index matches the member lists it is derived from.
 
@@ -378,6 +405,7 @@ SLOT_CHECKS_IMPL = (
     _check_slot_member_liveness,
     _check_member_counts,
     _check_edge_entity_slots,
+    _check_edge_entity_count,
     _check_incidence_index,
     _check_matrix_matches_member_lists,
     _check_clock,

@@ -60,7 +60,9 @@ def register_entity(g, ekey, kind: str = 'node') -> None:
     if slot is None:
         store.add_entity(ekey, _SLOT_ENTITY_KIND.get(kind, ST.NODE))
     else:
-        store.entity_kind[slot] = _SLOT_ENTITY_KIND.get(kind, ST.NODE)
+        # Through the store, because the kind of a live entity moves the count of
+        # edge-entities the store keeps.
+        store.set_entity_kind(slot, _SLOT_ENTITY_KIND.get(kind, ST.NODE))
 
 
 def remove_entity(g, ekey) -> None:
