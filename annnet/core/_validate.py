@@ -75,6 +75,36 @@ def _check_slice_membership(g, problems) -> None:
                 break
 
 
+def _check_matrix_buffers(g, problems) -> None:
+    """A buffer in the borrowing state has written to none of its arrays.
+
+    A cached matrix is kept in the three arrays of the compressed-sparse-column
+    format. A buffer seeded from a built matrix borrows those arrays and copies
+    them at its first growth, so a matrix handed out before that growth never
+    sees a write. A buffer that wrote while still claiming to borrow would break
+    exactly that, and nothing else would catch it.
+    """
+    cache = getattr(getattr(g, 'matrices', None), '_cache', None)
+    if cache is None:
+        return
+    for entry in getattr(cache, '_entries', {}).values():
+        held = getattr(entry, 'buffer', None)
+        if not held:
+            continue
+        buffer = held[0]
+        if buffer.owns:
+            continue
+        seeded = buffer._borrowed
+        if seeded is None:
+            problems.append('a matrix buffer borrows arrays it cannot name')
+            continue
+        arrays, columns, entries = seeded[:3], seeded[3], seeded[4]
+        if (buffer.data, buffer.indices, buffer.indptr) != arrays:
+            problems.append('a matrix buffer borrows, and holds arrays it was not seeded with')
+        elif buffer.n_cols > columns or buffer.nnz > entries:
+            problems.append('a matrix buffer wrote past the arrays it only borrows')
+
+
 def _check_materialized_matrix(g, problems) -> None:
     """The matrix the graph answers with is the one its member lists imply.
 
@@ -430,6 +460,7 @@ SLOT_CHECKS: tuple = tuple(_slot_check(check) for check in SLOT_CHECKS_IMPL)
 # so they run only for a graph.
 GRAPH_CHECKS = (
     _check_slice_membership,
+    _check_matrix_buffers,
     _check_materialized_matrix,
 )
 

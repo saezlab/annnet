@@ -310,6 +310,11 @@ class _CscBuffer:
         self.indptr = np.zeros(17, dtype=np.int32)
         self.n_cols = 0
         self.nnz = 0
+        # Whether the three arrays belong to this buffer. One that allocated
+        # them owns them; one seeded from a built matrix borrows them until it
+        # first grows. See :meth:`of`.
+        self.owns = True
+        self._borrowed: tuple | None = None
 
     @classmethod
     def of(cls, matrix) -> _CscBuffer:
@@ -320,20 +325,51 @@ class _CscBuffer:
         entry of every edge in one pass. So a build goes through
         :func:`_incidence_matrix` and hands the result here.
 
-        The arrays are copied rather than aliased, because the buffer writes
-        past the end of what it holds and a matrix handed out earlier must not
-        see that.
+        **The arrays are borrowed, not copied.** A buffer that never grows never
+        writes, so a copy here is paid by every rebuild and earned by the ones an
+        append follows. The copy happens instead at the first growth, which is
+        the one place a write can reach an array the matrix it was seeded from
+        still holds.
         """
         buffer = cls(matrix.shape[0])
-        buffer.data = np.array(matrix.data, dtype=np.float32)
-        buffer.indices = np.array(matrix.indices, dtype=np.int32)
-        buffer.indptr = np.array(matrix.indptr, dtype=np.int32)
+        buffer.data = matrix.data
+        buffer.indices = matrix.indices
+        buffer.indptr = matrix.indptr
         buffer.n_cols = int(matrix.shape[1])
         buffer.nnz = int(matrix.nnz)
+        buffer.owns = False
+        buffer._borrowed = (
+            matrix.data,
+            matrix.indices,
+            matrix.indptr,
+            buffer.n_cols,
+            buffer.nnz,
+        )
         return buffer
+
+    def _take_ownership(self) -> None:
+        """Copy the borrowed arrays, once, at the first write."""
+        self.data = np.array(self.data, dtype=np.float32)
+        self.indices = np.array(self.indices, dtype=np.int32)
+        self.indptr = np.array(self.indptr, dtype=np.int32)
+        self.owns = True
+        self._borrowed = None
+
+    def drop_last_column(self) -> None:
+        """Take the last column off, which writes nothing.
+
+        The mirror of an append at the frontier. The used prefix shrinks and the
+        arrays are untouched, so a borrowing buffer stays borrowing.
+        """
+        if self.n_cols == 0:
+            return
+        self.n_cols -= 1
+        self.nnz = int(self.indptr[self.n_cols])
 
     def append_column(self, rows: np.ndarray, values: np.ndarray) -> None:
         """Add one column, given its row indices and their values."""
+        if not self.owns:
+            self._take_ownership()
         width = int(rows.size)
         needed = self.nnz + width
         if needed > self.data.size:
@@ -432,6 +468,12 @@ class _Entry:
                 edge_of_column.append(edge_id)
         self.edge_slots = np.concatenate((self.edge_slots, edge_slots))
 
+    def note_removed_last(self) -> None:
+        """Record that the last column has just been taken off the matrix."""
+        if self._view is not None and self._view.edge_of_column:
+            self._view.column_of_edge.pop(self._view.edge_of_column.pop(), None)
+        self.edge_slots = self.edge_slots[:-1]
+
 
 class MatrixCache:
     """Materialized matrices, kept against the clock of one store.
@@ -452,11 +494,12 @@ class MatrixCache:
         self.extends = 0
 
     def _appended_since(self, version: int):
-        """Return the edge slots appended since ``version``, or None if not all were.
+        """Return the frontier events since ``version``, or None if not all were.
 
-        The store keeps a log of the edge slots it appended at the frontier, and
-        the clock value the log starts from. Any other write clears the log, so a
-        gap the log cannot account for means the cache has to rebuild.
+        The store keeps a log of what it did at the frontier of the edge slots,
+        and the clock value the log starts from. An append is the slot; a removal
+        of the highest slot is its bitwise complement. Any other write clears the
+        log, so a gap the log cannot account for means the cache has to rebuild.
         """
         store = self._store
         if version < store.append_log_from_version:
@@ -504,15 +547,39 @@ class MatrixCache:
                 buffer=(buffer, row_lookup),
             )
 
-        def extend(entry, appended):
+        def extend(entry, events):
             store = self._store
-            selected = _selected(store, appended, kinds)
-            if selected.size:
-                buffer, row_lookup = entry.buffer
-                for slot in selected:
-                    buffer.append_column(*_column_entries(store, int(slot), row_lookup, signed))
-                entry.matrix = buffer.matrix()
-                entry.note_appended(selected)
+            buffer, row_lookup = entry.buffer
+            if not (events < 0).any():
+                # A run of appends, which is the common shape, so the kinds are
+                # filtered for the whole run rather than once per edge.
+                selected = _selected(store, events, kinds)
+                if selected.size:
+                    for slot in selected:
+                        buffer.append_column(*_column_entries(store, int(slot), row_lookup, signed))
+                    entry.matrix = buffer.matrix()
+                    entry.note_appended(selected)
+                return True
+            for event in events.tolist():
+                if event >= 0:
+                    selected = _selected(store, np.array((event,), dtype=np.int64), kinds)
+                    if not selected.size:
+                        continue
+                    buffer.append_column(*_column_entries(store, event, row_lookup, signed))
+                    entry.note_appended(selected)
+                else:
+                    slot = ~event
+                    if not entry.edge_slots.size or int(entry.edge_slots[-1]) != slot:
+                        # The removed edge held no column of this matrix, or it
+                        # held one that is not the last. The first is nothing to
+                        # do; the second cannot happen, because the store logs a
+                        # removal only when it frees the highest slot.
+                        if entry.edge_slots.size and slot in entry.edge_slots:
+                            return False
+                        continue
+                    buffer.drop_last_column()
+                    entry.note_removed_last()
+            entry.matrix = buffer.matrix()
             return True
 
         return self._cached(name, build, extend)
@@ -552,6 +619,36 @@ class MatrixCache:
     def laplacian_matrix(self, **kwargs):
         """Return the Laplacian alone."""
         return self._square('laplacian', _laplacian_matrix, kwargs).matrix
+
+    # -- the named formats -------------------------------------------------
+    # A caller that wants the incidence matrix in a particular sparse format, or
+    # an adjacency built from a filtered incidence, asks for it here rather than
+    # keeping its own. There was a second cache for exactly these, against a
+    # second clock the graph advanced itself, so one matrix could be current in
+    # one of them and stale in the other and the two held the same entries twice.
+
+    def derived(self, name: tuple, build):
+        """Return a matrix derived from this store, built once per clock value.
+
+        ``build`` takes nothing and returns the matrix. It runs when the cache
+        holds no entry under ``name`` for the current clock value.
+        """
+        return self._cached(name, self._derived_entry(build), lambda entry, _: False).matrix
+
+    def _derived_entry(self, build):
+        def make() -> _Entry:
+            return _Entry(self._store, build(), self._store.structure_version, entity_slots=None)
+
+        return make
+
+    def holds(self, name: tuple) -> bool:
+        """Whether a derived matrix is cached and current."""
+        entry = self._entries.get(name)
+        return entry is not None and entry.version == self._store.structure_version
+
+    def forget(self, name: tuple) -> None:
+        """Forget one cached matrix, if the cache holds it."""
+        self._entries.pop(name, None)
 
     def drop(self) -> None:
         """Forget every cached matrix. A cache is always safe to drop."""
