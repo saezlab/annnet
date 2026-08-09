@@ -23,16 +23,16 @@ Example event:
 Controls:
 
 ```python
-G.history.enable(True)   # toggle logging
-G.history.clear()        # clear in‑memory history buffer
-G.history.mark("checkpoint")  # insert a labeled marker
+G.history.enable(True)  # toggle logging
+G.history.clear()  # clear in‑memory history buffer
+G.history.mark('checkpoint')  # insert a labeled marker
 ```
 
 Export:
 
 ```python
-df = G.history(as_df=True)           # Polars/pandas DataFrame view
-n = G.history.export("log.parquet")  # or .ndjson / .json / .csv
+df = G.history(as_df=True)  # Polars/pandas DataFrame view
+n = G.history.export('log.parquet')  # or .ndjson / .json / .csv
 ```
 
 Tips:

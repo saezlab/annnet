@@ -30,8 +30,8 @@ The batch path always returns a `list[str]`.
 ### Binary edge
 
 ```python
-G.add_edges("A", "B")
-G.add_edges("A", "B", weight=0.5, edge_id="e1", directed=True)
+G.add_edges('A', 'B')
+G.add_edges('A', 'B', weight=0.5, edge_id='e1', directed=True)
 ```
 
 Both endpoints must be strings. If either node does not exist yet, it is
@@ -40,7 +40,7 @@ created automatically.
 ### Supra-node edge (multilayer)
 
 ```python
-G.add_edges(("A", ("healthy",)), ("B", ("treated",)))
+G.add_edges(('A', ('healthy',)), ('B', ('treated',)))
 ```
 
 Each endpoint is a `(node_id, layer_coord_tuple)` pair. Required when the graph
@@ -57,7 +57,7 @@ In a multilayer graph, passing a bare string ID raises `ValueError`.
 ### Undirected hyperedge
 
 ```python
-G.add_edges(["A", "B", "C"])
+G.add_edges(['A', 'B', 'C'])
 ```
 
 `src` is a list; `tgt` defaults to `None`. All members get `+weight` in the
@@ -66,7 +66,7 @@ incidence column.
 ### Directed hyperedge
 
 ```python
-G.add_edges(["A", "B"], ["C", "D"])   # tail → head
+G.add_edges(['A', 'B'], ['C', 'D'])  # tail → head
 ```
 
 First list is the tail (source side, `+weight`), second is the head (target side, `-weight`).
@@ -75,10 +75,10 @@ First list is the tail (source side, `+weight`), second is the head (target side
 
 ```python
 # Negative coeff → source side, positive coeff → target side
-G.add_edges({"glucose": -1.0, "atp": -1.0, "glucose-6p": 1.0, "adp": 1.0})
+G.add_edges({'glucose': -1.0, 'atp': -1.0, 'glucose-6p': 1.0, 'adp': 1.0})
 
 # Explicit two-dict form
-G.add_edges({"A": -1.0, "B": -2.0}, {"C": 3.0})
+G.add_edges({'A': -1.0, 'B': -2.0}, {'C': 3.0})
 ```
 
 Literal coefficient values are written directly into the incidence matrix column.
@@ -87,7 +87,7 @@ This form is **single-edge only**.
 ### Edge-entity placeholder (single)
 
 ```python
-G.add_edges(None, None, as_entity=True, edge_id="virtual_e1", role="enzyme")
+G.add_edges(None, None, as_entity=True, edge_id='virtual_e1', role='enzyme')
 ```
 
 Creates a named edge that has no incident nodes yet, but occupies a row in the
@@ -104,16 +104,18 @@ Pass a single list (or generator) as the first argument. No positional `src`/`tg
 
 ```python
 # 2-tuples
-G.add_edges([("A", "B"), ("C", "D")])
+G.add_edges([('A', 'B'), ('C', 'D')])
 
 # 3-tuples  (weight in position 2)
-G.add_edges([("A", "B", 0.5), ("C", "D", 2.0)])
+G.add_edges([('A', 'B', 0.5), ('C', 'D', 2.0)])
 
 # dicts  (keys: source/target or src/tgt)
-G.add_edges([
-    {"source": "A", "target": "B", "weight": 0.5, "edge_id": "e1"},
-    {"src": "C", "tgt": "D"},
-])
+G.add_edges(
+    [
+        {'source': 'A', 'target': 'B', 'weight': 0.5, 'edge_id': 'e1'},
+        {'src': 'C', 'tgt': 'D'},
+    ]
+)
 ```
 
 ### Hyperedge batch
@@ -128,15 +130,19 @@ The shape of `src` (and optionally `tgt`) determines hyperedge kind:
 
 ```python
 # Undirected
-G.add_edges([
-    {"src": ["A", "B", "C"]},
-    {"src": ["B", "D"], "edge_id": "h2"},
-])
+G.add_edges(
+    [
+        {'src': ['A', 'B', 'C']},
+        {'src': ['B', 'D'], 'edge_id': 'h2'},
+    ]
+)
 
 # Directed (tail → head)
-G.add_edges([
-    {"src": ["A", "B"], "tgt": ["C"]},
-])
+G.add_edges(
+    [
+        {'src': ['A', 'B'], 'tgt': ['C']},
+    ]
+)
 ```
 
 ### Edge-entity placeholder batch
@@ -148,11 +154,11 @@ space with no incidence column.
 ```python
 G.add_edges(
     [
-        {"edge_id": "EE1", "role": "enzyme", "pathway": "glycolysis"},
-        {"edge_id": "EE2", "role": "enzyme", "pathway": "tca"},
+        {'edge_id': 'EE1', 'role': 'enzyme', 'pathway': 'glycolysis'},
+        {'edge_id': 'EE2', 'role': 'enzyme', 'pathway': 'tca'},
     ],
     as_entity=True,
-    slice="Healthy",
+    slice='Healthy',
 )
 ```
 
@@ -230,13 +236,17 @@ Controls which slices receive the edge after insertion.
 An edge's effective direction can be driven by one of its own attribute values.
 
 ```python
-G.add_edges("A", "B", flexible={
-    "var": "score",       # which edge attribute to read
-    "threshold": 0.0,     # decision boundary
-    "scope": "edge",      # "edge" (read from this edge) or "global"
-    "above": "forward",   # direction when var > threshold
-    "tie": "undirected",  # direction when var == threshold
-})
+G.add_edges(
+    'A',
+    'B',
+    flexible={
+        'var': 'score',  # which edge attribute to read
+        'threshold': 0.0,  # decision boundary
+        'scope': 'edge',  # "edge" (read from this edge) or "global"
+        'above': 'forward',  # direction when var > threshold
+        'tie': 'undirected',  # direction when var == threshold
+    },
+)
 ```
 
 `flexible` is **single-edge path only**. Setting it causes `_apply_flexible_direction`

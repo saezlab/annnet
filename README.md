@@ -143,36 +143,36 @@ import annnet as an
 G = an.Graph(directed=True)  # default direction; can be overridden per-edge
 
 # Create slices and set active
-G.slices.add("toy")
-G.slices.add("train")
-G.slices.add("eval")
-G.slices.active = "toy"
+G.slices.add('toy')
+G.slices.add('train')
+G.slices.add('eval')
+G.slices.active = 'toy'
 
 # Add nodes with attributes
-for v in ["A", "B", "C", "D"]:
-    G.add_nodes(v, label=v, kind="gene")
+for v in ['A', 'B', 'C', 'D']:
+    G.add_nodes(v, label=v, kind='gene')
 
 # 1) Binary directed edge
-e_dir = G.add_edges("A", "B", weight=2.0, directed=True, relation="activates")
+e_dir = G.add_edges('A', 'B', weight=2.0, directed=True, relation='activates')
 
 # 2) Binary undirected edge
-e_undir = G.add_edges("B", "C", weight=1.0, directed=False, relation="binds")
+e_undir = G.add_edges('B', 'C', weight=1.0, directed=False, relation='binds')
 
 # 3) Self-loop
-e_loop = G.add_edges("D", "D", weight=0.5, directed=True, relation="self")
+e_loop = G.add_edges('D', 'D', weight=0.5, directed=True, relation='self')
 
 # 4) Parallel edge
-e_parallel = G.add_edges("A", "B", weight=5.0, parallel="parallel", relation="alternative")
+e_parallel = G.add_edges('A', 'B', weight=5.0, parallel='parallel', relation='alternative')
 
 # 5) Node-edge hybrid relation
-G.add_edges(edge_id="edge_e1", as_entity=True, description="signal")
-e_vx = G.add_edges("edge_e1", "C", directed=True, as_entity=True, channel="edge->node")
+G.add_edges(edge_id='edge_e1', as_entity=True, description='signal')
+e_vx = G.add_edges('edge_e1', 'C', directed=True, as_entity=True, channel='edge->node')
 
 # 6) Undirected hyperedge (3-way membership)
-e_hyper_undir = G.add_edges(["A", "C", "D"], weight=1.0, directed=False, tag="complex")
+e_hyper_undir = G.add_edges(['A', 'C', 'D'], weight=1.0, directed=False, tag='complex')
 
 # 7) Directed hyperedge (head→tail member groups)
-e_hyper_dir = G.add_edges(["A", "B"], ["C", "D"], weight=1.0, directed=True, reaction="A+B->C+D")
+e_hyper_dir = G.add_edges(['A', 'B'], ['C', 'D'], weight=1.0, directed=True, reaction='A+B->C+D')
 
 # 8) Run a NetworkX algorithm if networkx is installed
 deg = G.nx.degree_centrality(G)
@@ -200,8 +200,8 @@ bc = G.nx.betweenness_centrality(G)
 # Build a projected NetworkX graph explicitly
 nxG = G.nx.backend(
     directed=True,
-    hyperedge_mode="skip",  # or "expand"
-    slice="toy",
+    hyperedge_mode='skip',  # or "expand"
+    slice='toy',
     simple=True,
 )
 
@@ -224,7 +224,7 @@ NetworkX:
 ```python
 import annnet as an
 
-nxG, manifest = an.adapters.to_nx(G, directed=True, hyperedge_mode="skip")
+nxG, manifest = an.adapters.to_nx(G, directed=True, hyperedge_mode='skip')
 
 # ... run algorithms or edit nxG ...
 
@@ -234,7 +234,7 @@ G2 = an.adapters.from_nx(nxG, manifest)
 igraph:
 
 ```python
-igG, ig_manifest = an.adapters.to_igraph(G, directed=True, hyperedge_mode="skip")
+igG, ig_manifest = an.adapters.to_igraph(G, directed=True, hyperedge_mode='skip')
 G2 = an.adapters.from_igraph(igG, ig_manifest)
 ```
 
@@ -244,23 +244,23 @@ File formats and dataframes:
 import annnet as an
 
 # GraphML / GEXF / SIF
-an.io.to_graphml(G, "graph.graphml", directed=True, hyperedge_mode="reify")
-G2 = an.io.from_graphml("graph.graphml")
+an.io.to_graphml(G, 'graph.graphml', directed=True, hyperedge_mode='reify')
+G2 = an.io.from_graphml('graph.graphml')
 
-an.io.to_sif(G, "graph.sif", lossless=True, manifest_path="graph.sif.manifest.json")
-G3 = an.io.from_sif("graph.sif", manifest="graph.sif.manifest.json")
+an.io.to_sif(G, 'graph.sif', lossless=True, manifest_path='graph.sif.manifest.json')
+G3 = an.io.from_sif('graph.sif', manifest='graph.sif.manifest.json')
 
 # JSON / NDJSON
-an.io.to_json(G, "graph.json")
-H = an.io.from_json("graph.json")
+an.io.to_json(G, 'graph.json')
+H = an.io.from_json('graph.json')
 
 # Parquet graph directory
-an.io.to_parquet(G, "graph_dir/")
-K = an.io.from_parquet("graph_dir/")
+an.io.to_parquet(G, 'graph_dir/')
+K = an.io.from_parquet('graph_dir/')
 
 # CX2 (Cytoscape exchange format v2)
-cx2 = an.io.to_cx2(G, hyperedges="reify")
-L = an.io.from_cx2(cx2, hyperedges="manifest")
+cx2 = an.io.to_cx2(G, hyperedges='reify')
+L = an.io.from_cx2(cx2, hyperedges='manifest')
 ```
 
 Notes:
@@ -276,8 +276,8 @@ The `.annnet` format is the native persisted representation for annnet graphs. I
 ```python
 import annnet as an
 
-an.io.write(G, "my_graph.annnet", overwrite=True)
-R = an.io.read("my_graph.annnet")
+an.io.write(G, 'my_graph.annnet', overwrite=True)
+R = an.io.read('my_graph.annnet')
 ```
 
 Layout highlights:

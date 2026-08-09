@@ -37,8 +37,8 @@ bc = G.nx.betweenness_centrality(G)
 # Get a concrete backend graph with options
 nxG = G.nx.backend(
     directed=True,
-    hyperedge_mode="skip",
-    slice="toy",
+    hyperedge_mode='skip',
+    slice='toy',
     simple=True,
 )
 ```
@@ -86,7 +86,7 @@ cannot represent the original graph directly.
 ```python
 import annnet as an
 
-nxG, manifest = an.adapters.to_nx(G, directed=True, hyperedge_mode="skip")
+nxG, manifest = an.adapters.to_nx(G, directed=True, hyperedge_mode='skip')
 G2 = an.adapters.from_nx(nxG, manifest)
 ```
 

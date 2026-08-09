@@ -60,7 +60,7 @@ def session(workspace: str | Path | None = None) -> object | None:
         from pkg_infra import get_session
 
         _session = get_session(workspace=Path(workspace or Path.cwd()).resolve())
-    except Exception:  # noqa: BLE001 - a package must load without a session
+    except Exception:
         _session = None
         logging.getLogger(__name__).debug(
             'No pkg_infra session for %s. Logging and configuration fall back to '

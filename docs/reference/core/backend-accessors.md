@@ -35,7 +35,7 @@ The accessors resolve backend functions dynamically. For example:
 
 ```python
 centrality = G.nx.degree_centrality(G)
-distances = G.ig.distances(source="a", target="c", weights="weight")
+distances = G.ig.distances(source='a', target='c', weights='weight')
 ```
 
 In these calls AnnNet projects the graph to the backend, replaces the `G`
