@@ -6,7 +6,7 @@ recreate them, use the linked GitHub environment file for the notebook family.
 Base HowTos use the
 [HowTo environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/environment.yml).
 Scenario notebooks each link a narrower environment for the external packages
-they demonstrate. Use-case notebooks are coming soon.
+they demonstrate. The larger use-case notebooks render their stored outputs and link dedicated environments for reproducing the analyses.
 
 ## HowTos
 
@@ -117,19 +117,21 @@ optimization, and graph learning workflows.
 
     ---
 
-    Build patient layers from CPTAC/OmniPath data and write inferred causal
-    subnetworks back into AnnNet.
+    Fit a signed signaling network to perturbation experiments with CORNETO,
+    then keep the selected network and predicted activities in AnnNet.
 
-    Coming soon.
+    [Open notebook](notebooks/use_cases/UC1.ipynb) ·
+    [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/uc1_multi_condition_causal_signaling.yml)
 
--   __HEK293 heterogeneous biology graph__
+-   __TGF-beta fibrosis response__
 
     ---
 
-    Combine signaling, metabolic, complex, regulatory, organelle, and
-    graph-learning workflows in one AnnNet object.
+    Combine signaling, regulation, protein complexes, and metabolism across
+    mechanism and time layers in one AnnNet object.
 
-    Coming soon.
+    [Open notebook](notebooks/use_cases/UC2.ipynb) ·
+    [Environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/envs/uc2_hek293_heterogeneous_graph.yml)
 
 </div>
 

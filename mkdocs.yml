@@ -5,8 +5,6 @@ repo_name: saezlab/annnet
 exclude_docs: |
     tutorials/notebooks/environment.yml
     tutorials/notebooks/envs/*.yml
-    tutorials/notebooks/use_cases/*.ipynb
-    tutorials/notebooks/use_cases/*/*.ipynb
 theme:
     name: material
     font:
@@ -53,7 +51,10 @@ nav:
         -   Backend accessors: tutorials/notebooks/tutos/08_backend_accessors.ipynb
         -   Flexible edge orientation: tutorials/notebooks/special/sp03_flexible_edge_orientation.ipynb
         -   Backend lazy proxies: tutorials/notebooks/special/sp04_backend_lazy_proxies.ipynb
-    -   Use Cases: tutorials/use-cases.md
+    -   Use Cases:
+        -   Overview: tutorials/use-cases.md
+        -   Multi-condition signaling: tutorials/notebooks/use_cases/UC1.ipynb
+        -   TGF-beta fibrosis response: tutorials/notebooks/use_cases/UC2.ipynb
     -   Scenarios:
         -   OmniPath table ingestion: tutorials/notebooks/scenarios/omnipath_table_ingestion.ipynb
         -   Cytoscape CX2 export: tutorials/notebooks/scenarios/cytoscape_cx2_export.ipynb
