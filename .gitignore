@@ -75,9 +75,14 @@ site/
 benchmarks/results/
 
 # pixi environments
-.pixi/*
+**/.pixi/
 !.pixi/config.toml
 pixi.lock
+
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
 
 # cache etc.
 .cache/

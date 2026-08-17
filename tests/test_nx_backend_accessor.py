@@ -1,6 +1,13 @@
 import os
 import sys
+# ``unittest.assertWarns`` clears ``__warningregistry__`` on every module in
+# ``sys.modules`` to do its job. A lazily-imported module resolves that attribute
+# access by importing itself, so a heavy optional dependency another test pulled
+# in can fail here for reasons that have nothing to do with the warning under
+# test. ``pytest.warns`` checks the same thing without walking ``sys.modules``.
 import unittest
+
+import pytest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import networkx as nx
@@ -174,7 +181,7 @@ class TestNXBackendAccessor(unittest.TestCase):
         G.add_nodes('b')
         G.add_edges(src=['a', 'b'])  # hyperedge
 
-        with self.assertWarns(RuntimeWarning):
+        with pytest.warns(RuntimeWarning):
             G.nx.backend(hyperedge_mode='skip')
 
     # ---- slice flattening warning ----
@@ -185,7 +192,7 @@ class TestNXBackendAccessor(unittest.TestCase):
         G.add_nodes('b', slice='s2')
         G.add_edges('a', 'b')
 
-        with self.assertWarns(RuntimeWarning):
+        with pytest.warns(RuntimeWarning):
             G.nx.backend()
 
     # ---- verify peek_nodes gives valid vert IDs ----
