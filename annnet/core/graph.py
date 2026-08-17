@@ -454,7 +454,6 @@ class AnnNet(
     def _invalidate_sparse_caches(self, *args, **kwargs):
         return _derive.invalidate_sparse_caches(self, *args, **kwargs)
 
-
     @property
     def slice_edge_weights(self):
         """Per-slice edge weight overrides, as ``{slice_id: {edge_id: weight}}``.
@@ -479,7 +478,9 @@ class AnnNet(
         """Install overrides by writing them where the weight actually lives."""
         for slice_id, weights in (value or {}).items():
             for edge_id, weight in (weights or {}).items():
-                self._contextual.set('edge_slice_attrs', (slice_id, edge_id), {'weight': float(weight)})
+                self._contextual.set(
+                    'edge_slice_attrs', (slice_id, edge_id), {'weight': float(weight)}
+                )
 
     def _init_annotation_tables(self, annotations):
         # The generic node and edge attributes live in the slot-indexed column
@@ -669,7 +670,6 @@ class AnnNet(
         )
         self._contextual_tables[level_name] = (token, table)
         return table
-
 
     def _install_contextual_table(self, level_name, key_columns, value) -> None:
         """Fill one contextual level from a table, a mapping, or nothing."""

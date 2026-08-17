@@ -1,5 +1,6 @@
 import os
 import sys
+
 # ``unittest.assertWarns`` clears ``__warningregistry__`` on every module in
 # ``sys.modules`` to do its job. A lazily-imported module resolves that attribute
 # access by importing itself, so a heavy optional dependency another test pulled

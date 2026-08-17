@@ -157,7 +157,6 @@ class AttributeStore:
         self._node_floor = 0
         self._edge_floor = 0
 
-
         self._tables: dict[str, tuple] = {}
         self._row_cache: dict[str, tuple] = {}
         self.table_builds = 0
