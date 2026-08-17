@@ -93,13 +93,6 @@ def _edge_weight_lookup(weights: dict, edge_id: str) -> float:
     return 1.0 if w is None else float(w)
 
 
-def _endpoint_coeff_from_map(coeff_map, endpoint) -> float:
-    """Cached-map variant of :func:`_endpoint_coeff` for tight loops."""
-    if not coeff_map:
-        return 1.0
-    return float(coeff_map.get(endpoint, {}).get('__value', 1.0))
-
-
 def _flush_edge_buckets(data, buckets, device):
     """Write batched edges out to HeteroData in one tensor build per etype."""
     for etype, bucket in buckets.items():

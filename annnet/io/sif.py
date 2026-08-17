@@ -67,15 +67,6 @@ def _get_edge_weight(graph: AnnNet, edge_id: str, default=1.0):
     return default
 
 
-def _get_edge_directed(graph: AnnNet, edge_id: str) -> bool:
-    if edge_id in graph.edge_directed:
-        return bool(graph.edge_directed[edge_id])
-    value = graph.attrs.get_attr_edge(edge_id, 'directed', None)
-    if value is not None:
-        return bool(value)
-    return True if graph.directed is None else bool(graph.directed)
-
-
 def _build_edge_attr_map(graph: AnnNet):
     ea = getattr(graph, '_edge_table', None)
     if ea is None:

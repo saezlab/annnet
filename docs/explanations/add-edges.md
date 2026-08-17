@@ -258,7 +258,7 @@ to run immediately after the edge is stored.
 
 | Limitation | Detail |
 |---|---|
-| Stoich form in batch mode | The stoichiometric dict is normalised only in `_parse_edge_inputs`, which is not called by the batch path. |
+| Stoich form in batch mode | The stoichiometric dict is not normalised on the batch path. |
 | `parallel` policy per batch item | The batch path is optimised for throughput and has no per-item dedup logic. |
 | `flexible` direction in batch mode | Not wired into the batch path. |
 | Bare string IDs in a multilayer graph | `_add_edge_impl` raises `ValueError` if any endpoint is not a supra-node when `G.is_multilayer` is `True`. |

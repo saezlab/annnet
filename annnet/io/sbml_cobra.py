@@ -16,7 +16,7 @@ sink/source node — and flagged with an ``is_boundary`` edge attribute.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -36,11 +36,6 @@ warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
 
 BOUNDARY_SOURCE = '__BOUNDARY_SOURCE__'
 BOUNDARY_SINK = '__BOUNDARY_SINK__'
-
-
-def _ensure_nodes(G, nodes: Iterable[str], slice: str | None) -> None:
-    # Internal bulk node insertion handles missing nodes efficiently.
-    G._add_nodes_bulk(list(nodes), slice=slice)
 
 
 def _graph_from_stoich(

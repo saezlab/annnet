@@ -252,11 +252,6 @@ class _IGBackendAccessor(_BackendAccessorBase):
     def _coerce_nodes_in_bound(self, bound, igG, label_field: str | None):
         self._coerce_node_bound(bound, lambda obj: self._coerce_node_or_iter(obj, igG, label_field))
 
-    def _prune_edge_attributes(self, igG, needed_attrs: set):
-        removable = set(igG.es.attributes()) - set(needed_attrs)
-        for attr in removable:
-            del igG.es[attr]
-
     def _collapse_multiedges(
         self, igG, *, directed: bool, aggregations: dict | None, needed_attrs: set
     ):

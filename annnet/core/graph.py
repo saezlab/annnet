@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import time
 from typing import TYPE_CHECKING, Any
-from collections import defaultdict
 from collections.abc import Iterable, Iterator, MutableMapping
 
-import numpy as np
-
-from . import _build, _state, _derive, _mutate, _identity, _validate, _structure
+from . import _build, _state, _derive, _mutate, _identity, _validate, _structure, _contextual
 from ._Ops import Operations, OperationsAccessor
 from ._attrs import AttributeStore
 from ._Views import GraphView, ViewsClass, EdgeSequence, NodeSequence, ViewsAccessor
@@ -21,6 +18,7 @@ from ._records import (
     _external_entity_kind,
 )
 from ._Annotation import AttributesClass, AttributesAccessor
+from ._contextual import ContextualStore
 from ._stored_kinds import STORED_EDGE_KIND, STORED_ENTITY_KIND
 from ..algorithms.traversal import Traversal
 from .._support.dataframe_backend import (
@@ -29,6 +27,7 @@ from .._support.dataframe_backend import (
     dataframe_height,
     dataframe_columns,
     dataframe_to_rows,
+    dataframe_from_rows,
     rename_dataframe_columns,
     select_dataframe_backend,
 )
@@ -441,7 +440,6 @@ class AnnNet(
         self.graph_attributes.update(kwargs)
 
         # Per-slice edge-weight compatibility cache
-        self.slice_edge_weights = defaultdict(dict)
 
         # History
         self._history_enabled = True
@@ -456,61 +454,32 @@ class AnnNet(
     def _invalidate_sparse_caches(self, *args, **kwargs):
         return _derive.invalidate_sparse_caches(self, *args, **kwargs)
 
-    def _rebuild_slice_edge_weights_cache(self):
-        cache = defaultdict(dict)
-        df = self.edge_slice_attributes
-        if df is None:
-            self.slice_edge_weights = cache
-            return
 
-        cols = set(dataframe_columns(df))
-        if not {'slice_id', 'edge_id', 'weight'} <= cols:
-            self.slice_edge_weights = cache
-            return
+    @property
+    def slice_edge_weights(self):
+        """Per-slice edge weight overrides, as ``{slice_id: {edge_id: weight}}``.
 
-        rows = dataframe_to_rows(df)
-        for row in rows:
-            lid = row.get('slice_id')
-            eid = row.get('edge_id')
-            w = row.get('weight')
-            if lid is None or eid is None or w is None:
+        Derived from the edge-by-slice attributes on each read. It used to be a
+        cache kept beside them and synchronised by two routines, which is one
+        copy of the same fact too many: the two could disagree, and a removal had
+        to remember to prune both.
+        """
+        if self._pending_edge_slice_drops:
+            self._flush_edge_slice_rows()
+        out: dict[str, dict[str, float]] = {}
+        for (slice_id, edge_id), attrs in self._contextual.edge_slice_attrs.items():
+            weight = attrs.get('weight')
+            if weight is None or (isinstance(weight, float) and weight != weight):
                 continue
-            if isinstance(w, float) and np.isnan(w):
-                continue
-            cache[lid][eid] = float(w)
+            out.setdefault(slice_id, {})[edge_id] = float(weight)
+        return out
 
-        self.slice_edge_weights = cache
-
-    def _sync_slice_edge_weights_for_rows(self, slice_id, rows):
-        if not isinstance(self.slice_edge_weights, defaultdict):
-            self.slice_edge_weights = defaultdict(dict, self.slice_edge_weights)
-
-        bucket = self.slice_edge_weights[slice_id]
-        touched = set()
-        for row in rows:
-            eid = row.get('edge_id')
-            if eid is not None:
-                touched.add(eid)
-
-        for eid in touched:
-            bucket.pop(eid, None)
-
-        for row in rows:
-            eid = row.get('edge_id')
-            weight = row.get('weight')
-            if eid is None or weight is None:
-                continue
-            try:
-                import math as _math
-
-                if isinstance(weight, float) and _math.isnan(weight):
-                    continue
-            except TypeError:
-                pass
-            bucket[eid] = float(weight)
-
-        if not bucket:
-            self.slice_edge_weights.pop(slice_id, None)
+    @slice_edge_weights.setter
+    def slice_edge_weights(self, value):
+        """Install overrides by writing them where the weight actually lives."""
+        for slice_id, weights in (value or {}).items():
+            for edge_id, weight in (weights or {}).items():
+                self._contextual.set('edge_slice_attrs', (slice_id, edge_id), {'weight': float(weight)})
 
     def _init_annotation_tables(self, annotations):
         # The generic node and edge attributes live in the slot-indexed column
@@ -519,6 +488,13 @@ class AnnNet(
         self._attr_store = AttributeStore(
             self._store, node_id_column='node_id', edge_id_column='edge_id'
         )
+        # Every contextual level — the ones keyed by a pair — in one store. See
+        # ``annnet.core._contextual`` for why none of them is a dataframe.
+        self._contextual = ContextualStore()
+        # A layer table a caller assigned that carries no ``layer_id``.
+        self._layer_table_passthrough = None
+        # Materialized contextual tables, against the store's version.
+        self._contextual_tables: dict = {}
         self._edge_slice_attributes = None
         self._pending_edge_slice_drops: set = set()
 
@@ -594,16 +570,118 @@ class AnnNet(
 
     @property
     def edge_slice_attributes(self):
-        """Edge-by-slice attribute table; flushes buffered row removals on read."""
+        """The edge-by-slice attributes, as a table.
+
+        Built on each read from the contextual store, in this graph's annotation
+        backend. It is a rendering of canonical state, not the state itself, so
+        editing the returned table changes nothing — write through
+        ``G.attrs.set_edge_slice_attrs``.
+        """
         if self._pending_edge_slice_drops:
             self._flush_edge_slice_rows()
-        return self._edge_slice_attributes
+        return self._contextual_table(
+            'edge_slice_attrs',
+            ('slice_id', 'edge_id'),
+            {'slice_id': 'text', 'edge_id': 'text', 'weight': 'float'},
+        )
 
     @edge_slice_attributes.setter
     def edge_slice_attributes(self, value):
-        """Replace the edge-by-slice table and drop what was owed against the old one."""
-        self._edge_slice_attributes = value
+        """Install the edge-by-slice attributes from a table."""
+        self._install_contextual_table('edge_slice_attrs', ('slice_id', 'edge_id'), value)
         self._pending_edge_slice_drops = set()
+
+    @property
+    def slice_attributes(self):
+        """The per-slice attributes, as a table.
+
+        Built on each read; see :attr:`edge_slice_attributes`.
+        """
+        return self._contextual_table('slice_attrs', 'slice_id', {'slice_id': 'text'})
+
+    @slice_attributes.setter
+    def slice_attributes(self, value):
+        self._install_contextual_table('slice_attrs', 'slice_id', value)
+
+    @property
+    def layer_attributes(self):
+        """The layer attribute table.
+
+        Two things share this name. ``G.layers.set_elementary_attrs`` writes rows
+        keyed by ``layer_id``, and those are canonical in the contextual store and
+        rendered here. A caller may also assign a table of their own that carries
+        no ``layer_id`` — the elementary-layer API cannot read it, but adapters
+        round-trip it, so it is kept verbatim and handed back unchanged.
+        """
+        if self._layer_table_passthrough is not None:
+            return self._layer_table_passthrough
+        return self._contextual_table('elementary_attrs', 'layer_id', {'layer_id': 'text'})
+
+    @layer_attributes.setter
+    def layer_attributes(self, value):
+        if value is not None and 'layer_id' not in dataframe_columns(value):
+            # Not addressable by the elementary-layer API. Keep it as given.
+            self._layer_table_passthrough = value
+            self._contextual.elementary_attrs.clear()
+            return
+        self._layer_table_passthrough = None
+        self._install_contextual_table('elementary_attrs', 'layer_id', value)
+
+    def contextual_table(self, level_name, *, backend=None):
+        """Render one contextual level as a table, in the backend you name.
+
+        The store holds dicts, so the backend is a property of this call and not
+        of the graph. ``G.contextual_table('slice_attrs', backend='pandas')``
+        answers in pandas whatever the graph was constructed with.
+
+        Parameters
+        ----------
+        level_name : str
+            One of :data:`annnet.core._contextual.LEVELS`.
+        backend : {"polars", "pandas", "pyarrow"}, optional
+            Defaults to the graph's annotation backend.
+
+        Returns
+        -------
+        DataFrame-like
+        """
+        keys, schema = _CONTEXTUAL_TABLE_SHAPE[level_name]
+        return self._contextual_table(level_name, keys, schema, backend=backend)
+
+    def _contextual_table(self, level_name, key_columns, schema, *, backend=None):
+        """Render one contextual level as a table, cached against the level.
+
+        A read after a read costs nothing; a write drops the entry. This is the
+        same discipline the matrices use, and it is what keeps the dict-canonical
+        model from paying for a rebuild on every access.
+        """
+        level = getattr(self._contextual, level_name)
+        backend = backend or self._annotations_backend
+        token = (backend, self._contextual.version)
+        cached = self._contextual_tables.get(level_name)
+        if cached is not None and cached[0] == token:
+            return cached[1]
+        rows = _contextual.rows_of(level, key_columns)
+        table = (
+            empty_dataframe(schema, backend=backend)
+            if not rows
+            else dataframe_from_rows(rows, backend=backend)
+        )
+        self._contextual_tables[level_name] = (token, table)
+        return table
+
+
+    def _install_contextual_table(self, level_name, key_columns, value) -> None:
+        """Fill one contextual level from a table, a mapping, or nothing."""
+        level = getattr(self._contextual, level_name)
+        if value is None:
+            level.clear()
+            return
+        if isinstance(value, dict):
+            level.clear()
+            level.update({key: dict(attrs) for key, attrs in value.items()})
+            return
+        _contextual.install_rows(level, dataframe_to_rows(value), key_columns)
 
     def __dir__(self):
         return sorted(set(self._PUBLIC_API))
@@ -748,9 +826,6 @@ class AnnNet(
     def _ensure_placeholder_layers_declared(self, *args, **kwargs):
         return _identity.ensure_placeholder_layers_declared(self, *args, **kwargs)
 
-    def _warn_placeholder_node_assignment(self, *args, **kwargs):
-        return _identity.warn_placeholder_node_assignment(self, *args, **kwargs)
-
     def _resolve_node_insert_coord(self, *args, **kwargs):
         return _identity.resolve_node_insert_coord(self, *args, **kwargs)
 
@@ -792,12 +867,6 @@ class AnnNet(
 
     def _endpoint_slice_node_ids(self, *args, **kwargs):
         return _identity.endpoint_slice_node_ids(self, *args, **kwargs)
-
-    def _slice_contains_endpoint(self, *args, **kwargs):
-        return _identity.slice_contains_endpoint(self, *args, **kwargs)
-
-    def _add_endpoint_to_slice_nodes(self, *args, **kwargs):
-        return _identity.add_endpoint_to_slice_nodes(self, *args, **kwargs)
 
     # Aspect / layer registry queries
 
@@ -979,13 +1048,7 @@ class AnnNet(
     def _ensure_edge_entity_placeholder(self, *args, **kwargs):
         return _mutate.ensure_edge_entity_placeholder(self, *args, **kwargs)
 
-    def _register_edge_as_entity(self, *args, **kwargs):
-        return _mutate.register_edge_as_entity(self, *args, **kwargs)
-
     # ── Edge input helpers ────────────────────────────────────────────────────
-
-    def _parse_edge_inputs(self, *args, **kwargs):
-        return _mutate.parse_edge_inputs(self, *args, **kwargs)
 
     @staticmethod
     def _infer_ml_kind(*args, **kwargs):
@@ -994,9 +1057,6 @@ class AnnNet(
     @staticmethod
     def _infer_hyper_ml(*args, **kwargs):
         return _mutate.infer_hyper_ml(*args, **kwargs)
-
-    def _find_parallel_edges(self, *args, **kwargs):
-        return _mutate.find_parallel_edges(self, *args, **kwargs)
 
     # ── Unified edge builder ──────────────────────────────────────────────────
 
@@ -1510,24 +1570,6 @@ class AnnNet(
             directed=ref.directed,
         )
 
-    def _incident_edge_indices(self, node_id) -> list[int]:
-        # The row of the matrix answers this outright, but only for a caller that
-        # names the entity by its key. Anything else is matched against the
-        # endpoints the store holds.
-        incident = []
-        if _structure.is_entity_key(node_id) and _structure.has_entity(self, node_id):
-            try:
-                row = _structure.entity_row(self, node_id)
-                incident.extend(self._get_csr()[row, :].indices.tolist())
-                return incident
-            except (IndexError, ValueError):
-                pass
-        for column, ref in enumerate(_structure.iter_edges(self)):
-            sides = _structure.edge_sides(self, ref.id)
-            if node_id in sides.source or node_id in sides.target:
-                incident.append(column)
-        return incident
-
     def _is_directed_edge(self, edge_id):
         if not _structure.has_edge(self, edge_id):
             return bool(self.directed)
@@ -1804,14 +1846,6 @@ class AnnNet(
         """Outgoing edges. Prefer ``incident_edges(direction='out')``."""
         return self.incident_edges(nodes, direction='out')
 
-    def get_directed_edges(self) -> list[str]:
-        """Directed edge IDs. Prefer ``get_edges_by_direction(True)``."""
-        return self.get_edges_by_direction(True)
-
-    def get_undirected_edges(self) -> list[str]:
-        """Undirected edge IDs. Prefer ``get_edges_by_direction(False)``."""
-        return self.get_edges_by_direction(False)
-
     # ── Traversal ────────────────────────────────────────────────────────────
 
     def incident_edges(
@@ -2011,21 +2045,6 @@ class AnnNet(
             vid = f'{base}::{i}'
             i += 1
         return vid
-
-    def node_key_tuple(self, node_id) -> tuple | None:
-        """Return the composite-key tuple for a node.
-
-        Parameters
-        ----------
-        node_id : str
-            Node identifier.
-
-        Returns
-        -------
-        tuple | None
-            Composite key tuple, or None if incomplete or not configured.
-        """
-        return self._current_key_of_node(node_id)
 
     @property
     def N(self):
@@ -3021,3 +3040,18 @@ class AnnNet(
 for _legacy_name in AnnNet._BLOCKED_LEGACY_API:
     setattr(AnnNet, _legacy_name, _BlockedLegacyAttribute(_legacy_name))
 del _legacy_name
+
+
+# The column shape of each contextual level, so ``contextual_table`` can render
+# any of them by name without the caller repeating the key columns.
+_CONTEXTUAL_TABLE_SHAPE = {
+    'slice_attrs': ('slice_id', {'slice_id': 'text'}),
+    'edge_slice_attrs': (
+        ('slice_id', 'edge_id'),
+        {'slice_id': 'text', 'edge_id': 'text', 'weight': 'float'},
+    ),
+    'elementary_attrs': ('layer_id', {'layer_id': 'text'}),
+    'aspect_attrs': ('aspect', {'aspect': 'text'}),
+    'layer_attrs': ('layer', {'layer': 'text'}),
+    'node_layer_attrs': (('node_id', 'layer'), {'node_id': 'text', 'layer': 'text'}),
+}

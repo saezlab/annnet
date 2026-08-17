@@ -108,13 +108,6 @@ class _LayerDict:
         self.layer_to_id[layer] = new_id
         return new_id
 
-    def get_id(self, layer: tuple | None) -> int | None:
-        if layer is None:
-            return None
-        if not isinstance(layer, tuple):
-            layer = tuple(layer)
-        return self.layer_to_id.get(layer)
-
     def get_layer(self, layer_id: int | None) -> tuple | None:
         if layer_id is None:
             return None

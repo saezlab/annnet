@@ -454,22 +454,6 @@ def _edge_directed(graph, record) -> bool:
     )
 
 
-def _edge_ref_of_record(graph, edge_id: str, record) -> EdgeRef:
-    # Positional construction, because a reference is built once per edge on
-    # every enumeration and the keyword form costs nearly twice as much.
-    weight = record.weight
-    return EdgeRef(
-        edge_id,
-        _EDGE_KIND_OF_RECORD.get(record.etype, record.etype),
-        _edge_directed(graph, record),
-        float(weight) if weight is not None else 1.0,
-        record.ml_kind,
-        record.ml_layers,
-        record.directed,
-        weight,
-    )
-
-
 def edge_ref(graph, edge_id: str) -> EdgeRef:
     """Return the edge reference for one edge."""
     store = store_of(graph)

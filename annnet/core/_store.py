@@ -1671,13 +1671,6 @@ class CoreState:
 # ---------------------------------------------------------------------------
 
 
-def members_from_sides(state, graph, sides, coefficients, weight, edge) -> list:
-    """Return the member entries of one edge, given its two sides as a record holds them."""
-    return members_from_endpoints(
-        state, graph, sides.source, sides.target, coefficients, weight, edge.directed
-    )
-
-
 def members_from_endpoints(state, graph, source, target, coefficients, weight, directed) -> list:
     """Return the member entries of one edge, given the endpoints on each side.
 
