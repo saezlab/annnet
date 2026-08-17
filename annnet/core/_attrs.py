@@ -22,8 +22,13 @@ write to the graph; a caller who wants to hold values across a change copies.
 
 A contextual attribute belongs to a pair rather than to one element, for example
 one edge in one slice or one node in one layer. Almost no pair carries a value, so
-a dense column per pair would waste nearly every cell. Those stores therefore stay
-keyed by the pair.
+a dense column per pair would waste nearly every cell, and those stores stay keyed
+by the pair instead.
+
+**This store does not hold them.** It owns the two generic axes and nothing else.
+It once carried a second, parallel set of the contextual stores; nothing wrote to
+them on any public path, so a value written through the API never appeared in
+them and a reader who found them here looked in the wrong place. They are gone.
 
 The node table and the edge table are derived. They gather the live slots of every
 column and hand the result to narwhals, so one materialization serves every
@@ -34,7 +39,7 @@ backend matters only when a table materializes.
 multilayer graph holds one entity per layer the node lives in, so one bare id
 covers several slots. A write by bare id lands in the cell of each of them, and
 the derived table shows the id once. What one node-layer carries alone is a
-contextual attribute, and :attr:`AttributeStore.node_layer_attributes` holds it.
+contextual attribute, written through ``G.layers.set_node_attrs``.
 """
 
 from __future__ import annotations
@@ -152,18 +157,6 @@ class AttributeStore:
         self._node_floor = 0
         self._edge_floor = 0
 
-        # Contextual stores, each keyed by its own pair.
-        self.slice_attributes: dict[str, dict] = {}
-        self.edge_slice_attributes: dict[tuple[str, str], dict] = {}
-        self.node_layer_attributes: dict[tuple[tuple, tuple], dict] = {}
-        self.aspect_attributes: dict[str, dict] = {}
-        self.layer_attributes: dict[tuple, dict] = {}
-        self.graph_attrs: dict = {}
-
-        # The per-slice weight override, which decides the effective weight of an
-        # edge. It is separate from the other contextual attributes because the
-        # materialization of a matrix reads it.
-        self.slice_weights: dict[tuple[str, str], float] = {}
 
         self._tables: dict[str, tuple] = {}
         self._row_cache: dict[str, tuple] = {}
@@ -672,67 +665,6 @@ class AttributeStore:
         """Forget the materialized tables. A table is always safe to drop."""
         self._tables.clear()
 
-    # -- contextual attributes --------------------------------------------
-
-    def set_slice(self, slice_id: str, **attrs) -> None:
-        """Set attributes of one slice."""
-        self.slice_attributes.setdefault(slice_id, {}).update(attrs)
-
-    def slice_attrs(self, slice_id: str) -> dict:
-        """Return the attributes of one slice."""
-        return dict(self.slice_attributes.get(slice_id, {}))
-
-    def set_edge_slice(self, slice_id: str, edge_id: str, **attrs) -> None:
-        """Set attributes of one edge inside one slice."""
-        self.edge_slice_attributes.setdefault((slice_id, edge_id), {}).update(attrs)
-
-    def edge_slice_attrs(self, slice_id: str, edge_id: str) -> dict:
-        """Return the attributes of one edge inside one slice."""
-        return dict(self.edge_slice_attributes.get((slice_id, edge_id), {}))
-
-    def set_node_layer(self, key: tuple, layer: tuple, **attrs) -> None:
-        """Set attributes of one node inside one layer."""
-        self.node_layer_attributes.setdefault((key, layer), {}).update(attrs)
-
-    def node_layer_attrs(self, key: tuple, layer: tuple) -> dict:
-        """Return the attributes of one node inside one layer."""
-        return dict(self.node_layer_attributes.get((key, layer), {}))
-
-    def set_aspect(self, aspect: str, **attrs) -> None:
-        """Set attributes of one aspect."""
-        self.aspect_attributes.setdefault(aspect, {}).update(attrs)
-
-    def aspect_attrs(self, aspect: str) -> dict:
-        """Return the attributes of one aspect."""
-        return dict(self.aspect_attributes.get(aspect, {}))
-
-    def set_layer(self, layer: tuple, **attrs) -> None:
-        """Set attributes of one layer."""
-        self.layer_attributes.setdefault(layer, {}).update(attrs)
-
-    def layer_attrs(self, layer: tuple) -> dict:
-        """Return the attributes of one layer."""
-        return dict(self.layer_attributes.get(layer, {}))
-
-    # -- the per-slice weight override ------------------------------------
-
-    def set_slice_weight(self, slice_id: str, edge_id: str, weight: float) -> None:
-        """Override the weight of one edge inside one slice."""
-        self.slice_weights[(slice_id, edge_id)] = float(weight)
-
-    def effective_weight(self, edge_id: str, *, slice_id: str | None = None) -> float:
-        """Return the weight of one edge, honouring a slice override.
-
-        A matrix materialization reads this, so the override is a structural fact
-        and not only an annotation.
-        """
-        if slice_id is not None:
-            override = self.slice_weights.get((slice_id, edge_id))
-            if override is not None:
-                return override
-        slot = self._require_edge(edge_id)
-        return float(self._store.edge_weight[slot])
-
     # -- forgetting -------------------------------------------------------
 
     @staticmethod
@@ -750,14 +682,15 @@ class AttributeStore:
         self.forget_edge(edge_id)
 
     def forget_edge(self, edge_id: str) -> None:
-        """Drop the contextual attributes of one edge."""
-        for mapping in (self.edge_slice_attributes, self.slice_weights):
-            for pair in [pair for pair in mapping if pair[1] == edge_id]:
-                del mapping[pair]
+        """Drop what this store held for one edge.
+
+        The slot-indexed cells are cleared by the caller; what is left here is
+        the materialized edge table, which named the edge and is now stale.
+        Contextual state keyed by a pair the edge belongs to lives outside this
+        store, and its owner drops its own.
+        """
         self._tables.pop(EDGE_AXIS, None)
 
     def forget_node(self, key: tuple) -> None:
-        """Drop the contextual attributes of one node."""
-        for pair in [pair for pair in self.node_layer_attributes if pair[0] == key]:
-            del self.node_layer_attributes[pair]
+        """Drop what this store held for one node. See :meth:`forget_edge`."""
         self._tables.pop(NODE_AXIS, None)
