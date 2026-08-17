@@ -8,9 +8,6 @@ from . import _store as ST, _matrices, _structure
 from ._state import GraphState
 from ._records import _external_entity_kind
 from ._stored_kinds import STORED_ENTITY_KIND
-from .._support.dataframe_backend import (
-    dataframe_drop_rows,
-)
 
 # Tells a missing key from one whose value is ``None``, which every pending row
 # carries: the pending buffers are dicts used as insertion-ordered sets.
@@ -699,9 +696,9 @@ class IndexMapping(GraphState):
         if not drop:
             return
         self._pending_edge_slice_drops: set[Any] = set()
-        self._edge_slice_attributes = dataframe_drop_rows(
-            self._edge_slice_attributes, 'edge_id', drop
-        )
+        level = self._contextual.edge_slice_attrs
+        for key in [key for key in level if key[1] in drop]:
+            del level[key]
 
     def _node_key_enabled(self) -> bool:
         return bool(self._node_key_fields)

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, TypedDict
 from collections.abc import Iterable
 
 from . import _structure
-from ._records import SliceRecord, _df_filter_not_equal
+from ._records import SliceRecord
 from .._support.dataframe_backend import dataframe_columns, dataframe_to_rows, dataframe_filter_eq
 
 if TYPE_CHECKING:
@@ -123,19 +123,13 @@ class SliceManager:
         if slice_id not in G._slices:
             raise KeyError(f'slice {slice_id} not found')
 
-        ela = getattr(G, 'edge_slice_attributes', None)
-        if ela is not None and hasattr(ela, 'columns'):
-            is_empty = (getattr(ela, 'height', None) == 0) or (
-                hasattr(ela, '__len__') and len(ela) == 0
-            )
-            if (not is_empty) and ('slice_id' in list(ela.columns)):
-                G.edge_slice_attributes = _df_filter_not_equal(ela, 'slice_id', slice_id)
-
-        if isinstance(G.slice_edge_weights, dict):
-            G.slice_edge_weights.pop(slice_id, None)
+        # The slice's own attributes and every (slice, edge) pair inside it are
+        # one store now, so one call drops both. The per-slice weights go with
+        # them, because a weight is an attribute of the pair rather than a cache
+        # beside it.
+        G._contextual.forget_slice(slice_id)
 
         del G._slices[slice_id]
-        G._rebuild_slice_edge_weights_cache()
         if G._current_slice == slice_id:
             G._current_slice = G._default_slice
 

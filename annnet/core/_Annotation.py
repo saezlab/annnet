@@ -18,7 +18,6 @@ from .._support.dataframe_backend import (
     dataframe_columns,
     dataframe_to_rows,
     dataframe_filter_eq,
-    dataframe_upsert_rows,
 )
 
 
@@ -295,7 +294,9 @@ class AttributesClass(GraphState):
         _check_reserved_collision(self._slice_RESERVED, attrs, kind='slice')
         clean = dict(attrs)
         if clean:
-            self.slice_attributes = self._upsert_row(self.slice_attributes, slice_id, clean)
+            # One hash insert. This used to filter and rebuild the whole table,
+            # so the cost of a write grew with how many slices already had one.
+            self._contextual.set('slice_attrs', slice_id, clean)
 
     def get_slice_attr(self, slice_id, key, default=None):
         """Get a single slice attribute (scalar) or default if missing.
@@ -352,12 +353,7 @@ class AttributesClass(GraphState):
                 clean['weight'] = float(clean['weight'])
             except (TypeError, ValueError):
                 pass
-        self.edge_slice_attributes = self._upsert_row(
-            self.edge_slice_attributes, (slice_id, edge_id), clean
-        )
-        self._sync_slice_edge_weights_for_rows(
-            slice_id, [{'slice_id': slice_id, 'edge_id': edge_id, **clean}]
-        )
+        self._contextual.set('edge_slice_attrs', (slice_id, edge_id), clean)
 
     def edge_slice(self, slice_id, edge_id) -> dict:
         """Return every attribute one edge carries in one slice.
@@ -528,34 +524,6 @@ class AttributesClass(GraphState):
     # The slice table and the edge-by-slice table are frames still, keyed by the
     # level they belong to. Their rows are written whole, so a write states the
     # key columns and the values together.
-
-    def _upsert_row(self, df: 'object', idx: Any, attrs: dict) -> 'object':
-        if not isinstance(attrs, dict) or not attrs:
-            return df
-        cols = set(dataframe_columns(df))
-        key_cols: tuple[str, ...]
-        if {'slice_id', 'edge_id'} <= cols:
-            key_cols = ('slice_id', 'edge_id')
-            key_vals = {'slice_id': idx[0], 'edge_id': idx[1]}
-        elif 'slice_id' in cols:
-            key_cols = ('slice_id',)
-            key_vals = {'slice_id': idx}
-        else:
-            raise ValueError('Cannot infer key columns from DataFrame schema')
-        return dataframe_upsert_rows(df, [{**key_vals, **attrs}], key_cols)
-
-    def _upsert_rows_bulk(self, df: 'object', updates: dict) -> 'object':
-        if not updates:
-            return df
-        cols = set(dataframe_columns(df))
-        join_keys = ('slice_id', 'edge_id') if {'slice_id', 'edge_id'} <= cols else ('slice_id',)
-        update_records = [
-            {'slice_id': idx[0], 'edge_id': idx[1], **attrs}
-            if isinstance(idx, tuple)
-            else {'slice_id': idx, **attrs}
-            for idx, attrs in updates.items()
-        ]
-        return dataframe_upsert_rows(df, update_records, join_keys)
 
     def _variables_watched_by_nodes(self):
         return {
@@ -791,8 +759,8 @@ class AttributesClass(GraphState):
             }
             for row in rows
         }
-        self.edge_slice_attributes = self._upsert_rows_bulk(self.edge_slice_attributes, updates)
-        self._sync_slice_edge_weights_for_rows(slice_id, rows)
+        for key, attrs in updates.items():
+            self._contextual.set('edge_slice_attrs', key, attrs)
 
 
 # Methods exposed verbatim on the ``G.attrs`` namespace.

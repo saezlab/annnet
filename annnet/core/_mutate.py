@@ -519,9 +519,9 @@ def remove_edges_bulk(g, edge_ids):
 
     for slice_data in g._slices.values():
         slice_data['edges'].difference_update(drop)
-    for d in g.slice_edge_weights.values():
-        for eid in drop:
-            d.pop(eid, None)
+    # The per-slice weight is an attribute of the (slice, edge) pair, and the
+    # edge-slice buffer below drops those pairs. Pruning a second copy here is
+    # what the derived property removed the need for.
 
     # The generic attributes of a removed edge go with the slot the store frees.
     # The edge-by-slice table is a frame still, and takes the removal buffered:

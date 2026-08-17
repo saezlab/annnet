@@ -171,6 +171,27 @@ pair, and each level has one public entry point: `G.slices.attrs`,
 `G.attrs.edge_slice`, `G.layers.attrs`, `G.layers.node_attrs`,
 `G.layers.aspect_attrs` and `G.layers.elementary_attrs`.
 
+**All six levels live in one store, `annnet.core._contextual.ContextualStore`,
+and every one of them is a plain dict.** No canonical field of a graph is a
+dataframe. That matters twice over.
+
+It keeps the graph independent of the table library. A stored
+`polars.DataFrame` would make the type of canonical state, its null handling and
+its dtype promotion depend on which optional dependency happens to be installed.
+
+And it keeps a write constant-time. Three of these levels used to be stored as
+frames, and each write filtered the whole frame and stacked one row back on — so
+the cost of a write grew with the table and the total was quadratic. Writing
+3 200 pairs took over 17 seconds; it now takes 7 milliseconds, which is the same
+per-write cost as a generic attribute.
+
+A dataframe is what a *reader* gets. `G.slice_attributes`,
+`G.edge_slice_attributes` and `G.layer_attributes` are rendered on access and
+cached against the store's version, and `G.contextual_table(level,
+backend=...)` renders any level in the backend you name — so the backend is a
+property of the read, not of the graph. Narwhals appears at that boundary and
+nowhere else.
+
 ## Slices are overlays, not duplicate graphs
 
 Slice state lives in `_slices`, which maps a slice identifier to a

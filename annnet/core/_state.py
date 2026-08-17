@@ -177,8 +177,6 @@ class GraphState:
     _mark_structure_changed: Any
     _invalidate_sparse_caches: Any
     _resolve_entity_key: Any
-    _upsert_row: Any
-    _upsert_rows_bulk: Any
 
     # The namespace objects, each built on the first read of its property and
     # kept on the graph after that.

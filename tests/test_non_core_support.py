@@ -141,13 +141,6 @@ def test_dataframe_backend_helpers_preserve_rows_and_schema(tmp_path):
     renamed = df_backend.rename_dataframe_columns(table, {'id': 'name'})
     assert 'name' in df_backend.dataframe_columns(renamed)
 
-    upserted = df_backend.dataframe_upsert_rows(
-        table, [{'id': 'a', 'score': 9.0, 'flag': True}], 'id', backend=backend
-    )
-    assert {row['id']: row.get('score') for row in df_backend.dataframe_to_rows(upserted)}[
-        'a'
-    ] == 9.0
-
     empty = df_backend.empty_dataframe(
         {'name': 'text', 'value': 'float', 'enabled': 'bool', 'tags': 'list_text'},
         backend=backend,
@@ -175,7 +168,6 @@ def test_dataframe_backend_edge_paths_and_backend_detection(monkeypatch):
     assert df_backend.dataframe_filter_ne(None, 'missing', 'x') is None
     assert df_backend.dataframe_filter_not_in(None, 'missing', ['x']) is None
     assert df_backend.dataframe_append_rows(None, [], backend=backend) is None
-    assert df_backend.dataframe_upsert_rows(None, [], 'id', backend=backend) is None
     assert df_backend.rename_dataframe_columns(None, {'a': 'b'}) is None
     assert df_backend.rename_dataframe_columns('unchanged', {}) == 'unchanged'
 
@@ -196,7 +188,6 @@ def test_dataframe_backend_edge_paths_and_backend_detection(monkeypatch):
     ]
     assert df_backend.dataframe_filter_not_in(table, 'id', []) is not table
     assert df_backend.dataframe_append_rows(table, [], backend=backend) is not table
-    assert df_backend.dataframe_upsert_rows(table, [], 'id', backend=backend) is not table
 
     empty_columns = df_backend.dataframe_from_columns(
         {},
@@ -245,14 +236,10 @@ def test_dataframe_backend_preserves_schema_only_columns_on_rebuilds():
     assert df_backend.dataframe_columns(appended) == ['id', 'notes']
     assert df_backend.dataframe_to_rows(appended) == [{'id': 'a', 'notes': None}]
 
-    upserted = df_backend.dataframe_upsert_rows(
-        appended,
-        [{'id': 'a', 'notes': 'kept'}],
-        'id',
-        backend=backend,
-    )
-    assert df_backend.dataframe_columns(upserted) == ['id', 'notes']
-    assert df_backend.dataframe_to_rows(upserted) == [{'id': 'a', 'notes': 'kept'}]
+    # ``dataframe_upsert_rows`` used to be exercised here. It existed for the
+    # per-write contextual attribute path, which is now a dict, and it was the
+    # only caller of the backend-specific fast paths this layer is meant not to
+    # have. Both are gone; the append path below is what remains.
 
 
 def test_dataframe_backend_missing_column_paths_preserve_shape():

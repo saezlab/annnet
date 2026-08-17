@@ -17,11 +17,9 @@ from . import _build, _derive, _mutate
 from ._stored_kinds import STORED_EDGE_KIND
 from .._support.dataframe_backend import (
     clone_dataframe,
-    dataframe_height,
     dataframe_columns,
     dataframe_to_rows,
     dataframe_filter_eq,
-    dataframe_from_rows,
 )
 
 
@@ -47,14 +45,49 @@ def _entity_id_of_row(graph, row):
 class LayerAccessor:
     """Namespace for multilayer operations on an :class:`~annnet.core.graph.AnnNet` graph."""
 
-    __slots__ = ('_G', '_all_layers', '_aspect_attrs', '_layer_attrs', '_state_attrs')
+    __slots__ = ('_G', '_all_layers')
 
     def __init__(self, graph):
         self._G = graph
         self._all_layers: tuple = ()
-        self._aspect_attrs: dict = {}
-        self._layer_attrs: dict = {}
-        self._state_attrs: dict = {}
+
+    # The three layer-family contextual levels are held by the graph's one
+    # contextual store, not by this accessor. They stay reachable under their
+    # old names so that every call site reads the same, and so that there is one
+    # place a copy or a serializer has to know about.
+
+    @property
+    def _aspect_attrs(self) -> dict:
+        """Attributes of each aspect, keyed by aspect name."""
+        return self._G._contextual.aspect_attrs
+
+    @_aspect_attrs.setter
+    def _aspect_attrs(self, value) -> None:
+        store = self._G._contextual.aspect_attrs
+        store.clear()
+        store.update(value or {})
+
+    @property
+    def _layer_attrs(self) -> dict:
+        """Attributes of each layer, keyed by layer coordinate."""
+        return self._G._contextual.layer_attrs
+
+    @_layer_attrs.setter
+    def _layer_attrs(self, value) -> None:
+        store = self._G._contextual.layer_attrs
+        store.clear()
+        store.update(value or {})
+
+    @property
+    def _state_attrs(self) -> dict:
+        """Attributes of each node-layer pair, keyed by ``(node_id, layer)``."""
+        return self._G._contextual.node_layer_attrs
+
+    @_state_attrs.setter
+    def _state_attrs(self, value) -> None:
+        store = self._G._contextual.node_layer_attrs
+        store.clear()
+        store.update(value or {})
 
     def list_aspects(self) -> tuple:
         """Return declared aspect names, or an empty tuple for flat graphs."""
@@ -93,6 +126,10 @@ class LayerAccessor:
     # lives in __slots__.
     # ------------------------------------------------------------------
 
+    # What this accessor writes on itself. Everything else it is asked to set
+    # belongs to the graph. The three contextual levels are properties above, so
+    # they are named here too: a property assignment must reach the descriptor
+    # rather than being forwarded to the graph as an unknown name.
     _OWN = frozenset({'_G', '_all_layers', '_aspect_attrs', '_layer_attrs', '_state_attrs'})
 
     # A field of the graph, which ``__setattr__`` below writes there. The
@@ -763,34 +800,16 @@ class LayerAccessor:
         return f'{aspect}_{label}'
 
     def _upsert_layer_attribute_row(self, layer_id: str, attrs: dict):
-        df = self.layer_attributes
+        """Merge attributes into one elementary layer.
 
-        # Convert existing DF to list of dict rows (backend-agnostic)
-        rows = dataframe_to_rows(df) if dataframe_height(df) > 0 else []
-
-        # Find if we already have a row for this layer_id
-        existing = None
-        new_rows = []
-        for r in rows:
-            if r.get('layer_id') == layer_id:
-                existing = r
-                # don't append the old version
-            else:
-                new_rows.append(r)
-
-        if existing is None:
-            base = {'layer_id': layer_id}
-        else:
-            base = dict(existing)  # copy
-
-        # Merge new attrs (override old keys)
-        base.update(attrs)
-
-        # Append updated row
-        new_rows.append(base)
-
-        # Rebuild DF; Polars will infer schema and fill missing values with nulls
-        self.layer_attributes = dataframe_from_rows(new_rows, backend=self._annotations_backend)
+        This used to convert the whole table to rows, rebuild it and assign it
+        back, so writing one layer's attributes cost the size of the table. The
+        canonical form is a dict, and the table is built when a reader asks.
+        """
+        # A keyed write makes the store authoritative again, so a passthrough
+        # table a caller assigned earlier no longer answers for this level.
+        self._G._layer_table_passthrough = None
+        self._G._contextual.set('elementary_attrs', layer_id, attrs)
 
     def set_elementary_attrs(self, aspect: str, label: str, /, **attrs):
         """Attach attributes to an elementary Kivela layer.
@@ -891,8 +910,7 @@ class LayerAccessor:
         """
         aa = tuple(layer_tuple)
         self._validate_layer_tuple(aa)
-        d = self._layer_attrs.setdefault(aa, {})
-        d.update(attrs)
+        self._G._contextual.set('layer_attrs', aa, attrs)
 
     def attrs(self, layer_tuple: tuple[str, ...]) -> dict:
         """Get metadata dict for a Kivela layer.
