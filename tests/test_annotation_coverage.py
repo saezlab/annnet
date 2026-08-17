@@ -23,6 +23,14 @@ def _toy() -> AnnNet:
 # ── bulk attribute setters ─────────────────────────────────────────────
 
 
+def _annotation_snapshot(G):
+    """Everything a no-op write must leave alone."""
+    return (
+        sorted(row.items() for row in G.obs.to_dicts()),
+        sorted(row.items() for row in G.var.to_dicts()),
+    )
+
+
 def test_set_node_attrs_bulk_dict_input_writes_each_row() -> None:
     G = _toy()
     G.attrs.set_node_attrs_bulk({'A': {'color': 'red'}, 'B': {'color': 'blue'}})
@@ -50,12 +58,16 @@ def test_set_node_attrs_bulk_rejects_reserved_keys() -> None:
 
 def test_set_node_attrs_bulk_noop_on_empty_input() -> None:
     G = _toy()
-    G.attrs.set_node_attrs_bulk({})  # must not raise
+    before = _annotation_snapshot(G)
+    G.attrs.set_node_attrs_bulk({})
+    assert _annotation_snapshot(G) == before
 
 
 def test_set_node_attrs_bulk_noop_when_all_attrs_dicts_empty() -> None:
     G = _toy()
-    G.attrs.set_node_attrs_bulk({'A': {}, 'B': {}})  # filtered out
+    before = _annotation_snapshot(G)
+    G.attrs.set_node_attrs_bulk({'A': {}, 'B': {}})
+    assert _annotation_snapshot(G) == before
 
 
 def test_set_edge_attrs_bulk_dict_input_writes_each_row() -> None:
@@ -85,12 +97,16 @@ def test_set_edge_attrs_bulk_rejects_reserved_keys() -> None:
 
 def test_set_edge_attrs_bulk_noop_on_empty_input() -> None:
     G = _toy()
+    before = _annotation_snapshot(G)
     G.attrs.set_edge_attrs_bulk({})
+    assert _annotation_snapshot(G) == before
 
 
 def test_set_edge_attrs_bulk_noop_when_all_attrs_dicts_empty() -> None:
     G = _toy()
+    before = _annotation_snapshot(G)
     G.attrs.set_edge_attrs_bulk({'e1': {}})
+    assert _annotation_snapshot(G) == before
 
 
 # ── set_edge_slice_attrs internal branches ─────────────────────────────
@@ -114,9 +130,16 @@ def test_set_edge_slice_attrs_writes_non_weight_attrs() -> None:
 
 
 def test_set_edge_slice_attrs_noop_when_only_reserved_allow_weight_missing() -> None:
-    """Calling with no attrs at all is a no-op."""
+    """Calling with no attrs at all writes nothing.
+
+    Not even a default weight: a pair carries a value once something writes one,
+    so a call that names no attribute leaves the pair absent.
+    """
     G = _toy()
+    before = _annotation_snapshot(G)
     G.attrs.set_edge_slice_attrs('s1', 'e1')  # no kwargs
+    assert _annotation_snapshot(G) == before
+    assert G.attrs.get_edge_slice_attr('s1', 'e1', 'weight') is None
 
 
 def test_set_edge_slice_attrs_bulk_writes_only_present_attrs() -> None:
@@ -147,7 +170,11 @@ def test_set_edge_slice_attrs_bulk_skips_non_dict_or_empty_entries() -> None:
 
 def test_set_edge_slice_attrs_bulk_noop_on_empty() -> None:
     G = _toy()
+    before = _annotation_snapshot(G)
     G.attrs.set_edge_slice_attrs_bulk('s1', [])
+    assert _annotation_snapshot(G) == before
+    # No row is created either: a weight only appears once something writes one.
+    assert G.attrs.get_edge_slice_attr('s1', 'e1', 'weight') is None
 
 
 # ── set_slice_edge_weight error paths ──────────────────────────────────
@@ -407,111 +434,97 @@ def test_set_node_attrs_bulk_with_composite_key_rejects_collision() -> None:
         G.attrs.set_node_attrs_bulk({'B': {'name': 'alice'}})
 
 
-# ── flexible edge direction policy (covers _apply_flexible_direction) ─
+# ── flexible edge direction policy ────────────────────────────────────
+#
+# The policy rewrites the member coefficients of the edge, so what it did is
+# visible in the incidence column: +w on the source side, -w on the target side.
+# These tests used to call the write and assert nothing, which meant they passed
+# whether or not the orientation moved.
 
 
-def test_flexible_edge_with_edge_scope_policy_applies_on_attr_change() -> None:
-    """Setting an edge attribute that an edge-scope policy watches flips
-    the orientation in the incidence matrix."""
+def _incidence_column(G, edge_id='e1'):
+    """The incidence column of one edge, as ``{node_id: coefficient}``."""
+    matrix = G.S.toarray()
+    column = G.idx.edge_to_col(edge_id)
+    return {n: float(matrix[G.idx.entity_to_row(n), column]) for n in ('A', 'B')}
+
+
+def _flexible_graph(policy):
     G = AnnNet(directed=True)
     G.add_nodes(['A', 'B'])
-    G.add_edges(
-        'A',
-        'B',
-        edge_id='e1',
-        weight=1.0,
-        flexible={
-            'var': 'temperature',
-            'threshold': 10.0,
-            'scope': 'edge',
-            'above': 's->t',
-        },
-    )
-    # set the watched attribute → triggers _apply_flexible_direction
-    G.attrs.set_edge_attrs('e1', temperature=20.0)
+    G.add_edges('A', 'B', edge_id='e1', weight=1.0, flexible=policy)
+    return G
 
 
-def test_flexible_edge_with_node_scope_policy_applies_on_node_change() -> None:
-    G = AnnNet(directed=True)
-    G.add_nodes(['A', 'B'])
-    G.add_edges(
-        'A',
-        'B',
-        edge_id='e1',
-        weight=1.0,
-        flexible={
-            'var': 'level',
-            'threshold': 5.0,
-            'scope': 'node',
-            'above': 's->t',
-        },
-    )
-    # change a node attr watched by the policy
-    G.attrs.set_node_attrs('A', level=10.0)
-    G.attrs.set_node_attrs('B', level=2.0)
+def test_flexible_edge_scope_policy_orients_the_edge_from_the_attribute() -> None:
+    """An edge-scope policy decides the orientation from the watched attribute.
+
+    Both branches are exercised, because above the threshold the resolved
+    orientation equals the declared one — so a test that only writes a value
+    above it cannot tell the policy from doing nothing.
+    """
+    policy = {'var': 'temperature', 'threshold': 10.0, 'scope': 'edge', 'above': 's->t'}
+
+    above = _flexible_graph(policy)
+    above.attrs.set_edge_attrs('e1', temperature=20.0)
+    assert _incidence_column(above) == {'A': 1.0, 'B': -1.0}
+
+    below = _flexible_graph(policy)
+    below.attrs.set_edge_attrs('e1', temperature=2.0)
+    assert _incidence_column(below) == {'A': -1.0, 'B': 1.0}
 
 
-def test_flexible_edge_tie_handling_keep_does_nothing() -> None:
-    G = AnnNet(directed=True)
-    G.add_nodes(['A', 'B'])
-    G.add_edges(
-        'A',
-        'B',
-        edge_id='e1',
-        weight=1.0,
-        flexible={
-            'var': 'x',
-            'threshold': 5.0,
-            'scope': 'edge',
-            'tie': 'keep',
-        },
-    )
-    # Set x == threshold → tie_case=True, tie='keep' → returns without rewriting
+def test_flexible_node_scope_policy_orients_from_the_endpoint_attributes() -> None:
+    """A node-scope policy compares the two endpoints rather than one edge value."""
+    policy = {'var': 'level', 'threshold': 5.0, 'scope': 'node', 'above': 's->t'}
+
+    forward = _flexible_graph(policy)
+    forward.attrs.set_node_attrs('A', level=10.0)
+    forward.attrs.set_node_attrs('B', level=2.0)
+    assert _incidence_column(forward) == {'A': 1.0, 'B': -1.0}
+
+    backward = _flexible_graph(policy)
+    backward.attrs.set_node_attrs('A', level=2.0)
+    backward.attrs.set_node_attrs('B', level=10.0)
+    assert _incidence_column(backward) == {'A': -1.0, 'B': 1.0}
+
+
+def test_flexible_edge_tie_keep_leaves_the_orientation_alone() -> None:
+    G = _flexible_graph({'var': 'x', 'threshold': 5.0, 'scope': 'edge', 'tie': 'keep'})
+    before = _incidence_column(G)
     G.attrs.set_edge_attrs('e1', x=5.0)
+    assert _incidence_column(G) == before == {'A': 1.0, 'B': -1.0}
 
 
-def test_flexible_edge_tie_handling_undirected() -> None:
-    G = AnnNet(directed=True)
-    G.add_nodes(['A', 'B'])
-    G.add_edges(
-        'A',
-        'B',
-        edge_id='e1',
-        weight=1.0,
-        flexible={
-            'var': 'x',
-            'threshold': 5.0,
-            'scope': 'edge',
-            'tie': 'undirected',
-        },
-    )
+def test_flexible_edge_tie_undirected_puts_the_weight_on_both_sides() -> None:
+    G = _flexible_graph({'var': 'x', 'threshold': 5.0, 'scope': 'edge', 'tie': 'undirected'})
     G.attrs.set_edge_attrs('e1', x=5.0)
+    assert _incidence_column(G) == {'A': 1.0, 'B': 1.0}
 
 
-def test_flexible_edge_attrs_bulk_triggers_apply() -> None:
-    G = AnnNet(directed=True)
-    G.add_nodes(['A', 'B'])
-    G.add_edges(
-        'A',
-        'B',
-        edge_id='e1',
-        weight=1.0,
-        flexible={'var': 'x', 'threshold': 5.0, 'scope': 'edge'},
-    )
-    G.attrs.set_edge_attrs_bulk({'e1': {'x': 10.0}})
+def test_flexible_policy_applies_on_the_bulk_edge_write() -> None:
+    """The bulk path has to reach the policy, not only the single write."""
+    policy = {'var': 'x', 'threshold': 5.0, 'scope': 'edge'}
+
+    above = _flexible_graph(policy)
+    above.attrs.set_edge_attrs_bulk({'e1': {'x': 10.0}})
+    assert _incidence_column(above) == {'A': 1.0, 'B': -1.0}
+
+    below = _flexible_graph(policy)
+    below.attrs.set_edge_attrs_bulk({'e1': {'x': 2.0}})
+    assert _incidence_column(below) == {'A': -1.0, 'B': 1.0}
 
 
-def test_flexible_edge_node_attrs_bulk_triggers_apply() -> None:
-    G = AnnNet(directed=True)
-    G.add_nodes(['A', 'B'])
-    G.add_edges(
-        'A',
-        'B',
-        edge_id='e1',
-        weight=1.0,
-        flexible={'var': 'level', 'threshold': 5.0, 'scope': 'node'},
-    )
-    G.attrs.set_node_attrs_bulk({'A': {'level': 10.0}, 'B': {'level': 2.0}})
+def test_flexible_policy_applies_on_the_bulk_node_write() -> None:
+    policy = {'var': 'level', 'threshold': 5.0, 'scope': 'node'}
+
+    forward = _flexible_graph(policy)
+    forward.attrs.set_node_attrs_bulk({'A': {'level': 10.0}, 'B': {'level': 2.0}})
+    assert _incidence_column(forward) == {'A': 1.0, 'B': -1.0}
+
+    backward = _flexible_graph(policy)
+    backward.attrs.set_node_attrs_bulk({'A': {'level': 2.0}, 'B': {'level': 10.0}})
+    assert _incidence_column(backward) == {'A': -1.0, 'B': 1.0}
 
 
 # Touch the accessor class import for symmetry.

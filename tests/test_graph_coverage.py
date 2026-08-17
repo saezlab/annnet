@@ -115,7 +115,9 @@ def test_edge_kind_setter_marks_ml_kind_for_non_hyper() -> None:
 
 def test_edge_kind_setter_ignores_unknown_eid() -> None:
     G = _toy()
-    G.edge_kind = {'unknown-eid': 'hyper'}  # no-op
+    before = {eid: S.edge_ref(G, eid).kind for eid in G.edges()}
+    G.edge_kind = {'unknown-eid': 'hyper'}
+    assert {eid: S.edge_ref(G, eid).kind for eid in G.edges()} == before
 
 
 def test_edge_definitions_setter_updates_src_tgt_etype() -> None:
@@ -229,7 +231,9 @@ def test_remove_edges_with_unknown_id_raises_by_default() -> None:
 
 def test_remove_edges_with_errors_ignore_silently_skips_unknown() -> None:
     G = _toy()
+    before = sorted(G.edges())
     G.remove_edges('not-an-edge', errors='ignore')
+    assert sorted(G.edges()) == before
 
 
 def test_remove_edges_rejects_invalid_errors_value() -> None:
@@ -264,7 +268,9 @@ def test_remove_nodes_with_unknown_id_raises_by_default() -> None:
 
 def test_remove_nodes_with_errors_ignore_silently_skips() -> None:
     G = _toy()
+    before = sorted(G.nodes())
     G.remove_nodes('not-a-node', errors='ignore')
+    assert sorted(G.nodes()) == before
 
 
 def test_remove_nodes_rejects_invalid_errors_value() -> None:
