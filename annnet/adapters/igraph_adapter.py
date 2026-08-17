@@ -277,8 +277,11 @@ def to_igraph(
     slices: list[str] | None = None,
     public_only: bool = False,
     reify_prefix: str = 'he::',
-) -> Any:
-    """Export AnnNet → (igraph.AnnNet, manifest).
+) -> tuple[Any, dict]:
+    """Export AnnNet → ``(igraph graph, manifest)``.
+
+    ``from_igraph`` takes the manifest as its second argument, so
+    ``from_igraph(*to_igraph(G))`` is the round trip.
 
     hyperedge_mode: {"skip","expand","reify"}
       - "skip": drop HE edges from igG (manifest keeps them)

@@ -236,8 +236,12 @@ def to_nx(
     slices: list[str] | None = None,
     public_only: bool = False,
     reify_prefix: str = 'he::',
-) -> nx.Graph:
-    """Export AnnNet → (networkx.AnnNet, manifest).
+) -> tuple[nx.Graph, dict[str, Any]]:
+    """Export AnnNet → ``(networkx graph, manifest)``.
+
+    Both halves are returned because the manifest carries the state a NetworkX
+    graph cannot hold, and :func:`from_nx` takes it as its second argument:
+    ``from_nx(*to_nx(G))`` is the round trip.
 
     Manifest preserves hyperedges with per-endpoint coefficients, slices,
     node/edge attrs, and stable edge IDs.
