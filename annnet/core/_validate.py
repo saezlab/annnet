@@ -122,6 +122,7 @@ def _check_materialized_matrix(g, problems) -> None:
     n_rows, n_cols = matrix.shape
     seen_cells: set[tuple[int, int]] = set()
     rows_of_entity = {key: row for row, key in enumerate(S.entity_keys(store))}
+    indptr, indices, data = matrix.indptr, matrix.indices, matrix.data
 
     for column, edge_id in enumerate(S.edge_ids(store)):
         if column >= n_cols:
@@ -135,9 +136,11 @@ def _check_materialized_matrix(g, problems) -> None:
             if row is None or coefficient == 0:
                 continue
             expected[row] = coefficient
-        block = matrix[:, [column]].tocoo()
+        start, stop = int(indptr[column]), int(indptr[column + 1])
         found = {
-            int(r): float(v) for r, v in zip(block.row, block.data, strict=False) if float(v) != 0.0
+            int(r): float(v)
+            for r, v in zip(indices[start:stop], data[start:stop], strict=False)
+            if float(v) != 0.0
         }
         seen_cells.update((row, column) for row in found)
         for row in set(expected) | set(found):
@@ -397,17 +400,22 @@ def _check_matrix_matches_member_lists(store, problems) -> None:
         problems.append(f'the incidence matrix cannot be materialized: {error}')
         return
     matrix = view.matrix.tocsc()
+    indptr, indices, data = matrix.indptr, matrix.indices, matrix.data
+    _slots, row_of_slot = MX._row_lookup(store)
+
     for column, edge_id in enumerate(view.edge_of_column):
         slot = store.edge_slot(edge_id)
         members = store.members(slot)
         expected: dict[int, float] = {}
         for entity_slot, coefficient in zip(members.entities, members.coefficients, strict=False):
-            row = view.row_of_entity[store.entity_key(int(entity_slot))]
+            row = int(row_of_slot[entity_slot])
             expected[row] = expected.get(row, 0.0) + float(coefficient)
         expected = {row: value for row, value in expected.items() if value != 0.0}
-        block = matrix[:, [column]].tocoo()
+        start, stop = int(indptr[column]), int(indptr[column + 1])
         found = {
-            int(r): float(v) for r, v in zip(block.row, block.data, strict=False) if float(v) != 0.0
+            int(r): float(v)
+            for r, v in zip(indices[start:stop], data[start:stop], strict=False)
+            if float(v) != 0.0
         }
         for row in set(expected) | set(found):
             want, have = expected.get(row, 0.0), found.get(row, 0.0)
