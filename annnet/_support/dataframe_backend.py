@@ -113,17 +113,10 @@ def dataframe_iter_rows(df):
     """
     if df is None:
         return
-    # Try the native polars iter_rows fast path first (avoids the per-row dict
-    # rewrap that narwhals' rows() incurs).
-    native = df
-    try:
-        import polars as _pl
-
-        if isinstance(native, _pl.DataFrame):
-            yield from native.iter_rows(named=True)
-            return
-    except ImportError:
-        pass
+    # One implementation for every backend. A Polars branch used to run first,
+    # to avoid the per-row rewrap narwhals was said to incur; measured on 20 000
+    # rows the narwhals path is now the faster of the two, so the branch bought
+    # a privileged backend for nothing.
     yield from _to_nw(df).iter_rows(named=True)
 
 
@@ -317,79 +310,10 @@ def dataframe_append_rows(df, rows: list[dict[str, Any]], *, backend: str | None
     return _rebuild_dataframe(df, base_rows + rows, backend=backend)
 
 
-def dataframe_upsert_rows(
-    df,
-    rows: list[dict[str, Any]],
-    key_columns: str | list[str] | tuple[str, ...],
-    *,
-    backend: str | None = None,
-):
-    """Replace rows with matching key values, then append the new rows.
-
-    Partial rows (those missing one or more existing non-key columns) are
-    overlaid on the matching existing row so that unmentioned columns keep
-    their prior values. Fully specified rows (or rows for keys that don't
-    exist yet) pass through unchanged.
-    """
-    rows = [dict(row) for row in (rows or [])]
-    if not rows:
-        return clone_dataframe(df)
-
-    keys = (key_columns,) if isinstance(key_columns, str) else tuple(key_columns)
-
-    rows = _merge_partial_rows(df, rows, keys)
-
-    # Fast path: single-key upsert that adds no new columns can run as
-    # native filter + vstack on the underlying backend, avoiding the
-    # full Python-row round-trip that the slow path does per call.
-    fast = _fast_upsert_rows(df, rows, keys, backend=backend)
-    if fast is not None:
-        return fast
-
-    incoming_keys = {tuple(row.get(key) for key in keys) for row in rows}
-    kept = [
-        row
-        for row in dataframe_to_rows(df)
-        if tuple(row.get(key) for key in keys) not in incoming_keys
-    ]
-    return _rebuild_dataframe(df, kept + rows, backend=backend)
-
-
-def _merge_partial_rows(df, rows, keys):
-    """Overlay partial incoming rows on existing rows to preserve unmentioned columns.
-
-    Without this, a fast-path replace would null out any column the user
-    didn't include in their update dict — which is correct row-replacement
-    semantics but wrong upsert semantics.
-    """
-    existing_cols = set(dataframe_columns(df) or ())
-    if not existing_cols:
-        return rows
-    non_key_cols = existing_cols - set(keys)
-    if not non_key_cols:
-        return rows
-    needs_merge = any(any(c not in row for c in non_key_cols) for row in rows)
-    if not needs_merge:
-        return rows
-
-    incoming_key_set = {tuple(row.get(k) for k in keys) for row in rows}
-    existing_by_key: dict[tuple, dict] = {}
-    for old in dataframe_to_rows(df):
-        k = tuple(old.get(c) for c in keys)
-        if k in incoming_key_set:
-            existing_by_key[k] = old
-
-    merged: list[dict[str, Any]] = []
-    for row in rows:
-        k = tuple(row.get(c) for c in keys)
-        existing = existing_by_key.get(k)
-        if existing is None:
-            merged.append(row)
-            continue
-        base = {c: existing.get(c) for c in existing_cols if c in existing}
-        base.update(row)
-        merged.append(base)
-    return merged
+def _rows_introduce_new_columns(rows: list[dict[str, Any]], existing) -> bool:
+    """Whether any row carries a column the frame does not already have."""
+    existing_set = set(existing)
+    return any(name not in existing_set for row in rows for name in row)
 
 
 def _fast_concat_rows(df, rows: list[dict[str, Any]], *, backend: str | None = None):
@@ -397,10 +321,15 @@ def _fast_concat_rows(df, rows: list[dict[str, Any]], *, backend: str | None = N
 
     Returns ``None`` if the operation needs the slow path (new columns,
     unsupported backend, etc.).
+
+    This path is Narwhals for every backend. It used to branch into a Polars
+    implementation first, because the contextual attribute writes came through
+    here once per write and the generic path was several times slower. Those
+    writes are dicts now and never reach a dataframe, so the branch bought
+    nothing and cost the one thing this layer exists to provide — the same code
+    for every backend.
     """
     try:
-        if _is_polars_native(df):
-            return _polars_fast_concat(df, rows)
         nw_df = _to_nw(df)
         existing_schema = nw_df.collect_schema()
         if _rows_introduce_new_columns(rows, existing_schema.names()):
@@ -410,84 +339,6 @@ def _fast_concat_rows(df, rows: list[dict[str, Any]], *, backend: str | None = N
         return _from_nw(nw.concat([nw_df, incoming_nw], how='vertical'))
     except (AttributeError, NotImplementedError, RuntimeError, TypeError, ValueError):
         return None
-
-
-def _fast_upsert_rows(
-    df,
-    rows: list[dict[str, Any]],
-    keys: tuple[str, ...],
-    *,
-    backend: str | None = None,
-):
-    """Upsert rows without materialising the existing dataframe to Python."""
-    if len(keys) != 1:
-        return None
-    key = keys[0]
-    try:
-        if _is_polars_native(df):
-            return _polars_fast_upsert(df, rows, key)
-        nw_df = _to_nw(df)
-        existing_schema = nw_df.collect_schema()
-        if _rows_introduce_new_columns(rows, existing_schema.names()):
-            return None
-        incoming_key_values = [row.get(key) for row in rows]
-        kept_nw = nw_df.filter(~nw.col(key).is_in(incoming_key_values))
-        backend_name = dataframe_backend(df, default=backend or 'auto')
-        incoming_nw = _build_nw_from_rows(rows, schema=existing_schema, backend=backend_name)
-        return _from_nw(nw.concat([kept_nw, incoming_nw], how='vertical'))
-    except (AttributeError, NotImplementedError, RuntimeError, TypeError, ValueError):
-        return None
-
-
-def _is_polars_native(df) -> bool:
-    try:
-        import polars as pl
-
-        return isinstance(df, pl.DataFrame)
-    except ImportError:
-        return False
-
-
-def _rows_introduce_new_columns(rows: list[dict[str, Any]], existing: list[str] | set[str]) -> bool:
-    existing_set = set(existing)
-    for row in rows:
-        for k in row:
-            if k not in existing_set:
-                return True
-    return False
-
-
-def _polars_fast_concat(df, rows: list[dict[str, Any]]):
-    """Polars-eager append. ~3× the narwhals path on small rows."""
-    import polars as pl
-
-    existing_cols = df.columns
-    if _rows_introduce_new_columns(rows, existing_cols):
-        return None
-    incoming = pl.DataFrame(
-        {col: [row.get(col) for row in rows] for col in existing_cols},
-        schema=dict(zip(existing_cols, df.dtypes, strict=False)),
-    )
-    return df.vstack(incoming)
-
-
-def _polars_fast_upsert(df, rows: list[dict[str, Any]], key: str):
-    """Polars-eager filter + vstack. ~6× the narwhals path for single-row upserts."""
-    import polars as pl
-
-    existing_cols = df.columns
-    if _rows_introduce_new_columns(rows, existing_cols):
-        return None
-    incoming_keys = [row.get(key) for row in rows]
-    if len(incoming_keys) == 1:
-        kept = df.filter(pl.col(key) != incoming_keys[0])
-    else:
-        kept = df.filter(~pl.col(key).is_in(incoming_keys))
-    incoming = pl.DataFrame(
-        {col: [row.get(col) for row in rows] for col in existing_cols},
-        schema=dict(zip(existing_cols, df.dtypes, strict=False)),
-    )
-    return kept.vstack(incoming)
 
 
 def dataframe_read_delimited(
