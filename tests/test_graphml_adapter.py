@@ -27,10 +27,17 @@ class TestGraphMLAdapter:
         assert 'h1' in G2.hyperedge_definitions
         assert 'h2' in G2.hyperedge_definitions
 
-    def test_manifest_sidecar(self, complex_graph, tmpdir_fixture):
+    def test_the_companion_sidecar_carries_what_graphml_cannot(self, complex_graph, tmpdir_fixture):
+        """GraphML keeps no edge id, so the mapping that does lives beside it.
+
+        That used to be a ``.manifest.json`` of this adapter's own invention, one
+        of three such conventions in the package. It is the one shared sidecar
+        now, and there is exactly one file beside the export.
+        """
         G = complex_graph
         to_graphml(G, tmpdir_fixture / 'graph.graphml', hyperedge_mode='reify')
-        assert (tmpdir_fixture / 'graph.graphml.manifest.json').exists()
+        assert (tmpdir_fixture / 'graph.graphml.annnet-sidecar').exists()
+        assert not (tmpdir_fixture / 'graph.graphml.manifest.json').exists()
         G2 = from_graphml(tmpdir_fixture / 'graph.graphml', hyperedge='reified')
         assert_graphs_equal(G, G2, check_slices=True, check_hyperedges=True)
 
