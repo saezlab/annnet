@@ -320,6 +320,13 @@ def node_count(graph) -> int:
     )
 
 
+def has_hyperedges(graph) -> bool:
+    """Whether any edge names more than two sides. One pass over the kind array."""
+    store = store_of(graph)
+    slots = store.live_edge_slots()
+    return bool(slots.size) and bool((store.edge_kind[slots] == ST.HYPER).any())
+
+
 def edge_count(graph) -> int:
     """Return how many edges carry structure.
 
