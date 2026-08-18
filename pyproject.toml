@@ -7,7 +7,7 @@ dev = [
     "distlib",
     "pre-commit>=2.17.0",
     "twine",
-    "ruff>=0.6",
+    "ruff>=0.16,<0.17",
     "black>=24.0",
     "mypy>=1.0",
     "bump2version"

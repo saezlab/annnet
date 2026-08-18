@@ -18,8 +18,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-import torch
-from torch_geometric.data import HeteroData
+
+try:
+    import torch
+    from torch_geometric.data import HeteroData
+except ImportError:
+    torch = None
+    HeteroData = None
 
 from ._shared.common import (
     _iter_node_ids,
@@ -154,6 +159,10 @@ def to_pyg(
         Heterogeneous graph with per-type ``x`` / ``edge_index`` / ``edge_attr``
         and slice masks.
     """
+    if torch is None:
+        raise RuntimeError(
+            "torch and torch-geometric are not installed; cannot call to_pyg. Install with `pip install 'annnet[pyg]'`."
+        )
 
     if slice_id is None:
         slice_id = graph.slices.active
@@ -467,6 +476,11 @@ def _add_expanded_edge(
 @delivers
 def from_pyg(data, *, directed: bool = True) -> AnnNet:
     """Rebuild an AnnNet graph from PyG ``HeteroData``."""
+    if torch is None:
+        raise RuntimeError(
+            "torch and torch-geometric are not installed; cannot call from_pyg. Install with `pip install 'annnet[pyg]'`."
+        )
+
     from ..core import AnnNet
 
     manifest = getattr(data, 'manifest', None) or {}
