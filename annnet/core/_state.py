@@ -10,6 +10,7 @@ from ._records import (
     _node_RESERVED,
     _slice_RESERVED,
 )
+from ._contextual import ContextualStore
 
 # Canonical source of truth (everything else is reconstructable from these).
 SOT_FIELDS = (
@@ -106,10 +107,13 @@ class GraphState:
     _aspects: tuple
     _layers: dict
 
-    # The attribute columns, and the two contextual tables that are frames.
+    # The attribute columns, the contextual store, and the tables materialized
+    # from it on demand.
     _attr_store: Any
     _annotations_backend: Any
     graph_attributes: dict
+    _contextual: ContextualStore
+    _contextual_tables: dict
     slice_attributes: Any
     edge_slice_attributes: Any
     layer_attributes: Any
