@@ -13,9 +13,13 @@ from __future__ import annotations
 
 import pathlib
 
-from ._common import dataframe_read_excel
+from ._shared.common import dataframe_read_excel
+from ._shared.sidecar import restores
+from ._shared.importing import delivers
 
 
+@delivers
+@restores
 def from_excel(
     path: str | pathlib.Path,
     graph=None,

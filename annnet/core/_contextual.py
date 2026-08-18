@@ -50,6 +50,12 @@ class ContextualStore:
     explain which a given level got.
     """
 
+    # The level names, reachable from any store. A caller outside the core needs
+    # them to walk every level — serializing one, copying one — and reaching for
+    # the module constant would cross a boundary to read a name the object can
+    # answer for itself.
+    levels = LEVELS
+
     __slots__ = (*LEVELS, 'version')
 
     def __init__(self) -> None:

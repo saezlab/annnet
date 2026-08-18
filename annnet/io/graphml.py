@@ -17,7 +17,6 @@ This is an accepted boundary exception.
 
 from __future__ import annotations
 
-import os
 import re
 import json
 import math
@@ -25,6 +24,8 @@ from typing import TYPE_CHECKING
 
 import networkx as nx
 
+from ._shared.sidecar import read_sidecar, apply_sidecar, write_sidecar
+from ._shared.importing import delivers
 from .._support.serialization import serialize_endpoint, deserialize_endpoint
 from ..adapters.networkx_adapter import (
     to_nx,
@@ -159,10 +160,15 @@ def _restore_types_graphml_inplace(G):
         fix_dict(data)
 
 
-def to_graphml(graph, path, *, directed=True, hyperedge_mode='reify', public_only=False):
+def to_graphml(
+    graph, path, *, directed=True, hyperedge_mode='reify', public_only=False, sidecar=True
+):
     """Export via NetworkX with reified hyperedges; sanitize attrs for GraphML.
 
-    Also writes a sidecar manifest for lossless re-import.
+    GraphML does not keep an edge id, so the mapping that does goes into the
+    companion sidecar along with everything else the format cannot hold. It used
+    to go into a ``.manifest.json`` of this module's own invention, which meant
+    two files beside one export and two things to remember to copy.
     """
     G, manifest = to_nx(
         graph, directed=directed, hyperedge_mode=hyperedge_mode, public_only=public_only
@@ -170,36 +176,38 @@ def to_graphml(graph, path, *, directed=True, hyperedge_mode='reify', public_onl
     G = _relabel_nx(G, _encode_node)
     _sanitize_graphml_inplace(G)
     nx.write_graphml(G, path)
-    # sidecar manifest
-    mpath = str(path) + '.manifest.json'
-    with open(mpath, 'w', encoding='utf-8') as f:
-        json.dump(_encode_manifest(manifest), f, ensure_ascii=False)
+    if sidecar:
+        write_sidecar(graph, path, format_name='graphml', format_payload=_encode_manifest(manifest))
 
 
-def from_graphml(path, *, hyperedge='reified'):
-    """Import via NetworkX; if a sidecar manifest is present, use it as SSOT.
+@delivers
+def from_graphml(path, *, hyperedge='reified', sidecar='auto'):
+    """Import via NetworkX, using the companion sidecar as the source of truth.
 
-    Otherwise, fall back to a best-effort no-manifest import with type restoration.
+    Without one, this is a best-effort import: GraphML keeps no edge id, so the
+    ids are the ones NetworkX invents.
     """
     G = nx.read_graphml(path)
     _restore_types_graphml_inplace(G)
     G = _relabel_nx(G, _decode_node)
-    mpath = str(path) + '.manifest.json'
-    if os.path.exists(mpath):
-        with open(mpath, encoding='utf-8') as f:
-            manifest = _decode_manifest(json.load(f))
-        # Rebuild exactly from the manifest (lossless), ignoring GraphML-added noise
-        return from_nx(G, manifest, hyperedge=('reified' if hyperedge == 'reified' else 'none'))
-    # Fallback (no manifest available)
-    return from_nx_without_manifest(G, hyperedge=('reified' if hyperedge == 'reified' else 'none'))
+    document = read_sidecar(path, policy=sidecar)
+    mode = 'reified' if hyperedge == 'reified' else 'none'
+    if document and document.get('format_payload') is not None:
+        manifest = _decode_manifest(document['format_payload'])
+        graph = from_nx(G, manifest, hyperedge=mode)
+    else:
+        graph = from_nx_without_manifest(G, hyperedge=mode)
+    return apply_sidecar(graph, document)
 
 
-def to_gexf(graph: AnnNet, path, *, directed=True, hyperedge_mode='reify', public_only=False):
+def to_gexf(
+    graph: AnnNet, path, *, directed=True, hyperedge_mode='reify', public_only=False, sidecar=True
+):
     """Export an AnnNet graph to GEXF via NetworkX.
 
     GEXF (like GraphML) cannot encode ``None`` attribute values; the same
-    sanitiser used for GraphML is applied here. A sidecar manifest is also
-    written so ``from_gexf`` can round-trip losslessly.
+    sanitiser used for GraphML is applied here, and what the format cannot hold
+    — edge identity among it — goes to the one companion sidecar.
     """
     G, manifest = to_nx(
         graph, directed=directed, hyperedge_mode=hyperedge_mode, public_only=public_only
@@ -207,23 +215,20 @@ def to_gexf(graph: AnnNet, path, *, directed=True, hyperedge_mode='reify', publi
     G = _relabel_nx(G, _encode_node)
     _sanitize_graphml_inplace(G)
     nx.write_gexf(G, path)
-    mpath = str(path) + '.manifest.json'
-    with open(mpath, 'w', encoding='utf-8') as f:
-        json.dump(_encode_manifest(manifest), f, ensure_ascii=False)
+    if sidecar:
+        write_sidecar(graph, path, format_name='gexf', format_payload=_encode_manifest(manifest))
 
 
-def from_gexf(path, *, hyperedge='reified') -> AnnNet:
-    """Import a GEXF graph through NetworkX.
-
-    Uses the sidecar manifest written by ``to_gexf`` when present (lossless
-    round-trip); otherwise falls back to a best-effort import.
-    """
+@delivers
+def from_gexf(path, *, hyperedge='reified', sidecar='auto') -> AnnNet:
+    """Import a GEXF graph through NetworkX, using the companion sidecar."""
     G = nx.read_gexf(path)
     _restore_types_graphml_inplace(G)
     G = _relabel_nx(G, _decode_node)
-    mpath = str(path) + '.manifest.json'
-    if os.path.exists(mpath):
-        with open(mpath, encoding='utf-8') as f:
-            manifest = _decode_manifest(json.load(f))
-        return from_nx(G, manifest, hyperedge=('reified' if hyperedge == 'reified' else 'none'))
-    return from_nx_without_manifest(G, hyperedge=('reified' if hyperedge == 'reified' else 'none'))
+    document = read_sidecar(path, policy=sidecar)
+    mode = 'reified' if hyperedge == 'reified' else 'none'
+    if document and document.get('format_payload') is not None:
+        graph = from_nx(G, _decode_manifest(document['format_payload']), hyperedge=mode)
+    else:
+        graph = from_nx_without_manifest(G, hyperedge=mode)
+    return apply_sidecar(graph, document)

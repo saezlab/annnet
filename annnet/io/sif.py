@@ -17,7 +17,7 @@ from contextlib import nullcontext
 from collections.abc import Iterable
 
 from ..core import AnnNet
-from ._common import (
+from ._shared.common import (
     _rows_to_df,
     dataframe_to_rows,
     serialize_endpoint,
@@ -27,6 +27,8 @@ from ._common import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
+from ._shared.sidecar import read_sidecar, apply_sidecar, write_sidecar
+from ._shared.importing import delivers
 
 
 def _split_sif_line(line: str, delimiter: str | None) -> list[str]:
@@ -91,10 +93,11 @@ def to_sif(
     *,
     relation_attr: str = 'relation',
     default_relation: str = 'interacts_with',
-    write_nodes: bool = True,
+    write_nodes: bool = False,
     nodes_path: str | None = None,
     lossless: bool = False,
     manifest_path: str | None = None,
+    sidecar: bool = True,
 ) -> None | tuple[None, dict]:
     """Export graph to SIF format.
 
@@ -123,6 +126,11 @@ def to_sif(
 
     """
 
+    lossless_requested = lossless
+    # The companion sidecar always wants the full manifest: SIF keeps no edge id,
+    # so without it a reader invents new ones and anything keyed by an edge —
+    # a contextual attribute, a slice membership — has nothing to attach to.
+    lossless = lossless or sidecar
     manifest = (
         {
             'version': '1.0',
@@ -271,7 +279,7 @@ def to_sif(
         _slice_weight_map: dict[tuple[str, str], float] = {}
         _esa = getattr(graph, 'edge_slice_attributes', None)
         if _esa is not None:
-            from ._common import dataframe_to_rows as _df_rows
+            from ._shared.common import dataframe_to_rows as _df_rows
 
             for _row in _df_rows(_esa):
                 _w_val = _row.get('weight')
@@ -303,11 +311,14 @@ def to_sif(
             with open(manifest_path, 'w', encoding='utf-8') as mf:
                 json.dump(manifest, mf, indent=2)
 
-        return None, manifest
+        if sidecar and path:
+            write_sidecar(graph, path, format_name='sif', format_payload=manifest)
+        return (None, manifest) if lossless_requested else None
 
     return None
 
 
+@delivers
 def from_sif(
     path: str,
     *,
@@ -315,8 +326,9 @@ def from_sif(
     directed: bool = True,
     relation_attr: str = 'relation',
     default_relation: str = 'interacts_with',
-    read_nodes_sidecar: bool = True,
+    read_nodes_sidecar: bool = False,
     nodes_path: str | None = None,
+    sidecar: str = 'auto',
     encoding: str = 'utf-8',
     delimiter: str | None = None,
     comment_prefixes: Iterable[str] = ('#', '!'),
@@ -377,6 +389,12 @@ def from_sif(
     if manifest is not None and not isinstance(manifest, dict):
         with open(str(manifest), encoding='utf-8') as mf:
             manifest = json.load(mf)
+
+    # Without an explicit one, the companion sidecar is where the manifest lives.
+    # It is what carries edge identity, which SIF itself does not write.
+    document = read_sidecar(path, policy=sidecar)
+    if manifest is None and document and document.get('format_payload') is not None:
+        manifest = document['format_payload']
 
     H = AnnNet(directed=None if manifest and 'binary_edges' in manifest else directed)
 
@@ -641,4 +659,4 @@ def from_sif(
             deserialize_edge_layers=deserialize_edge_layers,
         )
 
-    return H
+    return apply_sidecar(H, document)

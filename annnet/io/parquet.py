@@ -17,7 +17,7 @@ import math
 from typing import TYPE_CHECKING
 from pathlib import Path
 
-from ._common import (
+from ._shared.common import (
     _rows_to_df,
     empty_dataframe,
     dataframe_to_rows,
@@ -31,6 +31,9 @@ from ._common import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
+from ._shared.sidecar import restores, preserves
+from ._shared.importing import delivers
+from ._shared.contextual import contextual_payload, restore_contextual
 
 if TYPE_CHECKING:
     from ..core import AnnNet
@@ -147,6 +150,7 @@ def _build_attr_map(df, key_col: str) -> dict:
     return out
 
 
+@preserves('parquet')
 def to_parquet(graph: AnnNet, path):
     """Write lossless GraphDir:
 
@@ -329,10 +333,14 @@ def to_parquet(graph: AnnNet, path):
             table_to_rows=dataframe_to_rows,
             serialize_edge_layers=serialize_edge_layers,
         ),
+        'contextual': contextual_payload(graph),
+        'uns': dict((getattr(graph, 'uns', {}) or {}).items()),
     }
     (path / 'manifest.json').write_text(json.dumps(manifest, indent=2))
 
 
+@delivers
+@restores
 def from_parquet(path) -> AnnNet:
     """Read GraphDir (lossless) using bulk ops for speed."""
     from ..core import AnnNet
@@ -638,6 +646,8 @@ def from_parquet(path) -> AnnNet:
     manifest_path = path / 'manifest.json'
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text())
+        restore_contextual(H, manifest.get('contextual') or {})
+        H.graph_attributes.update(manifest.get('uns') or {})
         restore_multilayer_manifest(
             H,
             manifest.get('multilayer', {}),

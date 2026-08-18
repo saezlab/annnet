@@ -17,7 +17,7 @@ import json
 from typing import Any
 
 from ..core import AnnNet
-from ._common import (
+from ._shared.common import (
     _rows_to_df,
     dataframe_height,
     dataframe_columns,
@@ -28,6 +28,7 @@ from ._common import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
+from ._shared.importing import delivers
 from .._support.serialization import serialize_endpoint, deserialize_endpoint
 
 
@@ -286,6 +287,7 @@ def to_dataframes(
     return result
 
 
+@delivers
 def from_dataframes(
     nodes: Any | dict | None = None,
     edges: Any | None = None,

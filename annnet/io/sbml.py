@@ -18,6 +18,8 @@ from __future__ import annotations
 import warnings
 
 from ..core import AnnNet
+from ._shared.sidecar import restores, write_sidecar
+from ._shared.importing import delivers
 
 warnings.filterwarnings('ignore', message='Signature .*numpy.longdouble.*')
 
@@ -356,6 +358,8 @@ def _graph_from_sbml_model(
 # ── public entry point ────────────────────────────────────────────────────────
 
 
+@delivers
+@restores
 def from_sbml(
     path: str,
     graph: AnnNet | None = None,
@@ -388,3 +392,53 @@ def from_sbml(
         preserve_stoichiometry=preserve_stoichiometry,
         layer=layer,
     )
+
+
+# Writer. A hyperedge becomes a reaction: tail is the reactant side, head the
+# product side, and the stored coefficients carry the stoichiometry back.
+
+
+def _species_reference(reference, endpoint, coefficients) -> None:
+    bare = endpoint[0] if isinstance(endpoint, tuple) else endpoint
+    reference.setSpecies(str(bare))
+    reference.setConstant(True)
+    value = coefficients.get(endpoint, coefficients.get(bare))
+    reference.setStoichiometry(abs(float(value)) if value is not None else 1.0)
+
+
+def to_sbml(graph: AnnNet, path: str, *, model_id: str = 'annnet', sidecar: bool = True) -> None:
+    """Write the graph as an SBML Level 3 document."""
+    import libsbml
+
+    from ..core import _structure as S
+
+    document = libsbml.SBMLDocument(3, 1)
+    model = document.createModel()
+    model.setId(model_id)
+
+    compartment = model.createCompartment()
+    compartment.setId('c')
+    compartment.setConstant(True)
+
+    for node_id in graph.nodes():
+        species = model.createSpecies()
+        species.setId(str(node_id))
+        species.setCompartment('c')
+        species.setHasOnlySubstanceUnits(False)
+        species.setBoundaryCondition(False)
+        species.setConstant(False)
+
+    for definition in S.definitions_of(graph)[1]:
+        reaction = model.createReaction()
+        reaction.setId(str(definition.id))
+        reaction.setReversible(not definition.directed)
+        reaction.setFast(False)
+        coefficients = dict(definition.coefficients or ())
+        for endpoint in sorted(definition.target, key=repr):
+            _species_reference(reaction.createReactant(), endpoint, coefficients)
+        for endpoint in sorted(definition.source, key=repr):
+            _species_reference(reaction.createProduct(), endpoint, coefficients)
+
+    libsbml.writeSBMLToFile(document, str(path))
+    if sidecar:
+        write_sidecar(graph, path, format_name='sbml')

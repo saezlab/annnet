@@ -28,7 +28,7 @@ import scipy.sparse as sp
 
 from .. import __version__ as ANNNET_VERSION
 from ..core import _structure
-from ._common import (
+from ._shared.common import (
     LOADED_EDGE_KIND,
     STORED_EDGE_KIND,
     LOADED_ENTITY_KIND,
@@ -49,7 +49,9 @@ from ._common import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
-from ._archive import _read_archive, _write_archive
+from ._shared.archive import _read_archive, _write_archive
+from ._shared.sidecar import restores
+from ._shared.importing import delivers
 
 if TYPE_CHECKING:
     from ..core import AnnNet
@@ -269,6 +271,7 @@ def write(
     compression: str = 'zstd',
     overwrite: bool = False,
     matrix: bool = False,
+    sidecar: bool = True,
 ) -> None:
     """Write an AnnNet graph to a directory or `.annnet` archive.
 
@@ -851,6 +854,8 @@ def _write_uns(graph, path: Path):
     (path / 'results').mkdir(exist_ok=True)
 
 
+@delivers
+@restores
 def read(path: str | Path, *, lazy: bool = False) -> AnnNet:
     """Load graph from disk with zero loss.
 

@@ -42,7 +42,7 @@ from collections.abc import Iterable
 import numpy as np
 
 from ..core import AnnNet
-from ._common import (
+from ._shared.common import (
     dataframe_width,
     dataframe_height,
     dataframe_columns,
@@ -55,6 +55,9 @@ from ._common import (
     dataframe_select_to_numpy,
     dataframe_column_is_numeric,
 )
+from ._shared.sidecar import restores, write_sidecar
+from ..core._structure import iter_edge_sides
+from ._shared.importing import delivers
 
 # ---------------------------
 # Helpers / parsing utilities
@@ -247,6 +250,8 @@ def _detect_schema(df) -> str:
 # ---------------------------
 
 
+@delivers
+@restores
 def from_csv(
     path: str | Path,
     *,
@@ -321,6 +326,8 @@ def from_csv(
     )
 
 
+@delivers
+@restores
 def from_dataframe(
     df: Any,
     *,
@@ -1036,3 +1043,60 @@ def _ingest_lil(
                     attrs_to_apply[added_eids[idx]] = pa
             if attrs_to_apply:
                 G.attrs.set_edge_attrs_bulk(attrs_to_apply)
+
+
+# Symmetric writers. The rows are the schema ``from_csv`` auto-detects, so a
+# round trip needs no arguments on either side.
+
+
+def _tabular_rows(graph: AnnNet) -> list[dict[str, Any]]:
+    """One row per binary edge, with attributes and slice membership inline."""
+    edge_attrs = graph._attr_store.edge_attr_rows()
+    membership: dict[str, list[str]] = {}
+    for sid in graph.slices.list(include_default=False):
+        for eid in graph.slices.edges(sid):
+            membership.setdefault(eid, []).append(sid)
+
+    rows = []
+    for eid, ref, sides in iter_edge_sides(graph):
+        if ref.kind != 'binary':
+            continue
+        source = next(iter(sides.source), None)
+        target = next(iter(sides.target), None)
+        row = {
+            'source': _bare_id(source),
+            'target': _bare_id(target),
+            'weight': ref.weight,
+            'directed': ref.directed,
+            'edge_id': eid,
+            'slices': '|'.join(membership.get(eid, ())),
+        }
+        for key, value in (edge_attrs.get(eid) or {}).items():
+            if key != 'edge_id' and value is not None:
+                row[key] = value
+        rows.append(row)
+
+    return rows
+
+
+def _bare_id(endpoint):
+    return endpoint[0] if isinstance(endpoint, tuple) else endpoint
+
+
+def to_csv(graph: AnnNet, path: str | Path, *, sidecar: bool = True) -> None:
+    """Write the graph as an edge list ``from_csv`` reads back."""
+    frame = dataframe_from_rows(_tabular_rows(graph))
+    dataframe_write_csv(frame, str(path))
+    if sidecar:
+        write_sidecar(graph, path, format_name='csv')
+
+
+def to_excel(
+    graph: AnnNet, path: str | Path, *, sheet: str = 'edges', sidecar: bool = True
+) -> None:
+    """Write the graph as a single-sheet workbook ``from_excel`` reads back."""
+    import pandas as pd
+
+    pd.DataFrame(_tabular_rows(graph)).to_excel(str(path), sheet_name=sheet, index=False)
+    if sidecar:
+        write_sidecar(graph, path, format_name='excel')

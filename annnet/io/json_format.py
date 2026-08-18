@@ -17,7 +17,7 @@ import json
 from typing import TYPE_CHECKING
 from pathlib import Path
 
-from ._common import (
+from ._shared.common import (
     _rows_to_df,
     iter_edge_sides,
     _is_directed_eid,
@@ -30,6 +30,9 @@ from ._common import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
+from ._shared.sidecar import restores, preserves, read_sidecar, apply_sidecar
+from ._shared.importing import delivers
+from ._shared.contextual import contextual_payload, restore_contextual
 
 if TYPE_CHECKING:
     from ..core import AnnNet
@@ -57,6 +60,7 @@ def _attrs_by_id(table, id_col: str, *, public_only: bool = False) -> dict:
     return out
 
 
+@preserves('json')
 def to_json(
     graph: AnnNet,
     path: str | Path,
@@ -202,6 +206,7 @@ def to_json(
         ],
         'x-extensions': {
             'uns': graph_meta,
+            'contextual': contextual_payload(graph),
             'slices': slices,
             'edge_slices': edge_slices,
             'hyperedges': [
@@ -236,12 +241,18 @@ def to_json(
         json.dump(doc, f, ensure_ascii=False, indent=indent)
 
 
+@delivers
+@restores
 def from_json(path: str | Path) -> AnnNet:
     """Load AnnNet from node-link JSON + x-extensions (lossless wrt schema above)."""
+    with open(path, encoding='utf-8') as f:
+        return _graph_from_document(json.load(f))
+
+
+def _graph_from_document(doc: dict) -> AnnNet:
+    """Build a graph from the node-link document ``to_json`` writes."""
     from ..core import AnnNet
 
-    with open(path, encoding='utf-8') as f:
-        doc = json.load(f)
     H = AnnNet()
     ext = doc.get('x-extensions') or {}
 
@@ -341,6 +352,8 @@ def from_json(path: str | Path) -> AnnNet:
     if hyper_attrs_pending:
         H.attrs.set_edge_attrs_bulk(hyper_attrs_pending)
 
+    restore_contextual(H, ext.get('contextual') or {})
+
     # slices + edge_slices — bulk
     known_slices = set(H.slices.list(include_default=True))
     for L in ext.get('slices', []):
@@ -390,7 +403,7 @@ def from_json(path: str | Path) -> AnnNet:
     return H
 
 
-def write_ndjson(graph: AnnNet, dir_path):
+def write_ndjson(graph: AnnNet, dir_path, *, sidecar: bool = True):
     """Write nodes.ndjson, edges.ndjson, hyperedges.ndjson, slices.ndjson, edge_slices.ndjson.
 
     Each line is one JSON object. Lossless wrt to_json schema.
@@ -470,6 +483,11 @@ def write_ndjson(graph: AnnNet, dir_path):
             except (TypeError, ValueError):
                 continue
 
+    with open(f'{dir_path}/uns.ndjson', 'w', encoding='utf-8') as fu:
+        fu.write(json.dumps(dict(getattr(graph, 'uns', {}) or {}), ensure_ascii=False) + '\n')
+    with open(f'{dir_path}/contextual.ndjson', 'w', encoding='utf-8') as fc:
+        fc.write(json.dumps(contextual_payload(graph), ensure_ascii=False) + '\n')
+
     with open(f'{dir_path}/edge_slices.ndjson', 'w', encoding='utf-8') as fel:
         for lid in graph.slices.list(include_default=True):
             for eid in graph.slices.edges(lid):
@@ -478,3 +496,35 @@ def write_ndjson(graph: AnnNet, dir_path):
                 if w is not None:
                     rec['weight'] = w
                 fel.write(json.dumps(rec, ensure_ascii=False) + '\n')
+
+
+# NDJSON: the same document as to_json, one object per line per table.
+
+
+@delivers
+def read_ndjson(dir_path, *, sidecar='auto') -> AnnNet:
+    """Read the directory ``write_ndjson`` wrote."""
+    import os
+
+    base = str(dir_path)
+
+    def lines(name):
+        path = os.path.join(base, name)
+        if not os.path.exists(path):
+            return []
+        with open(path, encoding='utf-8') as handle:
+            return [json.loads(line) for line in handle if line.strip()]
+
+    doc = {
+        'nodes': lines('nodes.ndjson'),
+        'edges': lines('edges.ndjson'),
+        'x-extensions': {
+            'hyperedges': lines('hyperedges.ndjson'),
+            'slices': lines('slices.ndjson'),
+            'edge_slices': lines('edge_slices.ndjson'),
+            'uns': (lines('uns.ndjson') or [{}])[0],
+            'contextual': (lines('contextual.ndjson') or [{}])[0],
+        },
+    }
+    graph = _graph_from_document(doc)
+    return apply_sidecar(graph, read_sidecar(base, policy=sidecar))

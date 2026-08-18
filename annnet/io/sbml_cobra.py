@@ -21,6 +21,8 @@ from collections.abc import Sequence
 import numpy as np
 
 from ..core import AnnNet
+from ._shared.sidecar import restores
+from ._shared.importing import delivers
 
 try:
     from cobra.io import read_sbml_model  # type: ignore
@@ -114,6 +116,8 @@ def _graph_from_stoich(
 # ---------------- COBRA-based import ----------------
 
 
+@delivers
+@restores
 def from_cobra_model(
     model,
     graph: AnnNet | None = None,
@@ -151,6 +155,8 @@ def from_cobra_model(
     return G
 
 
+@delivers
+@restores
 def from_sbml(
     path: str,
     graph: AnnNet | None = None,

@@ -21,7 +21,7 @@ from pathlib import Path
 from binascii import Error as BinasciiError
 
 from ..core import _structure
-from ._common import (
+from ._shared.common import (
     STORED_EDGE_KIND,
     stored_key,
     _rows_to_df,
@@ -34,6 +34,8 @@ from ._common import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
+from ._shared.sidecar import restores
+from ._shared.importing import delivers
 
 if TYPE_CHECKING:
     from ..core import AnnNet
@@ -196,6 +198,7 @@ def to_cx2(
     include_inter: bool = False,
     include_coupling: bool = False,
     hyperedges: str = 'skip',
+    sidecar: bool = True,
 ) -> list[dict[str, Any]]:
     """
     Convert an AnnNet graph to CX2 compliant JSON format.
@@ -753,6 +756,8 @@ def to_cx2(
 # --- Core Adapter: from_cx2 ---
 
 
+@delivers
+@restores
 def from_cx2(
     cx2_data: str | Path | list[dict[str, Any]],
     *,
@@ -782,6 +787,12 @@ def from_cx2(
     import os
     import json
 
+    # A ``Path`` is what every other reader here takes, and the annotation has
+    # always said this one takes it too. Only ``str`` was handled, so a Path fell
+    # through to the branch that treats the argument as CX2 aspects and failed
+    # trying to iterate it.
+    if isinstance(cx2_data, Path):
+        cx2_data = str(cx2_data)
     if isinstance(cx2_data, str):
         if os.path.exists(cx2_data):
             with open(cx2_data) as f:

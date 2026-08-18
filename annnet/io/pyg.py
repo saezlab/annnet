@@ -21,10 +21,11 @@ import numpy as np
 import torch
 from torch_geometric.data import HeteroData
 
-from ._common import (
+from ._shared.common import (
     _iter_node_ids,
     dataframe_to_rows,
 )
+from ._shared.importing import delivers
 
 if TYPE_CHECKING:
     from ..core import AnnNet
@@ -93,9 +94,11 @@ def _edge_weight_lookup(weights: dict, edge_id: str) -> float:
     return 1.0 if w is None else float(w)
 
 
-def _flush_edge_buckets(data, buckets, device):
+def _flush_edge_buckets(data, buckets, device, manifest=None):
     """Write batched edges out to HeteroData in one tensor build per etype."""
     for etype, bucket in buckets.items():
+        if manifest is not None and bucket.get('ids'):
+            manifest.setdefault('edge_index', {})['|'.join(etype)] = list(bucket['ids'])
         src_list = bucket['src']
         if src_list:
             edge_index = torch.tensor([src_list, bucket['tgt']], dtype=torch.long, device=device)
@@ -276,11 +279,12 @@ def to_pyg(
         etype = (uk, 'edge', vk)
         bucket = edge_buckets.get(etype)
         if bucket is None:
-            bucket = {'src': [], 'tgt': [], 'w': [], 'emit_weight': True}
+            bucket = {'src': [], 'tgt': [], 'w': [], 'ids': [], 'emit_weight': True}
             edge_buckets[etype] = bucket
 
         bucket['src'].append(ui)
         bucket['tgt'].append(vi)
+        bucket['ids'].append(eid)
 
         w = _edge_weight_lookup(edge_weights_cache, eid)
         if has_stoich:
@@ -312,7 +316,7 @@ def to_pyg(
                     edge_weights_cache,
                 )
 
-    _flush_edge_buckets(data, edge_buckets, device)
+    _flush_edge_buckets(data, edge_buckets, device, manifest)
 
     # Edge features
     if edge_features:
@@ -370,7 +374,7 @@ def _process_hyperedge_reify(
         etype = (uk, 'member_of', 'hypernode')
         bucket = buckets.get(etype)
         if bucket is None:
-            bucket = {'src': [], 'tgt': [], 'w': [], 'emit_weight': False}
+            bucket = {'src': [], 'tgt': [], 'w': [], 'ids': [], 'emit_weight': False}
             buckets[etype] = bucket
         bucket['src'].append(ui)
         bucket['tgt'].append(he_idx)
@@ -448,8 +452,55 @@ def _add_expanded_edge(
     etype = (uk, 'edge', vk)
     bucket = buckets.get(etype)
     if bucket is None:
-        bucket = {'src': [], 'tgt': [], 'w': [], 'emit_weight': True}
+        bucket = {'src': [], 'tgt': [], 'w': [], 'ids': [], 'emit_weight': True}
         buckets[etype] = bucket
     bucket['src'].append(ui)
     bucket['tgt'].append(vi)
+    bucket['ids'].append(eid)
     bucket['w'].append(_edge_weight_lookup(edge_weights_cache, eid))
+
+
+# The inverse of to_pyg. Node ids and edge ids come from the manifest the
+# projection attaches; topology and weights come from the tensors.
+
+
+@delivers
+def from_pyg(data, *, directed: bool = True) -> AnnNet:
+    """Rebuild an AnnNet graph from PyG ``HeteroData``."""
+    from ..core import AnnNet
+
+    manifest = getattr(data, 'manifest', None) or {}
+    node_index = manifest.get('node_index') or {}
+    edge_ids = manifest.get('edge_index') or {}
+
+    graph = AnnNet(directed=directed)
+    position_to_id: dict[str, list[str]] = {}
+    for kind, mapping in node_index.items():
+        ordered = sorted(mapping.items(), key=lambda pair: pair[1])
+        position_to_id[kind] = [node_id for node_id, _ in ordered]
+        graph.add_nodes([node_id for node_id, _ in ordered])
+
+    for etype in data.edge_types:
+        store = data[etype]
+        index = getattr(store, 'edge_index', None)
+        if index is None or index.numel() == 0:
+            continue
+        source_kind, _relation, target_kind = etype
+        sources = position_to_id.get(source_kind, [])
+        targets = position_to_id.get(target_kind, [])
+        weights = getattr(store, 'edge_weight', None)
+        recorded = edge_ids.get('|'.join(etype), [])
+        rows = index.tolist()
+        batch = []
+        for position, (u, v) in enumerate(zip(rows[0], rows[1], strict=False)):
+            if u >= len(sources) or v >= len(targets):
+                continue
+            item = {'source': sources[u], 'target': targets[v]}
+            if position < len(recorded):
+                item['edge_id'] = recorded[position]
+            if weights is not None:
+                item['weight'] = float(weights[position])
+            batch.append(item)
+        if batch:
+            graph.add_edges(batch)
+    return graph
