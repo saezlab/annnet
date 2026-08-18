@@ -35,6 +35,11 @@ _lazy_symbols: dict[str, tuple[str, str]] = {
     'show_cx2': ('annnet.io.cx2', 'show_cx2'),
     # PyTorch Geometric
     'to_pyg': ('annnet.io.pyg', 'to_pyg'),
+    'to_csv': ('annnet.io.csv_format', 'to_csv'),
+    'to_excel': ('annnet.io.csv_format', 'to_excel'),
+    'to_sbml': ('annnet.io.sbml', 'to_sbml'),
+    'read_ndjson': ('annnet.io.json_format', 'read_ndjson'),
+    'from_pyg': ('annnet.io.pyg', 'from_pyg'),
     # Parquet
     'to_parquet': ('annnet.io.parquet', 'to_parquet'),
     'from_parquet': ('annnet.io.parquet', 'from_parquet'),
