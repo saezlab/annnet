@@ -18,8 +18,10 @@ ALLOWED_PRIVATE_IMPORTS = {
     ('annnet.adapters', 'annnet._support.graph_records'),
     # The scverse bridge is a file format in all but name: it serializes a whole
     # graph and reads it back, so it takes the same helpers the formats under
-    # ``annnet.io`` do rather than a second copy of them.
-    ('annnet.experimental', 'annnet.io._common'),
+    # ``annnet.io`` do rather than a second copy of them. ``annnet.io._shared``
+    # is where those helpers live, and the prefix a match is made on is three
+    # segments, so the package is named here rather than the module inside it.
+    ('annnet.experimental', 'annnet.io._shared'),
 }
 
 # The structural query facade is the sanctioned door into the core. Every module

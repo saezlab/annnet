@@ -8,14 +8,14 @@ _support modules.
 
 from __future__ import annotations
 
-from ..core import _structure
-from ..core._structure import (
+from ...core import _structure
+from ...core._structure import (
     _iter_node_ids,
     iter_edge_sides,
     _is_directed_eid,
 )
-from .._support.graph_records import _rows_to_df
-from .._support.serialization import (
+from ..._support.graph_records import _rows_to_df
+from ..._support.serialization import (
     stored as stored_key,
     endpoint_coeff_map,
     serialize_endpoint,
@@ -27,7 +27,7 @@ from .._support.serialization import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
-from .._support.dataframe_backend import (
+from ..._support.dataframe_backend import (
     dataframe_width,
     empty_dataframe,
     dataframe_height,

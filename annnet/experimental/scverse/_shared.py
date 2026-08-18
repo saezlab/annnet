@@ -11,7 +11,7 @@ from scipy import sparse
 import pandas as pd
 
 from annnet.core import _structure
-from annnet.io._common import (
+from annnet.io._shared.common import (
     STORED_EDGE_KIND,
     dataframe_to_rows,
     serialize_endpoint,

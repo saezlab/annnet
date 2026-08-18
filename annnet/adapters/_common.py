@@ -37,7 +37,7 @@ from .._support.dataframe_backend import (
 
 # The word an adapter and a manifest use for each kind of edge. The facade names
 # the kinds and this names them again in the vocabulary the files carry, the way
-# ``annnet.io._common`` does for the entity kinds.
+# ``annnet.io._shared.common`` does for the entity kinds.
 STORED_EDGE_KIND = {
     _structure.BINARY: 'binary',
     _structure.HYPER: 'hyper',
