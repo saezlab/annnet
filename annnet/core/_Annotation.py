@@ -15,9 +15,27 @@ from typing import TYPE_CHECKING, Any
 from . import _structure
 from ._state import GraphState
 from .._support.dataframe_backend import (
+    dataframe_backend,
     dataframe_columns,
     dataframe_to_rows,
     dataframe_filter_eq,
+    dataframe_from_rows,
+    select_dataframe_backend,
+)
+
+# The eight attribute tables, each named for the address it is keyed by. They are
+# one concept — attributes keyed by something — so they sit beside the setters
+# that write them rather than in a namespace named after the container they
+# happen to be handed over in.
+TABLE_NAMES = (
+    'nodes',
+    'edges',
+    'slices',
+    'aspects',
+    'layers',
+    'edge_slices',
+    'node_layers',
+    'elementary_layers',
 )
 
 
@@ -799,6 +817,85 @@ class AttributesAccessor:
 
     def __init__(self, graph):
         self._G = graph
+
+    # -- the eight tables -------------------------------------------------
+    #
+    # A property each, because the backend is ambient rather than per-call: it
+    # picks the container and never the content, so it is set once on the
+    # namespace instead of being passed at every read. ``table()`` is the escape
+    # hatch for the rare call that wants one table in another backend.
+
+    @property
+    def nodes(self):
+        """Attributes keyed by node, as a table."""
+        return self._G.obs
+
+    @property
+    def edges(self):
+        """Attributes keyed by edge, as a table."""
+        return self._G.var
+
+    @property
+    def slices(self):
+        """Attributes keyed by slice, as a table."""
+        return self._G.slice_attributes
+
+    @property
+    def aspects(self):
+        """Attributes keyed by aspect, as a table."""
+        return self._G.contextual_table('aspect_attrs')
+
+    @property
+    def layers(self):
+        """Attributes keyed by layer coordinate, as a table.
+
+        The whole coordinate across every aspect. One elementary label inside one
+        aspect is :attr:`elementary_layers`, which is a different table.
+        """
+        return self._G.contextual_table('layer_attrs')
+
+    @property
+    def edge_slices(self):
+        """Attributes keyed by one edge inside one slice, as a table."""
+        return self._G.edge_slice_attributes
+
+    @property
+    def node_layers(self):
+        """Attributes keyed by one node inside one layer, as a table."""
+        return self._G.contextual_table('node_layer_attrs')
+
+    @property
+    def elementary_layers(self):
+        """Attributes keyed by elementary layer id, as a table.
+
+        One label inside one aspect, addressed by the ``layer_id`` that
+        ``G.layers.set_elementary_attrs`` composes from the two.
+        """
+        return self._G.layer_attributes
+
+    @property
+    def backend(self):
+        """The dataframe backend every table is rendered in."""
+        return self._G._annotations_backend
+
+    @backend.setter
+    def backend(self, value):
+        self._G._annotations_backend = select_dataframe_backend(value)
+        self._G._contextual_tables.clear()
+
+    def table(self, name: str, *, backend: str | None = None):
+        """Return one table by name, optionally in a backend of its own.
+
+        Naming a backend costs a conversion, so it is worth it only for the
+        genuinely mixed case; set :attr:`backend` when every table should
+        answer in the same one.
+        """
+        if name not in TABLE_NAMES:
+            raise KeyError(f'unknown attribute table {name!r}; known: {list(TABLE_NAMES)}')
+        table = getattr(self, name)
+        if backend is None or dataframe_backend(table) == backend:
+            return table
+        return dataframe_from_rows(dataframe_to_rows(table), backend=backend)
 
     if TYPE_CHECKING:  # pragma: no cover - the delegators are installed below
 
