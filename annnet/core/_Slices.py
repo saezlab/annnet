@@ -174,6 +174,30 @@ class SliceManager:
             verts.update(_bare(member) for member in sides.source | sides.target)
         data['nodes'].update(verts)
 
+    def add_nodes(self, slice_id: str | None, node_ids: Iterable[str]) -> None:
+        """Attach many existing nodes to a slice.
+
+        The bulk counterpart of :meth:`add_node_to_slice`, and the node-side
+        mirror of :meth:`add_edges`. A reader that has just built a membership
+        set writes it in one call rather than reaching into the registry.
+
+        Membership names bare node ids, so a multilayer entity key is reduced to
+        its id the way the rest of the slice API does.
+
+        Parameters
+        ----------
+        slice_id : str | None
+            The slice to extend, or None for the current slice.
+        node_ids : Iterable[str]
+            Node identifiers. One the graph does not hold is ignored, which is
+            what :meth:`add_edges` does with an edge it does not hold.
+        """
+        G = self._G
+        sid = slice_id if slice_id is not None else G._current_slice
+        data = self._ensure_slice(sid)
+        wanted = {_bare(vid) for vid in node_ids}
+        data['nodes'].update(vid for vid in wanted if _structure.has_entity_id(G, vid))
+
     def attach_edges(self, slice_id: str, edge_ids: Iterable[str]) -> None:
         """Attach every edge the graph holds to a slice, and derive no nodes.
 
