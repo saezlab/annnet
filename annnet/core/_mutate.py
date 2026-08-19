@@ -390,17 +390,11 @@ def add_edge(
     ml_layers = None
     if not is_multilayer:
         ml_kind = 'intra'
-    elif (
-        etype == 'binary'
-        and isinstance(src, tuple)
-        and len(src) == 2
-        and isinstance(src[1], tuple)
-        and isinstance(tgt, tuple)
-        and len(tgt) == 2
-        and isinstance(tgt[1], tuple)
-    ):
-        ml_kind = infer_ml_kind(src, tgt)
-        ml_layers = (src[1], tgt[1])
+    elif etype == 'binary' and tgt_store is not None:
+        src_key = I.resolve_ekey(g, src_store)
+        tgt_key = I.resolve_ekey(g, tgt_store)
+        ml_kind = infer_ml_kind(src_key, tgt_key)
+        ml_layers = (src_key[1], tgt_key[1])
     elif etype == 'hyper':
         ml_kind, ml_layers = infer_hyper_ml(src_nodes, tgt_nodes)
 

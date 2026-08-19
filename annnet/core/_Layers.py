@@ -4,6 +4,7 @@ import copy
 from typing import TYPE_CHECKING, Any
 import warnings
 import itertools
+from collections.abc import Mapping
 
 import numpy as np
 import scipy.sparse as sp
@@ -136,6 +137,22 @@ class LayerAccessor:
     # annotation carries no value, so it adds nothing to ``__slots__``; it says
     # what the field holds, which one assignment of ``None`` does not.
     _supra_index_cache: Any
+
+    # Mutation that takes a ``layer=``, forwarded to the graph on purpose. Every
+    # other graph name reaches this accessor through ``__getattr__`` as well, but
+    # only these are part of what a layer namespace offers.
+    _FORWARDED = ('add_nodes', 'add_edges', 'remove_node', 'remove_edge')
+
+    def __dir__(self):
+        """The layer operations, and not the fields of the graph behind them.
+
+        ``__getattr__`` forwards every unknown name to the graph, ``__dict__``
+        included, so the default ``dir()`` reported the graph's whole instance
+        state as though it were part of this namespace — ``graph_attributes`` and
+        ``node_aligned`` among them, neither of which is an operation.
+        """
+        own = (name for name in vars(type(self)) if not name.startswith('_'))
+        return sorted({*own, *self._FORWARDED})
 
     def __getattr__(self, name):
         if name == '_G':
@@ -619,16 +636,49 @@ class LayerAccessor:
         return entry
 
     def _supra_cache(self) -> dict:
-        """Return the (lazy) layer index cache, holding supra indexes + membership.
+        """Return the (lazy) layer index cache, holding supra indexes and matrices.
 
-        A single dict per graph so all layer indexes share one invalidation
-        point (``_supra_index_cache = None`` in the structural-mutation hooks).
+        Keyed to the structural clock rather than cleared by hand. Clearing it by
+        hand meant every write path had to remember to, and ``add_node`` did not:
+        it advances the clock but never reached the hook that dropped this cache,
+        so the supra index kept a node count the graph had already outgrown.
+        ``bump_structure`` is the single point that advances the clock, so keying
+        on it is what no write path can forget.
         """
         cache = self._supra_index_cache
-        if cache is None:
-            cache = {'entries': {}, 'layer_to_nodes': None, 'node_to_layers': None}
+        version = self._structure_version
+        if cache is None or cache['version'] != version:
+            cache = {
+                'version': version,
+                'entries': {},
+                'layer_to_nodes': None,
+                'node_to_layers': None,
+                'matrices': {},
+            }
             self._supra_index_cache = cache
         return cache
+
+    def _supra_matrix(self, key, build):
+        """Memoise one supra matrix beside the index it is built from.
+
+        The whole layer cache is dropped by the hooks that already clear the
+        index — every structural mutation and every weight write — so a key names
+        the call and never a clock. The matrix is shared, so a caller treats it as
+        read-only, the same contract the index carries.
+        """
+        cache = self._supra_cache()
+        held = cache.setdefault('matrices', {})
+        found = held.get(key)
+        if found is None:
+            found = build()
+            held[key] = found
+        return found
+
+    def _layers_key(self, layers):
+        """A hashable identity for a ``layers=`` argument."""
+        if layers is None:
+            return None
+        return frozenset(tuple(x) for x in layers)
 
     def _layer_membership(self) -> tuple[dict, dict]:
         """Return cached ``(layer_to_nodes, node_to_layers)`` maps.
@@ -1362,36 +1412,23 @@ class LayerAccessor:
 
     ## Subgraph
 
-    def subgraph_from_layer_tuple(
-        self,
-        layer_tuple,
-        *,
-        include_inter: bool = False,
-        include_coupling: bool = False,
-    ) -> AnnNet:
-        """Concrete subgraph induced by a single Kivela layer.
+    def _layer_keys(self, layer_tuples, bare_ids) -> set:
+        """Place bare node ids on each named layer, keeping only real presences.
 
-        Parameters
-        ----------
-        layer_tuple : Iterable[str]
-            Layer tuple.
-        include_inter : bool, optional
-            Include inter-layer edges touching ``layer_tuple``.
-        include_coupling : bool, optional
-            Include coupling edges touching ``layer_tuple``.
-
-        Returns
-        -------
-        AnnNet
+        The set family answers in bare ids, because slice membership is keyed that
+        way. A subgraph is not: a node has to land on a layer, and a bare id does
+        not say which. Resolving it here is what stopped the generic path from
+        dropping nodes onto the placeholder layer.
         """
-        aa = tuple(layer_tuple)
-        V = self.layer_node_set(aa)
-        E = self.layer_edge_set(
-            aa,
-            include_inter=include_inter,
-            include_coupling=include_coupling,
-        )
+        return {
+            (vid, tuple(aa))
+            for aa in layer_tuples
+            for vid in bare_ids
+            if self.has_presence(vid, tuple(aa))
+        }
 
+    def _subgraph_from_keys(self, keys: set, edge_ids: set):
+        """Build the concrete subgraph spanned by these node-layer keys and edges."""
         from ._Ops import _hyper_def
 
         G_src = self._G
@@ -1399,45 +1436,34 @@ class LayerAccessor:
         new_aspects = {a: list(G_src._layers.get(a, [])) for a in G_src._aspects}
         g = G_cls(
             directed=G_src.directed,
-            n=len(V),
-            e=len(E),
+            n=len(keys),
+            e=len(edge_ids),
             aspects=new_aspects,
         )
 
-        va_lookup = G_src._attr_store.node_attr_rows(V)
-        v_rows = [{'node_id': vid, **va_lookup.get(vid, {})} for vid in V]
-        if v_rows:
-            g._add_nodes_bulk(v_rows, layer=aa, slice=g._default_slice)
-
-        if include_inter or include_coupling:
-            extra_endpoints: set = set()
-            for eid in E:
+        # One bulk insert per layer, for the named nodes and for any endpoint an
+        # inter or coupling edge reaches outside them.
+        endpoints = set(keys)
+        if edge_ids:
+            for eid in edge_ids:
                 if not _structure.has_edge(G_src, eid):
                     continue
                 if _structure.edge_ref(G_src, eid).kind == _structure.HYPER:
                     continue
                 sides = _structure.edge_sides(G_src, eid)
                 for ep in sides.source | sides.target:
-                    if (
-                        isinstance(ep, tuple)
-                        and len(ep) == 2
-                        and isinstance(ep[1], tuple)
-                        and ep[1] != aa
-                    ):
-                        extra_endpoints.add(ep)
-            extra_bare = {bare for (bare, _) in extra_endpoints}
-            extra_attrs = G_src._attr_store.node_attr_rows(extra_bare)
-            # Group by layer coord so each call is one bulk insert.
-            by_coord: dict = {}
-            for bare_vid, coord in extra_endpoints:
-                by_coord.setdefault(coord, []).append(
-                    {'node_id': bare_vid, **extra_attrs.get(bare_vid, {})}
-                )
-            for coord, rows in by_coord.items():
-                g._add_nodes_bulk(rows, layer=coord, slice=g._default_slice)
+                    if isinstance(ep, tuple) and len(ep) == 2 and isinstance(ep[1], tuple):
+                        endpoints.add(ep)
+
+        attrs = G_src._attr_store.node_attr_rows({vid for (vid, _) in endpoints})
+        by_coord: dict = {}
+        for vid, coord in endpoints:
+            by_coord.setdefault(coord, []).append({'node_id': vid, **attrs.get(vid, {})})
+        for coord, rows in by_coord.items():
+            g._add_nodes_bulk(rows, layer=coord, slice=g._default_slice)
 
         bin_payload, hyper_payload = [], []
-        for eid in E:
+        for eid in edge_ids:
             if not _structure.has_edge(G_src, eid):
                 continue
             if not _structure.carries_structure(G_src, eid):
@@ -1482,11 +1508,39 @@ class LayerAccessor:
         for lid, meta in G_src._slices.items():
             if not g.slices.exists(lid):
                 g.slices.add(lid, **meta['attributes'])
-            kept = set(meta['edges']) & E
+            kept = set(meta['edges']) & edge_ids
             if kept:
                 g.slices.add_edges(lid, kept)
 
         return g
+
+    def subgraph_from_layer_tuple(
+        self,
+        layer_tuple,
+        *,
+        include_inter: bool = False,
+        include_coupling: bool = False,
+    ) -> AnnNet:
+        """Concrete subgraph induced by a single Kivela layer.
+
+        Parameters
+        ----------
+        layer_tuple : Iterable[str]
+            Layer tuple.
+        include_inter : bool, optional
+            Include inter-layer edges touching ``layer_tuple``.
+        include_coupling : bool, optional
+            Include coupling edges touching ``layer_tuple``.
+
+        Returns
+        -------
+        AnnNet
+        """
+        aa = tuple(layer_tuple)
+        edges = self.layer_edge_set(
+            aa, include_inter=include_inter, include_coupling=include_coupling
+        )
+        return self._subgraph_from_keys(self._layer_keys([aa], self.layer_node_set(aa)), edges)
 
     def subgraph_from_layer_union(
         self,
@@ -1510,12 +1564,11 @@ class LayerAccessor:
         -------
         AnnNet
         """
-        res = self.layer_union(
-            layer_tuples,
-            include_inter=include_inter,
-            include_coupling=include_coupling,
+        result = self.layer_union(
+            layer_tuples, include_inter=include_inter, include_coupling=include_coupling
         )
-        return self._G.ops.extract_subgraph(nodes=res['nodes'], edges=res['edges'])
+        keys = self._layer_keys(layer_tuples, result['nodes'])
+        return self._subgraph_from_keys(keys, result['edges'])
 
     def subgraph_from_layer_intersection(
         self,
@@ -1539,12 +1592,11 @@ class LayerAccessor:
         -------
         AnnNet
         """
-        res = self.layer_intersection(
-            layer_tuples,
-            include_inter=include_inter,
-            include_coupling=include_coupling,
+        result = self.layer_intersection(
+            layer_tuples, include_inter=include_inter, include_coupling=include_coupling
         )
-        return self._G.ops.extract_subgraph(nodes=res['nodes'], edges=res['edges'])
+        keys = self._layer_keys(layer_tuples, result['nodes'])
+        return self._subgraph_from_keys(keys, result['edges'])
 
     def subgraph_from_layer_difference(
         self,
@@ -1571,13 +1623,11 @@ class LayerAccessor:
         -------
         AnnNet
         """
-        res = self.layer_difference(
-            layer_a,
-            layer_b,
-            include_inter=include_inter,
-            include_coupling=include_coupling,
+        result = self.layer_difference(
+            layer_a, layer_b, include_inter=include_inter, include_coupling=include_coupling
         )
-        return self._G.ops.extract_subgraph(nodes=res['nodes'], edges=res['edges'])
+        keys = self._layer_keys([layer_a], result['nodes'])
+        return self._subgraph_from_keys(keys, result['edges'])
 
     ## helper
 
@@ -1608,6 +1658,12 @@ class LayerAccessor:
         A = G.supra_adjacency()
         ```
         """
+        return self._supra_matrix(
+            ('supra_adjacency', self._layers_key(layers)),
+            lambda: self._build_supra_adjacency(layers),
+        )
+
+    def _build_supra_adjacency(self, layers: list[str] | list[tuple] | None = None):
         layers_t: list[tuple[str, ...]] | None
         if layers is not None and len(getattr(self, 'aspects', [])) == 1:
             # One aspect, so every id is the label of that aspect, as a string.
@@ -1617,7 +1673,9 @@ class LayerAccessor:
         nl_to_row, row_to_nl = self._build_supra_index(layers_t)
 
         n = len(row_to_nl)
-        A = sp.dok_array((n, n), dtype=float)
+        rows: list[int] = []
+        cols: list[int] = []
+        vals: list[float] = []
 
         def _to_tuple(L):
             if isinstance(L, tuple):
@@ -1645,9 +1703,14 @@ class LayerAccessor:
             if ru is None or rv is None:
                 continue
             w = ref.weight
-            A[ru, rv] = A.get((ru, rv), 0.0) + w
-            A[rv, ru] = A.get((rv, ru), 0.0) + w
-        return A.tocsr()
+            rows.append(ru)
+            cols.append(rv)
+            vals.append(w)
+            if not ref.directed:
+                rows.append(rv)
+                cols.append(ru)
+                vals.append(w)
+        return sp.coo_array((vals, (rows, cols)), shape=(n, n), dtype=float).tocsr()
 
     ## Supra_Incidence
 
@@ -1943,10 +2006,20 @@ class LayerAccessor:
         return [tuple(L) for L in layers]
 
     def _build_block(self, include_kinds: set[str], layers: list[str] | list[tuple] | None = None):
+        return self._supra_matrix(
+            ('block', frozenset(include_kinds), self._layers_key(layers)),
+            lambda: self._compute_block(include_kinds, layers),
+        )
+
+    def _compute_block(
+        self, include_kinds: set[str], layers: list[str] | list[tuple] | None = None
+    ):
         layers_t = self._normalize_layers_arg(layers)
         nl_to_row, row_to_nl = self._build_supra_index(layers_t)
         n = len(row_to_nl)
-        A = sp.dok_array((n, n), dtype=float)
+        rows: list[int] = []
+        cols: list[int] = []
+        vals: list[float] = []
 
         def _to_tuple(L):
             if isinstance(L, tuple):
@@ -1970,8 +2043,13 @@ class LayerAccessor:
                 if ru is None or rv is None:
                     continue
                 w = ref.weight
-                A[ru, rv] = A.get((ru, rv), 0.0) + w
-                A[rv, ru] = A.get((rv, ru), 0.0) + w
+                rows.append(ru)
+                cols.append(rv)
+                vals.append(w)
+                if not ref.directed:
+                    rows.append(rv)
+                    cols.append(ru)
+                    vals.append(w)
 
         # Inter/coupling edges (off-diagonal blocks)
         if include_kinds & {'inter', 'coupling'}:
@@ -1991,10 +2069,15 @@ class LayerAccessor:
                 if ru is None or rv is None:
                     continue
                 w = ref.weight
-                A[ru, rv] = A.get((ru, rv), 0.0) + w
-                A[rv, ru] = A.get((rv, ru), 0.0) + w
+                rows.append(ru)
+                cols.append(rv)
+                vals.append(w)
+                if not ref.directed:
+                    rows.append(rv)
+                    cols.append(ru)
+                    vals.append(w)
 
-        return A.tocsr()
+        return sp.coo_array((vals, (rows, cols)), shape=(n, n), dtype=float).tocsr()
 
     def build_intra_block(self, layers: list[str] | list[tuple] | None = None):
         """Supra matrix containing only intra-layer edges (diagonal blocks).
@@ -2105,12 +2188,15 @@ class LayerAccessor:
                 return False
         return True
 
-    def _coupling_edge_spec(self, u: str, La: tuple, Lb: tuple, weight: float) -> dict:
+    def _coupling_edge_spec(
+        self, u: str, La: tuple, Lb: tuple, weight: float, directed: bool = False
+    ) -> dict:
         _lid = lambda t: t[0] if len(self.aspects) == 1 else '×'.join(t)
         return {
             'source': (u, La),
             'target': (u, Lb),
             'weight': weight,
+            'directed': directed,
             'edge_id': f'{u}>{u}@{_lid(La)}~{_lid(Lb)}',
         }
 
@@ -2118,10 +2204,11 @@ class LayerAccessor:
         self,
         triples: list[tuple[str, tuple, tuple]],
         weight: float,
+        directed: bool = False,
     ) -> int:
         if not triples:
             return 0
-        specs = [self._coupling_edge_spec(u, La, Lb, weight) for (u, La, Lb) in triples]
+        specs = [self._coupling_edge_spec(u, La, Lb, weight, directed) for (u, La, Lb) in triples]
         self._G._add_edges_bulk(specs)
         return len(specs)
 
@@ -2131,7 +2218,11 @@ class LayerAccessor:
         return spec['edge_id']
 
     def add_layer_coupling_pairs(
-        self, layer_pairs: list[tuple[tuple[str, ...], tuple[str, ...]]], *, weight: float = 1.0
+        self,
+        layer_pairs: list[tuple[tuple[str, ...], tuple[str, ...]]],
+        *,
+        weight: float = 1.0,
+        directed: bool = False,
     ) -> int:
         """Add diagonal couplings for explicit layer pairs.
 
@@ -2166,10 +2257,15 @@ class LayerAccessor:
             Ub = layer_to_nodes.get(Lb, set())
             for u in Ua & Ub:
                 triples.append((u, La, Lb))
-        return self._add_coupling_edges_bulk(triples, weight)
+        return self._add_coupling_edges_bulk(triples, weight, directed)
 
     def add_categorical_coupling(
-        self, aspect: str, groups: list[list[str]], *, weight: float = 1.0
+        self,
+        aspect: str,
+        groups: list[list[str]],
+        *,
+        weight: float = 1.0,
+        directed: bool = False,
     ) -> int:
         """Add categorical couplings along one aspect.
 
@@ -2206,10 +2302,14 @@ class LayerAccessor:
                     continue
                 for La, Lb in itertools.combinations(sorted(layers), 2):
                     triples.append((u, La, Lb))
-        return self._add_coupling_edges_bulk(triples, weight)
+        return self._add_coupling_edges_bulk(triples, weight, directed)
 
     def add_diagonal_coupling_filter(
-        self, layer_filter: dict[str, set], *, weight: float = 1.0
+        self,
+        layer_filter: dict[str, set],
+        *,
+        weight: float = 1.0,
+        directed: bool = False,
     ) -> int:
         """Add diagonal couplings within a filtered layer subspace.
 
@@ -2237,7 +2337,7 @@ class LayerAccessor:
                 continue
             for La, Lb in itertools.combinations(sorted(layers), 2):
                 triples.append((u, La, Lb))
-        return self._add_coupling_edges_bulk(triples, weight)
+        return self._add_coupling_edges_bulk(triples, weight, directed)
 
     ## Tensor view & flattening map
 
@@ -2477,6 +2577,20 @@ class LayerAccessor:
         scipy.sparse.csr_matrix
         """
 
+        return self._supra_matrix(
+            ('scaled', coupling_scale, include_inter, self._layers_key(layers)),
+            lambda: self._build_supra_adjacency_scaled(
+                coupling_scale=coupling_scale, include_inter=include_inter, layers=layers
+            ),
+        )
+
+    def _build_supra_adjacency_scaled(
+        self,
+        *,
+        coupling_scale: float = 1.0,
+        include_inter: bool = True,
+        layers: list[str] | list[tuple] | None = None,
+    ):
         A_intra = self.build_intra_block(layers)
         A_coup = self.build_coupling_block(layers)
         A_inter = self.build_inter_block(layers) if include_inter else None
@@ -2848,7 +2962,23 @@ class LayerAccessor:
         layers_t = self._normalize_layers_arg(layers)
         _, row_to_nl_ms = self._build_supra_index(layers_t)
         n = len(row_to_nl_ms)
-        part = np.asarray(partition)
+        # A mapping is what the metrics beside this one return, so it is accepted
+        # here as well as the positional sequence, and anything else is named
+        # rather than left to fail as a shape error deep in numpy.
+        if isinstance(partition, Mapping):
+            missing = [row for row in range(n) if row not in partition]
+            if missing:
+                raise ValueError(
+                    f'partition is missing {len(missing)} of {n} rows, first at row {missing[0]}'
+                )
+            part = np.asarray([partition[row] for row in range(n)])
+        else:
+            part = np.asarray(list(partition))
+        if part.ndim != 1:
+            raise TypeError(
+                'partition must be a sequence of community ids of length '
+                f'|V_M| = {n}, or a mapping from row to community id'
+            )
         if part.shape[0] != n:
             raise ValueError(f'partition length {part.shape[0]} != |V_M| {n}')
         # Build A = A_intra + (include_inter ? A_inter : 0) + omega * (binary coupling structure)
