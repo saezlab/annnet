@@ -1506,6 +1506,105 @@ class AnnNet(
             attrs=self._attr_store.node_attrs(node_id),
         )
 
+    def _node_layer_key(self, node_id: str, aspects: dict) -> tuple:
+        """Return the ``(node_id, layer_coord)`` key one node-and-aspects names.
+
+        Aspects are named rather than positional here, because a coordinate is a
+        tuple whose order is the graph's and a caller writing it out by hand gets
+        it wrong silently the first time an aspect is added.
+        """
+        declared = tuple(self._aspects)
+        if declared == ('_',) and not aspects:
+            return (node_id, ('_',))
+        unknown = sorted(set(aspects) - set(declared))
+        if unknown:
+            raise KeyError(f'unknown aspect(s) {unknown!r}; this graph declares {list(declared)!r}')
+        absent = [name for name in declared if name not in aspects]
+        if absent:
+            raise KeyError(
+                f'this graph declares {list(declared)!r}, so a node-layer needs a value '
+                f'for {absent!r} as well'
+            )
+        return (node_id, tuple(str(aspects[name]) for name in declared))
+
+    def _has_node_layer(self, key: tuple) -> bool:
+        """Whether one ``(node_id, layer_coord)`` key is present.
+
+        A flat graph has one implicit layer, and asking the layer accessor about
+        it raises rather than answering — so the question there is just whether
+        the node is present.
+        """
+        if tuple(self._aspects) == ('_',):
+            return self.has_node(key[0])
+        return self.layers.has_presence(key[0], key[1])
+
+    def at(self, node_id: str, **aspects) -> tuple:
+        """Return the node-layer key one node sits on, naming its aspects.
+
+        The key is what every layered call takes — ``add_edges``,
+        ``layers.node_attrs``, ``slices.add_nodes``. Writing it by hand means
+        writing a tuple in the graph's aspect order, which is a fact about the
+        graph that a call site should not have to hold.
+
+        Parameters
+        ----------
+        node_id : str
+            The node.
+        **aspects
+            One value per declared aspect, by name.
+
+        Returns
+        -------
+        tuple
+            ``(node_id, layer_coord)``.
+
+        Raises
+        ------
+        KeyError
+            If an aspect is unknown or unnamed, or if the node is not on that
+            node-layer. Use :meth:`exists` to ask without raising.
+
+        Examples
+        --------
+        >>> G.at('akt', condition='stim')  # doctest: +SKIP
+        ('akt', ('stim',))
+        """
+        key = self._node_layer_key(node_id, aspects)
+        if not self._has_node_layer(key):
+            raise KeyError(
+                f'{node_id!r} is not on layer {key[1]!r}. '
+                f'G.exists({node_id!r}, ...) asks without raising.'
+            )
+        return key
+
+    def exists(self, node_id: str, **aspects) -> bool:
+        """Whether one node sits on the node-layer its aspects name.
+
+        Parameters
+        ----------
+        node_id : str
+            The node.
+        **aspects
+            One value per declared aspect, by name.
+
+        Returns
+        -------
+        bool
+
+        Raises
+        ------
+        KeyError
+            If an aspect is unknown or unnamed. A missing *node* is ``False``; a
+            malformed *question* still raises.
+
+        Examples
+        --------
+        >>> G.exists('akt', condition='stim')  # doctest: +SKIP
+        True
+        """
+        key = self._node_layer_key(node_id, aspects)
+        return self._has_node_layer(key)
+
     def get_edge(self, edge_id: str) -> EdgeView:
         """Return an :class:`EdgeView` for one edge.
 

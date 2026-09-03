@@ -8,7 +8,7 @@ and the reserved sets say which attribute names the structural columns own.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, NamedTuple
 from dataclasses import field, dataclass
 
 import narwhals as nw
@@ -77,8 +77,99 @@ class SliceRecord:
         return getattr(self, key, default)
 
 
+class Endpoint(NamedTuple):
+    """One side of one edge: the node, and the layer it sits in.
+
+    The store spells an endpoint two ways — a bare id in a flat graph, an
+    ``(id, layer)`` pair in a layered one — so reading one meant asking which it
+    was::
+
+        node = next(iter(sides.source))
+        node_id = node[0] if isinstance(node, tuple) else node
+
+    That check is a defect rather than an idiom. A graph holding both layered and
+    unlayered edges makes it wrong, and nothing reports it. An endpoint read
+    through :func:`as_endpoint` has one shape everywhere, and ``layer`` is
+    ``None`` when there is not one.
+
+    The positional shape is the store's, so ``endpoint[0]`` is the id and
+    ``endpoint[1]`` is the layer. ``str(endpoint)`` is the id, which is what a
+    label, a dataframe cell and a join all want.
+
+    Examples
+    --------
+    >>> as_endpoint(('akt', ('stim',)))
+    Endpoint(node_id='akt', layer=('stim',))
+    >>> str(as_endpoint('akt'))
+    'akt'
+    """
+
+    node_id: str
+    layer: tuple | None = None
+
+    def __str__(self) -> str:
+        return self.node_id
+
+    @property
+    def key(self) -> Any:
+        """The endpoint as the store spells it: a bare id, or an ``(id, layer)`` pair."""
+        return self.node_id if self.layer is None else (self.node_id, self.layer)
+
+
+def as_endpoint(value) -> Endpoint:
+    """Return one stored endpoint as an :class:`Endpoint`.
+
+    Parameters
+    ----------
+    value : str | tuple[str, tuple[str, ...]] | Endpoint
+        An endpoint in any shape the store holds.
+
+    Returns
+    -------
+    Endpoint
+    """
+    if isinstance(value, Endpoint):
+        return value
+    if (
+        isinstance(value, tuple)
+        and len(value) == 2
+        and isinstance(value[0], str)
+        and isinstance(value[1], tuple)
+    ):
+        return Endpoint(value[0], value[1])
+    return Endpoint(str(value), None)
+
+
+def as_endpoints(side) -> frozenset:
+    """Return one side of an edge as a frozenset of :class:`Endpoint`.
+
+    Parameters
+    ----------
+    side : Iterable
+        One side of an edge, as :func:`annnet.core._structure.edge_sides` holds it.
+
+    Returns
+    -------
+    frozenset[Endpoint]
+    """
+    return frozenset(as_endpoint(item) for item in side)
+
+
+def _one_endpoint(side) -> Endpoint | None:
+    """The one endpoint of a one-member side, or ``None`` when it is not one."""
+    if side is None or len(side) != 1:
+        return None
+    return as_endpoint(next(iter(side)))
+
+
 class EdgeView(tuple):
-    """Tuple-shaped edge record returned by :meth:`AnnNet.get_edge`."""
+    """Tuple-shaped edge record returned by :meth:`AnnNet.get_edge`.
+
+    ``source``, ``target`` and ``members`` hold endpoints as the store spells
+    them. :func:`as_endpoints` normalises a side; :attr:`source_id`,
+    :attr:`target_id` and :attr:`layer` answer the three questions a caller
+    almost always has instead.
+    """
 
     edge_id: str
     kind: Any
@@ -87,6 +178,27 @@ class EdgeView(tuple):
     members: Any
     weight: float
     directed: bool
+
+    @property
+    def source_id(self) -> str | None:
+        """The id of the one source, or ``None`` when the side is not one node."""
+        found = _one_endpoint(self.source)
+        return None if found is None else found.node_id
+
+    @property
+    def target_id(self) -> str | None:
+        """The id of the one target, or ``None`` when the side is not one node."""
+        found = _one_endpoint(self.target)
+        return None if found is None else found.node_id
+
+    @property
+    def layer(self) -> tuple | None:
+        """The layer this edge sits in, or ``None`` when it crosses two or has none."""
+        source = _one_endpoint(self.source)
+        target = _one_endpoint(self.target)
+        if source is None or target is None or source.layer != target.layer:
+            return None
+        return source.layer
 
     def __new__(cls, source, target, *, edge_id, kind, members, weight, directed):
         self = super().__new__(cls, (source, target))

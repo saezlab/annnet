@@ -51,6 +51,9 @@ _lazy_objects: dict[str, tuple[str, str]] = {
     'Graph': ('annnet.core.graph', 'AnnNet'),
     'EdgeType': ('annnet.core._records', 'EdgeType'),
     'EdgeView': ('annnet.core._records', 'EdgeView'),
+    'Endpoint': ('annnet.core._records', 'Endpoint'),
+    'as_endpoint': ('annnet.core._records', 'as_endpoint'),
+    'as_endpoints': ('annnet.core._records', 'as_endpoints'),
     'NodeView': ('annnet.core._records', 'NodeView'),
     'Traversal': ('annnet.algorithms.traversal', 'Traversal'),
 }

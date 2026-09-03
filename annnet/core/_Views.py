@@ -6,7 +6,7 @@ import scipy.sparse as sp
 from . import _mutate, _structure
 from ._attrs import read_only
 from ._state import GraphState
-from ._records import _external_entity_kind
+from ._records import as_endpoint, _external_entity_kind
 from ._stored_kinds import STORED_EDGE_KIND, STORED_ENTITY_KIND
 from .._support.dataframe_backend import (
     clone_dataframe,
@@ -16,6 +16,26 @@ from .._support.dataframe_backend import (
     dataframe_filter_in,
     dataframe_from_rows,
 )
+
+
+def _side_identity(side):
+    """Return one side of an edge as ``(sorted node ids, the layer they share)``.
+
+    The layer is ``None`` when the side is empty, when the graph is flat, or when
+    the members of a hyperedge side do not all sit in one layer — three cases a
+    column holding one coordinate cannot tell apart, and none of which is a
+    coordinate.
+    """
+    if not side:
+        return [], None
+    # Sorted on the whole endpoint, not on the id: one node in two layers is two
+    # members of one side, and a sort on the id alone would order them by chance.
+    endpoints = sorted(
+        (as_endpoint(item) for item in side), key=lambda e: (e.node_id, e.layer or ())
+    )
+    layers = {endpoint.layer for endpoint in endpoints}
+    one = layers.pop() if len(layers) == 1 else None
+    return [endpoint.node_id for endpoint in endpoints], one
 
 
 class GraphView:
@@ -434,13 +454,19 @@ class ViewsClass(GraphState):
         include_weight=True,
         resolved_weight=True,
         copy=True,
+        *,
+        layer=None,
+        in_slice=None,
+        include_hyper=True,
+        include_binary=True,
     ):
         """Build a DataFrame view of edges with optional slice join.
 
         Parameters
         ----------
         slice : str, optional
-            Slice ID to join per-slice attributes.
+            Slice id whose per-edge attributes are joined onto **every** row, as
+            ``slice_*`` columns. This does not filter — see ``in_slice``.
         include_directed : bool, optional
             Include directedness column.
         include_weight : bool, optional
@@ -449,18 +475,56 @@ class ViewsClass(GraphState):
             Include effective weight (slice override if present).
         copy : bool, optional
             Return a cloned DataFrame if True.
+        layer : tuple[str, ...], optional
+            Keep only the edges of this layer, as
+            :meth:`LayerAccessor.layer_edge_set` names them.
+        in_slice : str, optional
+            Keep **only** the rows of this slice. Distinct from ``slice``, which
+            joins without filtering.
+        include_hyper : bool, optional
+            Include hyperedges. ``False`` leaves a table whose rows are all
+            binary, which is what an exporter that cannot hold a hyperedge wants.
+        include_binary : bool, optional
+            Include binary edges. ``False`` with ``include_hyper`` leaves the
+            hyperedges alone — which is what :meth:`ViewsAccessor.hyperedges`
+            asks for.
 
         Returns
         -------
         DataFrame-like
+            ``source`` and ``target`` are bare node ids; ``src_layer`` and
+            ``dst_layer`` are the canonical layer ids of the two endpoints, and
+            are null when the graph is flat or a side does not sit in one layer.
 
         Notes
         -----
-        Vectorized implementation avoids per-edge scans.
+        ``slice=`` joins, ``in_slice=`` filters. Both take a slice id and they do
+        different things, so a call that means "only this slice's edges" wants
+        the second.
         """
         _edge_refs = list(_structure.iter_edges(self))
+        if not include_hyper:
+            _edge_refs = [ref for ref in _edge_refs if ref.kind != _structure.HYPER]
+        if not include_binary:
+            _edge_refs = [ref for ref in _edge_refs if ref.kind == _structure.HYPER]
+        if layer is not None:
+            keep = self.layers.layer_edge_set(tuple(layer))
+            _edge_refs = [ref for ref in _edge_refs if ref.id in keep]
+        if in_slice is not None:
+            keep = self.slices.edges(in_slice)
+            _edge_refs = [ref for ref in _edge_refs if str(ref.id) in keep]
         if not _edge_refs:
-            return empty_dataframe({'edge_id': 'text', 'kind': 'text', 'ml_kind': 'text'})
+            return empty_dataframe(
+                {
+                    'edge_id': 'text',
+                    'kind': 'text',
+                    'ml_kind': 'text',
+                    'source': 'text',
+                    'target': 'text',
+                    'src_layer': 'text',
+                    'dst_layer': 'text',
+                }
+            )
 
         eids_raw = [ref.id for ref in _edge_refs]
         eids_str = [str(eid) for eid in eids_raw]
@@ -472,30 +536,32 @@ class ViewsClass(GraphState):
         global_w = [ref.weight for ref in _edge_refs] if need_global else None
         dirs = [ref.directed for ref in _edge_refs] if include_directed else None
 
+        layer_id = self.layers.layer_tuple_to_id
         src, tgt, etype, head, tail, members = [], [], [], [], [], []
+        src_layer, dst_layer = [], []
         for ref in _edge_refs:
             sides = _structure.edge_sides(self, ref.id)
+            source_ids, source_layer = _side_identity(sides.source)
+            target_ids, target_layer = _side_identity(sides.target)
+            src_layer.append(None if source_layer is None else layer_id(source_layer))
+            dst_layer.append(None if target_layer is None else layer_id(target_layer))
             if ref.kind == _structure.HYPER:
-                src_vals = tuple(str(x) for x in sorted(sides.source, key=str))
-                if sides.target:
-                    tgt_vals = tuple(str(x) for x in sorted(sides.target, key=str))
-                    head.append(src_vals)
-                    tail.append(tgt_vals)
+                if target_ids:
+                    head.append(tuple(source_ids))
+                    tail.append(tuple(target_ids))
                     members.append(None)
-                    src.append('|'.join(src_vals))
-                    tgt.append('|'.join(tgt_vals))
+                    src.append('|'.join(source_ids))
+                    tgt.append('|'.join(target_ids))
                 else:
                     head.append(None)
                     tail.append(None)
-                    members.append(src_vals)
-                    src.append('|'.join(src_vals))
+                    members.append(tuple(source_ids))
+                    src.append('|'.join(source_ids))
                     tgt.append(None)
                 etype.append(None)
             else:
-                one_source = next(iter(sides.source), None)
-                one_target = next(iter(sides.target), None)
-                src.append(str(one_source) if one_source is not None else None)
-                tgt.append(str(one_target) if one_target is not None else None)
+                src.append(source_ids[0] if source_ids else None)
+                tgt.append(target_ids[0] if target_ids else None)
                 etype.append(STORED_EDGE_KIND.get(ref.kind, ref.kind))
                 head.append(None)
                 tail.append(None)
@@ -522,6 +588,8 @@ class ViewsClass(GraphState):
                 'ml_kind': ml_kinds[idx],
                 'source': src[idx],
                 'target': tgt[idx],
+                'src_layer': src_layer[idx],
+                'dst_layer': dst_layer[idx],
                 'edge_type': etype[idx],
                 'head': list(head[idx]) if head[idx] is not None else None,
                 'tail': list(tail[idx]) if tail[idx] is not None else None,
@@ -679,6 +747,38 @@ class ViewsAccessor:
     def edges(self, *args, **kwargs):
         """Materialize the edge table view."""
         return ViewsClass.edges_view(self._G, *args, **kwargs)
+
+    def hyperedges(self, slice=None, copy=True, *, layer=None, in_slice=None):
+        """Materialize the hyperedge table view.
+
+        The same table :meth:`edges` builds, holding only the rows whose ``kind``
+        is ``"hyper"``. ``head``, ``tail`` and ``members`` are the columns that
+        carry a hyperedge's shape, and they are null on every binary row — which
+        is why reading hyperedges out of the full table means filtering it first.
+
+        Parameters
+        ----------
+        slice : str, optional
+            Slice id whose per-edge attributes are joined onto every row.
+        copy : bool, optional
+            Return a cloned DataFrame if True.
+        layer : tuple[str, ...], optional
+            Keep only the hyperedges of this layer.
+        in_slice : str, optional
+            Keep only the rows of this slice.
+
+        Returns
+        -------
+        DataFrame-like
+        """
+        return ViewsClass.edges_view(
+            self._G,
+            slice=slice,
+            copy=copy,
+            layer=layer,
+            in_slice=in_slice,
+            include_binary=False,
+        )
 
     def entity_kinds(self) -> dict:
         """Return the kind of every entity, as a mapping from its id.

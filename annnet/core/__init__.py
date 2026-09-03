@@ -10,7 +10,14 @@ Input-output code, adapters and bridges read structure through the query facade
 """
 
 from .graph import AnnNet
-from ._records import EdgeType, EdgeView, NodeView
+from ._records import (
+    EdgeType,
+    EdgeView,
+    Endpoint,
+    NodeView,
+    as_endpoint,
+    as_endpoints,
+)
 
 Graph = AnnNet
 
@@ -19,5 +26,8 @@ __all__ = [
     'Graph',
     'EdgeType',
     'EdgeView',
+    'Endpoint',
     'NodeView',
+    'as_endpoint',
+    'as_endpoints',
 ]

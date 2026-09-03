@@ -65,3 +65,21 @@ tables (`obs`, `var`, `uns`), and backend accessors (`nx`, `ig`, `gt`).
 ::: annnet.core._records.EdgeType
     options:
       show_root_heading: true
+
+## Endpoint
+
+One side of one edge: the node, and the layer it sits in. Read a stored endpoint
+through `as_endpoint` and it has the same shape whether or not the graph is
+layered — see [Reading the graph](../../explanations/reading-the-graph.md).
+
+::: annnet.core._records.Endpoint
+    options:
+      show_root_heading: true
+
+::: annnet.core._records.as_endpoint
+    options:
+      show_root_heading: true
+
+::: annnet.core._records.as_endpoints
+    options:
+      show_root_heading: true

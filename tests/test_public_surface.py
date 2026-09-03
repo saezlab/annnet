@@ -150,7 +150,16 @@ def test_the_package_exports_what_it_lists(monkeypatch):
 def test_the_core_exports_the_graph_and_the_records():
     import annnet.core as core
 
-    assert core.__all__ == ['AnnNet', 'Graph', 'EdgeType', 'EdgeView', 'NodeView']
+    assert core.__all__ == [
+        'AnnNet',
+        'Graph',
+        'EdgeType',
+        'EdgeView',
+        'Endpoint',
+        'NodeView',
+        'as_endpoint',
+        'as_endpoints',
+    ]
     for name in core.__all__:
         assert hasattr(core, name)
 
