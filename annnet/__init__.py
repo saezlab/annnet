@@ -53,6 +53,7 @@ _lazy_objects: dict[str, tuple[str, str]] = {
     'EdgeView': ('annnet.core._records', 'EdgeView'),
     'Endpoint': ('annnet.core._records', 'Endpoint'),
     'Aspect': ('annnet.core._aspects', 'Aspect'),
+    'BOUNDARIES': ('annnet.core._aspects', 'BOUNDARIES'),
     'OrderedLabels': ('annnet.core._aspects', 'OrderedLabels'),
     'as_aspect': ('annnet.core._aspects', 'as_aspect'),
     'LayerSelection': ('annnet.core._selection', 'LayerSelection'),

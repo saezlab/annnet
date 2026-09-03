@@ -15,7 +15,13 @@ if TYPE_CHECKING:
     from .graph import AnnNet
 
 from . import _build, _derive, _mutate
-from ._aspects import ORDERED_KEY, Aspect, OrderedLabels, as_aspect
+from ._aspects import (
+    ORDERED_KEY,
+    Aspect,
+    OrderedLabels,
+    as_aspect,
+    require_boundary,
+)
 from ._selection import LayerSelection, satisfies, parse_predicate
 from ._stored_kinds import STORED_EDGE_KIND
 from .._support.dataframe_backend import (
@@ -1172,6 +1178,76 @@ class LayerAccessor:
         # Copy: callers mutate the result in-place (e.g. `V &= ...`).
         return set(layer_to_nodes.get(aa, ()))
 
+    @staticmethod
+    def _edge_layers(ref) -> frozenset:
+        """The layer coordinates one edge touches.
+
+        The store spells this two ways: one coordinate for a hyperedge or an
+        intra-layer edge, and a ``(La, Lb)`` pair for one that crosses. A pair is
+        told from a coordinate by its members — a coordinate holds labels, a pair
+        holds coordinates.
+        """
+        layers = ref.ml_layers
+        if layers is None:
+            return frozenset()
+        if (
+            isinstance(layers, tuple)
+            and len(layers) == 2
+            and all(isinstance(x, tuple) for x in layers)
+        ):
+            return frozenset(layers)
+        return frozenset({layers})
+
+    def _edge_sets(self, layer_tuples, *, include_inter: bool, include_coupling: bool):
+        """One edge-id set per layer, and the layers of every edge, in one pass.
+
+        The per-layer call this replaces re-derived the whole edge table for each
+        layer, so a window of *n* layers cost ``n × |E|``. Nothing about the
+        answer needed that: one walk can drop each edge into every layer it
+        touches.
+
+        Returns
+        -------
+        tuple[list[set[str]], dict[str, frozenset]]
+            The sets, in the order the layers were given, and ``edge_id -> the
+            layers it touches`` for the edges that reached a set — which is what
+            ``boundary="closed"`` needs and would otherwise walk again for.
+        """
+        wanted = [tuple(aa) for aa in layer_tuples]
+        position: dict[tuple, list[int]] = {}
+        for index, aa in enumerate(wanted):
+            position.setdefault(aa, []).append(index)
+        found: list[set] = [set() for _ in wanted]
+        touched: dict[str, frozenset] = {}
+
+        for ref in _structure.iter_edges(self):
+            kind = self._effective_ml_edge_kind(ref)
+            if kind == 'inter' and not include_inter:
+                continue
+            if kind == 'coupling' and not include_coupling:
+                continue
+            layers = self._edge_layers(ref)
+            hit = False
+            for aa in layers:
+                for index in position.get(aa, ()):
+                    found[index].add(ref.id)
+                    hit = True
+            if hit:
+                touched[ref.id] = layers
+        return found, touched
+
+    @staticmethod
+    def _close(edge_ids, window, touched):
+        """Drop the edges of ``edge_ids`` that reach outside ``window``.
+
+        What ``boundary="closed"`` means: a selection holds an edge only when
+        every layer that edge touches is one the selection named. An edge with an
+        end outside is not half in — it is out, and it is what
+        :attr:`LayerSelection.crossing` is for.
+        """
+        inside = set(window)
+        return {eid for eid in edge_ids if touched.get(eid, frozenset()) <= inside}
+
     def layer_edge_set(
         self,
         layer_tuple,
@@ -1193,35 +1269,17 @@ class LayerAccessor:
         Returns
         -------
         set[str]
+            Every edge *touching* this layer. This is the primitive the layer
+            algebra is built on, and it carries no ``boundary=`` for that reason:
+            "touching" is the question a single layer answers, and whether a
+            selection may keep an edge that leaves it is a question about the
+            selection.
         """
         aa = tuple(layer_tuple)
-        E = set()
-        for ref in _structure.iter_edges(self):
-            eid = ref.id
-            kind = self._effective_ml_edge_kind(ref)
-            layers = ref.ml_layers
-
-            if kind in {'intra', 'hyper'}:
-                # Binary intra-layer edges store layers as (Lsrc, Ltgt) where
-                # Lsrc == Ltgt by definition; both must equal aa. Hyperedges
-                # store a single layer tuple.
-                if layers == aa:
-                    E.add(eid)
-                elif (
-                    isinstance(layers, tuple) and len(layers) == 2 and layers[0] == layers[1] == aa
-                ):
-                    E.add(eid)
-
-            elif kind == 'inter' and include_inter:
-                # layers expected to be (La, Lb)
-                if isinstance(layers, tuple) and len(layers) == 2 and aa in layers:
-                    E.add(eid)
-
-            elif kind == 'coupling' and include_coupling:
-                if isinstance(layers, tuple) and len(layers) == 2 and aa in layers:
-                    E.add(eid)
-
-        return E
+        (found,), _touched = self._edge_sets(
+            [aa], include_inter=include_inter, include_coupling=include_coupling
+        )
+        return found
 
     @staticmethod
     def _effective_ml_edge_kind(ref):
@@ -1253,6 +1311,7 @@ class LayerAccessor:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
+        boundary: str = 'closed',
     ):
         """Union of several Kivela layers.
 
@@ -1264,27 +1323,34 @@ class LayerAccessor:
             Include inter-layer edges touching any layer in the union.
         include_coupling : bool, optional
             Include coupling edges touching any layer in the union.
+        boundary : {"closed", "open"}, default "closed"
+            ``"closed"`` keeps only the edges whose every layer is in the union,
+            so the selection cannot reach outside the window it names.
+            ``"open"`` keeps an edge that merely touches it, which is what this
+            did before the behaviour had a name.
 
         Returns
         -------
         dict
             ``{"nodes": set[str], "edges": set[str]}``.
+
+        Notes
+        -----
+        With the default ``include_inter=False`` and ``include_coupling=False``
+        the two boundaries agree, because an intra-layer edge never leaves its
+        layer. They differ exactly when a crossing edge was asked for.
         """
-        Vs = []
-        Es = []
-        for aa in layer_tuples:
-            Vs.append(self.layer_node_set(aa))
-            Es.append(
-                self.layer_edge_set(
-                    aa,
-                    include_inter=include_inter,
-                    include_coupling=include_coupling,
-                )
-            )
-        if not Vs:
+        require_boundary(boundary)
+        window = [tuple(aa) for aa in layer_tuples]
+        if not window:
             return {'nodes': set(), 'edges': set()}
-        V = set().union(*Vs)
-        E = set().union(*Es)
+        sets, touched = self._edge_sets(
+            window, include_inter=include_inter, include_coupling=include_coupling
+        )
+        V = set().union(*(self.layer_node_set(aa) for aa in window))
+        E = set().union(*sets)
+        if boundary == 'closed':
+            E = self._close(E, window, touched)
         return {'nodes': V, 'edges': E}
 
     def layer_intersection(
@@ -1293,6 +1359,7 @@ class LayerAccessor:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
+        boundary: str = 'closed',
     ):
         """Intersection of several Kivela layers.
 
@@ -1304,32 +1371,35 @@ class LayerAccessor:
             Include inter-layer edges touching any layer in the intersection.
         include_coupling : bool, optional
             Include coupling edges touching any layer in the intersection.
+        boundary : {"closed", "open"}, default "closed"
+            ``"closed"`` keeps only the edges whose every layer is one of these.
 
         Returns
         -------
         dict
             ``{"nodes": set[str], "edges": set[str]}``.
+
+        Notes
+        -----
+        An intra-layer edge belongs to one layer, so it cannot be in the
+        intersection of two. What survives here is a crossing edge that touches
+        every named layer, and only when one was asked for.
         """
-        layer_tuples = list(layer_tuples)
-        if not layer_tuples:
+        require_boundary(boundary)
+        window = [tuple(aa) for aa in layer_tuples]
+        if not window:
             return {'nodes': set(), 'edges': set()}
-
-        # start with first layer
-        V = self.layer_node_set(layer_tuples[0])
-        E = self.layer_edge_set(
-            layer_tuples[0],
-            include_inter=include_inter,
-            include_coupling=include_coupling,
+        sets, touched = self._edge_sets(
+            window, include_inter=include_inter, include_coupling=include_coupling
         )
-
-        for aa in layer_tuples[1:]:
+        V = self.layer_node_set(window[0])
+        for aa in window[1:]:
             V &= self.layer_node_set(aa)
-            E &= self.layer_edge_set(
-                aa,
-                include_inter=include_inter,
-                include_coupling=include_coupling,
-            )
-
+        E = set(sets[0])
+        for found in sets[1:]:
+            E &= found
+        if boundary == 'closed':
+            E = self._close(E, window, touched)
         return {'nodes': V, 'edges': E}
 
     def layer_difference(
@@ -1339,6 +1409,7 @@ class LayerAccessor:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
+        boundary: str = 'closed',
     ):
         """Set difference: elements in ``layer_a`` but not in ``layer_b``.
 
@@ -1352,27 +1423,25 @@ class LayerAccessor:
             Include inter-layer edges touching ``layer_a``.
         include_coupling : bool, optional
             Include coupling edges touching ``layer_a``.
+        boundary : {"closed", "open"}, default "closed"
+            ``"closed"`` keeps only the edges whose every layer is ``layer_a``.
 
         Returns
         -------
         dict
             ``{"nodes": set[str], "edges": set[str]}``.
         """
-        Va = self.layer_node_set(layer_a)
-        Ea = self.layer_edge_set(
-            layer_a,
-            include_inter=include_inter,
-            include_coupling=include_coupling,
+        require_boundary(boundary)
+        aa, bb = tuple(layer_a), tuple(layer_b)
+        (Ea, Eb), touched = self._edge_sets(
+            [aa, bb], include_inter=include_inter, include_coupling=include_coupling
         )
-        Vb = self.layer_node_set(layer_b)
-        Eb = self.layer_edge_set(
-            layer_b,
-            include_inter=include_inter,
-            include_coupling=include_coupling,
-        )
+        E = Ea - Eb
+        if boundary == 'closed':
+            E = self._close(E, [aa], touched)
         return {
-            'nodes': Va - Vb,
-            'edges': Ea - Eb,
+            'nodes': self.layer_node_set(aa) - self.layer_node_set(bb),
+            'edges': E,
         }
 
     ## Layer X Slice
@@ -1384,6 +1453,7 @@ class LayerAccessor:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
+        boundary: str = 'closed',
         **attributes,
     ):
         """Create a slice induced by a single Kivela layer.
@@ -1398,6 +1468,9 @@ class LayerAccessor:
             Include inter-layer edges touching ``layer_tuple``.
         include_coupling : bool, optional
             Include coupling edges touching ``layer_tuple``.
+        boundary : {"closed", "open"}, default "closed"
+            ``"closed"`` keeps only the edges whose every layer is in the
+            selection, so it cannot reach outside the window it names.
         **attributes
             Slice attributes to store.
 
@@ -1416,6 +1489,7 @@ class LayerAccessor:
             [layer_tuple],
             include_inter=include_inter,
             include_coupling=include_coupling,
+            boundary=boundary,
         )
         attributes.setdefault('source', 'kivela_layer')
         attributes.setdefault('layer_tuple', tuple(layer_tuple))
@@ -1650,6 +1724,7 @@ class LayerAccessor:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
+        boundary: str = 'closed',
     ) -> AnnNet:
         """Concrete subgraph induced by a single Kivela layer.
 
@@ -1661,15 +1736,21 @@ class LayerAccessor:
             Include inter-layer edges touching ``layer_tuple``.
         include_coupling : bool, optional
             Include coupling edges touching ``layer_tuple``.
+        boundary : {"closed", "open"}, default "closed"
+            ``"closed"`` keeps only the edges whose every layer is in the
+            selection, so it cannot reach outside the window it names.
 
         Returns
         -------
         AnnNet
         """
+        require_boundary(boundary)
         aa = tuple(layer_tuple)
-        edges = self.layer_edge_set(
-            aa, include_inter=include_inter, include_coupling=include_coupling
+        (edges,), touched = self._edge_sets(
+            [aa], include_inter=include_inter, include_coupling=include_coupling
         )
+        if boundary == 'closed':
+            edges = self._close(edges, [aa], touched)
         return self._subgraph_from_keys(self._layer_keys([aa], self.layer_node_set(aa)), edges)
 
     def subgraph_from_layer_union(
@@ -1678,6 +1759,7 @@ class LayerAccessor:
         *,
         include_inter: bool = False,
         include_coupling: bool = False,
+        boundary: str = 'closed',
     ) -> AnnNet:
         """Concrete subgraph induced by the union of several layers.
 
@@ -1689,13 +1771,19 @@ class LayerAccessor:
             Include inter-layer edges touching any layer in the union.
         include_coupling : bool, optional
             Include coupling edges touching any layer in the union.
+        boundary : {"closed", "open"}, default "closed"
+            ``"closed"`` keeps only the edges whose every layer is in the
+            selection, so it cannot reach outside the window it names.
 
         Returns
         -------
         AnnNet
         """
         result = self.layer_union(
-            layer_tuples, include_inter=include_inter, include_coupling=include_coupling
+            layer_tuples,
+            include_inter=include_inter,
+            include_coupling=include_coupling,
+            boundary=boundary,
         )
         keys = self._layer_keys(layer_tuples, result['nodes'])
         return self._subgraph_from_keys(keys, result['edges'])

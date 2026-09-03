@@ -153,6 +153,7 @@ def test_the_core_exports_the_graph_and_the_records():
     assert core.__all__ == [
         'AnnNet',
         'Aspect',
+        'BOUNDARIES',
         'Graph',
         'LayerSelection',
         'OrderedLabels',

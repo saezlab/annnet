@@ -29,6 +29,36 @@ from collections.abc import Sequence
 #: so a caller writing aspect attributes by hand can see what is taken.
 ORDERED_KEY = '__ordered__'
 
+#: What a selection does at its own edge.
+#:
+#: ``"closed"`` keeps only the edges whose every layer the selection named, so a
+#: selection cannot reach outside the window it names. ``"open"`` keeps an edge
+#: that merely touches the window, which is what the layer algebra did before
+#: this was a word — the leak had no name, so nobody could ask for it or refuse
+#: it.
+BOUNDARIES = ('closed', 'open')
+
+
+def require_boundary(value: str) -> str:
+    """Return ``value`` if it names a boundary, and raise otherwise.
+
+    Parameters
+    ----------
+    value : str
+
+    Returns
+    -------
+    str
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not one of :data:`BOUNDARIES`.
+    """
+    if value not in BOUNDARIES:
+        raise ValueError(f'boundary must be one of {BOUNDARIES}, got {value!r}')
+    return value
+
 
 class OrderedLabels:
     """A set of labels that remembers the order they were declared in.

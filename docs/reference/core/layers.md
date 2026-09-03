@@ -23,6 +23,14 @@ An aspect's values, and whether they come one before another. See
     options:
       show_root_heading: true
 
+::: annnet.core._aspects.BOUNDARIES
+    options:
+      show_root_heading: true
+
+::: annnet.core._aspects.require_boundary
+    options:
+      show_root_heading: true
+
 ::: annnet.core._aspects.as_aspect
     options:
       show_root_heading: true
