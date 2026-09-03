@@ -11,6 +11,7 @@ from ._Views import GraphView, ViewsClass, EdgeSequence, NodeSequence, ViewsAcce
 from ._Layers import LayerAccessor
 from ._Matrix import CacheManager, IndexManager, IndexMapping, MatrixNamespace
 from ._Slices import SliceManager
+from ._aspects import OrderedLabels, as_aspect
 from ._History import History, HistoryAccessor
 from ._records import (
     EdgeView,
@@ -2717,12 +2718,12 @@ class AnnNet(
         """Set the graph aspect names and rebuild the layer registry."""
         if not val:
             self._aspects = ('_',)
-            self._layers = {'_': {'_'}}
+            self._layers = {'_': OrderedLabels(['_'])}
         else:
             self._aspects = tuple(val)
-            self._layers = {a: set(self._layers.get(a, set())) for a in self._aspects}
+            self._layers = {a: OrderedLabels(self._layers.get(a, ())) for a in self._aspects}
             for a in self._aspects:
-                self._layers.setdefault(a, set())
+                self._layers.setdefault(a, OrderedLabels())
         self._rebuild_all_layers_cache()
 
     @property
@@ -2730,15 +2731,15 @@ class AnnNet(
         """Elementary layer labels per aspect (empty dict for flat graphs)."""
         if self._aspects == ('_',):
             return {}
-        return {k: sorted(x for x in v if x != '_') for k, v in self._layers.items() if k != '_'}
+        return {k: [x for x in v if x != '_'] for k, v in self._layers.items() if k != '_'}
 
     @elem_layers.setter
     def elem_layers(self, val: dict[str, list[str]]):
         """Replace the declared elementary layers and rebuild layer caches."""
         if not val:
-            self._layers = {'_': {'_'}}
+            self._layers = {'_': OrderedLabels(['_'])}
         else:
-            self._layers = {k: set(v) for k, v in val.items()}
+            self._layers = {k: OrderedLabels(as_aspect(v).values) for k, v in val.items()}
         self._rebuild_all_layers_cache()
 
     # -------------------------------------------------------------------------

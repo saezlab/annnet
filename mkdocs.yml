@@ -65,6 +65,7 @@ nav:
 -   Explanations:
     -   Explanations Overview: explanations/index.md
     -   Reading the graph: explanations/reading-the-graph.md
+    -   Aspects, order, and windows: explanations/aspects-and-windows.md
     -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
     -   Slices and views: explanations/managers-and-views.md
     -   Interoperability: explanations/interoperability.md

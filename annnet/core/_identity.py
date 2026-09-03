@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import warnings
 
+from ._aspects import OrderedLabels
+
 
 def is_explicit_entity_key(value) -> bool:
     """Return True when ``value`` is an explicit ``(node_id, layer_coord)`` key."""
@@ -26,10 +28,10 @@ def ensure_placeholder_layers_declared(g) -> tuple:
     """Ensure the placeholder value ``'_'`` exists for every declared aspect."""
     coord = placeholder_layer_coord(g)
     if g._aspects == ('_',):
-        g._layers.setdefault('_', {'_'})
+        g._layers.setdefault('_', OrderedLabels(['_']))
         return coord
     for aspect in g._aspects:
-        g._layers.setdefault(aspect, set()).add('_')
+        g._layers.setdefault(aspect, OrderedLabels()).add('_')
     g._rebuild_all_layers_cache()
     return coord
 

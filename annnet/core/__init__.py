@@ -10,6 +10,7 @@ Input-output code, adapters and bridges read structure through the query facade
 """
 
 from .graph import AnnNet
+from ._aspects import Aspect, OrderedLabels, as_aspect
 from ._records import (
     EdgeType,
     EdgeView,
@@ -18,16 +19,21 @@ from ._records import (
     as_endpoint,
     as_endpoints,
 )
+from ._selection import LayerSelection
 
 Graph = AnnNet
 
 __all__ = [
     'AnnNet',
+    'Aspect',
     'Graph',
+    'LayerSelection',
+    'OrderedLabels',
     'EdgeType',
     'EdgeView',
     'Endpoint',
     'NodeView',
+    'as_aspect',
     'as_endpoint',
     'as_endpoints',
 ]

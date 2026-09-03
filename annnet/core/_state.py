@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ._aspects import OrderedLabels
 from ._records import (
     _EDGE_RESERVED,
     SliceRecord,
@@ -38,7 +39,7 @@ def init_state(g, *, directed=None, aspects=None) -> None:
     # Aspect / layer registry (aspect count is immutable after init).
     if aspects is None:
         g._aspects = ('_',)
-        g._layers = {'_': {'_'}}
+        g._layers = {'_': OrderedLabels(['_'])}
     else:
         if not aspects:
             raise ValueError('aspects dict must not be empty')
@@ -46,7 +47,7 @@ def init_state(g, *, directed=None, aspects=None) -> None:
             if not vals:
                 raise ValueError(f'Aspect {asp!r} must have at least one layer value')
         g._aspects = tuple(aspects.keys())
-        g._layers = {k: set(val) for k, val in aspects.items()}
+        g._layers = {k: OrderedLabels(val) for k, val in aspects.items()}
 
     # Composite node key support.
     g._node_key_fields = None

@@ -15,6 +15,8 @@ if TYPE_CHECKING:
     from .graph import AnnNet
 
 from . import _build, _derive, _mutate
+from ._aspects import ORDERED_KEY, Aspect, OrderedLabels, as_aspect
+from ._selection import LayerSelection, satisfies, parse_predicate
 from ._stored_kinds import STORED_EDGE_KIND
 from .._support.dataframe_backend import (
     clone_dataframe,
@@ -112,9 +114,15 @@ class LayerAccessor:
             return {} if aspect is None else []
 
         def _filter(values):
-            if include_placeholder:
-                return sorted(values)
-            return sorted(v for v in values if v != '_')
+            # Declaration order, not sorted: an ordinal aspect declared
+            # ['basal', 'stim', 'late'] reads back in that order, and sorting it
+            # would be the wrong order rather than a cosmetic difference.
+            declared = [v for v in values if v != '_']
+            if include_placeholder and '_' in values:
+                # The placeholder is synthetic, so it has no declared position.
+                # It goes first, where it cannot be mistaken for one of them.
+                return ['_', *declared]
+            return declared
 
         if aspect is None:
             return {k: _filter(v) for k, v in self._layers.items()}
@@ -194,11 +202,12 @@ class LayerAccessor:
         if self._placeholder_layer_referenced():
             return
         if not all(
-            any(val != '_' for val in self._layers.get(aspect, set())) for aspect in self._aspects
+            any(val != '_' for val in self._layers.get(aspect, OrderedLabels()))
+            for aspect in self._aspects
         ):
             return
         for aspect in self._aspects:
-            self._layers.get(aspect, set()).discard('_')
+            self._layers.get(aspect, OrderedLabels()).discard('_')
         self._rebuild_all_layers_cache()
 
     def set_aspects(self, aspects, elem_layers: dict[str, list[str]] | None = None):
@@ -248,7 +257,7 @@ class LayerAccessor:
         _mutate.sync_aspects(self._G)
         self._layers = {}
         for aspect in aspects:
-            values = set(elem_layers.get(aspect, []))
+            values = OrderedLabels(as_aspect(elem_layers.get(aspect, [])).values)
             values.add('_')
             self._layers[aspect] = values
 
@@ -275,9 +284,130 @@ class LayerAccessor:
                 stacklevel=2,
             )
 
+        # Orderedness is a property of the aspect, so it is kept with the
+        # aspect's own attributes and survives whatever they survive.
+        for aspect in aspects:
+            declared = elem_layers.get(aspect)
+            if isinstance(declared, Aspect):
+                self._aspect_attrs.setdefault(aspect, {})[ORDERED_KEY] = declared.ordered
+
         self._rebuild_all_layers_cache()
         self._drop_unused_placeholder_layers()
         self._supra_index_cache = None
+
+    def aspect(self, name: str) -> Aspect:
+        """Return one aspect, with its values in declaration order.
+
+        Parameters
+        ----------
+        name : str
+            The aspect.
+
+        Returns
+        -------
+        Aspect
+            Its values, and whether they come one before another.
+
+        Raises
+        ------
+        KeyError
+            If the aspect is not declared.
+
+        Examples
+        --------
+        >>> G.layers.aspect('time').consecutive_pairs()  # doctest: +SKIP
+        [('0h', '1h'), ('1h', '12h')]
+        """
+        if name not in self._aspects:
+            raise KeyError(f'unknown aspect {name!r}; known: {list(self._aspects)!r}')
+        return Aspect(
+            self.list_layers(name),
+            ordered=bool(self._aspect_attrs.get(name, {}).get(ORDERED_KEY, False)),
+        )
+
+    def where(self, **predicates) -> LayerSelection:
+        """Select the layers whose aspect values satisfy every predicate.
+
+        A predicate is ``aspect=value`` or ``aspect__operator=value``. The
+        operators are ``eq`` (the default), ``ne``, ``in``, ``not_in``, ``lt``,
+        ``lte``, ``gt`` and ``gte``. The last four ask *where a value sits*, so
+        they need an ordered aspect and refuse a categorical one — the answer
+        would otherwise be the declaration order pretending to be a meaning.
+
+        The window is resolved off the aspect declaration, so it costs the number
+        of layers rather than the size of the graph. What it is then asked for —
+        ``.nodes``, ``.edges``, ``.crossing``, ``.boundary`` — costs one pass
+        over the axis in question.
+
+        Parameters
+        ----------
+        **predicates
+            One or more ``aspect``/``aspect__operator`` keywords. With none, the
+            selection is every layer.
+
+        Returns
+        -------
+        LayerSelection
+
+        Raises
+        ------
+        KeyError
+            If an aspect is not declared.
+        ValueError
+            If an operator is unknown, or a comparison is asked of a categorical
+            aspect.
+
+        Examples
+        --------
+        >>> G.layers.where(time__lte='12h')  # doctest: +SKIP
+        LayerSelection(3 layer(s): [('0h',), ('1h',), ('12h',)])
+        >>> G.layers.where(time__lte='12h', mechanism='mapk').nodes  # doctest: +SKIP
+        {'akt', 'erk'}
+        """
+        aspects = tuple(self._aspects)
+        if aspects == ('_',):
+            raise ValueError('no aspects are configured; call set_aspects(...) first')
+        tests = []
+        for key, wanted in predicates.items():
+            name, operator = parse_predicate(key, aspects)
+            tests.append((aspects.index(name), self.aspect(name), operator, wanted))
+        selected = [
+            layer
+            for layer in self._all_layers
+            if all(
+                satisfies(aspect, operator, layer[position], wanted)
+                for position, aspect, operator, wanted in tests
+            )
+        ]
+        return LayerSelection(self._G, selected)
+
+    def set_ordered(self, name: str, ordered: bool = True) -> None:
+        """Declare whether one aspect's values come one before another.
+
+        An ordinal aspect — a timepoint, a dose, a stage — answers ``before``,
+        ``after`` and ``consecutive_pairs``, and can be windowed with the
+        comparison predicates of :meth:`where`. A categorical one refuses them,
+        because the answer would be the declaration order pretending to be a
+        meaning.
+
+        Parameters
+        ----------
+        name : str
+            The aspect.
+        ordered : bool, default True
+
+        Raises
+        ------
+        KeyError
+            If the aspect is not declared.
+
+        Examples
+        --------
+        >>> G.layers.set_ordered('time')  # doctest: +SKIP
+        """
+        if name not in self._aspects:
+            raise KeyError(f'unknown aspect {name!r}; known: {list(self._aspects)!r}')
+        self._aspect_attrs.setdefault(name, {})[ORDERED_KEY] = bool(ordered)
 
     def set_elementary_layers(self, layers_by_aspect: dict[str, list[str]]):
         """Declare concrete elementary layer values for existing aspects."""
@@ -286,12 +416,12 @@ class LayerAccessor:
         for aspect, values in layers_by_aspect.items():
             if aspect not in self._aspects:
                 raise KeyError(f'Unknown aspect {aspect!r}. Valid: {list(self._aspects)!r}')
-            labels = {str(v) for v in values}
+            labels = list(dict.fromkeys(str(v) for v in values))
             if not labels:
                 raise ValueError(
                     f'Aspect {aspect!r} must receive at least one elementary layer value.'
                 )
-            self._layers.setdefault(aspect, set()).update(labels)
+            self._layers.setdefault(aspect, OrderedLabels()).update(labels)
         self._rebuild_all_layers_cache()
         self._drop_unused_placeholder_layers()
 
@@ -794,7 +924,7 @@ class LayerAccessor:
                 f'layer tuple rank mismatch: expected {len(self._aspects)}, got {len(aa)}'
             )
         for i, a in enumerate(self._aspects):
-            allowed = self._layers.get(a, set())
+            allowed = self._layers.get(a, OrderedLabels())
             if aa[i] not in allowed:
                 raise KeyError(f'unknown elementary layer {aa[i]!r} for aspect {a!r}')
 
@@ -842,7 +972,7 @@ class LayerAccessor:
     def _elem_layer_id(self, aspect: str, label: str) -> str:
         if aspect not in self._aspects:
             raise KeyError(f'unknown aspect {aspect!r}; known: {list(self._aspects)!r}')
-        allowed = self._layers.get(aspect, set())
+        allowed = self._layers.get(aspect, OrderedLabels())
         if label not in allowed:
             raise KeyError(
                 f'unknown elementary layer {label!r} for aspect {aspect!r}; known: {sorted(allowed)!r}'

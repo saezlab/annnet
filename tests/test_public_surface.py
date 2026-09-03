@@ -152,11 +152,15 @@ def test_the_core_exports_the_graph_and_the_records():
 
     assert core.__all__ == [
         'AnnNet',
+        'Aspect',
         'Graph',
+        'LayerSelection',
+        'OrderedLabels',
         'EdgeType',
         'EdgeView',
         'Endpoint',
         'NodeView',
+        'as_aspect',
         'as_endpoint',
         'as_endpoints',
     ]
