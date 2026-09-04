@@ -151,6 +151,17 @@ def dataframe_columns(df) -> list[str]:
     return [] if df is None else list(_to_nw(df).columns)
 
 
+def dataframe_schema(df) -> dict[str, str]:
+    """Return the type of every column, named the way Narwhals names it.
+
+    A backend spells its own types, so the answer is Narwhals' spelling rather
+    than any one backend's — which is what makes two tables built by different
+    backends comparable. Use :func:`dataframe_columns` when only the names are
+    wanted. Collecting the schema costs about three times as much.
+    """
+    return {} if df is None else {name: str(dtype) for name, dtype in _to_nw(df).schema.items()}
+
+
 def dataframe_column_values(df, column: str) -> list[Any]:
     """Return one dataframe column as a Python list.
 
@@ -221,6 +232,30 @@ def dataframe_backend(df, *, default: str | None = 'auto') -> str:
         return 'pyarrow'
 
     return select_dataframe_backend(default)
+
+
+def dataframe_to_backend(df, *, backend: str | None = 'auto'):
+    """Return the same table in another backend, keeping its columns and types.
+
+    The table a caller gets back holds what it held: the same columns in the same
+    order, carrying the same types, and the same rows. Only the container
+    changes. A table already in the backend asked for is handed back as it is, so
+    naming the one you already have costs nothing.
+
+    Going through rows instead would lose both ends of that. Rows carry no
+    schema, so a table with no rows comes back with **no columns** — and a table
+    keyed by a column it no longer has is not the same table. A table that does
+    hold rows keeps its columns but lets the target backend infer their types
+    from the first value, which is a different promise from keeping them.
+    """
+    if df is None:
+        return None
+    target = select_dataframe_backend(backend)
+    if dataframe_backend(df) == target:
+        return df
+    nw_df = _to_nw(df)
+    columns = {name: nw_df[name].to_list() for name in nw_df.columns}
+    return _from_nw(_build_nw_from_columns(columns, schema=nw_df.schema, backend=target))
 
 
 def clone_dataframe(df):

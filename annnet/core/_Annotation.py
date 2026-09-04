@@ -15,11 +15,10 @@ from typing import TYPE_CHECKING, Any
 from . import _structure
 from ._state import GraphState
 from .._support.dataframe_backend import (
-    dataframe_backend,
     dataframe_columns,
     dataframe_to_rows,
     dataframe_filter_eq,
-    dataframe_from_rows,
+    dataframe_to_backend,
     select_dataframe_backend,
 )
 
@@ -811,7 +810,19 @@ _ATTR_DELEGATED = (
 
 
 class AttributesAccessor:
-    """Namespace for graph, node, edge, and slice annotations (``G.attrs``)."""
+    """Every attribute of a graph, read and written (``G.attrs``).
+
+    Eight tables, each named for what addresses it — :attr:`nodes`,
+    :attr:`edges`, :attr:`slices`, :attr:`aspects`, :attr:`layers`,
+    :attr:`edge_slices`, :attr:`node_layers` and :attr:`elementary_layers` —
+    beside the setters that write them. Each is a property, because a table takes
+    no arguments. :meth:`table` is the one call, for naming a backend.
+
+    A table here holds **what was written**. The frames under ``G.views`` hold
+    everything derivable, take filters and joins, and are calls rather than
+    properties. Five names appear in both namespaces and mean those two different
+    things.
+    """
 
     __slots__ = ('_G',)
 
@@ -870,8 +881,14 @@ class AttributesAccessor:
 
         One label inside one aspect, addressed by the ``layer_id`` that
         ``G.layers.set_elementary_attrs`` composes from the two.
+
+        ``G.layer_attributes`` also accepts a table this API cannot address —
+        one carrying no ``layer_id`` — and hands that back exactly as it was
+        given, because an adapter round-trips it. That promise is the old
+        property's. Here every table answers in one backend, so a table given in
+        another is rendered into it.
         """
-        return self._G.layer_attributes
+        return dataframe_to_backend(self._G.layer_attributes, backend=self.backend)
 
     @property
     def backend(self):
@@ -880,22 +897,36 @@ class AttributesAccessor:
 
     @backend.setter
     def backend(self, value):
+        # The materialized tables need no clearing: each records the backend it
+        # was built in beside the clock of its level, so one built in the backend
+        # being left behind is already out of date and rebuilds on the next read.
         self._G._annotations_backend = select_dataframe_backend(value)
-        self._G._contextual_tables.clear()
 
     def table(self, name: str, *, backend: str | None = None):
         """Return one table by name, optionally in a backend of its own.
 
-        Naming a backend costs a conversion, so it is worth it only for the
-        genuinely mixed case; set :attr:`backend` when every table should
-        answer in the same one.
+        The table is the one the property of the same name gives, so the two
+        cannot answer differently. Naming a backend converts, which costs
+        something, so it is worth it only for the genuinely mixed case. Set
+        :attr:`backend` when every table should answer in the same one. Naming
+        the backend a table already has — or ``"auto"`` — is the table itself
+        and costs nothing.
+
+        Parameters
+        ----------
+        name : str
+            One of :data:`TABLE_NAMES`.
+        backend : {"polars", "pandas", "pyarrow", "auto"}, optional
+            Defaults to the ambient :attr:`backend`.
+
+        Returns
+        -------
+        DataFrame-like
         """
         if name not in TABLE_NAMES:
             raise KeyError(f'unknown attribute table {name!r}; known: {list(TABLE_NAMES)}')
         table = getattr(self, name)
-        if backend is None or dataframe_backend(table) == backend:
-            return table
-        return dataframe_from_rows(dataframe_to_rows(table), backend=backend)
+        return table if backend is None else dataframe_to_backend(table, backend=backend)
 
     if TYPE_CHECKING:  # pragma: no cover - the delegators are installed below
 
