@@ -72,9 +72,10 @@ class LayerAccessor:
 
     @_aspect_attrs.setter
     def _aspect_attrs(self, value) -> None:
-        store = self._G._contextual.aspect_attrs
-        store.clear()
-        store.update(value or {})
+        # Through the store, so that the clock of this level rises with it.
+        # Writing the dict here would leave a materialized table looking
+        # current while holding what this assignment replaced.
+        self._G._contextual.replace('aspect_attrs', value)
 
     @property
     def _layer_attrs(self) -> dict:
@@ -83,9 +84,10 @@ class LayerAccessor:
 
     @_layer_attrs.setter
     def _layer_attrs(self, value) -> None:
-        store = self._G._contextual.layer_attrs
-        store.clear()
-        store.update(value or {})
+        # Through the store, so that the clock of this level rises with it.
+        # Writing the dict here would leave a materialized table looking
+        # current while holding what this assignment replaced.
+        self._G._contextual.replace('layer_attrs', value)
 
     @property
     def _state_attrs(self) -> dict:
@@ -94,9 +96,10 @@ class LayerAccessor:
 
     @_state_attrs.setter
     def _state_attrs(self, value) -> None:
-        store = self._G._contextual.node_layer_attrs
-        store.clear()
-        store.update(value or {})
+        # Through the store, so that the clock of this level rises with it.
+        # Writing the dict here would leave a materialized table looking
+        # current while holding what this assignment replaced.
+        self._G._contextual.replace('node_layer_attrs', value)
 
     def list_aspects(self) -> tuple:
         """Return declared aspect names, or an empty tuple for flat graphs."""

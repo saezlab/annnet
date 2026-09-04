@@ -56,14 +56,19 @@ class ContextualStore:
     # answer for itself.
     levels = LEVELS
 
-    __slots__ = (*LEVELS, 'version')
+    __slots__ = (*LEVELS, 'versions')
 
     def __init__(self) -> None:
-        # Rises on every write. A materialized table records the value it was
-        # built at, so a read after a read is free and a read after a write
-        # rebuilds. Counting entries would not do: updating a value in place
-        # changes no count.
-        self.version = 0
+        # One clock per level, each rising on every write to that level. A
+        # materialized table records the value its own level was built at, so a
+        # read after a read is free and a read after a write rebuilds. Counting
+        # entries would not do: updating a value in place changes no count.
+        #
+        # One clock for all six would be simpler and wrong in one direction: a
+        # write to any level would age every other level's table, so a loop that
+        # annotates slices and reads node-layers would rebuild the node-layer
+        # table on every pass, for a change that cannot have touched it.
+        self.versions: dict[str, int] = dict.fromkeys(LEVELS, 0)
         # slice_id            -> attrs
         self.slice_attrs: dict[str, dict] = {}
         # (slice_id, edge_id) -> attrs
@@ -82,7 +87,7 @@ class ContextualStore:
     def copy(self) -> ContextualStore:
         """Return a store holding the same values and sharing no dict with this one."""
         other = ContextualStore()
-        other.version = self.version
+        other.versions = dict(self.versions)
         for level in LEVELS:
             getattr(other, level).update(
                 {key: dict(value) for key, value in getattr(self, level).items()}
@@ -93,19 +98,43 @@ class ContextualStore:
         """Forget every level."""
         for level in LEVELS:
             getattr(self, level).clear()
-        self.version += 1
+            self.versions[level] += 1
 
     def is_empty(self) -> bool:
         """Whether any level carries a value."""
         return not any(getattr(self, level) for level in LEVELS)
 
+    # -- the clock --------------------------------------------------------
+
+    def version_of(self, level_name: str) -> int:
+        """The clock of one level, which rises on every write to it.
+
+        A reader that materializes a level records this beside the table it
+        built, and rebuilds when the two disagree.
+        """
+        return self.versions[level_name]
+
+    def touch(self, level_name: str | None = None) -> None:
+        """Record a change made by something holding a level dict directly.
+
+        Every method here bumps the clock of what it changed, so this is for the
+        one case they cannot cover: code that reached into a level dict itself.
+        Naming the level is what keeps the bump as narrow as the change.
+        Without a name every level is aged, which is correct and costs the other
+        five a rebuild they did not earn.
+        """
+        for level in LEVELS if level_name is None else (level_name,):
+            self.versions[level] += 1
+
     # -- forgetting one element ------------------------------------------
 
     def forget_edge(self, edge_id: str) -> None:
         """Drop every pair that names one edge."""
-        for key in [key for key in self.edge_slice_attrs if key[1] == edge_id]:
+        dropped = [key for key in self.edge_slice_attrs if key[1] == edge_id]
+        for key in dropped:
             del self.edge_slice_attrs[key]
-        self.version += 1
+        if dropped:
+            self.versions['edge_slice_attrs'] += 1
 
     def forget_node(self, node_id) -> None:
         """Drop every pair that names one node.
@@ -114,24 +143,29 @@ class ContextualStore:
         the rest of the contextual API does.
         """
         bare = node_id[0] if isinstance(node_id, tuple) else node_id
-        for key in [
+        dropped = [
             key
             for key in self.node_layer_attrs
             if (key[0][0] if isinstance(key[0], tuple) else key[0]) == bare
-        ]:
+        ]
+        for key in dropped:
             del self.node_layer_attrs[key]
-        self.version += 1
+        if dropped:
+            self.versions['node_layer_attrs'] += 1
 
     def forget_slice(self, slice_id: str) -> None:
         """Drop a slice and every edge pair inside it."""
-        self.slice_attrs.pop(slice_id, None)
-        for key in [key for key in self.edge_slice_attrs if key[0] == slice_id]:
+        if self.slice_attrs.pop(slice_id, None) is not None:
+            self.versions['slice_attrs'] += 1
+        dropped = [key for key in self.edge_slice_attrs if key[0] == slice_id]
+        for key in dropped:
             del self.edge_slice_attrs[key]
-        self.version += 1
+        if dropped:
+            self.versions['edge_slice_attrs'] += 1
 
     # -- one level, one pair ---------------------------------------------
     #
-    # Every write goes through here, so that the version rises exactly once per
+    # Every write goes through here, so that a clock rises exactly once per
     # change and nothing outside has to remember to bump it.
 
     def set(self, level_name: str, key, attrs: dict) -> None:
@@ -139,7 +173,7 @@ class ContextualStore:
         if not attrs:
             return
         getattr(self, level_name).setdefault(key, {}).update(attrs)
-        self.version += 1
+        self.versions[level_name] += 1
 
     def get(self, level_name: str, key) -> dict:
         """Return a copy of what one pair carries, or an empty dict."""
@@ -150,11 +184,24 @@ class ContextualStore:
         level = getattr(self, level_name)
         level.clear()
         level.update({key: dict(value) for key, value in (contents or {}).items()})
-        self.version += 1
+        self.versions[level_name] += 1
 
-    def touch(self) -> None:
-        """Record that a level was changed by something holding it directly."""
-        self.version += 1
+    def clear_level(self, level_name: str) -> None:
+        """Forget one level."""
+        getattr(self, level_name).clear()
+        self.versions[level_name] += 1
+
+    def install_rows(self, level_name: str, rows, key_columns) -> None:
+        """Fill one level from table rows, replacing whatever it held.
+
+        The counterpart of asking a level for a table. It is a method rather than
+        a bare function over the dict because a caller that writes the dict
+        itself leaves the clock where it was, and the materialized table then
+        outlives the values it was built from — a read after the install answers
+        with what the install replaced, and nothing says so.
+        """
+        install_rows(getattr(self, level_name), rows, key_columns)
+        self.versions[level_name] += 1
 
 
 # ---------------------------------------------------------------------------

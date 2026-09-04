@@ -624,7 +624,7 @@ class AnnNet(
         if value is not None and 'layer_id' not in dataframe_columns(value):
             # Not addressable by the elementary-layer API. Keep it as given.
             self._layer_table_passthrough = value
-            self._contextual.elementary_attrs.clear()
+            self._contextual.clear_level('elementary_attrs')
             return
         self._layer_table_passthrough = None
         self._install_contextual_table('elementary_attrs', 'layer_id', value)
@@ -659,7 +659,7 @@ class AnnNet(
         """
         level = getattr(self._contextual, level_name)
         backend = backend or self._annotations_backend
-        token = (backend, self._contextual.version)
+        token = (backend, self._contextual.version_of(level_name))
         cached = self._contextual_tables.get(level_name)
         if cached is not None and cached[0] == token:
             return cached[1]
@@ -673,16 +673,19 @@ class AnnNet(
         return table
 
     def _install_contextual_table(self, level_name, key_columns, value) -> None:
-        """Fill one contextual level from a table, a mapping, or nothing."""
-        level = getattr(self._contextual, level_name)
+        """Fill one contextual level from a table, a mapping, or nothing.
+
+        Every branch goes through the store rather than the level dict, so that
+        the clock of the level rises with the install. Writing the dict directly
+        left the materialized table looking current while it held what the
+        install had just replaced, and the next read answered from it.
+        """
         if value is None:
-            level.clear()
-            return
-        if isinstance(value, dict):
-            level.clear()
-            level.update({key: dict(attrs) for key, attrs in value.items()})
-            return
-        _contextual.install_rows(level, dataframe_to_rows(value), key_columns)
+            self._contextual.clear_level(level_name)
+        elif isinstance(value, dict):
+            self._contextual.replace(level_name, value)
+        else:
+            self._contextual.install_rows(level_name, dataframe_to_rows(value), key_columns)
 
     def __dir__(self):
         return sorted(set(self._PUBLIC_API))
@@ -3152,6 +3155,9 @@ _CONTEXTUAL_TABLE_SHAPE = {
     ),
     'elementary_attrs': ('layer_id', {'layer_id': 'text'}),
     'aspect_attrs': ('aspect', {'aspect': 'text'}),
-    'layer_attrs': ('layer', {'layer': 'text'}),
-    'node_layer_attrs': (('node_id', 'layer'), {'node_id': 'text', 'layer': 'text'}),
+    # A layer coordinate is one label per aspect, so the column holding it is a
+    # list of strings and not a string. Declaring it text made an empty table and
+    # a filled one disagree about the type of the column they are both keyed by.
+    'layer_attrs': ('layer', {'layer': 'list_text'}),
+    'node_layer_attrs': (('node_id', 'layer'), {'node_id': 'text', 'layer': 'list_text'}),
 }

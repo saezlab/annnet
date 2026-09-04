@@ -45,10 +45,29 @@ def test_no_contextual_level_is_stored_as_a_dataframe():
         assert isinstance(held, dict), f'{level} is a {type(held).__name__}, not a dict'
 
 
+# What the store holds besides the levels themselves. Named here rather than
+# skipped by a filter, so that a field added to the store has to be declared as
+# bookkeeping before this test will pass.
+BOOKKEEPING = {'versions'}
+
+
 def test_every_level_lives_in_one_store():
     G = AnnNet(directed=True)
-    assert {*LEVELS} == {name for name in ContextualStore.__slots__ if name != 'version'}
+    assert {*LEVELS} == {*ContextualStore.__slots__} - BOOKKEEPING
     assert isinstance(G._contextual, ContextualStore)
+
+
+def test_every_level_keeps_its_own_clock():
+    """A write ages the level it wrote, and no other."""
+    G = AnnNet(directed=True)
+    G.slices.add('s')
+    before = dict(G._contextual.versions)
+    G.attrs.set_slice_attrs('s', curated=True)
+    after = G._contextual.versions
+    assert after['slice_attrs'] > before['slice_attrs']
+    for level in LEVELS:
+        if level != 'slice_attrs':
+            assert after[level] == before[level], f'{level} was aged by a slice write'
 
 
 # ---------------------------------------------------------------------------
