@@ -143,25 +143,40 @@ G.exists('akt', mechansim='x')  # KeyError: unknown aspect ['mechansim']
 ## Two namespaces hand back a frame
 
 `G.views` and `G.attrs` both answer with a table, and five names appear on both —
-`nodes`, `edges`, `slices`, `aspects` and `layers`. They are not the same table,
-and the rule is one sentence:
+`nodes`, `edges`, `slices`, `aspects` and `layers`. The intent is:
 
-**`G.views.<x>()` is a call and gives you everything known about `x`.
-`G.attrs.<x>` is a property and gives you only what was written to `x`.**
+**`G.views.<x>()` is a call and gives everything known about `x`. `G.attrs.<x>`
+is a property and gives only what was written to `x`.**
 
-```python
-G.views.edges()  # edge_id, kind, source, target, src_layer, directed, weight, …
-G.attrs.edges  # edge_id, and the attributes you set
-```
+That is the same split as `G.B` against `G.matrices.incidence(...)` — a property
+for the plain case, a call when there are arguments. Reach for `views` to
+analyse and for `attrs` to round-trip.
 
-The call takes the filters and joins — `layer=`, `in_slice=`, `slice=` — because
-a derived frame is built to a question. The property takes none, because there is
-nothing to derive: it is the stored table, and the only choice about it is the
-backend, which is [ambient](internal-representation.md#the-backend-is-ambient-and-namable).
-That is the same split as `G.B` against `G.matrices.incidence(...)`: a property
-for the plain case, a call when there are arguments.
+!!! warning "The five pairs do not all keep to it"
 
-Reach for `views` to analyse and for `attrs` to round-trip.
+    Today the relationship is different for each of the five, so check the one
+    you are about to use:
+
+    | name | `attrs.<x>` | `views.<x>()` |
+    |---|---|---|
+    | `edges` | the attributes you set | those, plus `source`, `target`, the layer columns, `directed` and the weights |
+    | `slices` | only the slices carrying an attribute | every declared slice, including `default`, with null cells |
+    | `aspects` | only the aspects carrying an attribute | every declared aspect, plus `elem_layers` |
+    | `nodes` | the node table | **the same table** — `views.nodes()` adds nothing |
+    | `layers` | the coordinate level, keyed by `layer` | the coordinate and elementary levels **merged**, keyed by `layer_tuple` |
+
+    So `edges` follows the rule, `slices` and `aspects` are the registry joined
+    onto the attributes rather than a superset of them, `nodes` is a duplicate,
+    and `layers` is neither.
+
+    Both layer frames also carry a column called `layer_id`, and they are
+    **different key spaces**: in `views.layers()` it is a bare label, `'ctl'`; in
+    `attrs.elementary_layers` it is the composite the elementary API writes,
+    `'cond_ctl'`. Do not join the two.
+
+    Making the five agree is open work. Until it lands, read attributes through
+    `attrs`, and treat `views.slices()`, `views.aspects()` and `views.layers()`
+    as a display of the registry.
 
 !!! warning "The two layer frames are not joinable"
 

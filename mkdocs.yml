@@ -64,9 +64,14 @@ nav:
 
 -   Explanations:
     -   Explanations Overview: explanations/index.md
+    -   Design philosophy: explanations/design-philosophy.md
+    -   Architecture overview: explanations/architecture-overview.md
     -   Reading the graph: explanations/reading-the-graph.md
+    -   Internal representation: explanations/internal-representation.md
+    -   Mutation and derived state: explanations/mutation-and-derived-state.md
     -   Aspects, order, and windows: explanations/aspects-and-windows.md
     -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
+    -   Incidence and the matrices: explanations/math-incidence.md
     -   Slices and views: explanations/managers-and-views.md
     -   Interoperability: explanations/interoperability.md
     -   Storage and IO: explanations/io-annnet.md
