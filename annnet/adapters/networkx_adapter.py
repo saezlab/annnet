@@ -49,7 +49,8 @@ from ._common import (
 
 if TYPE_CHECKING:
     from ..core import AnnNet
-
+from ..core import _structure
+from .._support import projection as _projection
 
 # Structural keys that must not be re-applied as hyperedge attributes on import
 # (they are part of the edge dispatch contract).
@@ -232,6 +233,8 @@ def to_nx(
     graph: AnnNet,
     directed: bool = True,
     hyperedge_mode: str = 'skip',
+    hyperedges: str | None = None,
+    coefficients: str = 'error',
     slice: str | None = None,
     slices: list[str] | None = None,
     public_only: bool = False,
@@ -250,6 +253,13 @@ def to_nx(
     ----------
     graph : AnnNet
     directed : bool
+    hyperedges : str, optional
+        The same choice as ``hyperedge_mode``, under the name every exporter
+        shares, and accepting ``"star"`` and ``"clique"`` as aliases for
+        ``"reify"`` and ``"expand"``. Takes precedence when both are given.
+    coefficients : {"error", "drop"}, default "error"
+        What to do when the projection would drop per-member coefficients. Only
+        ``"expand"`` loses them, and losing them silently is what this refuses.
     hyperedge_mode : {"skip", "expand", "reify"}
     slice : str, optional
         Export single slice only (affects which hyperedges are reified).
@@ -263,6 +273,10 @@ def to_nx(
         (nxG, manifest)
 
     """
+    hyperedge_mode = _projection.normalise(hyperedges if hyperedges is not None else hyperedge_mode)
+    _projection.check_coefficients(
+        _structure.hyperedges_with_coefficients(graph), hyperedge_mode, coefficients
+    )
 
     def _public(d):
         if not d:

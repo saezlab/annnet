@@ -20,7 +20,7 @@ either, and the reader never learns which.
 
 ```python
 G.layers.attach_values(
-    {'expression': matrix},          # conditions x nodes
+    {'expression': matrix},  # conditions x nodes
     layers=[(c,) for c in conditions],
     nodes=node_ids,
 )
@@ -43,8 +43,8 @@ Two options are worth knowing:
 ## Reading: one cell, or a rectangle
 
 ```python
-G.layers.values()                 # the resolver
-G.layers.matrix('expression')     # a rectangle
+G.layers.values()  # the resolver
+G.layers.matrix('expression')  # a rectangle
 G.layers.node_frame(attrs=[...])  # a table
 ```
 
@@ -57,9 +57,9 @@ conflict, and blending would hide it.
 
 ```python
 block = G.layers.matrix('expression', nodes=wanted)
-block.values     # ndarray, layers x nodes
-block.nodes      # the node of each column
-block.layers     # the layer of each row
+block.values  # ndarray, layers x nodes
+block.nodes  # the node of each column
+block.layers  # the layer of each row
 ```
 
 A frame of Python objects has to be unpacked before any arithmetic. This is the
@@ -88,7 +88,7 @@ to give — the dict store never does — the whole read goes cell by cell, even
 where the fast answer would have been right. Telling those cases apart costs more
 than taking the slow path does, and the slow path is never wrong.
 
-## Identity is a separate question, and it does not shrink
+## Identity is a separate question
 
 Values moved into an array. **Presence did not.** Whether node `n` exists on
 layer `c` is a fact the structure store holds per pair, and that is what
@@ -108,21 +108,32 @@ bare ids needs.
 | 400,000 | 1.78 s | **0.45 s** |
 | 1,600,000 | 13.69 s | **1.88 s** |
 
-!!! warning "Identity still costs memory, and this is the open problem"
+!!! note "Placement is for the network's entities, not for the assay"
 
-    Placing 1.6 M node-layers holds about **470 MB**, and 20 M holds several
-    gigabytes. That is not the values — those are 80 MB as an array. It is the
-    per-pair identity: a key in a dict, a slot in a list, and a container per
-    entity.
+    Reading an attached array **never consults presence**. `MatrixValues`
+    addresses cells through its own two index maps, so a cell answers whether or
+    not its node-layer exists:
 
-    So the read path scales and the *placement* path does not, and no amount of
-    making `place` faster changes that: it is one dict entry per pair by
-    construction. Making it otherwise means a node-layer rectangle the store can
-    hold without enumerating — which is a change to the store rather than to this
-    seam, and it has not been made.
+    ```python
+    G.layers.attach_values({'expr': X}, layers=conditions, nodes=all_20k_genes)
+    # 3.3 ms, no measurable memory, 20 million cells readable
+    G.layers.matrix('expr', nodes=the_300_i_care_about)  # 12.6 ms
+    ```
 
-    Until it is: attach and read at any scale, and place deliberately. `mask=`
-    is the tool — place what was measured, not the cross product.
+    So `place` is not on the read path at all. It is needed for three things, and
+    none of them scales with the size of the assay: a node-layer that is an
+    **edge endpoint**, one that carries a **dict-store attribute** (which is how
+    a method's results land), and **structural queries** like supra-adjacency.
+
+    All three are about entities the *network* holds. A 7,000-node prior across
+    16 samples is ~114,000 pairs — a tenth of a second and a few tens of
+    megabytes. The measurement matrix stays where it was, in the AnnData, and is
+    read through the index maps.
+
+    The one shape that does hit the wall is declaring **cells** as layers rather
+    than samples: 20,000 nodes across 1,000 layers is several gigabytes of
+    per-pair identity. Pseudobulk first; the number to watch is the layer count,
+    not the cell count.
 
 ## Where to go next
 

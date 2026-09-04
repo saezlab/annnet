@@ -9,6 +9,12 @@ from .._support.lazy_exports import export_dir, resolve_lazy_export
 _lazy_symbols: dict[str, tuple[str, str]] = {
     # annnet native format
     'write': ('annnet.io.annnet_format', 'write'),
+    # edge tables
+    'from_edge_frame': ('annnet.io.edge_frame', 'from_edge_frame'),
+    'add_edges_from_frame': ('annnet.io.edge_frame', 'add_edges_from_frame'),
+    'edge_id_for': ('annnet.io.edge_frame', 'edge_id_for'),
+    'ON_CONFLICT': ('annnet.io._conflict', 'ON_CONFLICT'),
+    'EdgeIdConflict': ('annnet.io._conflict', 'EdgeIdConflict'),
     'read': ('annnet.io.annnet_format', 'read'),
     # JSON
     'to_json': ('annnet.io.json_format', 'to_json'),

@@ -589,6 +589,48 @@ def edge_coefficients(graph, edge_id: str):
     return {key[0]: value for key, value in members.items()}
 
 
+def hyperedges_with_coefficients(graph) -> list[str]:
+    """The ids of the hyperedges that weight their members separately.
+
+    :func:`edge_coefficients` answers ``None`` for an edge whose coefficients
+    follow from its weight and its directedness, and a mapping for one the caller
+    set — which is exactly the distinction that decides whether projecting the
+    graph onto pairs loses anything.
+
+    Parameters
+    ----------
+    graph : AnnNet
+
+    Returns
+    -------
+    list[str]
+    """
+    found = []
+    for ref in iter_edges(graph):
+        if ref.kind != HYPER:
+            continue
+        if edge_coefficients(graph, ref.id) is not None:
+            found.append(ref.id)
+    return found
+
+
+def is_flat(graph) -> bool:
+    """Whether every edge of this graph joins exactly two entities.
+
+    A flat graph projects onto any pair-shaped format without a decision, which
+    is what a caller usually wants to know before making one.
+
+    Parameters
+    ----------
+    graph : AnnNet
+
+    Returns
+    -------
+    bool
+    """
+    return not any(ref.kind == HYPER for ref in iter_edges(graph))
+
+
 def edge_definition(graph, edge_id: str) -> EdgeDefinition:
     """Return one edge as the definition a loader would hand over.
 

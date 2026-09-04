@@ -38,6 +38,8 @@ from ._common import (
 
 if TYPE_CHECKING:
     from ..core import AnnNet
+from ..core import _structure
+from .._support import projection as _projection
 
 
 def _export_binary_graph(
@@ -273,6 +275,8 @@ def to_igraph(
     graph: AnnNet,
     directed: bool = True,
     hyperedge_mode: str = 'skip',
+    hyperedges: str | None = None,
+    coefficients: str = 'error',
     slice: str | None = None,
     slices: list[str] | None = None,
     public_only: bool = False,
@@ -283,11 +287,22 @@ def to_igraph(
     ``from_igraph`` takes the manifest as its second argument, so
     ``from_igraph(*to_igraph(G))`` is the round trip.
 
+    hyperedges : str, optional
+        The same choice as ``hyperedge_mode``, under the name every exporter
+        shares, and accepting ``"star"`` and ``"clique"`` as aliases for
+        ``"reify"`` and ``"expand"``. Takes precedence when both are given.
+    coefficients : {"error", "drop"}, default "error"
+        What to do when the projection would drop per-member coefficients. Only
+        ``"expand"`` loses them, and losing them silently is what this refuses.
     hyperedge_mode: {"skip","expand","reify"}
       - "skip": drop HE edges from igG (manifest keeps them)
       - "expand": cartesian product (directed) / clique (undirected)
       - "reify": add a node per HE and membership edges V↔HE carrying roles/coeffs
     """
+    hyperedge_mode = _projection.normalise(hyperedges if hyperedges is not None else hyperedge_mode)
+    _projection.check_coefficients(
+        _structure.hyperedges_with_coefficients(graph), hyperedge_mode, coefficients
+    )
     # -------------- base igraph build (binary edges only) --------------
     # For "reify" we start with hyperedges skipped, then add them as nodes+membership edges.
     _slice_filter_for_export: set[str] | None = None

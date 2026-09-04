@@ -71,6 +71,7 @@ nav:
     -   Mutation and derived state: explanations/mutation-and-derived-state.md
     -   Aspects, order, and windows: explanations/aspects-and-windows.md
     -   Node-layer values and scale: explanations/values-and-scale.md
+    -   Edge tables, ids, and formats: explanations/edge-tables-and-formats.md
     -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
     -   Incidence and the matrices: explanations/math-incidence.md
     -   Slices and views: explanations/managers-and-views.md

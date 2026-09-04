@@ -169,7 +169,15 @@ def _build_layer_dict(graph) -> _LayerDict:
     return ld
 
 
-def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False, matrix=False):
+def _write_dir(
+    graph,
+    path: str | Path,
+    *,
+    compression='zstd',
+    overwrite=False,
+    matrix=False,
+    attached='materialise',
+):
     """Write graph to disk with zero topology loss.
 
     Parameters
@@ -252,7 +260,7 @@ def _write_dir(graph, path: str | Path, *, compression='zstd', overwrite=False, 
     _write_tables(graph, root / 'tables', compression)
 
     # 4. Write layers/ (Kivela Multilayer structures)
-    _write_multilayers(graph, root / 'layers', compression, layer_dict)
+    _write_multilayers(graph, root / 'layers', compression, layer_dict, attached=attached)
 
     # 5. Write slices/
     _write_slices(graph, root / 'slices', compression, layer_dict)
@@ -272,6 +280,7 @@ def write(
     overwrite: bool = False,
     matrix: bool = False,
     sidecar: bool = True,
+    attached: str = 'materialise',
 ) -> None:
     """Write an AnnNet graph to a directory or `.annnet` archive.
 
@@ -283,7 +292,39 @@ def write(
         correctness one: with it omitted, ``read()`` defers a rebuild until the
         matrix is first touched. Explicit coefficients persist either way, as
         records data.
+    attached : {"materialise", "drop", "error"}, default "materialise"
+        What to do with node-layer values held in an *attached array* — which is
+        every value a matrix join brought in.
+
+        These were **not written at all** before this parameter existed: the file
+        read back null in their place and said nothing about it.
+        ``"materialise"`` writes them out as ordinary node-layer attributes, one
+        stored cell per non-null pair the graph holds a node-layer for.
+        ``"drop"`` leaves them out deliberately. ``"error"`` refuses to write,
+        naming what it refused.
+
+        There is no mode that loses them quietly. Materialising costs size — a
+        dense array becomes one stored row per non-null pair — and holding arrays
+        as arrays is a storage-format question that is still open.
+
+    Raises
+    ------
+    ValueError
+        If ``attached`` is not one of the three.
+    FileExistsError
+        If the path exists and ``overwrite`` is False.
     """
+    if attached not in ('materialise', 'drop', 'error'):
+        raise ValueError(f"attached must be 'materialise', 'drop' or 'error', got {attached!r}")
+    backings = list(getattr(graph, '_node_layer_backings', ()) or [])
+    if attached == 'error' and backings:
+        names = sorted({name for backing in backings for name in backing.names()})
+        raise ValueError(
+            f'this graph holds {len(backings)} attached array(s) carrying {names!r}, and '
+            f"attached='error' refuses to write them. Pass attached='materialise' to "
+            f"write the cells out, or attached='drop' to write the graph without them."
+        )
+    store_attached = 'drop' if attached == 'drop' else 'materialise'
     path = Path(path)
 
     # FILE MODE (.annnet archive)
@@ -295,12 +336,26 @@ def write(
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_root = Path(tmp) / 'graph.annnet'
-            _write_dir(graph, tmp_root, compression=compression, overwrite=True, matrix=matrix)
+            _write_dir(
+                graph,
+                tmp_root,
+                compression=compression,
+                overwrite=True,
+                matrix=matrix,
+                attached=store_attached,
+            )
             _write_archive(tmp_root, path)
         return
 
     # DIRECTORY MODE (canonical format)
-    return _write_dir(graph, path, compression=compression, overwrite=overwrite, matrix=matrix)
+    return _write_dir(
+        graph,
+        path,
+        compression=compression,
+        overwrite=overwrite,
+        matrix=matrix,
+        attached=store_attached,
+    )
 
 
 def _write_structure(
@@ -490,7 +545,7 @@ def _write_structure(
         path / 'edges.parquet',
     )
 
-    # 4b. Explicit incidence coefficients (stoichiometry, resolved flexible
+    # 4b. Explicit incidence coefficients (resolved flexible
     # directions). An edge that carries these cannot derive its column from its
     # weight and its directedness, so they are what makes the file a complete
     # description, and they are written whether or not the derived matrix is.
@@ -568,7 +623,14 @@ def _write_tables(graph, path: Path, compression: str):
     dataframe_write_parquet(graph.edge_slice_attributes, path / 'edge_slice_attributes.parquet')
 
 
-def _write_multilayers(graph, path: Path, compression: str, layer_dict: _LayerDict):
+def _write_multilayers(
+    graph,
+    path: Path,
+    compression: str,
+    layer_dict: _LayerDict,
+    *,
+    attached: str = 'materialise',
+):
     """Write Kivela multilayer structures with integer-encoded layer ids."""
     import json
 
@@ -584,6 +646,7 @@ def _write_multilayers(graph, path: Path, compression: str, layer_dict: _LayerDi
         # native writer reads graph.edge_layers directly below; skip the
         # serialize → deserialize round-trip the manifest used to do.
         include_edge_layers=False,
+        attached=attached,
     )
 
     # 1. Metadata: Aspects & elementary layer values
@@ -1259,7 +1322,7 @@ def _recover_legacy_coeffs(graph, csc) -> None:
             continue
         # Compare in float32. The matrix holds float32 while a weight is a Python
         # float, so a float64 comparison never matches for an ordinary weight such
-        # as 0.1, and every column would masquerade as stoichiometry.
+        # as 0.1, and every column would masquerade as an explicit coefficient.
         derived = {
             key: float(np.float32(value))
             for key, value in _structure.edge_members(graph, edge.id).items()

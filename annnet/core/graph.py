@@ -2633,7 +2633,11 @@ class AnnNet(
             matrix is first touched, which is usually cheaper than loading it. Turn
             it on for graphs large enough that the rebuild dominates.
         **kwargs
-            Passed to `annnet.io.annnet_format.write`.
+            Passed to `annnet.io.annnet_format.write`. Notably ``attached=``,
+            which says what to do with node-layer values held in an attached
+            array: ``"materialise"`` (the default) writes them out, ``"drop"``
+            leaves them out deliberately, ``"error"`` refuses. None of the three
+            loses them quietly.
 
         Returns
         -------

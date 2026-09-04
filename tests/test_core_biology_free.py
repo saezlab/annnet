@@ -67,8 +67,40 @@ BIOLOGY_WORDS = (
 PATTERN = re.compile(r'(?<![A-Za-z])(' + '|'.join(BIOLOGY_WORDS) + r')(?![A-Za-z])', re.IGNORECASE)
 
 
+#: The parts of the package a general network data structure is made of. `io`
+#: and `_support` are here for the same reason `core` is: a reader that names a
+#: gene has a shape that fits one field, and a format is not a domain.
+MECHANISM = ('core', 'io', '_support')
+
+
+#: Readers for formats that are themselves domain formats. SBML is a systems
+#: biology exchange format and CX2 carries a domain schema; a reader for one
+#: names what the format names, and refusing that would be the gate crying wolf.
+#: The exemption is per *file* and deliberately short — a new name here is a
+#: decision, not a convenience.
+EXEMPT = frozenset({'sbml.py', 'sbml_cobra.py', 'cx2.py'})
+
+
 def core_files() -> list[Path]:
-    return sorted(CORE.rglob('*.py'))
+    root = Path(annnet.__file__).parent
+    return sorted(
+        path
+        for part in MECHANISM
+        for path in (root / part).rglob('*.py')
+        if path.name not in EXEMPT
+    )
+
+
+def test_every_exemption_names_a_file_that_exists():
+    """An exemption for a file that moved would silently stop covering it."""
+    root = Path(annnet.__file__).parent
+    present = {path.name for part in MECHANISM for path in (root / part).rglob('*.py')}
+    assert EXEMPT <= present, f'these exemptions name nothing: {sorted(EXEMPT - present)}'
+
+
+def test_the_exemption_list_stays_short():
+    """Three format readers is a boundary; thirty would be a suppressed gate."""
+    assert len(EXEMPT) <= 5
 
 
 def test_the_word_list_is_the_one_the_gate_reads():
@@ -79,12 +111,13 @@ def test_the_word_list_is_the_one_the_gate_reads():
 
 
 @pytest.mark.parametrize('path', core_files(), ids=lambda path: path.name)
-def test_no_module_of_the_core_names_a_biological_concept(path):
+def test_no_module_of_the_mechanism_names_a_biological_concept(path):
     found = []
     for number, line in enumerate(path.read_text().splitlines(), start=1):
         match = PATTERN.search(line)
         if match:
             found.append(f'{path.relative_to(PROJECT)}:{number} says {match.group(0)!r}')
     assert not found, (
-        'the core is a general network data structure and names no biology:\n' + '\n'.join(found)
+        'the mechanism half of the package is a general network data structure and\n'
+        'names no biology; the vocabulary lives in annnet.experimental:\n' + '\n'.join(found)
     )

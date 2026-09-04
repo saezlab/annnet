@@ -142,19 +142,59 @@ def deserialize_edge_layers(data: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+#: What a writer may do about node-layer values held in an attached array.
+ATTACHED_POLICIES = ('materialise', 'drop')
+
+
+def _attached_cells(backings, names, node_id, layer_tuple) -> dict:
+    """The cells attached arrays hold for one node-layer, the latest winning.
+
+    Read in attachment order so the rule matches
+    :meth:`annnet.core._values.ValueResolver.get`: a later backing shadows an
+    earlier one rather than blending with it.
+    """
+    found: dict = {}
+    for backing in backings:
+        for name in names:
+            value = backing.get(node_id, layer_tuple, name, None)
+            if value is not None:
+                found[name] = value
+    return found
+
+
 def serialize_multilayer_manifest(
     graph,
     *,
     table_to_rows,
     serialize_edge_layers,
     include_edge_layers: bool = True,
+    attached: str = 'materialise',
 ):
     """Serialize multilayer bookkeeping through the public layer API when possible.
 
     Pass ``include_edge_layers=False`` to skip the (potentially expensive)
     serialize_edge_layers pass when the caller already reads ``graph.edge_layers``
     directly (e.g. the native parquet writer).
+
+    Parameters
+    ----------
+    attached : {"materialise", "drop"}, default "materialise"
+        What to do with node-layer values held in an *attached array* rather than
+        in the contextual store. ``graph.layers.node_attrs`` reads only the
+        store, so before this parameter existed every value an attach had joined
+        was written nowhere and read back as null, silently.
+
+        ``"materialise"`` writes them out as ordinary node-layer attributes —
+        one stored cell per non-null pair the graph actually holds a node-layer
+        for. ``"drop"`` leaves them out deliberately.
+
+    Raises
+    ------
+    ValueError
+        If ``attached`` is not one of :data:`ATTACHED_POLICIES`.
     """
+    if attached not in ATTACHED_POLICIES:
+        raise ValueError(f'attached must be one of {ATTACHED_POLICIES}, got {attached!r}')
     aspect_attrs = {}
     for aspect in graph.aspects:
         attrs = graph.layers.aspect_attrs(aspect)
@@ -164,11 +204,23 @@ def serialize_multilayer_manifest(
     # One walk over the node entities instead of calling ``iter_node_layers``
     # per node — that helper does a full V-wide scan internally, which would
     # make this loop O(V²).
+    # A value that arrived as a matrix lives in an attached backing, which
+    # ``node_attrs`` does not read. Materialising it here is what makes it
+    # survive the write; without this the file said nothing and read back null.
+    backings = (
+        list(getattr(graph, '_node_layer_backings', ()) or []) if attached == 'materialise' else []
+    )
+    attached_names = sorted({name for backing in backings for name in backing.names()})
+
     vm_rows = []
     node_layer_attrs = []
     for uu, layer_tuple in graph._VM_ordered():
         vm_rows.append({'node': uu, 'layer': list(layer_tuple)})
         attrs = graph.layers.node_attrs(uu, layer_tuple)
+        if attached_names:
+            held = _attached_cells(backings, attached_names, uu, layer_tuple)
+            if held:
+                attrs = {**attrs, **held}
         if attrs:
             node_layer_attrs.append({'node': uu, 'layer': list(layer_tuple), 'attrs': attrs})
 

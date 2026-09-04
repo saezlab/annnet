@@ -101,7 +101,7 @@ FORMAT_CAPABILITIES: dict[str, frozenset[str]] = {
 }
 FORMAT_CAPABILITIES['gexf'] = FORMAT_CAPABILITIES['graphml']
 FORMAT_CAPABILITIES['excel'] = FORMAT_CAPABILITIES['csv']
-# SBML is reactions over species: topology and stoichiometry survive, the rest does not.
+# SBML holds a bipartite topology and its coefficients; the rest does not survive.
 _ALL_CAPABILITIES = frozenset(CAPABILITIES)
 
 FORMAT_CAPABILITIES['sbml'] = frozenset(
