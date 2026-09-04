@@ -7,6 +7,13 @@ construction with `add_nodes` and `add_edges`, graph-owned accessors
 (`slices`, `layers`, `attrs`, `views`, `ops`, `idx`, `cache`), annotation
 tables (`obs`, `var`, `uns`), and backend accessors (`nx`, `ig`, `gt`).
 
+The eight attribute tables are read under `attrs`, each named for what addresses
+it: `nodes`, `edges`, `slices`, `aspects`, `layers`, `edge_slices`,
+`node_layers` and `elementary_layers`. `obs` and `var` are the same tables as
+`attrs.nodes` and `attrs.edges` under the anndata spelling. See
+[Reading the graph](../../explanations/reading-the-graph.md) for how these
+differ from the frames `views` builds.
+
 ## AnnNet
 
 ::: annnet.core.graph.AnnNet

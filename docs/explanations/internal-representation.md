@@ -185,12 +185,66 @@ the cost of a write grew with the table and the total was quadratic. Writing
 3 200 pairs took over 17 seconds; it now takes 7 milliseconds, which is the same
 per-write cost as a generic attribute.
 
-A dataframe is what a *reader* gets. `G.slice_attributes`,
-`G.edge_slice_attributes` and `G.layer_attributes` are rendered on access and
-cached against the store's version, and `G.contextual_table(level,
-backend=...)` renders any level in the backend you name — so the backend is a
-property of the read, not of the graph. Narwhals appears at that boundary and
-nowhere else.
+A dataframe is what a *reader* gets. Every level is rendered on access and
+cached against the clock of that level, so a read after a read costs nothing and
+a read after a write rebuilds. **Each level keeps its own clock.** One clock for
+all six would age every table on any write, so a loop that annotates slices and
+reads node-layers would rebuild the node-layer table on every pass, for a change
+that cannot have touched it.
+
+Narwhals appears at that boundary and nowhere else.
+
+### The eight tables
+
+The two generic axes and the six contextual levels are the same idea —
+attributes keyed by an address — so they are read the same way, under
+`G.attrs`, each named for what addresses it:
+
+| table | keyed by |
+|---|---|
+| `G.attrs.nodes` | one node |
+| `G.attrs.edges` | one edge |
+| `G.attrs.slices` | one slice |
+| `G.attrs.aspects` | one aspect |
+| `G.attrs.layers` | one layer coordinate, across every aspect |
+| `G.attrs.edge_slices` | one edge inside one slice |
+| `G.attrs.node_layers` | one node inside one layer |
+| `G.attrs.elementary_layers` | one label inside one aspect |
+
+`layers` and `elementary_layers` are different tables and the difference is easy
+to miss. A layer coordinate is one label *per aspect* — `('12h', 'mapk')`. An
+elementary layer is one label *inside one* aspect — `mapk` of `mechanism`.
+
+The older spellings still answer: `G.obs` and `G.var` for the two axes,
+`G.slice_attributes`, `G.edge_slice_attributes` and `G.layer_attributes` for
+three of the levels, and `G.contextual_table(level)` for all six. They are the
+same tables. `obs` and `var` also keep the anndata parallel, which is the reason
+they are not going anywhere.
+
+Two of the eight differ in one way worth knowing: `nodes` and `edges` render
+through `G.obs` and `G.var`, which **clone** on every read, so a caller cannot
+reach the cache behind them. The other six hand back the cached table itself and
+are read-only by contract — writing into one changes what the next reader sees,
+and changes nothing the graph holds.
+
+### The backend is ambient, and namable
+
+Set it once for every table:
+
+```python
+G.attrs.backend = 'pandas'
+```
+
+Ask for one table in another, when a workflow genuinely mixes them:
+
+```python
+G.attrs.table('nodes', backend='pyarrow')
+```
+
+Naming the backend a table already has, or `auto`, is the table itself and costs
+nothing. Naming a different one converts, and the conversion keeps the columns
+and their types — including on a table with no rows, which still states what it
+is addressed by.
 
 ## Slices are overlays, not duplicate graphs
 

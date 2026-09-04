@@ -140,6 +140,52 @@ G.exists('akt')  # KeyError: ... needs a value for ['condition']
 G.exists('akt', mechansim='x')  # KeyError: unknown aspect ['mechansim']
 ```
 
+## Two namespaces hand back a frame
+
+`G.views` and `G.attrs` both answer with a table, and five names appear on both —
+`nodes`, `edges`, `slices`, `aspects` and `layers`. They are not the same table,
+and the rule is one sentence:
+
+**`G.views.<x>()` is a call and gives you everything known about `x`.
+`G.attrs.<x>` is a property and gives you only what was written to `x`.**
+
+```python
+G.views.edges()  # edge_id, kind, source, target, src_layer, directed, weight, …
+G.attrs.edges  # edge_id, and the attributes you set
+```
+
+The call takes the filters and joins — `layer=`, `in_slice=`, `slice=` — because
+a derived frame is built to a question. The property takes none, because there is
+nothing to derive: it is the stored table, and the only choice about it is the
+backend, which is [ambient](internal-representation.md#the-backend-is-ambient-and-namable).
+That is the same split as `G.B` against `G.matrices.incidence(...)`: a property
+for the plain case, a call when there are arguments.
+
+Reach for `views` to analyse and for `attrs` to round-trip.
+
+!!! warning "The two layer frames are not joinable"
+
+    `G.views.layers()` and `G.attrs.layers` are both about layers and agree about
+    nothing else, so do not join them:
+
+    - `views.layers()` keys on `layer_tuple`; `attrs.layers` keys on `layer`.
+    - `views.layers()` merges the layer-coordinate level and the
+      elementary-layer level into one frame. `attrs` keeps them apart, as
+      `attrs.layers` and `attrs.elementary_layers`, because they are addressed
+      differently.
+    - Both carry a column called `layer_id` and they are **different key
+      spaces**: in `views.layers()` it is a bare label, `'ctl'`; in
+      `attrs.elementary_layers` it is the composite the elementary API writes,
+      `'cond_ctl'`.
+
+    Reconciling the two is open work. Until it lands, read layer attributes
+    through `attrs` and treat the `layers()` frame as a display of the layer
+    registry.
+
+A window is a third thing and does not hand back a frame at all.
+`G.layers.where(...).nodes` is a **set of ids**, the way `G.nodes` is a list of
+ids. A bare plural is identities. The same plural under `attrs` is the table.
+
 ## Where to go next
 
 - [Slices and views](managers-and-views.md) — what a slice is, and how it differs

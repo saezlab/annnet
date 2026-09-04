@@ -101,8 +101,60 @@ them calls goes away.
 
 ### Added
 
+- **The eight attribute tables, under one namespace and one convention.** They
+  carried three spellings — `G.obs` and `G.var` for the two generic axes,
+  `G.slice_attributes` and two siblings for three of the contextual levels, and
+  `G.contextual_table(level)` for all six. Same concept, three ways to reach it,
+  and the read side in a different namespace from the setter that writes it.
+  They are `G.attrs.<address>` now, beside those setters:
+
+  ```python
+  G.attrs.nodes  # G.obs
+  G.attrs.edges  # G.var
+  G.attrs.slices
+  G.attrs.aspects
+  G.attrs.layers  # one label per aspect, the whole coordinate
+  G.attrs.edge_slices
+  G.attrs.node_layers
+  G.attrs.elementary_layers  # one label inside one aspect
+  ```
+
+  Every older spelling still answers, and `obs` and `var` keep the anndata
+  parallel, so nothing has to move.
+
+- **`G.attrs.backend`, which every table follows**, and
+  `G.attrs.table(name, backend=...)` for the workflow that genuinely mixes two.
+  The backend picks the container and never the content.
+
 - `G.N` and `G.E`, the node sequence and the edge sequence. A string key is an
   attribute column, an integer key is a position in that sequence, and `select`
   and `find` filter it.
 - `G.get_node(node_id)`, which gives a `NodeView`: the id, the kind of the node,
   the layers it lives in, and its attributes.
+
+### Fixed
+
+- **A whole table assigned to the graph is visible to the next read.** Assigning
+  `G.slice_attributes`, `G.edge_slice_attributes` or `G.layer_attributes` wrote
+  the store but left the materialized table where it was, so the next read
+  answered with the values the assignment had **replaced** — without the rows it
+  added, and with nothing to say so. Reading a table before assigning one was
+  enough to hit it, which is what a round trip through an adapter does.
+
+- **`G.attrs.table(name, backend=...)` keeps the columns of a table with no
+  rows.** It went through rows, and rows carry no schema, so an empty table came
+  back with no columns at all — including the column it is addressed by.
+
+- **Asking for the backend a table already has costs nothing.** The name passed
+  in was compared against the table without being resolved first, so `"auto"`
+  never matched a concrete backend and rebuilt the whole table.
+
+- **A layer column is typed the same whether or not the table holds a row.** A
+  layer coordinate is a tuple, so the column holding it is a list of strings.
+  `G.attrs.layers` and `G.attrs.node_layers` declared it text, so an empty table
+  and a filled one disagreed about the type of the column they are keyed by.
+
+- **A write to one contextual level no longer rebuilds the tables of the other
+  five.** They shared one clock, so annotating a slice aged the node-layer table
+  as well. Each level keeps its own now.
+
