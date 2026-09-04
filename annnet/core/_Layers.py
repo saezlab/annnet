@@ -15,6 +15,12 @@ if TYPE_CHECKING:
     from .graph import AnnNet
 
 from . import _build, _derive, _mutate
+from ._values import (
+    ValueMatrix,
+    MatrixValues,
+    ValueResolver,
+    ContextualValues,
+)
 from ._aspects import (
     ORDERED_KEY,
     Aspect,
@@ -26,9 +32,12 @@ from ._selection import LayerSelection, satisfies, parse_predicate
 from ._stored_kinds import STORED_EDGE_KIND
 from .._support.dataframe_backend import (
     clone_dataframe,
+    empty_dataframe,
     dataframe_columns,
     dataframe_to_rows,
     dataframe_filter_eq,
+    dataframe_from_rows,
+    dataframe_from_columns,
 )
 
 
@@ -333,6 +342,401 @@ class LayerAccessor:
             self.list_layers(name),
             ordered=bool(self._aspect_attrs.get(name, {}).get(ORDERED_KEY, False)),
         )
+
+    # ------------------------------------------------------------------
+    # Node-layer values
+    #
+    # A value may live in the contextual store or in an attached array (see
+    # :mod:`annnet.core._values`). Every read goes through the resolver, so a
+    # caller — and a notebook — never learns which one answered.
+    # ------------------------------------------------------------------
+
+    @property
+    def _value_backings(self) -> list:
+        """The attached backings of this graph, in the order they arrived."""
+        graph = self._G
+        try:
+            return graph._node_layer_backings
+        except AttributeError:
+            graph._node_layer_backings = []
+            return graph._node_layer_backings
+
+    def values(self) -> ValueResolver:
+        """Return the resolver that answers for node-layer values.
+
+        Returns
+        -------
+        ValueResolver
+            The contextual store first, then every attached array in the order it
+            was attached. A later backing wins for a cell it can answer.
+        """
+        return ValueResolver([ContextualValues(self._state_attrs), *self._value_backings])
+
+    def attach_values(self, arrays, *, layers, nodes, rows=None, columns=None, mask=None):
+        """Attach an array of node-layer values without copying a cell.
+
+        The contextual store keys every value by its pair, which costs about 360
+        bytes a cell. That is the right shape for values a person typed and the
+        wrong one for values that arrived as a table. Attaching costs the two
+        index maps and nothing else: the array is not copied, not converted, and
+        not read until a cell is asked for.
+
+        Parameters
+        ----------
+        arrays : dict[str, array-like]
+            One two-dimensional array per attribute name, ``len(layers)`` rows by
+            ``len(nodes)`` columns.
+        layers : Sequence[tuple[str, ...]]
+            The layer each row stands for, in row order.
+        nodes : Sequence[str]
+            The node each column stands for, in column order.
+        rows, columns : dict, optional
+            Explicit index maps. An explicit column map lets two nodes share one
+            column without the column being copied.
+        mask : array-like, optional
+            A boolean array gating which cells hold a value at all.
+
+        Returns
+        -------
+        MatrixValues
+            The backing, so a caller can detach it later.
+
+        Raises
+        ------
+        ValueError
+            If ``arrays`` is empty, or an array does not match the maps.
+
+        Examples
+        --------
+        >>> G.layers.attach_values(  # doctest: +SKIP
+        ...     {'response': matrix},
+        ...     layers=[(c,) for c in conditions],
+        ...     nodes=node_ids,
+        ... )
+        """
+        backing = MatrixValues(
+            arrays,
+            [tuple(layer) for layer in layers],
+            list(nodes),
+            rows=rows,
+            columns=columns,
+            mask=mask,
+        )
+        self._value_backings.append(backing)
+        return backing
+
+    def detach_values(self, backing) -> None:
+        """Drop one attached array. The contextual store is never dropped."""
+        self._value_backings.remove(backing)
+
+    def matrix(self, name: str, *, nodes=None, layers=None, missing=np.nan) -> ValueMatrix:
+        """Read one attribute as an array, with the labels that index it.
+
+        This is what to hand a method. A frame of Python objects has to be
+        unpacked before any arithmetic; an array is the arithmetic's own shape,
+        and the two label lists are what put an answer back on the right rows.
+
+        Where the values live in an attached array this reads them in one pass in
+        C. Where they live in the dict store, or span both, it falls back to
+        reading cell by cell — and the two give the same numbers, which is pinned
+        by test.
+
+        Parameters
+        ----------
+        name : str
+            The attribute.
+        nodes : Sequence[str], optional
+            The node of each column. Default: every node carrying a value, sorted.
+        layers : Sequence[tuple[str, ...]], optional
+            The layer of each row. Default: every layer carrying one, in the
+            order the graph declares them.
+        missing : Any, default ``numpy.nan``
+            What a cell no backing answers for holds.
+
+        Returns
+        -------
+        ValueMatrix
+
+        Examples
+        --------
+        >>> block = G.layers.matrix('expression', nodes=['akt', 'erk'])  # doctest: +SKIP
+        >>> block.values.mean(axis=0)  # doctest: +SKIP
+        """
+        resolver = self.values()
+        node_list = list(nodes) if nodes is not None else sorted(resolver.nodes())
+        layer_list = self._frame_layers(resolver, layers)
+        found = resolver.block(node_list, layer_list, name, default=missing)
+        if found is None:
+            found = np.array(
+                [
+                    [resolver.get(node_id, layer, name, missing) for node_id in node_list]
+                    for layer in layer_list
+                ],
+                dtype=float,
+            ).reshape(len(layer_list), len(node_list))
+        return ValueMatrix(values=found, nodes=node_list, layers=layer_list, name=name)
+
+    def node_frame(
+        self,
+        nodes=None,
+        layers=None,
+        attrs=None,
+        *,
+        pairs=None,
+        format: str = 'wide',
+        missing=np.nan,
+        backend: str | None = None,
+    ):
+        """Read node-layer values as a table.
+
+        The scalar accessor :meth:`node_attrs` answers for one pair and returns a
+        dict, so reading a node by layer by attribute cube meant a Python loop
+        with a ``.get()`` default in it — a helper every analysis wrote for
+        itself. This is that cube.
+
+        Parameters
+        ----------
+        nodes : Sequence[str], optional
+            Node ids. Default: every node that carries a value.
+        layers : Sequence[tuple[str, ...]], optional
+            Layer coordinates. Default: every layer that carries a value, in the
+            order the graph declares them.
+        attrs : Sequence[str], optional
+            Attribute names. Default: every name present.
+        pairs : Mapping[str, tuple[str, str]] | Sequence[tuple[str, str]], optional
+            Explicit ``(node_id, attr)`` columns, optionally labelled. Given
+            this, ``nodes`` and ``attrs`` are not used, and the frame costs the
+            pairs asked for rather than their cross product.
+        format : {"wide", "long"}, default "wide"
+            ``"wide"`` is one row per layer, one column per ``(node, attr)``.
+            ``"long"`` is one row per ``(node, layer, attr, value)``.
+        missing : Any, default ``numpy.nan``
+            What a cell no backing answers for holds. Never a ``KeyError``.
+        backend : str, optional
+            Dataframe backend. Defaults to the graph's.
+
+        Returns
+        -------
+        DataFrame-like
+            In ``"wide"`` form: ``layer``, ``layer_id``, then one column per
+            requested pair — named for the attribute when one node was asked for,
+            for the node when one attribute was, and ``"{node}.{attr}"``
+            otherwise, or by the label ``pairs`` gave it.
+
+        Raises
+        ------
+        ValueError
+            If ``format`` is neither ``"wide"`` nor ``"long"``.
+
+        Notes
+        -----
+        Values are read through :meth:`matrix`, so an attached array is gathered
+        in one pass rather than a cell at a time, and the frame is the same
+        whichever store answered.
+
+        Examples
+        --------
+        >>> G.layers.node_frame(nodes=['akt'], attrs=['observed'])  # doctest: +SKIP
+        >>> G.layers.node_frame(pairs={'TGFA': ('tgfa', 'input')})  # doctest: +SKIP
+        """
+        if format not in ('wide', 'long'):
+            raise ValueError(f"format must be 'wide' or 'long', got {format!r}")
+        resolver = self.values()
+        columns = self._frame_columns(resolver, nodes, attrs, pairs)
+        layer_list = self._frame_layers(resolver, layers)
+        backend = backend or self._G._annotations_backend
+
+        # One block per attribute, then read columns out of it. The per-cell
+        # loop this replaces was the whole cost of the frame on an attached
+        # array, and it asked the resolver the same question once per cell.
+        wanted = {name for _label, (_node, name) in columns}
+        node_order = [node_id for _label, (node_id, _name) in columns]
+        blocks = {
+            name: self.matrix(name, nodes=node_order, layers=layer_list, missing=missing).values
+            for name in wanted
+        }
+        at = {(label): (position, name) for position, (label, (_n, name)) in enumerate(columns)}
+
+        if format == 'long':
+            rows = [
+                {
+                    'node_id': node_id,
+                    'layer': list(layer),
+                    'layer_id': self.layer_tuple_to_id(layer),
+                    'attr': name,
+                    'value': blocks[name][row][position],
+                }
+                for row, layer in enumerate(layer_list)
+                for position, (_label, (node_id, name)) in enumerate(columns)
+            ]
+            if not rows:
+                return empty_dataframe(
+                    {
+                        'node_id': 'text',
+                        'layer': 'list_text',
+                        'layer_id': 'text',
+                        'attr': 'text',
+                        'value': 'float',
+                    },
+                    backend=backend,
+                )
+            return dataframe_from_rows(rows, backend=backend)
+
+        if not layer_list:
+            schema: dict[str, str] = {'layer': 'list_text', 'layer_id': 'text'}
+            schema.update({label: 'float' for label, _ in columns})
+            return empty_dataframe(schema, backend=backend)
+
+        out: dict[str, list] = {
+            'layer': [list(layer) for layer in layer_list],
+            'layer_id': [self.layer_tuple_to_id(layer) for layer in layer_list],
+        }
+        for label, (position, name) in at.items():
+            out[label] = list(blocks[name][:, position])
+        return dataframe_from_columns(out, backend=backend)
+
+    def _frame_columns(self, resolver, nodes, attrs, pairs):
+        """Return ``[(column label, (node_id, attr)), ...]`` for one frame."""
+        if pairs is not None:
+            if isinstance(pairs, Mapping):
+                return [(str(label), (pair[0], pair[1])) for label, pair in pairs.items()]
+            return [(f'{node_id}.{name}', (node_id, name)) for node_id, name in pairs]
+
+        node_list = list(nodes) if nodes is not None else sorted(resolver.nodes())
+        name_list = list(attrs) if attrs is not None else sorted(resolver.names())
+        if len(node_list) == 1 and len(name_list) >= 1:
+            return [(name, (node_list[0], name)) for name in name_list]
+        if len(name_list) == 1:
+            return [(node_id, (node_id, name_list[0])) for node_id in node_list]
+        return [
+            (f'{node_id}.{name}', (node_id, name)) for node_id in node_list for name in name_list
+        ]
+
+    def _frame_layers(self, resolver, layers):
+        """Return the layers of one frame, in declaration order when not named."""
+        if layers is not None:
+            return [tuple(layer) for layer in layers]
+        held = resolver.layers()
+        declared = [tuple(aa) for aa in getattr(self, '_all_layers', ())]
+        ordered = [aa for aa in declared if aa in held]
+        return ordered or sorted(held)
+
+    def place(self, nodes, layers, *, mask=None) -> int:
+        """Put every node on every layer, in one call.
+
+        Identity and values are separate questions, and this is the identity one.
+        The value of a node-layer may live in an attached array, which costs two
+        index maps; its *presence* still lives in the structure store, and
+        placing a rectangle one pair at a time is what makes a real measurement
+        table slow to attach whatever its values do.
+
+        Parameters
+        ----------
+        nodes : Sequence[str]
+            The node ids to place.
+        layers : Sequence[tuple[str, ...]]
+            The layer coordinates to place them on.
+        mask : array-like, optional
+            A boolean array, ``len(layers)`` by ``len(nodes)``. Only the cells it
+            holds true are placed, so a condition that was never measured stays
+            absent rather than becoming an empty node-layer.
+
+        Returns
+        -------
+        int
+            The number of node-layers created.
+
+        Examples
+        --------
+        >>> G.layers.place(node_ids, [(c,) for c in conditions])  # doctest: +SKIP
+        """
+        node_list = [str(node_id) for node_id in nodes]
+        layer_list = [tuple(layer) for layer in layers]
+        if not node_list or not layer_list:
+            return 0
+        for coordinate in layer_list:
+            self._validate_layer_tuple(coordinate)
+        gate = None if mask is None else np.asarray(mask, dtype=bool)
+
+        # Straight at the store. The general node-adding path normalises each
+        # item, resolves a coordinate, merges default attributes and touches the
+        # slice registry — all of which are per-node costs, and none of which a
+        # rectangle of bare ids needs.
+        def _keys():
+            # A generator, not a list: the list would be a second copy of the
+            # whole rectangle, and the rectangle is the thing that is large.
+            for row, coordinate in enumerate(layer_list):
+                if gate is None:
+                    yield from ((node_id, coordinate) for node_id in node_list)
+                else:
+                    for index in np.flatnonzero(gate[row]):
+                        yield (node_list[index], coordinate)
+
+        placed = self._G._store.add_entities(_keys())
+        if placed:
+            _derive.bump_structure(self._G)
+            self._G.slices._ensure_slice(self._G._current_slice)['nodes'].update(node_list)
+        return placed
+
+    def set_node_attrs_bulk(self, values, *, layer=None, key=None) -> int:
+        """Write many node-layer values in one call.
+
+        The scalar :meth:`set_node_attrs` takes one pair, so filling a table
+        meant a loop with a call in it.
+
+        Parameters
+        ----------
+        values : Mapping
+            One of three shapes:
+
+            - ``{(node_id, layer): {name: value}}`` — fully explicit.
+            - ``{node_id: {name: value}}`` with ``layer=`` — one layer, many nodes.
+            - ``{(node_id, layer): value}`` or ``{node_id: value}`` with ``key=``
+              — one attribute, its name given once.
+        layer : tuple[str, ...], optional
+            The layer, when the keys are bare node ids.
+        key : str, optional
+            The attribute name, when the values are scalars.
+
+        Returns
+        -------
+        int
+            The number of pairs written.
+
+        Raises
+        ------
+        ValueError
+            If a key is a bare node id and no ``layer`` is given, or a value is a
+            scalar and no ``key`` is.
+
+        Examples
+        --------
+        >>> G.layers.set_node_attrs_bulk({'akt': 0.9}, layer=('stim',), key='observed')
+        1
+        """
+        written = 0
+        for holder, value in values.items():
+            if isinstance(holder, tuple) and len(holder) == 2 and isinstance(holder[1], tuple):
+                node_id, coordinate = holder[0], tuple(holder[1])
+            else:
+                if layer is None:
+                    raise ValueError(
+                        f'{holder!r} is a bare node id, so this call needs layer= to say '
+                        f'which node-layer it means'
+                    )
+                node_id, coordinate = holder, tuple(layer)
+            if isinstance(value, Mapping):
+                attrs = dict(value)
+            else:
+                if key is None:
+                    raise ValueError(
+                        f'the value for {holder!r} is not a mapping, so this call needs '
+                        f'key= to say which attribute it is'
+                    )
+                attrs = {key: value}
+            self.set_node_attrs(node_id, coordinate, **attrs)
+            written += 1
+        return written
 
     def where(self, **predicates) -> LayerSelection:
         """Select the layers whose aspect values satisfy every predicate.

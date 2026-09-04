@@ -525,6 +525,66 @@ class CoreState:
         self._note_change()
         return slot
 
+    def add_entities(self, keys, kind: int = NODE) -> int:
+        """Add many entities at once, and return how many were new.
+
+        :meth:`add_entity` is right for one key and wrong for a hundred thousand:
+        the per-key costs it pays — a capacity check, a hook loop and a clock
+        bump — are each cheap and none of them is per-key work in principle. A
+        rectangle of nodes by layers is exactly that case, and it is the shape a
+        measurement table arrives in.
+
+        Everything the batch does once instead of per key: grow the kind array to
+        the final size, fire the capacity hooks, and note one change.
+
+        Parameters
+        ----------
+        keys : Iterable[tuple]
+            Entity keys. One the store already holds keeps its slot and is not
+            counted.
+        kind : int, default ``NODE``
+
+        Returns
+        -------
+        int
+            How many keys were new.
+        """
+        held = self._entity_slot
+        # A dict rather than a list membership test: the batch may name one key
+        # twice, and asking a list whether it already holds one is quadratic in
+        # exactly the case this method exists for.
+        wanted = list(dict.fromkeys(key for key in keys if key not in held))
+        if not wanted:
+            return 0
+
+        # Reuse freed slots first, exactly as the single-key path does, then
+        # append the rest — but size the array for the whole batch once.
+        slots = []
+        reused = min(len(self.entity_free), len(wanted))
+        for _ in range(reused):
+            slots.append(self.entity_free.pop())
+        appended = len(wanted) - reused
+        if appended:
+            first = len(self._entity_key)
+            slots.extend(range(first, first + appended))
+            self._entity_key.extend([None] * appended)
+            self.entity_kind = _grown(self.entity_kind, first + appended)
+            for hook in self.entity_capacity_hooks:
+                hook(first + appended)
+
+        layered = self._aspects != ('_',)
+        for key, slot in zip(wanted, slots, strict=True):
+            self._entity_key[slot] = key
+            self._entity_slot[key] = slot
+            self.entity_kind[slot] = kind
+            self._entity_edges[slot] = {}
+            if layered:
+                self._id_slots.setdefault(key[0], []).append(slot)
+        if kind == EDGE_ENTITY:
+            self._edge_entity_count += len(wanted)
+        self._note_change()
+        return len(wanted)
+
     def remove_entity(self, key: tuple) -> list[str]:
         """Remove one entity and return the ids of the edges it leaves dangling.
 

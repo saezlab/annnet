@@ -191,9 +191,9 @@ Layers are joined by coupling edges, and which coupling you want follows from th
 same distinction the top of this page draws. `couple` is one call for both:
 
 ```python
-G.layers.couple('time')                          # ordinal: consecutive values
+G.layers.couple('time')  # ordinal: consecutive values
 G.layers.couple('mechanism', kind='categorical')  # categorical: every pair
-G.layers.couple('time', pairs=[('0h', '24h')])    # neither: say which
+G.layers.couple('time', pairs=[('0h', '24h')])  # neither: say which
 ```
 
 Ordinal coupling reads `Aspect.consecutive_pairs()`, so the pairs come from the

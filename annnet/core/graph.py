@@ -20,6 +20,7 @@ from ._records import (
 )
 from ._Annotation import AttributesClass, AttributesAccessor
 from ._contextual import ContextualStore
+from ._provenance import ProvenanceAccessor
 from ._stored_kinds import STORED_EDGE_KIND, STORED_ENTITY_KIND
 from ..algorithms.traversal import Traversal
 from .._support.dataframe_backend import (
@@ -2566,6 +2567,29 @@ class AnnNet(
         except AttributeError:
             self._layer_accessor = LayerAccessor(self)
             return self._layer_accessor
+
+    @property
+    def provenance(self) -> ProvenanceAccessor:
+        """What this graph was built from (``G.provenance``).
+
+        Callable, so ``G.provenance()`` is the table of sources and
+        ``G.provenance.record(...)`` is how a reader adds to it. The records live
+        in ``uns``, so they survive whatever the graph survives.
+
+        Returns
+        -------
+        ProvenanceAccessor
+
+        Examples
+        --------
+        >>> G.provenance.record('OmniPath', version='2024.1')  # doctest: +SKIP
+        >>> G.provenance()  # doctest: +SKIP
+        """
+        found = getattr(self, '_provenance_accessor', None)
+        if found is None:
+            found = ProvenanceAccessor(self)
+            self._provenance_accessor = found
+        return found
 
     @property
     def idx(self):

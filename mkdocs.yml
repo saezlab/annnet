@@ -70,6 +70,7 @@ nav:
     -   Internal representation: explanations/internal-representation.md
     -   Mutation and derived state: explanations/mutation-and-derived-state.md
     -   Aspects, order, and windows: explanations/aspects-and-windows.md
+    -   Node-layer values and scale: explanations/values-and-scale.md
     -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
     -   Incidence and the matrices: explanations/math-incidence.md
     -   Slices and views: explanations/managers-and-views.md

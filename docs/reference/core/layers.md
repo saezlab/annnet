@@ -48,3 +48,29 @@ An aspect's values, and whether they come one before another. See
 ::: annnet.core._selection.satisfies
     options:
       show_root_heading: true
+
+## Node-layer values
+
+The two backings a value may live in, the resolver over them, and the array a
+method is handed. See
+[Node-layer values and scale](../../explanations/values-and-scale.md).
+
+::: annnet.core._values.ValueMatrix
+    options:
+      show_root_heading: true
+
+::: annnet.core._values.MatrixValues
+    options:
+      show_root_heading: true
+
+::: annnet.core._values.ContextualValues
+    options:
+      show_root_heading: true
+
+::: annnet.core._values.ValueResolver
+    options:
+      show_root_heading: true
+
+::: annnet.core._values.ValueBacking
+    options:
+      show_root_heading: true

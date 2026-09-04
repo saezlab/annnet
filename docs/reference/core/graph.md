@@ -90,3 +90,15 @@ layered — see [Reading the graph](../../explanations/reading-the-graph.md).
 ::: annnet.core._records.as_endpoints
     options:
       show_root_heading: true
+
+## Provenance
+
+What a graph was built from, recorded as data rather than as a memory.
+
+::: annnet.core._provenance.ProvenanceAccessor
+    options:
+      show_root_heading: true
+
+::: annnet.core._provenance.checksum_of
+    options:
+      show_root_heading: true

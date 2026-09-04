@@ -79,6 +79,7 @@ BEYOND_THE_CONTRACT = {
     'cache': 'the matrix cache controls',
     'read': 'read a graph from the native format',
     'write': 'write a graph to the native format',
+    'provenance': 'what the graph was built from, recorded as data',
 }
 
 
@@ -155,7 +156,12 @@ def test_the_core_exports_the_graph_and_the_records():
         'Aspect',
         'BOUNDARIES',
         'Graph',
+        'ContextualValues',
         'LayerSelection',
+        'MatrixValues',
+        'ProvenanceAccessor',
+        'ValueMatrix',
+        'ValueResolver',
         'OrderedLabels',
         'EdgeType',
         'EdgeView',

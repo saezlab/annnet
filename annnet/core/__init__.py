@@ -10,6 +10,7 @@ Input-output code, adapters and bridges read structure through the query facade
 """
 
 from .graph import AnnNet
+from ._values import ValueMatrix, MatrixValues, ValueResolver, ContextualValues
 from ._aspects import BOUNDARIES, Aspect, OrderedLabels, as_aspect
 from ._records import (
     EdgeType,
@@ -20,6 +21,7 @@ from ._records import (
     as_endpoints,
 )
 from ._selection import LayerSelection
+from ._provenance import ProvenanceAccessor
 
 Graph = AnnNet
 
@@ -28,7 +30,12 @@ __all__ = [
     'Aspect',
     'BOUNDARIES',
     'Graph',
+    'ContextualValues',
     'LayerSelection',
+    'MatrixValues',
+    'ProvenanceAccessor',
+    'ValueMatrix',
+    'ValueResolver',
     'OrderedLabels',
     'EdgeType',
     'EdgeView',

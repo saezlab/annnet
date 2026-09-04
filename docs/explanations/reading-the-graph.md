@@ -270,7 +270,7 @@ edgeless graph. `induce_edges` is the missing half, and which edges it means is 
 choice rather than a default worth guessing:
 
 ```python
-G.slices.induce_edges('picked')             # both: the induced subgraph
+G.slices.induce_edges('picked')  # both: the induced subgraph
 G.slices.induce_edges('picked', mode='any')  # any: reaches outside the slice
 ```
 
