@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import math
 from typing import TYPE_CHECKING, Any, TypedDict
-from collections.abc import Iterable
+from collections.abc import Mapping, Iterable
 
 from . import _structure
 from ._records import SliceRecord
-from .._support.dataframe_backend import dataframe_columns, dataframe_to_rows, dataframe_filter_eq
+from .._support.dataframe_backend import (
+    empty_dataframe,
+    dataframe_columns,
+    dataframe_to_rows,
+    dataframe_filter_eq,
+    dataframe_from_rows,
+)
 
 if TYPE_CHECKING:
     from .graph import AnnNet
@@ -84,23 +90,44 @@ class SliceManager:
 
     # ── core mutations ────────────────────────────────────────────────────────
 
-    def add(self, slice_id: str, **attributes: Any) -> str:
-        """Create a new empty slice.
+    def add(
+        self,
+        slice_id: str,
+        *,
+        nodes: Iterable[str] | None = None,
+        edges: Iterable[str] | None = None,
+        **attributes: Any,
+    ) -> str:
+        """Create a new slice, optionally with its members.
 
         Parameters
         ----------
         slice_id : str
+        nodes : Iterable[str], optional
+            Node ids to attach. The three-call opening — create, add nodes, add
+            edges — is what every caller wrote, so it is one call.
+        edges : Iterable[str], optional
+            Edge ids to attach. Their incident nodes come with them, as
+            :meth:`add_edges` does.
         **attributes
             Slice attributes.
 
         Returns
         -------
         str
+
+        Examples
+        --------
+        >>> G.slices.add('prior', edges=prior_ids, role='input')  # doctest: +SKIP
         """
         G = self._G
         if slice_id in G._slices and slice_id != 'default':
             raise ValueError(f'slice {slice_id} already exists')
         self._ensure_slice(slice_id, **attributes)
+        if nodes is not None:
+            self.add_nodes(slice_id, nodes)
+        if edges is not None:
+            self.add_edges(slice_id, edges)
         return slice_id
 
     def remove(self, slice_id: str) -> None:
@@ -552,6 +579,253 @@ class SliceManager:
             prefix = '├─' if i < len(stats) - 1 else '└─'
             lines.append(f'{prefix} {sid}: {info["nodes"]} nodes, {info["edges"]} edges')
         return '\n'.join(lines)
+
+    # ── reading many slices at once ───────────────────────────────────────────
+
+    def edge_frame(
+        self,
+        edges: Iterable[str] | None = None,
+        slices: Iterable[str] | None = None,
+        attrs: Iterable[str] | None = None,
+        *,
+        pairs: Any = None,
+        format: str = 'wide',
+        missing: Any = None,
+        backend: str | None = None,
+    ) -> Any:
+        """Read per-slice edge attributes as a table.
+
+        The scalar accessor answers for one ``(slice, edge, name)``, so reading
+        an edge by slice by attribute cube meant a Python loop with a default in
+        it. This is that cube, and it is the shape the question *which
+        interactions carried signal in which condition* actually has — one a
+        ``source``/``target``/``weight`` frame cannot express at all.
+
+        Parameters
+        ----------
+        edges : Sequence[str], optional
+            Edge ids. Default: every edge that carries a per-slice attribute.
+        slices : Sequence[str], optional
+            Slice ids. Default: every slice that carries one.
+        attrs : Sequence[str], optional
+            Attribute names. Default: every name present.
+        pairs : Mapping[str, tuple[str, str]] | Sequence[tuple[str, str]], optional
+            Explicit ``(edge_id, attr)`` columns, optionally labelled. Given
+            this, ``edges`` and ``attrs`` are not used, and the frame costs the
+            pairs asked for rather than their cross product.
+        format : {"wide", "long"}, default "wide"
+            ``"wide"`` is one row per slice, one column per ``(edge, attr)``.
+            ``"long"`` is one row per ``(edge, slice, attr, value)``, which is
+            the shape to group and pivot yourself.
+        missing : Any, optional
+            What a cell with no value holds. Default ``None``.
+        backend : str, optional
+            Dataframe backend. Defaults to the graph's.
+
+        Returns
+        -------
+        DataFrame-like
+
+        Raises
+        ------
+        ValueError
+            If ``format`` is neither ``"wide"`` nor ``"long"``.
+
+        Examples
+        --------
+        >>> G.slices.edge_frame(attrs=['activity'])  # doctest: +SKIP
+        >>> G.slices.edge_frame(slices=fit, attrs=['activity'], format='long')  # doctest: +SKIP
+        """
+        if format not in ('wide', 'long'):
+            raise ValueError(f"format must be 'wide' or 'long', got {format!r}")
+        held = self._edge_slice_cells()
+        backend = backend or self._G._annotations_backend
+
+        if slices is not None:
+            slice_list = [str(sid) for sid in slices]
+        else:
+            carrying = {key[0] for key in held}
+            slice_list = [sid for sid in self.list(include_default=True) if sid in carrying]
+        columns = self._frame_columns(held, edges, attrs, pairs)
+
+        if format == 'long':
+            rows = [
+                {
+                    'edge_id': edge_id,
+                    'slice_id': slice_id,
+                    'attr': name,
+                    'value': held.get((slice_id, edge_id), {}).get(name, missing),
+                }
+                for slice_id in slice_list
+                for _label, (edge_id, name) in columns
+            ]
+            if not rows:
+                return empty_dataframe(
+                    {'edge_id': 'text', 'slice_id': 'text', 'attr': 'text', 'value': 'float'},
+                    backend=backend,
+                )
+            return dataframe_from_rows(rows, backend=backend)
+
+        rows = []
+        for slice_id in slice_list:
+            row: dict[str, Any] = {'slice_id': slice_id}
+            for label, (edge_id, name) in columns:
+                row[label] = held.get((slice_id, edge_id), {}).get(name, missing)
+            rows.append(row)
+        if not rows:
+            schema: dict[str, str] = {'slice_id': 'text'}
+            schema.update({label: 'float' for label, _ in columns})
+            return empty_dataframe(schema, backend=backend)
+        return dataframe_from_rows(rows, backend=backend)
+
+    def _edge_slice_cells(self) -> dict:
+        """``(slice_id, edge_id) -> attrs``, read once off the per-slice table."""
+        df = getattr(self._G, 'edge_slice_attributes', None)
+        if df is None:
+            return {}
+        held: dict[tuple, dict] = {}
+        for row in dataframe_to_rows(df):
+            sid, eid = row.get('slice_id'), row.get('edge_id')
+            if sid is None or eid is None:
+                continue
+            held[(str(sid), str(eid))] = {
+                key: value
+                for key, value in row.items()
+                if key not in ('slice_id', 'edge_id') and value is not None
+            }
+        return held
+
+    @staticmethod
+    def _frame_columns(held, edges, attrs, pairs):
+        """Return ``[(column label, (edge_id, attr)), ...]`` for one frame."""
+        if pairs is not None:
+            if isinstance(pairs, Mapping):
+                return [(str(label), (pair[0], pair[1])) for label, pair in pairs.items()]
+            return [(f'{edge_id}.{name}', (edge_id, name)) for edge_id, name in pairs]
+        edge_list = list(edges) if edges is not None else sorted({key[1] for key in held})
+        name_list = (
+            list(attrs)
+            if attrs is not None
+            else sorted({name for cell in held.values() for name in cell})
+        )
+        if len(edge_list) == 1:
+            return [(name, (edge_list[0], name)) for name in name_list]
+        if len(name_list) == 1:
+            return [(edge_id, (edge_id, name_list[0])) for edge_id in edge_list]
+        return [
+            (f'{edge_id}.{name}', (edge_id, name)) for edge_id in edge_list for name in name_list
+        ]
+
+    def compare(
+        self,
+        slice_a: str,
+        slice_b: str,
+        *,
+        axis: str = 'edges',
+        backend: str | None = None,
+    ) -> Any:
+        """Compare the membership of two slices, as a table.
+
+        The set operations answer *how many*; this answers *which, and where*.
+        One row per element in either slice, with a ``status`` naming the side it
+        is on — the shape a diff of a prior against a fit wants, and which
+        callers otherwise built from three set expressions and a loop.
+
+        Parameters
+        ----------
+        slice_a, slice_b : str
+        axis : {"edges", "nodes"}, default "edges"
+        backend : str, optional
+
+        Returns
+        -------
+        DataFrame-like
+            Columns ``edge_id`` or ``node_id``, and ``status`` — one of
+            ``"both"``, ``"a_only"``, ``"b_only"``.
+
+        Raises
+        ------
+        ValueError
+            If ``axis`` is neither ``"edges"`` nor ``"nodes"``.
+        KeyError
+            If either slice is unknown.
+
+        Examples
+        --------
+        >>> G.slices.compare('prior', 'fitted', axis='edges')  # doctest: +SKIP
+        """
+        if axis not in ('edges', 'nodes'):
+            raise ValueError(f"axis must be 'edges' or 'nodes', got {axis!r}")
+        read = self.edges if axis == 'edges' else self.nodes
+        left, right = read(slice_a), read(slice_b)
+        column = 'edge_id' if axis == 'edges' else 'node_id'
+        backend = backend or self._G._annotations_backend
+
+        rows = []
+        for element in sorted(left | right):
+            in_left, in_right = element in left, element in right
+            status = 'both' if in_left and in_right else ('a_only' if in_left else 'b_only')
+            rows.append({column: element, 'status': status})
+        if not rows:
+            return empty_dataframe({column: 'text', 'status': 'text'}, backend=backend)
+        return dataframe_from_rows(rows, backend=backend)
+
+    def induce_edges(self, slice_id: str, *, mode: str = 'both', hyper: str = 'all') -> int:
+        """Attach the edges this slice's nodes already imply.
+
+        A slice built by naming nodes holds no edges, so every read of it sees an
+        edgeless graph. Induction is the missing half, and which edges it means
+        is a choice rather than an obvious default.
+
+        Parameters
+        ----------
+        slice_id : str
+        mode : {"both", "any"}, default "both"
+            ``"both"`` attaches an edge when *every* endpoint is in the slice —
+            the induced subgraph. ``"any"`` attaches it when one endpoint is,
+            which reaches outside the slice.
+        hyper : {"all", "skip"}, default "all"
+            Whether a hyperedge may be induced. ``"skip"`` leaves them out, for a
+            reader that cannot hold one.
+
+        Returns
+        -------
+        int
+            The number of edges attached.
+
+        Raises
+        ------
+        ValueError
+            If ``mode`` or ``hyper`` is unknown.
+        KeyError
+            If the slice is unknown.
+
+        Examples
+        --------
+        >>> G.slices.induce_edges('selected')  # doctest: +SKIP
+        """
+        if mode not in ('both', 'any'):
+            raise ValueError(f"mode must be 'both' or 'any', got {mode!r}")
+        if hyper not in ('all', 'skip'):
+            raise ValueError(f"hyper must be 'all' or 'skip', got {hyper!r}")
+        members = self.nodes(slice_id)
+        held = self.edges(slice_id)
+        found = []
+        for ref in _structure.iter_edges(self._G):
+            if hyper == 'skip' and ref.kind == _structure.HYPER:
+                continue
+            if str(ref.id) in held:
+                continue
+            sides = _structure.edge_sides(self._G, ref.id)
+            endpoints = {_bare(item) for item in sides.source | sides.target}
+            if not endpoints:
+                continue
+            reached = endpoints & members
+            if reached and (mode == 'any' or reached == endpoints):
+                found.append(ref.id)
+        if found:
+            self.add_edges(slice_id, found)
+        return len(found)
 
     def __repr__(self) -> str:
         return f'SliceManager({self.count()} slices)'

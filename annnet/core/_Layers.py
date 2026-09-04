@@ -2410,26 +2410,52 @@ class LayerAccessor:
         return True
 
     def _coupling_edge_spec(
-        self, u: str, La: tuple, Lb: tuple, weight: float, directed: bool = False
+        self,
+        u: str,
+        La: tuple,
+        Lb: tuple,
+        weight: float,
+        directed: bool = False,
+        *,
+        family: str = 'coupling',
+        v: str | None = None,
     ) -> dict:
+        """One coupling edge, with its family in its id.
+
+        The id used to be ``{u}>{u}@{La}~{Lb}``, which two different coupling
+        schemes over the same node pair both produce — so the second one silently
+        collided with the first. The family is what tells them apart, and it is
+        also carried as an attribute so a reader can select on it.
+        """
         _lid = lambda t: t[0] if len(self.aspects) == 1 else '×'.join(t)
+        target = u if v is None else v
         return {
             'source': (u, La),
-            'target': (u, Lb),
+            'target': (target, Lb),
             'weight': weight,
             'directed': directed,
-            'edge_id': f'{u}>{u}@{_lid(La)}~{_lid(Lb)}',
+            'edge_id': f'{family}:{u}>{target}@{_lid(La)}~{_lid(Lb)}',
+            'edge_kind': family,
         }
 
     def _add_coupling_edges_bulk(
         self,
-        triples: list[tuple[str, tuple, tuple]],
+        triples,
         weight: float,
         directed: bool = False,
+        *,
+        family: str = 'coupling',
     ) -> int:
+        """Add every coupling in ``triples``, which are ``(u, La, Lb)`` or ``(u, v, La, Lb)``."""
         if not triples:
             return 0
-        specs = [self._coupling_edge_spec(u, La, Lb, weight, directed) for (u, La, Lb) in triples]
+        specs = []
+        for triple in triples:
+            if len(triple) == 4:
+                u, v, La, Lb = triple
+            else:
+                (u, La, Lb), v = triple, None
+            specs.append(self._coupling_edge_spec(u, La, Lb, weight, directed, family=family, v=v))
         self._G._add_edges_bulk(specs)
         return len(specs)
 
@@ -2438,12 +2464,174 @@ class LayerAccessor:
         self._G._add_edges_bulk([spec])
         return spec['edge_id']
 
+    def couple(
+        self,
+        aspect: str,
+        *,
+        kind: str = 'ordinal',
+        pairs=None,
+        within: dict | None = None,
+        on: str | None = None,
+        edge_kind: str | None = None,
+        weight: float = 1.0,
+        directed: bool = False,
+        both_present: bool = True,
+    ) -> int:
+        """Couple the layers of one aspect, in one call.
+
+        A multilayer graph has two families of coupling and they follow from
+        whether the aspect is ordered. An **ordinal** aspect couples consecutive
+        values — a timepoint to the next timepoint. A **categorical** one couples
+        across values — every mechanism to every other. Both were reachable
+        before only by building the value pairs by hand from a list kept beside
+        the graph, which is the fact :meth:`aspect` now holds.
+
+        Parameters
+        ----------
+        aspect : str
+            The aspect to couple along.
+        kind : {"ordinal", "categorical"}, default "ordinal"
+            Which family. ``"ordinal"`` takes the aspect's consecutive pairs and
+            needs it ordered; ``"categorical"`` takes every pair of values.
+            Ignored when ``pairs`` is given.
+        pairs : Sequence[tuple[str, str]], optional
+            Explicit value pairs on this aspect, for a coupling neither family
+            describes.
+        within : dict, optional
+            Restrict to layers whose other aspects match, as
+            ``{aspect: value}`` or ``{aspect: {values}}``. Two node-layers are
+            coupled only when they agree on every aspect but this one, whether or
+            not ``within`` is given.
+        on : str, optional
+            A node attribute two different node ids may share when they denote
+            one entity — a shared symbol, where the same thing is measured two
+            ways and each way names it differently. Default: couple a node to
+            itself.
+        edge_kind : str, optional
+            The family name carried in the edge id and in the ``edge_kind``
+            attribute. Default: ``kind``, or ``"pairs"`` when ``pairs`` is given.
+        weight : float, default 1.0
+        directed : bool, default False
+        both_present : bool, default True
+            Couple only where both node-layers already exist. ``False`` places
+            the missing one first, which a timecourse whose nodes appear late
+            wants; it needs ``on=None``, because there is no answer to which id a
+            missing node would have.
+
+        Returns
+        -------
+        int
+            The number of coupling edges added.
+
+        Raises
+        ------
+        KeyError
+            If the aspect is not declared, or a pair names a value it does not
+            hold.
+        ValueError
+            If ``kind`` is unknown, if ``"ordinal"`` is asked of a categorical
+            aspect, or if ``both_present=False`` is combined with ``on``.
+
+        Examples
+        --------
+        >>> G.layers.couple('time')  # consecutive timepoints  # doctest: +SKIP
+        >>> G.layers.couple('mechanism', kind='categorical')  # doctest: +SKIP
+        >>> G.layers.couple('assay', kind='categorical', on='symbol')  # doctest: +SKIP
+        """
+        index = self._aspect_index(aspect)
+        declared = self.aspect(aspect)
+        if pairs is not None:
+            wanted = [(str(a), str(b)) for a, b in pairs]
+            family = edge_kind or 'pairs'
+        elif kind == 'ordinal':
+            wanted = declared.consecutive_pairs()
+            family = edge_kind or kind
+        elif kind == 'categorical':
+            wanted = list(itertools.combinations(declared.values, 2))
+            family = edge_kind or kind
+        else:
+            raise ValueError(f"kind must be 'ordinal' or 'categorical', got {kind!r}")
+        if not both_present and on is not None:
+            raise ValueError(
+                'both_present=False places the node-layer that is missing, and with '
+                'on= there is no answer to which node id it would have. Pass '
+                'both_present=True, or place the node-layers first.'
+            )
+        for value in {v for pair in wanted for v in pair}:
+            if value not in declared:
+                raise KeyError(
+                    f'{value!r} is not a value of aspect {aspect!r}; it holds '
+                    f'{list(declared.values)!r}'
+                )
+
+        allowed = self._within_filter(within)
+        attrs = self._G._attr_store.node_attr_rows() if on is not None else {}
+
+        # (join key, the coordinate with this aspect removed) -> {value: node id}
+        buckets: dict[tuple, dict] = {}
+        for ref in _structure.iter_entities(self):
+            if ref.kind != _structure.NODE:
+                continue
+            u, aa = ref.key
+            if not self._layer_matches_filter(aa, allowed):
+                continue
+            key = u if on is None else attrs.get(u, {}).get(on)
+            if key is None:
+                continue
+            other = aa[:index] + aa[index + 1 :]
+            buckets.setdefault((key, other), {}).setdefault(aa[index], u)
+
+        quads: list[tuple] = []
+        placed: list[tuple] = []
+        for (_key, other), holders in buckets.items():
+            for left, right in wanted:
+                u, v = holders.get(left), holders.get(right)
+                if u is not None and v is not None:
+                    quads.append(
+                        (
+                            u,
+                            v,
+                            self._layer_of(other, index, left),
+                            self._layer_of(other, index, right),
+                        )
+                    )
+                elif not both_present and (u is not None or v is not None):
+                    node = u if u is not None else v
+                    missing = right if u is not None else left
+                    placed.append((node, self._layer_of(other, index, missing)))
+                    quads.append(
+                        (
+                            node,
+                            node,
+                            self._layer_of(other, index, left),
+                            self._layer_of(other, index, right),
+                        )
+                    )
+        for node, coordinate in placed:
+            self._G.add_nodes([{'node_id': node}], layer=coordinate)
+        return self._add_coupling_edges_bulk(quads, weight, directed, family=family)
+
+    def _layer_of(self, other: tuple, index: int, value: str) -> tuple:
+        """Put ``value`` back at ``index`` in a coordinate it was taken out of."""
+        return other[:index] + (value,) + other[index:]
+
+    @staticmethod
+    def _within_filter(within: dict | None) -> dict:
+        """Normalise ``within`` into the ``{aspect: set}`` shape the filter takes."""
+        if not within:
+            return {}
+        return {
+            name: set(values) if isinstance(values, (set, frozenset, list, tuple)) else {values}
+            for name, values in within.items()
+        }
+
     def add_layer_coupling_pairs(
         self,
         layer_pairs: list[tuple[tuple[str, ...], tuple[str, ...]]],
         *,
         weight: float = 1.0,
         directed: bool = False,
+        edge_kind: str | None = None,
     ) -> int:
         """Add diagonal couplings for explicit layer pairs.
 
@@ -2453,6 +2641,9 @@ class LayerAccessor:
             Layer tuple pairs ``(aa, bb)``.
         weight : float, optional
             Edge weight.
+        edge_kind : str, optional
+            The family name carried in the edge id and in the ``edge_kind``
+            attribute, so two coupling schemes over one node pair do not collide.
 
         Returns
         -------
@@ -2478,7 +2669,7 @@ class LayerAccessor:
             Ub = layer_to_nodes.get(Lb, set())
             for u in Ua & Ub:
                 triples.append((u, La, Lb))
-        return self._add_coupling_edges_bulk(triples, weight, directed)
+        return self._add_coupling_edges_bulk(triples, weight, directed, family=edge_kind or 'pairs')
 
     def add_categorical_coupling(
         self,
@@ -2487,6 +2678,7 @@ class LayerAccessor:
         *,
         weight: float = 1.0,
         directed: bool = False,
+        edge_kind: str | None = None,
     ) -> int:
         """Add categorical couplings along one aspect.
 
@@ -2498,6 +2690,9 @@ class LayerAccessor:
             Groups of elementary labels to fully connect per node.
         weight : float, optional
             Edge weight.
+        edge_kind : str, optional
+            The family name carried in the edge id and in the ``edge_kind``
+            attribute, so two coupling schemes over one node pair do not collide.
 
         Returns
         -------
@@ -2523,7 +2718,9 @@ class LayerAccessor:
                     continue
                 for La, Lb in itertools.combinations(sorted(layers), 2):
                     triples.append((u, La, Lb))
-        return self._add_coupling_edges_bulk(triples, weight, directed)
+        return self._add_coupling_edges_bulk(
+            triples, weight, directed, family=edge_kind or 'categorical'
+        )
 
     def add_diagonal_coupling_filter(
         self,
@@ -2531,6 +2728,7 @@ class LayerAccessor:
         *,
         weight: float = 1.0,
         directed: bool = False,
+        edge_kind: str | None = None,
     ) -> int:
         """Add diagonal couplings within a filtered layer subspace.
 
@@ -2540,6 +2738,9 @@ class LayerAccessor:
             Aspect filters (e.g., ``{"time": {"t1","t2"}}``).
         weight : float, optional
             Edge weight.
+        edge_kind : str, optional
+            The family name carried in the edge id and in the ``edge_kind``
+            attribute, so two coupling schemes over one node pair do not collide.
 
         Returns
         -------
@@ -2558,7 +2759,9 @@ class LayerAccessor:
                 continue
             for La, Lb in itertools.combinations(sorted(layers), 2):
                 triples.append((u, La, Lb))
-        return self._add_coupling_edges_bulk(triples, weight, directed)
+        return self._add_coupling_edges_bulk(
+            triples, weight, directed, family=edge_kind or 'diagonal'
+        )
 
     ## Tensor view & flattening map
 

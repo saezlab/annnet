@@ -185,6 +185,54 @@ layer it touches. Measured on 4,800 edges across 12 layers, `layer_union` is
 **5.4× faster** than the per-layer loop it replaced, and the advantage grows with
 the layer count because that is the factor being removed.
 
+## Coupling
+
+Layers are joined by coupling edges, and which coupling you want follows from the
+same distinction the top of this page draws. `couple` is one call for both:
+
+```python
+G.layers.couple('time')                          # ordinal: consecutive values
+G.layers.couple('mechanism', kind='categorical')  # categorical: every pair
+G.layers.couple('time', pairs=[('0h', '24h')])    # neither: say which
+```
+
+Ordinal coupling reads `Aspect.consecutive_pairs()`, so the pairs come from the
+declaration rather than from a list kept beside the graph. Asking for it on a
+categorical aspect raises, for the same reason `index` does.
+
+Three more parameters carry the cases that used to need a hand-written loop:
+
+```python
+G.layers.couple('time', within={'mechanism': 'mapk'})  # fix the other aspects
+G.layers.couple('assay', kind='categorical', on='symbol')  # two ids, one entity
+G.layers.couple('time', both_present=False)  # place the node-layer that is missing
+```
+
+`on=` is the one worth dwelling on. It names a node attribute that two
+*different* node ids share when they denote one entity — the same thing measured
+two ways, each way naming it differently. Without it, coupling joins a node to
+itself and two differently-named nodes never meet.
+
+Note that an edge made this way is an **inter-layer** edge, not a coupling one:
+`ml_kind` is structural, and coupling means one entity in two layers. What says
+the two were joined deliberately is the `edge_kind` attribute.
+
+### The family is in the id
+
+Every coupling edge's id now begins with its family:
+
+```
+ordinal:A>A@t0~t1
+categorical:gene:X>prot:X@rna~prot
+```
+
+Two coupling schemes over one node pair used to produce the same id, so the
+second silently collided with the first. `edge_kind=` renames the family, and it
+is carried as an attribute so a reader can select on it. The three older
+generators — `add_layer_coupling_pairs`, `add_categorical_coupling`,
+`add_diagonal_coupling_filter` — take `edge_kind=` too and default to `pairs`,
+`categorical` and `diagonal`.
+
 ## Where to go next
 
 - [Reading the graph](reading-the-graph.md) — the frame as the default answer.

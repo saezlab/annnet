@@ -15,6 +15,7 @@ from .._support.dataframe_backend import (
     dataframe_to_rows,
     dataframe_filter_in,
     dataframe_from_rows,
+    dataframe_from_columns,
 )
 
 
@@ -28,6 +29,13 @@ def _side_identity(side):
     """
     if not side:
         return [], None
+    if len(side) == 1:
+        # Every side of every binary edge, which is nearly every side there is.
+        # Sorting one element and reducing a one-member set are both answers
+        # already known, and the general path below spends most of the edge
+        # table's build time arriving at them.
+        endpoint = as_endpoint(next(iter(side)))
+        return [endpoint.node_id], endpoint.layer
     # Sorted on the whole endpoint, not on the id: one node in two layers is two
     # members of one side, and a sort on the id alone would order them by chance.
     endpoints = sorted(
@@ -580,41 +588,49 @@ class ViewsClass(GraphState):
                     f'slice_{k}': v for k, v in row.items() if k not in {'slice_id', 'edge_id'}
                 }
 
-        out_rows = []
-        for idx, eid in enumerate(eids_str):
-            row = {
-                'edge_id': eid,
-                'kind': kinds[idx],
-                'ml_kind': ml_kinds[idx],
-                'source': src[idx],
-                'target': tgt[idx],
-                'src_layer': src_layer[idx],
-                'dst_layer': dst_layer[idx],
-                'edge_type': etype[idx],
-                'head': list(head[idx]) if head[idx] is not None else None,
-                'tail': list(tail[idx]) if tail[idx] is not None else None,
-                'members': list(members[idx]) if members[idx] is not None else None,
-            }
-            if include_directed:
-                row['directed'] = dirs[idx]
-            if include_weight:
-                row['global_weight'] = global_w[idx]
-            elif resolved_weight:
-                row['_gw_tmp'] = global_w[idx]
+        # Columns, not rows. The dict-per-edge shape this replaced allocated one
+        # dict and one key lookup per attribute per edge, and then made the
+        # backend pivot the whole thing back into columns — so the frame cost a
+        # multiple of what the data is. A column is a list built once, and an
+        # attribute column is filled only where some edge carries it.
+        out: dict[str, list] = {
+            'edge_id': eids_str,
+            'kind': kinds,
+            'ml_kind': ml_kinds,
+            'source': src,
+            'target': tgt,
+            'src_layer': src_layer,
+            'dst_layer': dst_layer,
+            'edge_type': etype,
+            'head': [list(v) if v is not None else None for v in head],
+            'tail': [list(v) if v is not None else None for v in tail],
+            'members': [list(v) if v is not None else None for v in members],
+        }
+        if include_directed:
+            out['directed'] = dirs
+        if include_weight:
+            out['global_weight'] = global_w
 
-            row.update(edge_attrs_map.get(eid, {}))
-            row.update(slice_attrs_map.get(eid, {}))
+        for source_map in (edge_attrs_map, slice_attrs_map):
+            names: list[str] = []
+            seen: set[str] = set()
+            for eid in eids_str:
+                for name in source_map.get(eid, ()):
+                    if name not in seen and name not in out:
+                        seen.add(name)
+                        names.append(name)
+            for name in names:
+                out[name] = [source_map.get(eid, {}).get(name) for eid in eids_str]
 
-            if resolved_weight:
-                gw_col = 'global_weight' if include_weight else '_gw_tmp'
-                row['effective_weight'] = row.get('slice_weight', row.get(gw_col))
-                if not include_weight:
-                    row.pop('_gw_tmp', None)
+        if resolved_weight:
+            override = out.get('slice_weight')
+            out['effective_weight'] = [
+                global_w[idx] if override is None or override[idx] is None else override[idx]
+                for idx in range(len(eids_str))
+            ]
 
-            out_rows.append(row)
-
-        out = dataframe_from_rows(out_rows)
-        return clone_dataframe(out) if copy else out
+        frame = dataframe_from_columns(out)
+        return clone_dataframe(frame) if copy else frame
 
     def nodes_view(self, copy=True):
         """Read-only node attribute table.

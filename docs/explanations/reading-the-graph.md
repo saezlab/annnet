@@ -207,3 +207,71 @@ ids. A bare plural is identities. The same plural under `attrs` is the table.
   from a layer.
 - [Multilayer and multi-aspect graphs](math-multilayer.md) — the coordinate
   system the layer columns above are written in.
+
+## Reading many slices at once
+
+A slice is a named subset. Per-slice attributes are how a result lands on an
+object without overwriting anything — a fit writes `activity` on the edges it
+selected, inside its own slice, and the prior is untouched.
+
+Reading that back is a cube — edge by slice by attribute — and
+`slices.edge_frame` is the cube:
+
+```python
+G.slices.edge_frame(attrs=['activity'])
+```
+
+```
+┌──────────┬──────┬──────┬──────┐
+│ slice_id ┆ e1   ┆ e2   ┆ e3   │
+╞══════════╪══════╪══════╪══════╡
+│ prior    ┆ 1.0  ┆ null ┆ null │
+│ fit      ┆ null ┆ -1.0 ┆ 1.0  │
+└──────────┴──────┴──────┴──────┘
+```
+
+That table is the answer to *which interactions carried signal in which
+condition*, and it is a shape a `source`/`target`/`weight` frame structurally
+cannot hold. `format='long'` gives one row per cell instead, and `pairs=`
+cherry-picks columns without paying for their cross product.
+
+### Diffing two slices
+
+The set operations — `union`, `intersect`, `difference` — answer *how many*.
+`compare` answers *which, and on which side*:
+
+```python
+G.slices.compare('prior', 'fit', axis='edges')
+```
+
+```
+┌─────────┬────────┐
+│ edge_id ┆ status │
+╞═════════╪════════╡
+│ e1      ┆ a_only │
+│ e2      ┆ both   │
+│ e3      ┆ b_only │
+└─────────┴────────┘
+```
+
+`axis='nodes'` is the other axis. The order matters — `a_only` names the first
+argument — so `compare(a, b)` and `compare(b, a)` are different tables.
+
+### Building a slice
+
+Creating a slice and filling it was three calls; it is one:
+
+```python
+G.slices.add('prior', edges=prior_ids, role='input')
+```
+
+A slice built by naming *nodes* holds no edges, so every read of it sees an
+edgeless graph. `induce_edges` is the missing half, and which edges it means is a
+choice rather than a default worth guessing:
+
+```python
+G.slices.induce_edges('picked')             # both: the induced subgraph
+G.slices.induce_edges('picked', mode='any')  # any: reaches outside the slice
+```
+
+`hyper='skip'` leaves hyperedges out, for a reader that cannot hold one.
