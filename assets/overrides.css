@@ -1,0 +1,334 @@
+/* Notebook and docs layout */
+:root {
+  /* Force a robust monospace stack for code + outputs */
+  --md-code-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "DejaVu Sans Mono", "Liberation Mono", "Courier New", monospace;
+  --annnet-surface: color-mix(in srgb, var(--md-default-bg-color) 86%, var(--md-primary-fg-color) 14%);
+  --annnet-surface-strong: color-mix(in srgb, var(--md-default-bg-color) 74%, var(--md-primary-fg-color) 26%);
+  --annnet-border: color-mix(in srgb, var(--md-primary-fg-color) 18%, transparent);
+  --annnet-shadow: 0 18px 40px rgba(7, 33, 41, 0.09);
+}
+
+.md-grid {
+  max-width: 82rem;
+}
+
+.md-typeset {
+  --md-code-font-size: 0.68rem;
+}
+
+.md-typeset pre,
+.md-typeset code {
+  font-size: var(--md-code-font-size);
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.md-typeset .highlight pre,
+.md-typeset .highlight code {
+  white-space: pre;
+}
+
+.md-typeset .highlight pre {
+  overflow-x: auto;
+}
+
+/* Jupyter/MkDocs-Jupyter output containers */
+.jp-OutputArea-output,
+.output,
+.nb-output,
+.output_text,
+.cell_output,
+.jp-OutputArea,
+.jp-RenderedText {
+  font-size: 0.68rem !important;
+  font-variant-ligatures: none !important;
+}
+
+.jp-OutputArea-output pre,
+.output pre,
+.nb-output pre,
+.cell_output pre,
+.output_text pre,
+.jp-RenderedText pre {
+  white-space: pre-wrap !important;
+  word-break: normal !important;
+  overflow-wrap: anywhere !important;
+  overflow-x: visible;
+}
+
+.md-typeset pre,
+.md-typeset code,
+.md-typeset kbd,
+.md-typeset samp,
+.md-typeset tt,
+.jp-OutputArea-output pre,
+.nb-output pre,
+.output pre,
+.cell_output pre {
+  font-family: var(--md-code-font) !important;
+  font-size: 0.68rem !important;
+  font-variant-ligatures: none !important;
+}
+
+/* HTML notebook outputs should keep their own typography/layout. */
+.md-typeset .jp-RenderedHTML.jp-OutputArea-output,
+.md-typeset .jp-RenderedHTMLCommon.jp-OutputArea-output[data-mime-type="text/html"] {
+  overflow-x: auto;
+  font-family: var(--md-text-font-family) !important;
+  font-size: 0.72rem !important;
+}
+
+/* an.info() emits an HTML card; make it fit the docs page first, scroll only if needed. */
+.md-typeset .jp-RenderedHTML.jp-OutputArea-output > .annnet-info,
+.md-typeset .jp-RenderedHTMLCommon.jp-OutputArea-output[data-mime-type="text/html"] > .annnet-info {
+  --annnet-info-bg: var(--md-default-bg-color);
+  --annnet-info-fg: var(--md-default-fg-color);
+  --annnet-info-muted: var(--md-default-fg-color--light);
+  --annnet-info-border: var(--md-default-fg-color--lightest);
+  --annnet-info-link: var(--md-primary-fg-color);
+  --annnet-info-row-bg: var(--md-default-bg-color);
+  --annnet-info-row-alt: color-mix(in srgb, var(--md-default-fg-color) 6%, var(--md-default-bg-color));
+  box-sizing: border-box;
+  display: block;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  font-size: 0.7rem !important;
+}
+
+.md-typeset .annnet-info {
+  --annnet-info-bg: var(--md-default-bg-color);
+  --annnet-info-fg: var(--md-default-fg-color);
+  --annnet-info-muted: var(--md-default-fg-color--light);
+  --annnet-info-border: var(--md-default-fg-color--lightest);
+  --annnet-info-link: var(--md-primary-fg-color);
+  --annnet-info-row-bg: var(--md-default-bg-color);
+  --annnet-info-row-alt: color-mix(in srgb, var(--md-default-fg-color) 6%, var(--md-default-bg-color));
+}
+
+.md-typeset .annnet-info .annnet-info-summary {
+  font-size: 0.68rem !important;
+  line-height: 1.2 !important;
+}
+
+.md-typeset .annnet-info .annnet-info-row-even {
+  background: var(--annnet-info-row-bg) !important;
+}
+
+.md-typeset .annnet-info .annnet-info-row-odd {
+  background: var(--annnet-info-row-alt) !important;
+}
+
+.md-typeset .jp-RenderedHTML.jp-OutputArea-output > .annnet-info table,
+.md-typeset .jp-RenderedHTMLCommon.jp-OutputArea-output[data-mime-type="text/html"] > .annnet-info table {
+  width: 100% !important;
+  table-layout: auto;
+}
+
+.md-typeset .jp-RenderedHTML.jp-OutputArea-output > .annnet-info td,
+.md-typeset .jp-RenderedHTMLCommon.jp-OutputArea-output[data-mime-type="text/html"] > .annnet-info td {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.md-typeset .jupyter-wrapper table.dataframe {
+  width: 100%;
+  max-width: 100%;
+  table-layout: auto;
+  font-size: 0.66rem;
+}
+
+.md-typeset .jupyter-wrapper table.dataframe th,
+.md-typeset .jupyter-wrapper table.dataframe td {
+  padding: 0.3em 0.45em;
+  white-space: normal;
+}
+
+@media screen and (min-width: 1220px) {
+  .md-grid {
+    max-width: 90rem;
+  }
+
+  .md-sidebar--primary .md-sidebar__scrollwrap {
+    box-sizing: border-box;
+    padding-left: clamp(0.75rem, 1.25vw, 1.4rem);
+  }
+
+  .md-sidebar--secondary .md-sidebar__scrollwrap {
+    box-sizing: border-box;
+    padding-right: clamp(0.75rem, 1.25vw, 1.4rem);
+  }
+}
+
+/* Make links clearly clickable */
+.md-typeset a,
+.md-nav__link {
+  color: var(--md-primary-fg-color);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.2em;
+}
+
+.md-typeset a:hover,
+.md-nav__link:hover {
+  color: var(--md-accent-fg-color);
+  text-decoration-color: var(--md-accent-fg-color);
+}
+
+/* Simple badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--md-primary-fg-color);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--md-primary-fg-color);
+  background: color-mix(in srgb, var(--md-primary-fg-color) 12%, transparent);
+  text-decoration: none;
+}
+
+.badge:hover {
+  color: var(--md-accent-fg-color);
+  border-color: var(--md-accent-fg-color);
+  background: color-mix(in srgb, var(--md-accent-fg-color) 16%, transparent);
+}
+
+/* Landing page and docs marketing blocks */
+.annnet-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 2rem;
+  margin: 0 0 1.5rem;
+  border: 1px solid var(--annnet-border);
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--md-accent-fg-color) 22%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--md-primary-fg-color) 10%, var(--md-default-bg-color)) 0%, var(--md-default-bg-color) 62%, color-mix(in srgb, var(--md-accent-fg-color) 10%, var(--md-default-bg-color)) 100%);
+  box-shadow: var(--annnet-shadow);
+}
+
+.annnet-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.annnet-kicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  margin-bottom: 1rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-primary-fg-color) 14%, transparent);
+  color: var(--md-primary-fg-color);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.annnet-hero h1,
+.annnet-section-heading {
+  margin-top: 0;
+}
+
+.annnet-lead {
+  max-width: 52rem;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.annnet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin: 1.25rem 0 0;
+}
+
+.annnet-actions .md-button {
+  margin: 0;
+  border-radius: 999px;
+}
+
+.annnet-actions .md-button--primary {
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--md-primary-fg-color) 22%, transparent);
+}
+
+.md-typeset .annnet-feature-cards {
+  margin: 1.25rem 0 1.75rem;
+}
+
+.md-typeset .annnet-feature-cards > ul {
+  gap: 1rem;
+}
+
+.md-typeset .annnet-feature-cards > ul > li {
+  border: 1px solid var(--annnet-border);
+  border-radius: 1.1rem;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--md-default-bg-color) 92%, var(--md-primary-fg-color) 8%), var(--md-default-bg-color));
+  box-shadow: var(--annnet-shadow);
+}
+
+.md-typeset .annnet-feature-cards > ul > li > p:last-child {
+  margin-bottom: 0;
+}
+
+.md-typeset .annnet-feature-cards a {
+  text-decoration: none;
+}
+
+.md-typeset .annnet-mini-feature-cards {
+  margin: 1rem 0 1.5rem;
+}
+
+.md-typeset .annnet-mini-feature-cards > ul {
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.md-typeset .annnet-mini-feature-cards > ul > li {
+  border: 1px solid var(--annnet-border);
+  border-radius: 1rem;
+  background: var(--annnet-surface);
+  box-shadow: none;
+}
+
+.md-typeset .annnet-mini-feature-cards > ul > li > p:last-child {
+  margin-bottom: 0;
+}
+
+.md-typeset .annnet-mini-feature-cards a {
+  text-decoration: none;
+}
+
+.annnet-callout {
+  padding: 1rem 1.15rem;
+  margin: 1.25rem 0;
+  border-left: 4px solid var(--md-primary-fg-color);
+  border-radius: 0.9rem;
+  background: var(--annnet-surface);
+}
+
+.annnet-visual {
+  margin-top: 1.5rem;
+}
+
+.annnet-visual img {
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid var(--annnet-border);
+}
+
+@media screen and (max-width: 760px) {
+  .annnet-hero {
+    padding: 1.4rem;
+    border-radius: 1.15rem;
+  }
+
+  .annnet-lead {
+    font-size: 0.98rem;
+  }
+}
+

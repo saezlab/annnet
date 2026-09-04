@@ -1,0 +1,3116 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://saezlab.github.io/annnet/explanations/reading-the-graph/">
+      
+      
+        <link rel="prev" href="../architecture-overview/">
+      
+      
+        <link rel="next" href="../internal-representation/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>Reading the graph - annnet</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Lato";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../assets/overrides.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#reading-the-graph" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="annnet" class="md-header__button md-logo" aria-label="annnet" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            annnet
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Reading the graph
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="light-blue"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5m0 8a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="light-blue"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5M7 15a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/saezlab/annnet" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    saezlab/annnet
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../quickstart/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Quickstart
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../tutorials/" class="md-tabs__link">
+          
+  
+  
+  Tutorials and Scenarios
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  Explanations
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/" class="md-tabs__link">
+          
+  
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../changelog/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../community/" class="md-tabs__link">
+          
+  
+  
+  Community
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="annnet" class="md-nav__button md-logo" aria-label="annnet" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    annnet
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/saezlab/annnet" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    saezlab/annnet
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Tutorials and Scenarios
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Tutorials and Scenarios
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Notebooks Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    HowTo's
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            HowTo's
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/tutos/01_quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/tutos/02_attributes_and_views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Attributes and views
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/tutos/03_tables_and_storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tables and storage
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/tutos/04_slices_and_subgraphs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Slices and subgraphs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/tutos/05_hyperedges_and_traversal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Hyperedges and traversal
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/special/sp01_directed_hyperedges/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Directed hyperedges &amp; stoichiometry
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/tutos/06_multilayer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Multilayer
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/special/sp02_multilayer_math/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Multilayer math
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/tutos/07_history_and_reproducibility/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    History and reproducibility
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/tutos/08_backend_accessors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Backend accessors
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/special/sp03_flexible_edge_orientation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Flexible edge orientation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/special/sp04_backend_lazy_proxies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Backend lazy proxies — run igraph &amp; NetworkX algorithms straight off an AnnNet
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Use Cases
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            Use Cases
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/use-cases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/use_cases/UC1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Fitting a multi-condition signaling network stored in AnnNet
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/use_cases/UC2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    UC2 — tracing a TGF-beta fibrosis response in one AnnNet object
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Scenarios
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_4">
+            <span class="md-nav__icon md-icon"></span>
+            Scenarios
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/scenarios/omnipath_table_ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    OmniPath table ingestion
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/scenarios/cytoscape_cx2_export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Cytoscape CX2 export
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/scenarios/pyg_heterodata_export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    PyG HeteroData export
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/notebooks/scenarios/causal_activity_bridge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Causal activity bridge
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Explanations
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Explanations
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Explanations Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../design-philosophy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Design philosophy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture-overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Reading the graph
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Reading the graph
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#an-endpoint-is-a-node-id" class="md-nav__link">
+    <span class="md-ellipsis">
+      An endpoint is a node id
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="An endpoint is a node id">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-structured-form-when-you-want-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      The structured form, when you want it
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filtering-slice-joins-in_slice-filters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Filtering: slice= joins, in_slice= filters
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#naming-a-node-layer-instead-of-spelling-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      Naming a node-layer instead of spelling it
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-namespaces-hand-back-a-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      Two namespaces hand back a frame
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-to-go-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      Where to go next
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../internal-representation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Internal representation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mutation-and-derived-state/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Mutation and derived state
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aspects-and-windows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Aspects, order, and windows
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../math-multilayer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Multilayer and multi-aspect graphs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../math-incidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Incidence and the matrices
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../managers-and-views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Slices and views
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../interoperability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Interoperability
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io-annnet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Storage and IO
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../history-and-diffs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tracking changes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../add-edges/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Adding edges
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    API Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            API Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Reference Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api-boundary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Public and internal APIs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Support helpers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_4" id="__nav_6_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Core
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_4">
+            <span class="md-nav__icon md-icon"></span>
+            Core
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/graph/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Graph
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/backend-accessors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Backend accessors
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/indexing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Indexing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/attributes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Attributes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/bulk-operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Operations
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/history/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    History
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Cache
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Views
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/slices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Slices
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/core/layers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Layers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_5" id="__nav_6_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Algorithms
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_5">
+            <span class="md-nav__icon md-icon"></span>
+            Algorithms
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/algorithms/traversal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Traversal
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_6" id="__nav_6_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    IO
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            IO
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/annnet-format/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Native .annnet format
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/parquet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Parquet
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/graphml-gexf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    GraphML and GEXF
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/sif/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    SIF
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/sbml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    SBML
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/cx2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CX2
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/json/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    JSON and NDJSON
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/csv/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CSV
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/excel/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Excel
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/dataframes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    DataFrames
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/io/pyg/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    PyTorch Geometric
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_7" id="__nav_6_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Adapters
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_7">
+            <span class="md-nav__icon md-icon"></span>
+            Adapters
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/adapters/networkx/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    NetworkX adapter
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/adapters/igraph/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    igraph adapter
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/adapters/graphtool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    graph-tool adapter
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_8" id="__nav_6_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Utilities
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_8">
+            <span class="md-nav__icon md-icon"></span>
+            Utilities
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/utils/plotting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Plotting
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Changelog
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Community
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            Community
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Join Us
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/contribute-docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contribute to the Documentation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/contribute-codebase/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contribute to the package code
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#an-endpoint-is-a-node-id" class="md-nav__link">
+    <span class="md-ellipsis">
+      An endpoint is a node id
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="An endpoint is a node id">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-structured-form-when-you-want-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      The structured form, when you want it
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filtering-slice-joins-in_slice-filters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Filtering: slice= joins, in_slice= filters
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#naming-a-node-layer-instead-of-spelling-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      Naming a node-layer instead of spelling it
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-namespaces-hand-back-a-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      Two namespaces hand back a frame
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-to-go-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      Where to go next
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/saezlab/annnet/edit/master/docs/explanations/reading-the-graph.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="reading-the-graph">Reading the graph</h1>
+<p>A graph holds three kinds of thing a question can be about: the structure, the
+attributes, and where each element sits. Most questions cross all three — <em>which
+edges carry a sign, inside this layer, in the slice I called <code>prior</code></em> — and the
+answer to a crossing question is a table.</p>
+<p>So the shape of this page is one sentence: <strong>the frame is the default answer.</strong>
+If reading something out of an AnnNet takes a loop, the loop is a gap in the API
+and not a thing you were supposed to write.</p>
+<h2 id="an-endpoint-is-a-node-id">An endpoint is a node id</h2>
+<p><code>G.views.edges()</code> gives one row per edge, and its <code>source</code> and <code>target</code> columns
+hold <strong>node ids</strong>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">frame</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">views</span><span class="o">.</span><span class="n">edges</span><span class="p">()</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">frame</span><span class="o">.</span><span class="n">select</span><span class="p">([</span><span class="s1">&#39;edge_id&#39;</span><span class="p">,</span> <span class="s1">&#39;source&#39;</span><span class="p">,</span> <span class="s1">&#39;target&#39;</span><span class="p">,</span> <span class="s1">&#39;src_layer&#39;</span><span class="p">,</span> <span class="s1">&#39;dst_layer&#39;</span><span class="p">])</span>
+</span></code></pre></div>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>┌────────────┬────────┬────────┬───────────┬───────────┐
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>│ edge_id    ┆ source ┆ target ┆ src_layer ┆ dst_layer │
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>╞════════════╪════════╪════════╪═══════════╪═══════════╡
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│ intra_ctrl ┆ A      ┆ B      ┆ ctrl      ┆ ctrl      │
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>│ coupling   ┆ A      ┆ A      ┆ ctrl      ┆ stim      │
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>└────────────┴────────┴────────┴───────────┴───────────┘
+</span></code></pre></div>
+<p>The layer each endpoint sits in is its own column. That is what makes the table
+joinable: <code>source</code> joins against the node table, <code>src_layer</code> groups, and a
+crossing edge is visible as a row whose two layer columns differ.</p>
+<div class="admonition warning">
+<p class="admonition-title">This column changed</p>
+<p>Before this release, <code>source</code> held the <em>repr of an internal tuple</em>, as a
+string: <code>"('A', ('ctrl',))"</code>. Nothing downstream could consume it without
+<code>ast.literal_eval</code>, and it said nothing about that. If you have code doing
+that parse, delete it — <code>source</code> is the id and <code>src_layer</code> is the layer.</p>
+</div>
+<h3 id="the-structured-form-when-you-want-it">The structured form, when you want it</h3>
+<p>An endpoint is a bare id in a flat graph and an <code>(id, layer)</code> pair in a layered
+one, which used to mean reading one looked like this:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">node</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">sides</span><span class="o">.</span><span class="n">source</span><span class="p">))</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">node_id</span> <span class="o">=</span> <span class="n">node</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="k">else</span> <span class="n">node</span>
+</span></code></pre></div>
+<p>That check is a defect, not an idiom: a graph holding both layered and unlayered
+edges makes it wrong, and nothing reports it. Read an endpoint through
+<a class="autorefs autorefs-internal" title="annnet.core._records.as_endpoint" href="../../reference/core/graph/#annnet.core._records.as_endpoint"><code>as_endpoint</code></a> instead, and it has one shape everywhere:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">annnet</span><span class="w"> </span><span class="kn">import</span> <span class="n">as_endpoint</span><span class="p">,</span> <span class="n">as_endpoints</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">as_endpoint</span><span class="p">((</span><span class="s1">&#39;akt&#39;</span><span class="p">,</span> <span class="p">(</span><span class="s1">&#39;stim&#39;</span><span class="p">,)))</span>  <span class="c1"># Endpoint(node_id=&#39;akt&#39;, layer=(&#39;stim&#39;,))</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">as_endpoint</span><span class="p">(</span><span class="s1">&#39;akt&#39;</span><span class="p">)</span>  <span class="c1"># Endpoint(node_id=&#39;akt&#39;, layer=None)</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">as_endpoints</span><span class="p">(</span><span class="n">edge</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>  <span class="c1"># frozenset[Endpoint]</span>
+</span></code></pre></div>
+<p><code>Endpoint</code> keeps the store's positional shape — <code>endpoint[0]</code> is the id,
+<code>endpoint[1]</code> is the layer — and <code>str(endpoint)</code> is the id, which is what a
+label, a dataframe cell and a join all want.</p>
+<p>For the common case there is no unpacking at all:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">edge</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">get_edge</span><span class="p">(</span><span class="s1">&#39;intra_ctrl&#39;</span><span class="p">)</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">edge</span><span class="o">.</span><span class="n">source_id</span>  <span class="c1"># &#39;A&#39;</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">edge</span><span class="o">.</span><span class="n">target_id</span>  <span class="c1"># &#39;B&#39;</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">edge</span><span class="o">.</span><span class="n">layer</span>  <span class="c1"># (&#39;ctrl&#39;,)  — None when the edge crosses two layers</span>
+</span></code></pre></div>
+<h2 id="filtering-slice-joins-in_slice-filters">Filtering: <code>slice=</code> joins, <code>in_slice=</code> filters</h2>
+<p>These two take the same argument and do different things, and the difference is
+worth reading twice:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">G</span><span class="o">.</span><span class="n">views</span><span class="o">.</span><span class="n">edges</span><span class="p">(</span><span class="nb">slice</span><span class="o">=</span><span class="s1">&#39;prior&#39;</span><span class="p">)</span>  <span class="c1"># every row, with prior&#39;s attributes joined on</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">G</span><span class="o">.</span><span class="n">views</span><span class="o">.</span><span class="n">edges</span><span class="p">(</span><span class="n">in_slice</span><span class="o">=</span><span class="s1">&#39;prior&#39;</span><span class="p">)</span>  <span class="c1"># only prior&#39;s rows</span>
+</span></code></pre></div>
+<p><code>slice=</code> is a <strong>join</strong>: every edge in the graph still gets a row, and the ones
+that are in <code>prior</code> gain <code>slice_*</code> columns. <code>in_slice=</code> is a <strong>filter</strong>: the rows
+that are not in <code>prior</code> are gone.</p>
+<p>A call that means "the edges of this slice" wants the second. Reaching for the
+first and then wondering why the row count did not change is the mistake this
+sentence exists to prevent.</p>
+<p>The other two filters are unsurprising:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">G</span><span class="o">.</span><span class="n">views</span><span class="o">.</span><span class="n">edges</span><span class="p">(</span><span class="n">layer</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;ctrl&#39;</span><span class="p">,))</span>  <span class="c1"># the edges of one layer</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">G</span><span class="o">.</span><span class="n">views</span><span class="o">.</span><span class="n">edges</span><span class="p">(</span><span class="n">include_hyper</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># binary rows only</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">G</span><span class="o">.</span><span class="n">views</span><span class="o">.</span><span class="n">hyperedges</span><span class="p">()</span>  <span class="c1"># hyper rows only</span>
+</span></code></pre></div>
+<p><code>layer=</code> names exactly the set
+<a class="autorefs autorefs-internal" title="layer_edge_set" href="../../reference/core/layers/#annnet.core._Layers.LayerAccessor.layer_edge_set"><code>layers.layer_edge_set</code></a>
+names, so the frame and the id set never disagree. They compose:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">G</span><span class="o">.</span><span class="n">views</span><span class="o">.</span><span class="n">edges</span><span class="p">(</span><span class="n">layer</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;ctrl&#39;</span><span class="p">,),</span> <span class="n">in_slice</span><span class="o">=</span><span class="s1">&#39;prior&#39;</span><span class="p">,</span> <span class="n">include_hyper</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span></code></pre></div>
+<p><code>hyperedges()</code> is worth its own call rather than a filter you write, because
+<code>head</code>, <code>tail</code> and <code>members</code> are the columns that carry a hyperedge's shape and
+they are null on every binary row.</p>
+<h2 id="naming-a-node-layer-instead-of-spelling-it">Naming a node-layer instead of spelling it</h2>
+<p>A layer coordinate is a tuple in the graph's aspect order. Writing one by hand
+means holding a fact about the graph at the call site, and it goes wrong silently
+the first time an aspect is added — <code>('stim',)</code> was right and is now the wrong
+length, and a tuple of the wrong length is a coordinate nobody is on.</p>
+<p>Name the aspects instead:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">G</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="s1">&#39;akt&#39;</span><span class="p">,</span> <span class="n">condition</span><span class="o">=</span><span class="s1">&#39;stim&#39;</span><span class="p">)</span>  <span class="c1"># (&#39;akt&#39;, (&#39;stim&#39;,))</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">G</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="s1">&#39;akt&#39;</span><span class="p">,</span> <span class="n">condition</span><span class="o">=</span><span class="s1">&#39;stim&#39;</span><span class="p">)</span>  <span class="c1"># True</span>
+</span></code></pre></div>
+<p><code>at</code> returns the key every layered call takes — <code>add_edges</code>,
+<code>layers.node_attrs</code>, <code>slices.add_nodes</code> — and raises when the node is not there,
+because a key you cannot use is not an answer. <code>exists</code> is the same question
+asked without raising.</p>
+<p>Both refuse a malformed <em>question</em> even when they would answer <code>False</code> to the
+node: an aspect you did not declare, or one you declared and did not name, raises
+rather than quietly resolving to something else.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">G</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="s1">&#39;akt&#39;</span><span class="p">)</span>  <span class="c1"># KeyError: ... needs a value for [&#39;condition&#39;]</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">G</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="s1">&#39;akt&#39;</span><span class="p">,</span> <span class="n">mechansim</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">)</span>  <span class="c1"># KeyError: unknown aspect [&#39;mechansim&#39;]</span>
+</span></code></pre></div>
+<h2 id="two-namespaces-hand-back-a-frame">Two namespaces hand back a frame</h2>
+<p><code>G.views</code> and <code>G.attrs</code> both answer with a table, and five names appear on both —
+<code>nodes</code>, <code>edges</code>, <code>slices</code>, <code>aspects</code> and <code>layers</code>. The intent is:</p>
+<p><strong><code>G.views.&lt;x&gt;()</code> is a call and gives everything known about <code>x</code>. <code>G.attrs.&lt;x&gt;</code>
+is a property and gives only what was written to <code>x</code>.</strong></p>
+<p>That is the same split as <code>G.B</code> against <code>G.matrices.incidence(...)</code> — a property
+for the plain case, a call when there are arguments. Reach for <code>views</code> to
+analyse and for <code>attrs</code> to round-trip.</p>
+<div class="admonition warning">
+<p class="admonition-title">The five pairs do not all keep to it</p>
+<p>Today the relationship is different for each of the five, so check the one
+you are about to use:</p>
+<table>
+<thead>
+<tr>
+<th>name</th>
+<th><code>attrs.&lt;x&gt;</code></th>
+<th><code>views.&lt;x&gt;()</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>edges</code></td>
+<td>the attributes you set</td>
+<td>those, plus <code>source</code>, <code>target</code>, the layer columns, <code>directed</code> and the weights</td>
+</tr>
+<tr>
+<td><code>slices</code></td>
+<td>only the slices carrying an attribute</td>
+<td>every declared slice, including <code>default</code>, with null cells</td>
+</tr>
+<tr>
+<td><code>aspects</code></td>
+<td>only the aspects carrying an attribute</td>
+<td>every declared aspect, plus <code>elem_layers</code></td>
+</tr>
+<tr>
+<td><code>nodes</code></td>
+<td>the node table</td>
+<td><strong>the same table</strong> — <code>views.nodes()</code> adds nothing</td>
+</tr>
+<tr>
+<td><code>layers</code></td>
+<td>the coordinate level, keyed by <code>layer</code></td>
+<td>the coordinate and elementary levels <strong>merged</strong>, keyed by <code>layer_tuple</code></td>
+</tr>
+</tbody>
+</table>
+<p>So <code>edges</code> follows the rule, <code>slices</code> and <code>aspects</code> are the registry joined
+onto the attributes rather than a superset of them, <code>nodes</code> is a duplicate,
+and <code>layers</code> is neither.</p>
+<p>Both layer frames also carry a column called <code>layer_id</code>, and they are
+<strong>different key spaces</strong>: in <code>views.layers()</code> it is a bare label, <code>'ctl'</code>; in
+<code>attrs.elementary_layers</code> it is the composite the elementary API writes,
+<code>'cond_ctl'</code>. Do not join the two.</p>
+<p>Making the five agree is open work. Until it lands, read attributes through
+<code>attrs</code>, and treat <code>views.slices()</code>, <code>views.aspects()</code> and <code>views.layers()</code>
+as a display of the registry.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">The two layer frames are not joinable</p>
+<p><code>G.views.layers()</code> and <code>G.attrs.layers</code> are both about layers and agree about
+nothing else, so do not join them:</p>
+<ul>
+<li><code>views.layers()</code> keys on <code>layer_tuple</code>; <code>attrs.layers</code> keys on <code>layer</code>.</li>
+<li><code>views.layers()</code> merges the layer-coordinate level and the
+  elementary-layer level into one frame. <code>attrs</code> keeps them apart, as
+  <code>attrs.layers</code> and <code>attrs.elementary_layers</code>, because they are addressed
+  differently.</li>
+<li>Both carry a column called <code>layer_id</code> and they are <strong>different key
+  spaces</strong>: in <code>views.layers()</code> it is a bare label, <code>'ctl'</code>; in
+  <code>attrs.elementary_layers</code> it is the composite the elementary API writes,
+  <code>'cond_ctl'</code>.</li>
+</ul>
+<p>Reconciling the two is open work. Until it lands, read layer attributes
+through <code>attrs</code> and treat the <code>layers()</code> frame as a display of the layer
+registry.</p>
+</div>
+<p>A window is a third thing and does not hand back a frame at all.
+<code>G.layers.where(...).nodes</code> is a <strong>set of ids</strong>, the way <code>G.nodes</code> is a list of
+ids. A bare plural is identities. The same plural under <code>attrs</code> is the table.</p>
+<h2 id="where-to-go-next">Where to go next</h2>
+<ul>
+<li><a href="../managers-and-views/">Slices and views</a> — what a slice is, and how it differs
+  from a layer.</li>
+<li><a href="../math-multilayer/">Multilayer and multi-aspect graphs</a> — the coordinate
+  system the layer columns above are written in.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../architecture-overview/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Architecture overview">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Architecture overview
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../internal-representation/" class="md-footer__link md-footer__link--next" aria-label="Next: Internal representation">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Internal representation
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      © Copyright 2021-2026, Saez-lab development team.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy", "content.action.edit", "navigation.tabs", "navigation.instant", "navigation.footer"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
