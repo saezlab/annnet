@@ -72,6 +72,8 @@ nav:
     -   Aspects, order, and windows: explanations/aspects-and-windows.md
     -   Node-layer values and scale: explanations/values-and-scale.md
     -   Edge tables, ids, and formats: explanations/edge-tables-and-formats.md
+    -   What a number means: explanations/vocabulary-and-contracts.md
+    -   Joining measurements: explanations/joining-measurements.md
     -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
     -   Incidence and the matrices: explanations/math-incidence.md
     -   Slices and views: explanations/managers-and-views.md
@@ -97,6 +99,9 @@ nav:
         -   Layers: reference/core/layers.md
     -   Algorithms:
         -   Traversal: reference/algorithms/traversal.md
+    -   Experimental:
+        -   Vocabulary: reference/experimental/vocabulary.md
+        -   Systems biology bridge: reference/experimental/sysbio.md
     -   IO:
         -   Native .annnet format: reference/io/annnet-format.md
         -   Parquet: reference/io/parquet.md

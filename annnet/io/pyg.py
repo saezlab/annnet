@@ -33,7 +33,8 @@ from ._shared.common import (
 from ._shared.importing import delivers
 
 if TYPE_CHECKING:
-    from ..core import AnnNet
+    from ..core import AnnNet, _structure
+from .._support import projection as _projection
 
 
 def _rows_to_tensor(
@@ -122,6 +123,8 @@ def to_pyg(
     edge_features: dict[tuple[str, str, str], list[str]] | None = None,
     slice_id: str | None = None,
     hyperedge_mode: Literal['skip', 'reify', 'expand'] = 'reify',
+    hyperedges: str | None = None,
+    coefficients: str = 'error',
     device: str = 'cpu',
 ) -> HeteroData:
     """Export AnnNet → torch_geometric.data.HeteroData.
@@ -159,6 +162,15 @@ def to_pyg(
         Heterogeneous graph with per-type ``x`` / ``edge_index`` / ``edge_attr``
         and slice masks.
     """
+    # A separate name: `hyperedge_mode` is declared as a Literal, and the
+    # vocabulary returns the widened string it resolved an alias to.
+    projection = _projection.normalise(
+        hyperedges if hyperedges is not None else hyperedge_mode, default='reify'
+    )
+    _projection.check_coefficients(
+        _structure.hyperedges_with_coefficients(graph), projection, coefficients
+    )
+    hyperedge_mode = projection  # type: ignore[assignment]
     if torch is None:
         raise RuntimeError(
             "torch and torch-geometric are not installed; cannot call to_pyg. Install with `pip install 'annnet[pyg]'`."

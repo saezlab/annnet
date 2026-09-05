@@ -246,4 +246,9 @@ def from_edge_frame(
     add_edges_from_frame(graph, frame, directed=directed, **kwargs)
     if node_attrs:
         graph.attrs.set_node_attrs_bulk(node_attrs)
+    # A table has no uri to hash, so what is recorded is that one was read and
+    # how many rows it had — which is what tells two runs apart.
+    graph.provenance.record(
+        'edge frame', format='table', reader='from_edge_frame', rows=len(graph.edges())
+    )
     return graph

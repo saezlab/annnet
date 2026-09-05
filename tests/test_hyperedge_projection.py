@@ -137,3 +137,41 @@ class TestExportersShareIt:
         out = an.to_igraph(hyper, hyperedges='star')
         graph = out[0] if isinstance(out, tuple) else out
         assert graph.vcount() == 4
+
+
+class TestEveryExporterShares(TestExportersShareIt):
+    """The file exporters, not only the graph-backend adapters.
+
+    C3 is only done when the vocabulary reaches every exporter: two of them using
+    it and four keeping their own spelling is the state it was meant to end.
+    """
+
+    @pytest.fixture
+    def carrying(self):
+        G = an.Graph(directed=True)
+        G.add_nodes(['A', 'B', 'C'])
+        G.add_edges([{'head': ['A'], 'tail': ['B', 'C'], 'edge_id': 'h1'}])
+        G.set_edge_coeffs('h1', {'A': 2.0, 'B': -1.0, 'C': -1.0})
+        return G
+
+    @pytest.mark.parametrize('name', ['to_graphml', 'to_gexf', 'to_cx2'])
+    def test_the_guard_fires(self, carrying, name, tmp_path):
+        write = getattr(an, name)
+        with pytest.raises(P.CoefficientsWouldBeLost):
+            write(carrying, tmp_path / 'out', hyperedges='clique')
+
+    @pytest.mark.parametrize('name', ['to_graphml', 'to_gexf', 'to_cx2'])
+    def test_drop_accepts_the_loss(self, carrying, name, tmp_path):
+        getattr(an, name)(carrying, tmp_path / 'out', hyperedges='clique', coefficients='drop')
+
+    @pytest.mark.parametrize('name', ['to_graphml', 'to_gexf', 'to_cx2'])
+    def test_an_unknown_name_is_refused(self, carrying, name, tmp_path):
+        with pytest.raises(ValueError, match='hyperedges must be'):
+            getattr(an, name)(carrying, tmp_path / 'out', hyperedges='sideways')
+
+    def test_the_shape_questions_are_on_the_public_surface(self):
+        """Stage D's capability checks are these two functions."""
+        assert an.is_flat(an.Graph()) is True
+        assert an.hyperedges_with_coefficients(an.Graph()) == []
+        assert an.PROJECTIONS == P.PROJECTIONS
+        assert an.CoefficientsWouldBeLost is P.CoefficientsWouldBeLost

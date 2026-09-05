@@ -161,7 +161,15 @@ def _restore_types_graphml_inplace(G):
 
 
 def to_graphml(
-    graph, path, *, directed=True, hyperedge_mode='reify', public_only=False, sidecar=True
+    graph,
+    path,
+    *,
+    directed=True,
+    hyperedge_mode='reify',
+    public_only=False,
+    sidecar=True,
+    hyperedges=None,
+    coefficients='error',
 ):
     """Export via NetworkX with reified hyperedges; sanitize attrs for GraphML.
 
@@ -171,7 +179,12 @@ def to_graphml(
     two files beside one export and two things to remember to copy.
     """
     G, manifest = to_nx(
-        graph, directed=directed, hyperedge_mode=hyperedge_mode, public_only=public_only
+        graph,
+        directed=directed,
+        hyperedge_mode=hyperedge_mode,
+        hyperedges=hyperedges,
+        coefficients=coefficients,
+        public_only=public_only,
     )
     G = _relabel_nx(G, _encode_node)
     _sanitize_graphml_inplace(G)
@@ -201,7 +214,15 @@ def from_graphml(path, *, hyperedge='reified', sidecar='auto'):
 
 
 def to_gexf(
-    graph: AnnNet, path, *, directed=True, hyperedge_mode='reify', public_only=False, sidecar=True
+    graph: AnnNet,
+    path,
+    *,
+    directed=True,
+    hyperedge_mode='reify',
+    public_only=False,
+    sidecar=True,
+    hyperedges=None,
+    coefficients='error',
 ):
     """Export an AnnNet graph to GEXF via NetworkX.
 
@@ -210,7 +231,12 @@ def to_gexf(
     — edge identity among it — goes to the one companion sidecar.
     """
     G, manifest = to_nx(
-        graph, directed=directed, hyperedge_mode=hyperedge_mode, public_only=public_only
+        graph,
+        directed=directed,
+        hyperedge_mode=hyperedge_mode,
+        hyperedges=hyperedges,
+        coefficients=coefficients,
+        public_only=public_only,
     )
     G = _relabel_nx(G, _encode_node)
     _sanitize_graphml_inplace(G)

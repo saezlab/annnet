@@ -385,13 +385,18 @@ def from_sbml(
         modifiers -1). Default True.
     """
     model = _read_sbml_model(path)
-    return _graph_from_sbml_model(
+    built = _graph_from_sbml_model(
         model,
         graph=graph,
         slice=slice,
         preserve_stoichiometry=preserve_stoichiometry,
         layer=layer,
     )
+    # What was read, recorded as data. The history log says what was *done*, so
+    # reloading a file otherwise tells you the edits and not what they were made
+    # from — and a release that changed under you leaves no trace at all.
+    built.provenance.record('SBML', uri=path, format='sbml', reader='from_sbml')
+    return built
 
 
 # Writer. A hyperedge becomes a reaction: tail is the reactant side, head the

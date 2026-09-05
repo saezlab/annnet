@@ -38,8 +38,8 @@ from ._shared.sidecar import restores
 from ._shared.importing import delivers
 
 if TYPE_CHECKING:
-    from ..core import AnnNet
-
+    from ..core import AnnNet, _structure
+from .._support import projection as _projection
 
 # --- Helpers ---
 CX_STYLE_KEY = '__cx_style__'
@@ -198,6 +198,7 @@ def to_cx2(
     include_inter: bool = False,
     include_coupling: bool = False,
     hyperedges: str = 'skip',
+    coefficients: str = 'error',
     sidecar: bool = True,
 ) -> list[dict[str, Any]]:
     """
@@ -243,6 +244,10 @@ def to_cx2(
     - The full multilayer structure is preserved in the manifest regardless
       of the `layer` parameter, enabling lossless round-trip via from_cx2().
     """
+    hyperedges = _projection.normalise(hyperedges)
+    _projection.check_coefficients(
+        _structure.hyperedges_with_coefficients(G), hyperedges, coefficients
+    )
 
     if layer is not None:
         if not isinstance(layer, tuple):
@@ -1150,6 +1155,12 @@ def from_cx2(
         G.graph_attributes = dict(getattr(G, 'graph_attributes', {}))
         G.graph_attributes[CX_STYLE_KEY] = style_aspects
 
+    G.provenance.record(
+        'CX2',
+        uri=cx2_data if isinstance(cx2_data, (str, Path)) else None,
+        format='cx2',
+        reader='from_cx2',
+    )
     return G
 
 

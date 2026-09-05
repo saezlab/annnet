@@ -43,6 +43,8 @@ _lazy_submodules = {
     'adapters': 'annnet.adapters',
     'io': 'annnet.io',
     'core': 'annnet.core',
+    'exp': 'annnet.experimental',
+    'experimental': 'annnet.experimental',
     'algorithms': 'annnet.algorithms',
 }
 
@@ -51,6 +53,16 @@ _lazy_objects: dict[str, tuple[str, str]] = {
     'Graph': ('annnet.core.graph', 'AnnNet'),
     'EdgeType': ('annnet.core._records', 'EdgeType'),
     'ON_CONFLICT': ('annnet.io._conflict', 'ON_CONFLICT'),
+    'PROJECTIONS': ('annnet._support.projection', 'PROJECTIONS'),
+    'CoefficientsWouldBeLost': (
+        'annnet._support.projection',
+        'CoefficientsWouldBeLost',
+    ),
+    'is_flat': ('annnet.core._structure', 'is_flat'),
+    'hyperedges_with_coefficients': (
+        'annnet.core._structure',
+        'hyperedges_with_coefficients',
+    ),
     'EdgeIdConflict': ('annnet.io._conflict', 'EdgeIdConflict'),
     'EdgeView': ('annnet.core._records', 'EdgeView'),
     'Endpoint': ('annnet.core._records', 'Endpoint'),

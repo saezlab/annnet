@@ -125,6 +125,21 @@ class DummyDoc:
 # ---------------
 
 
+class _DummyProvenance:
+    """The reader records what it read, so a stand-in has to hold records."""
+
+    def __init__(self):
+        self.entries = []
+
+    def record(self, name, **fields):
+        entry = {'name': name, **fields}
+        self.entries.append(entry)
+        return entry
+
+    def records(self):
+        return list(self.entries)
+
+
 class DummyGraph:
     """Minimal AnnNet stand-in to test adapter logic."""
 
@@ -136,6 +151,7 @@ class DummyGraph:
         self.slice_attrs = {}
         self.attrs = _DummyAttrs(self)
         self.slices = _DummySlices(self)
+        self.provenance = _DummyProvenance()
 
     def _add_nodes_bulk(self, ids, slice=None):
         self.nodes.update(ids)

@@ -148,3 +148,42 @@ def _columns(frame):
     from annnet._support.dataframe_backend import dataframe_columns
 
     return list(dataframe_columns(frame))
+
+
+class TestReadersRecordThemselves:
+    """An accessor nothing writes to is a feature that does not exist."""
+
+    def test_from_edge_frame_records_the_table(self):
+        G = an.from_edge_frame([{'source': 'A', 'target': 'B'}])
+        assert [entry['name'] for entry in G.provenance.records()] == ['edge frame']
+
+    def test_the_record_names_the_reader(self):
+        G = an.from_edge_frame([{'source': 'A', 'target': 'B'}])
+        assert G.provenance.records()[0]['reader'] == 'from_edge_frame'
+
+    def test_from_cx2_records_the_file(self, tmp_path):
+        G = an.from_edge_frame([{'source': 'A', 'target': 'B'}])
+        path = tmp_path / 'g.cx2'
+        an.to_cx2(G, path)
+        back = an.from_cx2(path)
+        assert 'CX2' in [entry['name'] for entry in back.provenance.records()]
+
+    def test_a_chain_of_readers_keeps_every_step(self, tmp_path):
+        """Where the data came from, then what it passed through."""
+        G = an.from_edge_frame([{'source': 'A', 'target': 'B'}])
+        path = tmp_path / 'g.cx2'
+        an.to_cx2(G, path)
+        back = an.from_cx2(path)
+        assert [entry['name'] for entry in back.provenance.records()] == ['edge frame', 'CX2']
+
+    def test_reading_the_native_format_adds_nothing(self, tmp_path):
+        """`read` restores records; adding one would grow them on every round trip.
+
+        The path of a file you just named is the one fact the caller already has,
+        and what the file's own records say is where the data came from.
+        """
+        G = an.from_edge_frame([{'source': 'A', 'target': 'B'}])
+        path = tmp_path / 'g.annnet'
+        G.write(path)
+        back = an.read(path)
+        assert [entry['name'] for entry in back.provenance.records()] == ['edge frame']
