@@ -26,6 +26,8 @@ except ImportError:
     torch = None
     HeteroData = None
 
+from ..core import _structure
+from .._support import projection as _projection
 from ._shared.common import (
     _iter_node_ids,
     dataframe_to_rows,
@@ -33,8 +35,7 @@ from ._shared.common import (
 from ._shared.importing import delivers
 
 if TYPE_CHECKING:
-    from ..core import AnnNet, _structure
-from .._support import projection as _projection
+    from ..core import AnnNet
 
 
 def _rows_to_tensor(
