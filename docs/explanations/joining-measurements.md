@@ -136,7 +136,11 @@ third code path.
 ```python
 activity = exp.sysbio.methods.decoupler.run(G, pdata, aspect='condition', slice='regulon')
 fit = exp.sysbio.methods.corneto.run(
-    G, inputs='perturbation', outputs=activity.key, aspect='condition', slice='signalling',
+    G,
+    inputs='perturbation',
+    outputs=activity.key,
+    aspect='condition',
+    slice='signalling',
 )
 
 # or, the whole thing at once
