@@ -125,3 +125,45 @@ something a downstream method can assert on.
 - [What a number means](vocabulary-and-contracts.md) — the reserved names, and
   checking a graph before a method reads it.
 - [Node-layer values and scale](values-and-scale.md) — why attaching is cheap.
+
+## Running a method on it
+
+Two tiers, deliberately. The **adapter** is thin, for someone building a pipeline
+who wants each step visible; the **use case** is the composed loop, for someone
+reading this page. The second is written in terms of the first — there is no
+third code path.
+
+```python
+activity = exp.sysbio.methods.decoupler.run(G, pdata, aspect='condition', slice='regulon')
+fit = exp.sysbio.methods.corneto.run(
+    G, inputs='perturbation', outputs=activity.key, aspect='condition', slice='signalling',
+)
+
+# or, the whole thing at once
+exp.sysbio.usecases.tf_activity(G, pdata, aspect='condition', on='symbol')
+```
+
+`outputs=activity.key` is the join between two steps: it names the attribute the
+first one wrote. No intermediate dictionary, and no way for the two to disagree
+about which condition is which.
+
+**No adapter reimplements any arithmetic.** The scores are decoupler's and the
+fits are CORNETO's, each pinned to floating point against calling the package
+directly on the equivalent DataFrame. What an adapter contributes is the three
+things around it:
+
+- **The declaration before.** `SPEC` is a `MethodSpec`, checked before anything
+  runs.
+- **Reading the input off the graph.** `decoupler.regulon(G, slice=...)` and
+  `corneto.pkn(G, slice=...)` produce what each package reads.
+- **The additive write-back after.** A new slice plus new attributes; nothing is
+  replaced, so a prior and two fits coexist on one object and any pair can be
+  diffed.
+
+!!! note "Results need somewhere to sit"
+
+    `attach` places node-layers for the genes it *matched*. A regulator whose own
+    gene the assay never measured has none — so `decoupler.run` calls
+    `layers.place` for the regulators it scored, and reports how many in
+    `result.placed`. Identity and values are separate questions, and this is
+    where that shows.

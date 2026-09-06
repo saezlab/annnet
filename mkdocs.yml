@@ -102,6 +102,7 @@ nav:
     -   Experimental:
         -   Vocabulary: reference/experimental/vocabulary.md
         -   Systems biology bridge: reference/experimental/sysbio.md
+        -   Method adapters: reference/experimental/methods.md
     -   IO:
         -   Native .annnet format: reference/io/annnet-format.md
         -   Parquet: reference/io/parquet.md

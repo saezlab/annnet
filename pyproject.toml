@@ -157,6 +157,19 @@ scverse = [
   "spatialdata>=0.2",
 ]
 
+decoupler = ["decoupler>=2.0", "anndata>=0.12", "pandas>=2.0"]
+corneto = [
+  "corneto>=1.0.0rc5",
+  "scipy>=1.11",
+]
+methods = [
+  "decoupler>=2.0",
+  "corneto>=1.0.0rc5",
+  "anndata>=0.12",
+  "pandas>=2.0",
+  "scipy>=1.11",
+]
+
 storage = [
   "pyarrow>=10",
   "zarr>=2.18",

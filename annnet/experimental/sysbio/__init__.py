@@ -7,6 +7,7 @@ Becomes its own package, on top of ``vocabulary``. The loop it serves:
 
 from __future__ import annotations
 
+from . import methods, usecases
 from ._attach import (
     REDUCERS,
     PLACEMENTS,
@@ -20,6 +21,8 @@ from ._support import obs_layers
 from ._write_back import TARGETS, COMBINERS, connected, write_back, measurements
 
 __all__ = [
+    'methods',
+    'usecases',
     'COMBINERS',
     'ENTITY_POLICIES',
     'KIND_POLICIES',
