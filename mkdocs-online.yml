@@ -27,5 +27,11 @@ plugins:
 -   mkdocs-jupyter:
         execute: true
         execute_ignore:
+        # Keep the same non-executed notebooks as mkdocs.yml.  The online
+        # config replaces the inherited plugin options rather than merging
+        # them, so these entries must be repeated here.
+        -   tutorials/notebooks/scenarios/*.ipynb
+        # Fetches DoRothEA from OmniPath; render its checked-in output.
+        -   tutorials/notebooks/special/sp04_backend_lazy_proxies.ipynb
         -   tutorials/notebooks/use_cases/*.ipynb
         -   tutorials/notebooks/use_cases/*/*.ipynb
