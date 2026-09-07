@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/annnet?logo=python)](https://pypi.org/project/annnet/)
 [![Unit Tests](https://img.shields.io/github/actions/workflow/status/saezlab/annnet/ci-testing-unit.yml?branch=main&label=tests)](https://github.com/saezlab/annnet/actions/workflows/ci-testing-unit.yml)
 [![codecov](https://codecov.io/gh/saezlab/annnet/branch/main/graph/badge.svg)](https://codecov.io/gh/saezlab/annnet)
-[![Docs](https://img.shields.io/badge/docs_built_with-MkDocs-blue)](https://saezlab.github.io/annnet/)
+[![Docs](https://img.shields.io/badge/docs_built_with-MkDocs-blue)](https://annnet.sysbioverse.org/)
 [![License](https://img.shields.io/github/license/saezlab/annnet)](https://github.com/saezlab/annnet/blob/main/LICENSE)
 
 annnet (Annotated Network) is a unified, high‑expressivity graph platform that brings anndata‑style, annotated containers to networks, multilayer structures, and hypergraphs. It targets systems biology, network biology, omics integration, computational social science, and any domain needing fully flexible graph semantics with modern, stable storage and interoperability.

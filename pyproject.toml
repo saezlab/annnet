@@ -236,8 +236,8 @@ include = [
 
 
 [project.urls]
-Documentation = "https://saezlab.github.io/annnet/reference/"
-Homepage = "https://saezlab.github.io/annnet/"
+Documentation = "https://annnet.sysbioverse.org/reference/"
+Homepage = "https://annnet.sysbioverse.org/"
 Issues = "https://github.com/saezlab/annnet/issues"
 Repository = "https://github.com/saezlab/annnet"
 

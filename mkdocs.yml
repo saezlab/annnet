@@ -1,5 +1,5 @@
 site_name: 'annnet'
-site_url: https://saezlab.github.io/annnet
+site_url: https://annnet.sysbioverse.org/
 repo_url: https://github.com/saezlab/annnet
 repo_name: saezlab/annnet
 exclude_docs: |
