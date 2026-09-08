@@ -3,7 +3,7 @@
 decoupler scores, per sample, how active each regulator is, given a signed set of
 regulator→target edges and a matrix of measurements.
 
-**The arithmetic is decoupler's, unchanged.** ``tests/test_decoupler_adapter.py``
+**The arithmetic is decoupler's, unchanged.** ``tests/test_method_adapters.py``
 pins numeric parity against calling ``dc.mt.ulm`` directly on the equivalent
 DataFrame. What this adapter contributes is the three things around it: the
 declaration before, reading the regulon off the graph, and writing the answer
