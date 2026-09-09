@@ -27,7 +27,7 @@ can store:
 
 Slices support cases such as:
 
-- experimental conditions
+- measured conditions
 - perturbation scenarios
 - train and test partitions
 - condition-specific subgraphs

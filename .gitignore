@@ -69,6 +69,7 @@ notebooks/data
 # Build-time mirror of the notebooks/ SSoT dirs (see tools/mkdocs_hooks.py)
 docs/tutorials/notebooks/special/
 docs/tutorials/notebooks/use_cases/
+docs/tutorials/notebooks/the-loop.ipynb
 site/
 
 # Track the benchmark suite code & ignore generated outputs

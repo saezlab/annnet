@@ -1,5 +1,87 @@
 INHERIT: mkdocs.yml
 
+# ONLINE DOCS: this nav intentionally omits the LOCAL ONLY explanation pages
+# and API subsection from mkdocs.yml. Keep those files excluded below too.
+exclude_docs: |
+    tutorials/notebooks/environment.yml
+    tutorials/notebooks/envs/*.yml
+    tutorials/notebooks/the-loop.ipynb
+    explanations/vocabulary-and-contracts.md
+    explanations/joining-measurements.md
+    reference/experimental/**
+
+nav:
+-   Home: index.md
+
+-   Installation: installation.md
+-   Quickstart: quickstart.md
+-   Tutorials and notebooks:
+    -   Notebook Gallery: tutorials/index.md
+
+-   Explanations:
+    -   Explanations Overview: explanations/index.md
+    -   1. Understand the model:
+        -   Design principles: explanations/design-philosophy.md
+        -   Package architecture: explanations/architecture-overview.md
+        -   Internal representation: explanations/internal-representation.md
+        -   Edge tables, ids, and formats: explanations/edge-tables-and-formats.md
+        -   Incidence representation: explanations/math-incidence.md
+    -   2. Work with graph state:
+        -   Reading the graph: explanations/reading-the-graph.md
+        -   Adding edges: explanations/add-edges.md
+        -   Mutation and derived state: explanations/mutation-and-derived-state.md
+        -   Aspects, order, and windows: explanations/aspects-and-windows.md
+        -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
+        -   Slices and views: explanations/managers-and-views.md
+        -   Node-layer values and scale: explanations/values-and-scale.md
+    -   3. Connect and persist:
+        -   Interoperability: explanations/interoperability.md
+        -   Storage and IO: explanations/io-annnet.md
+        -   Tracking changes: explanations/history-and-diffs.md
+
+-   API Reference:
+    -   API Reference Overview: reference/index.md
+    -   Public and internal APIs: reference/api-boundary.md
+    -   Support helpers: reference/support.md
+    -   Core:
+        -   Graph: reference/core/graph.md
+        -   Backend accessors: reference/core/backend-accessors.md
+        -   Indexing: reference/core/indexing.md
+        -   Attributes: reference/core/attributes.md
+        -   Operations: reference/core/bulk-operations.md
+        -   History: reference/core/history.md
+        -   Cache: reference/core/cache.md
+        -   Views: reference/core/views.md
+        -   Slices: reference/core/slices.md
+        -   Layers: reference/core/layers.md
+    -   Algorithms:
+        -   Traversal: reference/algorithms/traversal.md
+    -   IO:
+        -   Native .annnet format: reference/io/annnet-format.md
+        -   Parquet: reference/io/parquet.md
+        -   GraphML and GEXF: reference/io/graphml-gexf.md
+        -   SIF: reference/io/sif.md
+        -   SBML: reference/io/sbml.md
+        -   CX2: reference/io/cx2.md
+        -   JSON and NDJSON: reference/io/json.md
+        -   CSV: reference/io/csv.md
+        -   Excel: reference/io/excel.md
+        -   DataFrames: reference/io/dataframes.md
+        -   PyTorch Geometric: reference/io/pyg.md
+    -   Adapters:
+        -   NetworkX adapter: reference/adapters/networkx.md
+        -   igraph adapter: reference/adapters/igraph.md
+        -   graph-tool adapter: reference/adapters/graphtool.md
+    -   Utilities:
+        -   Plotting: reference/utils/plotting.md
+
+-   Changelog: changelog.md
+
+-   Community:
+    -   Join Us: community/index.md
+    -   Contribute to the Documentation: community/contribute-docs.md
+    -   Contribute to the package code: community/contribute-codebase.md
+
 plugins:
 -   search
 -   autorefs
@@ -31,6 +113,7 @@ plugins:
         # config replaces the inherited plugin options rather than merging
         # them, so these entries must be repeated here.
         -   tutorials/notebooks/scenarios/*.ipynb
+        -   tutorials/notebooks/the-loop.ipynb
         # Fetches DoRothEA from OmniPath; render its checked-in output.
         -   tutorials/notebooks/special/sp04_backend_lazy_proxies.ipynb
         -   tutorials/notebooks/use_cases/*.ipynb

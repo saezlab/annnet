@@ -1,4 +1,9 @@
-# Joining measurements to a network
+# Joining measurements to a network (LOCAL ONLY)
+
+!!! warning "LOCAL ONLY — excluded from online docs"
+    This explanation is retained for local inspection only because it covers
+    the experimental measurement bridge.
+
 
 The loop this exists for:
 

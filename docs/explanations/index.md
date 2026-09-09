@@ -1,24 +1,51 @@
 # Explanations
 
-This section is a conceptual guide to annnet.
+This section explains how annnet represents a graph, how its state changes, and
+how graph data moves between annnet and other tools. Follow the sections in
+order for the main path, or jump directly to a topic.
 
-Read these three first. They are the ones that say what an AnnNet *is*.
+## 1. Understand the model
 
-- [Design philosophy](design-philosophy.md): what the package optimises for, and what it refuses to.
-- [Architecture overview](architecture-overview.md): the modules, and which of them a caller ever names.
-- [Internal representation](internal-representation.md): the canonical stores, what derives from them, and the eight attribute tables.
+### Principles and architecture
 
-Then, on reading and changing a graph:
+- [Design principles](design-philosophy.md): the choices that shape the package.
+- [Package architecture](architecture-overview.md): the main modules and how they fit together.
+- [Internal representation](internal-representation.md): canonical storage, indices, and attribute tables.
 
-- [Reading the graph](reading-the-graph.md): the frame as the default answer, and which namespace builds which one.
-- [Mutation and derived state](mutation-and-derived-state.md): what a write invalidates, and what a read rebuilds.
-- [Aspects, order, and windows](aspects-and-windows.md): ordinal against categorical aspects, and selecting layers as a query.
-- [Incidence and the matrices](math-incidence.md): what each named matrix means, and where a self-loop and a boundary edge land.
-- [Multilayer and multi-aspect graphs](math-multilayer.md): how annnet models layered graph state.
-- [Slices and views](managers-and-views.md): how one graph can hold several contexts without duplication.
-- [Interoperability](interoperability.md): what annnet keeps, what other tools expect, and how conversion works.
-- [Storage and IO](io-annnet.md): native persistence and exchange formats.
-- [Tracking changes](history-and-diffs.md): mutation history, snapshots, and diffs.
-- [Adding edges](add-edges.md): accepted edge input forms and dispatch rules.
+### Identity and representation
 
-Use the [API reference](../reference/index.md) when you need exact signatures and details about parameters, attributes, and methods.
+- [Edge tables, ids, and formats](edge-tables-and-formats.md): what an edge identity means and what each format can preserve.
+- [Incidence representation](math-incidence.md): how graph structure appears in incidence matrices.
+
+## 2. Work with graph state
+
+### Inspect and change
+
+- [Reading the graph](reading-the-graph.md): choose the right frame and namespace for a query.
+- [Adding edges](add-edges.md): accepted edge inputs and how they are dispatched.
+- [Mutation and derived state](mutation-and-derived-state.md): what writes maintain and what reads derive.
+
+### Layers and context
+
+- [Aspects, order, and windows](aspects-and-windows.md): organize layers and select them as a query.
+- [Multilayer and multi-aspect graphs](math-multilayer.md): model structure across layer coordinates.
+- [Slices and views](managers-and-views.md): work with contexts without duplicating the graph.
+
+### Values
+
+- [Node-layer values](values-and-scale.md): attach, read, and interpret values on node-layer pairs.
+
+## 3. Connect and persist
+
+### Interoperate
+
+- [Interoperability](interoperability.md): convert graphs while making projections explicit.
+- [Storage and IO](io-annnet.md): persist native state and exchange it with other formats.
+
+### Track changes
+
+- [Tracking changes](history-and-diffs.md): use mutation history, snapshots, and diffs.
+
+When you need exact signatures, parameters, attributes, or methods, use the
+[API reference](../reference/index.md). For runnable examples, use the
+[Notebook Gallery](../tutorials/index.md).

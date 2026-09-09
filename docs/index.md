@@ -9,7 +9,7 @@
 ## Why annnet
 
 Many real-world networks are structurally heterogeneous and context-dependent. A single dataset may combine
-directed and undirected interactions, signed edges, higher-order relations, and multiple experimental or temporal
+directed and undirected interactions, signed edges, higher-order relations, and multiple contextual or temporal
 conditions. Standard graph libraries handle topology and algorithms well, but typically treat attributes as flat,
 per-object dictionaries without schema, indexing, or efficient bulk operations. This makes it difficult to manage
 annotations, compare conditions, or preserve structure across analysis steps.
@@ -81,7 +81,7 @@ keeps them within a single, consistent representation that can still be exported
 
     ---
 
-    Model regulatory, signaling, metabolic, and cross-modal networks with typed metadata and multiple experimental contexts.
+    Model regulatory, signaling, metabolic, and cross-modal networks with typed metadata and multiple analysis contexts.
 
 -   __Condition-specific and temporal networks__
 
@@ -105,8 +105,9 @@ keeps them within a single, consistent representation that can still be exported
 
 ## Documentation
 
-The documentation is structured around how the package is typically used: first understanding the model, then
-working through examples, and finally consulting the API in detail. Check out the documentation sections below:
+The documentation is split by purpose: short setup, conceptual explanations,
+runnable notebooks, and exact reference pages. Choose one route below and move
+to another section only when you need it.
 
 <div class="grid cards annnet-feature-cards" markdown>
 
@@ -144,22 +145,25 @@ working through examples, and finally consulting the API in detail. Check out th
 
 </div>
 
-## Start with the workflow you need
+## Recommended order
 
-The entry points below correspond to common usage patterns. Installation is the minimal setup path, the quickstart
-introduces the core object and data model, and the tutorial walks through a complete example with annotations,
-hypergraph structure, and layers.
+1. [Install annnet](installation.md).
+2. Build one graph with the [Quickstart](quickstart.md).
+3. Read the [Explanations](explanations/index.md) page that matches your model.
+4. Run a matching example from the [Notebook Gallery](tutorials/index.md).
+5. Consult the [API reference](reference/index.md) for exact signatures.
 
 <div class="annnet-hero">
   <div class="annnet-kicker">Get started</div>
-  <h2>Install annnet, build a toy AnnNet graph, or inspect a full biological example</h2>
+  <h2>Choose the next useful page</h2>
   <p class="annnet-lead">
-    Start with installation if you are setting up the package, the quickstart if you want the core object model,
-    or the tutorial if you want a complete worked example with annotations and graph structure.
+    Use the quickstart for the core loop, explanations for the model, notebooks
+    for runnable workflows, and the reference for exact API details.
   </p>
   <div class="annnet-actions">
     <a class="md-button md-button--primary" href="installation/">Installation</a>
     <a class="md-button" href="quickstart/">Quickstart</a>
-    <a class="md-button" href="tutorials/">Tutorials</a>
+    <a class="md-button" href="explanations/">Explanations</a>
+    <a class="md-button" href="tutorials/">Notebook Gallery</a>
   </div>
 </div>

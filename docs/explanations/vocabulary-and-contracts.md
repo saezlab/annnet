@@ -1,4 +1,9 @@
-# What a number means, and whether it means it
+# What a number means, and whether it means it (LOCAL ONLY)
+
+!!! warning "LOCAL ONLY — excluded from online docs"
+    This explanation is retained for local inspection only because it covers
+    experimental vocabulary and method contracts.
+
 
 `AnnNet.validate()` asks whether the object is *internally consistent* — the slot
 bijections hold, the matrix agrees with the store. A failure there means the
