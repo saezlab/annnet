@@ -94,6 +94,7 @@ pixi.lock
 _*.md
 _repo_analysis/*
 .importscope*
-# Session logs the ecosystem logger writes beside a run
+# Runtime and session logs generated beside a run
 logs/
 **/logs/
+*.log
