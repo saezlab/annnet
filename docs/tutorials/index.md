@@ -1,17 +1,17 @@
 # Notebook Gallery
 
-This section collects runnable AnnNet notebooks with rendered outputs. To
-recreate them, use the linked GitHub environment file for the notebook family.
+This is the single index for runnable annnet notebooks. The sections follow the
+work being demonstrated; the [Explanations](../explanations/index.md) section
+covers concepts and choices separately.
 
 Base HowTos use the
 [HowTo environment](https://github.com/saezlab/annnet/blob/main/docs/tutorials/notebooks/environment.yml).
-Scenario notebooks each link a narrower environment for the external packages
-they demonstrate. The larger use-case notebooks render their stored outputs and link dedicated environments for reproducing the analyses.
+Scenario and use-case notebooks link their dedicated environments.
 
-## HowTos
+## Core graph workflows
 
-Small, self-contained notebooks that show AnnNet APIs directly, including
-focused special-topic notebooks.
+These notebooks cover construction, graph structure, context, values, and
+reproducibility.
 
 <div class="grid cards annnet-feature-cards" markdown>
 
@@ -51,7 +51,7 @@ focused special-topic notebooks.
 
     ---
 
-    Represent complexes/reactions and traverse local neighborhoods.
+    Represent complexes or reactions and traverse local neighborhoods.
 
     [Open notebook](notebooks/tutos/05_hyperedges_and_traversal.ipynb)
 
@@ -88,6 +88,15 @@ focused special-topic notebooks.
 
     [Open notebook](notebooks/tutos/07_history_and_reproducibility.ipynb)
 
+</div>
+
+## Interoperability and storage
+
+These notebooks show the boundaries where annnet connects to another backend,
+format, or workflow.
+
+<div class="grid cards annnet-feature-cards" markdown>
+
 -   __Backend accessors__
 
     ---
@@ -104,12 +113,20 @@ focused special-topic notebooks.
 
     [Open notebook](notebooks/special/sp03_flexible_edge_orientation.ipynb)
 
+-   __Backend lazy proxies__
+
+    ---
+
+    Inspect deferred backend conversion and the optional dependency boundary.
+
+    [Open notebook](notebooks/special/sp04_backend_lazy_proxies.ipynb)
+
 </div>
 
-## Use Cases
+## Applied workflows
 
-Larger applied notebooks that combine AnnNet with external biological data,
-optimization, and graph learning workflows.
+These larger notebooks combine graph structure with external biological data,
+optimization, or graph-learning tools.
 
 <div class="grid cards annnet-feature-cards" markdown>
 
@@ -137,8 +154,8 @@ optimization, and graph learning workflows.
 
 ## Scenarios
 
-Short ecosystem bridges. They use tiny deterministic data and keep external
-dependencies in scenario-specific environment files.
+Short ecosystem bridges use small deterministic data and scenario-specific
+environments.
 
 <div class="grid cards annnet-feature-cards" markdown>
 

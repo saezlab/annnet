@@ -28,6 +28,7 @@ warnings.filterwarnings(
 # tree at build time so editing them auto-updates the published docs. The
 # tutos/ notebooks already live under docs/ directly and are their own SSoT.
 _MIRRORED_NOTEBOOK_DIRS = ("special", "use_cases")
+_LOCAL_ONLY_NOTEBOOKS = ("the-loop.ipynb",)
 
 # Chunked use cases live in per-case subfolders. Only the ones listed here are
 # published; work-in-progress subfolders (e.g. UC2b) and data/outputs dirs stay
@@ -49,6 +50,12 @@ def _sync_tutorial_notebooks() -> None:
     repo_root = Path(__file__).resolve().parent.parent
     notebooks_root = repo_root / "notebooks"
     tutorials_root = repo_root / "docs" / "tutorials" / "notebooks"
+    tutorials_root.mkdir(parents=True, exist_ok=True)
+
+    for name in _LOCAL_ONLY_NOTEBOOKS:
+        source = notebooks_root / name
+        if source.is_file():
+            shutil.copy2(source, tutorials_root / name)
 
     for name in _MIRRORED_NOTEBOOK_DIRS:
         source_dir = notebooks_root / name

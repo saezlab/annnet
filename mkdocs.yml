@@ -36,51 +36,32 @@ nav:
 
 -   Installation: installation.md
 -   Quickstart: quickstart.md
--   Tutorials and Scenarios:
-    -   Notebooks Overview: tutorials/index.md
-    -   HowTo's:
-        -   Quickstart: tutorials/notebooks/tutos/01_quickstart.ipynb
-        -   Attributes & views: tutorials/notebooks/tutos/02_attributes_and_views.ipynb
-        -   Tables & storage: tutorials/notebooks/tutos/03_tables_and_storage.ipynb
-        -   Slices & subgraphs: tutorials/notebooks/tutos/04_slices_and_subgraphs.ipynb
-        -   Hyperedges & traversal: tutorials/notebooks/tutos/05_hyperedges_and_traversal.ipynb
-        -   Directed hyperedges & stoichiometry: tutorials/notebooks/special/sp01_directed_hyperedges.ipynb
-        -   Multilayer: tutorials/notebooks/tutos/06_multilayer.ipynb
-        -   Multilayer math: tutorials/notebooks/special/sp02_multilayer_math.ipynb
-        -   History & reproducibility: tutorials/notebooks/tutos/07_history_and_reproducibility.ipynb
-        -   Backend accessors: tutorials/notebooks/tutos/08_backend_accessors.ipynb
-        -   Flexible edge orientation: tutorials/notebooks/special/sp03_flexible_edge_orientation.ipynb
-        -   Backend lazy proxies: tutorials/notebooks/special/sp04_backend_lazy_proxies.ipynb
-    -   Use Cases:
-        -   Overview: tutorials/use-cases.md
-        -   Multi-condition signaling: tutorials/notebooks/use_cases/UC1.ipynb
-        -   TGF-beta fibrosis response: tutorials/notebooks/use_cases/UC2.ipynb
-    -   Scenarios:
-        -   OmniPath table ingestion: tutorials/notebooks/scenarios/omnipath_table_ingestion.ipynb
-        -   Cytoscape CX2 export: tutorials/notebooks/scenarios/cytoscape_cx2_export.ipynb
-        -   PyG HeteroData export: tutorials/notebooks/scenarios/pyg_heterodata_export.ipynb
-        -   Causal activity bridge: tutorials/notebooks/scenarios/causal_activity_bridge.ipynb
-        
+-   Tutorials and notebooks:
+    -   Notebook Gallery: tutorials/index.md
+    -   The loop (LOCAL ONLY): tutorials/notebooks/the-loop.ipynb
 
 -   Explanations:
     -   Explanations Overview: explanations/index.md
-    -   Design philosophy: explanations/design-philosophy.md
-    -   Architecture overview: explanations/architecture-overview.md
-    -   Reading the graph: explanations/reading-the-graph.md
-    -   Internal representation: explanations/internal-representation.md
-    -   Mutation and derived state: explanations/mutation-and-derived-state.md
-    -   Aspects, order, and windows: explanations/aspects-and-windows.md
-    -   Node-layer values and scale: explanations/values-and-scale.md
-    -   Edge tables, ids, and formats: explanations/edge-tables-and-formats.md
-    -   What a number means: explanations/vocabulary-and-contracts.md
-    -   Joining measurements: explanations/joining-measurements.md
-    -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
-    -   Incidence and the matrices: explanations/math-incidence.md
-    -   Slices and views: explanations/managers-and-views.md
-    -   Interoperability: explanations/interoperability.md
-    -   Storage and IO: explanations/io-annnet.md
-    -   Tracking changes: explanations/history-and-diffs.md
-    -   Adding edges: explanations/add-edges.md
+    -   1. Understand the model:
+        -   Design principles: explanations/design-philosophy.md
+        -   Package architecture: explanations/architecture-overview.md
+        -   Internal representation: explanations/internal-representation.md
+        -   Edge tables, ids, and formats: explanations/edge-tables-and-formats.md
+        -   Incidence representation: explanations/math-incidence.md
+    -   2. Work with graph state:
+        -   Reading the graph: explanations/reading-the-graph.md
+        -   Adding edges: explanations/add-edges.md
+        -   Mutation and derived state: explanations/mutation-and-derived-state.md
+        -   Aspects, order, and windows: explanations/aspects-and-windows.md
+        -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
+        -   Slices and views: explanations/managers-and-views.md
+        -   Node-layer values and scale: explanations/values-and-scale.md
+        -   What a number means (LOCAL ONLY): explanations/vocabulary-and-contracts.md
+        -   Joining measurements (LOCAL ONLY): explanations/joining-measurements.md
+    -   3. Connect and persist:
+        -   Interoperability: explanations/interoperability.md
+        -   Storage and IO: explanations/io-annnet.md
+        -   Tracking changes: explanations/history-and-diffs.md
 
 -   API Reference:
     -   API Reference Overview: reference/index.md
@@ -99,10 +80,8 @@ nav:
         -   Layers: reference/core/layers.md
     -   Algorithms:
         -   Traversal: reference/algorithms/traversal.md
-    -   Experimental:
-        -   Vocabulary: reference/experimental/vocabulary.md
-        -   Systems biology bridge: reference/experimental/sysbio.md
-        -   Method adapters: reference/experimental/methods.md
+    -   Experimental (LOCAL ONLY):
+        -   Experimental API reference (LOCAL ONLY): reference/experimental/index.md
     -   IO:
         -   Native .annnet format: reference/io/annnet-format.md
         -   Parquet: reference/io/parquet.md
@@ -186,6 +165,8 @@ plugins:
         execute: true
         execute_ignore:
         -   tutorials/notebooks/scenarios/*.ipynb
+        # Local-only notebook; render its checked-in output.
+        -   tutorials/notebooks/the-loop.ipynb
         # Fetches DoRothEA from OmniPath, so a docs build would need the network.
         -   tutorials/notebooks/special/sp04_backend_lazy_proxies.ipynb
         -   tutorials/notebooks/use_cases/*.ipynb
