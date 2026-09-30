@@ -15,7 +15,7 @@ so run from a checkout it measures that checkout and reports the label of the
 worktree it never imported. The answer carries ``annnet`` under ``measured``,
 so a run that reached the wrong tree says so.
 
-**Only API that held across the whole cycle is used**, because this module is
+**Only API every measured revision holds is used**, because this module is
 not imported by the tree it measures and must not depend on anything that tree
 may not have.
 
@@ -72,7 +72,7 @@ def measure(label: str = '', rounds: int = 5) -> dict:
 
     def removes(graph):
         for edge_id in victims:
-            graph.remove_edge(edge_id)
+            graph.remove_edges(edge_id)
             _ = graph.S
 
     cases = {
@@ -108,7 +108,7 @@ def measure(label: str = '', rounds: int = 5) -> dict:
 
 # -- the bulk-build attribution -------------------------------------------
 #
-# `FR-024` asks where the wall time of a bulk build goes, by named phase, at the
+# Where the wall time of a bulk build goes, by named phase, at the
 # medium scale — 10 000 nodes and 40 000 edges, with the attribute counts the
 # `medium` scale of the suite declares.
 #

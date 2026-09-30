@@ -141,7 +141,7 @@ class AnnNetEngine(Engine):
             'degree': lambda: G.degree(v_lo),
             'neighbors': lambda: G.neighbors(v_lo),
             'has_edge': lambda: G.has_edge(v_lo, v_hi),
-            'enumerate_edges': lambda: list(G.edges()),
+            'enumerate_edges': lambda: list(G.E),
         }
 
     def mutation_ops(self, data, *, count: int):
@@ -169,7 +169,7 @@ class AnnNetEngine(Engine):
             return G.add_edges(u, probes[i], edge_id=f'{probes[i]}_e')
 
         def remove(G, i):
-            return G.remove_edge(f'{probes[i]}_e')
+            return G.remove_edges(f'{probes[i]}_e')
 
         def add_then_read(G, i):
             G.add_edges(u, probes[i], edge_id=f'{probes[i]}_e')

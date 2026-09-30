@@ -612,7 +612,7 @@ def _attribute_baselines(records: list[dict]) -> list[str]:
     held: dict[tuple[str, str], dict] = {(row['op'], row['baseline']): row for row in rows}
     subject = 'annnet'
 
-    # The ceiling of SC-001 is against a contiguous array of the same length, so
+    # The attribute-read ceiling is against a contiguous array of the same length, so
     # that is the ratio the table carries, and it says so in the heading rather
     # than leaving a reader to guess which bar it is against.
     against = 'numpy' if 'numpy' in baselines else None

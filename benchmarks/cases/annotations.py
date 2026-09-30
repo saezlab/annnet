@@ -38,13 +38,14 @@ def annotation_update_dimensions(
     def set_node_attrs_bulk_initial():
         graph = AnnNet(directed=True, annotations_backend=backend)
         graph.add_nodes(nodes, slice='base')
-        graph.attrs.set_node_attrs_bulk(
+        graph.attrs.update(
+            'nodes',
             make_node_attr_updates(
                 nodes,
                 attr_count=scale.node_attrs,
                 sparse_every=scale.sparse_every,
                 annotation_density=scale.annotation_density,
-            )
+            ),
         )
         return graph
 
@@ -52,26 +53,28 @@ def annotation_update_dimensions(
         graph, _nodes, _pairs, _edge_ids = build_annnet_graph(
             scale, backend=backend, node_attrs=True
         )
-        graph.attrs.set_node_attrs_bulk(
+        graph.attrs.update(
+            'nodes',
             make_node_attr_updates(
                 nodes,
                 attr_count=scale.node_attrs,
                 sparse_every=scale.sparse_every,
                 annotation_density=scale.annotation_density,
                 prefix='node_attr_update',
-            )
+            ),
         )
         return graph
 
     def set_edge_attrs_bulk_initial():
         graph, _nodes, _pairs, edge_ids = build_annnet_graph(scale, backend=backend)
-        graph.attrs.set_edge_attrs_bulk(
+        graph.attrs.update(
+            'edges',
             make_edge_attr_updates(
                 edge_ids,
                 attr_count=scale.edge_attrs,
                 sparse_every=scale.sparse_every,
                 annotation_density=scale.annotation_density,
-            )
+            ),
         )
         return graph
 
@@ -79,25 +82,27 @@ def annotation_update_dimensions(
         graph, _nodes, _pairs, edge_ids = build_annnet_graph(
             scale, backend=backend, edge_attrs=True
         )
-        graph.attrs.set_edge_attrs_bulk(
+        graph.attrs.update(
+            'edges',
             make_edge_attr_updates(
                 edge_ids,
                 attr_count=scale.edge_attrs,
                 sparse_every=scale.sparse_every,
                 annotation_density=scale.annotation_density,
                 prefix='edge_attr_update',
-            )
+            ),
         )
         return graph
 
     def set_slice_attrs_repeated():
         graph, _nodes, _pairs, _edge_ids = build_annnet_graph(scale, backend=backend)
         for idx in range(scale.slices):
-            graph.attrs.set_slice_attrs(
-                f'slice_{idx}',
-                label=f'condition_{idx}',
-                replicate=idx,
-                score=float(idx),
+            slice_id = f'slice_{idx}'
+            if not graph.slices.exists(slice_id):
+                graph.slices.add(slice_id)
+            graph.attrs.update(
+                'slices',
+                {slice_id: {'label': f'condition_{idx}', 'replicate': idx, 'score': float(idx)}},
             )
         return graph
 
@@ -110,7 +115,7 @@ def annotation_update_dimensions(
             }
             for idx, edge_id in enumerate(edge_ids)
         }
-        graph.attrs.set_edge_slice_attrs_bulk('base', updates)
+        graph.attrs.update('edge_slices', {('base', eid): attrs for eid, attrs in updates.items()})
         return graph
 
     cases = (

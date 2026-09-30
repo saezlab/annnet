@@ -20,30 +20,30 @@ Two rules make the answers comparable across commits and across machines.
 
 **The reference is measured in the same process as the subject.** An absolute
 number does not survive a change of machine, or a busy one — the reference
-libraries in the T044 run were up to 1.9 times slower than in the baseline run,
+libraries in one earlier run were up to 1.9 times slower than in the baseline run,
 which made every absolute comparison in that table invalid. A ratio against a
 reference measured beside the subject survives both.
 
-**Only API that held across the whole cycle is used.** This module is not
+**Only API every measured revision holds is used.** This module is not
 imported by the tree it measures, so it must not depend on anything that tree
 may not have. Nothing here reaches past the public graph.
 
-The scale is the ``small`` scale of ``benchmarks-baseline.md``: 1 000 nodes and
+The scale is the ``small`` scale of the benchmark suite: 1 000 nodes and
 4 000 edges, a ring with a constant degree, so a query measures the cost of one
 call rather than the size of an adjacency list.
 
 ## The derive probe
 
 The module carries a second measurement, which is not a bisection. It re-measures
-every number cycle 003 was planned against — the two attribute-column reads, the
-O(1) probes on the store, the intrinsic edge column, and the three dataframe
-baselines — so that any claim of that cycle can be checked with one command:
+every reference number of the derive layer — the two attribute-column reads,
+the O(1) probes on the store, the intrinsic edge column, and the three dataframe
+baselines — so that any claim about them can be checked with one command:
 
 .. code-block:: bash
 
     python benchmarks/bisect_read_path.py --derive
 
-The call counts are calibrated for the costs *after* cycle 003, which are
+The call counts are calibrated for the current costs, which are
 microseconds. A run against an older tree, where the same reads cost
 milliseconds, should raise them or read the answer as an upper bound.
 
@@ -70,7 +70,7 @@ N_EDGES = 4000
 DERIVE_NODES = 100_000
 DERIVE_EDGES = 40_000
 
-# The scale `SC-004` names for the rebuild of a cached matrix.
+# The scale the rebuild ceiling of a cached matrix is stated at.
 DERIVE_REBUILD_EDGES = 25_600
 
 
@@ -150,7 +150,7 @@ def measure(label: str = '') -> dict:
             'degree': lambda: graph.degree(lo),
             'neighbors': lambda: graph.neighbors(lo),
             'has_edge': lambda: graph.has_edge(lo, hi),
-            'enumerate_edges': lambda: list(graph.edges()),
+            'enumerate_edges': lambda: list(graph.E),
         }
 
     def networkx_ops(graph):
@@ -295,10 +295,10 @@ def _pandas_column(values):
 def _matrix_rebuild() -> dict:
     """R5: where the rebuild of a cached matrix spends its time.
 
-    ``handover-07`` of cycle 002 names three causes for a rebuild costing about
-    twice the one it replaced — the row lookup, the edge-kind selection, and the
-    three array copies that seed the buffer — and only the third is a copy. The
-    ceiling of `SC-004` cannot be set until the three are told apart.
+    Three causes were found for a rebuild costing about twice the one it
+    replaced — the row lookup, the edge-kind selection, and the three array
+    copies that seed the buffer — and only the third is a copy. A ceiling for
+    the rebuild cannot be set until the three are told apart.
 
     Each phase is timed on its own, on the same graph, so the parts are
     comparable with the whole rather than with each other alone.
@@ -352,7 +352,7 @@ def measure_rebuild() -> dict:
 
 
 def measure_derive() -> dict:
-    """Return every reference measurement cycle 003 was planned against."""
+    """Return every reference measurement of the derive layer."""
     import annnet
 
     parts = {
