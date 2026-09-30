@@ -43,7 +43,7 @@ def test_iter_yields_node_ids():
     G = AnnNet(directed=False)
     G.add_nodes(['A', 'B', 'C'])
     assert set(iter(G)) == {'A', 'B', 'C'}
-    assert list(G) == list(G.nodes())
+    assert list(G) == list(G.N)
 
 
 def test_contains_checks_node_membership():

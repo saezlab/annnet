@@ -141,7 +141,7 @@ def test_an_edge_added_after_a_read_shows_up():
 def test_a_weight_write_moves_the_matrix():
     G = two_layer(directed=False)
     G.layers.supra_adjacency()
-    G.E['weight'] = [5.0] * G.ne
+    G.E['weight'] = [5.0] * len(G.E)
     assert G.layers.supra_adjacency().max() == 5.0
 
 

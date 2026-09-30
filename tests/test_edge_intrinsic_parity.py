@@ -1,6 +1,6 @@
 """An intrinsic edge column gives what the record-per-edge read gave.
 
-`FR-016` asks for one pass over the arrays *and* for the same values in the same
+The read is one pass over the arrays *and* gives the same values in the same
 order. The reference here is the read this replaces, called directly: one record
 per edge, and the field taken off it.
 
@@ -23,7 +23,7 @@ INTRINSIC = ('weight', 'directed', 'kind')
 
 def _per_edge(graph, name) -> list:
     """The read this replaces: one record per edge, and one field off it."""
-    return [getattr(graph.get_edge(edge_id), name) for edge_id in graph.E.ids]
+    return [getattr(graph.E.at(edge_id), name) for edge_id in graph.E.ids]
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +86,7 @@ def with_an_edge_entity() -> AnnNet:
 
 def with_a_freed_edge_slot() -> AnnNet:
     graph = binary()
-    graph.remove_edge('e2')
+    graph.remove_edges('e2')
     return graph
 
 
@@ -98,7 +98,7 @@ def with_a_placeholder() -> AnnNet:
 
 def with_a_placeholder_and_a_freed_slot() -> AnnNet:
     graph = with_a_placeholder()
-    graph.remove_edge('e1')
+    graph.remove_edges('e1')
     return graph
 
 

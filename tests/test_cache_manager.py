@@ -1,6 +1,6 @@
 """One cache answers a matrix read.
 
-`FR-019`. Cycle 002 left two. ``MatrixCache`` holds a built matrix against the
+There used to be two. ``MatrixCache`` holds a built matrix against the
 clock of the store and extends it when a write only appended edges at the
 frontier. ``CacheManager`` held the CSR form, the CSC form and a
 boundary-filtered adjacency against a *second* clock, one the graph maintained

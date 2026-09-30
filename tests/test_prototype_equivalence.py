@@ -175,7 +175,7 @@ def test_a_subgraph_takes_the_weight_the_slice_gives_an_edge():
     G.slices.add_edge_to_slice('heavy', 'e_ab')
     for node_id in ('A', 'B'):
         G.slices.add_node_to_slice('heavy', node_id)
-    G.attrs.set_edge_slice_attrs('heavy', 'e_ab', weight=10.0)
+    G.attrs.update('edge_slices', {('heavy', 'e_ab'): {'weight': 10.0}})
     H = G.subgraph_from_slice('heavy')
     assert S.edge_members(H._store, 'e_ab') == pytest.approx(
         {('A', ('_',)): 10.0, ('B', ('_',)): -10.0}
@@ -233,7 +233,7 @@ def test_a_write_to_a_copy_leaves_the_graph_it_came_from_alone():
     H = G.ops.copy()
     H.add_nodes(['Z'])
     H.remove_edges('e_ab')
-    assert 'Z' not in set(G.nodes())
+    assert 'Z' not in set(G.N)
     assert 'e_ab' in set(S.edge_ids(G._store))
 
 

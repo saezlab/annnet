@@ -38,7 +38,7 @@ def _close(left, right, *, tol=1e-6) -> bool:
 
 
 def _node_ids(graph) -> list[str]:
-    return list(graph.nodes())
+    return list(graph.N)
 
 
 def _supra_node_keys(graph) -> list[tuple]:
@@ -46,7 +46,7 @@ def _supra_node_keys(graph) -> list[tuple]:
 
 
 def _edge_ids(graph) -> list[str]:
-    return list(graph.edges())
+    return list(graph.E)
 
 
 def _edge_view_signature(view) -> tuple:
@@ -150,8 +150,8 @@ def compare(left, right) -> list[str]:
 
     # get_edge must return the same view for every shared edge id.
     for edge_id in sorted(set(_edge_ids(left)) & set(_edge_ids(right))):
-        left_view = _edge_view_signature(left.get_edge(edge_id))
-        right_view = _edge_view_signature(right.get_edge(edge_id))
+        left_view = _edge_view_signature(left.E.at(edge_id))
+        right_view = _edge_view_signature(right.E.at(edge_id))
         if left_view != right_view:
             problems.append(f'get_edge({edge_id!r}) differs: {left_view} != {right_view}')
 
@@ -178,11 +178,11 @@ def compare(left, right) -> list[str]:
 
     # The node table and the edge table.
     for label, table_name, key_column in (
-        ('obs', 'obs', 'node_id'),
-        ('var', 'var', 'edge_id'),
+        ('nodes', 'nodes', 'node_id'),
+        ('edges', 'edges', 'edge_id'),
     ):
-        left_rows = _table_rows(getattr(left, table_name), key_column)
-        right_rows = _table_rows(getattr(right, table_name), key_column)
+        left_rows = _table_rows(getattr(left.attrs, table_name), key_column)
+        right_rows = _table_rows(getattr(right.attrs, table_name), key_column)
         _compare_sets(problems, f'{label} keys', left_rows, right_rows)
         for key in sorted(set(left_rows) & set(right_rows), key=repr):
             if left_rows[key] != right_rows[key]:

@@ -490,8 +490,8 @@ def test_edge_count_leaves_out_an_edge_that_carries_no_structure():
 def test_the_facade_agrees_with_the_public_counts(case):
     G = build_case(case)
     entity_ids = {ref.id for ref in S.iter_entities(G) if ref.kind == S.NODE}
-    assert entity_ids == set(G.nodes())
-    assert {ref.id for ref in S.iter_edges(G)} == set(G.edges())
+    assert entity_ids == set(G.N)
+    assert {ref.id for ref in S.iter_edges(G)} == set(G.E)
 
 
 @pytest.mark.parametrize('case', CASE_NAMES)
@@ -686,11 +686,11 @@ def test_the_slot_store_rejects_an_unknown_direction():
 
 
 def test_the_retired_edge_shape_record_is_gone():
-    """`FR-018`, and `D37` of cycle 002, which said where it would end.
+    """The retired record shape is gone, as its introduction said it would be.
 
     ``EdgeShape`` was the five field names the adapters and the file formats
     read off the record store, kept over the store that answers now so that
-    sixty call sites did not have to move in one cycle. It was always meant to
+    sixty call sites did not have to move at once. It was always meant to
     go when the last of those callers asked for an :class:`EdgeRef` instead.
     """
     for name in ('EdgeShape', 'edge_shape', '_iter_edge_records', '_shape_side'):

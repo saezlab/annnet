@@ -46,11 +46,11 @@ def test_annnet_core_methods_are_annotated() -> None:
         AnnNet.add_edges,
         AnnNet.remove_nodes,
         AnnNet.remove_edges,
-        AnnNet.get_edge,
+        AnnNet.at,
+        AnnNet.exists,
         AnnNet.has_node,
         AnnNet.has_edge,
-        AnnNet.nodes,
-        AnnNet.edges,
+        AnnNet.degree,
         AnnNet.edge_list,
         AnnNet.incident_edges,
     ]
@@ -59,17 +59,15 @@ def test_annnet_core_methods_are_annotated() -> None:
 
 
 def test_annnet_core_properties_have_return_types() -> None:
-    """``G.nv``, ``G.shape``, etc. should advertise their return type."""
+    """``len(G.N)``, ``G.shape``, etc. should advertise their return type."""
     property_names = [
-        'nv',
-        'ne',
+        'N',
+        'E',
+        'nv_supra',
         'shape',
-        'obs',
-        'var',
         'uns',
         'slices',
         'attrs',
-        'views',
         'ops',
         'layers',
         'nx',

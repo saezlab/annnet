@@ -55,7 +55,7 @@ def _remove_hyperedge(G):
 
 
 def _remove_binary_edge(G):
-    G.remove_edges([G.edges()[0]])
+    G.remove_edges([list(G.E)[0]])
 
 
 def _remove_node(G):
@@ -81,7 +81,7 @@ def _add_node(G):
 
 
 def _probe_neighbors(G):
-    return {v: sorted(G.neighbors(v)) for v in sorted(G.nodes())}
+    return {v: sorted(G.neighbors(v)) for v in sorted(G.N)}
 
 
 def _probe_csr(G):
@@ -170,7 +170,7 @@ def test_hyperedge_removal_regression():
     assert sorted(warm.neighbors('a')) == ['b', 'c']
     warm.remove_edges(['h1'])
 
-    assert warm.edges() == []
+    assert list(warm.E) == []
     assert warm.neighbors('a') == []
 
 

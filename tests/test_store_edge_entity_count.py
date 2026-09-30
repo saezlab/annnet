@@ -44,8 +44,8 @@ class TestTheCount:
 
     def test_removing_the_edge_entity_uncounts_it(self):
         graph = _graph_with_an_edge_entity()
-        graph.remove_edge('e_meta')
-        graph.remove_edge('ee_ab')
+        graph.remove_edges('e_meta')
+        graph.remove_edges('ee_ab')
         store = graph._store
         assert store.edge_entity_count == _true_count(store)
         assert store.edge_entity_count == 0

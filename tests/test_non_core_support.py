@@ -31,37 +31,53 @@ class CursorLike:
         return [(1, 2), (3, 4)]
 
 
-class FakeGraph:
-    def __init__(self):
-        self.ne = 4
-        self._edges = ['e_pos', 'e_neg', 'h1', 'loop']
-        self._weights = {'e_pos': 2.0, 'e_neg': -3.0, 'h1': 0.0}
-        self._attrs = {'e_pos': {'kind': 'activation'}, 'e_neg': {'kind': 'repression'}}
+class _FakeEdges(list):
+    """The edge axis of the stand-in: ``E.at`` and ``E.effective_weight``."""
 
-    def nodes(self):
-        return ['A', 'B', 'C']
+    def __init__(self, ids, sides, weights):
+        super().__init__(ids)
+        self._sides = sides
+        self._weights = weights
 
-    def edges(self):
-        return list(self._edges)
+    def at(self, edge_id):
+        return self._sides[edge_id]
 
-    def get_edge(self, edge_id):
-        return {
-            'e_pos': (frozenset({'A'}), frozenset({'B'})),
-            'e_neg': (frozenset({'B'}), frozenset({'C'})),
-            'h1': (frozenset({'A', 'B'}), frozenset({'C'})),
-            'loop': (frozenset({'C'}), frozenset({'C'})),
-        }[edge_id]
-
-    def get_attr_node(self, node, key, default=None):
-        return {'A': 'alpha'}.get(node, default)
-
-    def get_attr_edge(self, edge_id, key, default=None):
-        return self._attrs.get(edge_id, {}).get(key, default)
-
-    def get_effective_edge_weight(self, edge_id, slice=None):
+    def effective_weight(self, edge_id, slice=None):
         if edge_id == 'loop':
             raise KeyError(edge_id)
         return self._weights[edge_id]
+
+
+class _FakeAttrs:
+    """``attrs.row(address, key)`` answering with plain dicts."""
+
+    def __init__(self, nodes, edges):
+        self._rows = {'nodes': nodes, 'edges': edges}
+
+    def row(self, address, key):
+        return dict(self._rows[address].get(key, {}))
+
+
+class FakeGraph:
+    """A duck-typed stand-in carrying the public names the plotting helpers read."""
+
+    def __init__(self):
+        self.N = ['A', 'B', 'C']
+        self._weights = {'e_pos': 2.0, 'e_neg': -3.0, 'h1': 0.0}
+        self.E = _FakeEdges(
+            ['e_pos', 'e_neg', 'h1', 'loop'],
+            {
+                'e_pos': (frozenset({'A'}), frozenset({'B'})),
+                'e_neg': (frozenset({'B'}), frozenset({'C'})),
+                'h1': (frozenset({'A', 'B'}), frozenset({'C'})),
+                'loop': (frozenset({'C'}), frozenset({'C'})),
+            },
+            self._weights,
+        )
+        self.attrs = _FakeAttrs(
+            {'A': {'label': 'alpha'}},
+            {'e_pos': {'kind': 'activation'}, 'e_neg': {'kind': 'repression'}},
+        )
 
 
 def test_optional_component_selection_with_mocked_availability(monkeypatch):
@@ -72,7 +88,7 @@ def test_optional_component_selection_with_mocked_availability(monkeypatch):
     monkeypatch.setattr(
         optional_components,
         '_is_component_available',
-        lambda component: component.module == 'present_second',
+        lambda component, recheck=False: component.module == 'present_second',
     )
 
     assert optional_components.component_names(specs) == ('first', 'second')
@@ -486,3 +502,75 @@ def test_lazy_module_exports_and_unknown_attributes():
         annnet.io.__getattr__('missing_io')
     with pytest.raises(AttributeError):
         annnet.utils.__getattr__('missing_util')
+
+
+def test_availability_is_looked_up_once_and_remembered(monkeypatch):
+    asked = []
+
+    def counting(name):
+        asked.append(name)
+        return object() if name == 'here' else None
+
+    monkeypatch.setattr(optional_components, 'find_spec', counting)
+    optional_components.refresh()
+    here = optional_components.OptionalComponent('here')
+    gone = optional_components.OptionalComponent('gone')
+    for _ in range(3):
+        assert optional_components._is_component_available(here) is True
+        assert optional_components._is_component_available(gone) is False
+    assert asked == ['here', 'gone']
+
+
+def test_a_module_missing_earlier_is_asked_again_when_requested_by_name(monkeypatch):
+    present = {'late': False}
+    monkeypatch.setattr(
+        optional_components, 'find_spec', lambda name: object() if present.get(name) else None
+    )
+    optional_components.refresh()
+    specs = {
+        'early': optional_components.OptionalComponent('early'),
+        'late': optional_components.OptionalComponent('late'),
+    }
+    with pytest.raises(RuntimeError, match='No test backend'):
+        optional_components.select_component(specs, 'auto', kind='test', install_message='x')
+    present['late'] = True  # installed after the first look
+    assert (
+        optional_components.select_component(specs, 'late', kind='test', install_message='x')
+        == 'late'
+    )
+    optional_components.refresh()
+
+
+def test_auto_selection_stops_at_the_first_component_that_is_there(monkeypatch):
+    asked = []
+
+    def counting(name):
+        asked.append(name)
+        return object()
+
+    monkeypatch.setattr(optional_components, 'find_spec', counting)
+    optional_components.refresh()
+    specs = {
+        'first': optional_components.OptionalComponent('first_mod'),
+        'second': optional_components.OptionalComponent('second_mod'),
+    }
+    assert (
+        optional_components.select_component(specs, 'auto', kind='test', install_message='x')
+        == 'first'
+    )
+    assert asked == ['first_mod']
+    optional_components.refresh()
+
+
+def test_refresh_forgets_what_was_learned(monkeypatch):
+    calls = []
+    monkeypatch.setattr(optional_components, 'find_spec', lambda name: calls.append(name))
+    optional_components.refresh()
+    component = optional_components.OptionalComponent('never_there')
+    optional_components._is_component_available(component)
+    optional_components._is_component_available(component)
+    assert calls == ['never_there']
+    optional_components.refresh()
+    optional_components._is_component_available(component)
+    assert calls == ['never_there', 'never_there']
+    optional_components.refresh()

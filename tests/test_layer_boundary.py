@@ -116,15 +116,15 @@ class TestEveryOperationTakesIt:
 
     def test_subgraph_from_layer_tuple(self, G):
         sub = G.layers.subgraph_from_layer_tuple(('a',), include_coupling=True)
-        assert set(sub.edges()) == {'intra_a'}
+        assert set(sub.E) == {'intra_a'}
 
     def test_subgraph_from_layer_union(self, G):
         sub = G.layers.subgraph_from_layer_union(AB, include_coupling=True)
-        assert set(sub.edges()) == {'intra_a', 'intra_b', 'couple_ab'}
+        assert set(sub.E) == {'intra_a', 'intra_b', 'couple_ab'}
 
     def test_subgraph_from_layer_union_open(self, G):
         sub = G.layers.subgraph_from_layer_union(AB, include_coupling=True, boundary='open')
-        assert 'couple_bc' in set(sub.edges())
+        assert 'couple_bc' in set(sub.E)
 
     @pytest.mark.parametrize(
         'call',

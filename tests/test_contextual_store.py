@@ -36,10 +36,10 @@ def _graph_with_edges(count):
 def test_no_contextual_level_is_stored_as_a_dataframe():
     """The whole point: a graph's own state must not depend on a table library."""
     G = _graph_with_edges(2)
-    G.attrs.set_slice_attrs('s', kind='curated')
-    G.attrs.set_edge_slice_attrs('s', 'e0', confidence=0.9)
+    G.attrs.update('slices', {'s': {'kind': 'curated'}})
+    G.attrs.update('edge_slices', {('s', 'e0'): {'confidence': 0.9}})
     G.layers.set_aspects(['phase'], {'phase': ['t0']})
-    G.layers.set_elementary_attrs('phase', 't0', colour='blue')
+    G.attrs.update('elementary_layers', {('phase', 't0'): {'colour': 'blue'}})
     for level in LEVELS:
         held = getattr(G._contextual, level)
         assert isinstance(held, dict), f'{level} is a {type(held).__name__}, not a dict'
@@ -62,7 +62,7 @@ def test_every_level_keeps_its_own_clock():
     G = AnnNet(directed=True)
     G.slices.add('s')
     before = dict(G._contextual.versions)
-    G.attrs.set_slice_attrs('s', curated=True)
+    G.attrs.update('slices', {'s': {'curated': True}})
     after = G._contextual.versions
     assert after['slice_attrs'] > before['slice_attrs']
     for level in LEVELS:
@@ -79,14 +79,14 @@ def test_every_level_keeps_its_own_clock():
 def test_a_table_is_rendered_in_the_backend_the_caller_names(backend):
     """The backend belongs to the read, not to the graph."""
     G = _graph_with_edges(3)
-    G.attrs.set_edge_slice_attrs('s', 'e0', confidence=0.9)
-    table = G.contextual_table('edge_slice_attrs', backend=backend)
+    G.attrs.update('edge_slices', {('s', 'e0'): {'confidence': 0.9}})
+    table = G.attrs.table('edge_slices', backend=backend)
     assert type(table).__module__.split('.')[0] == backend
 
 
 def test_the_table_round_trips_through_the_property():
     G = _graph_with_edges(2)
-    G.attrs.set_slice_attrs('s', kind='curated')
+    G.attrs.update('slices', {'s': {'kind': 'curated'}})
     assert G.slice_attributes.to_dicts() == [{'slice_id': 's', 'kind': 'curated'}]
 
     other = AnnNet(directed=True)
@@ -96,12 +96,12 @@ def test_the_table_round_trips_through_the_property():
 
 def test_a_second_read_is_the_cached_table_and_a_write_rebuilds_it():
     G = _graph_with_edges(4)
-    G.attrs.set_edge_slice_attrs('s', 'e0', confidence=0.1)
+    G.attrs.update('edge_slices', {('s', 'e0'): {'confidence': 0.1}})
     first = G.edge_slice_attributes
     assert G.edge_slice_attributes is first
 
     # An update in place changes no count, so the store carries a version.
-    G.attrs.set_edge_slice_attrs('s', 'e0', confidence=0.9)
+    G.attrs.update('edge_slices', {('s', 'e0'): {'confidence': 0.9}})
     rebuilt = G.edge_slice_attributes
     assert rebuilt is not first
     assert {row['edge_id']: row['confidence'] for row in rebuilt.to_dicts()}['e0'] == 0.9
@@ -125,7 +125,7 @@ def test_a_contextual_write_does_not_cost_the_size_of_the_table():
         G = _graph_with_edges(count)
         start = time.perf_counter()
         for i in range(count):
-            G.attrs.set_edge_slice_attrs('s', f'e{i}', conf=0.5)
+            G.attrs.update('edge_slices', {('s', f'e{i}'): {'conf': 0.5}})
         timings[count] = (time.perf_counter() - start) / count
 
     ratio = timings[large] / timings[small]
@@ -137,9 +137,9 @@ def test_a_contextual_write_does_not_cost_the_size_of_the_table():
 
 def test_the_store_forgets_what_an_element_carried():
     G = _graph_with_edges(2)
-    G.attrs.set_edge_slice_attrs('s', 'e0', confidence=0.9)
+    G.attrs.update('edge_slices', {('s', 'e0'): {'confidence': 0.9}})
     assert ('s', 'e0') in G._contextual.edge_slice_attrs
-    G.remove_edge('e0')
+    G.remove_edges('e0')
     assert G.edge_slice_attributes is not None
     assert ('s', 'e0') not in G._contextual.edge_slice_attrs
 

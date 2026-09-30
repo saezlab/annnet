@@ -54,8 +54,8 @@ def test_multilayer_add_edges_with_bare_ids_warns_and_falls_back():
         G.add_edges('a', 'b')
     msgs = [str(w.message) for w in caught if issubclass(w.category, UserWarning)]
     assert any('placeholder layer' in m for m in msgs), msgs
-    assert 'a' in G.nodes()
-    assert 'b' in G.nodes()
+    assert 'a' in list(G.N)
+    assert 'b' in list(G.N)
 
 
 def test_list_layers_hides_placeholder_by_default():

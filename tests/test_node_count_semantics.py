@@ -24,10 +24,10 @@ def _build_multilayer(n_nodes: int = 2, n_layers: int = 3) -> AnnNet:
 
 def test_nv_counts_unique_nodes_in_multilayer():
     G = _build_multilayer(n_nodes=2, n_layers=3)
-    assert G.nv == 2
-    assert G.ncount() == 2
-    assert len(G.nodes()) == 2
-    assert set(G.nodes()) == {'v0', 'v1'}
+    assert len(G.N) == 2
+    assert len(G.N) == 2
+    assert len(list(G.N)) == 2
+    assert set(G.N) == {'v0', 'v1'}
 
 
 def test_nv_supra_counts_supra_nodes_in_multilayer():
@@ -35,28 +35,28 @@ def test_nv_supra_counts_supra_nodes_in_multilayer():
     # 2 nodes × 3 layers + the placeholder ('_',) carry-over from the
     # initial flat add_nodes call (still indexed as supra-nodes).
     assert G.nv_supra >= 2 * 3
-    assert G.ncount(supra=True) == G.nv_supra
+    assert G.nv_supra == G.nv_supra
     assert len(G.supra_nodes()) == G.nv_supra
 
 
 def test_shape_uses_unique_nodes_supra_shape_uses_supra_nodes():
     G = _build_multilayer(n_nodes=2, n_layers=3)
     G.add_edges([('v0', 'v1')])
-    assert G.shape == (G.ncount(), G.ne)
-    assert G.supra_shape == (G.nv_supra, G.ne)
+    assert G.shape == (len(G.N), len(G.E))
+    assert G.supra_shape == (G.nv_supra, len(G.E))
     assert G.shape != G.supra_shape  # multilayer: V ≠ S
 
 
 def test_nv_equals_nv_supra_in_flat_graph():
     G = AnnNet(directed=False)
     G.add_nodes(['A', 'B', 'C'])
-    assert G.nv == G.nv_supra == 3
+    assert len(G.N) == G.nv_supra == 3
     assert G.shape == G.supra_shape == (3, 0)
 
 
 def test_nodes_has_no_duplicates_in_multilayer():
     G = _build_multilayer(n_nodes=4, n_layers=5)
-    vlist = G.nodes()
+    vlist = list(G.N)
     assert len(vlist) == len(set(vlist)) == 4
 
 

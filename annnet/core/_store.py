@@ -52,6 +52,10 @@ HYPER = 1
 NODE_EDGE = 2
 PLACEHOLDER = 3
 
+# The multilayer role every structural edge of a flat graph has. It is a fact
+# about the graph, so the store answers it rather than recording it per edge.
+FLAT_ML_KIND = 'intra'
+
 # ``edge_directed`` holds a declared value, where this code means "inherit the
 # default of the graph".
 INHERIT = -1
@@ -211,6 +215,11 @@ class CoreState:
         # cost the size of the graph.
         self._id_slots: dict[str, list] = {}
         self._aspects = tuple(aspects)
+        # How many live node entities each bare id stands for, so that the
+        # number of distinct nodes is one read. A flat graph holds one entity
+        # per id, so there the distinct count is the node-layer count and no
+        # map is kept. See :attr:`node_count`.
+        self._node_counts: dict[str, int] | None = None if self._aspects == ('_',) else {}
         self._edge_slot: dict[str, int] = {}
         self._edge_id: list = []
 
@@ -374,6 +383,54 @@ class CoreState:
         return len(self._entity_slot)
 
     @property
+    def node_layer_count(self) -> int:
+        """How many live entities are nodes, one per node-layer placement.
+
+        Maintained, never counted: the entity count is the size of the identity
+        map and the edge-entities are counted as they arrive, so the difference
+        is the node placements. This is ``G.nv_supra``.
+        """
+        return len(self._entity_slot) - self._edge_entity_count
+
+    @property
+    def node_count(self) -> int:
+        """How many distinct node ids the store holds, without enumeration.
+
+        A flat graph holds one entity per id, so the answer is the placement
+        count. A layered graph keeps a per-id counter beside the identity map,
+        and the answer is the size of that map. This is ``len(G.N)``.
+        """
+        counts = self._node_counts
+        return self.node_layer_count if counts is None else len(counts)
+
+    def _count_node(self, key: tuple, delta: int) -> None:
+        """Move the per-id node counter of ``key`` by ``delta`` (layered stores)."""
+        counts = self._node_counts
+        if counts is None:
+            return
+        held = counts.get(key[0], 0) + delta
+        if held > 0:
+            counts[key[0]] = held
+        else:
+            counts.pop(key[0], None)
+
+    def _rebuild_node_counts(self) -> None:
+        """Recount the per-id node counters from the live entities.
+
+        Called by the two operations that change many identities at once — a
+        rekey and a change of aspects — which already walk the entities.
+        """
+        if self._aspects == ('_',):
+            self._node_counts = None
+            return
+        counts: dict[str, int] = {}
+        kinds = self.entity_kind
+        for slot, key in self.live_entities():
+            if int(kinds[slot]) == NODE:
+                counts[key[0]] = counts.get(key[0], 0) + 1
+        self._node_counts = counts
+
+    @property
     def entity_capacity(self) -> int:
         """How many entity slots the arrays can address."""
         return len(self._entity_key)
@@ -398,6 +455,10 @@ class CoreState:
         held = int(self.entity_kind[slot])
         if held == kind:
             return
+        if held == NODE:
+            self._count_node(self._entity_key[slot], -1)
+        if kind == NODE:
+            self._count_node(self._entity_key[slot], 1)
         self.entity_kind[slot] = kind
         if kind == EDGE_ENTITY:
             self._edge_entity_count += 1
@@ -479,10 +540,45 @@ class CoreState:
         self._aspects = value
         if value == ('_',):
             self._id_slots = {}
+            if not was_flat:
+                # Back to one layer: the role every edge now has is the flat
+                # default again, and a default is not a record.
+                self.edge_ml_kind = {
+                    slot: held for slot, held in self.edge_ml_kind.items() if held != FLAT_ML_KIND
+                }
         elif was_flat:
             self._id_slots = {}
             for slot, key in self.live_entities():
                 self._id_slots.setdefault(key[0], []).append(slot)
+            # The flat graph held no role per edge because every edge had the
+            # same one. Now that an edge can differ, the edges it already holds
+            # get the role they had: this is the promotion's per-edge cost.
+            structural = self.live_edge_slots()
+            structural = structural[self.edge_kind[structural] != PLACEHOLDER]
+            for slot in structural.tolist():
+                self.edge_ml_kind.setdefault(slot, FLAT_ML_KIND)
+        self._rebuild_node_counts()
+
+    # -- the multilayer role of an edge --------------------------------------
+    #
+    # A flat graph has one layer, so every structural edge there is ``intra``.
+    # That is a fact about the graph and not about an edge, so the store keeps
+    # no record of it: a write of the flat default stores nothing, and a read
+    # answers it from the aspects. The record exists once the graph declares
+    # aspects, when the role of one edge can differ from another's.
+
+    def _stored_ml_kind(self, ml_kind):
+        """What a write of ``ml_kind`` leaves in the record: nothing for the flat default."""
+        if ml_kind == FLAT_ML_KIND and self._aspects == ('_',):
+            return None
+        return ml_kind
+
+    def edge_ml_kind_of(self, slot: int):
+        """The multilayer role of one edge slot: its record, or the flat default."""
+        held = self.edge_ml_kind.get(slot)
+        if held is None and self._aspects == ('_',) and int(self.edge_kind[slot]) != PLACEHOLDER:
+            return FLAT_ML_KIND
+        return held
 
     def entity_slots_of_id(self, entity_id: str) -> list:
         """Return the slots a bare id stands for, in slot order.
@@ -519,6 +615,8 @@ class CoreState:
         self.entity_kind[slot] = kind
         if kind == EDGE_ENTITY:
             self._edge_entity_count += 1
+        else:
+            self._count_node(key, 1)
         self._entity_edges[slot] = {}
         if self._aspects != ('_',):
             self._id_slots.setdefault(key[0], []).append(slot)
@@ -573,6 +671,7 @@ class CoreState:
                 hook(first + appended)
 
         layered = self._aspects != ('_',)
+        counts = self._node_counts if kind == NODE else None
         for key, slot in zip(wanted, slots, strict=True):
             self._entity_key[slot] = key
             self._entity_slot[key] = slot
@@ -580,6 +679,8 @@ class CoreState:
             self._entity_edges[slot] = {}
             if layered:
                 self._id_slots.setdefault(key[0], []).append(slot)
+                if counts is not None:
+                    counts[key[0]] = counts.get(key[0], 0) + 1
         if kind == EDGE_ENTITY:
             self._edge_entity_count += len(wanted)
         self._note_change()
@@ -601,6 +702,8 @@ class CoreState:
         self._entity_key[slot] = None
         if int(self.entity_kind[slot]) == EDGE_ENTITY:
             self._edge_entity_count -= 1
+        else:
+            self._count_node(key, -1)
         self.entity_kind[slot] = NODE
         del self._entity_edges[slot]
         held = self._id_slots.get(key[0])
@@ -643,6 +746,7 @@ class CoreState:
             self._id_slots = {}
             for slot, key in self.live_entities():
                 self._id_slots.setdefault(key[0], []).append(slot)
+        self._rebuild_node_counts()
         self._note_change()
 
     def entity_slot(self, key: tuple):
@@ -763,6 +867,7 @@ class CoreState:
         self.edge_directed[slot] = INHERIT if directed is None else int(bool(directed))
         self.edge_weight[slot] = 1.0 if weight is None else weight
         self.edge_explicit[slot] = explicit_coefficients
+        ml_kind = self._stored_ml_kind(ml_kind)
         if ml_kind is not None:
             self.edge_ml_kind[slot] = ml_kind
         if ml_layers is not None:
@@ -1031,6 +1136,8 @@ class CoreState:
         self._member_used = cursor
 
         # The rare per-edge state, only when a spec in the batch carries any.
+        if self._aspects == ('_',) and FLAT_ML_KIND in ml_kinds:
+            ml_kinds = tuple(self._stored_ml_kind(value) for value in ml_kinds)
         if ml_kinds.count(None) < count:
             self.edge_ml_kind.update(
                 (slot, value)
@@ -1190,6 +1297,7 @@ class CoreState:
     def set_edge_ml_kind(self, edge_id: str, ml_kind) -> None:
         """Set the multilayer role of one edge, or clear it with ``None``."""
         slot = self._require_edge_slot(edge_id)
+        ml_kind = self._stored_ml_kind(ml_kind)
         if ml_kind is None:
             self.edge_ml_kind.pop(slot, None)
         else:
@@ -1255,6 +1363,27 @@ class CoreState:
                 value = coefficients.get(key[0], 0.0)
             self.member_coef[position] = float(value)
         self.edge_explicit[slot] = True
+        self._note_change()
+
+    def restore_member_coefficients(self, edge_id: str, coefficients, explicit: bool) -> None:
+        """Put back the member coefficients of one edge, entry by entry.
+
+        The inverse of a rewrite: ``coefficients`` is the column as
+        :meth:`members` handed it out, in member order, and ``explicit`` is
+        the flag the edge carried. A transaction that has to undo a
+        flexible-direction rewrite needs exactly this, because a column keyed
+        by entity cannot say which of a self-loop's two entries held what.
+        """
+        slot = self._require_edge_slot(edge_id)
+        start = int(self.member_start[slot])
+        stop = start + int(self.member_len[slot])
+        if len(coefficients) != stop - start:
+            raise ValueError(
+                f'edge {edge_id!r} holds {stop - start} member entries, '
+                f'{len(coefficients)} coefficients were given'
+            )
+        self.member_coef[start:stop] = coefficients
+        self.edge_explicit[slot] = bool(explicit)
         self._note_change()
 
     def set_edge_explicit(self, edge_id: str, explicit: bool) -> None:
@@ -1684,6 +1813,7 @@ class CoreState:
         other = CoreState.__new__(CoreState)
         other.directed = self.directed
         other._aspects = self._aspects
+        other._node_counts = None if self._node_counts is None else dict(self._node_counts)
 
         other._entity_slot = dict(self._entity_slot)
         other._entity_key = list(self._entity_key)

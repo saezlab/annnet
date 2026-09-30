@@ -1,6 +1,6 @@
 """The core holds no biology.
 
-Constitution Principle IV and FR-033: the core is a general network data
+The core is a general network data
 structure. Biology belongs in the documentation, where it makes an example
 concrete, and in the client packages that reach a knowledge base. A core that
 names a gene has a shape that fits one field, and every other field then reads

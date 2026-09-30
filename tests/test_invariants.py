@@ -450,8 +450,8 @@ def test_rule_9_holds_on_every_case(case):
     # the rule is that no row names something absent, not that every row names
     # something structural.
     edge_ids = {ref.id for ref in S.iter_edges(G, include_placeholders=True)}
-    assert {row['node_id'] for row in table_rows(G.obs)} <= node_ids
-    assert {row['edge_id'] for row in table_rows(G.var)} <= edge_ids
+    assert {row['node_id'] for row in table_rows(G.attrs.nodes)} <= node_ids
+    assert {row['edge_id'] for row in table_rows(G.attrs.edges)} <= edge_ids
 
 
 def test_a_node_row_for_a_node_that_does_not_exist_cannot_be_stated():
@@ -462,20 +462,20 @@ def test_a_node_row_for_a_node_that_does_not_exist_cannot_be_stated():
     the values and the table comes back without it.
     """
     G = build_case('binary_directed')
-    rows = table_rows(G.obs)
+    rows = table_rows(G.attrs.nodes)
     rows.append({**rows[0], 'node_id': 'ghost'})
     G._node_table = build_dataframe_from_rows(rows)
-    assert 'ghost' not in {row['node_id'] for row in table_rows(G.obs)}
+    assert 'ghost' not in {row['node_id'] for row in table_rows(G.attrs.nodes)}
     assert problems_of(G) == []
 
 
 def test_an_edge_row_for_an_edge_that_does_not_exist_cannot_be_stated():
     """The same holds of the edge table, for the same reason."""
     G = build_case('binary_directed')
-    rows = table_rows(G.var)
+    rows = table_rows(G.attrs.edges)
     rows.append({**rows[0], 'edge_id': 'ghost'})
     G._edge_table = build_dataframe_from_rows(rows)
-    assert 'ghost' not in {row['edge_id'] for row in table_rows(G.var)}
+    assert 'ghost' not in {row['edge_id'] for row in table_rows(G.attrs.edges)}
     assert problems_of(G) == []
 
 
@@ -514,7 +514,7 @@ def test_rule_10_reports_a_slice_that_holds_a_non_identity_node():
 def test_rule_11_a_removed_node_leaves_no_address_that_resolves_to_it():
     G = build_case('binary_directed')
     removed_row = G.idx.entity_to_row('A')
-    G.remove_node('A')
+    G.remove_nodes('A')
     assert problems_of(G) == []
     assert not S.has_entity(G, 'A')
     rows = S.entity_keys(G)
@@ -524,7 +524,7 @@ def test_rule_11_a_removed_node_leaves_no_address_that_resolves_to_it():
 
 def test_rule_11_a_removed_edge_leaves_no_address_that_resolves_to_it():
     G = build_case('parallel_edge')
-    G.remove_edge('e_first')
+    G.remove_edges('e_first')
     assert problems_of(G) == []
     assert not S.has_edge(G, 'e_first')
     assert 'e_first' not in set(S.edge_ids(G))

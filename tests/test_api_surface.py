@@ -72,17 +72,17 @@ def test_the_incidence_matrix_is_named_b_and_not_x(chain):
 
 def test_the_counts_are_short_names(chain):
     """``ncount`` and ``ecount`` are the count methods."""
-    assert chain.ncount() == 3
-    assert chain.ecount() == 2
+    assert len(chain.N) == 3
+    assert len(chain.E) == 2
 
 
 def test_the_length_of_a_graph_is_its_node_count(chain):
-    assert len(chain) == chain.ncount()
+    assert len(chain) == len(chain.N)
 
 
 def test_the_supra_count_is_an_option_of_the_node_count(chain):
     """A flat graph holds one supra-node per node, so the two counts agree."""
-    assert chain.ncount(supra=True) == 3
+    assert chain.nv_supra == 3
 
 
 @pytest.mark.parametrize(
@@ -144,14 +144,14 @@ def test_assigning_the_weight_column_sets_the_weight_of_each_edge(chain):
     """
     chain.E['weight'] = [3.0, 4.0]
     assert list(chain.E['weight']) == [3.0, 4.0]
-    assert chain.get_edge('e_ab').weight == 3.0
-    assert chain.get_edge('e_bc').weight == 4.0
+    assert chain.E.at('e_ab').weight == 3.0
+    assert chain.E.at('e_bc').weight == 4.0
 
 
 def test_assigning_the_directed_column_sets_the_direction_of_each_edge(chain):
     chain.E['directed'] = [False, True]
     assert list(chain.E['directed']) == [False, True]
-    assert chain.get_edge('e_ab').directed is False
+    assert chain.E.at('e_ab').directed is False
 
 
 def test_the_kind_of_an_edge_cannot_be_written_as_a_column(chain):
@@ -220,18 +220,18 @@ def test_the_public_namespace_holds_no_position_map(chain, name):
 def test_an_edge_lookup_refuses_a_position(chain):
     """``get_edge`` takes an id. A column number is not an id."""
     with pytest.raises(TypeError):
-        chain.get_edge(0)
+        chain.E.at(0)
 
 
 def test_an_edge_lookup_takes_an_id(chain):
-    assert chain.get_edge('e_ab').edge_id == 'e_ab'
+    assert chain.E.at('e_ab').edge_id == 'e_ab'
 
 
 def test_the_position_lookup_of_a_node_is_gone(chain):
     """``get_node`` takes an id. ``G.N[0]`` asks for the n-th node."""
     with pytest.raises(TypeError):
-        chain.get_node(0)
-    assert chain.get_node(chain.N[0]) == chain.N[0]
+        chain.N.at(0)
+    assert chain.N.at(chain.N[0]) == chain.N[0]
 
 
 # ---------------------------------------------------------------------------
@@ -272,8 +272,8 @@ def test_one_node_and_a_list_of_one_node_agree_on_removal(chain):
 
 def test_obs_and_var_are_materialized_each_time(chain):
     """Each read builds a table. Two reads are equal and not the same object."""
-    assert chain.obs is not chain.obs
-    assert chain.var is not chain.var
+    assert chain.attrs.nodes is not chain.attrs.nodes
+    assert chain.attrs.edges is not chain.attrs.edges
 
 
 def test_the_stored_attribute_frames_are_gone(chain):
@@ -285,11 +285,11 @@ def test_the_stored_attribute_frames_are_gone(chain):
 def test_a_column_write_shows_up_in_the_next_materialization(chain):
     """A write through the cheap path reaches the table the slow path builds."""
     chain.N['kind'] = ['x', 'y', 'z']
-    rows = {row['node_id']: row for row in chain.obs.to_dicts()}
+    rows = {row['node_id']: row for row in chain.attrs.nodes.to_dicts()}
     assert [rows[v]['kind'] for v in ('a', 'b', 'c')] == ['x', 'y', 'z']
 
 
 def test_a_cell_write_shows_up_in_the_next_materialization(chain):
-    chain.attrs.set_edge_attrs('e_ab', label='changed')
-    rows = {row['edge_id']: row for row in chain.var.to_dicts()}
+    chain.attrs.update('edges', {'e_ab': {'label': 'changed'}})
+    rows = {row['edge_id']: row for row in chain.attrs.edges.to_dicts()}
     assert rows['e_ab']['label'] == 'changed'

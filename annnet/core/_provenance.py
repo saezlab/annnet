@@ -129,7 +129,7 @@ def as_frame(graph, *, backend: str | None = None):
     return dataframe_from_rows(rows, backend=backend)
 
 
-class ProvenanceAccessor:
+class Provenance:
     """What one graph was built from (``G.provenance``).
 
     Callable, so ``G.provenance()`` is the table and ``G.provenance.record(...)``
@@ -181,4 +181,4 @@ class ProvenanceAccessor:
 
     def __repr__(self) -> str:
         found = records(self._G)
-        return f'ProvenanceAccessor({len(found)} source(s): {[e["name"] for e in found]!r})'
+        return f'Provenance({len(found)} source(s): {[e["name"] for e in found]!r})'

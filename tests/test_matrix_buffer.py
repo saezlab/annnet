@@ -1,6 +1,6 @@
 """The buffer of a cached matrix borrows until it grows.
 
-`FR-012` and `FR-013`. A cached matrix is kept in the three arrays of the
+A cached matrix is kept in the three arrays of the
 compressed-sparse-column format, so that appending an edge costs the new column
 and nothing more. The buffer was seeded by copying those three arrays out of the
 matrix a build had just produced, because the buffer writes past the end of what

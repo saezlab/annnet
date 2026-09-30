@@ -73,5 +73,5 @@ class TestAFilterAfterAWrite:
 
     def test_a_removal_moves_the_filter(self):
         graph = _graph()
-        graph.remove_edge('e1')
+        graph.remove_edges('e1')
         assert list(graph.E.select(weight=2.0).ids) == ['e2']

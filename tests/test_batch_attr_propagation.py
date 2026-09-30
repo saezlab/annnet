@@ -12,11 +12,11 @@ from annnet.core import _structure as S
 
 
 def _attr_value(graph: AnnNet, edge_id: str, key: str):
-    return graph.attrs.get_edge_attrs(edge_id).get(key)
+    return dict(graph.attrs.row('edges', edge_id)).get(key)
 
 
 def _node_attr_value(graph: AnnNet, node_id: str, key: str):
-    return graph.attrs.get_node_attrs(node_id).get(key)
+    return dict(graph.attrs.row('nodes', node_id)).get(key)
 
 
 # ── add_edges: batch dict form ─────────────────────────────────────────────

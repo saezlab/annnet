@@ -79,17 +79,17 @@ class TestPublicAPI:
         G.add_nodes(['A', 'B'])
         G.add_edges([{'source': 'A', 'target': 'B', 'edge_id': 'e1'}])
 
-        assert G.views is not None
+        assert G.attrs is not None
         assert G.ops is not None
         assert G.attrs is not None
         assert callable(G.history)
 
         sub = G.ops.subgraph(['A', 'B'])
-        assert sub.ncount() == 2
+        assert len(sub.N) == 2
 
-        edges_df = G.views.edges()
+        edges_df = G.attrs.table('edges', derived=True)
         assert len(edges_df) == 1
-        assert G.attrs.get_edge_attrs('e1') == {}
+        assert dict(G.attrs.row('edges', 'e1')) == {}
 
     def test_native_read_write_methods_resolve_and_roundtrip(self, tmp_path):
         G = an.AnnNet(directed=True)
@@ -100,16 +100,16 @@ class TestPublicAPI:
         G.write(path, overwrite=True)
 
         G2 = an.AnnNet.read(path)
-        assert G2.ncount() == 2
-        assert G2.ecount() == 1
-        assert G2.get_edge('e1') == (frozenset({'A'}), frozenset({'B'}))
-        edges_df = G2.views.edges(include_weight=True)
+        assert len(G2.N) == 2
+        assert len(G2.E) == 1
+        assert G2.E.at('e1') == (frozenset({'A'}), frozenset({'B'}))
+        edges_df = G2.attrs.table('edges', derived=True, include_weight=True)
         try:
             rows = edges_df.to_dicts()
         except Exception:
             rows = edges_df.to_dict(orient='records')
         row = next(r for r in rows if r['edge_id'] == 'e1')
-        assert row['global_weight'] == 1.5
+        assert row['weight'] == 1.5
 
     def test_dir_exposes_compact_annnet_api(self):
         G = an.AnnNet()
@@ -124,12 +124,11 @@ class TestPublicAPI:
             'add_edges',
             'remove_nodes',
             'remove_edges',
-            'ncount',
-            'ecount',
+            'N',
+            'E',
             'layers',
             'slices',
             'attrs',
-            'views',
             'history',
             'ops',
             'view',

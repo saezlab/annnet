@@ -91,7 +91,8 @@ class CacheManager:
         reused without copying — the overwhelmingly common case.
         """
         g = self._G
-        boundary_eids = g.attrs.get_edges_by_attr('is_boundary', True)
+        column = g._attr_store.edge_attr_map('is_boundary') or {}
+        boundary_eids = [edge_id for edge_id, value in column.items() if value is True]
         if not boundary_eids:
             return None
         boundary_cols = {
@@ -130,33 +131,6 @@ class CacheManager:
         bool
         """
         return self._cache.holds(('format', 'adjacency'))
-
-    def get_csr(self):
-        """Return the cached CSR matrix.
-
-        Returns
-        -------
-        scipy.sparse.csr_matrix
-        """
-        return self.csr
-
-    def get_csc(self):
-        """Return the cached CSC matrix.
-
-        Returns
-        -------
-        scipy.sparse.csc_matrix
-        """
-        return self.csc
-
-    def get_adjacency(self):
-        """Return the cached adjacency matrix.
-
-        Returns
-        -------
-        scipy.sparse.sparray
-        """
-        return self.adjacency
 
     def invalidate(self, formats=None):
         """Invalidate cached formats.
@@ -716,5 +690,5 @@ class IndexMapping(GraphState):
     def _current_key_of_node(self, node_id) -> tuple | None:
         if not self._node_key_fields:
             return None
-        cur = {f: self.attrs.get_attr_node(node_id, f, None) for f in self._node_key_fields}
+        cur = {f: self._attr_store.node_attr(node_id, f, None) for f in self._node_key_fields}
         return self._build_key_from_attrs(cur)

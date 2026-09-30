@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 from typing import NamedTuple
+import importlib
 from importlib.util import find_spec
 from collections.abc import Mapping
 
@@ -52,9 +54,34 @@ def component_names(specs: Mapping[str, OptionalComponent]) -> tuple[str, ...]:
     return tuple(specs)
 
 
-def _is_component_available(component: OptionalComponent) -> bool:
+# What ``find_spec`` answered for each module. Looking a module up walks
+# ``sys.path`` and costs tens of microseconds per absent module, which a graph
+# paid on every construction to choose a dataframe backend. The answer does not
+# change within a process unless the environment does, so it is kept: a module
+# that was found stays found, and one that was not is asked again when it is
+# requested by name, when nothing usable is left, and on :func:`refresh`.
+_AVAILABLE: dict[str, bool] = {}
+
+
+def refresh() -> None:
+    """Forget what was learned about installed modules.
+
+    Call it after installing a package into a running interpreter so that the
+    next choice of a backend sees it.
+    """
+    _AVAILABLE.clear()
+    importlib.invalidate_caches()
+
+
+def _is_component_available(component: OptionalComponent, *, recheck: bool = False) -> bool:
     """Return whether a component's import target is available."""
-    return find_spec(component.module) is not None
+    module = component.module
+    known = _AVAILABLE.get(module)
+    if known is not None and not (recheck and not known):
+        return known
+    found = module in sys.modules or find_spec(module) is not None
+    _AVAILABLE[module] = found
+    return found
 
 
 def available_optional_components(specs: Mapping[str, OptionalComponent]) -> dict[str, bool]:
@@ -85,9 +112,13 @@ def select_component(
     names = component_names(specs)
 
     if requested == 'auto':
-        available = available_optional_components(specs)
+        # In preference order, stopping at the first that is there: the others
+        # are not asked about.
         for name in names:
-            if available[name]:
+            if _is_component_available(specs[name]):
+                return name
+        for name in names:
+            if _is_component_available(specs[name], recheck=True):
                 return name
         raise RuntimeError(f'No {kind} backend available. {install_message}')
 
@@ -95,7 +126,7 @@ def select_component(
         allowed = ', '.join(('auto', *names))
         raise ValueError(f'Unknown {kind} backend {preferred!r}; expected one of: {allowed}.')
 
-    if not _is_component_available(specs[requested]):
+    if not _is_component_available(specs[requested], recheck=True):
         raise RuntimeError(
             f'{kind.capitalize()} backend {requested!r} is not installed. '
             f"{install_message}, or use backend='auto'."

@@ -94,7 +94,7 @@ def test_subgraph_from_slice_raises_on_unknown_slice() -> None:
 
 def test_subgraph_from_slice_resolves_slice_weight_overrides() -> None:
     G = _mixed_graph()
-    G.attrs.set_edge_slice_attrs('S1', 'e_dir', weight=7.5)
+    G.attrs.update('edge_slices', {('S1', 'e_dir'): {'weight': 7.5}})
     H = G.subgraph_from_slice('S1', resolve_slice_weights=True)
     assert S.has_edge(H, 'e_dir')
 
@@ -145,7 +145,7 @@ def test_get_node_incidence_matrix_as_lists_returns_indices_by_default() -> None
     out = G.ops.get_node_incidence_matrix_as_lists()
     assert isinstance(out, dict)
     # Every node should map to a list of incident column indices.
-    for v in G.nodes():
+    for v in list(G.N):
         assert v in out
         assert isinstance(out[v], list)
 
@@ -153,7 +153,7 @@ def test_get_node_incidence_matrix_as_lists_returns_indices_by_default() -> None
 def test_get_node_incidence_matrix_as_lists_can_return_values() -> None:
     G = _mixed_graph()
     out = G.ops.get_node_incidence_matrix_as_lists(values=True)
-    for v in G.nodes():
+    for v in list(G.N):
         assert v in out
         for x in out[v]:
             assert isinstance(x, (int, float))
@@ -172,7 +172,7 @@ def test_ops_incidence_as_lists_alias_matches() -> None:
 def test_ops_subgraph_and_edge_subgraph_forwarders() -> None:
     G = _mixed_graph()
     sub = G.ops.subgraph(['A', 'B'])
-    assert sub.nv == 2
+    assert len(sub.N) == 2
     esub = G.ops.edge_subgraph(['e_dir'])
     assert S.has_edge(esub, 'e_dir')
 
@@ -197,23 +197,23 @@ def test_edge_subgraph_does_not_leak_constructor_capacity_into_graph_attributes(
 
     assert 'n' not in H.graph_attributes
     assert H.graph_attributes['project'] == 'demo'
-    assert H.edges() == ['e1']
+    assert list(H.E) == ['e1']
 
 
 def test_ops_extract_and_extract_subgraph_aliases_match() -> None:
     G = _mixed_graph()
     a = G.ops.extract(nodes=['A', 'B'])
     b = G.ops.extract_subgraph(nodes=['A', 'B'])
-    assert set(a.nodes()) == set(b.nodes())
+    assert set(a.N) == set(b.N)
 
 
 def test_ops_copy_returns_independent_graph() -> None:
     G = _mixed_graph()
     H = G.ops.copy()
     assert H is not G
-    assert set(H.nodes()) == set(G.nodes())
+    assert set(H.N) == set(G.N)
     H.add_nodes(['Z'])
-    assert 'Z' not in G.nodes()
+    assert 'Z' not in list(G.N)
 
 
 def test_ops_reverse_via_accessor() -> None:
@@ -233,7 +233,7 @@ def test_ops_memory_usage_forwarder() -> None:
 def test_extract_subgraph_no_filters_returns_copy() -> None:
     G = _mixed_graph()
     H = G.ops.extract_subgraph()
-    assert set(H.nodes()) == set(G.nodes())
+    assert set(H.N) == set(G.N)
     assert H is not G
 
 
@@ -248,7 +248,7 @@ def test_extract_subgraph_edge_indices_are_resolved() -> None:
 def test_extract_subgraph_node_filter_only_path() -> None:
     G = _mixed_graph()
     H = G.ops.extract_subgraph(nodes=['A', 'B'])
-    assert set(H.nodes()) == {'A', 'B'}
+    assert set(H.N) == {'A', 'B'}
 
 
 def test_extract_subgraph_edge_filter_only_path() -> None:
@@ -283,7 +283,7 @@ def test_copy_with_history_flag() -> None:
     G = _mixed_graph()
     H = G.ops.copy(history=True)
     assert H is not G
-    assert set(H.nodes()) == set(G.nodes())
+    assert set(H.N) == set(G.N)
 
 
 # ── multilayer subgraph_from_slice ──────────────────────────────────────
@@ -418,8 +418,8 @@ def test_copy_multilayer_preserves_aspects_and_layer_attrs() -> None:
     """Exercises the multilayer aspects-cloning branch of Operations.copy."""
     G = _multilayer_with_supra_edges()
     H = G.ops.copy()
-    assert H.layers.aspects == G.layers.aspects
-    assert dict(H.layers.elem_layers) == dict(G.layers.elem_layers)
+    assert H.layers.list_aspects() == G.layers.list_aspects()
+    assert H.layers.list_layers() == G.layers.list_layers()
 
 
 def test_copy_multilayer_does_not_emit_placeholder_reassignment_warning() -> None:

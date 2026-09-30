@@ -1,6 +1,6 @@
 """A borrowing read gives what the walk gives, on every graph.
 
-`FR-009`. The fast path is an optimization and not a change of meaning, so the
+The fast path is an optimization and not a change of meaning, so the
 values and their order must be identical to what the read gave before it — on a
 flat graph and a multilayer one, with and without freed slots, with and without
 an edge-entity, and with a column that carries nothing for some elements.
@@ -64,8 +64,8 @@ def flat() -> AnnNet:
 
 def flat_with_freed_slots() -> AnnNet:
     graph = flat()
-    graph.remove_edge('e3')
-    graph.remove_node('v9')
+    graph.remove_edges('e3')
+    graph.remove_nodes('v9')
     return graph
 
 
@@ -175,9 +175,9 @@ def test_a_read_after_every_shape_of_write_matches_the_walk():
     steps = [
         lambda: graph.add_nodes([{'node_id': 'new0', 'score': 99.0}]),
         lambda: graph.add_nodes([{'node_id': 'new1'}]),
-        lambda: graph.remove_node('v2'),
+        lambda: graph.remove_nodes('v2'),
         lambda: graph.add_nodes([{'node_id': 'new2', 'score': 7.0}]),
-        lambda: graph.attrs.set_node_attrs('v0', score=-1.0),
+        lambda: graph.attrs.update('nodes', {'v0': {'score': -1.0}}),
     ]
     for step in steps:
         step()

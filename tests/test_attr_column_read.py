@@ -41,7 +41,7 @@ def _graph(nodes: int = 64, *, edges: int = 0) -> AnnNet:
 
 
 class TestTheReadBorrows:
-    """`FR-007`: the read does not copy the array the store holds."""
+    """The read does not copy the array the store holds."""
 
     def test_a_node_column_is_a_view_of_the_stored_array(self):
         graph = _graph()
@@ -64,7 +64,7 @@ class TestTheReadBorrows:
 
     def test_a_graph_with_a_freed_slot_falls_back_and_still_answers(self):
         graph = _graph()
-        graph.remove_node('v3')
+        graph.remove_nodes('v3')
         column = graph.N['score']
         assert column.size == graph._store.entity_count
         assert 3.0 not in set(column.tolist())
@@ -81,7 +81,7 @@ class TestTheReadBorrows:
 
 
 class TestTheReadAfterAWriteDoesNotWalk:
-    """`FR-008`: a structural write does not make the next read walk the elements."""
+    """A structural write does not make the next read walk the elements."""
 
     def test_the_row_map_is_not_rebuilt(self, monkeypatch):
         graph = _graph()
@@ -123,7 +123,7 @@ class TestTheReadAfterAWriteDoesNotWalk:
 
 
 class TestTheCostDoesNotGrowWithTheGraph:
-    """`SC-002`: neither read grows with the size of the graph."""
+    """Neither read grows with the size of the graph."""
 
     @staticmethod
     def _best(fn, calls: int) -> float:

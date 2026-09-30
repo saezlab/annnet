@@ -8,6 +8,7 @@ from ._aspects import OrderedLabels
 from ._records import (
     _EDGE_RESERVED,
     SliceRecord,
+    SliceRegistry,
     _node_RESERVED,
     _slice_RESERVED,
 )
@@ -60,11 +61,17 @@ def init_state(g, *, directed=None, aspects=None) -> None:
 
     g._next_edge_id = 0
 
-    # Slice state.
-    g._slices = {}
+    # Slice state. The registry carries the slice clock: every membership
+    # write through a record it holds ticks it, and so does adding or
+    # dropping a slice.
+    g._slices = SliceRegistry()
     g._default_slice = 'default'
     g._slices['default'] = SliceRecord()
     g._current_slice = 'default'
+
+    # Aspect registry clock: bumped whenever the declared aspects or their
+    # elementary labels change (see ``LayerAccessor._rebuild_all_layers_cache``).
+    g._aspects_version = 0
 
     # History/audit clock: bumped only by ``_History._log_event`` / ``_log_mutation``.
     # User-visible via ``_current_snapshot()``; drives snapshot & diff numbering. It does
@@ -104,7 +111,7 @@ class GraphState:
     # The canonical state (see SOT_FIELDS).
     directed: Any
     _store: Any
-    _slices: dict
+    _slices: Any  # a SliceRegistry: a dict of SliceRecord with a clock
     _aspects: tuple
     _layers: dict
 
@@ -144,6 +151,7 @@ class GraphState:
 
     # Derived state and the clocks it is checked against.
     _structure_version: int
+    _aspects_version: int
     _csr_cache: Any
     _supra_index_cache: Any
     _next_edge_id: int

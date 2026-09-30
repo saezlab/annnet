@@ -19,7 +19,7 @@ BACKENDS = ['polars', 'pandas', 'pyarrow']
 
 
 def _obs_nrows(graph: AnnNet) -> int:
-    obs = graph.obs
+    obs = graph.attrs.nodes
     if hasattr(obs, 'shape'):
         return int(obs.shape[0])
     return len(obs)

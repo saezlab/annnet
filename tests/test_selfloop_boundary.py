@@ -273,13 +273,13 @@ def test_a_placeholder_edge_occupies_no_column_of_the_graph_matrix():
 # ---------------------------------------------------------------------------
 # What a caller can say about a self-loop, and what it cannot
 # ---------------------------------------------------------------------------
-# `FR-022`, and decision `D6` of cycle 003. The store holds a self-loop as two
+# The store holds a self-loop as two
 # member entries on one entity slot, and the two entries may carry different
 # coefficients. Nothing above the store can say so: a coefficient is addressed by
 # endpoint, at every layer between the public call and the file, and a self-loop
-# names one endpoint twice. `D6` records that the addressing stays as it is in
-# this cycle and names what a caller states instead, and these fix both halves of
-# it so the limit is a tested fact rather than something rediscovered.
+# names one endpoint twice. The addressing stays as it is, a caller states a
+# boundary pair instead, and these fix both halves of it so the limit is a
+# tested fact rather than something rediscovered.
 
 
 def _loop_graph() -> AnnNet:

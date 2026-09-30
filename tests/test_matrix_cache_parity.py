@@ -1,6 +1,6 @@
 """Whatever path a cached matrix took, it is the matrix a rebuild would give.
 
-`FR-015`. The cache has three paths — return what it holds, extend it by the
+The cache has three paths — return what it holds, extend it by the
 columns a run of frontier writes changed, or build it again — and a caller can
 see which one answered only in the time it took. So every one of them has to give
 the same matrix, over every shape of write the store allows.
@@ -54,14 +54,14 @@ STEPS = {
     'append_a_run': lambda g: g.add_edges(
         [{'source': 'v0', 'target': 'v1', 'edge_id': f'y{i}'} for i in range(4)]
     ),
-    'remove_at_the_frontier': lambda g: g.remove_edge('h0'),
-    'remove_in_the_middle': lambda g: g.remove_edge('e4'),
-    'remove_the_first': lambda g: g.remove_edge('e0'),
-    'remove_a_node': lambda g: g.remove_node('v2'),
+    'remove_at_the_frontier': lambda g: g.remove_edges('h0'),
+    'remove_in_the_middle': lambda g: g.remove_edges('e4'),
+    'remove_the_first': lambda g: g.remove_edges('e0'),
+    'remove_a_node': lambda g: g.remove_nodes('v2'),
     'add_a_node': lambda g: g.add_nodes(['fresh']),
     'set_a_weight': lambda g: g.E.set_column('weight', [2.0] * len(g.E.ids)),
     'append_after_a_hole': lambda g: (
-        g.remove_edge('e3'),
+        g.remove_edges('e3'),
         g.add_edges('v0', 'v1', edge_id='z0'),
     ),
 }
@@ -99,7 +99,7 @@ def test_a_long_alternation_of_appends_and_frontier_removals():
         graph.add_edges('v0', 'v1', edge_id=f'w{i}')
         _ = graph.S
         if i % 3 == 2:
-            graph.remove_edge(f'w{i}')
+            graph.remove_edges(f'w{i}')
             _ = graph.S
     _matches_a_rebuild(graph)
 
@@ -109,5 +109,5 @@ def test_the_cache_never_answers_with_the_wrong_shape():
     graph = _graph()
     _ = graph.S
     for edge_id in ('h0', 'e9', 'e8', 'e7'):
-        graph.remove_edge(edge_id)
+        graph.remove_edges(edge_id)
         assert graph.S.shape[1] == len(graph.E.ids), edge_id

@@ -1,6 +1,6 @@
 """The eight attribute tables, under one namespace and one convention.
 
-They used to carry three spellings: ``G.obs``/``G.var`` for the two generic
+They used to carry three spellings: ``G.attrs.nodes``/``G.attrs.edges`` for the two generic
 axes, ``G.slice_attributes`` and two siblings for some of the contextual ones,
 and ``G.contextual_table(level)`` for all six. Same concept — attributes keyed
 by an address — reached three different ways, with the read side in a different
@@ -34,7 +34,7 @@ KEY_COLUMNS = {
     'layers': ('layer',),
     'edge_slices': ('slice_id', 'edge_id'),
     'node_layers': ('node_id', 'layer'),
-    'elementary_layers': ('layer_id',),
+    'elementary_layers': ('aspect', 'elementary_layer'),
 }
 
 
@@ -49,12 +49,12 @@ def graph() -> AnnNet:
         G.add_edges('a', 'b', edge_id='e0', weight=2.0)
         G.slices.add('core')
         G.slices.add_edges('core', ['e0'])
-        G.attrs.set_slice_attrs('core', curated=True)
-        G.attrs.set_edge_slice_attrs('core', 'e0', confidence=0.9)
-        G.layers.set_aspect_attrs('cond', kind='experimental')
-        G.layers.set_elementary_attrs('cond', 'trt', dose=5)
-        G.layers.set_node_attrs('a', ('ctl',), depth=2)
-        G.layers.set_attrs(('ctl',), note='baseline')
+        G.attrs.update('slices', {'core': {'curated': True}})
+        G.attrs.update('edge_slices', {('core', 'e0'): {'confidence': 0.9}})
+        G.attrs.update('aspects', {'cond': {'kind': 'experimental'}})
+        G.attrs.update('elementary_layers', {('cond', 'trt'): {'dose': 5}})
+        G.attrs.update('node_layers', {('a', ('ctl',)): {'depth': 2}})
+        G.attrs.update('layers', {('ctl',): {'note': 'baseline'}})
     return G
 
 
@@ -72,12 +72,15 @@ def test_every_table_carries_what_was_written_to_it(name, graph):
 
 
 def test_the_new_names_answer_what_the_old_spellings_answered(graph):
-    """Purely additive: every old spelling still resolves to the same table."""
-    assert graph.attrs.nodes.columns == graph.obs.columns
-    assert graph.attrs.edges.columns == graph.var.columns
+    """The file-format properties render the same levels the addresses do."""
     assert graph.attrs.slices.columns == graph.slice_attributes.columns
     assert graph.attrs.edge_slices.columns == graph.edge_slice_attributes.columns
-    assert graph.attrs.elementary_layers.columns == graph.layer_attributes.columns
+    # The legacy property carries the ``layer_id`` display id beside the
+    # structured key; the public table carries the structured key alone.
+    assert set(graph.layer_attributes.columns) == {
+        'layer_id',
+        *graph.attrs.elementary_layers.columns,
+    }
 
 
 def test_a_layer_coordinate_is_not_an_elementary_layer(graph):
@@ -88,7 +91,7 @@ def test_a_layer_coordinate_is_not_an_elementary_layer(graph):
     is the point of the rename, so nothing may quietly make them one table.
     """
     assert 'layer' in graph.attrs.layers.columns
-    assert 'layer_id' in graph.attrs.elementary_layers.columns
+    assert {'aspect', 'elementary_layer'} <= set(graph.attrs.elementary_layers.columns)
     assert graph.attrs.layers.columns != graph.attrs.elementary_layers.columns
 
 
@@ -123,14 +126,14 @@ def test_table_without_a_backend_is_the_property(graph):
 
 
 def test_an_unknown_table_names_the_ones_that_exist(graph):
-    with pytest.raises(KeyError, match='unknown attribute table'):
+    with pytest.raises(KeyError, match='unknown attribute address'):
         graph.attrs.table('nodez')
 
 
 def test_a_write_shows_up_in_the_next_read(graph):
     before = len(graph.attrs.slices)
     graph.slices.add('second')
-    graph.attrs.set_slice_attrs('second', curated=False)
+    graph.attrs.update('slices', {'second': {'curated': False}})
     assert len(graph.attrs.slices) == before + 1
 
 
@@ -172,34 +175,19 @@ def test_an_empty_table_is_keyed_by_its_address_in_any_backend(name, blank):
         assert key in table.columns, f'empty {name} lost its {key} column'
 
 
-# ``nodes`` and ``edges`` render through ``G.obs`` and ``G.var``, which clone on
-# every read so that a caller cannot reach the cache the store holds. The six
-# contextual tables hand back the cached table itself and are read-only by
-# contract. So identity is what the six promise and the two cannot.
-_CLONED = ('nodes', 'edges')
+# Every table read is a caller-owned snapshot: a caller may edit
+# what it got back without reaching the graph, at every address alike.
 
 
-@pytest.mark.parametrize('name', [n for n in TABLE_NAMES if n not in _CLONED])
-def test_asking_for_the_backend_a_table_already_has_costs_nothing(name, graph):
-    """Naming the ambient backend, or ``auto``, is the property itself.
-
-    Comparing the name the caller passed against the backend of the table meant
-    ``auto`` never matched a concrete backend, so asking for the backend you
-    already have rebuilt the whole table.
-    """
-    ambient = graph.attrs.backend
-    assert graph.attrs.table(name, backend=ambient) is getattr(graph.attrs, name)
-    assert graph.attrs.table(name, backend='auto') is getattr(graph.attrs, name)
-
-
-@pytest.mark.parametrize('name', _CLONED)
-def test_a_cloned_table_asked_for_its_own_backend_is_not_converted(name, graph):
-    """The two generic axes clone, so identity cannot hold — the schema still does."""
+@pytest.mark.parametrize('name', TABLE_NAMES)
+def test_asking_for_the_backend_a_table_already_has_gives_the_same_table(name, graph):
+    """Naming the ambient backend, or ``auto``, answers with the same rows and types."""
     ambient = graph.attrs.backend
     for asked in (ambient, 'auto'):
         table = graph.attrs.table(name, backend=asked)
         assert dataframe_backend(table) == ambient
         assert dataframe_schema(table) == dataframe_schema(getattr(graph.attrs, name))
+        assert len(table) == len(getattr(graph.attrs, name))
 
 
 @pytest.mark.parametrize('name', TABLE_NAMES)
@@ -226,11 +214,17 @@ def test_a_write_to_one_level_does_not_rebuild_the_others(blank):
     table of every other level, so a loop that writes one level and reads another
     rebuilt on every pass.
     """
-    before = {name: getattr(blank.attrs, name) for name in ('node_layers', 'aspects')}
+    before = {
+        name: blank._contextual.version_of(level)
+        for name, level in (
+            ('node_layer_attrs', 'node_layer_attrs'),
+            ('aspect_attrs', 'aspect_attrs'),
+        )
+    }
     blank.slices.add('s')
-    blank.attrs.set_slice_attrs('s', curated=True)
-    for name, table in before.items():
-        assert getattr(blank.attrs, name) is table, f'{name} was rebuilt by a slice write'
+    blank.attrs.update('slices', {'s': {'curated': True}})
+    for level, version in before.items():
+        assert blank._contextual.version_of(level) == version, f'{level} was aged by a slice write'
 
 
 def test_a_table_a_caller_installed_still_answers_in_the_ambient_backend(blank):
@@ -276,9 +270,9 @@ def test_installing_a_whole_table_is_visible_to_the_next_read(attribute, rows):
         G.add_edges('a', 'b', edge_id='e0')
         G.add_edges('b', 'a', edge_id='e1')
         G.slices.add('a')
-        G.attrs.set_slice_attrs('a', curated=True)
-        G.attrs.set_edge_slice_attrs('a', 'e0', weight=9.0)
-        G.layers.set_elementary_attrs('cond', 'ctl', dose=1)
+        G.attrs.update('slices', {'a': {'curated': True}})
+        G.attrs.update('edge_slices', {('a', 'e0'): {'weight': 9.0}})
+        G.attrs.update('elementary_layers', {('cond', 'ctl'): {'dose': 1}})
 
     getattr(G, attribute)  # materialize, so a stale one would be there to find
     setattr(G, attribute, pl.DataFrame(rows))

@@ -27,13 +27,13 @@ def _graph_with_edge():
 def test_set_edge_attrs_raises_on_reserved_key():
     G = _graph_with_edge()
     with pytest.raises(ValueError, match='reserved'):
-        G.attrs.set_edge_attrs('e1', kind='complex')
+        G.attrs.update('edges', {'e1': {'kind': 'complex'}})
 
 
 def test_set_edge_attrs_bulk_raises_on_reserved_key():
     G = _graph_with_edge()
     with pytest.raises(ValueError, match='reserved'):
-        G.attrs.set_edge_attrs_bulk({'e1': {'members': ['x']}})
+        G.attrs.update('edges', {'e1': {'members': ['x']}})
 
 
 def test_set_node_attrs_bulk_raises_on_reserved_key():
@@ -43,13 +43,13 @@ def test_set_node_attrs_bulk_raises_on_reserved_key():
     G = AnnNet(directed=False)
     G.add_nodes(['A'])
     with pytest.raises(ValueError, match='reserved'):
-        G.attrs.set_node_attrs_bulk({'A': {'node_id': 'B'}})
+        G.attrs.update('nodes', {'A': {'node_id': 'B'}})
 
 
 def test_set_edge_slice_attrs_allows_weight_but_raises_on_others():
     G = _graph_with_edge()
     G.slices.add('s1')
     # 'weight' is allowed even though it's reserved structurally
-    G.attrs.set_edge_slice_attrs('s1', 'e1', weight=2.0)
+    G.attrs.update('edge_slices', {('s1', 'e1'): {'weight': 2.0}})
     with pytest.raises(ValueError, match='reserved'):
-        G.attrs.set_edge_slice_attrs('s1', 'e1', members=['x'])
+        G.attrs.update('edge_slices', {('s1', 'e1'): {'members': ['x']}})

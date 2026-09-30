@@ -1,14 +1,19 @@
-"""Coverage tests for ``annnet/core/_Annotation.py``."""
+"""Coverage of the attribute write paths and the flexible-direction policies.
+
+Written against the current surface: ``G.attrs.update`` for every batch,
+``G.attrs.row(address, key)`` for one row, ``G.E.effective_weight`` for the
+resolved weight, ``G.attrs.audit()`` for the audit. The semantics these tests
+pin are the ones the old ``AttributesClass`` methods had where they were
+correct; where the old route was lenient about an unknown key it is now
+strict, and the test says so.
+"""
 
 from __future__ import annotations
 
 import pytest
 
-from annnet.core._Annotation import AttributesAccessor, AttributesClass
+from annnet.core._Annotation import AttributesClass
 from annnet.core.graph import AnnNet
-
-
-# ── fixtures ────────────────────────────────────────────────────────────
 
 
 def _toy() -> AnnNet:
@@ -20,426 +25,283 @@ def _toy() -> AnnNet:
     return G
 
 
-# ── bulk attribute setters ─────────────────────────────────────────────
-
-
 def _annotation_snapshot(G):
     """Everything a no-op write must leave alone."""
     return (
-        sorted(row.items() for row in G.obs.to_dicts()),
-        sorted(row.items() for row in G.var.to_dicts()),
+        G.attrs.rows('nodes'),
+        G.attrs.rows('edges'),
+        G.attrs.rows('edge_slices'),
+        G._state_clock(),
     )
 
 
-def test_set_node_attrs_bulk_dict_input_writes_each_row() -> None:
+# ── batch writes ───────────────────────────────────────────────────────
+
+
+def test_node_batch_dict_input_writes_each_row() -> None:
     G = _toy()
-    G.attrs.set_node_attrs_bulk({'A': {'color': 'red'}, 'B': {'color': 'blue'}})
-    assert G.attrs.get_attr_node('A', 'color') == 'red'
-    assert G.attrs.get_attr_node('B', 'color') == 'blue'
+    assert G.attrs.update('nodes', {'A': {'color': 'red'}, 'B': {'color': 'blue'}}) == 2
+    assert G.attrs.row('nodes', 'A')['color'] == 'red'
+    assert G.attrs.row('nodes', 'B')['color'] == 'blue'
 
 
-def test_set_node_attrs_bulk_accepts_iterable_of_pairs() -> None:
+def test_node_batch_accepts_iterable_of_pairs() -> None:
     G = _toy()
-    G.attrs.set_node_attrs_bulk([('A', {'color': 'red'}), ('B', {'color': 'blue'})])
-    assert G.attrs.get_attr_node('A', 'color') == 'red'
+    G.attrs.update('nodes', [('A', {'color': 'red'}), ('B', {'color': 'blue'})])
+    assert G.attrs.row('nodes', 'A')['color'] == 'red'
 
 
-def test_set_node_attrs_bulk_rejects_non_dict_attrs() -> None:
+def test_node_batch_rejects_non_mapping_rows() -> None:
     G = _toy()
-    with pytest.raises(TypeError, match='must be dict'):
-        G.attrs.set_node_attrs_bulk({'A': 'not-a-dict'})
+    with pytest.raises(TypeError, match='mapping'):
+        G.attrs.update('nodes', {'A': 'not-a-dict'})
 
 
-def test_set_node_attrs_bulk_rejects_reserved_keys() -> None:
-    G = _toy()
-    with pytest.raises(ValueError, match='reserved'):
-        G.attrs.set_node_attrs_bulk({'A': {'node_id': 'X'}})
-
-
-def test_set_node_attrs_bulk_noop_on_empty_input() -> None:
-    G = _toy()
-    before = _annotation_snapshot(G)
-    G.attrs.set_node_attrs_bulk({})
-    assert _annotation_snapshot(G) == before
-
-
-def test_set_node_attrs_bulk_noop_when_all_attrs_dicts_empty() -> None:
-    G = _toy()
-    before = _annotation_snapshot(G)
-    G.attrs.set_node_attrs_bulk({'A': {}, 'B': {}})
-    assert _annotation_snapshot(G) == before
-
-
-def test_set_edge_attrs_bulk_dict_input_writes_each_row() -> None:
-    G = _toy()
-    G.attrs.set_edge_attrs_bulk({'e1': {'label': 'alpha'}, 'e2': {'label': 'beta'}})
-    assert G.attrs.get_attr_edge('e1', 'label') == 'alpha'
-    assert G.attrs.get_attr_edge('e2', 'label') == 'beta'
-
-
-def test_set_edge_attrs_bulk_accepts_iterable_of_pairs() -> None:
-    G = _toy()
-    G.attrs.set_edge_attrs_bulk([('e1', {'label': 'alpha'})])
-    assert G.attrs.get_attr_edge('e1', 'label') == 'alpha'
-
-
-def test_set_edge_attrs_bulk_rejects_non_dict_attrs() -> None:
-    G = _toy()
-    with pytest.raises(TypeError, match='must be dict'):
-        G.attrs.set_edge_attrs_bulk({'e1': 'not-a-dict'})
-
-
-def test_set_edge_attrs_bulk_rejects_reserved_keys() -> None:
+def test_node_batch_rejects_reserved_keys() -> None:
     G = _toy()
     with pytest.raises(ValueError, match='reserved'):
-        G.attrs.set_edge_attrs_bulk({'e1': {'source': 'X'}})
+        G.attrs.update('nodes', {'A': {'node_id': 'X'}})
 
 
-def test_set_edge_attrs_bulk_noop_on_empty_input() -> None:
+def test_node_batch_is_a_noop_on_empty_input() -> None:
     G = _toy()
     before = _annotation_snapshot(G)
-    G.attrs.set_edge_attrs_bulk({})
+    assert G.attrs.update('nodes', {}) == 0
+    assert G.attrs.update('nodes', []) == 0
     assert _annotation_snapshot(G) == before
 
 
-def test_set_edge_attrs_bulk_noop_when_all_attrs_dicts_empty() -> None:
+def test_edge_batch_dict_input_writes_each_row() -> None:
+    G = _toy()
+    G.attrs.update('edges', {'e1': {'label': 'alpha'}, 'e2': {'label': 'beta'}})
+    assert G.attrs.row('edges', 'e1')['label'] == 'alpha'
+    assert G.attrs.row('edges', 'e2')['label'] == 'beta'
+
+
+def test_edge_batch_accepts_iterable_of_pairs() -> None:
+    G = _toy()
+    G.attrs.update('edges', [('e1', {'label': 'alpha'})])
+    assert G.attrs.row('edges', 'e1')['label'] == 'alpha'
+
+
+def test_edge_batch_rejects_non_mapping_rows_and_reserved_keys() -> None:
+    G = _toy()
+    with pytest.raises(TypeError, match='mapping'):
+        G.attrs.update('edges', {'e1': 'nope'})
+    with pytest.raises(ValueError, match='reserved'):
+        G.attrs.update('edges', {'e1': {'source': 'X'}})
+
+
+def test_an_empty_row_in_a_batch_writes_nothing() -> None:
     G = _toy()
     before = _annotation_snapshot(G)
-    G.attrs.set_edge_attrs_bulk({'e1': {}})
-    assert _annotation_snapshot(G) == before
+    G.attrs.update('edges', {'e1': {}})
+    G.attrs.update('nodes', {'A': {}})
+    assert G.attrs.rows('nodes') == before[0]
+    assert G.attrs.rows('edges') == before[1]
 
 
-# ── set_edge_slice_attrs internal branches ─────────────────────────────
+# ── edge-slice writes ──────────────────────────────────────────────────
 
 
-def test_set_edge_slice_attrs_coerces_weight_to_float() -> None:
+def test_edge_slice_weight_is_coerced_to_float() -> None:
     G = _toy()
     G.slices.add_edges('s1', ['e1'])
-    G.attrs.set_edge_slice_attrs('s1', 'e1', weight=99)
-    out = G.attrs.get_edge_slice_attr('s1', 'e1', 'weight')
+    G.attrs.update('edge_slices', {('s1', 'e1'): {'weight': 99}})
+    out = G.attrs.row('edge_slices', ('s1', 'e1'))['weight']
     assert out == 99.0
     assert isinstance(out, float)
 
 
-def test_set_edge_slice_attrs_writes_non_weight_attrs() -> None:
+def test_edge_slice_non_weight_attrs_are_written() -> None:
     G = _toy()
     G.slices.add_edges('s1', ['e1'])
-    G.attrs.set_edge_slice_attrs('s1', 'e1', confidence=0.95)
-    out = G.attrs.get_edge_slice_attr('s1', 'e1', 'confidence')
-    assert out == 0.95
+    G.attrs.update('edge_slices', {('s1', 'e1'): {'confidence': 0.95}})
+    assert G.attrs.row('edge_slices', ('s1', 'e1'))['confidence'] == 0.95
 
 
-def test_set_edge_slice_attrs_noop_when_only_reserved_allow_weight_missing() -> None:
-    """Calling with no attrs at all writes nothing.
-
-    Not even a default weight: a pair carries a value once something writes one,
-    so a call that names no attribute leaves the pair absent.
-    """
+def test_an_edge_slice_row_appears_only_once_something_is_written() -> None:
     G = _toy()
     before = _annotation_snapshot(G)
-    G.attrs.set_edge_slice_attrs('s1', 'e1')  # no kwargs
-    assert _annotation_snapshot(G) == before
-    assert G.attrs.get_edge_slice_attr('s1', 'e1', 'weight') is None
+    G.attrs.update('edge_slices', {('s1', 'e1'): {}})
+    assert G.attrs.rows('edge_slices') == before[2]
+    assert G.attrs.row('edge_slices', ('s1', 'e1')).get('weight') is None
+    assert ('s1', 'e1') not in G._contextual.edge_slice_attrs
 
 
-def test_set_edge_slice_attrs_bulk_writes_only_present_attrs() -> None:
+def test_edge_slice_batch_writes_every_present_attr() -> None:
     G = _toy()
     G.slices.add_edges('s1', ['e1', 'e2'])
-    G.attrs.set_edge_slice_attrs_bulk('s1', [('e1', {'weight': 5.0}), ('e2', {'confidence': 0.9})])
-    assert G.attrs.get_edge_slice_attr('s1', 'e1', 'weight') == 5.0
-    assert G.attrs.get_edge_slice_attr('s1', 'e2', 'confidence') == 0.9
-
-
-def test_set_edge_slice_attrs_bulk_accepts_dict_form() -> None:
-    G = _toy()
-    G.slices.add_edges('s1', ['e1'])
-    G.attrs.set_edge_slice_attrs_bulk('s1', {'e1': {'weight': 7.0}})
-    assert G.attrs.get_edge_slice_attr('s1', 'e1', 'weight') == 7.0
-
-
-def test_set_edge_slice_attrs_bulk_skips_non_dict_or_empty_entries() -> None:
-    G = _toy()
-    G.slices.add_edges('s1', ['e1'])
-    G.attrs.set_edge_slice_attrs_bulk(
-        's1',
-        [('e1', {'weight': 1.0}), ('e2', 'not-a-dict'), ('e1', {})],
+    G.attrs.update(
+        'edge_slices', {('s1', 'e1'): {'weight': 5.0}, ('s1', 'e2'): {'confidence': 0.9}}
     )
-    # only the valid entry got written
-    assert G.attrs.get_edge_slice_attr('s1', 'e1', 'weight') == 1.0
+    assert G.attrs.row('edge_slices', ('s1', 'e1'))['weight'] == 5.0
+    assert G.attrs.row('edge_slices', ('s1', 'e2'))['confidence'] == 0.9
 
 
-def test_set_edge_slice_attrs_bulk_noop_on_empty() -> None:
-    G = _toy()
-    before = _annotation_snapshot(G)
-    G.attrs.set_edge_slice_attrs_bulk('s1', [])
-    assert _annotation_snapshot(G) == before
-    # No row is created either: a weight only appears once something writes one.
-    assert G.attrs.get_edge_slice_attr('s1', 'e1', 'weight') is None
-
-
-# ── set_slice_edge_weight error paths ──────────────────────────────────
-
-
-def test_set_slice_edge_weight_raises_for_missing_slice() -> None:
+def test_an_override_needs_an_existing_slice_and_edge() -> None:
     G = _toy()
     with pytest.raises(KeyError, match='slice'):
-        AttributesClass.set_slice_edge_weight(G, 'not-a-slice', 'e1', 1.0)
+        G.attrs.update('edge_slices', {('not-a-slice', 'e1'): {'weight': 1.0}})
+    with pytest.raises(KeyError, match='edge'):
+        G.attrs.update('edge_slices', {('s1', 'not-an-edge'): {'weight': 1.0}})
+    # An override can be prepared before the edge is a member of the slice.
+    G.attrs.update('edge_slices', {('s1', 'e1'): {'weight': 42.0}})
+    assert G.attrs.row('edge_slices', ('s1', 'e1'))['weight'] == 42.0
+    assert 'e1' not in G.slices.edges('s1')
 
 
-def test_set_slice_edge_weight_raises_for_missing_edge() -> None:
+# ── effective weight ───────────────────────────────────────────────────
+
+
+def test_effective_weight_falls_back_to_the_stored_weight() -> None:
     G = _toy()
-    with pytest.raises(KeyError, match='Edge'):
-        AttributesClass.set_slice_edge_weight(G, 's1', 'not-an-edge', 1.0)
+    assert G.E.effective_weight('e1') == 1.0
+    assert G.E.effective_weight('e2', slice='s1') == 2.0
 
 
-def test_set_slice_edge_weight_writes_the_weight() -> None:
-    G = _toy()
-    G.slices.add_edges('s1', ['e1'])
-    AttributesClass.set_slice_edge_weight(G, 's1', 'e1', 42.0)
-    assert G.attrs.get_edge_slice_attr('s1', 'e1', 'weight') == 42.0
-
-
-# ── get_effective_edge_weight ──────────────────────────────────────────
-
-
-def test_get_effective_edge_weight_falls_back_to_rec_weight_when_no_slice_override() -> None:
-    G = _toy()
-    w = G.attrs.get_effective_edge_weight('e1')
-    assert w == 1.0
-
-
-def test_get_effective_edge_weight_uses_slice_override_when_present() -> None:
+def test_effective_weight_uses_the_slice_override_when_present() -> None:
     G = _toy()
     G.slices.add_edges('s1', ['e1'])
-    G.attrs.set_edge_slice_attrs('s1', 'e1', weight=42.0)
-    w = G.attrs.get_effective_edge_weight('e1', slice='s1')
-    assert w == 42.0
+    G.attrs.update('edge_slices', {('s1', 'e1'): {'weight': 42.0}})
+    assert G.E.effective_weight('e1', slice='s1') == 42.0
+    assert G.E.effective_weight('e1') == 1.0, 'the active slice carries no override'
+    G.slices.active = 's1'
+    assert G.E.effective_weight('e1') == 42.0
 
 
-def test_get_effective_edge_weight_returns_one_for_unknown_edge() -> None:
+def test_effective_weight_is_one_for_an_unknown_edge() -> None:
     G = _toy()
-    assert G.attrs.get_effective_edge_weight('no-such-edge') == 1.0
+    assert G.E.effective_weight('no-such-edge') == 1.0
 
 
-# ── audit_attributes ──────────────────────────────────────────────────
+# ── audit ──────────────────────────────────────────────────────────────
 
 
-def test_audit_attributes_returns_expected_shape_on_clean_graph() -> None:
+def test_audit_returns_the_documented_shape_on_a_clean_graph() -> None:
     G = _toy()
-    out = AttributesClass.audit_attributes(G)
-    for key in (
-        'extra_node_rows',
-        'extra_edge_rows',
-        'missing_node_rows',
-        'missing_edge_rows',
-        'invalid_edge_slice_rows',
-    ):
-        assert key in out
+    for out in (G.attrs.audit(), AttributesClass.audit_attributes(G)):
+        for key in (
+            'extra_node_rows',
+            'extra_edge_rows',
+            'missing_node_rows',
+            'missing_edge_rows',
+            'invalid_edge_slice_rows',
+            'invalid_slice_rows',
+            'invalid_node_layer_rows',
+        ):
+            assert isinstance(out[key], list)
+            assert out[key] == []
 
 
-def test_audit_attributes_returns_lists_for_each_category() -> None:
-    """Smoke-test that audit_attributes runs and returns the documented shape."""
+def test_audit_finds_a_contextual_row_the_structure_no_longer_holds() -> None:
     G = _toy()
-    G.attrs.set_node_attrs('A', color='red')
-    G.attrs.set_edge_attrs('e1', label='alpha')
-    out = AttributesClass.audit_attributes(G)
-    # The lists must be defined (empty or populated, exact contents depend on
-    # whether node/edge insert auto-creates an attr row in this backend).
-    for key in (
-        'extra_node_rows',
-        'extra_edge_rows',
-        'missing_node_rows',
-        'missing_edge_rows',
-        'invalid_edge_slice_rows',
-    ):
-        assert isinstance(out[key], list)
+    G.slices.add_edges('s1', ['e1'])
+    G.attrs.update('edge_slices', {('s1', 'e1'): {'weight': 3.0}})
+    # Reach behind the API, as a broken loader might.
+    G._contextual.edge_slice_attrs[('s1', 'ghost')] = {'weight': 1.0}
+    G._contextual.touch('edge_slice_attrs')
+    assert G.attrs.audit()['invalid_edge_slice_rows'] == [('s1', 'ghost')]
 
 
-# ── get_edge_attrs / get_node_attrs ─────────────────────────────────
+# ── one row ────────────────────────────────────────────────────────────
 
 
-def test_get_edge_attrs_by_int_index_uses_col_to_edge() -> None:
+def test_a_row_by_id_reads_what_was_written() -> None:
     G = _toy()
-    G.attrs.set_edge_attrs('e1', label='alpha')
-    attrs = G.attrs.get_edge_attrs(0)
-    assert attrs.get('label') == 'alpha'
+    G.attrs.update('edges', {'e1': {'label': 'alpha'}})
+    assert dict(G.attrs.row('edges', 'e1')) == {'label': 'alpha'}
+    G.attrs.update('nodes', {'A': {'color': 'red'}})
+    assert dict(G.attrs.row('nodes', 'A')) == {'color': 'red'}
 
 
-def test_get_edge_attrs_by_string_id() -> None:
+def test_a_row_for_an_unknown_key_raises_rather_than_answering_empty() -> None:
+    """The old getters answered ``{}`` for an unknown id; a typo now fails."""
     G = _toy()
-    G.attrs.set_edge_attrs('e1', label='alpha')
-    attrs = G.attrs.get_edge_attrs('e1')
-    assert attrs.get('label') == 'alpha'
+    with pytest.raises(KeyError, match='unknown edge'):
+        G.attrs.row('edges', 'no-such')
+    with pytest.raises(KeyError, match='unknown node'):
+        G.attrs.row('nodes', 'no-such')
+    with pytest.raises(TypeError, match='edge id'):
+        G.attrs.row('edges', 0)
 
 
-def test_get_edge_attrs_empty_for_unknown_id() -> None:
+def test_rows_of_many_keys() -> None:
     G = _toy()
-    assert G.attrs.get_edge_attrs('no-such') == {}
+    G.attrs.update('edges', {'e1': {'label': 'alpha'}, 'e2': {'label': 'beta'}})
+    assert G.attrs.rows('edges') == {'e1': {'label': 'alpha'}, 'e2': {'label': 'beta'}}
+    assert G.attrs.rows('edges', ['e1']) == {'e1': {'label': 'alpha'}}
+    G.attrs.update('nodes', {'A': {'color': 'red'}, 'B': {'color': 'blue'}})
+    assert set(G.attrs.rows('nodes')) == {'A', 'B', 'C'}
+    assert G.attrs.rows('nodes', {'A'}) == {'A': {'color': 'red'}}
 
 
-def test_get_node_attrs_returns_dict_with_attrs() -> None:
+# ── columns and selections replace the old lookups ─────────────────────
+
+
+def test_a_column_read_with_a_default_replaces_get_attr_from_edges() -> None:
     G = _toy()
-    G.attrs.set_node_attrs('A', color='red')
-    assert G.attrs.get_node_attrs('A').get('color') == 'red'
+    G.attrs.update('edges', {'e1': {'label': 'alpha'}})
+    assert dict(zip(G.E.ids, G.E.column('label', default='??'), strict=True)) == {
+        'e1': 'alpha',
+        'e2': '??',
+    }
+    with pytest.raises(KeyError, match='no attribute'):
+        G.E.column('not-a-column', default='??')
 
 
-def test_get_node_attrs_empty_for_unknown() -> None:
+def test_a_selection_replaces_get_edges_by_attr() -> None:
     G = _toy()
-    assert G.attrs.get_node_attrs('no-such') == {}
-
-
-# ── get_attr_edges / get_attr_nodes ────────────────────────────────
-
-
-def test_get_attr_edges_with_no_indexes_returns_all() -> None:
-    G = _toy()
-    G.attrs.set_edge_attrs('e1', label='alpha')
-    out = G.attrs.get_attr_edges()
-    assert 'e1' in out
-
-
-def test_get_attr_edges_with_indexes_filters_to_those_eids() -> None:
-    G = _toy()
-    G.attrs.set_edge_attrs('e1', label='alpha')
-    G.attrs.set_edge_attrs('e2', label='beta')
-    out = G.attrs.get_attr_edges(indexes=[0])  # only e1
-    assert set(out) == {'e1'}
-
-
-def test_get_attr_nodes_with_no_filter_returns_all() -> None:
-    G = _toy()
-    G.attrs.set_node_attrs('A', color='red')
-    G.attrs.set_node_attrs('B', color='blue')
-    out = G.attrs.get_attr_nodes()
-    assert {'A', 'B'}.issubset(out)
-
-
-def test_get_attr_nodes_with_filter_restricts() -> None:
-    G = _toy()
-    G.attrs.set_node_attrs('A', color='red')
-    G.attrs.set_node_attrs('B', color='blue')
-    out = G.attrs.get_attr_nodes(nodes={'A'})
-    assert set(out) == {'A'}
-
-
-# ── get_attr_from_edges / get_edges_by_attr ───────────────────────────
-
-
-def test_get_attr_from_edges_returns_default_when_column_missing() -> None:
-    G = _toy()
-    out = G.attrs.get_attr_from_edges('not-a-column', default='??')
-    assert out == {'e1': '??', 'e2': '??'}
-
-
-def test_get_attr_from_edges_returns_actual_values_when_set() -> None:
-    G = _toy()
-    G.attrs.set_edge_attrs('e1', label='alpha')
-    out = G.attrs.get_attr_from_edges('label', default='??')
-    assert out['e1'] == 'alpha'
-    assert out['e2'] == '??'  # e2 has no value → default
-
-
-def test_get_edges_by_attr_returns_matching_edges() -> None:
-    G = _toy()
-    G.attrs.set_edge_attrs('e1', label='alpha')
-    G.attrs.set_edge_attrs('e2', label='alpha')
-    out = G.attrs.get_edges_by_attr('label', 'alpha')
-    assert set(out) == {'e1', 'e2'}
-
-
-def test_get_edges_by_attr_empty_when_column_missing() -> None:
-    G = _toy()
-    assert G.attrs.get_edges_by_attr('not-a-column', 'x') == []
+    G.attrs.update('edges', {'e1': {'label': 'alpha'}, 'e2': {'label': 'alpha'}})
+    assert set(G.E.select(label='alpha').ids) == {'e1', 'e2'}
+    with pytest.raises(KeyError, match='unknown field'):
+        G.E.select(**{'not-a-column': 'x'})
 
 
 # ── graph attributes ──────────────────────────────────────────────────
 
 
-def test_get_graph_attributes_returns_shallow_copy() -> None:
+def test_uns_is_the_graph_attribute_mapping() -> None:
     G = _toy()
-    G.attrs.set_graph_attribute('study', 'demo')
-    out = G.attrs.get_graph_attributes()
+    G.uns['study'] = 'demo'
+    out = dict(G.uns)
     out['mutated'] = True
-    # mutating the returned dict must not affect the graph.
-    assert 'mutated' not in G.attrs.get_graph_attributes()
+    assert 'mutated' not in G.uns
+    assert G.uns['study'] == 'demo'
 
 
-# ── AttributesAccessor forwarders ─────────────────────────────────────
+# ── composite node key ─────────────────────────────────────────────────
 
 
-def test_attributes_accessor_forwards_all_public_methods() -> None:
-    G = _toy()
-    a = G.attrs  # AttributesAccessor instance
-    a.set_graph_attribute('study', 'demo')
-    assert a.get_graph_attribute('study') == 'demo'
-    assert a.get_graph_attributes()['study'] == 'demo'
-    a.set_node_attrs('A', color='red')
-    assert a.get_attr_node('A', 'color') == 'red'
-    assert a.get_node_attrs('A').get('color') == 'red'
-    assert a.get_attr_nodes().get('A', {}).get('color') == 'red'
-    a.set_edge_attrs('e1', label='alpha')
-    assert a.get_attr_edge('e1', 'label') == 'alpha'
-    assert a.get_edge_attrs('e1').get('label') == 'alpha'
-    assert a.get_attr_edges().get('e1', {}).get('label') == 'alpha'
-    assert a.get_attr_from_edges('label', default='??').get('e1') == 'alpha'
-    assert 'e1' in a.get_edges_by_attr('label', 'alpha')
-    a.set_slice_attrs('s1', notes='primary')
-    assert a.get_slice_attr('s1', 'notes') == 'primary'
-
-
-def test_attributes_accessor_forwards_bulk_and_slice_helpers() -> None:
-    G = _toy()
-    a = G.attrs
-    a.set_node_attrs_bulk({'A': {'color': 'red'}})
-    a.set_edge_attrs_bulk({'e1': {'label': 'alpha'}})
-    a.set_edge_slice_attrs('s1', 'e1', weight=2.0)
-    a.set_edge_slice_attrs_bulk('s1', {'e1': {'weight': 3.0}})
-    assert a.get_edge_slice_attr('s1', 'e1', 'weight') == 3.0
-    a.set_slice_edge_weight('s1', 'e1', 4.0)
-    assert a.get_edge_slice_attr('s1', 'e1', 'weight') == 4.0
-    assert a.get_effective_edge_weight('e1', slice='s1') == 4.0
-
-
-# ── composite node key (covers the _node_key_enabled branches) ───
-
-
-def test_set_node_attrs_with_composite_key_writes_and_indexes() -> None:
+def test_composite_key_writes_and_indexes() -> None:
     G = _toy()
     G.set_node_key('name')
-    G.attrs.set_node_attrs('A', name='alice')
-    assert G.attrs.get_attr_node('A', 'name') == 'alice'
+    G.attrs.update('nodes', {'A': {'name': 'alice'}})
+    assert G.attrs.row('nodes', 'A')['name'] == 'alice'
+    assert G._node_key_index == {('alice',): 'A'}
 
 
-def test_set_node_attrs_with_composite_key_rejects_collision() -> None:
+def test_composite_key_rejects_a_collision() -> None:
     G = _toy()
     G.set_node_key('name')
-    G.attrs.set_node_attrs('A', name='alice')
+    G.attrs.update('nodes', {'A': {'name': 'alice'}})
     with pytest.raises(ValueError, match='Composite key collision'):
-        G.attrs.set_node_attrs('B', name='alice')  # 'alice' already owned by A
+        G.attrs.update('nodes', {'B': {'name': 'alice'}})
 
 
-def test_set_node_attrs_bulk_with_composite_key_writes_all() -> None:
+def test_composite_key_batch_writes_all() -> None:
     G = _toy()
     G.set_node_key('name')
-    G.attrs.set_node_attrs_bulk({'A': {'name': 'alice'}, 'B': {'name': 'bob'}})
-    assert G.attrs.get_attr_node('A', 'name') == 'alice'
-    assert G.attrs.get_attr_node('B', 'name') == 'bob'
-
-
-def test_set_node_attrs_bulk_with_composite_key_rejects_collision() -> None:
-    G = _toy()
-    G.set_node_key('name')
-    G.attrs.set_node_attrs('A', name='alice')
-    with pytest.raises(ValueError, match='Composite key collision'):
-        G.attrs.set_node_attrs_bulk({'B': {'name': 'alice'}})
+    G.attrs.update('nodes', {'A': {'name': 'alice'}, 'B': {'name': 'bob'}})
+    assert G.attrs.row('nodes', 'A')['name'] == 'alice'
+    assert G.attrs.row('nodes', 'B')['name'] == 'bob'
+    assert G._node_key_index == {('alice',): 'A', ('bob',): 'B'}
 
 
 # ── flexible edge direction policy ────────────────────────────────────
 #
 # The policy rewrites the member coefficients of the edge, so what it did is
 # visible in the incidence column: +w on the source side, -w on the target side.
-# These tests used to call the write and assert nothing, which meant they passed
-# whether or not the orientation moved.
 
 
 def _incidence_column(G, edge_id='e1'):
@@ -457,75 +319,70 @@ def _flexible_graph(policy):
 
 
 def test_flexible_edge_scope_policy_orients_the_edge_from_the_attribute() -> None:
-    """An edge-scope policy decides the orientation from the watched attribute.
-
-    Both branches are exercised, because above the threshold the resolved
-    orientation equals the declared one — so a test that only writes a value
-    above it cannot tell the policy from doing nothing.
-    """
     policy = {'var': 'temperature', 'threshold': 10.0, 'scope': 'edge', 'above': 's->t'}
 
     above = _flexible_graph(policy)
-    above.attrs.set_edge_attrs('e1', temperature=20.0)
+    above.attrs.update('edges', {'e1': {'temperature': 20.0}})
     assert _incidence_column(above) == {'A': 1.0, 'B': -1.0}
 
     below = _flexible_graph(policy)
-    below.attrs.set_edge_attrs('e1', temperature=2.0)
+    below.attrs.update('edges', {'e1': {'temperature': 2.0}})
     assert _incidence_column(below) == {'A': -1.0, 'B': 1.0}
 
 
 def test_flexible_node_scope_policy_orients_from_the_endpoint_attributes() -> None:
-    """A node-scope policy compares the two endpoints rather than one edge value."""
     policy = {'var': 'level', 'threshold': 5.0, 'scope': 'node', 'above': 's->t'}
 
     forward = _flexible_graph(policy)
-    forward.attrs.set_node_attrs('A', level=10.0)
-    forward.attrs.set_node_attrs('B', level=2.0)
+    forward.attrs.update('nodes', {'A': {'level': 10.0}})
+    forward.attrs.update('nodes', {'B': {'level': 2.0}})
     assert _incidence_column(forward) == {'A': 1.0, 'B': -1.0}
 
     backward = _flexible_graph(policy)
-    backward.attrs.set_node_attrs('A', level=2.0)
-    backward.attrs.set_node_attrs('B', level=10.0)
+    backward.attrs.update('nodes', {'A': {'level': 2.0}})
+    backward.attrs.update('nodes', {'B': {'level': 10.0}})
     assert _incidence_column(backward) == {'A': -1.0, 'B': 1.0}
 
 
 def test_flexible_edge_tie_keep_leaves_the_orientation_alone() -> None:
     G = _flexible_graph({'var': 'x', 'threshold': 5.0, 'scope': 'edge', 'tie': 'keep'})
     before = _incidence_column(G)
-    G.attrs.set_edge_attrs('e1', x=5.0)
+    G.attrs.update('edges', {'e1': {'x': 5.0}})
     assert _incidence_column(G) == before == {'A': 1.0, 'B': -1.0}
 
 
 def test_flexible_edge_tie_undirected_puts_the_weight_on_both_sides() -> None:
     G = _flexible_graph({'var': 'x', 'threshold': 5.0, 'scope': 'edge', 'tie': 'undirected'})
-    G.attrs.set_edge_attrs('e1', x=5.0)
+    G.attrs.update('edges', {'e1': {'x': 5.0}})
     assert _incidence_column(G) == {'A': 1.0, 'B': 1.0}
 
 
-def test_flexible_policy_applies_on_the_bulk_edge_write() -> None:
-    """The bulk path has to reach the policy, not only the single write."""
+def test_flexible_policy_applies_on_the_batch_edge_write() -> None:
     policy = {'var': 'x', 'threshold': 5.0, 'scope': 'edge'}
 
     above = _flexible_graph(policy)
-    above.attrs.set_edge_attrs_bulk({'e1': {'x': 10.0}})
+    above.attrs.update('edges', {'e1': {'x': 10.0}})
     assert _incidence_column(above) == {'A': 1.0, 'B': -1.0}
 
     below = _flexible_graph(policy)
-    below.attrs.set_edge_attrs_bulk({'e1': {'x': 2.0}})
+    below.attrs.update('edges', {'e1': {'x': 2.0}})
     assert _incidence_column(below) == {'A': -1.0, 'B': 1.0}
 
 
-def test_flexible_policy_applies_on_the_bulk_node_write() -> None:
+def test_flexible_policy_applies_on_the_batch_node_write() -> None:
     policy = {'var': 'level', 'threshold': 5.0, 'scope': 'node'}
 
     forward = _flexible_graph(policy)
-    forward.attrs.set_node_attrs_bulk({'A': {'level': 10.0}, 'B': {'level': 2.0}})
+    forward.attrs.update('nodes', {'A': {'level': 10.0}, 'B': {'level': 2.0}})
     assert _incidence_column(forward) == {'A': 1.0, 'B': -1.0}
 
     backward = _flexible_graph(policy)
-    backward.attrs.set_node_attrs_bulk({'A': {'level': 2.0}, 'B': {'level': 10.0}})
+    backward.attrs.update('nodes', {'A': {'level': 2.0}, 'B': {'level': 10.0}})
     assert _incidence_column(backward) == {'A': -1.0, 'B': 1.0}
 
 
-# Touch the accessor class import for symmetry.
-_ = AttributesAccessor
+def test_flexible_policy_applies_through_a_column_write() -> None:
+    policy = {'var': 'level', 'threshold': 5.0, 'scope': 'node'}
+    G = _flexible_graph(policy)
+    G.N['level'] = [2.0, 10.0]
+    assert _incidence_column(G) == {'A': -1.0, 'B': 1.0}

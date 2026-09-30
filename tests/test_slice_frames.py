@@ -24,9 +24,9 @@ def G():
         graph.add_edges(source, target, edge_id=edge_id)
     graph.slices.add('prior', edges=['e1', 'e2'], role='input')
     graph.slices.add('fit', edges=['e2', 'e3'])
-    graph.attrs.set_edge_slice_attrs('prior', 'e1', activity=1.0)
-    graph.attrs.set_edge_slice_attrs('fit', 'e2', activity=-1.0)
-    graph.attrs.set_edge_slice_attrs('fit', 'e3', activity=1.0)
+    graph.attrs.update('edge_slices', {('prior', 'e1'): {'activity': 1.0}})
+    graph.attrs.update('edge_slices', {('fit', 'e2'): {'activity': -1.0}})
+    graph.attrs.update('edge_slices', {('fit', 'e3'): {'activity': 1.0}})
     return graph
 
 
@@ -45,7 +45,7 @@ class TestAddWithMembers:
         assert G.slices.nodes('prior') == {'A', 'B', 'C'}
 
     def test_attributes_still_work_alongside(self, G):
-        assert G.slices.attrs('prior')['role'] == 'input'
+        assert dict(G.attrs.row('slices', 'prior'))['role'] == 'input'
 
     def test_nodes_can_be_given_instead(self, G):
         G.slices.add('picked', nodes=['A', 'B'])

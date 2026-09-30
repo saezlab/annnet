@@ -1,6 +1,6 @@
 """A removal at the frontier leaves the cached matrix usable.
 
-`FR-014`. A cached matrix survives a run of appends at the frontier, because the
+A cached matrix survives a run of appends at the frontier, because the
 store logs them and the buffer takes the new columns one at a time. It did not
 survive a removal of any kind, so removing the edge that was appended last threw
 away every column that removal did not touch.
@@ -44,7 +44,7 @@ class TestTheCacheSurvivesAFrontierRemoval:
         graph = _graph()
         _ = graph.S
         before = _counts(graph)
-        graph.remove_edge('e11')
+        graph.remove_edges('e11')
         _ = graph.S
         rebuilds, extends = _counts(graph)
         assert rebuilds == before[0], 'a frontier removal must not force a rebuild'
@@ -53,7 +53,7 @@ class TestTheCacheSurvivesAFrontierRemoval:
     def test_the_matrix_loses_exactly_that_column(self):
         graph = _graph()
         before = graph.S.toarray()
-        graph.remove_edge('e11')
+        graph.remove_edges('e11')
         assert np.array_equal(graph.S.toarray(), before[:, :-1])
 
     def test_a_run_of_frontier_removals_survives(self):
@@ -61,7 +61,7 @@ class TestTheCacheSurvivesAFrontierRemoval:
         before = graph.S.toarray()
         counts = _counts(graph)
         for edge_id in ('e11', 'e10', 'e9'):
-            graph.remove_edge(edge_id)
+            graph.remove_edges(edge_id)
             _ = graph.S
         assert _counts(graph)[0] == counts[0]
         assert np.array_equal(graph.S.toarray(), before[:, :-3])
@@ -70,7 +70,7 @@ class TestTheCacheSurvivesAFrontierRemoval:
         graph = _graph()
         _ = graph.S
         counts = _counts(graph)
-        graph.remove_edge('e11')
+        graph.remove_edges('e11')
         graph.add_edges('v0', 'v2', edge_id='later')
         _ = graph.S
         assert _counts(graph)[0] == counts[0]
@@ -80,7 +80,7 @@ class TestTheCacheSurvivesAFrontierRemoval:
         graph = _graph()
         view = graph.matrices.signed()
         assert 'e11' in view.column_of_edge
-        graph.remove_edge('e11')
+        graph.remove_edges('e11')
         view = graph.matrices.signed()
         assert 'e11' not in view.column_of_edge
         assert view.matrix.shape[1] == len(view.edge_of_column)
@@ -92,7 +92,7 @@ class TestWhatItCannotSurvive:
         graph = _graph()
         _ = graph.S
         before = _counts(graph)
-        graph.remove_edge(victim)
+        graph.remove_edges(victim)
         _ = graph.S
         assert _counts(graph)[0] == before[0] + 1
 
@@ -100,7 +100,7 @@ class TestWhatItCannotSurvive:
         graph = _graph()
         _ = graph.S
         before = _counts(graph)
-        graph.remove_node('v3')
+        graph.remove_nodes('v3')
         _ = graph.S
         assert _counts(graph)[0] > before[0]
 
@@ -111,7 +111,7 @@ class TestWhatItCannotSurvive:
         graph.add_edges('ee_ab', 'C', edge_id='e_meta')
         _ = graph.S
         before = _counts(graph)
-        graph.remove_edge('e_meta')
+        graph.remove_edges('e_meta')
         _ = graph.S
         assert _counts(graph) != before
 
@@ -121,7 +121,7 @@ class TestTheAnswerIsTheSameEitherWay:
     def test_it_matches_a_full_rebuild(self, victim):
         graph = _graph()
         _ = graph.S
-        graph.remove_edge(victim)
+        graph.remove_edges(victim)
         kept = graph.S.toarray()
         graph.matrices.cache.drop()
         assert np.array_equal(kept, graph.S.toarray())
