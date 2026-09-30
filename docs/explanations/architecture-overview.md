@@ -104,7 +104,7 @@ graph rather than replacing it.
 Several pieces of state are intentionally derived rather than canonical:
 
 - every named matrix: `G.A`, `G.B`, `G.H`, `G.S` and `G.L`
-- the node table and the edge table, `G.obs` and `G.var`
+- the node table and the edge table, `G.attrs.nodes` and `G.attrs.edges`
 - graph views
 - subgraphs and reversed graphs
 - backend graphs for NetworkX, igraph, and graph-tool
@@ -134,9 +134,9 @@ which concerns are canonical, which are overlays, and which are derived.
 ## The public surface names no position
 
 A position belongs to one materialized matrix, so no public name hands one back.
-`G.get_node` and `G.get_edge` take an id. `G.N[n]` is the n-th node of the node
+`G.N.at` and `G.E.at` take an id. `G.N[n]` is the n-th node of the node
 sequence. `G.idx` translates a coordinate a caller already holds, in both
-directions, and `G.views.entity_kinds()` reads the kind of each entity.
+directions, and `G.entity_kinds()` reads the kind of each entity.
 
 The maps from an id to a position that earlier releases exposed are gone. They
 described one materialization as though it were the model.

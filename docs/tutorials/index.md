@@ -121,6 +121,16 @@ format, or workflow.
 
     [Open notebook](notebooks/special/sp04_backend_lazy_proxies.ipynb)
 
+-   __Exploring a graph: the twelve questions__
+
+    ---
+
+    Schema and summary, composed selections, layer and slice windows, the
+    incidence layout, closed and open boundaries, live read-only views and
+    materialization — on one tiny graph, without a helper function.
+
+    [Open notebook](notebooks/special/sp05_exploration_workflow.ipynb)
+
 </div>
 
 ## Applied workflows

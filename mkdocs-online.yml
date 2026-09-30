@@ -28,19 +28,23 @@ nav:
         -   Incidence representation: explanations/math-incidence.md
     -   2. Work with graph state:
         -   Reading the graph: explanations/reading-the-graph.md
+        -   Migrating to the current surface: explanations/api-migration.md
         -   Adding edges: explanations/add-edges.md
         -   Mutation and derived state: explanations/mutation-and-derived-state.md
         -   Aspects, order, and windows: explanations/aspects-and-windows.md
         -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
         -   Slices and views: explanations/managers-and-views.md
         -   Node-layer values and scale: explanations/values-and-scale.md
+        -   What the general path costs: explanations/performance.md
     -   3. Connect and persist:
         -   Interoperability: explanations/interoperability.md
+        -   What each format keeps: explanations/format-semantics.md
         -   Storage and IO: explanations/io-annnet.md
         -   Tracking changes: explanations/history-and-diffs.md
 
 -   API Reference:
     -   API Reference Overview: reference/index.md
+    -   The public surface (contract): reference/api-contract.md
     -   Public and internal APIs: reference/api-boundary.md
     -   Support helpers: reference/support.md
     -   Core:

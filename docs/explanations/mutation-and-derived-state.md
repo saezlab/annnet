@@ -67,7 +67,7 @@ Both are rebuildable from the member lists and neither is authoritative.
 These are materializations rather than canonical state:
 
 - every named matrix: `G.A`, `G.B`, `G.H`, `G.S` and `G.L`
-- the node table and the edge table, `G.obs` and `G.var`
+- the node table and the edge table, `G.attrs.nodes` and `G.attrs.edges`
 - backend graphs from the `G.nx`, `G.ig` and `G.gt` lazy accessors
 - layer-specific matrix views
 

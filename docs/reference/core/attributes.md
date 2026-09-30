@@ -1,22 +1,42 @@
 # Attributes
 
-Attribute table helpers from `annnet.core._Annotation`.
+The attribute API from `annnet.core._attribute_api` and the row selections from
+`annnet.core._select`. Direct imports from underscore modules follow the
+[internal API policy](../api-boundary.md); the public names are exported as
+`annnet.Attrs`, `annnet.RowSelection` and `annnet.Schema`.
 
-These methods are mixed into `AnnNet`. Direct imports from underscore modules
-follow the [internal API policy](../api-boundary.md).
-
-`AttributesAccessor` is what `G.attrs` gives back: the eight attribute tables and
-the setters that write them. For how those tables relate to the frames under
-`G.views`, and to the older `obs`/`var`/`slice_attributes` spellings, see
-[Reading the graph](../../explanations/reading-the-graph.md) and
+`Attrs` is what `G.attrs` gives back: the eight attribute addresses — `nodes`,
+`edges`, `slices`, `aspects`, `layers`, `edge_slices`, `node_layers`,
+`elementary_layers` — read and written the same way. A read (`nodes`, `table`,
+`row`, `rows`) returns a detached copy; a write is a named call (`update`,
+`replace`, `delete`); `select` is a live query and `from_frame` a fixed
+selection made from the rows of a table you filtered yourself. The contract is stated in
+[the API contract](../api-contract.md), section 3; the reading workflow in
+[Reading the graph](../../explanations/reading-the-graph.md); the storage in
 [Internal representation](../../explanations/internal-representation.md).
 
-::: annnet.core._Annotation.AttributesClass
+::: annnet.core._attribute_api.Attrs
     options:
       filters: public
       show_root_heading: true
 
-::: annnet.core._Annotation.AttributesAccessor
+::: annnet.core._attribute_api.Schema
     options:
       filters: public
+      show_root_heading: true
+
+::: annnet.core._select.RowSelection
+    options:
+      filters: public
+      show_root_heading: true
+
+## Predicates
+
+The one predicate language every `select` parses.
+
+::: annnet.core._predicate
+    options:
+      members:
+        - OPERATORS
+        - parse_conditions
       show_root_heading: true

@@ -143,13 +143,13 @@ onto the canonical state, and a write through it would reach the graph with no
 validation, no clock bump and no history entry. A caller who means to change
 values copies first, which is one call and is visible in their code, and a caller
 who means to change the graph writes through `G.N["score"] = values` or
-`G.attrs.set_node_attrs`.
+`G.attrs.update('nodes', {...})`.
 
 **A column is good until the next write to the graph.** After a write, a column
 a caller still holds is stale, and what it shows is not something the package
 states. `.copy()` is the way to hold values across a change.
 
-`G.obs` and `G.var` **derive** their content. They gather the live slots of
+`G.attrs.nodes` and `G.attrs.edges` **derive** their content. They gather the live slots of
 every column and hand the result to narwhals, so one materialization serves
 every dataframe backend. A write into the table a materialization handed back
 changes nothing the graph holds.
@@ -167,9 +167,9 @@ the derived table shows the id once.
 A contextual attribute belongs to a pair rather than to one element — one edge in
 one slice, or one node in one layer. Almost no pair carries a value, so a dense
 column per pair would waste nearly every cell. Those stores stay keyed by the
-pair, and each level has one public entry point: `G.slices.attrs`,
-`G.attrs.edge_slice`, `G.layers.attrs`, `G.layers.node_attrs`,
-`G.layers.aspect_attrs` and `G.layers.elementary_attrs`.
+pair, and every level is one address of `G.attrs` — `slices`, `edge_slices`,
+`layers`, `node_layers`, `aspects` and `elementary_layers` — read and written
+like the two generic ones: `G.attrs.row('edge_slices', (slice_id, edge_id))`.
 
 **All six levels live in one store, `annnet.core._contextual.ContextualStore`,
 and every one of them is a plain dict.** No canonical field of a graph is a
@@ -215,17 +215,12 @@ attributes keyed by an address — so they are read the same way, under
 to miss. A layer coordinate is one label *per aspect* — `('12h', 'mapk')`. An
 elementary layer is one label *inside one* aspect — `mapk` of `mechanism`.
 
-The older spellings still answer: `G.obs` and `G.var` for the two axes,
-`G.slice_attributes`, `G.edge_slice_attributes` and `G.layer_attributes` for
-three of the levels, and `G.contextual_table(level)` for all six. They are the
-same tables. `obs` and `var` also keep the anndata parallel, which is the reason
-they are not going anywhere.
+The older spellings — `G.obs`, `G.var`, `G.contextual_table(level)`, the
+`get_*`/`set_*` methods — were removed; each raises with its replacement, and
+[the migration page](api-migration.md) lists them all.
 
-Two of the eight differ in one way worth knowing: `nodes` and `edges` render
-through `G.obs` and `G.var`, which **clone** on every read, so a caller cannot
-reach the cache behind them. The other six hand back the cached table itself and
-are read-only by contract — writing into one changes what the next reader sees,
-and changes nothing the graph holds.
+Every table a read hands back is the caller's own: writing into it changes
+nothing the graph holds, and the next read builds it again from the store.
 
 ### The backend is ambient, and namable
 

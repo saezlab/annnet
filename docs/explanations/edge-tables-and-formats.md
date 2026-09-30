@@ -13,8 +13,7 @@ a graph used to look like this:
 prior_edge_ids = []
 for index, (source, effect, target) in enumerate(rows):
     edge_id = f'prior_{index:02d}'
-    G.add_edges(source, target, edge_id=edge_id, slice='prior')
-    G.attrs.set_edge_attrs(edge_id, interaction=effect)
+    G.add_edges(source, target, edge_id=edge_id, slice='prior', interaction=effect)
     prior_edge_ids.append(edge_id)
 ```
 

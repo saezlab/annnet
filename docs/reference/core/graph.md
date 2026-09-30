@@ -95,7 +95,7 @@ layered — see [Reading the graph](../../explanations/reading-the-graph.md).
 
 What a graph was built from, recorded as data rather than as a memory.
 
-::: annnet.core._provenance.ProvenanceAccessor
+::: annnet.core._provenance.Provenance
     options:
       show_root_heading: true
 

@@ -21,7 +21,8 @@ order for the main path, or jump directly to a topic.
 
 ### Inspect and change
 
-- [Reading the graph](reading-the-graph.md): choose the right frame and namespace for a query.
+- [Reading the graph](reading-the-graph.md): summaries, tables, selections and views for a query.
+- [Migrating to the current surface](api-migration.md): every removed name and its replacement.
 - [Adding edges](add-edges.md): accepted edge inputs and how they are dispatched.
 - [Mutation and derived state](mutation-and-derived-state.md): what writes maintain and what reads derive.
 
@@ -34,6 +35,7 @@ order for the main path, or jump directly to a topic.
 ### Values
 
 - [Node-layer values](values-and-scale.md): attach, read, and interpret values on node-layer pairs.
+- [What the general path costs](performance.md): measured costs of construction, counts, degree, promotion and exploration, and the decisions that rest on them.
 
 ## 3. Connect and persist
 
