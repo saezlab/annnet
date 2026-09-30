@@ -336,11 +336,11 @@ def _graph_from_sbml_model(
         if preserve_stoichiometry:
             G.set_edge_coeffs(rid, coeffs)
         else:
-            G.attrs.set_edge_attrs(rid, stoich=coeffs)
+            G.attrs.update('edges', {rid: {'stoich': coeffs}})
 
     # ── edge attributes ───────────────────────────────────────────────────────
     if edge_attrs_map:
-        G.attrs.set_edge_attrs_bulk(edge_attrs_map)
+        G.attrs.update('edges', edge_attrs_map)
 
     # ── assign reactions to their compartment slices ──────────────────────────
     by_slice: dict[str, list[str]] = {}
@@ -425,7 +425,7 @@ def to_sbml(graph: AnnNet, path: str, *, model_id: str = 'annnet', sidecar: bool
     compartment.setId('c')
     compartment.setConstant(True)
 
-    for node_id in graph.nodes():
+    for node_id in list(graph.N):
         species = model.createSpecies()
         species.setId(str(node_id))
         species.setCompartment('c')

@@ -35,7 +35,9 @@ from ._shared.common import (
     serialize_multilayer_manifest,
 )
 from ._shared.sidecar import restores
+from ..core._structure import edge_entity_record
 from ._shared.importing import delivers
+from .._support.entities import restore_entities
 
 if TYPE_CHECKING:
     from ..core import AnnNet, _structure
@@ -269,6 +271,7 @@ def to_cx2(
 
     manifest = {
         'version': 1,
+        'edge_entities': edge_entity_record(G),
         'graph': {
             'directed': bool(G.directed) if G.directed is not None else True,
             'attributes': g_attrs,
@@ -916,10 +919,18 @@ def from_cx2(
 
         # Binary edges from the manifest definitions.
         _bin = []
+        _placeholders = []
+        _node_edges = []
         for eid, defn in (emeta.get('definitions') or {}).items():
             src, tgt, etype = defn
             if etype == 'hyper':
                 continue
+            if etype == 'edge_placeholder' or (src is None and tgt is None):
+                # An edge entity that holds no members: no endpoints to add.
+                _placeholders.append(eid)
+                continue
+            if etype == 'node_edge':
+                _node_edges.append(eid)
             _bin.append(
                 {
                     'source': _tuplify(src),
@@ -931,6 +942,17 @@ def from_cx2(
             )
         if _bin:
             G._add_edges_bulk(_bin)
+
+        # Edge entities. A manifest written since they were recorded says what
+        # they are; an older one is read from the kinds of its definitions, which
+        # is enough for a flat graph and nothing more.
+        _entities = manifest.get('edge_entities')
+        if not _entities and (_placeholders or _node_edges) and tuple(G.aspects) == ('_',):
+            _entities = {
+                'entities': [{'id': eid, 'layer': ['_']} for eid in _placeholders],
+                'node_edges': _node_edges,
+            }
+        restore_entities(G, _entities)
 
         # Hyperedges from the manifest (authoritative regardless of export mode).
         _he = []

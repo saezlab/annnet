@@ -15,8 +15,8 @@ class TestSIFAdapter:
         G = simple_graph
         to_sif(G, tmpdir_fixture / 'net.sif', lossless=False)
         G2 = from_sif(tmpdir_fixture / 'net.sif')
-        assert set(G2.nodes()) == set(G.nodes())
-        assert G2.ne == G.ne
+        assert set(G2.N) == set(G.N)
+        assert len(G2.E) == len(G.E)
 
     def test_lossless_round_trip(self, complex_graph, tmpdir_fixture):
         G = complex_graph
@@ -42,7 +42,7 @@ class TestSIFAdapter:
 
     def test_custom_relation_attr(self, simple_graph, tmpdir_fixture):
         G = simple_graph
-        G.attrs.set_edge_attrs('e1', interaction_type='phosphorylation')
+        G.attrs.update('edges', {'e1': {'interaction_type': 'phosphorylation'}})
         to_sif(
             G,
             tmpdir_fixture / 'net.sif',

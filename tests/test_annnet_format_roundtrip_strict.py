@@ -40,15 +40,15 @@ def _build_fixture() -> AnnNet:
     )
 
     # Aspect-level attrs.
-    G.layers.set_aspect_attrs('level', description='biological process')
-    G.layers.set_aspect_attrs('phase', description='time bin')
+    G.attrs.update('aspects', {'level': {'description': 'biological process'}})
+    G.attrs.update('aspects', {'phase': {'description': 'time bin'}})
 
     # Elementary-layer attrs (per aspect/value).
-    G.layers.set_elementary_attrs('level', 'sig', color='#1f77b4', weight=1.0)
-    G.layers.set_elementary_attrs('phase', 't0', when='baseline')
+    G.attrs.update('elementary_layers', {('level', 'sig'): {'color': '#1f77b4', 'weight': 1.0}})
+    G.attrs.update('elementary_layers', {('phase', 't0'): {'when': 'baseline'}})
 
     # Per layer-tuple attrs.
-    G.layers.set_attrs(('sig', 't0'), note='intra-signaling at baseline')
+    G.attrs.update('layers', {('sig', 't0'): {'note': 'intra-signaling at baseline'}})
 
     # Nodes: protein has presence in multiple layer combinations.
     G.add_nodes(
@@ -76,8 +76,8 @@ def _build_fixture() -> AnnNet:
     )
 
     # Per-(node, layer) attrs (state_attrs).
-    G.layers.set_node_attrs('prot:A', ('sig', 't0'), abundance=12.5)
-    G.layers.set_node_attrs('prot:A', ('sig', 't1'), abundance=18.0)
+    G.attrs.update('node_layers', {('prot:A', ('sig', 't0')): {'abundance': 12.5}})
+    G.attrs.update('node_layers', {('prot:A', ('sig', 't1')): {'abundance': 18.0}})
 
     # Edges — cover every kind.
     sig0 = ('sig', 't0')
@@ -181,10 +181,10 @@ def _build_fixture() -> AnnNet:
     G.slices.add_node_to_slice('nucleus', 'gene:A')
 
     # Per-slice edge weight override.
-    G.attrs.set_edge_slice_attrs('cytosol', 'e_sig_AB', weight=0.75)
+    G.attrs.update('edge_slices', {('cytosol', 'e_sig_AB'): {'weight': 0.75}})
 
     # Per-slice attribute (slice metadata table).
-    G.attrs.set_slice_attrs('cytosol', notes='cytosolic subset')
+    G.attrs.update('slices', {'cytosol': {'notes': 'cytosolic subset'}})
 
     # Edge-entity (null endpoints) — sometimes used as a reified anchor.
     G.add_edges(
@@ -276,7 +276,7 @@ def _full_snapshot(g: AnnNet):
         'layers_per_aspect': {
             a: sorted(g.layers.list_layers(a)) for a in g.layers.list_aspects() or ()
         },
-        'aspect_attrs': {a: g.layers.aspect_attrs(a) for a in g.layers.list_aspects() or ()},
+        'aspect_attrs': {a: dict(g.attrs.row('aspects', a)) for a in g.layers.list_aspects() or ()},
         'entities': sorted(S.entity_keys(g)),
         'entity_rows': {ref.key: (row, ref.kind) for row, ref in enumerate(S.iter_entities(g))},
         'edges': _edge_state(g),

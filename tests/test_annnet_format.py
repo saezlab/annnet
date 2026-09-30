@@ -555,7 +555,7 @@ class TestAnnNetIO(unittest.TestCase):
 
     def test_slice_attributes_roundtrip_from_dataframe_ssot(self):
         def _test(use_archive):
-            self.G.attrs.set_slice_attrs('slice1', region='EMEA', cohort='A')
+            self.G.attrs.update('slices', {'slice1': {'region': 'EMEA', 'cohort': 'A'}})
             G2, _ = self._roundtrip(use_archive=use_archive)
             info = G2.slices.info('slice1')
             self.assertEqual(info['attributes'], {'region': 'EMEA', 'cohort': 'A'})
@@ -568,7 +568,7 @@ class TestAnnNetIO(unittest.TestCase):
             G2, _ = self._roundtrip(use_archive=use_archive)
             G2.add_edges('v1', 'v2', edge_id='e_after_read', parallel='parallel')
 
-            self.assertCountEqual(G2.get_edge_ids('v1', 'v2'), ['e1', 'e_parallel', 'e_after_read'])
+            self.assertCountEqual(G2.has_edge('v1', 'v2')[1], ['e1', 'e_parallel', 'e_after_read'])
             found, ids = G2.has_edge('v1', 'v2')
             self.assertTrue(found)
             self.assertCountEqual(ids, ['e1', 'e_parallel', 'e_after_read'])
@@ -581,12 +581,12 @@ if __name__ == '__main__':
 
 
 # ---------------------------------------------------------------------------
-# The shapes cycle 003 added to what a stored graph carries
+# The two shapes a stored graph carries beside the plain ones
 # ---------------------------------------------------------------------------
 
 
 class TestTheDirectionPolicySurvivesARoundTrip(unittest.TestCase):
-    """`FR-021`, and decision `D5` of cycle 003.
+    """The direction policy of an edge is part of what a file holds.
 
     An edge may carry a flexible-direction policy: a variable and a threshold
     that decide, at read time, which way the edge points. cx2 persists it. The
@@ -652,16 +652,15 @@ class TestTheDirectionPolicySurvivesARoundTrip(unittest.TestCase):
 
 
 class TestEveryShapeThePackageSupportsRoundTrips(unittest.TestCase):
-    """`FR-023` and `SC-007`: the named shapes, each named, in one place.
+    """The named shapes, each named, in one place.
 
     The fixtures of ``tests/_fixtures.py`` are the package's inventory of graph
     shapes, so the round trip is run over all of them rather than over a list
     that has to be kept in step by hand. A shape added to that inventory is
     covered here on the next run without an edit.
 
-    The two shapes cycle 003 added are named beside them: an edge that carries a
-    direction policy, and the boundary pair that `D6` names as what a caller
-    states instead of an asymmetric self-loop.
+    Two shapes are named beside them: an edge that carries a direction policy,
+    and the boundary pair a caller states instead of an asymmetric self-loop.
     """
 
     def setUp(self):
@@ -682,11 +681,11 @@ class TestEveryShapeThePackageSupportsRoundTrips(unittest.TestCase):
             with self.subTest(shape=name):
                 before = build_case(name)
                 after = self._round_trip(before, name)
-                self.assertEqual(set(after.nodes()), set(before.nodes()))
-                self.assertEqual(set(after.edges()), set(before.edges()))
+                self.assertEqual(set(after.N), set(before.N))
+                self.assertEqual(set(after.E), set(before.E))
                 self.assertEqual(after.S.shape, before.S.shape)
                 self.assertEqual(S.edge_policies(after), S.edge_policies(before))
-                for eid in before.edges():
+                for eid in list(before.E):
                     self.assertEqual(S.edge_sides(after, eid), S.edge_sides(before, eid), eid)
                     self.assertEqual(S.edge_ref(after, eid).kind, S.edge_ref(before, eid).kind)
                     self.assertEqual(

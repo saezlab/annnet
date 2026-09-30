@@ -33,15 +33,19 @@ except ModuleNotFoundError as e:
 from ._common import (
     _rows_like,
     _rows_to_df,
+    binary_ends,
     _attrs_to_dict,
     iter_edge_sides,
     _is_directed_eid,
     _serialize_value,
+    restore_entities,
     dataframe_to_rows,
+    edge_entity_record,
     endpoint_coeff_map,
     serialize_edge_layers,
     collect_slice_manifest,
     restore_slice_manifest,
+    update_edge_attributes,
     deserialize_edge_layers,
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
@@ -146,7 +150,7 @@ def _export_binary_graph(
             e_attrs_map[eid] = attrs
 
     # ADD NODES WITH CACHED ATTRIBUTES
-    for v in graph.nodes():
+    for v in list(graph.N):
         v_attr = v_attrs_map.get(v, {})
         G.add_node(v, **v_attr)
 
@@ -345,7 +349,7 @@ def to_nx(
                 u = next(iter(members))
                 manifest_edges[eid] = (u, u, 'regular')
             elif len(members) == 2:
-                u, v = sorted(members)
+                u, v = binary_ends(S, T, ref.directed)
                 manifest_edges[eid] = (u, v, 'regular')
             else:
                 eattr = edge_attrs.get(eid, {})
@@ -484,6 +488,7 @@ def to_nx(
         'edge_attrs': edge_attrs,
         'slice_weights': slice_weights,
         'edge_directed': edge_directed_dict,
+        'edge_entities': edge_entity_record(graph),
         'manifest_version': 1,
         'multilayer': serialize_multilayer_manifest(
             graph,
@@ -654,6 +659,8 @@ def from_nx(
             deserialize_edge_layers=deserialize_edge_layers,
         )
 
+    restore_entities(H, manifest.get('edge_entities'))
+
     # BATCH ATTRIBUTES — bulk reattach. Per-call set_*_attrs is O(N) and
     # also leads to incremental schema drift (a column inferred as String
     # from the first incoming row may then reject Int64 values from a
@@ -662,12 +669,12 @@ def from_nx(
         if node_attrs_cache:
             v_updates = {vid: a for vid, a in node_attrs_cache.items() if a}
             if v_updates:
-                H.attrs.set_node_attrs_bulk(v_updates)
+                H.attrs.update('nodes', v_updates)
 
         if edge_attrs_cache:
             e_updates = {eid: a for eid, a in edge_attrs_cache.items() if a}
             if e_updates:
-                H.attrs.set_edge_attrs_bulk(e_updates)
+                update_edge_attributes(H, e_updates)
 
     if hyperedge == 'reified':
         with _time('reified', timings):
@@ -968,10 +975,10 @@ def _from_nx_without_manifest(
     if hyperedges_bulk:
         H.add_hyperedges_bulk(hyperedges_bulk)
     if node_attrs_buf:
-        H.attrs.set_node_attrs_bulk(node_attrs_buf)
+        H.attrs.update('nodes', node_attrs_buf)
     if edge_attrs_buf or hyperedge_attrs_buf:
         merged_edge_attrs = {**edge_attrs_buf, **hyperedge_attrs_buf}
-        H.attrs.set_edge_attrs_bulk(merged_edge_attrs)
+        H.attrs.update('edges', merged_edge_attrs)
 
     return H
 

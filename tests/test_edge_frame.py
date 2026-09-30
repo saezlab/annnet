@@ -41,49 +41,49 @@ class TestDerivedIds:
         """The whole point. A positional id fails this."""
         first = an.from_edge_frame(ROWS, sign='effect', slice='prior')
         second = an.from_edge_frame(list(reversed(ROWS)), sign='effect', slice='prior')
-        assert sorted(first.edges()) == sorted(second.edges())
+        assert sorted(first.E) == sorted(second.E)
 
     def test_the_prefix_is_readable_in_the_id(self, G):
-        assert all(edge_id.startswith('e:') for edge_id in G.edges())
+        assert all(edge_id.startswith('e:') for edge_id in list(G.E))
 
     def test_a_prefix_can_be_named(self):
         graph = an.from_edge_frame(ROWS, sign='effect', id_prefix='prior')
-        assert all(edge_id.startswith('prior:') for edge_id in graph.edges())
+        assert all(edge_id.startswith('prior:') for edge_id in list(graph.E))
 
     def test_an_id_column_is_used_when_given(self):
         rows = [{'source': 'A', 'target': 'B', 'eid': 'mine'}]
         graph = an.from_edge_frame(rows, edge_id='eid')
-        assert list(graph.edges()) == ['mine']
+        assert list(graph.E) == ['mine']
 
     def test_the_returned_ids_are_in_row_order(self, G):
         ids = an.add_edges_from_frame(
             G, [{'source': 'X', 'target': 'Y'}, {'source': 'Y', 'target': 'Z'}]
         )
         assert len(ids) == 2
-        assert G.get_edge(ids[0]).source_id == 'X'
-        assert G.get_edge(ids[1]).source_id == 'Y'
+        assert G.E.at(ids[0]).source_id == 'X'
+        assert G.E.at(ids[1]).source_id == 'Y'
 
 
 class TestWhatLands:
     def test_the_edges_are_there(self, G):
-        assert len(list(G.edges())) == 2
+        assert len(list(G.E)) == 2
 
     def test_the_slice_answers_which_edges_came_from_the_table(self, G):
         """The side list this replaces existed only because nothing else could."""
-        assert G.slices.edges('prior') == set(G.edges())
+        assert G.slices.edges('prior') == set(G.E)
 
     def test_the_sign_column_lands_under_the_reserved_name(self, G):
-        signs = {G.attrs.get_edge_attrs(e).get('sign') for e in G.edges()}
+        signs = {dict(G.attrs.row('edges', e)).get('sign') for e in list(G.E)}
         assert signs == {1, -1}
 
     def test_other_columns_are_carried(self, G):
-        one = next(iter(G.edges()))
-        assert G.attrs.get_edge_attrs(one)['resource'] == 'demo'
+        one = next(iter(list(G.E)))
+        assert dict(G.attrs.row('edges', one))['resource'] == 'demo'
 
     def test_attrs_restricts_what_is_carried(self):
         graph = an.from_edge_frame(ROWS, sign='effect', attrs=[])
-        one = next(iter(graph.edges()))
-        assert 'resource' not in graph.attrs.get_edge_attrs(one)
+        one = next(iter(list(graph.E)))
+        assert 'resource' not in dict(graph.attrs.row('edges', one))
 
     def test_a_missing_column_raises(self):
         with pytest.raises(KeyError, match='is not a column'):
@@ -109,10 +109,10 @@ class TestConflictPolicy:
             an.add_edges_from_frame(G, ROWS, sign='effect', slice='prior')
 
     def test_nothing_lands_on_a_refusal(self, G):
-        before = sorted(G.edges())
+        before = sorted(G.E)
         with pytest.raises(EdgeIdConflict):
             an.add_edges_from_frame(G, ROWS, sign='effect', slice='prior')
-        assert sorted(G.edges()) == before
+        assert sorted(G.E) == before
 
     def test_the_refusal_names_the_ids_and_the_way_out(self, G):
         with pytest.raises(EdgeIdConflict) as caught:
@@ -126,19 +126,19 @@ class TestConflictPolicy:
         assert issubclass(EdgeIdConflict, ValueError)
 
     def test_skip_keeps_what_the_graph_has(self, G):
-        before = sorted(G.edges())
+        before = sorted(G.E)
         an.add_edges_from_frame(G, ROWS, sign='effect', slice='prior', on_conflict='skip')
-        assert sorted(G.edges()) == before
+        assert sorted(G.E) == before
 
     def test_replace_keeps_what_the_batch_brings(self, G):
-        before = sorted(G.edges())
+        before = sorted(G.E)
         an.add_edges_from_frame(G, ROWS, sign='effect', slice='prior', on_conflict='replace')
-        assert sorted(G.edges()) == before
+        assert sorted(G.E) == before
 
     def test_rename_keeps_both(self, G):
-        before = set(G.edges())
+        before = set(G.E)
         ids = an.add_edges_from_frame(G, ROWS, sign='effect', slice='prior', on_conflict='rename')
-        assert set(G.edges()) > before
+        assert set(G.E) > before
         assert all(edge_id.endswith('~2') for edge_id in ids)
 
     def test_rename_tells_the_caller_the_new_ids(self, G):

@@ -91,7 +91,7 @@ def _edge_weight(graph: AnnNet, edge_id: str) -> float:
 
 
 def _endpoint_coeff(graph: AnnNet, edge_id: str, key: str, endpoint) -> float:
-    coeff_map = graph.attrs.get_attr_edge(edge_id, key) or {}
+    coeff_map = graph.attrs.row('edges', edge_id).get(key) or {}
     return float(coeff_map.get(endpoint, {}).get('__value', 1.0))
 
 

@@ -87,7 +87,7 @@ def resolve_conflicts(
     EdgeIdConflict
         Under ``"error"``, when any id is taken. Nothing is written.
     """
-    held = {str(existing) for existing in graph.edges()}
+    held = {str(existing) for existing in graph.E}
     clashing = [spec['edge_id'] for spec in specs if spec['edge_id'] in held]
     if not clashing:
         return specs

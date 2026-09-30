@@ -10,10 +10,13 @@ from __future__ import annotations
 
 from ..core import _structure
 from ..core._structure import (
+    binary_ends,
     _iter_node_ids,
     iter_edge_sides,
     _is_directed_eid,
+    edge_entity_record,
 )
+from .._support.entities import restore_entities, update_edge_attributes
 from .._support.graph_records import (
     _rows_like,
     _rows_to_df,
@@ -47,7 +50,11 @@ STORED_EDGE_KIND = {
 
 __all__ = [
     'STORED_EDGE_KIND',
+    'binary_ends',
     'dataframe_to_rows',
+    'edge_entity_record',
+    'restore_entities',
+    'update_edge_attributes',
     'empty_dataframe',
     '_attrs_to_dict',
     '_is_directed_eid',

@@ -117,7 +117,10 @@ def write_back(
             within=within,
             called=f'into={into!r}',
         )
-        found = [graph.layers.attrs(coordinate).get(key, missing) for coordinate in coordinates]
+        found = [
+            dict(graph.attrs.row('layers', coordinate)).get(key, missing)
+            for coordinate in coordinates
+        ]
         values = np.asarray(found)
         adata.obs[target] = values
         return values

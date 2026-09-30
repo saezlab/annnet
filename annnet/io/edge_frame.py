@@ -10,7 +10,7 @@ comparison could name the edges again::
     for index, (source, effect, target) in enumerate(rows):
         edge_id = f'prior_{index:02d}'
         G.add_edges(source, target, edge_id=edge_id, slice='prior')
-        G.attrs.set_edge_attrs(edge_id, interaction=effect)
+        G.attrs.update('edges', {edge_id: {'interaction': effect}})
         prior_edge_ids.append(edge_id)
 
 Two of those are defects rather than verbosity. A **positional id** means
@@ -245,10 +245,10 @@ def from_edge_frame(
         graph.layers.set_aspects(aspects)
     add_edges_from_frame(graph, frame, directed=directed, **kwargs)
     if node_attrs:
-        graph.attrs.set_node_attrs_bulk(node_attrs)
+        graph.attrs.update('nodes', node_attrs)
     # A table has no uri to hash, so what is recorded is that one was read and
     # how many rows it had — which is what tells two runs apart.
     graph.provenance.record(
-        'edge frame', format='table', reader='from_edge_frame', rows=len(graph.edges())
+        'edge frame', format='table', reader='from_edge_frame', rows=len(list(graph.E))
     )
     return graph

@@ -101,8 +101,21 @@ RESERVED = set(
 )
 
 
+def _is_blank(cell: Any) -> bool:
+    """Whether a cell holds nothing: ``None``, a float NaN, or pandas' missing value.
+
+    A spreadsheet reader hands back an empty cell as NaN, and ``str(nan)`` is a
+    perfectly good slice name or edge id to a parser that does not ask.
+    """
+    if cell is None:
+        return True
+    if isinstance(cell, (float, np.floating)):
+        return bool(cell != cell)
+    return type(cell).__name__ == 'NAType'
+
+
 def _norm(s: Any) -> str:
-    if s is None:
+    if _is_blank(s):
         return ''
     if isinstance(s, (int, float)) and not isinstance(s, bool):
         return str(s)
@@ -125,7 +138,7 @@ def _truthy(x: Any) -> bool | None:
 
 
 def _split_slices(cell: Any) -> list[str]:
-    if cell is None:
+    if _is_blank(cell):
         return []
     if isinstance(cell, str):
         cell = cell.strip()
@@ -150,7 +163,7 @@ def _split_slices(cell: Any) -> list[str]:
 
 
 def _split_set(cell: Any) -> set[str]:
-    if cell is None:
+    if _is_blank(cell):
         return set()
     if isinstance(cell, str):
         s = cell.strip()
@@ -415,7 +428,11 @@ def edges_to_csv(G: AnnNet, path: str | Path, slice: str | None = None) -> None:
     - This format is compatible with ``from_csv(schema="edge_list")``.
 
     """
-    df = G.views.edges(slice=slice) if slice is not None else G.views.edges()
+    df = (
+        G.attrs.table('edges', derived=True, slice=slice)
+        if slice is not None
+        else G.attrs.table('edges', derived=True)
+    )
 
     cols = {c.lower(): c for c in _columns(df)}
     rows = _rows(df)
@@ -494,7 +511,11 @@ def hyperedges_to_csv(G, path, slice=None, directed=None):
     - If the graph does not expose hyperedge columns, a ``ValueError`` is raised.
 
     """
-    df = G.views.edges(slice=slice) if slice is not None else G.views.edges()
+    df = (
+        G.attrs.table('edges', derived=True, slice=slice)
+        if slice is not None
+        else G.attrs.table('edges', derived=True)
+    )
 
     cols = {c.lower(): c for c in _columns(df)}
     rows = _rows(df)
@@ -640,6 +661,10 @@ def _ingest_edge_list(
     unique_nodes: set = set()
     edge_rows: list = []
     slice_weight_overrides: dict = {}  # {slice_id: {(u, v, slice_id): weight}}
+    # An edge that names its own id is one edge whatever number of slices it is
+    # in: the first slice goes in with the edge, the others are attached after.
+    extra_slices: list = []  # [(edge_id, slice_id)]
+    named_overrides: list = []  # [(edge_id, slice_id, weight)]
 
     for row in _rows(df):
         u = _norm(row[src])
@@ -660,11 +685,33 @@ def _ingest_edge_list(
         )
 
         pure_attrs = {k: row[k] for k in attrs_cols if row[k] is not None}
+        edge_id = _norm(row[ecol]) if ecol and row[ecol] is not None else ''
 
         unique_nodes.add(u)
         unique_nodes.add(v)
 
-        if not slices:
+        if edge_id:
+            edge_rows.append(
+                {
+                    'source': u,
+                    'target': v,
+                    'edge_id': edge_id,
+                    'edge_directed': directed,
+                    'weight': w,
+                    'slice': slices[0] if slices else default_slice,
+                    'attributes': pure_attrs,
+                }
+            )
+            for L in slices:
+                if L != slices[0]:
+                    extra_slices.append((edge_id, L))
+                for col_name, suffix in weight_slice_cols:
+                    if suffix == L and row[col_name] is not None:
+                        try:
+                            named_overrides.append((edge_id, L, float(row[col_name])))
+                        except (TypeError, ValueError):
+                            pass
+        elif not slices:
             edge_rows.append(
                 {
                     'source': u,
@@ -704,6 +751,16 @@ def _ingest_edge_list(
     else:
         added_eids = []
 
+    for edge_id, L in extra_slices:
+        if not G.slices.exists(L):
+            G.slices.add(L)
+        G.slices.attach_edges(L, [edge_id])
+    if named_overrides:
+        G.attrs.update(
+            'edge_slices',
+            {(L, edge_id): {'weight': w_val} for edge_id, L, w_val in named_overrides},
+        )
+
     # Bulk-attach per-slice weight overrides if any were collected.
     if slice_weight_overrides and added_eids:
         # Map (u, v, slice) -> eid for the rows we just added.
@@ -719,7 +776,10 @@ def _ingest_edge_list(
                     attrs_for_slice[eid] = {'weight': w_val}
             if attrs_for_slice:
                 try:
-                    G.attrs.set_edge_slice_attrs_bulk(L, attrs_for_slice)
+                    G.attrs.update(
+                        'edge_slices',
+                        {(L, eid): attrs for eid, attrs in dict(attrs_for_slice).items()},
+                    )
                 except (KeyError, TypeError, ValueError):
                     pass
 
@@ -814,7 +874,7 @@ def _ingest_hyperedge(
                 if 0 <= spec_idx < len(added_eids):
                     attrs_to_apply[added_eids[spec_idx]] = pa
             if attrs_to_apply:
-                G.attrs.set_edge_attrs_bulk(attrs_to_apply)
+                G.attrs.update('edges', attrs_to_apply)
 
 
 def _ingest_incidence(
@@ -1042,7 +1102,7 @@ def _ingest_lil(
                 if 0 <= idx < len(added_eids):
                     attrs_to_apply[added_eids[idx]] = pa
             if attrs_to_apply:
-                G.attrs.set_edge_attrs_bulk(attrs_to_apply)
+                G.attrs.update('edges', attrs_to_apply)
 
 
 # Symmetric writers. The rows are the schema ``from_csv`` auto-detects, so a
@@ -1050,7 +1110,11 @@ def _ingest_lil(
 
 
 def _tabular_rows(graph: AnnNet) -> list[dict[str, Any]]:
-    """One row per binary edge, with attributes and slice membership inline."""
+    """One row per two-endpoint edge, with attributes and slice membership inline.
+
+    An edge that joins an edge entity to a node is a row like any other; that the
+    entity is one is recorded in the sidecar.
+    """
     edge_attrs = graph._attr_store.edge_attr_rows()
     membership: dict[str, list[str]] = {}
     for sid in graph.slices.list(include_default=False):
@@ -1059,7 +1123,7 @@ def _tabular_rows(graph: AnnNet) -> list[dict[str, Any]]:
 
     rows = []
     for eid, ref, sides in iter_edge_sides(graph):
-        if ref.kind != 'binary':
+        if ref.kind not in ('binary', 'node_edge'):
             continue
         source = next(iter(sides.source), None)
         target = next(iter(sides.target), None)

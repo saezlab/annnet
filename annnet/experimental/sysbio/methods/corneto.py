@@ -136,7 +136,9 @@ def pkn(
 
     out = cn.Graph()
     unsigned = []
-    for row in dataframe_to_rows(graph.views.edges(in_slice=slice, include_hyper=False)):
+    for row in dataframe_to_rows(
+        graph.attrs.table('edges', derived=True, in_slice=slice, include_hyper=False)
+    ):
         sign = row.get('sign')
         if sign is None:
             unsigned.append(row['edge_id'])
@@ -160,7 +162,7 @@ def _per_condition(graph, coordinate, key, top=None) -> dict:
     """The node-layer attribute ``key`` reads on one layer, as ``{node: ±1}``."""
     resolver = graph.layers.values()
     found = {}
-    for node_id in graph.nodes():
+    for node_id in list(graph.N):
         value = resolver.get(node_id, coordinate, key, None)
         if value is None or (isinstance(value, float) and np.isnan(value)):
             continue
@@ -300,7 +302,7 @@ def run(
         slice_name = f'{into_slice}__{name}'
         graph.slices.add(slice_name, edges=sorted(selected), role='fitted', condition=name)
         for edge_id, signal in selected.items():
-            graph.attrs.set_edge_slice_attrs(slice_name, edge_id, **{key: signal})
+            graph.attrs.update('edge_slices', {(slice_name, edge_id): {key: signal}})
 
         result.conditions.append(name)
         result.slices.append(slice_name)

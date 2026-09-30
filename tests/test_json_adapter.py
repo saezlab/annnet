@@ -52,11 +52,11 @@ class TestJSONAdapter:
 
     def test_public_only_filter(self, complex_graph, tmpdir_fixture):
         G = complex_graph
-        G.attrs.set_node_attrs('A', __internal_flag='hidden')
-        G.attrs.set_edge_attrs('e1', __internal='private')
+        G.attrs.update('nodes', {'A': {'__internal_flag': 'hidden'}})
+        G.attrs.update('edges', {'e1': {'__internal': 'private'}})
         to_json(G, tmpdir_fixture / 'graph.json', public_only=True)
         G2 = from_json(tmpdir_fixture / 'graph.json')
-        attrs_a = G2.attrs.get_node_attrs('A') or {}
+        attrs_a = dict(G2.attrs.row('nodes', 'A')) or {}
         assert '__secret' not in attrs_a
 
     def test_from_json_multilayer_scales(self, tmpdir_fixture):
@@ -94,7 +94,7 @@ class TestJSONAdapter:
         H = from_json(path)
         elapsed = time.perf_counter() - t0
 
-        assert H.ecount() == E
+        assert len(H.E) == E
         assert H.nv_supra == G.nv_supra
         assert elapsed < 60.0, f'from_json multilayer took {elapsed:.1f}s; expected <60s'
 

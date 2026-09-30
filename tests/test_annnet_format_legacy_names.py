@@ -38,7 +38,7 @@ def a_graph() -> AnnNet:
     graph.add_nodes(['A', 'B', 'C'], kind='gene')
     graph.add_edges('A', 'B', edge_id='e0', weight=1.5)
     graph.add_edges('B', 'C', edge_id='e1', weight=2.0)
-    graph.attrs.set_node_attrs('A', symbol='TP53')
+    graph.attrs.update('nodes', {'A': {'symbol': 'TP53'}})
     graph.slices.add('left')
     graph.slices.add_edges('left', ['e0'])
     return graph
@@ -89,18 +89,18 @@ def test_the_structure_comes_back(legacy_archive):
     graph = annnet_format.read(legacy_archive)
     assert set(graph.N) == {'A', 'B', 'C'}
     assert set(graph.E) == {'e0', 'e1'}
-    assert graph.get_edge('e0').weight == 1.5
+    assert graph.E.at('e0').weight == 1.5
 
 
 def test_every_entity_is_a_node_again(legacy_archive):
     graph = annnet_format.read(legacy_archive)
-    assert set(graph.views.entity_kinds().values()) == {'node'}
+    assert set(graph.entity_kinds().values()) == {'node'}
 
 
 def test_the_node_attributes_come_back(legacy_archive):
     graph = annnet_format.read(legacy_archive)
-    assert graph.attrs.get_attr_node('A', 'symbol') == 'TP53'
-    assert graph.attrs.get_attr_node('B', 'kind') == 'gene'
+    assert graph.attrs.row('nodes', 'A').get('symbol') == 'TP53'
+    assert graph.attrs.row('nodes', 'B').get('kind') == 'gene'
 
 
 def test_the_slices_come_back(legacy_archive):
@@ -114,12 +114,12 @@ def test_a_multilayer_archive_comes_back(tmp_path):
     graph.add_nodes('A', layer=('treat',))
     graph.add_nodes('B', layer=('ctrl',))
     graph.add_edges(('A', ('ctrl',)), ('B', ('ctrl',)), edge_id='e0')
-    graph.layers.set_node_attrs('A', ('ctrl',), state='baseline')
+    graph.attrs.update('node_layers', {('A', ('ctrl',)): {'state': 'baseline'}})
 
     read_back = annnet_format.read(written_in_the_old_words(graph, tmp_path))
     assert set(read_back.N) == {'A', 'B'}
     assert read_back.nv_supra == 3
-    assert read_back.layers.node_attrs('A', ('ctrl',)) == {'state': 'baseline'}
+    assert dict(read_back.attrs.row('node_layers', ('A', ('ctrl',)))) == {'state': 'baseline'}
 
 
 def test_the_writer_emits_the_new_words_only(tmp_path):

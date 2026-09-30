@@ -22,15 +22,19 @@ from typing import TYPE_CHECKING, Any
 from ._common import (
     _rows_like,
     _rows_to_df,
+    binary_ends,
     _attrs_to_dict,
     iter_edge_sides,
     _is_directed_eid,
     _serialize_value,
+    restore_entities,
     dataframe_to_rows,
+    edge_entity_record,
     endpoint_coeff_map,
     serialize_edge_layers,
     collect_slice_manifest,
     restore_slice_manifest,
+    update_edge_attributes,
     deserialize_edge_layers,
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
@@ -98,7 +102,7 @@ def _export_binary_graph(
 
     # Build the node universe robustly
     # Start with declared nodes
-    base_nodes = set(graph.nodes())
+    base_nodes = set(graph.N)
     if slice_node_set is not None:
         base_nodes &= slice_node_set
 
@@ -335,7 +339,7 @@ def to_igraph(
                 if not public_only or not str(k).startswith('__')
             }
         )
-        for v in graph.nodes()
+        for v in list(graph.N)
     }
 
     _raw_edge_attrs = {
@@ -372,7 +376,7 @@ def to_igraph(
                 u = next(iter(members))
                 manifest_edges[eid] = (u, u, 'regular')
             elif len(members) == 2:
-                u, v = sorted(members)
+                u, v = binary_ends(S, T, ref.directed)
                 manifest_edges[eid] = (u, v, 'regular')
             else:
                 head_map = endpoint_coeff_map(eattr, '__source_attr', S)
@@ -501,6 +505,7 @@ def to_igraph(
         'edge_attrs': edge_attrs,
         'slice_weights': slice_weights,
         'edge_directed': edge_directed_dict,
+        'edge_entities': edge_entity_record(graph),
         'manifest_version': 1,
         'multilayer': serialize_multilayer_manifest(
             graph,
@@ -709,28 +714,41 @@ def from_igraph(
 
         return out
 
+    # Declare aspects up front so multilayer supra-node coordinates resolve while
+    # edges and hyperedges are added below. The full multilayer state (presence,
+    # attrs, edge layers) is restored from the same manifest afterwards.
+    _mm = manifest.get('multilayer', {}) or {}
+    _asp = _mm.get('aspects')
+    if _asp and tuple(H.aspects) != tuple(_asp):
+        H.layers.set_aspects(list(_asp), _mm.get('elem_layers') or None)
+
     # -------- nodes (from manifest = SSOT) --------
-    # Collect all node IDs referenced by manifest (attrs + edges)
+    # Collect all node IDs referenced by manifest (attrs + edges). A multilayer
+    # endpoint is a (vid, layer_coord) supra-node key, but the node entity is
+    # keyed by the bare vid; its placement comes back with the multilayer state.
+    def _bare(x):
+        return x[0] if isinstance(x, tuple) else x
+
     node_ids = set()
 
     for vid in (manifest.get('node_attrs', {}) or {}).keys():
-        node_ids.add(vid)
+        node_ids.add(_bare(vid))
 
     edges_def = manifest.get('edges', {}) or {}
     for _eid, defn in edges_def.items():
         kind = defn[-1]
         if kind == 'regular':
             u, v = defn[0], defn[1]
-            node_ids.add(u)
-            node_ids.add(v)
+            node_ids.add(_bare(u))
+            node_ids.add(_bare(v))
         elif kind == 'hyper':
             head_map, tail_map = defn[0], defn[1]
             if isinstance(head_map, dict):
                 for u in head_map.keys():
-                    node_ids.add(u)
+                    node_ids.add(_bare(u))
             if isinstance(tail_map, dict):
                 for v in tail_map.keys():
-                    node_ids.add(v)
+                    node_ids.add(_bare(v))
 
     # Add nodes now (no he:: nodes will be included since they aren't in the manifest)
     if node_ids:
@@ -759,10 +777,16 @@ def from_igraph(
             head_map, tail_map = defn[0], defn[1]
             if isinstance(head_map, dict) and isinstance(tail_map, dict):
                 head, tail = list(head_map), list(tail_map)
-                attrs = {
-                    '__source_attr': {u: {'__value': float(c)} for u, c in head_map.items()},
-                    '__target_attr': {v: {'__value': float(c)} for v, c in tail_map.items()},
-                }
+                # Coefficient maps are stored only when they carry a real
+                # (non-unit) coefficient; a unit map is what the edge already has.
+                attrs = {}
+                if any(c != 1.0 for c in head_map.values()) or any(
+                    c != 1.0 for c in tail_map.values()
+                ):
+                    attrs = {
+                        '__source_attr': {u: {'__value': float(c)} for u, c in head_map.items()},
+                        '__target_attr': {v: {'__value': float(c)} for v, c in tail_map.items()},
+                    }
                 if is_dir:
                     hyperedges_bulk.append(
                         {
@@ -805,18 +829,20 @@ def from_igraph(
         deserialize_edge_layers=deserialize_edge_layers,
     )
 
+    restore_entities(H, manifest.get('edge_entities'))
+
     # -------- restore node/edge attrs (bulk, not per-element) --------
     node_attrs_cache = manifest.get('node_attrs', {}) or {}
     if node_attrs_cache:
         v_updates = {vid: a for vid, a in node_attrs_cache.items() if a}
         if v_updates:
-            H.attrs.set_node_attrs_bulk(v_updates)
+            H.attrs.update('nodes', v_updates)
 
     edge_attrs_cache = manifest.get('edge_attrs', {}) or {}
     if edge_attrs_cache:
         e_updates = {eid: a for eid, a in edge_attrs_cache.items() if a}
         if e_updates:
-            H.attrs.set_edge_attrs_bulk(e_updates)
+            update_edge_attributes(H, e_updates)
 
     # -------- OPTIONAL: pull in reified HEs from igG not present in manifest --------
     if hyperedge == 'reified':
@@ -832,23 +858,35 @@ def from_igraph(
 
             if directed:
                 H.add_edges(src=list(head_map), tgt=list(tail_map), edge_id=eid, directed=True)
-                H.attrs.set_edge_attrs(
-                    eid,
-                    __source_attr={u: {'__value': c} for u, c in head_map.items()},
-                    __target_attr={v: {'__value': c} for v, c in tail_map.items()},
+                H.attrs.update(
+                    'edges',
+                    {
+                        eid: {
+                            '__source_attr': {u: {'__value': c} for u, c in head_map.items()},
+                            '__target_attr': {v: {'__value': c} for v, c in tail_map.items()},
+                        }
+                    },
                 )
             else:
                 members = list(set(head_map) | set(tail_map))
                 H.add_edges(src=members, edge_id=eid, directed=False)
-                H.attrs.set_edge_attrs(
-                    eid,
-                    __source_attr={u: {'__value': head_map.get(u, 1.0)} for u in members},
-                    __target_attr={v: {'__value': tail_map.get(v, 1.0)} for v in members},
+                H.attrs.update(
+                    'edges',
+                    {
+                        eid: {
+                            '__source_attr': {
+                                u: {'__value': head_map.get(u, 1.0)} for u in members
+                            },
+                            '__target_attr': {
+                                v: {'__value': tail_map.get(v, 1.0)} for v in members
+                            },
+                        }
+                    },
                 )
 
             # copy HE-node attrs minus markers
             if he_attrs:
-                H.attrs.set_edge_attrs(eid, **he_attrs)
+                H.attrs.update('edges', {eid: dict(he_attrs)})
 
     return H
 
@@ -1006,8 +1044,8 @@ def _from_ig_without_manifest(
     if hyperedges_bulk:
         H.add_hyperedges_bulk(hyperedges_bulk)
     if node_attrs_buf:
-        H.attrs.set_node_attrs_bulk(node_attrs_buf)
+        H.attrs.update('nodes', node_attrs_buf)
     if edge_attrs_buf or hyperedge_attrs_buf:
-        H.attrs.set_edge_attrs_bulk({**edge_attrs_buf, **hyperedge_attrs_buf})
+        H.attrs.update('edges', {**edge_attrs_buf, **hyperedge_attrs_buf})
 
     return H

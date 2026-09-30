@@ -36,6 +36,9 @@ import warnings
 
 from ...core import _structure as S
 from .contextual import contextual_payload, restore_contextual
+from ..._support.loss import AnnNetLossWarning
+from ...core._structure import edge_entity_record
+from ..._support.entities import restore_entities
 
 SIDECAR_SUFFIX = '.annnet-sidecar'
 SIDECAR_SCHEMA = 'annnet-sidecar/1'
@@ -66,6 +69,9 @@ CAPABILITIES = (
 # capability and comparing, not assumed from the format's reputation.
 FORMAT_CAPABILITIES: dict[str, frozenset[str]] = {
     'annnet': frozenset(CAPABILITIES),
+    # These three keep a record of their own inside the file (the CX2 manifest,
+    # the JSON extensions, the Parquet manifest), which holds the edge entities
+    # among the rest.
     'cx2': frozenset(CAPABILITIES),
     'json': frozenset(CAPABILITIES),
     'parquet': frozenset(CAPABILITIES),
@@ -111,10 +117,6 @@ FORMAT_CAPABILITIES['sbml'] = frozenset(
 
 class SidecarIntegrityError(ValueError):
     """A sidecar does not match the file it was written beside."""
-
-
-class AnnNetLossWarning(UserWarning):
-    """A format could not hold part of a graph."""
 
 
 def sidecar_path(primary: str | Path) -> Path:
@@ -289,16 +291,25 @@ def _payload(graph, lost) -> dict[str, Any]:
             if sid != graph._default_slice
         }
     if 'hyperedges' in lost:
+        rows = graph._attr_store.edge_attr_rows(
+            [d.id for d in S.definitions_of(graph)[1] if d.kind == S.HYPER]
+        )
         payload['hyperedges'] = [
             {
                 'id': definition.id,
                 'head': sorted(str(v) for v in definition.source),
                 'tail': sorted(str(v) for v in definition.target),
                 'weight': definition.weight,
+                'directed': definition.directed,
+                'attributes': {
+                    k: v for k, v in rows.get(definition.id, {}).items() if v is not None
+                },
             }
             for definition in S.definitions_of(graph)[1]
             if definition.kind == S.HYPER
         ]
+    if 'edge_entities' in lost:
+        payload['edge_entities'] = edge_entity_record(graph)
     if 'nodes' in lost:
         payload['nodes'] = [
             {'id': ref.id, 'layer': list(ref.layer)}
@@ -323,6 +334,8 @@ def _restore(graph, payload: dict[str, Any], holds: set[str]) -> None:
         if not S.has_entity_id(graph, record['id']):
             layer = tuple(record['layer'])
             graph.add_nodes([record['id']], layer=None if layer == ('_',) else layer)
+    _restore_hyperedges(graph, payload.get('hyperedges') or ())
+    restore_entities(graph, payload.get('edge_entities'))
     if 'contextual' in payload:
         restore_contextual(graph, payload['contextual'])
     if 'graph_attributes' in payload:
@@ -335,11 +348,49 @@ def _restore(graph, payload: dict[str, Any], holds: set[str]) -> None:
     for node_id, attrs in (payload.get('node_attributes') or {}).items():
         clean = {k: v for k, v in attrs.items() if v is not None and k != 'node_id'}
         if clean and S.has_entity_id(graph, node_id):
-            graph.attrs.set_node_attrs(node_id, **clean)
+            graph.attrs.update('nodes', {node_id: dict(clean)})
     for edge_id, attrs in (payload.get('edge_attributes') or {}).items():
         clean = {k: v for k, v in attrs.items() if v is not None and k != 'edge_id'}
         if clean and S.has_edge(graph, edge_id):
-            graph.attrs.set_edge_attrs(edge_id, **clean)
+            graph.attrs.update('edges', {edge_id: dict(clean)})
+
+
+def _restore_hyperedges(graph, records) -> None:
+    """Add back the hyperedges a format could not hold.
+
+    A member is recorded by id, so a hyperedge whose members are not all entities
+    of the graph (a multilayer member is a placement, not an id) cannot be placed
+    and is reported instead of being guessed at.
+    """
+    unplaced = []
+    for record in records:
+        if S.has_edge(graph, record['id']):
+            continue
+        head, tail = record['head'], record['tail']
+        if not all(S.has_entity_id(graph, member) for member in (*head, *tail)):
+            unplaced.append(record['id'])
+            continue
+        directed = record.get('directed')
+        if tail:
+            graph.add_edges(
+                head, tail, edge_id=record['id'], weight=record['weight'], directed=True
+            )
+        else:
+            graph.add_edges(
+                head,
+                edge_id=record['id'],
+                weight=record['weight'],
+                directed=False if directed is None else directed,
+            )
+        attributes = record.get('attributes') or {}
+        if attributes:
+            graph.attrs.update('edges', {record['id']: dict(attributes)})
+    if unplaced:
+        warnings.warn(
+            f'hyperedges whose members are not plain node ids were left out: {unplaced!r}',
+            AnnNetLossWarning,
+            stacklevel=3,
+        )
 
 
 # ---------------------------------------------------------------------------

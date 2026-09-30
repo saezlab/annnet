@@ -43,8 +43,8 @@ class TestCrossAdapter:
 
         graphs = [G_json, G_parquet, G_sif, G_graphml]
         for i, G_test in enumerate(graphs):
-            assert set(G.nodes()) == set(G_test.nodes()), f'Adapter {i} nodes differ'
-            assert G.ne == G_test.ne, f'Adapter {i} edge count differs'
+            assert set(G.N) == set(G_test.N), f'Adapter {i} nodes differ'
+            assert len(G.E) == len(G_test.E), f'Adapter {i} edge count differs'
             assert set(G.hyperedge_definitions.keys()) == set(
                 G_test.hyperedge_definitions.keys()
             ), f'Adapter {i} hyperedges differ'
@@ -73,7 +73,7 @@ class TestCrossAdapter:
             directed=None,
         )
 
-        assert set(G.nodes()) == set(G_parquet.nodes())
-        assert set(G.nodes()) == set(G_csv.nodes())
-        assert G.ne == G_parquet.ne
-        assert G.ne == G_csv.ne
+        assert set(G.N) == set(G_parquet.N)
+        assert set(G.N) == set(G_csv.N)
+        assert len(G.E) == len(G_parquet.E)
+        assert len(G.E) == len(G_csv.E)

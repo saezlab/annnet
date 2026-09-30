@@ -31,7 +31,9 @@ from ._shared.common import (
     serialize_multilayer_manifest,
 )
 from ._shared.sidecar import restores, preserves, read_sidecar, apply_sidecar
+from ..core._structure import binary_ends, edge_entity_record
 from ._shared.importing import delivers
+from .._support.entities import restore_entities
 from ._shared.contextual import contextual_payload, restore_contextual
 
 if TYPE_CHECKING:
@@ -81,7 +83,7 @@ def to_json(
 
     # nodes
     nodes = []
-    for v in graph.nodes():
+    for v in list(graph.N):
         row = {'id': v}
         row.update(node_attrs.get(v, {}))
         nodes.append(row)
@@ -128,12 +130,7 @@ def to_json(
             )
         else:
             # regular/binary
-            members = S | T
-            if len(members) == 1:
-                u = next(iter(members))
-                v = u
-            else:
-                u, v = sorted(members)
+            u, v = binary_ends(S, T, directed)
             edges.append(
                 {
                     'id': eid,
@@ -207,6 +204,7 @@ def to_json(
         'x-extensions': {
             'uns': graph_meta,
             'contextual': contextual_payload(graph),
+            'edge_entities': edge_entity_record(graph),
             'slices': slices,
             'edge_slices': edge_slices,
             'hyperedges': [
@@ -323,7 +321,7 @@ def _graph_from_document(doc: dict) -> AnnNet:
     if edge_dicts:
         H._add_edges_bulk(edge_dicts)
     if edge_attrs_pending:
-        H.attrs.set_edge_attrs_bulk(edge_attrs_pending)
+        H.attrs.update('edges', edge_attrs_pending)
 
     # hyperedges — bulk insert
     hyper_dicts = []
@@ -350,8 +348,9 @@ def _graph_from_document(doc: dict) -> AnnNet:
     if hyper_dicts:
         H.add_hyperedges_bulk(hyper_dicts)
     if hyper_attrs_pending:
-        H.attrs.set_edge_attrs_bulk(hyper_attrs_pending)
+        H.attrs.update('edges', hyper_attrs_pending)
 
+    restore_entities(H, ext.get('edge_entities'))
     restore_contextual(H, ext.get('contextual') or {})
 
     # slices + edge_slices — bulk
@@ -389,7 +388,7 @@ def _graph_from_document(doc: dict) -> AnnNet:
         if lid in known_slices and eid in known_edges:
             weights_by_slice.setdefault(lid, {})[eid] = {'weight': w}
     for lid, mp in weights_by_slice.items():
-        H.attrs.set_edge_slice_attrs_bulk(lid, mp)
+        H.attrs.update('edge_slices', {(lid, eid): attrs for eid, attrs in dict(mp).items()})
 
     restore_multilayer_manifest(
         H,
@@ -398,7 +397,7 @@ def _graph_from_document(doc: dict) -> AnnNet:
         deserialize_edge_layers=deserialize_edge_layers,
     )
     if node_attrs_pending:
-        H.attrs.set_node_attrs_bulk(node_attrs_pending)
+        H.attrs.update('nodes', node_attrs_pending)
 
     return H
 
@@ -416,7 +415,7 @@ def write_ndjson(graph: AnnNet, dir_path, *, sidecar: bool = True):
     edge_attrs = _attrs_by_id(getattr(graph, '_edge_table', None), 'edge_id')
 
     with open(f'{dir_path}/nodes.ndjson', 'w', encoding='utf-8') as f:
-        for v in graph.nodes():
+        for v in list(graph.N):
             obj = {'id': v}
             obj.update(node_attrs.get(v, {}))
             f.write(json.dumps(obj, ensure_ascii=False) + '\n')
@@ -451,12 +450,7 @@ def write_ndjson(graph: AnnNet, dir_path, *, sidecar: bool = True):
                 obj.update({k: v for k, v in d.items() if not str(k).startswith('__')})
                 fh.write(json.dumps(obj, ensure_ascii=False) + '\n')
             else:
-                members = S | T
-                if len(members) == 1:
-                    u = next(iter(members))
-                    v = u
-                else:
-                    u, v = sorted(members)
+                u, v = binary_ends(S, T, directed)
                 obj = {'id': eid, 'source': u, 'target': v, 'directed': directed, 'weight': w}
                 obj.update({k: v for k, v in d.items() if not str(k).startswith('__')})
                 fe.write(json.dumps(obj, ensure_ascii=False) + '\n')
@@ -487,6 +481,8 @@ def write_ndjson(graph: AnnNet, dir_path, *, sidecar: bool = True):
         fu.write(json.dumps(dict(getattr(graph, 'uns', {}) or {}), ensure_ascii=False) + '\n')
     with open(f'{dir_path}/contextual.ndjson', 'w', encoding='utf-8') as fc:
         fc.write(json.dumps(contextual_payload(graph), ensure_ascii=False) + '\n')
+    with open(f'{dir_path}/edge_entities.ndjson', 'w', encoding='utf-8') as fen:
+        fen.write(json.dumps(edge_entity_record(graph), ensure_ascii=False) + '\n')
 
     with open(f'{dir_path}/edge_slices.ndjson', 'w', encoding='utf-8') as fel:
         for lid in graph.slices.list(include_default=True):
@@ -524,6 +520,7 @@ def read_ndjson(dir_path, *, sidecar='auto') -> AnnNet:
             'edge_slices': lines('edge_slices.ndjson'),
             'uns': (lines('uns.ndjson') or [{}])[0],
             'contextual': (lines('contextual.ndjson') or [{}])[0],
+            'edge_entities': (lines('edge_entities.ndjson') or [{}])[0],
         },
     }
     graph = _graph_from_document(doc)

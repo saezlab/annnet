@@ -29,10 +29,13 @@ from ._common import (
     _iter_node_ids,
     empty_dataframe,
     iter_edge_sides,
+    restore_entities,
     dataframe_to_rows,
+    edge_entity_record,
     serialize_edge_layers,
     collect_slice_manifest,
     restore_slice_manifest,
+    update_edge_attributes,
     deserialize_edge_layers,
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
@@ -211,6 +214,7 @@ def to_graphtool(
     # 8) build manifest — all dicts already computed in the single pass above
     manifest = {
         'version': 1,
+        'edge_entities': edge_entity_record(G),
         'graph': {
             'directed': directed,
             'attributes': dict(getattr(G, 'graph_attributes', {})),
@@ -322,6 +326,27 @@ def from_graphtool(
     gmeta = manifest.get('graph', {})
     G.graph_attributes = dict(gmeta.get('attributes', {}))
 
+    # ----- edges the projection could not hold -----
+    # An edge whose endpoint is an edge entity has no vertex to sit on, so it is
+    # not in the graph-tool graph. The manifest names it, and the entities.
+    definitions = (manifest.get('edges', {}) or {}).get('definitions', {}) or {}
+    manifest_weights = (manifest.get('edges', {}) or {}).get('weights', {}) or {}
+    manifest_directed = (manifest.get('edges', {}) or {}).get('directed', {}) or {}
+    absent = [
+        {
+            'source': source,
+            'target': target,
+            'edge_id': eid,
+            'weight': float(manifest_weights.get(eid, 1.0)),
+            'edge_directed': bool(manifest_directed.get(eid, directed)),
+        }
+        for eid, (source, target, kind) in definitions.items()
+        if kind == 'node_edge' and not _structure.has_edge(G, eid)
+    ]
+    if absent:
+        G._add_edges_bulk(absent)
+    restore_entities(G, manifest.get('edge_entities'))
+
     # ----- nodes -----
     vmeta = stored_key(manifest, 'nodes', {})
     v_rows = vmeta.get('attributes', [])
@@ -372,6 +397,17 @@ def from_graphtool(
                 G._set_hyperedge_members(eid, members=meta.get('members', []))
         if hyperedge_bulk:
             G.add_hyperedges_bulk(hyperedge_bulk)
+        # The rows above were assigned before these edges existed, so the ones
+        # that belong to hyperedges are written now that there is something to
+        # attach them to.
+        hyper_rows = {}
+        for row in e_rows:
+            key = row.get('edge_id', row.get('id'))
+            attrs = {k: v for k, v in row.items() if k not in ('edge_id', 'id') and v is not None}
+            if key in hyperedges and attrs:
+                hyper_rows[key] = attrs
+        if hyper_rows:
+            update_edge_attributes(G, hyper_rows)
 
     kivela_edge = emeta.get('kivela', {})
     if kivela_edge:

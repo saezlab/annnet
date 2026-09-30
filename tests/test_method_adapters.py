@@ -120,8 +120,8 @@ class TestRegulon:
             D.regulon(regulon_graph, slice='regulon', weight='absent')
 
     def test_labels_can_come_from_a_node_attribute(self, regulon_graph):
-        regulon_graph.attrs.set_node_attrs_bulk(
-            {n: {'symbol': f'sym::{n}'} for n in regulon_graph.nodes()}
+        regulon_graph.attrs.update(
+            'nodes', {n: {'symbol': f'sym::{n}'} for n in list(regulon_graph.N)}
         )
         net = D.regulon(regulon_graph, slice='regulon', source_attr='symbol')
         assert all(str(s).startswith('sym::') for s in net['source'])
@@ -178,7 +178,7 @@ class TestDecouplerWriteBack:
     def test_the_per_condition_summary_lands_on_the_layer(self, regulon_graph, result):
         assert result.summary_key == 'n_active'
         for condition in CONDITIONS:
-            assert 'n_active' in regulon_graph.layers.attrs((condition,))
+            assert 'n_active' in dict(regulon_graph.attrs.row('layers', (condition,)))
 
     def test_the_scored_edges_land_in_a_slice(self, regulon_graph, result):
         assert result.slice == 'scored'
@@ -224,9 +224,12 @@ def signalling():
             slice='signalling',
             aspects={'condition': ['ctrl', 'stim']},
         )
-        G.layers.place(sorted(G.nodes()), [('ctrl',), ('stim',)])
-    G.layers.set_node_attrs_bulk({('R', ('ctrl',)): 1.0, ('R', ('stim',)): 1.0}, key='perturbation')
-    G.layers.set_node_attrs_bulk(
+        G.layers.place(sorted(G.N), [('ctrl',), ('stim',)])
+    G.attrs.update(
+        'node_layers', {('R', ('ctrl',)): 1.0, ('R', ('stim',)): 1.0}, key='perturbation'
+    )
+    G.attrs.update(
+        'node_layers',
         {('C', ('stim',)): 1.0, ('B', ('stim',)): -1.0, ('C', ('ctrl',)): -1.0},
         key='measured',
     )
@@ -299,7 +302,7 @@ class TestCarnivalRun:
     def test_a_node_the_network_does_not_hold_is_reported(self, signalling):
         signalling.add_nodes([{'node_id': 'GHOST'}])
         signalling.layers.place(['GHOST'], [('stim',)])
-        signalling.layers.set_node_attrs_bulk({('GHOST', ('stim',)): 1.0}, key='measured')
+        signalling.attrs.update('node_layers', {('GHOST', ('stim',)): 1.0}, key='measured')
         fit = K.run(
             signalling,
             inputs='perturbation',
@@ -348,7 +351,7 @@ class TestUseCases:
 
     def test_activity_to_obs_is_the_last_step_alone(self, regulon_graph, measurements):
         for condition in CONDITIONS:
-            regulon_graph.layers.set_attrs((condition,), fit_score=1.5)
+            regulon_graph.attrs.update('layers', {(condition,): {'fit_score': 1.5}})
         out = exp.sysbio.usecases.activity_to_obs(
             regulon_graph, measurements, key='fit_score', aspect='condition'
         )

@@ -59,11 +59,11 @@ class TestGraphToolAdapter(unittest.TestCase):
 
         g2 = from_graphtool(gtG, manifest)
 
-        self.assertEqual(g2.nv, g.nv)
+        self.assertEqual(len(g2.N), len(g.N))
 
-        self.assertIn('A', g2.nodes())
-        self.assertIn('B', g2.nodes())
-        self.assertIn('C', g2.nodes())
+        self.assertIn('A', list(g2.N))
+        self.assertIn('B', list(g2.N))
+        self.assertIn('C', list(g2.N))
 
     def test_manifest_preserves_slices(self):
         g = _BUILD_GRAPH()
@@ -114,7 +114,7 @@ class TestGraphToolAdapter(unittest.TestCase):
         self.assertGreater(len(edges_in_lw), 0)
 
         eid = edges_in_lw[0]
-        w_eff = g2.attrs.get_effective_edge_weight(eid, slice='Lw')
+        w_eff = g2.E.effective_weight(eid, slice='Lw')
         self.assertEqual(w_eff, 5.0)
 
     def test_node_properties_in_graph(self):
@@ -186,8 +186,8 @@ class TestGraphToolAdapter(unittest.TestCase):
 
         g2 = from_graphtool(gtG, manifest=None)
 
-        self.assertEqual(g2.nv, 3)
-        self.assertLess(g2.ne, g.ne)
+        self.assertEqual(len(g2.N), 3)
+        self.assertLess(len(g2.E), len(g.E))
 
 
 if __name__ == '__main__':

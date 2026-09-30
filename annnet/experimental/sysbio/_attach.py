@@ -217,7 +217,7 @@ def _match(graph, entities, on, policy, mapper, partial):
     parts: dict[str, tuple] = {}
 
     if on == 'node_id':
-        rows = {node_id: {} for node_id in graph.nodes()}
+        rows = {node_id: {} for node_id in graph.N}
 
         def key_of(node_id, attrs):
             return node_id
@@ -504,7 +504,7 @@ def attach(
     reached = {node_id for ids in matched.values() for node_id in ids}
     placed = _place(graph, coordinates, matched, entities, mask, place, reached)
 
-    in_scope = set(scope) if scope is not None else set(graph.nodes())
+    in_scope = set(scope) if scope is not None else set(graph.N)
     return AttachReport(
         layers=coordinates,
         matched=matched,
@@ -520,7 +520,7 @@ def _place(graph, coordinates, matched, entities, mask, place, reached) -> int:
     if place == 'none' or not coordinates:
         return 0
     if place == 'all':
-        return graph.layers.place(sorted(graph.nodes()), coordinates)
+        return graph.layers.place(sorted(graph.N), coordinates)
     if not reached:
         return 0
     if mask is None:

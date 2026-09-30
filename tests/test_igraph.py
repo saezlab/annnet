@@ -49,11 +49,11 @@ class TestIgraphAdapter(unittest.TestCase):
 
         # --- Round-trip back to AnnNet
         g2 = from_igraph(igG, manifest)
-        self.assertEqual(set(g2.nodes()), set(g.nodes()))
+        self.assertEqual(set(g2.N), set(g.N))
         for eid in g.edge_weights:
             self.assertIn(eid, g2.edge_weights)
         self.assertAlmostEqual(
-            g2.attrs.get_effective_edge_weight(list(manifest['slices']['Lw'])[0], slice='Lw'),
+            g2.E.effective_weight(list(manifest['slices']['Lw'])[0], slice='Lw'),
             5.0,
             places=7,
         )
@@ -84,8 +84,8 @@ class TestIgraphAdapter(unittest.TestCase):
         H = _from_ig_without_manifest(igG)
         elapsed = time.perf_counter() - t0
 
-        self.assertEqual(H.ncount(), N)
-        self.assertEqual(H.ecount(), E)
+        self.assertEqual(len(H.N), N)
+        self.assertEqual(len(H.E), E)
         self.assertLess(
             elapsed,
             60.0,

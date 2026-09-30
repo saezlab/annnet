@@ -232,7 +232,7 @@ def build_var_dataframe(graph, *, include_private: bool) -> pd.DataFrame:
 def build_node_incidence(graph) -> sparse.csr_matrix:
     """Return the node-only incidence matrix aligned to the exported obs rows."""
     row_indexes = [row_idx for _node_id, _layer, row_idx in _node_entities(graph)]
-    col_indexes = [_structure.edge_column(graph, edge_id) for edge_id in graph.edges()]
+    col_indexes = [_structure.edge_column(graph, edge_id) for edge_id in list(graph.E)]
     matrix = graph.S.tocsr()
     if not row_indexes:
         return sparse.csr_array((0, len(col_indexes)), dtype=matrix.dtype)
@@ -322,7 +322,7 @@ def restore_attrs_from_manifest(graph, manifest: dict[str, Any]) -> None:
         if row.get('node_id') is not None
     }
     if node_updates:
-        graph.attrs.set_node_attrs_bulk(node_updates)
+        graph.attrs.update('nodes', node_updates)
 
     edge_updates = {
         row['edge_id']: {k: v for k, v in row.items() if k != 'edge_id' and not is_nullish(v)}
@@ -330,7 +330,7 @@ def restore_attrs_from_manifest(graph, manifest: dict[str, Any]) -> None:
         if row.get('edge_id') is not None
     }
     if edge_updates:
-        graph.attrs.set_edge_attrs_bulk(edge_updates)
+        graph.attrs.update('edges', edge_updates)
 
     restore_slice_manifest(
         graph,
@@ -344,7 +344,7 @@ def restore_attrs_from_manifest(graph, manifest: dict[str, Any]) -> None:
             continue
         attrs = {k: v for k, v in row.items() if k != 'slice_id' and not is_nullish(v)}
         if attrs:
-            graph.attrs.set_slice_attrs(slice_id, **attrs)
+            graph.attrs.update('slices', {slice_id: dict(attrs)})
 
     grouped_edge_slice: dict[str, dict[str, dict[str, Any]]] = {}
     for row in manifest.get('edge_slice_attrs', []):
@@ -358,7 +358,9 @@ def restore_attrs_from_manifest(graph, manifest: dict[str, Any]) -> None:
         if attrs:
             grouped_edge_slice.setdefault(slice_id, {})[edge_id] = attrs
     for slice_id, updates in grouped_edge_slice.items():
-        graph.attrs.set_edge_slice_attrs_bulk(slice_id, updates)
+        graph.attrs.update(
+            'edge_slices', {(slice_id, eid): attrs for eid, attrs in dict(updates).items()}
+        )
 
     active_slice = manifest.get('active_slice')
     if active_slice is not None and graph.slices.exists(active_slice):
@@ -389,7 +391,7 @@ def restore_nodes_from_obs_attrs(graph, obs: pd.DataFrame) -> None:
         if attrs:
             updates.setdefault(node_id, {}).update(attrs)
     if updates:
-        graph.attrs.set_node_attrs_bulk(updates)
+        graph.attrs.update('nodes', updates)
 
 
 def add_edges_from_var(graph, var: pd.DataFrame) -> None:
@@ -468,7 +470,7 @@ def restore_edge_attrs_from_var(graph, var: pd.DataFrame) -> None:
         if attrs:
             updates[str(edge_id)] = attrs
     if updates:
-        graph.attrs.set_edge_attrs_bulk(updates)
+        graph.attrs.update('edges', updates)
 
 
 def obs_spatial_matrix(

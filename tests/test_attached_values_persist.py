@@ -66,11 +66,11 @@ class TestMaterialise:
 
     def test_they_read_back_as_ordinary_node_layer_attributes(self, G, tmp_path):
         back = _read_back(G, tmp_path)
-        assert back.layers.node_attrs('n0', ('c0',))['expr'] == 1.5
+        assert dict(back.attrs.row('node_layers', ('n0', ('c0',))))['expr'] == 1.5
 
     def test_the_rest_of_the_graph_still_round_trips(self, G, tmp_path):
         back = _read_back(G, tmp_path)
-        assert sorted(back.edges()) == ['e1']
+        assert sorted(back.E) == ['e1']
         assert back.layers.aspect('cond').values == CONDITIONS
 
     def test_a_graph_with_no_attached_array_is_unaffected(self, tmp_path):
@@ -78,7 +78,7 @@ class TestMaterialise:
         graph.add_nodes(['A', 'B'])
         graph.add_edges('A', 'B', edge_id='e1')
         back = _read_back(graph, tmp_path)
-        assert sorted(back.edges()) == ['e1']
+        assert sorted(back.E) == ['e1']
 
 
 class TestTheTwoWaysOut:
@@ -90,7 +90,7 @@ class TestTheTwoWaysOut:
 
     def test_drop_keeps_the_rest(self, G, tmp_path):
         back = _read_back(G, tmp_path, attached='drop')
-        assert sorted(back.edges()) == ['e1']
+        assert sorted(back.E) == ['e1']
 
     def test_error_refuses(self, G, tmp_path):
         with pytest.raises(ValueError, match="attached='error' refuses"):

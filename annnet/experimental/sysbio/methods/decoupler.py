@@ -142,7 +142,7 @@ def regulon(
     """
     pd = require_dependency('pandas', 'pandas')
     # in_slice filters rows; slice would join attributes onto every row instead.
-    frame = graph.views.edges(in_slice=slice, include_hyper=False)
+    frame = graph.attrs.table('edges', derived=True, in_slice=slice, include_hyper=False)
     columns = list(frame.columns)
     if weight not in columns:
         raise KeyError(
@@ -284,7 +284,8 @@ def run(
     # A regulator whose own gene was never measured has no node-layer to be
     # scored onto, so the identity comes first and the values after.
     result.placed = graph.layers.place(got, coordinates)
-    graph.layers.set_node_attrs_bulk(
+    graph.attrs.update(
+        'node_layers',
         {
             (source, coordinate): float(scores.iloc[row][source])
             for row, coordinate in enumerate(coordinates)
@@ -295,7 +296,7 @@ def run(
     if summary:
         for row, coordinate in enumerate(coordinates):
             counted = int((np.abs(np.asarray(scores.iloc[row], dtype=float)) > active).sum())
-            graph.layers.set_attrs(coordinate, **{summary: counted})
+            graph.attrs.update('layers', {coordinate: {summary: counted}})
         result.summary_key = summary
     if into_slice:
         scored_edges = _edges_of(graph, slice, got, source_attr)
@@ -309,7 +310,9 @@ def _edges_of(graph, slice, sources, source_attr) -> list[str]:
     labels, _ = _labels(graph, source_attr, None)
     wanted = set(sources)
     found = []
-    for row in dataframe_to_rows(graph.views.edges(in_slice=slice, include_hyper=False)):
+    for row in dataframe_to_rows(
+        graph.attrs.table('edges', derived=True, in_slice=slice, include_hyper=False)
+    ):
         name = labels.get(row['source'], row['source'])
         if name in wanted:
             found.append(row['edge_id'])

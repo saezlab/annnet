@@ -159,8 +159,8 @@ def test_to_cx2_with_layer_must_be_tuple() -> None:
 def test_to_cx2_with_node_attributes_strings_and_layout_columns() -> None:
     G = AnnNet(directed=True)
     G.add_nodes(['A', 'B'])
-    G.attrs.set_node_attrs('A', label='alpha', layout_x=1.0, layout_y=2.0)
-    G.attrs.set_node_attrs('B', label='beta')
+    G.attrs.update('nodes', {'A': {'label': 'alpha', 'layout_x': 1.0, 'layout_y': 2.0}})
+    G.attrs.update('nodes', {'B': {'label': 'beta'}})
     G.add_edges('A', 'B', edge_id='e1')
     out = to_cx2(G)
     nodes_aspect = next(a for a in out if 'nodes' in a)
@@ -175,7 +175,7 @@ def test_to_cx2_with_edge_attributes_attaches_them_under_v() -> None:
     G = AnnNet(directed=True)
     G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
-    G.attrs.set_edge_attrs('e1', label='alpha', confidence=0.95)
+    G.attrs.update('edges', {'e1': {'label': 'alpha', 'confidence': 0.95}})
     out = to_cx2(G)
     edges_aspect = next(a for a in out if 'edges' in a)
     e = edges_aspect['edges'][0]
@@ -193,8 +193,8 @@ def test_from_cx2_round_trip_via_manifest() -> None:
     G.add_edges('B', 'C', edge_id='e2', weight=3.0)
     cx2 = to_cx2(G)
     H = from_cx2(cx2)
-    assert set(H.nodes()) == {'A', 'B', 'C'}
-    assert H.ne == 2
+    assert set(H.N) == {'A', 'B', 'C'}
+    assert len(H.E) == 2
 
 
 def test_from_cx2_reads_from_file_path(tmp_path: Path) -> None:
@@ -204,7 +204,7 @@ def test_from_cx2_reads_from_file_path(tmp_path: Path) -> None:
     p = tmp_path / 'demo.cx2.json'
     to_cx2(G, p)
     H = from_cx2(str(p))
-    assert set(H.nodes()) == {'A', 'B'}
+    assert set(H.N) == {'A', 'B'}
 
 
 def test_from_cx2_reads_from_json_string() -> None:
@@ -214,7 +214,7 @@ def test_from_cx2_reads_from_json_string() -> None:
     cx2 = to_cx2(G)
     payload = json.dumps(cx2)
     H = from_cx2(payload)
-    assert set(H.nodes()) == {'A', 'B'}
+    assert set(H.N) == {'A', 'B'}
 
 
 def test_from_cx2_invalid_string_raises_value_error() -> None:
@@ -238,8 +238,8 @@ def test_from_cx2_with_no_manifest_still_imports_basic_nodes_and_edges() -> None
         {'status': [{'success': True}]},
     ]
     H = from_cx2(cx2)
-    assert set(H.nodes()) == {'A', 'B'}
-    assert H.ne == 1
+    assert set(H.N) == {'A', 'B'}
+    assert len(H.E) == 1
 
 
 def test_from_cx2_with_reified_hyperedges_round_trips_via_manifest() -> None:
@@ -247,7 +247,7 @@ def test_from_cx2_with_reified_hyperedges_round_trips_via_manifest() -> None:
     cx2 = to_cx2(G, hyperedges='reify')
     H = from_cx2(cx2)
     # Hyperedge survives via the manifest reconstruction path.
-    assert H.ne >= 1
+    assert len(H.E) >= 1
 
 
 # ── _cx2_collect_reified ──────────────────────────────────────────────
@@ -317,4 +317,4 @@ def test_from_cx2_skips_empty_aspect_dicts() -> None:
         {'status': [{'success': True}]},
     ]
     H = from_cx2(cx2)
-    assert 'A' in H.nodes()
+    assert 'A' in list(H.N)

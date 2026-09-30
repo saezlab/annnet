@@ -29,8 +29,8 @@ def _toy_directed() -> AnnNet:
     # igraph native node-ID column of the same name (latent bug in
     # ``_export_binary_graph``; surfaced during Wave 8 but out of scope to
     # fix here — would require a rename or skip).
-    G.attrs.set_node_attrs('A', label='alpha')
-    G.attrs.set_edge_attrs('e1', label='alpha')
+    G.attrs.update('nodes', {'A': {'label': 'alpha'}})
+    G.attrs.update('edges', {'e1': {'label': 'alpha'}})
     return G
 
 
@@ -121,7 +121,7 @@ def test_export_binary_graph_public_only_strips_double_underscore_attrs() -> Non
     G = AnnNet(directed=True)
     G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1', weight=1.0)
-    G.attrs.set_node_attrs('A', __secret='nope', name='alpha')  # nosec B106
+    G.attrs.update('nodes', {'A': {'__secret': 'nope', 'name': 'alpha'}})  # nosec B106
     out = _export_binary_graph(G, directed=True, skip_hyperedges=True, public_only=True)
     # __secret was stripped; name preserved
     assert '__secret' not in out.vs.attributes()
@@ -164,8 +164,8 @@ def test_to_igraph_reify_with_directed_hyperedge_attaches_head_tail_roles() -> N
 
 def test_to_igraph_with_public_only_strips_underscore_attrs() -> None:
     G = _toy_directed()
-    G.attrs.set_node_attrs('A', __secret='nope')  # nosec B106
-    G.attrs.set_edge_attrs('e1', __secret='nope')  # nosec B106
+    G.attrs.update('nodes', {'A': {'__secret': 'nope'}})  # nosec B106
+    G.attrs.update('edges', {'e1': {'__secret': 'nope'}})  # nosec B106
     igG, manifest = to_igraph(G, public_only=True)
     # The manifest's node_attrs / edge_attrs sections strip __ keys.
     for v_attrs in manifest['node_attrs'].values():
@@ -188,29 +188,29 @@ def test_to_igraph_from_igraph_round_trip_basic() -> None:
     G = _toy_directed()
     igG, manifest = to_igraph(G)
     H = from_igraph(igG, manifest)
-    assert set(H.nodes()) == {'A', 'B', 'C'}
-    assert H.ne == 2
+    assert set(H.N) == {'A', 'B', 'C'}
+    assert len(H.E) == 2
 
 
 def test_to_igraph_from_igraph_round_trip_with_undirected_hyperedge() -> None:
     G = _toy_with_undirected_hyper()
     igG, manifest = to_igraph(G, hyperedge_mode='reify')
     H = from_igraph(igG, manifest)
-    assert H.ne >= 1  # hyperedge survives via manifest
+    assert len(H.E) >= 1  # hyperedge survives via manifest
 
 
 def test_to_igraph_from_igraph_round_trip_with_directed_hyperedge() -> None:
     G = _toy_with_directed_hyper()
     igG, manifest = to_igraph(G, hyperedge_mode='reify')
     H = from_igraph(igG, manifest)
-    assert H.ne >= 1
+    assert len(H.E) >= 1
 
 
 def test_to_igraph_from_igraph_round_trip_with_slices() -> None:
     G = _toy_directed()
     G.slices.add('s1')
     G.slices.add_edges('s1', ['e1'])
-    G.attrs.set_edge_slice_attrs('s1', 'e1', weight=99.0)
+    G.attrs.update('edge_slices', {('s1', 'e1'): {'weight': 99.0}})
     igG, manifest = to_igraph(G)
     H = from_igraph(igG, manifest)
     assert 's1' in H.slices.list()
@@ -286,7 +286,7 @@ def test_from_igraph_reified_mode_recovers_hyperedge_not_in_manifest() -> None:
     empty_manifest = {'edges': {}, 'weights': {}, 'edge_directed': {}}
     H = from_igraph(igG, empty_manifest, hyperedge='reified')
     # h1 hyperedge gets rebuilt from the reified pattern.
-    assert H.ne >= 1
+    assert len(H.E) >= 1
 
 
 # ── _from_ig_without_manifest ─────────────────────────────────────────
@@ -296,8 +296,8 @@ def test_from_ig_without_manifest_basic_round_trip() -> None:
     G = _toy_directed()
     igG, _ = to_igraph(G)
     H = _from_ig_without_manifest(igG)
-    assert set(H.nodes()) == {'A', 'B', 'C'}
-    assert H.ne >= 2
+    assert set(H.N) == {'A', 'B', 'C'}
+    assert len(H.E) >= 2
 
 
 def test_from_ig_without_manifest_reified_mode_recovers_hyperedge() -> None:
@@ -312,4 +312,4 @@ def test_from_ig_without_manifest_reified_mode_recovers_hyperedge() -> None:
     igG.add_edges([(0, 3), (1, 3), (2, 3)])
     igG.es['role'] = ['member', 'member', 'member']
     H = _from_ig_without_manifest(igG, hyperedge='reified')
-    assert H.ne >= 1
+    assert len(H.E) >= 1
