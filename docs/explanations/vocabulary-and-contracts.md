@@ -9,15 +9,10 @@
 bijections hold, the matrix agrees with the store. A failure there means the
 graph is broken.
 
-There is a second question, and it is the one that produces published mistakes:
-do the attributes **mean** what a method reading them will assume? A failure
-there means the graph is fine and the data in it will be misread. Sign written
-into `weight`; `0.0` standing for "not reported"; a confidence and a coefficient
-in one column. None of that is a structural fault, and every one of it produces a
-wrong answer that looks right.
-
-The two are separate entry points on purpose. Folded together, a caller could not
-tell *your object is corrupt* from *your data does not say what you think*.
+Method contracts check attribute semantics separately from structural validity.
+For example, a method may require a coefficient where an attribute holds a
+confidence, or distinguish a missing value from zero. A structurally valid graph
+can still violate these requirements.
 
 ## Why this is not in the core
 
@@ -26,11 +21,9 @@ field, and reads every other field's vocabulary as foreign. So the core holds
 mechanism — incidence, layers, slices, coefficients — and the meanings live in
 `annnet.experimental.vocabulary`, which becomes its own package.
 
-That split is **enforced, not intended**: `tests/test_core_biology_free.py` reads
-the source of `core`, `io` and `_support` and fails on a domain word. It has
-caught real violations during development, including a parameter named
-`stoichiometry` that is now `coefficients` — the core's own word for the thing,
-with the domain meaning living here.
+`tests/test_core_biology_free.py` checks `core`, `io` and `_support` for
+domain-specific terminology. Core uses generic coefficients; domain packages
+assign meanings such as stoichiometry.
 
 ## The three-way split that used to be one column
 

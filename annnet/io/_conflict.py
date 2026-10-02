@@ -1,14 +1,8 @@
-"""What a bulk write does about an id the graph already holds.
+"""Conflict policies for bulk writes with existing element IDs.
 
-A batch that half-lands is worse than one that does not land: the caller sees an
-exception and a graph that is neither what it was nor what it asked for. So the
-policy is decided before anything is written, and ``error`` — the default —
-leaves the graph untouched.
-
-The four policies are the four honest answers. ``error`` refuses and names what
-it refused. ``skip`` keeps what the graph has. ``replace`` keeps what the batch
-brought. ``rename`` keeps both, giving the newcomer a suffixed id. Anything else
-is one of these with the decision hidden.
+Conflicts are checked before writing. ``error`` rejects the batch without
+modifying the graph; ``skip`` retains existing elements; ``replace`` uses the
+incoming values; ``rename`` inserts incoming elements with suffixed IDs.
 """
 
 from __future__ import annotations

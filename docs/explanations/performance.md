@@ -7,12 +7,10 @@ numbers were taken so they can be taken again, and the design decisions that
 rest on them. The machine-readable evidence is
 `docs/explanations/performance-measurements.json`.
 
-Two kinds of cost are kept apart throughout. **Starting a session** — importing
-the package and building the first graph in a new interpreter — is paid once and
-is nothing like **a warm operation**, which is what every microsecond figure
-below is. Quoting one for the other is how a constructor that takes 53.7 µs
-gets described as instant by someone who has just waited a third of a second for
-their first graph.
+Cold-start measurements include package import and the first graph construction
+in a fresh interpreter. Warm-operation measurements use an initialized process.
+The 53.7 µs warm constructor timing therefore excludes the roughly 317 ms first
+construction cost reported below.
 
 ## How the numbers were taken
 

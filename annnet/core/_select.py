@@ -1,13 +1,8 @@
 """Typed selections: sequences, attribute-row selections and their algebra.
 
-This module owns one thing: how a selection is described, resolved and
-combined. A selection is a small immutable *plan*. Its leaves are evaluated
-inside the scope they were made in — ``G.N.select(...)`` inside the graph,
-``V.N.select(...)`` inside the view ``V`` — and an inner node combines two
-plans with ``&``, ``|`` or ``-``. Because a leaf remembers its own scope, two
-selections made in two different views combine correctly: each side is
-evaluated where it was asked, and the combination is ordered by the root
-graph's axis.
+Selections are immutable plans. Leaves retain their originating graph or view
+scope; inner nodes combine plans with ``&``, ``|`` or ``-``. Each operand is
+evaluated in its own scope, and results follow the root graph's axis order.
 
 Three families share the machinery:
 

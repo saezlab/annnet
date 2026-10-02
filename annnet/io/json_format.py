@@ -72,7 +72,7 @@ def to_json(
 ) -> None:
     """Node-link JSON with x-extensions (slices, edge_slices, hyperedges).
 
-    Lossless vs your core (IDs, attrs, parallel, hyperedges, slices).
+    Preserves IDs, attributes, parallel edges, hyperedges and slices.
     """
     node_attrs = _attrs_by_id(
         getattr(graph, '_node_table', None), 'node_id', public_only=public_only

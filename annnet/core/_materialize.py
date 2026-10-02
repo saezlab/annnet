@@ -4,11 +4,10 @@
 subgraphs of ``G.layers`` arrive here with a
 :class:`~annnet.core._resolve.Resolved` state and leave with a new
 :class:`~annnet.core.graph.AnnNet` that holds exactly the selected placements,
-edge entities and structural edges, in the parent's order. Nothing is
-resolved again on the way, so the copy cannot disagree with the view that
-described it. This is the one implementation; there is no second builder.
+edge entities and structural edges, in the parent's order. All these paths use
+the supplied resolution without recomputing membership.
 
-What the copy carries:
+The copy preserves:
 
 - the topology: every kept edge with its full endpoint set, its declared
   direction and weight, its explicit coefficients, its multilayer kind and
@@ -27,9 +26,9 @@ What the copy carries:
   reader over the parent's measurements, and the copy reads the same array
   through the same index maps. Detach and re-attach to own one.
 
-What it does not do: it never places a node on a placeholder layer, never
-resolves slice weight overrides into the stored weight (the override rows
-come along as rows), and adds nothing the selection did not name.
+Placements and membership come from the resolved selection. Slice weight
+overrides remain separate attribute rows unless ``edge_weights`` supplies
+replacement stored weights.
 """
 
 from __future__ import annotations

@@ -4,13 +4,9 @@ AnnNet is before its first stable release. `CHANGELOG.md` says what that means
 for a user: a removed name carries no deprecation and no alias, and each removal
 names its replacement.
 
-It means something else for a package that bridges to us. A rename here does not
-fail our build, does not fail our tests, and does not warn anybody. It fails in
-their repository, at a time nobody chose, and usually the person who finds it is
-a user of theirs.
-
-This file, `dependents.toml` and `tests/test_dependents.py` are the answer to
-that, for as long as the API moves without a deprecation process.
+Renaming an AnnNet method can break downstream integrations without failing
+AnnNet's own tests. `dependents.toml` records known callers, and
+`tests/test_dependents.py` checks their required API names.
 
 ## How it works
 
@@ -39,7 +35,7 @@ caller's value into an ordinary attribute **without raising anything**.
 3. Open a pull request against every repository the register names for that
    name, or push directly where the entry says the package is ours.
 
-Step 3 is the point of the file. Steps 1 and 2 only make it possible to do.
+Update and test the downstream integration as part of each breaking API change.
 
 ## Where each migration stands
 
@@ -55,10 +51,9 @@ migration has got. There are three states, and they are different claims:
 | `verified_locally` | a migration applied to the recorded `upstream_revision` passed the package's own tests against the recorded AnnNet version. The package's repository has **not** merged it |
 | `merged_upstream` | the package's default branch carries the migration |
 
-`verified_locally` is real evidence and not a deployment. A user who upgrades
-AnnNet and keeps the released version of a package that is only
-`verified_locally` meets exactly the break this file exists to prevent. So the
-register has two gates, and they answer two questions:
+`verified_locally` records tests against a patched checkout. Released downstream
+versions may still require the previous API. Two gates track local verification
+and upstream merge status separately:
 
 ```bash
 ANNNET_RELEASE_GATE=1      pytest tests/test_dependents.py   # every package is at least verified_locally,
@@ -100,12 +95,9 @@ change.
 
 ## What this does not do
 
-**It does not prove a dependent works.** The register is written by hand, so a
-bridge may call more than its entry lists. A passing gate means nobody has told
-us about a break in the names we know about. It is not a test of their package.
-
-The only thing that tests a dependent is its own suite, run with AnnNet
-installed beside it, from a checkout of the commit the register names:
+The register is maintained manually and may omit calls or behavioral
+requirements. Validate each migration by running the downstream suite against
+AnnNet at the recorded revision:
 
 ```bash
 git clone https://github.com/saezlab/omnipath-client && cd omnipath-client
@@ -114,8 +106,7 @@ git apply <the migration patch>          # its digest is patch_sha256
 uv pip install -e /path/to/annnet && uv run pytest
 ```
 
-Without that install, every test that touches a graph skips, and the drift goes
-unseen. That is how two broken converters once survived two releases.
+Verify that integration tests run rather than skip because AnnNet is unavailable.
 
 **It does not find a package nobody has added.** Two ways to look for one:
 
@@ -133,7 +124,5 @@ will not show it.
 
 ## When the API stops moving
 
-The first stable release is what retires this. At that point a removal gets a
-deprecation period, the deprecation warning tells a dependent directly, and the
-register becomes a courtesy rather than the only signal. Until then it is the
-only signal.
+After the first stable release, API removals should follow a deprecation period.
+The register can continue tracking downstream compatibility alongside warnings.

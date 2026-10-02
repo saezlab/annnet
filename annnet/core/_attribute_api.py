@@ -21,11 +21,9 @@ Writing names what it does and is checked as a whole before it changes anything:
 - ``G.attrs.delete('nodes', keys=..., names=...)`` removes attributes and never
   the nodes, edges or other structure that carry them.
 
-Selecting comes in two kinds that do not mix. ``G.attrs.select('nodes',
-score__gt=0.5)`` is a live query over the graph, as ``G.N.select`` is: it keeps
-its conditions and answers again after the graph changes. Filtering a table you
-have read is the dataframe library's job; ``G.attrs.from_frame('nodes', frame)``
-turns the rows that are left into a fixed selection of the graph's keys.
+``G.attrs.select('nodes', score__gt=0.5)`` retains a live predicate over the
+graph. For snapshot filtering, use the returned dataframe's native operations
+and pass the result to ``G.attrs.from_frame('nodes', frame)`` to select its keys.
 
 This module owns the public *addressing* of attributes: which keys an address
 accepts, how they are normalized and validated, what each address's domain is,

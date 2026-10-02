@@ -82,7 +82,7 @@ reporting/     Markdown renderer, plot renderer, artifact CSVs, regeneration CLI
 
 - **Head-to-head** — comparable per-call medians; ratio columns and heatmaps are
   `AnnNet / baseline`. AnnNet carries an incidence matrix + annotation frames +
-  multilayer state, so parity on plain ops is the honest bar, not a tie.
+  multilayer state; interpret the ratios alongside these representation costs.
 - **Memory** — `retained` bytes and `bytes/edge` for the built graph.
 - **AnnNet-only** — hyperedges, multilayer, incidence/adjacency materialisation,
   copy/subgraph, annotations, IO: capabilities the baselines cannot express.

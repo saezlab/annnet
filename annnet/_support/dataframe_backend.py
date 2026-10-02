@@ -357,12 +357,8 @@ def _fast_concat_rows(df, rows: list[dict[str, Any]], *, backend: str | None = N
     Returns ``None`` if the operation needs the slow path (new columns,
     unsupported backend, etc.).
 
-    This path is Narwhals for every backend. It used to branch into a Polars
-    implementation first, because the contextual attribute writes came through
-    here once per write and the generic path was several times slower. Those
-    writes are dicts now and never reach a dataframe, so the branch bought
-    nothing and cost the one thing this layer exists to provide — the same code
-    for every backend.
+    All backends use the Narwhals implementation. Contextual attribute writes
+    use dictionaries and bypass dataframe upserts.
     """
     try:
         nw_df = _to_nw(df)

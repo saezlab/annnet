@@ -5,14 +5,14 @@
     the experimental measurement bridge.
 
 
-The loop this exists for:
+Measurement workflow:
 
 ```
 AnnData  ──attach──▶  AnnNet  ──method──▶  AnnNet (annotated)  ──write_back──▶  AnnData
 ```
 
-Four things about it are worth saying out loud, because none is visible from
-inside any single call.
+The following sections describe array ownership, identity mapping and data
+transfer across this workflow.
 
 ## The measurements stay in the AnnData
 

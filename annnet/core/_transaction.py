@@ -1,25 +1,16 @@
-"""Attribute transactions: a batch of attribute writes is all or nothing.
+"""Atomic attribute writes and rollback of their structural side effects.
 
-An attribute write has side effects beyond the cells it names. A node or edge
-attribute may be the variable of a flexible-direction policy, and the write
-then re-orients an edge — rewriting its incidence column through the mutation
-gateway and moving the structural clock. A write may also move the composite
-node-key index. If anything fails after some of that has happened, the graph
-must come back to what it was: the attribute values, the fields and types of the
-columns that hold them, the topology those policies rewrote, the index, and —
-because every derived cache is keyed by a clock the restore advances again — the
-caches.
+Attribute writes can trigger flexible-direction policies and update the
+composite node-key index. AttributeTransaction snapshots affected rows, column
+schema, the key index and incidence columns that those policies may rewrite.
+An ordinary scalar write without policies snapshots one row and schema metadata,
+without copying the graph.
 
-:class:`AttributeTransaction` is the coordinator. It snapshots only what the
-batch can touch: the rows it names, the key index when one is declared, and
-the incidence columns of the edges whose policies the batch can fire. For an
-ordinary scalar write on a graph without policies that is one row and
-nothing else; the store is never copied. On failure it restores the rows
-through the attribute stores and the columns through the mutation gateway,
-then re-raises.
+On failure, rows and schema are restored through the attribute stores and
+incidence columns through the mutation gateway. Clock changes invalidate derived
+caches. The original exception propagates after rollback.
 
-The attribute API (:mod:`annnet.core._attribute_api`) opens a transaction
-around every commit; nothing else needs to know how a rollback is done.
+``_attribute_api`` opens the transaction around each commit.
 """
 
 from __future__ import annotations

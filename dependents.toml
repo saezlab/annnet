@@ -7,9 +7,8 @@
 # `tests/test_dependents.py` asserts that every name below still resolves on the
 # public surface, so a rename fails the build here and names who to tell.
 #
-# The register is a promise to the packages listed, not a description of them.
-# It goes stale in one direction only: a bridge may call more than it lists, so
-# a passing gate is not proof that a package works. See DEPENDENTS.md.
+# The register covers known calls. Run downstream tests to check behavior and
+# calls missing from the register. See DEPENDENTS.md.
 #
 # For each package:
 #
@@ -58,8 +57,7 @@
 #   `G.attrs.row(...)` and every other attribute read return a detached copy. A
 #   caller that wrote through a returned row must call `G.attrs.update`.
 #
-# A behaviour note belongs here rather than only in CHANGELOG.md, because this
-# is the file a maintainer reads when they ask what they have to do about us.
+# Keep behavioral migration requirements alongside the registered method names.
 
 [[package]]
 name = "omnipath-client"

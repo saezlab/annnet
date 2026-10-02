@@ -1,16 +1,9 @@
-"""Edge entities across formats that have no notion of one.
+"""Restore edge entities and their attributes from exchange metadata.
 
-An edge entity is an edge that is also an endpoint: another edge can name it.
-Most exchange formats hold nodes and edges and nothing in between, so a writer
-that meets one has three honest choices: write it in a place the format has for
-it, record it beside the file, or say that it was left out. Reading it back as a
-plain node is not among them, because the graph that comes out then answers
-questions the graph that went in never would.
-
-The record is built by :func:`annnet.core._structure.edge_entity_record`. This
-module gives it back: :func:`restore_entities` puts the kinds on a graph a reader
-has already built. The graph is used through its own doors only, so nothing here
-depends on the core.
+``core._structure.edge_entity_record`` produces the metadata consumed here.
+``restore_entities`` restores entity kinds and connecting edge kinds after a
+reader has reconstructed the graph. Attribute rows without a corresponding edge
+are skipped with AnnNetLossWarning.
 """
 
 from __future__ import annotations

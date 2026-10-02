@@ -92,7 +92,7 @@ Nothing removed here carries an alias: each removed name raises
 - **Live queries and filtered tables are different things.** `select` is a
   query over the graph and answers again after the graph changes.
   `G.attrs.from_frame(address, frame)` turns the rows of a table you filtered
-  with your own dataframe library into a fixed selection of the graph's keys: it
+  with its dataframe library into a fixed selection of the graph's keys: it
   reads only the key columns, keeps the address's order without repeats, holds
   identities rather than storage slots, and an empty frame is an empty selection.
   There is no dataframe-expression form of `select` and no second keyword
@@ -280,8 +280,7 @@ Nothing removed here carries an alias: each removed name raises
   method, parameter, attribute, column name and document: `add_vertices` is
   `add_nodes`, `remove_vertices` is `remove_nodes`, `vertices()` is `nodes()`,
   `has_vertex` is `has_node`, `supra_vertices` is `supra_nodes`, and `vertex_id`
-  is `node_id` in every table the package hands back. Two words for one concept
-  was the largest of the faults this release fixes, not a reason to keep it.
+  is `node_id` in the public tables.
   `nv`, `ne` and `nv_supra` never carried the word and do not move.
 - The native format writes the new words. Its reader takes both, so an archive
   written before this release still loads: four member names, two columns and

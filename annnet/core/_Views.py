@@ -1,19 +1,13 @@
-"""The composable, live, read-only graph view (``G.view(...)``).
+"""Live, read-only graph views.
 
-:class:`GraphView` is the read-only *presentation* of a resolved membership.
-It owns nothing of the resolution itself: the filters are normalized by and
-the membership computed in :mod:`annnet.core._resolve`; the sequences it
-hands out (``V.N``, ``V.E``) are the typed selections of
-:mod:`annnet.core._select` scoped to it; ``V.attrs`` is
-:class:`annnet.core._attribute_api.ScopedAttrs`; tables and summaries come
-from :mod:`annnet.core._tables` and :mod:`annnet.core._summary`; and
-``V.materialize()`` is :mod:`annnet.core._materialize`.
+GraphView stores its parent and filters and caches resolved membership against
+state clocks. Callable filters are re-evaluated on each read. Each operation
+uses a consistent resolution.
 
-What the view itself does: keep its parent and filters, cache the resolved
-state against the graph's clocks, re-resolve when the parent changed (or on
-every read when a filter is a callable), give one consistent resolution to
-every operation, expose the reading vocabulary the graph exposes, and refuse
-every write with a message naming ``.materialize()``.
+Membership resolution lives in ``_resolve``; scoped sequences in ``_select``;
+attribute reads in ``_attribute_api.ScopedAttrs``; table rendering and summaries
+in ``_tables`` and ``_summary``; graph construction in ``_materialize``.
+Writes are rejected with a reference to ``materialize()``.
 """
 
 from __future__ import annotations
