@@ -148,7 +148,11 @@ import polars as pl
 
 interactions = pl.read_csv('docs/guide/data/interactions.csv')
 G = an.from_edge_frame(
-    interactions, edge_id='edge_id', sign='effect', directed=True, slice='prior',
+    interactions,
+    edge_id='edge_id',
+    sign='effect',
+    directed=True,
+    slice='prior',
 )
 G.attrs.backend = 'polars'
 G.summary()  # 10 nodes, 11 edges

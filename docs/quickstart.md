@@ -50,9 +50,7 @@ annotation; structural weights default to 1.
 ## Inspect and select
 
 ```python
-G.attrs.table('edges', derived=True).select(
-    'edge_id', 'source', 'target', 'sign', 'confidence'
-)
+G.attrs.table('edges', derived=True).select('edge_id', 'source', 'target', 'sign', 'confidence')
 ```
 
 Which interactions have confidence at least 0.85?
