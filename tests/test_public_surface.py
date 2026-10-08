@@ -347,7 +347,7 @@ def test_public_inventory_matches_package_and_namespaces(graph):
 
 
 CHANGELOG = Path(annnet.__file__).parent.parent / 'CHANGELOG.md'
-MIGRATION = Path(annnet.__file__).parent.parent / 'docs' / 'explanations' / 'api-migration.md'
+MIGRATION = DOCS / 'migration.md'
 
 # Every public name the attribute/selection/view rework removed, by holder. The
 # graph ones are the keys of REMOVED_GRAPH_NAMES; the rest were read off the
