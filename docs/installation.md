@@ -1,10 +1,10 @@
 # Installation guide
 
-`annnet` is designed to stay lightweight by default. The base package only requires `numpy`, `scipy`, and `narwhals`, and everything heavier is exposed as an optional extra.
+`annnet` is designed to stay lightweight by default. The base package only requires `numpy`, `scipy`, `narwhals`, and `pkg-infra`, and everything heavier is exposed as an optional extra.
 
 ## Requirements
 
-- Python `3.10+`
+- Python `3.11+`
 - `pip` for standard installs
 - `uv` if you want a fast local or development workflow
 - `git` if you want to install from GitHub
@@ -206,21 +206,21 @@ If you want the full test suite inside the Pixi environment, run:
 pixi run -e gt test-all
 ```
 
-## Build and serve the docs with uv
+## Build and serve the docs
 
-This repository defines a dedicated docs dependency group for MkDocs:
+From a repository checkout:
 
 ```bash
 uv sync --group docs
-uv run python -m mkdocs serve
+uv run --group docs python -m mkdocs serve --dev-addr 127.0.0.1:8000
 ```
 
-The default MkDocs configuration executes the HowTo notebooks during the docs build. Scenario and use-case notebooks render their stored outputs; use the environment files linked from the notebook gallery when you want to rerun those heavier notebooks.
-
-For a one-off strict build:
+Open <http://127.0.0.1:8000>. This executes the five Guide notebooks; Examples
+render their saved outputs. For a strict build without the preview server:
 
 ```bash
-uv run python -m mkdocs build --strict
+uv run --group docs python -m mkdocs build --strict
 ```
 
-The generated site is written to `site/`.
+The site is written to `site/`. See [Contributing to the documentation](community/contribute-docs.md)
+for faster previews, notebook editing, and the public-site configuration.

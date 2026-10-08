@@ -96,9 +96,9 @@ exp.vocabulary.SymbolMapper(separator='_', known=measured)
 ```
 
 The `Mapper` protocol is what keeps a resource's spelling rules out of the join —
-see [Joining measurements](joining-measurements.md).
+see [Joining measurements](measurements.md).
 
 ## Where to go next
 
-- [Joining measurements to a network](joining-measurements.md) — the loop this
+- [Joining measurements to a network](measurements.md) — the loop this
   vocabulary serves.

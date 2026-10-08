@@ -1232,7 +1232,7 @@ class AnnNet(
 
         For a full guide covering all input forms, dispatch logic, parallel
         policy, propagation, flexible direction, and batch formats, see the
-        [Adding edges](../../explanations/add-edges.md) explanation page.
+        [Adding edges](adding-edges.md) reference page.
 
         Examples
         --------

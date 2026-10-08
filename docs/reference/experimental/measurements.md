@@ -127,9 +127,9 @@ something a downstream method can assert on.
 
 ## Where to go next
 
-- [What a number means](vocabulary-and-contracts.md) — the reserved names, and
+- [What a number means](vocabulary.md) — the reserved names, and
   checking a graph before a method reads it.
-- [Node-layer values and scale](values-and-scale.md) — why attaching is cheap.
+- [Node-layer values and scale](../../guide/annotations-and-views.ipynb) — why attaching is cheap.
 
 ## Running a method on it
 

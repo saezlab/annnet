@@ -7,7 +7,9 @@
 [![Docs](https://img.shields.io/badge/docs_built_with-MkDocs-blue)](https://annnet.sysbioverse.org/)
 [![License](https://img.shields.io/github/license/saezlab/annnet)](https://github.com/saezlab/annnet/blob/main/LICENSE)
 
-annnet (Annotated Network) is a unified, high‑expressivity graph platform that brings anndata‑style, annotated containers to networks, multilayer structures, and hypergraphs. It targets systems biology, network biology, omics integration, computational social science, and any domain needing fully flexible graph semantics with modern, stable storage and interoperability.
+AnnNet keeps a network, its annotations, and analysis contexts in one Python
+object. Import an interaction table or an existing graph, attach measurements
+and results, select the part you need, and use it with other graph libraries.
 
 
 > 🚧 **annnet is under active development.**
@@ -25,9 +27,9 @@ annnet aims to combine graph expressiveness, annotation-centric data handling, a
 - Rich graph semantics: directed and undirected edges, parallel edges, self-loops, hyperedges, and edge-as-entity semantic.
 - Multilayer and slice-aware modeling: represent layers, aspects, inter-layer links, and named graph slices.
 - Annotated tables throughout: keep structured metadata for nodes, edges, slices, layers, and graph-level state, using Narwhals-compatible dataframes.
-- Interoperability without friction: import/export with NetworkX, igraph, graph-tool, GraphML, GEXF, SIF, SBML, CX2 (Cytoscape exchange format v2), Excel/CSV/TSV/JSON, Parquet graph directories, and DataFrames.
-- Algorithm interoperability: seamless, lazy calls into NetworkX/igraph/graph‑tool via the graph-owned `G.nx`, `G.ig`, and `G.gt` accessors.
-- Stable storage: persist graphs in a lossless `.annnet` layout built from Zarr, Parquet, and JSON.
+- Import and export: import/export with NetworkX, igraph, graph-tool, GraphML, GEXF, SIF, SBML, CX2 (Cytoscape exchange format v2), Excel/CSV/TSV/JSON, Parquet graph directories, and DataFrames.
+- Algorithm access: lazy calls into NetworkX/igraph/graph‑tool via the graph-owned `G.nx`, `G.ig`, and `G.gt` accessors.
+- Native storage: persist graph structure and annotations in a `.annnet` layout built from Zarr, Parquet, and JSON.
 
 
 ## Features
@@ -38,12 +40,12 @@ annnet aims to combine graph expressiveness, annotation-centric data handling, a
 [![SciPy](https://img.shields.io/badge/sparse_matrix_via-SciPy-8CAAE6?logo=scipy)](https://scipy.org/)
 [![Narwhals](https://img.shields.io/badge/dataframe--agnostic_design_with-Narwhals-blue?logo=narwhals)](https://narwhals-dev.github.io/narwhals/)
 
-The base package keeps the required runtime small. Only `numpy`, `scipy`, and `narwhals` are mandatory, which gives you the core graph model, sparse structure handling, and dataframe interoperability layer without forcing heavyweight optional backends.
+The base package keeps the required runtime small. `numpy`, `scipy`, `narwhals`, and `pkg-infra` are required, which gives you the core graph model, sparse structure handling, and dataframe interoperability layer without forcing heavyweight optional backends.
 
 ### Graph modeling
 
 - Simple graphs, directed graphs, and multigraphs
-- Hyperedges, including directed head-to-tail hyperedges
+- Hyperedges, including directed source-to-target groups
 - Signed and weighted relations with rich node and edge annotations
 - Efficient indexing, lookup helpers, and slice-based views
 - Edge-, node-, and graph-level semantics in the same container
@@ -137,47 +139,33 @@ pip install "annnet[all]"
 
 ## Quick Start
 
+Install `annnet[polars,storage]`. From a repository checkout, import the small
+[synthetic interaction table](docs/guide/data/interactions.csv):
+
 ```python
 import annnet as an
+import polars as pl
 
-G = an.Graph(directed=True)  # default direction; can be overridden per-edge
+interactions = pl.read_csv('docs/guide/data/interactions.csv')
+G = an.from_edge_frame(
+    interactions, edge_id='edge_id', sign='effect', directed=True, slice='prior',
+)
+G.attrs.backend = 'polars'
+G.summary()  # 10 nodes, 11 edges
 
-# Create slices and set active
-G.slices.add('toy')
-G.slices.add('train')
-G.slices.add('eval')
-G.slices.active = 'toy'
+supported = G.view(edges=G.E.select(confidence__gte=0.85))
+supported.attrs.table('edges', derived=True)
 
-# Add nodes with attributes
-for v in ['A', 'B', 'C', 'D']:
-    G.add_nodes(v, label=v, kind='gene')
-
-# 1) Binary directed edge
-e_dir = G.add_edges('A', 'B', weight=2.0, directed=True, relation='activates')
-
-# 2) Binary undirected edge
-e_undir = G.add_edges('B', 'C', weight=1.0, directed=False, relation='binds')
-
-# 3) Self-loop
-e_loop = G.add_edges('D', 'D', weight=0.5, directed=True, relation='self')
-
-# 4) Parallel edge
-e_parallel = G.add_edges('A', 'B', weight=5.0, parallel='parallel', relation='alternative')
-
-# 5) Node-edge hybrid relation
-G.add_edges(edge_id='edge_e1', as_entity=True, description='signal')
-e_vx = G.add_edges('edge_e1', 'C', directed=True, as_entity=True, channel='edge->node')
-
-# 6) Undirected hyperedge (3-way membership)
-e_hyper_undir = G.add_edges(['A', 'C', 'D'], weight=1.0, directed=False, tag='complex')
-
-# 7) Directed hyperedge (head→tail member groups)
-e_hyper_dir = G.add_edges(['A', 'B'], ['C', 'D'], weight=1.0, directed=True, reaction='A+B->C+D')
-
-# 8) Run a NetworkX algorithm if networkx is installed
-deg = G.nx.degree_centrality(G)
+G.attrs.update('nodes', {'ERK': {'label': 'ERK response'}})
+G.write('analysis.annnet')
+restored = an.read('analysis.annnet')
 ```
 
+The [quickstart](https://annnet.sysbioverse.org/quickstart/) explains the input
+columns and each step. The [Guide](https://annnet.sysbioverse.org/guide/) has five
+topic notebooks covering the model, annotations and views, slices, layers, and
+computation and storage. Longer analyses and integrations are in
+[Examples](https://annnet.sysbioverse.org/examples/).
 
 ## Backend-Specific Integration
 
@@ -187,7 +175,7 @@ If an optional backend is installed, AnnNet can dispatch directly to that backen
 centrality = G.nx.degree_centrality(G)
 ```
 
-`G.ig` and `G.gt` behave similarly for igraph and graph-tool. On calls such as `G.nx.<function>(G, ...)`, annnet resolves the backend callable, converts the AnnNet graph using the requested projection options, swaps in the converted backend graph, executes the algorithm call, and returns the backend result. Converted backend graphs are cached and refreshed after AnnNet mutations.
+`G.ig` and `G.gt` behave similarly for igraph and graph-tool. On calls such as `G.nx.<function>(G, ...)`, annnet resolves the backend callable, converts the AnnNet graph using the requested projection options, swaps in the converted backend graph, executes the algorithm call, and returns the backend result. Converted backend graphs are cached. After edits, call the accessor's `clear()` or use a fresh adapter conversion; automatic invalidation does not cover every mutation.
 
 Use `G.nx.backend(...)`, `G.ig.backend(...)`, or `G.gt.backend(...)` when you want the concrete projected graph object. Use `G.nx.<function>(G, ...)`, `G.ig.<function>(G, ...)`, or `G.gt.<namespace>.<function>(G, ...)` when you want conversion plus dispatch in one step.
 
@@ -201,7 +189,7 @@ bc = G.nx.betweenness_centrality(G)
 nxG = G.nx.backend(
     directed=True,
     hyperedge_mode='skip',  # or "expand"
-    slice='toy',
+    slice='prior',
     simple=True,
 )
 
@@ -351,12 +339,13 @@ Use the module entrypoint for MkDocs in this repository:
 
 ```bash
 uv sync --group docs
-uv run python -m mkdocs serve
+uv run --group docs python -m mkdocs serve --dev-addr 127.0.0.1:8000
 ```
 
-By default, the docs build reruns the HowTo notebooks and renders stored
-outputs for heavier scenario and use-case notebooks. The notebook gallery links
-environment files for rerunning those larger examples.
+Open <http://127.0.0.1:8000>. The build executes the five Guide notebooks and
+renders saved outputs for Examples. Run `uv run --group docs python -m mkdocs
+build --strict` to validate the site. See the [documentation contribution
+guide](docs/community/contribute-docs.md) for faster previews and notebook environments.
 
 ## Contributing
 

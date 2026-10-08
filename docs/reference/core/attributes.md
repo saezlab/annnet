@@ -12,8 +12,8 @@ The attribute API from `annnet.core._attribute_api` and the row selections from
 `replace`, `delete`); `select` is a live query and `from_frame` a fixed
 selection made from the rows of a table you filtered yourself. The contract is stated in
 [the API contract](../api-contract.md), section 3; the reading workflow in
-[Reading the graph](../../explanations/reading-the-graph.md); the storage in
-[Internal representation](../../explanations/internal-representation.md).
+[Reading the graph](../../guide/annotations-and-views.ipynb); the storage in
+[Internal representation](../../guide/annotations-and-views.ipynb).
 
 ::: annnet.core._attribute_api.Attrs
     options:

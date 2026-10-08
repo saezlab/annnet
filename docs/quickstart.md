@@ -1,72 +1,99 @@
-# Quickstart
+# Quickstart: import and explore a network
 
-This quickstart shows how to create a graph, work with slices and annotations, add hyperedges, and run an algorithm through a backend interoperability accessor.
+Start with an interaction table, inspect what was imported, select a useful
+subset, and save the annotated graph. This example uses a small
+[synthetic teaching dataset](guide/data/index.md): 11 interactions among
+10 nodes, including two separately identified EGFR–GRB2 records.
 
-Prerequisite: install annnet via the [Installation guide](installation.md) (add extras like `networkx` if you want backend algorithm interoperability).
+## Load the table
 
-For exact APIs used below, see [AnnNet](reference/core/graph.md), [Slices](reference/core/slices.md), [NetworkX adapter](reference/adapters/networkx.md), and [Native .annnet format](reference/io/annnet-format.md).
+Install the table and storage dependencies:
 
-## Build a small graph
+```bash
+pip install "annnet[polars,storage]"
+```
+
+From a repository checkout, run the Python examples from the repository root.
+Alternatively, download [interactions.csv](guide/data/interactions.csv) into
+your working directory and set `DATA = Path('.')` below.
 
 ```python
+from pathlib import Path
 import annnet as an
+import polars as pl
 
-G = an.AnnNet(directed=True)
-G.slices.add('toy')
-G.slices.active = 'toy'
-
-for v in ['A', 'B', 'C', 'D']:
-    G.add_nodes(v, label=v, kind='gene')
-
-# Binary edges (directed + undirected)
-G.add_edges('A', 'B', weight=2.0, directed=True, relation='activates')
-G.add_edges('B', 'C', weight=1.0, directed=False, relation='binds')
-
-# Hyperedge (directed head→tail)
-G.add_edges(['A', 'B'], ['C', 'D'], weight=1.0, directed=True)
-```
-For the complete structural edge API, see the [`AnnNet.add_edges` reference](reference/core/graph.md) and the [Adding edges](explanations/add-edges.md) explanation page.
-
-
-## Run an algorithm (NetworkX)
-
-```python
-# Requires networkx installed
-deg = G.nx.degree_centrality(G)
+DATA = Path('docs/guide/data')
+interactions = pl.read_csv(DATA / 'interactions.csv')
+interactions.head()
 ```
 
-`G.nx` is a lazy graph-owned accessor. It converts `G` to a NetworkX graph on demand, replaces the `G` argument with that backend graph for the algorithm call, and returns the NetworkX result. The same pattern exists for `G.ig` and `G.gt` when those optional backends are installed.
-
-You can fetch a concrete NetworkX graph with options:
+The columns are `edge_id`, `source`, `target`, `effect`, `confidence`, and
+`evidence`. Map the identifier and effect columns explicitly:
 
 ```python
-nxG = G.nx.backend(
+G = an.from_edge_frame(
+    interactions,
+    edge_id='edge_id',
+    sign='effect',
     directed=True,
-    hyperedge_mode='skip',  # or "expand"
-    slice='toy',
-    simple=True,  # collapse multiedges
+    slice='prior',
+)
+G.attrs.backend = 'polars'
+G.summary()
+```
+
+You should see 10 nodes, 11 edges, and a `prior` slice containing the imported
+network. AnnNet creates the endpoint nodes and preserves both EGFR–GRB2 edges.
+The `effect` column becomes the `sign` annotation. Confidence remains an
+annotation; structural weights default to 1.
+
+## Inspect and select
+
+```python
+G.attrs.table('edges', derived=True).select(
+    'edge_id', 'source', 'target', 'sign', 'confidence'
 )
 ```
 
-See also [Interoperability](explanations/interoperability.md) and the [NetworkX adapter reference](reference/adapters/networkx.md).
-
-## Convert and save
+Which interactions have confidence at least 0.85?
 
 ```python
-import annnet as an
-
-# File formats
-an.io.to_graphml(G, 'graph.gml', directed=True, hyperedge_mode='reify')
-
-# Lossless storage
-an.io.write(G, 'my_graph.annnet', overwrite=True)
-R = an.io.read('my_graph.annnet')
+supported = G.E.select(confidence__gte=0.85)
+V = G.view(edges=supported)
+print(len(V.N), len(V.E))  # 8 nodes, 8 edges
+V.attrs.table('edges', derived=True)
 ```
 
-See the [GraphML and GEXF reference](reference/io/graphml-gexf.md) and the [Native .annnet format reference](reference/io/annnet-format.md).
+`V` is a live, read-only view. It follows changes to the parent graph and the
+selection. To keep a separate graph for further editing, use
+`H = V.materialize()`.
 
-## Next step
+## Add an annotation
 
-- Continue with [Tutorials and use cases](tutorials/index.md).
-- Read [Explanations](explanations/index.md) when you want the conceptual model behind the data structures.
-- Use [Reference](reference/index.md) when you need exact APIs.
+Write through `G.attrs` when you want the graph to change:
+
+```python
+G.attrs.update('nodes', {'ERK': {'label': 'ERK response'}})
+G.uns['dataset'] = 'AnnNet synthetic tutorial network'
+G.attrs.row('nodes', 'ERK')
+```
+
+Tables and rows returned by `G.attrs` are detached reads. Editing a returned
+dataframe alone does not update AnnNet.
+
+## Save and reopen
+
+```python
+G.write('analysis.annnet')
+restored = an.read('analysis.annnet')
+print(len(restored.N), len(restored.E))  # 10, 11
+restored.attrs.row('nodes', 'ERK')
+```
+
+The native format retains identities, annotations, and slice membership. The
+writer refuses an existing destination unless you pass `overwrite=True`.
+
+Continue with [Annotations, selections, and views](guide/annotations-and-views.ipynb)
+for filtering and materialization, or [Slices](guide/slices.ipynb) to attach
+contextual results. The [Guide](guide/index.md) also covers the graph model,
+layers, and computation and storage.

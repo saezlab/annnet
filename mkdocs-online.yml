@@ -1,54 +1,41 @@
 INHERIT: mkdocs.yml
 
-# ONLINE DOCS: this nav intentionally omits the LOCAL ONLY explanation pages
-# and API subsection from mkdocs.yml. Keep those files excluded below too.
+# The public site excludes experimental reference pages retained for local work.
 exclude_docs: |
-    tutorials/notebooks/environment.yml
-    tutorials/notebooks/envs/*.yml
-    tutorials/notebooks/the-loop.ipynb
-    explanations/vocabulary-and-contracts.md
-    explanations/joining-measurements.md
+    changelog.md
+    tutorials/**
     reference/experimental/**
 
 nav:
 -   Home: index.md
-
 -   Installation: installation.md
 -   Quickstart: quickstart.md
--   Tutorials and notebooks:
-    -   Notebook Gallery: tutorials/index.md
-
--   Explanations:
-    -   Explanations Overview: explanations/index.md
-    -   1. Understand the model:
-        -   Design principles: explanations/design-philosophy.md
-        -   Package architecture: explanations/architecture-overview.md
-        -   Internal representation: explanations/internal-representation.md
-        -   Edge tables, ids, and formats: explanations/edge-tables-and-formats.md
-        -   Incidence representation: explanations/math-incidence.md
-    -   2. Work with graph state:
-        -   Reading the graph: explanations/reading-the-graph.md
-        -   Migrating to the current surface: explanations/api-migration.md
-        -   Adding edges: explanations/add-edges.md
-        -   Mutation and derived state: explanations/mutation-and-derived-state.md
-        -   Aspects, order, and windows: explanations/aspects-and-windows.md
-        -   Multilayer and multi-aspect graphs: explanations/math-multilayer.md
-        -   Slices and views: explanations/managers-and-views.md
-        -   Node-layer values and scale: explanations/values-and-scale.md
-        -   What the general path costs: explanations/performance.md
-    -   3. Connect and persist:
-        -   Interoperability: explanations/interoperability.md
-        -   What each format keeps: explanations/format-semantics.md
-        -   Storage and IO: explanations/io-annnet.md
-        -   Tracking changes: explanations/history-and-diffs.md
-
+-   Guide:
+    -   Start here: guide/index.md
+    -   Graph model and matrices: guide/graph-model.ipynb
+    -   Annotations, selections, and views: guide/annotations-and-views.ipynb
+    -   Slices and analysis contexts: guide/slices.ipynb
+    -   Layers: guide/layers.ipynb
+    -   Computation and storage: guide/computation-and-storage.ipynb
+-   Examples:
+    -   Choose an example: examples/index.md
+    -   Case studies:
+        -   Multi-condition causal signaling: examples/use_cases/UC1.ipynb
+        -   TGF-beta fibrosis response: examples/use_cases/UC2.ipynb
+    -   Integrations:
+        -   OmniPath table ingestion: examples/scenarios/omnipath_table_ingestion.ipynb
+        -   Cytoscape CX2 export: examples/scenarios/cytoscape_cx2_export.ipynb
+        -   PyG HeteroData export: examples/scenarios/pyg_heterodata_export.ipynb
+        -   Causal activity bridge: examples/scenarios/causal_activity_bridge.ipynb
 -   API Reference:
     -   API Reference Overview: reference/index.md
     -   The public surface (contract): reference/api-contract.md
     -   Public and internal APIs: reference/api-boundary.md
+    -   Migrating existing code: reference/migration.md
     -   Support helpers: reference/support.md
     -   Core:
         -   Graph: reference/core/graph.md
+        -   Edge construction: reference/core/adding-edges.md
         -   Backend accessors: reference/core/backend-accessors.md
         -   Indexing: reference/core/indexing.md
         -   Attributes: reference/core/attributes.md
@@ -61,6 +48,7 @@ nav:
     -   Algorithms:
         -   Traversal: reference/algorithms/traversal.md
     -   IO:
+        -   Format comparison: reference/io/format-comparison.md
         -   Native .annnet format: reference/io/annnet-format.md
         -   Parquet: reference/io/parquet.md
         -   GraphML and GEXF: reference/io/graphml-gexf.md
@@ -79,46 +67,9 @@ nav:
     -   Utilities:
         -   Plotting: reference/utils/plotting.md
 
--   Changelog: changelog.md
-
 -   Community:
-    -   Join Us: community/index.md
-    -   Contribute to the Documentation: community/contribute-docs.md
-    -   Contribute to the package code: community/contribute-codebase.md
-
-plugins:
--   search
--   autorefs
--   mkdocstrings:
-        default_handler: python
-        handlers:
-            python:
-                options:
-                    annotations_path: brief
-                    docstring_style: numpy
-                    heading_level: 3
-                    members_order: source
-                    modernize_annotations: true
-                    show_category_heading: true
-                    show_object_full_path: false
-                    show_root_toc_entry: true
-                    show_signature: true
-                    show_signature_annotations: false
-                    signature_crossrefs: true
-                    show_bases: false
-                    show_if_no_docstring: false
-                    show_source: false
-                    separate_signature: true
-                    line_length: 60
--   mkdocs-jupyter:
-        execute: true
-        execute_ignore:
-        # Keep the same non-executed notebooks as mkdocs.yml.  The online
-        # config replaces the inherited plugin options rather than merging
-        # them, so these entries must be repeated here.
-        -   tutorials/notebooks/scenarios/*.ipynb
-        -   tutorials/notebooks/the-loop.ipynb
-        # Fetches DoRothEA from OmniPath; render its checked-in output.
-        -   tutorials/notebooks/special/sp04_backend_lazy_proxies.ipynb
-        -   tutorials/notebooks/use_cases/*.ipynb
-        -   tutorials/notebooks/use_cases/*/*.ipynb
+    -   Join us: community/index.md
+    -   Contribute documentation: community/contribute-docs.md
+    -   Contribute code: community/contribute-codebase.md
+    -   In-memory architecture: community/internals.md
+    -   Performance report: community/performance.md

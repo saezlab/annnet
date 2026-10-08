@@ -464,7 +464,7 @@ edges table and the summary, so no reader has to translate between spellings.
 
 Every removed name raises `AttributeError` with its replacement in the
 message. The full old → new map, with examples, is
-`docs/explanations/api-migration.md`; the changelog entry is the record.
+`docs/reference/migration.md`; the changelog entry is the record.
 
 | removed | replacement |
 |---|---|

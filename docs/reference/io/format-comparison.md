@@ -1,26 +1,26 @@
 # What each format keeps
 
-Every exchange format is narrower than an AnnNet graph, and they are narrow in
-different places. This page says, for each one, what comes back when you write a
-graph and read it again, and by what means. The statements are checked: a round
-trip of one graph through every format below is a test
-(`tests/test_roundtrip_semantics.py`), and it compares structure, not counts.
+Choose a format for the consumer, and retain AnnNet's reconstruction metadata
+when you need to re-import it. The comparison below concerns structural round
+trips with that metadata present; it is not a claim that other tools understand
+all AnnNet features.
 
-The graph in that test has a parallel pair of edges, a self-loop, an undirected
-edge, a directed and an undirected hyperedge, an edge entity with attributes, an
-edge that joins that entity to a node, edge and node attributes, and a slice.
+`tests/test_roundtrip_semantics.py` checks a flat graph with parallel edges,
+self-loops, directed and undirected hyperedges, an edge entity, edge attributes,
+and slice membership. That fixture does not establish complete preservation of
+every contextual annotation, attached array, or multilayer configuration.
 
 ## Three ways a format holds a graph
 
-**The file holds all of it.** The native format, JSON, NDJSON, Parquet and CX2
+**Embedded reconstruction metadata.** The native format, JSON, NDJSON, Parquet and CX2
 carry their own record of what the format's tables have no column for (hyperedges,
 slices, contextual attributes, edge entities, aspects) inside the file or the
-directory. Reading returns the graph that was written. The dataframes API
+directory. AnnNet readers use those extensions to reconstruct richer structure. The dataframes API
 (`to_dataframes` / `from_dataframes`) does the same in the dictionary it returns:
 the frames, and a plain dict beside them for the parts that are not a frame.
 Hand `from_dataframes` the whole dictionary.
 
-**The adapter returns two things.** `to_nx`, `to_igraph` and `to_graphtool`
+**A separate manifest.** `to_nx`, `to_igraph` and `to_graphtool`
 return a library graph and a manifest. The library graph is what that library can
 represent; the manifest holds the rest. Keep the manifest and `from_nx`,
 `from_igraph` and `from_graphtool` rebuild the graph. Read the library graph
@@ -28,7 +28,7 @@ alone (`from_nx` without a manifest) and you get what that graph says:
 hyperedges are whatever reified nodes it holds, and an edge entity, which the
 library has no notion of, is a node.
 
-**A sidecar holds the rest.** SIF, CSV, Excel, GraphML and GEXF write the file
+**A companion sidecar.** SIF, CSV, Excel, GraphML and GEXF write the file
 the format defines and, when the graph carries something the format cannot hold,
 a companion `<file>.annnet-sidecar` beside it. Writing says so with an
 `AnnNetLossWarning` naming what went to the sidecar. The sidecar records the
@@ -59,8 +59,8 @@ in the last section.
 
 ## Edge entities
 
-An edge entity is an edge another edge can name as an endpoint. No exchange format
-has such a thing, so each writer records the entities (their identity, the
+An edge entity is an edge another edge can name as an endpoint. The binary graph formats here do not represent that distinction directly.
+AnnNet writers record the entities (their identity, the
 layer they sit on, the edges that join one to a node, and their attributes) in
 whichever of the three places above the format has, and each reader gives them
 back. A reader never turns an edge entity into a node on its own: if a record
@@ -70,13 +70,6 @@ with an `AnnNetLossWarning`, and the read still succeeds.
 A manifest written before edge entities were recorded has no such record. Reading
 one returns the entity as a node and reports the attributes that had no edge to
 go to; it does not fail.
-
-## The direction of an edge
-
-A directed binary edge is written source first in every format. Two formats
-used to sort the endpoints and so reverse any edge whose source sorted after its
-target; that is fixed, and the test above writes an edge from `B` to `A` through
-every format to keep it fixed.
 
 ## Limits worth knowing
 
@@ -100,6 +93,7 @@ every format to keep it fixed.
   attribute names `__source_attr` and `__target_attr`, and only when a
   coefficient is not 1. `public_only=True` leaves them out of a file.
 
-See [Storage and IO](io-annnet.md) for the native layout and
-[Interoperability](interoperability.md) for the conversions between in-memory
-backends.
+Native saving materializes attached measurement values only for existing
+node-layer placements. Keep external assays separately when they contain other
+pairs. The [computation and storage guide](../../guide/computation-and-storage.ipynb)
+shows a native/CX2 round trip and explains the projection choices.

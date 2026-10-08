@@ -5,7 +5,7 @@ layers, slices, edge entities — and a flat binary graph uses the same code
 path as a multilayer one. This page records what that path costs, how the
 numbers were taken so they can be taken again, and the design decisions that
 rest on them. The machine-readable evidence is
-`docs/explanations/performance-measurements.json`.
+`docs/community/performance-measurements.json`.
 
 Cold-start measurements include package import and the first graph construction
 in a fresh interpreter. Warm-operation measurements use an initialized process.
@@ -35,7 +35,7 @@ construction cost reported below.
 
   ```
   NUMBA_CACHE_DIR=/tmp/annnet-numba-cache python -m benchmarks.api_costs \
-      --out docs/explanations/performance-measurements.json \
+      --out docs/community/performance-measurements.json \
       --compare-tree <exported previous revision> --compare-label previous \
       --compare-sections cold_start,flat_costs,promotion
   ```

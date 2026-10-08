@@ -1,29 +1,12 @@
 # Adding edges
 
-`add_edges` is the single entry point for all edge creation in annnet. It handles
-binary edges, directed and undirected hyperedges, stoichiometric coefficients,
-supra-node (multilayer) edges, and edge-entity placeholders — all through one
-method, dispatching on the shape of the input.
+Use `an.from_edge_frame` to import an interaction table; see the
+[quickstart](../../quickstart.md). Use `G.add_edges` for individual additions,
+batched records, explicit multilayer placements, and structures that need more
+than a source and target column.
 
-## Dispatch
-
-When you call `G.add_edges(...)`, the first thing that happens is a shape check:
-
-```
-G.add_edges(*args, **kwargs)
-    │
-    ├─ single arg that is a list/generator of dicts or tuples?
-    │       ├─ all items are hyperedge dicts?  → batch hyperedge path
-    │       ├─ all items are binary?           → batch binary path (optimised)
-    │       └─ mixed?                          → item-by-item loop
-    │
-    └─ everything else                         → single-edge path
-```
-
-The single-edge path returns a `str` (the edge ID).  
-The batch path always returns a `list[str]`.
-
----
+A single-edge call returns the edge ID as a string. A batch call returns a list
+of IDs. The input forms below describe both paths.
 
 ## Input forms — single edge
 
@@ -52,7 +35,9 @@ was created with `aspects=`. The multilayer kind is inferred:
 | Same layer, different node IDs | `intra` |
 | Different node ID and layer | `inter` |
 
-In a multilayer graph, passing a bare string ID raises `ValueError`.
+Use explicit endpoint pairs in batch records too. Bare IDs are not a reliable
+shortcut: the single-edge path rejects them, while some batch import paths can
+create unintended placeholders.
 
 ### Undirected hyperedge
 
@@ -66,10 +51,12 @@ incidence column.
 ### Directed hyperedge
 
 ```python
-G.add_edges(['A', 'B'], ['C', 'D'])  # tail → head
+G.add_edges(['A', 'B'], ['C', 'D'])  # source → target
 ```
 
-First list is the tail (source side, `+weight`), second is the head (target side, `-weight`).
+First list is the source side (`+weight`), second is the target side (`-weight`).
+Some legacy records use `head` for sources and `tail` for targets; use
+`source` and `target` to avoid confusing conventions.
 
 ### Stoichiometric edge
 
@@ -124,7 +111,7 @@ The shape of `src` (and optionally `tgt`) determines hyperedge kind:
 
 - list-shaped `src`, no `tgt` → undirected hyperedge (`src` is the member set)
 - list-shaped `src` and list-shaped `tgt` → directed hyperedge (`src` is the
-  tail, `tgt` is the head)
+  source group, `tgt` is the target group)
 
 `source` / `target` are accepted as aliases for `src` / `tgt`.
 
@@ -137,7 +124,7 @@ G.add_edges(
     ]
 )
 
-# Directed (tail → head)
+# Directed (source → target)
 G.add_edges(
     [
         {'src': ['A', 'B'], 'tgt': ['C']},
@@ -284,7 +271,7 @@ Rows:      A     B
 Column:  +2.0  +2.0
 ```
 
-For a directed hyperedge with `tail=[A,B]`, `head=[C]`, `weight=1.0`:
+For a directed hyperedge with `source=[A,B]`, `target=[C]`, `weight=1.0`:
 
 ```
 Rows:      A      B      C
@@ -295,6 +282,6 @@ Column:  +1.0   +1.0   -1.0
 
 ## See also
 
-- [Multilayer and multi-aspect graphs](math-multilayer.md) — supra-node form in depth
-- [Slices and views](managers-and-views.md) — how `slice=` and `propagate=` interact with slice state
+- [Multilayer and multi-aspect graphs](../../guide/layers.ipynb) — supra-node form in depth
+- [Slices and views](../../guide/slices.ipynb) — how `slice=` and `propagate=` interact with slice state
 - API reference: [`AnnNet.add_edges`][annnet.core.graph.AnnNet.add_edges]

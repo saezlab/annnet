@@ -1,4 +1,4 @@
-name: annnet-use-case-uc2-hek293-heterogeneous-graph
+name: annnet-use-case-uc2-fibrosis
 channels:
   - conda-forge
 dependencies:
@@ -15,6 +15,10 @@ dependencies:
       - omnipath>=1.0
       - omnipath-client @ git+https://github.com/saezlab/omnipath-client.git
       - pandas>=2.0
+      - pyreadr
+      - pyarrow>=10
+      - zarr>=2.18
+      - numcodecs>=0.12
       - polars>=0.20.0
       - requests
       - scipy

@@ -229,6 +229,7 @@ include = [
   "dependents.toml",
   "LICENSE",
   "docs/**/*.ipynb",
+  "docs/guide/data/*.csv",
   "docs/**/*.md",
   "docs/**/*.yml",
   "docs/Elowitz.sbml.xml",
