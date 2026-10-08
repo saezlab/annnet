@@ -6,10 +6,13 @@ gateway, the query facade, the attribute columns, the matrix builders and the
 namespaces are all reachable through the graph object and through nothing else.
 
 Input-output code, adapters and bridges read structure through the query facade
-``annnet.core._structure`` and never through the store behind it (FR-002).
+``annnet.core._structure`` and never through the store behind it.
 """
 
 from .graph import AnnNet
+from ._space import Set, Space
+from ._Views import GraphView
+from ._select import EdgeSequence, NodeSequence, RowSelection
 from ._values import ValueMatrix, MatrixValues, ValueResolver, ContextualValues
 from ._aspects import BOUNDARIES, Aspect, OrderedLabels, as_aspect
 from ._records import (
@@ -21,7 +24,8 @@ from ._records import (
     as_endpoints,
 )
 from ._selection import LayerSelection
-from ._provenance import ProvenanceAccessor
+from ._provenance import Provenance
+from ._attribute_api import Attrs, Schema
 
 Graph = AnnNet
 
@@ -33,7 +37,15 @@ __all__ = [
     'ContextualValues',
     'LayerSelection',
     'MatrixValues',
-    'ProvenanceAccessor',
+    'Provenance',
+    'Attrs',
+    'RowSelection',
+    'Schema',
+    'GraphView',
+    'NodeSequence',
+    'EdgeSequence',
+    'Set',
+    'Space',
     'ValueMatrix',
     'ValueResolver',
     'OrderedLabels',

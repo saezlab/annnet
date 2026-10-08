@@ -21,10 +21,10 @@ def test_dataframe_export_options_and_private_attr_filtering():
     graph.add_edges('A', 'B', edge_id='e1', directed=None, relation='activates')
     graph._set_edge_field('e1', 'weight', None)
     graph.add_edges(src=['A', 'B'], tgt=['C'], edge_id='h1', weight=2.5, directed=True)
-    graph.attrs.set_edge_attrs('h1', pathway='p1', __internal='secret')
+    graph.attrs.update('edges', {'h1': {'pathway': 'p1', '__internal': 'secret'}})
     graph.slices.add('s1')
     graph.slices.add_edge_to_slice('s1', 'e1')
-    graph.attrs.set_edge_slice_attrs('s1', 'e1', weight=7.0)
+    graph.attrs.update('edge_slices', {('s1', 'e1'): {'weight': 7.0}})
 
     exported = dataframes.to_dataframes(
         graph,
@@ -84,7 +84,7 @@ def test_from_dataframes_validation_and_slice_weight_edge_cases():
 
     assert 'h1' in graph.hyperedge_definitions
     assert 'kept' in graph.slices.list(include_default=True)
-    assert graph.attrs.get_effective_edge_weight('e1', slice='kept') == 3.0
+    assert graph.E.effective_weight('e1', slice='kept') == 3.0
 
 
 def test_graphml_sanitize_restore_and_gexf_smoke(tmp_path):
@@ -114,7 +114,7 @@ def test_graphml_sanitize_restore_and_gexf_smoke(tmp_path):
     out = tmp_path / 'graph.gexf'
     graphml.to_gexf(ann, out)
     restored = graphml.from_gexf(out)
-    assert set(restored.nodes()) == {'A', 'B'}
+    assert set(restored.N) == {'A', 'B'}
 
 
 def test_sif_helpers_and_manifest_without_file(tmp_path):
@@ -149,8 +149,8 @@ def test_sif_helpers_and_manifest_without_file(tmp_path):
         read_nodes_sidecar=True,
         relation_attr='interaction',
     )
-    assert {'A', 'B'}.issubset(set(restored.nodes()))
-    assert restored.attrs.get_attr_node('A', 'active') is True
+    assert {'A', 'B'}.issubset(set(restored.N))
+    assert restored.attrs.row('nodes', 'A').get('active') is True
 
 
 def test_sif_from_manifest_restores_hyperedges_slices_and_multilayer(tmp_path):
@@ -265,5 +265,5 @@ def test_json_multilayer_and_malformed_entries_roundtrip(tmp_path):
     restored = json_format.from_json(path)
     assert restored._aspect_attrs['time']['unit'] == 'day'
     assert restored._state_attrs[('A', ('t1',))]['state'] == 'on'
-    assert restored.attrs.get_effective_edge_weight('e1', slice='s1') == 4.0
+    assert restored.E.effective_weight('e1', slice='s1') == 4.0
     assert S.edge_ref(restored, 'e1').ml_kind == 'intra'

@@ -46,9 +46,9 @@ def test_json_round_trip_preserves_uns(graph, tmp_path):
 def test_dataframes_round_trip(graph):
     dfs = dataframes.to_dataframes(graph)
     loaded = dataframes.from_dataframes(dfs)
-    assert loaded.nv == graph.nv
-    assert loaded.ne == graph.ne
-    assert set(loaded.edges()) == set(graph.edges())
+    assert len(loaded.N) == len(graph.N)
+    assert len(loaded.E) == len(graph.E)
+    assert set(loaded.E) == set(graph.E)
 
 
 # ── ``to_cx2(G, path)`` accepts a path ────────────────────────────────────

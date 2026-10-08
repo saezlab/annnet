@@ -1,6 +1,6 @@
 """An intrinsic edge field reads as one pass over the edge arrays.
 
-`FR-016`. Three fields of an edge are not attributes — its weight, its direction
+Three fields of an edge are not attributes — its weight, its direction
 and its kind — and they read like a column, because a filter over them is as
 common as a filter over an attribute. The read used to ask the graph for a record
 per edge, and a record carries two frozensets of endpoints, so reading the weight
@@ -49,7 +49,7 @@ class TestTheReadDoesNotBuildARecordPerEdge:
         def refuse(*_args, **_kwargs):
             raise AssertionError(f'reading {name!r} built a record per edge')
 
-        monkeypatch.setattr(type(graph), 'get_edge', refuse)
+        monkeypatch.setattr('annnet.core._select.edge_record', refuse)
         column = graph.E[name]
         assert len(column) == len(graph.E.ids)
 
@@ -67,7 +67,7 @@ class TestTheReadDoesNotBuildARecordPerEdge:
 
 
 class TestTheCostDoesNotGrowWithTheGraph:
-    """`SC-006`: within reach of an attribute column of the same graph."""
+    """Within reach of an attribute column of the same graph."""
 
     @staticmethod
     def _best(fn, calls: int) -> float:

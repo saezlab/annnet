@@ -73,7 +73,7 @@ class TestNetworkXAdapter(unittest.TestCase):
 
         # Ensure we can pull an edge id from Lw and read its effective weight
         eid = list(manifest['slices']['Lw'])[0]
-        w_eff = g2.attrs.get_effective_edge_weight(eid, slice='Lw')
+        w_eff = g2.E.effective_weight(eid, slice='Lw')
         self.assertEqual(w_eff, 5.0)
 
     def test_slice_filters_single(self):
@@ -183,8 +183,8 @@ class TestNetworkXAdapter(unittest.TestCase):
         H = from_nx_without_manifest(nxG)
         elapsed = time.perf_counter() - t0
 
-        self.assertEqual(H.ncount(), N)
-        self.assertEqual(H.ecount(), E)
+        self.assertEqual(len(H.N), N)
+        self.assertEqual(len(H.E), E)
         self.assertLess(
             elapsed, 60.0, f'from_nx_without_manifest took {elapsed:.1f}s; expected <60s'
         )

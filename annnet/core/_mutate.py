@@ -80,8 +80,14 @@ def remove_entity(g, ekey) -> None:
 # ---------------------------------------------------------------------------
 
 
-def add_node(g, node_id, slice=None, layer=None, **attributes):
-    """Add or update a node; returns its id."""
+def add_node(g, node_id, slice=None, layer=None, attributes=None):
+    """Add or update a node; returns its id.
+
+    ``attributes`` is a mapping rather than keywords, so that an attribute
+    named like a parameter of this function — ``g``, ``slice``, ``layer`` —
+    cannot collide with it.
+    """
+    attributes = attributes or {}
     if slice is None:
         slice = g._current_slice
 
@@ -108,10 +114,17 @@ def add_node(g, node_id, slice=None, layer=None, **attributes):
 
 
 def register_edge_as_entity(g, edge_id):
-    """Ensure an edge id names an edge-entity as well as an edge."""
+    """Ensure an edge id names an edge-entity as well as an edge.
+
+    On a multilayer graph the entity sits on the placeholder coordinate, like a
+    node added without ``layer=``; the placeholder is declared here for the same
+    reason it is declared there, so the entity can be named as an endpoint.
+    """
     ekey = I.resolve_ekey(g, edge_id)
     if g._store.entity_slot(ekey) is not None:
         return
+    if ekey[1] == I.placeholder_layer_coord(g):
+        I.ensure_placeholder_layers_declared(g)
     register_entity(g, ekey, 'edge_entity')
     D.bump_structure(g)
 
@@ -140,7 +153,7 @@ def ensure_edge_entity_placeholder(g, edge_id, slice=None, **attributes):
     if slice is not None:
         g.slices._ensure_slice(slice)['edges'].add(edge_id)
     if attributes:
-        g.attrs.set_edge_attrs(edge_id, **attributes)
+        g.attrs.update('edges', {edge_id: dict(attributes)})
     return edge_id
 
 
@@ -385,11 +398,12 @@ def add_edge(
         tgt_store = frozenset(tgt_nodes) if tgt_nodes else None
         edge_kind = 'hyper'
 
-    # 8. Infer ml_kind / ml_layers
+    # 8. Infer ml_kind / ml_layers. A flat graph has one role for every edge,
+    #    and the store answers that from the aspects rather than per edge.
     ml_kind = None
     ml_layers = None
     if not is_multilayer:
-        ml_kind = 'intra'
+        pass
     elif etype == 'binary' and tgt_store is not None:
         src_key = I.resolve_ekey(g, src_store)
         tgt_key = I.resolve_ekey(g, tgt_store)
@@ -450,7 +464,7 @@ def add_edge(
 
     # 14. Attributes
     if attrs:
-        g.attrs.set_edge_attrs(edge_id, **attrs)
+        g.attrs.update('edges', {edge_id: dict(attrs)})
 
     return edge_id
 
@@ -620,6 +634,30 @@ def set_entity_kinds(g, mapping):
             register_entity_as_edge(g, ekey[0])
 
 
+def declare_edge_entities(g, keys, node_edges=()):
+    """Mark entities as edge entities and edges as node edges, in place.
+
+    A loader that reads a format with no notion of an edge entity first builds
+    the entity as a node and the edge that names it as an ordinary binary edge.
+    When the file, or the record beside it, says what they were, this puts the
+    kinds back: each key becomes an edge entity (an entity the graph does not yet
+    hold is added, and an edge of that identity is registered when none exists),
+    and each listed binary edge becomes a node edge. Nothing else about an entity
+    or an edge changes, and an id the graph holds no edge for is skipped in
+    ``node_edges`` rather than invented.
+    """
+    keys = [(key[0], tuple(key[1])) for key in keys]
+    if keys:
+        set_entity_kinds(g, dict.fromkeys(keys, 'edge_entity'))
+    store = g._store
+    for edge_id in node_edges:
+        slot = store.edge_slot(edge_id)
+        if slot is not None and int(store.edge_kind[slot]) == ST.BINARY:
+            store.set_edge_kind(edge_id, ST.NODE_EDGE)
+    if keys or node_edges:
+        D.bump_structure(g)
+
+
 def remap_entity_keys(g, remap):
     """Move each entity an ``ekey -> ekey`` map names, keeping the row it holds.
 
@@ -681,6 +719,20 @@ def replace_edge_coeffs(g, edge_id, coeffs):
     g._store.set_edge_coefficients(
         edge_id, {member: value for member, value in coeffs.items() if value != 0.0}
     )
+
+
+def restore_edge_column(g, edge_id, coefficients, explicit) -> None:
+    """Put back the incidence column of one edge as a transaction snapshotted it.
+
+    The inverse of :func:`replace_edge_coeffs` for a rollback: the coefficients
+    return entry by entry, the explicit flag returns, and the clocks move so
+    that every derived matrix is rebuilt from the restored column.
+    """
+    if g._store.edge_slot(edge_id) is None:
+        return
+    g._store.restore_member_coefficients(edge_id, coefficients, explicit)
+    g._mark_structure_changed()
+    D.invalidate_sparse_caches(g)
 
 
 def set_hyperedge_members(g, eid, *, members=None, head=None, tail=None):
@@ -817,15 +869,24 @@ def remove_nodes_bulk(g, node_ids):
     """Remove many nodes, their incident edges, and compact entity rows."""
     drop_keys = set()
     drop_node_ids = set()
+    store = g._store
     for vid in node_ids:
+        if isinstance(vid, str):
+            # A bare id names the node, which is every placement it has.
+            keys = store.entity_keys_of_id(vid)
+            if not keys:
+                continue
+            drop_keys.update(keys)
+            drop_node_ids.add(vid)
+            continue
         try:
             ekey = I.resolve_ekey(g, vid)
         except (KeyError, ValueError, TypeError):
             continue
-        if g._store.entity_slot(ekey) is None:
+        if store.entity_slot(ekey) is None:
             continue
         drop_keys.add(ekey)
-        drop_node_ids.add(ekey[0] if isinstance(ekey, tuple) and len(ekey) == 2 else ekey)
+        drop_node_ids.add(ekey[0])
 
     if not drop_keys:
         return
@@ -1331,11 +1392,13 @@ def batch_add_edges(
         g.slices._ensure_slice(sid)['edges'].update(eids)
     for sid, vids in _slice_vids.items():
         g._slices[sid]['nodes'].update(vids)
-    for sid, eid, sw in _slice_weights:
-        g.attrs.set_edge_slice_attrs(sid, eid, weight=sw)
+    if _slice_weights:
+        g.attrs.update(
+            'edge_slices', {(sid, eid): {'weight': sw} for sid, eid, sw in _slice_weights}
+        )
 
     if pending_attrs:
-        g.attrs.set_edge_attrs_bulk(pending_attrs)
+        g.attrs.update('edges', pending_attrs)
 
     if as_entity:
         flat = g._aspects == ('_',)
@@ -1593,6 +1656,6 @@ def batch_add_hyperedges(
     g._mark_structure_changed()
     g._invalidate_sparse_caches()
     if attrs_batch:
-        g.attrs.set_edge_attrs_bulk(attrs_batch)
+        g.attrs.update('edges', attrs_batch)
 
     return out_ids

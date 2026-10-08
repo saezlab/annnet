@@ -1,14 +1,14 @@
 """What a caller may do with a column, and how long it is good for.
 
-Two rules, and `D2` of cycle 003 settles the second.
+Two rules.
 
-**A column is read-only.** `FR-011`. A borrowing read hands back a window onto
+**A column is read-only.** A borrowing read hands back a window onto
 the canonical store, and a write through that window would reach the graph with
 no validation, no clock bump and no history entry — the one outcome worse than
 copying. So it is refused, and it is refused on every path, so that a caller
 never has to ask which one answered.
 
-**A column is good until the next write to the graph.** `FR-010`. A view onto the
+**A column is good until the next write to the graph.** A view onto the
 storage would otherwise mean that a cell write shows through it and a growth does
 not, because a growth allocates a new array, and a caller cannot see which of the
 two happened. The package therefore states one lifetime instead of two, and
@@ -37,7 +37,7 @@ def _graph(nodes: int = 8, *, edges: int = 4) -> AnnNet:
 
 
 class TestAColumnIsReadOnly:
-    """`FR-011`. The behaviour is stated, so it is tested."""
+    """The behaviour is stated, so it is tested."""
 
     def test_writing_into_a_node_column_is_refused(self):
         column = _graph().N['score']
@@ -52,7 +52,7 @@ class TestAColumnIsReadOnly:
     def test_the_refusal_holds_on_the_gathering_path_too(self):
         """A graph with freed slots answers from a gather, and is refused alike."""
         graph = _graph()
-        graph.remove_node('v3')
+        graph.remove_nodes('v3')
         assert graph._store.node_axis_contiguous is False
         with pytest.raises(ValueError, match='read-only'):
             graph.N['score'][0] = 99.0
@@ -100,14 +100,14 @@ class TestACopyIsTheCallersOwn:
     def test_a_copy_survives_every_kind_of_change(self):
         graph = _graph()
         snapshot = graph.N['score'].copy()
-        graph.attrs.set_node_attrs('v0', score=-1.0)
+        graph.attrs.update('nodes', {'v0': {'score': -1.0}})
         graph.add_nodes([{'node_id': f'w{i}', 'score': 5.0} for i in range(64)])
-        graph.remove_node('v1')
+        graph.remove_nodes('v1')
         assert snapshot.tolist() == [float(i) for i in range(8)]
 
 
 class TestTheStatedLifetime:
-    """`FR-010` and `D2`: a column is good until the next write to the graph."""
+    """A column is good until the next write to the graph."""
 
     def test_a_column_holds_the_values_of_the_moment_it_was_read(self):
         graph = _graph()
@@ -116,7 +116,7 @@ class TestTheStatedLifetime:
 
     def test_a_read_after_a_write_gives_the_new_values(self):
         graph = _graph()
-        graph.attrs.set_node_attrs('v0', score=99.0)
+        graph.attrs.update('nodes', {'v0': {'score': 99.0}})
         assert float(graph.N['score'][0]) == 99.0
 
     def test_the_lifetime_does_not_depend_on_whether_the_store_grew(self):
@@ -134,7 +134,7 @@ class TestTheStatedLifetime:
             snapshot = column.copy()
             if grow_first:
                 graph.add_nodes([{'node_id': f'w{i}', 'score': 0.0} for i in range(64)])
-            graph.attrs.set_node_attrs('v0', score=99.0)
+            graph.attrs.update('nodes', {'v0': {'score': 99.0}})
 
             # What the package promises after a write: the copy is untouched,
             # and a fresh read is right.

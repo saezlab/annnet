@@ -38,19 +38,19 @@ class TestEntityContiguity:
 
     def test_a_freed_slot_breaks_it(self):
         graph = _flat_graph()
-        graph.remove_node('v3')
+        graph.remove_nodes('v3')
         assert graph._store.entity_slots_contiguous is False
 
     def test_reusing_the_freed_slot_restores_it(self):
         graph = _flat_graph()
-        graph.remove_node('v3')
+        graph.remove_nodes('v3')
         graph.add_nodes([{'node_id': 'v99'}])
         assert graph._store.entity_slots_contiguous is True
 
     def test_it_matches_the_slots_the_store_actually_holds(self):
         graph = _flat_graph(12)
         for victim in ('v2', 'v7'):
-            graph.remove_node(victim)
+            graph.remove_nodes(victim)
         store = graph._store
         live = store.live_entity_slots()
         expected = live.size == store.entity_capacity and (
@@ -75,7 +75,7 @@ class TestEdgeContiguity:
                 {'source': 'v1', 'target': 'v2', 'edge_id': 'e1'},
             ]
         )
-        graph.remove_edge('e0')
+        graph.remove_edges('e0')
         assert graph._store.edge_slots_contiguous is False
 
     def test_it_matches_the_slots_the_store_actually_holds(self):
@@ -83,7 +83,7 @@ class TestEdgeContiguity:
         graph.add_edges(
             [{'source': 'v0', 'target': f'v{i}', 'edge_id': f'e{i}'} for i in (1, 2, 3)]
         )
-        graph.remove_edge('e2')
+        graph.remove_edges('e2')
         store = graph._store
         live = store.live_edge_slots()
         expected = live.size == len(store._edge_id) and (

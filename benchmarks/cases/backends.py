@@ -95,25 +95,27 @@ def _annnet_ops(scale, backend: str):
     def set_node_attrs_bulk():
         graph = empty()
         graph.add_nodes(nodes, slice='base')
-        graph.attrs.set_node_attrs_bulk(
+        graph.attrs.update(
+            'nodes',
             make_node_attr_updates(
                 nodes,
                 attr_count=scale.node_attrs,
                 sparse_every=scale.sparse_every,
                 annotation_density=scale.annotation_density,
-            )
+            ),
         )
         return graph
 
     def set_edge_attrs_bulk():
         graph, _nodes, _pairs, edge_ids = build_annnet_graph(scale, backend=backend)
-        graph.attrs.set_edge_attrs_bulk(
+        graph.attrs.update(
+            'edges',
             make_edge_attr_updates(
                 edge_ids,
                 attr_count=scale.edge_attrs,
                 sparse_every=scale.sparse_every,
                 annotation_density=scale.annotation_density,
-            )
+            ),
         )
         return graph
 
@@ -234,7 +236,7 @@ def _igraph_ops(scale):
 
     def remove_nodes_fraction():
         graph = build_graph()
-        graph.delete_nodes(list(range(min(scale.remove_nodes, graph.vcount()))))
+        graph.delete_vertices(list(range(min(scale.remove_nodes, graph.vcount()))))
         return graph
 
     def set_node_attrs_bulk():

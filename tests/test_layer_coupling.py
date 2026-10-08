@@ -51,13 +51,17 @@ class TestOrdinal:
 
     def test_the_pairs_are_the_aspects_own(self, timed):
         timed.layers.couple('time')
-        rows = [r for r in _rows(timed.views.edges()) if r['ml_kind'] == 'coupling']
+        rows = [
+            r for r in _rows(timed.attrs.table('edges', derived=True)) if r['ml_kind'] == 'coupling'
+        ]
         pairs = {(r['src_layer'], r['dst_layer']) for r in rows}
         assert pairs == set(timed.layers.aspect('time').consecutive_pairs())
 
     def test_it_does_not_couple_across_a_gap(self, timed):
         timed.layers.couple('time')
-        rows = [r for r in _rows(timed.views.edges()) if r['ml_kind'] == 'coupling']
+        rows = [
+            r for r in _rows(timed.attrs.table('edges', derived=True)) if r['ml_kind'] == 'coupling'
+        ]
         assert ('t0', 't2') not in {(r['src_layer'], r['dst_layer']) for r in rows}
 
     def test_a_categorical_aspect_refuses_ordinal(self, categorical):
@@ -95,32 +99,32 @@ class TestTheFamilyIsInTheId:
 
     def test_the_id_carries_the_family(self, timed):
         timed.layers.couple('time')
-        assert all(eid.startswith('ordinal:') for eid in timed.edges())
+        assert all(eid.startswith('ordinal:') for eid in list(timed.E))
 
     def test_edge_kind_renames_it(self, timed):
         timed.layers.couple('time', edge_kind='timecourse')
-        assert all(eid.startswith('timecourse:') for eid in timed.edges())
+        assert all(eid.startswith('timecourse:') for eid in list(timed.E))
 
     def test_the_family_is_also_an_attribute(self, timed):
         timed.layers.couple('time', edge_kind='timecourse')
-        one = next(iter(timed.edges()))
-        assert timed.attrs.get_edge_attrs(one)['edge_kind'] == 'timecourse'
+        one = next(iter(list(timed.E)))
+        assert dict(timed.attrs.row('edges', one))['edge_kind'] == 'timecourse'
 
     def test_two_families_over_one_node_pair_coexist(self, timed):
         first = timed.layers.couple('time', edge_kind='a')
         second = timed.layers.couple('time', edge_kind='b')
         assert first == second == 4
-        assert len(list(timed.edges())) == 8
+        assert len(list(timed.E)) == 8
 
     def test_the_older_generators_carry_a_family_too(self, categorical):
         categorical.layers.add_categorical_coupling('mechanism', [list(MECHANISMS)])
-        assert all(eid.startswith('categorical:') for eid in categorical.edges())
+        assert all(eid.startswith('categorical:') for eid in list(categorical.E))
 
     def test_and_take_edge_kind(self, categorical):
         categorical.layers.add_categorical_coupling(
             'mechanism', [list(MECHANISMS)], edge_kind='mine'
         )
-        assert all(eid.startswith('mine:') for eid in categorical.edges())
+        assert all(eid.startswith('mine:') for eid in list(categorical.E))
 
 
 class TestJoiningOnAnAttribute:
@@ -142,7 +146,7 @@ class TestJoiningOnAnAttribute:
 
     def test_the_edge_runs_between_the_two_ids(self, omics):
         omics.layers.couple('omic', kind='categorical', on='sym')
-        row = next(iter(_rows(omics.views.edges())))
+        row = next(iter(_rows(omics.attrs.table('edges', derived=True))))
         assert {row['source'], row['target']} == {'gene:X', 'prot:X'}
         assert {row['src_layer'], row['dst_layer']} == {'rna', 'prot'}
 
@@ -154,13 +158,15 @@ class TestJoiningOnAnAttribute:
         attribute is what says the two were coupled deliberately.
         """
         omics.layers.couple('omic', kind='categorical', on='sym')
-        row = next(iter(_rows(omics.views.edges())))
+        row = next(iter(_rows(omics.attrs.table('edges', derived=True))))
         assert row['ml_kind'] == 'inter'
         assert row['edge_kind'] == 'categorical'
 
     def test_an_entity_present_on_one_side_only_is_not_coupled(self, omics):
         omics.layers.couple('omic', kind='categorical', on='sym')
-        assert 'gene:Q' not in {r['source'] for r in _rows(omics.views.edges())}
+        assert 'gene:Q' not in {
+            r['source'] for r in _rows(omics.attrs.table('edges', derived=True))
+        }
 
     def test_without_the_key_nothing_couples(self, omics):
         """The two ids differ, so a coupling on identity finds no pair."""

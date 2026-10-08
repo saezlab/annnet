@@ -105,35 +105,52 @@ keeps them within a single, consistent representation that can still be exported
 
 ## Documentation
 
-The documentation is split by purpose: short setup, conceptual explanations,
-runnable notebooks, and exact reference pages. Choose one route below and move
-to another section only when you need it.
+Start with installation and the quickstart, then choose a Guide topic or an
+Example. The Guide combines concepts, mathematics, and runnable code in five
+topic notebooks. Examples cover longer analyses and integrations; the API
+Reference provides exact signatures and options.
 
 <div class="grid cards annnet-feature-cards" markdown>
 
--   __Tutorials and notebooks__
+-   __Installation__
 
     ---
 
-    End-to-end examples showing graph construction, annotation workflows, slices, multilayer models, and interoperability.
+    Install annnet and choose the optional dependencies for your workflow.
 
-    [Open tutorials](tutorials/index.md)
+    [Install annnet](installation.md)
 
--   __Concepts and design__
+-   __Quickstart__
 
     ---
 
-    Explanations of the incidence-matrix core, annotation system, slices, multilayer formalism, adapters, and storage model.
+    Import an interaction table, inspect annotations, select a view, and save your first graph.
 
-    [Open explanations](explanations/index.md)
+    [Open the quickstart](quickstart.md)
 
--   __API reference__
+-   __Guide__
+
+    ---
+
+    Five notebooks explain the graph model and matrices, annotations and views, slices, layers, and computation and storage, with practical API examples.
+
+    [Open the guide](guide/index.md)
+
+-   __Examples__
+
+    ---
+
+    Two case studies and four integration scenarios show complete analyses and workflows with other tools.
+
+    [Explore examples](examples/index.md)
+
+-   __API Reference__
 
     ---
 
     Detailed reference for the object model, bulk APIs, IO, utilities, and public entry points.
 
-    [Open reference](reference/index.md)
+    [Open the API reference](reference/index.md)
 
 -   __Community__
 
@@ -145,25 +162,18 @@ to another section only when you need it.
 
 </div>
 
-## Recommended order
-
-1. [Install annnet](installation.md).
-2. Build one graph with the [Quickstart](quickstart.md).
-3. Read the [Explanations](explanations/index.md) page that matches your model.
-4. Run a matching example from the [Notebook Gallery](tutorials/index.md).
-5. Consult the [API reference](reference/index.md) for exact signatures.
-
 <div class="annnet-hero">
   <div class="annnet-kicker">Get started</div>
   <h2>Choose the next useful page</h2>
   <p class="annnet-lead">
-    Use the quickstart for the core loop, explanations for the model, notebooks
-    for runnable workflows, and the reference for exact API details.
+    Use the quickstart for your first imported graph, the guide for concepts
+    and practical API usage, examples for complete workflows, and the API
+    reference for exact details.
   </p>
   <div class="annnet-actions">
     <a class="md-button md-button--primary" href="installation/">Installation</a>
     <a class="md-button" href="quickstart/">Quickstart</a>
-    <a class="md-button" href="explanations/">Explanations</a>
-    <a class="md-button" href="tutorials/">Notebook Gallery</a>
+    <a class="md-button" href="guide/">Guide</a>
+    <a class="md-button" href="examples/">Examples</a>
   </div>
 </div>

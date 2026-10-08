@@ -77,7 +77,7 @@ def _build_graph() -> AnnNet:
     g.slices.add_edge_to_slice('active_only', e4)
 
     # Per-slice weight override
-    g.attrs.set_edge_slice_attrs('active_only', e1, weight=5.0)
+    g.attrs.update('edge_slices', {('active_only', e1): {'weight': 5.0}})
 
     # Second slice with different membership
     g.slices.add('druggable')
@@ -87,7 +87,7 @@ def _build_graph() -> AnnNet:
     g.slices.add_edge_to_slice('druggable', e3)
 
     # Basic sanity
-    assert g.ne >= 4
+    assert len(g.E) >= 4
     assert len(list(g.hyperedge_definitions)) >= 1
 
     return g

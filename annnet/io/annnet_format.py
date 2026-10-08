@@ -57,6 +57,18 @@ if TYPE_CHECKING:
     from ..core import AnnNet
 
 
+def _require_zarr():
+    """Import zarr, or say what to install for the native format."""
+    try:
+        import zarr
+    except ImportError as exc:
+        raise ModuleNotFoundError(
+            "Optional dependency 'zarr' is not installed. The native .annnet format needs it. "
+            'Install with: pip install annnet[zarr_io]'
+        ) from exc
+    return zarr
+
+
 def _df_from_dict(data: dict):
     """Create a dataframe/table using AnnNet's configured backend."""
     if isinstance(data, list):
@@ -232,7 +244,7 @@ def _write_dir(
             'nodes': sum(
                 1 for ref in _structure.iter_entities(graph) if ref.kind == _structure.NODE
             ),
-            'edges': graph.ne,
+            'edges': len(graph.E),
             'entities': sum(1 for _ in _structure.iter_entities(graph)),
             'slices': len(graph.slices.list(include_default=True)),
             'hyperedges': len(graph.hyperedge_definitions),
@@ -374,7 +386,7 @@ def _write_structure(
     """
     import json
 
-    import zarr
+    zarr = _require_zarr()
 
     path.mkdir(parents=True, exist_ok=True)
 
@@ -1033,7 +1045,7 @@ def _columns_as_lists(df, names):
 
 def _load_structure(graph, path: Path, lazy: bool, layer_dict: _LayerDict):
     """Load incidence matrix, entity index, and merged edges from v2 layout."""
-    import zarr
+    zarr = _require_zarr()
 
     # 1. Sparse incidence matrix. The graph derives its own from the store, so
     # this is not installed anywhere. It is read because a file written before
@@ -1638,9 +1650,8 @@ def _load_slices(graph, path: Path, layer_dict: _LayerDict):
     for lid, per_edge in slice_weights.items():
         if not per_edge:
             continue
-        graph.attrs.set_edge_slice_attrs_bulk(
-            lid,
-            {eid: {'weight': float(w)} for eid, w in per_edge.items()},
+        graph.attrs.update(
+            'edge_slices', {(lid, eid): {'weight': float(w)} for eid, w in per_edge.items()}
         )
 
 

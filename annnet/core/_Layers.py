@@ -28,14 +28,11 @@ from ._aspects import (
     as_aspect,
     require_boundary,
 )
-from ._selection import LayerSelection, satisfies, parse_predicate
-from ._stored_kinds import STORED_EDGE_KIND
+from ._predicate import satisfies, parse_conditions
+from ._selection import LayerSelection
 from .._support.dataframe_backend import (
     clone_dataframe,
     empty_dataframe,
-    dataframe_columns,
-    dataframe_to_rows,
-    dataframe_filter_eq,
     dataframe_from_rows,
     dataframe_from_columns,
 )
@@ -164,9 +161,10 @@ class LayerAccessor:
     # what the field holds, which one assignment of ``None`` does not.
     _supra_index_cache: Any
 
-    # Mutation that takes a ``layer=``, forwarded to the graph on purpose. Every
-    # other graph name reaches this accessor through ``__getattr__`` as well, but
-    # only these are part of what a layer namespace offers.
+    # Mutation that takes a ``layer=``, forwarded to the graph on purpose. The
+    # graph's private state reaches this accessor through ``__getattr__`` as
+    # well; no other public graph name does, so what a layer namespace offers
+    # is what ``dir()`` lists and nothing reachable by another spelling.
     _FORWARDED = ('add_nodes', 'add_edges', 'remove_node', 'remove_edge')
 
     def __dir__(self):
@@ -183,6 +181,10 @@ class LayerAccessor:
     def __getattr__(self, name):
         if name == '_G':
             raise AttributeError(name)
+        if not name.startswith('_') and name not in LayerAccessor._FORWARDED:
+            raise AttributeError(
+                f'G.layers has no operation {name!r}; if it is a graph operation, call it on the graph'
+            )
         return getattr(object.__getattribute__(self, '_G'), name)
 
     def __setattr__(self, name, value):
@@ -307,7 +309,7 @@ class LayerAccessor:
         for aspect in aspects:
             declared = elem_layers.get(aspect)
             if isinstance(declared, Aspect):
-                self._aspect_attrs.setdefault(aspect, {})[ORDERED_KEY] = declared.ordered
+                self._G._contextual.set('aspect_attrs', aspect, {ORDERED_KEY: declared.ordered})
 
         self._rebuild_all_layers_cache()
         self._drop_unused_placeholder_layers()
@@ -678,66 +680,6 @@ class LayerAccessor:
             self._G.slices._ensure_slice(self._G._current_slice)['nodes'].update(node_list)
         return placed
 
-    def set_node_attrs_bulk(self, values, *, layer=None, key=None) -> int:
-        """Write many node-layer values in one call.
-
-        The scalar :meth:`set_node_attrs` takes one pair, so filling a table
-        meant a loop with a call in it.
-
-        Parameters
-        ----------
-        values : Mapping
-            One of three shapes:
-
-            - ``{(node_id, layer): {name: value}}`` — fully explicit.
-            - ``{node_id: {name: value}}`` with ``layer=`` — one layer, many nodes.
-            - ``{(node_id, layer): value}`` or ``{node_id: value}`` with ``key=``
-              — one attribute, its name given once.
-        layer : tuple[str, ...], optional
-            The layer, when the keys are bare node ids.
-        key : str, optional
-            The attribute name, when the values are scalars.
-
-        Returns
-        -------
-        int
-            The number of pairs written.
-
-        Raises
-        ------
-        ValueError
-            If a key is a bare node id and no ``layer`` is given, or a value is a
-            scalar and no ``key`` is.
-
-        Examples
-        --------
-        >>> G.layers.set_node_attrs_bulk({'akt': 0.9}, layer=('stim',), key='observed')
-        1
-        """
-        written = 0
-        for holder, value in values.items():
-            if isinstance(holder, tuple) and len(holder) == 2 and isinstance(holder[1], tuple):
-                node_id, coordinate = holder[0], tuple(holder[1])
-            else:
-                if layer is None:
-                    raise ValueError(
-                        f'{holder!r} is a bare node id, so this call needs layer= to say '
-                        f'which node-layer it means'
-                    )
-                node_id, coordinate = holder, tuple(layer)
-            if isinstance(value, Mapping):
-                attrs = dict(value)
-            else:
-                if key is None:
-                    raise ValueError(
-                        f'the value for {holder!r} is not a mapping, so this call needs '
-                        f'key= to say which attribute it is'
-                    )
-                attrs = {key: value}
-            self.set_node_attrs(node_id, coordinate, **attrs)
-            written += 1
-        return written
-
     def where(self, **predicates) -> LayerSelection:
         """Select the layers whose aspect values satisfy every predicate.
 
@@ -781,15 +723,25 @@ class LayerAccessor:
         if aspects == ('_',):
             raise ValueError('no aspects are configured; call set_aspects(...) first')
         tests = []
-        for key, wanted in predicates.items():
-            name, operator = parse_predicate(key, aspects)
-            tests.append((aspects.index(name), self.aspect(name), operator, wanted))
+        for name, operator, wanted in parse_conditions(predicates, fields=aspects, noun='aspect'):
+            aspect = self.aspect(name)
+            if operator in ('lt', 'lte', 'gt', 'gte'):
+                # The engine compares by declared order; a categorical aspect
+                # has none, and refuses before any layer is looked at.
+                aspect.index(wanted)
+            tests.append((aspects.index(name), name, aspect, operator, wanted))
         selected = [
             layer
             for layer in self._all_layers
             if all(
-                satisfies(aspect, operator, layer[position], wanted)
-                for position, aspect, operator, wanted in tests
+                satisfies(
+                    operator,
+                    layer[position],
+                    wanted,
+                    field=name,
+                    order=aspect if aspect.ordered else None,
+                )
+                for position, name, aspect, operator, wanted in tests
             )
         ]
         return LayerSelection(self._G, selected)
@@ -820,7 +772,7 @@ class LayerAccessor:
         """
         if name not in self._aspects:
             raise KeyError(f'unknown aspect {name!r}; known: {list(self._aspects)!r}')
-        self._aspect_attrs.setdefault(name, {})[ORDERED_KEY] = bool(ordered)
+        self._G._contextual.set('aspect_attrs', name, {ORDERED_KEY: bool(ordered)})
 
     def set_elementary_layers(self, layers_by_aspect: dict[str, list[str]]):
         """Declare concrete elementary layer values for existing aspects."""
@@ -852,12 +804,15 @@ class LayerAccessor:
         self._rebuild_all_layers_cache()
 
     def _rebuild_all_layers_cache(self):
-        if not self.aspects:
+        # Every change to the declared aspects or their labels comes through
+        # here, so this is where the aspect clock rises.
+        self._G._aspects_version = getattr(self._G, '_aspects_version', 0) + 1
+        if not self._G.aspects:
             self._all_layers = ()
             return
         # build cartesian product (tuple of tuples)
-        spaces = [self.elem_layers.get(a, []) for a in self.aspects]
-        if not all(spaces) and self.aspects:
+        spaces = [self._G.elem_layers.get(a, []) for a in self._G.aspects]
+        if not all(spaces) and self._G.aspects:
             return  # No valid Cartesian product possible
         self._all_layers = tuple(itertools.product(*spaces)) if all(spaces) else ()
 
@@ -901,7 +856,7 @@ class LayerAccessor:
         self._history_enabled = False
         try:
             flat = self._G.__class__(
-                directed=self.directed,
+                directed=self._G.directed,
                 annotations_backend=getattr(self._G, '_annotations_backend', 'polars'),
             )
             flat._history_enabled = False
@@ -1024,12 +979,12 @@ class LayerAccessor:
                     _mutate.set_edge_direction_policy(flat, eid, copy.deepcopy(policy))
 
             flat.slice_edge_weights = {
-                lid: dict(weights) for lid, weights in self.slice_edge_weights.items()
+                lid: dict(weights) for lid, weights in self._G.slice_edge_weights.items()
             }
             flat._node_table = _clone_table(self._node_table)
             flat._edge_table = _clone_table(self._edge_table)
-            flat.slice_attributes = _clone_table(self.slice_attributes)
-            flat.edge_slice_attributes = _clone_table(self.edge_slice_attributes)
+            flat.slice_attributes = _clone_table(self._G.slice_attributes)
+            flat.edge_slice_attributes = _clone_table(self._G.edge_slice_attributes)
 
             # Keep the flat graph's empty layer table/schema and drop multilayer-only state.
             flat.layers._aspect_attrs = {}
@@ -1054,16 +1009,16 @@ class LayerAccessor:
                 default=flat._default_slice,
                 current=flat._current_slice,
             )
-            self.slice_edge_weights = flat.slice_edge_weights
+            self._G.slice_edge_weights = flat.slice_edge_weights
             # The store of the flat graph is now the store of this one, so every
             # slot addresses the same element in both and the columns move as
             # they stand.
             self._G._attr_store.copy_columns_from(flat._attr_store)
-            self.slice_attributes = flat.slice_attributes
-            self.edge_slice_attributes = flat.edge_slice_attributes
-            self.layer_attributes = flat.layer_attributes
+            self._G.slice_attributes = flat.slice_attributes
+            self._G.edge_slice_attributes = flat.edge_slice_attributes
+            self._G.layer_attributes = flat.layer_attributes
             self._G.layers._all_layers = flat.layers._all_layers
-            self.node_aligned = flat.node_aligned
+            self._G.node_aligned = flat.node_aligned
             self._G.layers._aspect_attrs = flat.layers._aspect_attrs
             self._G.layers._layer_attrs = flat.layers._layer_attrs
             self._G.layers._state_attrs = flat.layers._state_attrs
@@ -1381,192 +1336,6 @@ class LayerAccessor:
         return '×'.join(aa)
 
     ## Aspect / layer / node–layer attributes
-
-    def _elem_layer_id(self, aspect: str, label: str) -> str:
-        if aspect not in self._aspects:
-            raise KeyError(f'unknown aspect {aspect!r}; known: {list(self._aspects)!r}')
-        allowed = self._layers.get(aspect, OrderedLabels())
-        if label not in allowed:
-            raise KeyError(
-                f'unknown elementary layer {label!r} for aspect {aspect!r}; known: {sorted(allowed)!r}'
-            )
-        return f'{aspect}_{label}'
-
-    def _upsert_layer_attribute_row(self, layer_id: str, attrs: dict):
-        """Merge attributes into one elementary layer.
-
-        This used to convert the whole table to rows, rebuild it and assign it
-        back, so writing one layer's attributes cost the size of the table. The
-        canonical form is a dict, and the table is built when a reader asks.
-        """
-        # A keyed write makes the store authoritative again, so a passthrough
-        # table a caller assigned earlier no longer answers for this level.
-        self._G._layer_table_passthrough = None
-        self._G._contextual.set('elementary_attrs', layer_id, attrs)
-
-    def set_elementary_attrs(self, aspect: str, label: str, /, **attrs):
-        """Attach attributes to an elementary Kivela layer.
-
-        ``aspect`` and ``label`` are positional-only so user attribute
-        keys (including ``label=``) are passed through verbatim.
-
-        Parameters
-        ----------
-        aspect : str
-            Aspect identifier (positional-only).
-        label : str
-            Elementary layer label (positional-only).
-        **attrs
-            Key-value metadata to store.
-
-        Returns
-        -------
-        None
-        """
-        lid = self._elem_layer_id(aspect, label)
-        self._upsert_layer_attribute_row(lid, attrs)
-
-    def elementary_attrs(self, aspect: str, label: str) -> dict:
-        """Get attributes for an elementary Kivela layer.
-
-        Parameters
-        ----------
-        aspect : str
-            Aspect identifier.
-        label : str
-            Elementary layer label.
-
-        Returns
-        -------
-        dict
-            Attributes dict; empty if not set.
-        """
-        lid = self._elem_layer_id(aspect, label)
-        df = self.layer_attributes
-        if 'layer_id' not in dataframe_columns(df):
-            return {}
-        rows = dataframe_to_rows(dataframe_filter_eq(df, 'layer_id', lid))
-        if not rows:
-            return {}
-        row = dict(rows[0])
-        row.pop('layer_id', None)
-        return row
-
-    def set_aspect_attrs(self, aspect: str, **attrs):
-        """Attach metadata to a Kivela aspect.
-
-        Parameters
-        ----------
-        aspect : str
-            Aspect identifier.
-        **attrs
-            Key-value metadata to store.
-
-        Returns
-        -------
-        None
-        """
-        if aspect not in self._aspects:
-            raise KeyError(f'unknown aspect {aspect!r}; known: {list(self._aspects)!r}')
-        d = self._aspect_attrs.setdefault(aspect, {})
-        d.update(attrs)
-
-    def aspect_attrs(self, aspect: str) -> dict:
-        """Return a shallow copy of metadata for a Kivela aspect.
-
-        Parameters
-        ----------
-        aspect : str
-            Aspect identifier.
-
-        Returns
-        -------
-        dict
-        """
-        if aspect not in self._aspects:
-            raise KeyError(f'unknown aspect {aspect!r}')
-        return dict(self._aspect_attrs.get(aspect, {}))
-
-    def set_attrs(self, layer_tuple: tuple[str, ...], **attrs):
-        """Attach metadata to a Kivela layer.
-
-        Parameters
-        ----------
-        layer_tuple : tuple[str, ...]
-            Aspect tuple layer.
-        **attrs
-            Key-value metadata to store.
-
-        Returns
-        -------
-        None
-        """
-        aa = tuple(layer_tuple)
-        self._validate_layer_tuple(aa)
-        self._G._contextual.set('layer_attrs', aa, attrs)
-
-    def attrs(self, layer_tuple: tuple[str, ...]) -> dict:
-        """Get metadata dict for a Kivela layer.
-
-        Parameters
-        ----------
-        layer_tuple : tuple[str, ...]
-            Aspect tuple layer.
-
-        Returns
-        -------
-        dict
-            Shallow copy; empty if not set.
-        """
-        aa = tuple(layer_tuple)
-        self._validate_layer_tuple(aa)
-        return dict(self._layer_attrs.get(aa, {}))
-
-    def set_node_attrs(self, u: str, layer_tuple: tuple[str, ...], **attrs):
-        """Attach metadata to a node–layer pair.
-
-        Parameters
-        ----------
-        u : str
-            Node identifier.
-        layer_tuple : tuple[str, ...]
-            Aspect tuple layer.
-        **attrs
-            Key-value metadata to store.
-
-        Returns
-        -------
-        None
-
-        Raises
-        ------
-        KeyError
-            If ``(u, layer_tuple)`` is not present in ``V_M``.
-        """
-        aa = tuple(layer_tuple)
-        self._assert_presence(u, aa)  # enforce that (u,aa) exists in V_M
-        key = (u, aa)
-        d = self._state_attrs.setdefault(key, {})
-        d.update(attrs)
-
-    def node_attrs(self, u: str, layer_tuple: tuple[str, ...]) -> dict:
-        """Get metadata dict for a node–layer pair.
-
-        Parameters
-        ----------
-        u : str
-            Node identifier.
-        layer_tuple : tuple[str, ...]
-            Aspect tuple layer.
-
-        Returns
-        -------
-        dict
-            Shallow copy; empty if not set.
-        """
-        aa = tuple(layer_tuple)
-        key = (u, aa)
-        return dict(self._state_attrs.get(key, {}))
 
     def layer_node_set(self, layer_tuple):
         """Nodes present in a Kivela layer.
@@ -2039,91 +1808,26 @@ class LayerAccessor:
         }
 
     def _subgraph_from_keys(self, keys: set, edge_ids: set):
-        """Build the concrete subgraph spanned by these node-layer keys and edges."""
-        from ._Ops import _hyper_def
+        """Build the concrete subgraph spanned by these node-layer keys and edges.
 
-        G_src = self._G
-        G_cls = G_src.__class__
-        new_aspects = {a: list(G_src._layers.get(a, [])) for a in G_src._aspects}
-        g = G_cls(
-            directed=G_src.directed,
-            n=len(keys),
-            e=len(edge_ids),
-            aspects=new_aspects,
+        The layer algebra decides *which* placements and edges a window names;
+        the shared resolver and materializer build the graph, so a layer
+        subgraph carries what a view of the same selection carries — every
+        attribute address, coefficients, directedness, slice memberships and
+        the aspect declarations. The edges are the ones the algebra named; an
+        edge that reaches a placement outside the named layers (an inter or
+        coupling edge under ``boundary='open'``) brings that endpoint along,
+        which is what ``boundary='open'`` of a view means too.
+        """
+        from . import _resolve, _materialize
+
+        resolved = _resolve.resolve_explicit(
+            self._G,
+            node_keys=[(vid, tuple(coord)) for vid, coord in keys],
+            edge_ids=[eid for eid in edge_ids if _structure.has_edge(self._G, eid)],
+            boundary='open',
         )
-
-        # One bulk insert per layer, for the named nodes and for any endpoint an
-        # inter or coupling edge reaches outside them.
-        endpoints = set(keys)
-        if edge_ids:
-            for eid in edge_ids:
-                if not _structure.has_edge(G_src, eid):
-                    continue
-                if _structure.edge_ref(G_src, eid).kind == _structure.HYPER:
-                    continue
-                sides = _structure.edge_sides(G_src, eid)
-                for ep in sides.source | sides.target:
-                    if isinstance(ep, tuple) and len(ep) == 2 and isinstance(ep[1], tuple):
-                        endpoints.add(ep)
-
-        attrs = G_src._attr_store.node_attr_rows({vid for (vid, _) in endpoints})
-        by_coord: dict = {}
-        for vid, coord in endpoints:
-            by_coord.setdefault(coord, []).append({'node_id': vid, **attrs.get(vid, {})})
-        for coord, rows in by_coord.items():
-            g._add_nodes_bulk(rows, layer=coord, slice=g._default_slice)
-
-        bin_payload, hyper_payload = [], []
-        for eid in edge_ids:
-            if not _structure.has_edge(G_src, eid):
-                continue
-            if not _structure.carries_structure(G_src, eid):
-                continue
-            ref = _structure.edge_ref(G_src, eid)
-            if ref.kind == _structure.HYPER:
-                h = _hyper_def(G_src, eid)
-                if h.get('members'):
-                    hyper_payload.append(
-                        {
-                            'members': list(h['members']),
-                            'edge_id': eid,
-                            'weight': ref.declared_weight,
-                        }
-                    )
-                else:
-                    hyper_payload.append(
-                        {
-                            'head': list(h.get('head', ())),
-                            'tail': list(h.get('tail', ())),
-                            'edge_id': eid,
-                            'weight': ref.declared_weight,
-                        }
-                    )
-            else:
-                sides = _structure.edge_sides(G_src, eid)
-                bin_payload.append(
-                    {
-                        'source': self._one_endpoint(sides.source),
-                        'target': self._one_endpoint(sides.target),
-                        'edge_id': eid,
-                        'edge_type': STORED_EDGE_KIND[ref.kind],
-                        'edge_directed': ref.directed,
-                        'weight': ref.declared_weight,
-                    }
-                )
-        if bin_payload:
-            g._add_edges_bulk(bin_payload, slice=g._default_slice)
-        if hyper_payload:
-            g.add_edges(hyper_payload, slice=g._default_slice)
-
-        for lid, meta in G_src._slices.items():
-            if not g.slices.exists(lid):
-                g.slices.add(lid, **meta['attributes'])
-            kept = set(meta['edges']) & edge_ids
-            if kept:
-                g.slices.add_edges(lid, kept)
-
-        return g
+        return _materialize.materialize(resolved, record=False)
 
     def subgraph_from_layer_tuple(
         self,
@@ -2800,9 +2504,9 @@ class LayerAccessor:
     ## Coupling generators (node-independent)
 
     def _aspect_index(self, aspect: str) -> int:
-        if aspect not in self.aspects:
-            raise KeyError(f'unknown aspect {aspect!r}; known: {self.aspects!r}')
-        return self.aspects.index(aspect)
+        if aspect not in self._G.aspects:
+            raise KeyError(f'unknown aspect {aspect!r}; known: {self._G.aspects!r}')
+        return self._G.aspects.index(aspect)
 
     def _layer_matches_filter(self, aa: tuple[str, ...], layer_filter: dict[str, set]) -> bool:
         if not layer_filter:
@@ -2831,7 +2535,7 @@ class LayerAccessor:
         collided with the first. The family is what tells them apart, and it is
         also carried as an attribute so a reader can select on it.
         """
-        _lid = lambda t: t[0] if len(self.aspects) == 1 else '×'.join(t)
+        _lid = lambda t: t[0] if len(self._G.aspects) == 1 else '×'.join(t)
         target = u if v is None else v
         return {
             'source': (u, La),

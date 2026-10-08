@@ -64,8 +64,8 @@ def rich_graph() -> AnnNet:
     G.add_edges([{'head': ['a', 'b'], 'tail': ['c'], 'edge_id': 'h0'}])
     G.slices.add('core')
     G.slices.add_edges('core', ['e0'])
-    G.attrs.set_slice_attrs('core', curated=True)
-    G.attrs.set_edge_slice_attrs('core', 'e0', confidence=0.9)
+    G.attrs.update('slices', {'core': {'curated': True}})
+    G.attrs.update('edge_slices', {('core', 'e0'): {'confidence': 0.9}})
     G.uns['src'] = 'x'
     return G
 
@@ -128,7 +128,7 @@ def test_a_colliding_id_is_refused_unless_told_otherwise(tmp_path):
         with pytest.raises(Exception, match='already in the destination'):
             aio.from_json(path, into=plain_graph())
         kept = aio.from_json(path, into=plain_graph(), on_conflict='skip')
-    assert kept.ne == 1
+    assert len(kept.E) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -170,8 +170,8 @@ def test_a_lossy_format_round_trips_everything_through_its_sidecar(
         )
     assert sidecar_path(path).exists()
     back = getattr(aio, reader)(path)
-    assert back.slices.attrs('core') == {'curated': True}
-    assert back.attrs.edge_slice('core', 'e0') == {'confidence': 0.9}
+    assert dict(back.attrs.row('slices', 'core')) == {'curated': True}
+    assert dict(back.attrs.row('edge_slices', ('core', 'e0'))) == {'confidence': 0.9}
     assert dict(back.uns) == {'src': 'x'}
 
 
@@ -187,8 +187,8 @@ def test_a_lossless_format_leaves_no_sidecar(writer, filename, tmp_path):
     back = getattr(
         aio, {'write': 'read', 'to_json': 'from_json', 'to_parquet': 'from_parquet'}[writer]
     )(path, sidecar='ignore')
-    assert back.slices.attrs('core') == {'curated': True}
-    assert back.attrs.edge_slice('core', 'e0') == {'confidence': 0.9}
+    assert dict(back.attrs.row('slices', 'core')) == {'curated': True}
+    assert dict(back.attrs.row('edge_slices', ('core', 'e0'))) == {'confidence': 0.9}
 
 
 # ---------------------------------------------------------------------------
@@ -257,8 +257,8 @@ def test_a_format_that_could_only_be_read_can_now_be_written(writer, reader, fil
         warnings.simplefilter('ignore')
         getattr(aio, writer)(graph, path)
         back = getattr(aio, reader)(path)
-    assert sorted(back.nodes()) == ['a', 'b', 'c']
-    assert back.ne >= 1
+    assert sorted(back.N) == ['a', 'b', 'c']
+    assert len(back.E) >= 1
 
 
 def test_pyg_round_trips_through_its_manifest():
@@ -268,8 +268,8 @@ def test_pyg_round_trips_through_its_manifest():
     graph.add_edges('a', 'b', edge_id='e0', weight=2.0)
     graph.add_edges('b', 'c', edge_id='e1')
     back = aio.from_pyg(aio.to_pyg(graph))
-    assert sorted(back.edges()) == ['e0', 'e1']
-    assert back.get_edge('e0').weight == pytest.approx(2.0)
+    assert sorted(back.E) == ['e0', 'e1']
+    assert back.E.at('e0').weight == pytest.approx(2.0)
 
 
 def test_a_sidecar_refuses_a_primary_that_changed(tmp_path):

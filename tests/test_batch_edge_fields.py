@@ -26,7 +26,7 @@ from annnet.core.graph import AnnNet
 
 def _record(graph, edge_id):
     """What an edge holds, in the terms the batch defaults are stated in."""
-    view = graph.get_edge(edge_id)
+    view = graph.E.at(edge_id)
     return (view.kind, sorted(view.source), sorted(view.target), view.weight, view.directed)
 
 
@@ -60,7 +60,7 @@ def test_the_batch_defaults_reach_an_item_that_names_only_its_endpoints():
         default_weight=2.5,
         default_edge_directed=False,
     )
-    view = graph.get_edge('edge_0')
+    view = graph.E.at('edge_0')
     assert (view.weight, view.directed) == (2.5, False)
 
 
@@ -72,7 +72,7 @@ def test_a_third_key_that_names_the_id_is_still_read():
 def test_a_third_key_that_names_the_weight_is_still_read():
     graph = AnnNet(directed=True)
     graph.add_edges([{'source': 'A', 'target': 'B', 'weight': 3.0}])
-    assert graph.get_edge('edge_0').weight == 3.0
+    assert graph.E.at('edge_0').weight == 3.0
 
 
 def test_a_weight_beside_two_endpoints_leaves_the_other_defaults_standing():
@@ -95,14 +95,14 @@ def test_a_weight_beside_two_endpoints_leaves_the_other_defaults_standing():
 def test_a_weight_beside_two_endpoints_is_not_an_attribute():
     graph = AnnNet(directed=True)
     graph.add_edges([{'source': 'A', 'target': 'B', 'weight': 3.0}])
-    assert 'weight' not in graph.attrs.get_edge_attrs('edge_0')
+    assert 'weight' not in dict(graph.attrs.row('edges', 'edge_0'))
 
 
 @pytest.mark.parametrize('field', ['edge_directed', 'directed'])
 def test_a_third_key_that_names_the_direction_is_still_read(field):
     graph = AnnNet(directed=True)
     graph.add_edges([{'source': 'A', 'target': 'B', field: False}])
-    assert graph.get_edge('edge_0').directed is False
+    assert graph.E.at('edge_0').directed is False
 
 
 def test_a_third_key_that_names_the_slice_is_still_read():
@@ -115,7 +115,7 @@ def test_a_third_key_that_names_the_slice_is_still_read():
 def test_a_third_key_that_names_the_slice_weight_is_still_read():
     graph = AnnNet(directed=True)
     graph.add_edges([{'source': 'A', 'target': 'B', 'slice_weight': 0.25}])
-    assert graph.attrs.get_edge_slice_attr(graph.slices.active, 'edge_0', 'weight') == 0.25
+    assert graph.attrs.row('edge_slices', (graph.slices.active, 'edge_0')).get('weight') == 0.25
 
 
 def test_a_third_key_that_names_the_propagation_is_still_read():
@@ -131,13 +131,13 @@ def test_a_third_key_that_names_the_propagation_is_still_read():
 def test_a_third_key_the_writer_does_not_know_becomes_an_attribute():
     graph = AnnNet(directed=True)
     graph.add_edges([{'source': 'A', 'target': 'B', 'evidence': 'pubmed'}])
-    assert graph.attrs.get_edge_attrs('edge_0')['evidence'] == 'pubmed'
+    assert dict(graph.attrs.row('edges', 'edge_0'))['evidence'] == 'pubmed'
 
 
 def test_an_item_of_two_endpoints_carries_no_attribute():
     graph = AnnNet(directed=True)
     graph.add_edges([{'source': 'A', 'target': 'B'}])
-    attrs = graph.attrs.get_edge_attrs('edge_0')
+    attrs = dict(graph.attrs.row('edges', 'edge_0'))
     assert 'source' not in attrs
     assert 'target' not in attrs
 
@@ -145,15 +145,15 @@ def test_an_item_of_two_endpoints_carries_no_attribute():
 def test_a_node_named_twice_in_a_batch_is_one_entity():
     graph = AnnNet(directed=True)
     graph.add_edges([{'source': 'A', 'target': 'B'}, {'source': 'A', 'target': 'C'}])
-    assert sorted(graph.nodes()) == ['A', 'B', 'C']
-    assert sorted(graph.get_edge('edge_1').source) == ['A']
+    assert sorted(graph.N) == ['A', 'B', 'C']
+    assert sorted(graph.E.at('edge_1').source) == ['A']
 
 
 def test_a_self_loop_resolves_both_of_its_endpoints_to_the_same_entity():
     graph = AnnNet(directed=True)
     graph.add_edges([{'source': 'A', 'target': 'A'}])
-    assert sorted(graph.nodes()) == ['A']
-    view = graph.get_edge('edge_0')
+    assert sorted(graph.N) == ['A']
+    view = graph.E.at('edge_0')
     assert sorted(view.source) == sorted(view.target) == ['A']
 
 
@@ -161,13 +161,13 @@ def test_a_batch_reaching_a_node_added_before_it_makes_no_second_entity():
     graph = AnnNet(directed=True)
     graph.add_nodes(['A', 'B'])
     graph.add_edges([{'source': 'A', 'target': 'B'}])
-    assert sorted(graph.nodes()) == ['A', 'B']
+    assert sorted(graph.N) == ['A', 'B']
 
 
 def test_a_multilayer_endpoint_keeps_the_layer_it_names():
     graph = AnnNet(directed=True, aspects={'condition': ['healthy', 'treated']})
     graph.add_edges([{'source': ('A', ('healthy',)), 'target': ('B', ('treated',))}])
-    view = graph.get_edge('edge_0')
+    view = graph.E.at('edge_0')
     assert sorted(view.source) == [('A', ('healthy',))]
     assert sorted(view.target) == [('B', ('treated',))]
-    assert graph.ncount(supra=True) == 2
+    assert graph.nv_supra == 2

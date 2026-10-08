@@ -28,7 +28,9 @@ from ._shared.common import (
     restore_multilayer_manifest,
     serialize_multilayer_manifest,
 )
+from ..core._structure import edge_entity_record
 from ._shared.importing import delivers
+from .._support.entities import restore_entities
 from .._support.serialization import serialize_endpoint, deserialize_endpoint
 
 
@@ -174,7 +176,7 @@ def to_dataframes(
 
     # 1. Nodes table
     nodes_data = []
-    for vid in graph.nodes():
+    for vid in list(graph.N):
         row = {'node_id': vid}
         attrs = node_attrs.get(vid)
         if attrs:
@@ -284,6 +286,13 @@ def to_dataframes(
             serialize_edge_layers=serialize_edge_layers,
         )
 
+    # Edge entities have no frame of their own. Like the multilayer structure,
+    # the record travels as a plain dict beside the frames, and only when the
+    # graph has any.
+    record = edge_entity_record(graph)
+    if record:
+        result['edge_entities'] = record
+
     return result
 
 
@@ -296,6 +305,7 @@ def from_dataframes(
     slice_weights: Any | None = None,
     *,
     multilayer: dict | None = None,
+    edge_entities: dict | None = None,
     directed: bool | None = None,
     exploded_hyperedges: bool = False,
 ) -> AnnNet:
@@ -327,6 +337,8 @@ def from_dataframes(
         hyperedges: DataFrame with hyperedges
         slices: DataFrame with slice membership
         slice_weights: DataFrame with per-slice edge weights
+        multilayer: The multilayer record ``to_dataframes`` returned, if any
+        edge_entities: The edge-entity record ``to_dataframes`` returned, if any
         directed: Default directedness (None = mixed graph)
         exploded_hyperedges: If True, hyperedges DataFrame is in exploded format
 
@@ -350,6 +362,8 @@ def from_dataframes(
             slice_weights = bundle.get('slice_weights')
         if multilayer is None:
             multilayer = bundle.get('multilayer')
+        if edge_entities is None:
+            edge_entities = bundle.get('edge_entities')
 
     G = AnnNet(directed=directed)
 
@@ -485,7 +499,7 @@ def from_dataframes(
                 if he_bulk:
                     G.add_hyperedges_bulk(he_bulk)
                 if attr_updates:
-                    G.attrs.set_edge_attrs_bulk(attr_updates)
+                    G.attrs.update('edges', attr_updates)
 
     # 4. Add slice memberships (bulk per slice — per-row was O(rows) graph ops)
     if slices is not None and dataframe_height(slices) > 0:
@@ -521,7 +535,9 @@ def from_dataframes(
                 if lid in existing_slices and eid in existing_edges:
                     weights_by_slice.setdefault(lid, {})[eid] = {'weight': row['weight']}
             for lid, mp in weights_by_slice.items():
-                G.attrs.set_edge_slice_attrs_bulk(lid, mp)
+                G.attrs.update(
+                    'edge_slices', {(lid, eid): attrs for eid, attrs in dict(mp).items()}
+                )
 
     # 5. Restore the full multilayer state (node-layer presence, layer attrs,
     # edge layers). Aspects were already declared above.
@@ -532,5 +548,7 @@ def from_dataframes(
             rows_to_table=_rows_to_df,
             deserialize_edge_layers=deserialize_edge_layers,
         )
+
+    restore_entities(G, edge_entities)
 
     return G

@@ -215,7 +215,7 @@ def merge_into(
                 )
             if on_conflict == 'skip':
                 continue
-            target.remove_edge(definition.id)
+            target.remove_edges(definition.id)
         _add_definition(target, definition, coord)
         added_edges.append(definition.id)
 
@@ -269,11 +269,11 @@ def _copy_attributes(source, target) -> None:
     for node_id, attrs in source._attr_store.node_attr_rows().items():
         clean = {k: v for k, v in attrs.items() if v is not None and k != 'node_id'}
         if clean and S.has_entity_id(target, node_id):
-            target.attrs.set_node_attrs(node_id, **clean)
+            target.attrs.update('nodes', {node_id: dict(clean)})
     for edge_id, attrs in source._attr_store.edge_attr_rows().items():
         clean = {k: v for k, v in attrs.items() if v is not None and k != 'edge_id'}
         if clean and S.has_edge(target, edge_id):
-            target.attrs.set_edge_attrs(edge_id, **clean)
+            target.attrs.update('edges', {edge_id: dict(clean)})
 
     for level, contents in (
         (name, getattr(source._contextual, name)) for name in _CONTEXTUAL_LEVELS

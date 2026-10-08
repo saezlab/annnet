@@ -98,7 +98,7 @@ maintainers = [
 name = "annnet"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
-version = "0.3.0"
+version = "0.4.0"
 
 [project.optional-dependencies]
 # DataFrame backends
@@ -229,6 +229,7 @@ include = [
   "dependents.toml",
   "LICENSE",
   "docs/**/*.ipynb",
+  "docs/guide/data/*.csv",
   "docs/**/*.md",
   "docs/**/*.yml",
   "docs/Elowitz.sbml.xml",
@@ -390,6 +391,9 @@ section-order = [
 "tests/*" = ["ANN", "BLE", "D", "E402", "I"]
 "tests/conftest.py" = ["D101", "D102", "D103", "E402"]
 "benchmarks/*" = ["ANN", "BLE", "D", "E402"]
+# The timed callables close over the loop variable of the size they measure and
+# run before the loop moves on; the warning does not apply.
+"benchmarks/api_costs.py" = ["ANN", "BLE", "D", "E402", "B023"]
 "notebooks/*" = ["ANN", "BLE", "D", "E402", "I001"]
 "docs/tutorials/notebooks/*" = ["ANN", "BLE", "D", "E402", "I001"]
 

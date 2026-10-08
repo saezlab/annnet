@@ -49,6 +49,6 @@ def test_subgraph_from_layer_tuple_preserves_intra_layer_edge():
     G = _build_graph()
     sg = G.layers.subgraph_from_layer_tuple(('healthy',))
     # Three nodes were placed in (healthy,); the intra edge connects A-B.
-    assert sg.nv >= 2
-    assert sg.ne == 1
+    assert len(sg.N) >= 2
+    assert len(sg.E) == 1
     assert any(eid == 'intra1' for _src, _tgt, eid, _w in sg.edge_list())

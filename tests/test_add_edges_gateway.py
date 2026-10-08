@@ -48,7 +48,7 @@ def test_an_item_is_classified_by_its_keys_and_its_endpoint_shapes(item, is_hype
 
 
 def _kinds(graph, ids):
-    return [graph.get_edge(eid).kind for eid in ids]
+    return [graph.E.at(eid).kind for eid in ids]
 
 
 def test_a_uniform_binary_batch_reaches_the_binary_writer():
@@ -60,7 +60,8 @@ def test_a_uniform_binary_batch_reaches_the_binary_writer():
 def test_a_uniform_hyper_batch_reaches_the_hyper_writer():
     graph = AnnNet(directed=True)
     ids = graph.add_edges([{'members': ['A', 'B', 'C']}, {'members': ['B', 'C', 'D']}])
-    assert _kinds(graph, ids) == ['hyper_undirected', 'hyper_undirected']
+    assert _kinds(graph, ids) == ['hyper', 'hyper']
+    assert [graph.E.at(eid).directed for eid in ids] == [False, False]
 
 
 def test_a_mixed_batch_keeps_the_order_it_was_given():
@@ -73,4 +74,4 @@ def test_a_mixed_batch_keeps_the_order_it_was_given():
         ]
     )
     assert ids[1] == 'h1'
-    assert _kinds(graph, ids) == ['binary', 'hyper_undirected', 'binary']
+    assert _kinds(graph, ids) == ['binary', 'hyper', 'binary']

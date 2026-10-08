@@ -147,20 +147,22 @@ def graph_with_every_store() -> AnnNet:
         )
 
         # Generic: one element, one row.
-        G.attrs.set_node_attrs('B', note='a node value')
-        G.attrs.set_edge_attrs('e_ab', note='an edge value')
+        G.attrs.update('nodes', {'B': {'note': 'a node value'}})
+        G.attrs.update('edges', {'e_ab': {'note': 'an edge value'}})
 
         # Contextual: a pair, and no row for the pairs that carry nothing.
         G.slices.add('left')
         G.slices.add_node_to_slice('left', 'A')
         G.slices.add_edges('left', ['e_ab'])
-        G.attrs.set_slice_attrs('left', note='a slice value')
-        G.attrs.set_edge_slice_attrs('left', 'e_ab', note='an edge-in-slice value')
-        G.attrs.set_slice_edge_weight('left', 'e_ab', 9.5)
-        G.layers.set_aspect_attrs('phase', note='an aspect value')
-        G.layers.set_elementary_attrs('phase', 't0', note='an elementary-layer value')
-        G.layers.set_attrs(('t0',), note='a layer value')
-        G.layers.set_node_attrs('A', ('t0',), note='a node-in-layer value')
+        G.attrs.update('slices', {'left': {'note': 'a slice value'}})
+        G.attrs.update('edge_slices', {('left', 'e_ab'): {'note': 'an edge-in-slice value'}})
+        G.attrs.update('edge_slices', {('left', 'e_ab'): {'weight': 9.5}})
+        G.attrs.update('aspects', {'phase': {'note': 'an aspect value'}})
+        G.attrs.update(
+            'elementary_layers', {('phase', 't0'): {'note': 'an elementary-layer value'}}
+        )
+        G.attrs.update('layers', {('t0',): {'note': 'a layer value'}})
+        G.attrs.update('node_layers', {('A', ('t0',)): {'note': 'a node-in-layer value'}})
 
         # The graph itself.
         G.uns['note'] = 'a graph value'
@@ -170,19 +172,19 @@ def graph_with_every_store() -> AnnNet:
 def attribute_snapshot(graph: AnnNet) -> dict:
     """Read back every attribute store by name."""
     return {
-        'node_attributes': table_rows(graph.obs),
-        'edge_attributes': table_rows(graph.var),
+        'node_attributes': table_rows(graph.attrs.nodes),
+        'edge_attributes': table_rows(graph.attrs.edges),
         'slice_attributes': table_rows(graph.slice_attributes),
         'edge_slice_attributes': table_rows(graph.edge_slice_attributes),
         'layer_attributes': table_rows(graph.layer_attributes),
-        'aspect_attrs': graph.layers.aspect_attrs('phase'),
-        'elementary_layer_attrs': graph.layers.elementary_attrs('phase', 't0'),
-        'layer_attrs': graph.layers.attrs(('t0',)),
-        'node_layer_attrs': graph.layers.node_attrs('A', ('t0',)),
-        'slice_attr': graph.attrs.get_slice_attr('left', 'note'),
-        'edge_slice_attr': graph.attrs.get_edge_slice_attr('left', 'e_ab', 'note'),
-        'weight_in_the_slice': graph.attrs.get_effective_edge_weight('e_ab', slice='left'),
-        'weight_outside_it': graph.attrs.get_effective_edge_weight('e_ab'),
+        'aspect_attrs': dict(graph.attrs.row('aspects', 'phase')),
+        'elementary_layer_attrs': dict(graph.attrs.row('elementary_layers', ('phase', 't0'))),
+        'layer_attrs': dict(graph.attrs.row('layers', ('t0',))),
+        'node_layer_attrs': dict(graph.attrs.row('node_layers', ('A', ('t0',)))),
+        'slice_attr': graph.attrs.row('slices', 'left').get('note'),
+        'edge_slice_attr': graph.attrs.row('edge_slices', ('left', 'e_ab')).get('note'),
+        'weight_in_the_slice': graph.E.effective_weight('e_ab', slice='left'),
+        'weight_outside_it': graph.E.effective_weight('e_ab'),
         'uns': dict(graph.uns),
     }
 

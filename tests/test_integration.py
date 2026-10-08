@@ -21,7 +21,7 @@ class TestIntegration:
         proteins = ['TP53', 'MDM2', 'ATM', 'CHEK2', 'p21']
         for p in proteins:
             G.add_nodes(p)
-            G.attrs.set_node_attrs(p, type='protein', organism='human')
+            G.attrs.update('nodes', {p: {'type': 'protein', 'organism': 'human'}})
         interactions = [
             ('TP53', 'MDM2', 'inhibition'),
             ('MDM2', 'TP53', 'ubiquitination'),
@@ -31,7 +31,9 @@ class TestIntegration:
         ]
         for i, (src, tgt, interaction_type) in enumerate(interactions):
             G.add_edges(src, tgt, edge_id=f'int_{i}', directed=True)
-            G.attrs.set_edge_attrs(f'int_{i}', interaction_type=interaction_type, confidence=0.9)
+            G.attrs.update(
+                'edges', {f'int_{i}': {'interaction_type': interaction_type, 'confidence': 0.9}}
+            )
         to_sif(G, tmpdir_fixture / 'network.sif', relation_attr='interaction_type')
         dfs = to_dataframes(G)
         dfs['edges'].write_csv(tmpdir_fixture / 'interactions.csv')
@@ -40,7 +42,7 @@ class TestIntegration:
         assert (tmpdir_fixture / 'interactions.csv').exists()
         assert (tmpdir_fixture / 'network_archive').exists()
         G_sif = from_sif(tmpdir_fixture / 'network.sif')
-        assert len(list(G_sif.nodes())) == len(proteins)
+        assert len(list(G_sif.N)) == len(proteins)
 
     def test_multi_slice_network(self, tmpdir_fixture):
         from annnet.core.graph import AnnNet

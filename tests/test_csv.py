@@ -63,7 +63,7 @@ class TestCSVIO(unittest.TestCase):
         csv_format.from_dataframe(df_edges, graph=G2, schema='edge_list')
 
         # Validate: only binary edges came through (2); ignore directedness (importer may default True)
-        ev = G2.views.edges()
+        ev = G2.attrs.table('edges', derived=True)
         self.assertEqual(ev.shape[0], 2)
 
         cols = _colmap(ev)
@@ -96,7 +96,7 @@ class TestCSVIO(unittest.TestCase):
         csv_format.from_dataframe(df_h, graph=G3, schema='hyperedge')
 
         # Validate: hyperedge exists, members survived
-        ev = G3.views.edges()
+        ev = G3.attrs.table('edges', derived=True)
         self.assertGreaterEqual(ev.shape[0], 1)
         cols = _colmap(ev)
 
@@ -137,7 +137,7 @@ class TestCSVIO(unittest.TestCase):
         G4 = AnnNet(directed=True)
         csv_format.from_csv(e_buf, graph=G4, schema='auto')  # auto-detects edge_list
 
-        ev = G4.views.edges()
+        ev = G4.attrs.table('edges', derived=True)
         self.assertEqual(ev.shape[0], 2)
 
     def test_csv_ingest_paths_scale(self):
@@ -172,7 +172,7 @@ class TestCSVIO(unittest.TestCase):
             t0 = time.perf_counter()
             G = csv_format.from_csv(adj_path)
             elapsed = time.perf_counter() - t0
-            self.assertGreater(G.ecount(), 1000)
+            self.assertGreater(len(G.E), 1000)
             self.assertLess(
                 elapsed,
                 120.0,

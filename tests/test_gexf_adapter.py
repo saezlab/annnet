@@ -25,11 +25,11 @@ def _build_simple():
 def _build_with_attrs():
     G = AnnNet(directed=True)
     G.add_nodes('X')
-    G.attrs.set_node_attrs('X', gene='TP53', score=0.95)
+    G.attrs.update('nodes', {'X': {'gene': 'TP53', 'score': 0.95}})
     G.add_nodes('Y')
-    G.attrs.set_node_attrs('Y', gene='EGFR', score=0.80)
+    G.attrs.update('nodes', {'Y': {'gene': 'EGFR', 'score': 0.80}})
     G.add_edges('X', 'Y', edge_id='ex', weight=3.0)
-    G.attrs.set_edge_attrs('ex', relation='activates')
+    G.attrs.update('edges', {'ex': {'relation': 'activates'}})
     return G
 
 
@@ -61,16 +61,16 @@ class TestGEXFAdapter(unittest.TestCase):
         p = self._path('simple.gexf')
         to_gexf(G, p)
         G2 = from_gexf(p)
-        self.assertEqual(G2.nv, G.nv)
+        self.assertEqual(len(G2.N), len(G.N))
 
     def test_simple_round_trip_node_ids(self):
         G = _build_simple()
         p = self._path('vids.gexf')
         to_gexf(G, p)
         G2 = from_gexf(p)
-        self.assertIn('A', G2.nodes())
-        self.assertIn('B', G2.nodes())
-        self.assertIn('C', G2.nodes())
+        self.assertIn('A', list(G2.N))
+        self.assertIn('B', list(G2.N))
+        self.assertIn('C', list(G2.N))
 
     def test_simple_round_trip_edge_count(self):
         G = _build_simple()
@@ -78,7 +78,7 @@ class TestGEXFAdapter(unittest.TestCase):
         to_gexf(G, p)
         G2 = from_gexf(p)
         # to_gexf uses default hyperedge_mode="reify"; binary edges pass through
-        self.assertGreaterEqual(G2.ne, 2)
+        self.assertGreaterEqual(len(G2.E), 2)
 
     def test_file_is_created(self):
         G = _build_simple()
@@ -99,7 +99,7 @@ class TestGEXFAdapter(unittest.TestCase):
         p = self._path('dir.gexf')
         to_gexf(G, p, directed=True)
         G2 = from_gexf(p)
-        self.assertEqual(G2.nv, 2)
+        self.assertEqual(len(G2.N), 2)
 
     def test_undirected_graph(self):
         G = AnnNet(directed=False)
@@ -109,7 +109,7 @@ class TestGEXFAdapter(unittest.TestCase):
         p = self._path('undir.gexf')
         to_gexf(G, p, directed=False)
         G2 = from_gexf(p)
-        self.assertEqual(G2.nv, 2)
+        self.assertEqual(len(G2.N), 2)
 
     # ------------------------------------------------------------------ #
     # Attributes                                                           #
@@ -121,15 +121,15 @@ class TestGEXFAdapter(unittest.TestCase):
         p = self._path('attrs.gexf')
         to_gexf(G, p)
         G2 = from_gexf(p)
-        self.assertIn('X', G2.nodes())
-        self.assertIn('Y', G2.nodes())
+        self.assertIn('X', list(G2.N))
+        self.assertIn('Y', list(G2.N))
 
     def test_public_only_strips_private(self):
         G = AnnNet(directed=True)
         G.add_nodes('A')
-        G.attrs.set_node_attrs('A', __private='hidden', public='visible')
+        G.attrs.update('nodes', {'A': {'__private': 'hidden', 'public': 'visible'}})
         G.add_nodes('B')
-        G.attrs.set_node_attrs('B', __private='also_hidden', public='other')
+        G.attrs.update('nodes', {'B': {'__private': 'also_hidden', 'public': 'other'}})
         G.add_edges('A', 'B')
         p = self._path('pub.gexf')
         to_gexf(G, p, public_only=True)
@@ -146,14 +146,14 @@ class TestGEXFAdapter(unittest.TestCase):
         to_gexf(G, p, hyperedge_mode='reify')
         G2 = from_gexf(p, hyperedge='reified')
         # At minimum the 3 real nodes must survive
-        self.assertEqual(G2.nv, 3)
+        self.assertEqual(len(G2.N), 3)
 
     def test_hyperedge_skip_mode(self):
         G = _build_with_hyperedges()
         p = self._path('hyper_skip.gexf')
         to_gexf(G, p, hyperedge_mode='skip')
         G2 = from_gexf(p, hyperedge='none')
-        self.assertGreaterEqual(G2.nv, 3)
+        self.assertGreaterEqual(len(G2.N), 3)
 
     # ------------------------------------------------------------------ #
     # Multiple graphs independently                                        #
@@ -168,8 +168,8 @@ class TestGEXFAdapter(unittest.TestCase):
         to_gexf(G2, p2)
         R1 = from_gexf(p1)
         R2 = from_gexf(p2)
-        self.assertEqual(R1.nv, 3)
-        self.assertEqual(R2.nv, 2)
+        self.assertEqual(len(R1.N), 3)
+        self.assertEqual(len(R2.N), 2)
 
 
 if __name__ == '__main__':

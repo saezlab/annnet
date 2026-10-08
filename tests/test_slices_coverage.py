@@ -66,7 +66,7 @@ def test_remove_drops_edge_slice_attrs_for_that_slice() -> None:
     G.add_edges('A', 'B', edge_id='e1')
     G.slices.add('S1')
     G.slices.add_edge_to_slice('S1', 'e1')
-    G.attrs.set_edge_slice_attrs('S1', 'e1', weight=2.5)
+    G.attrs.update('edge_slices', {('S1', 'e1'): {'weight': 2.5}})
     G.slices.remove('S1')
     assert 'S1' not in G.slices.list()
 

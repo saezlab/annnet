@@ -57,7 +57,7 @@ def test_empty_graph(adapter, tmpdir_fixture):
         dfs = to_dataframes(G)
         G2 = from_dataframes(**dfs)
 
-    assert len(list(G2.nodes())) == 0
+    assert len(list(G2.N)) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ def test_special_characters_in_ids(adapter, tmpdir_fixture):
     else:
         G2 = _roundtrip_parquet(G, tmpdir_fixture, 'special')
 
-    assert set(G.nodes()) == set(G2.nodes())
+    assert set(G.N) == set(G2.N)
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +156,7 @@ def test_parallel_edges(tmpdir_fixture):
     assert 'e1' in G2.E
     assert 'e2' in G2.E
     assert 'e3' in G2.E
-    assert G2.ne == 3
+    assert len(G2.E) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -167,11 +167,13 @@ def test_parallel_edges(tmpdir_fixture):
 def test_null_and_none_handling(tmpdir_fixture):
     G = AnnNet()
     G.add_nodes('A')
-    G.attrs.set_node_attrs('A', present='value', missing=None, zero=0, empty_string='')
+    G.attrs.update(
+        'nodes', {'A': {'present': 'value', 'missing': None, 'zero': 0, 'empty_string': ''}}
+    )
 
     G2 = _roundtrip_json(G, tmpdir_fixture, 'nulls')
 
-    attrs = G2.attrs.get_node_attrs('A') or {}
+    attrs = dict(G2.attrs.row('nodes', 'A')) or {}
     assert attrs.get('present') == 'value'
     assert attrs.get('zero') == 0
     assert 'missing' not in attrs or attrs.get('missing') is None
@@ -198,5 +200,5 @@ def test_very_large_graph(tmpdir_fixture):
 
     G2 = _roundtrip_parquet(G, tmpdir_fixture, 'large')
 
-    assert len(list(G2.nodes())) == n_nodes
-    assert G2.ne == n_edges
+    assert len(list(G2.N)) == n_nodes
+    assert len(G2.E) == n_edges

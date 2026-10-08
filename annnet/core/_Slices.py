@@ -10,9 +10,6 @@ from . import _structure
 from ._records import SliceRecord
 from .._support.dataframe_backend import (
     empty_dataframe,
-    dataframe_columns,
-    dataframe_to_rows,
-    dataframe_filter_eq,
     dataframe_from_rows,
 )
 
@@ -68,16 +65,11 @@ class SliceManager:
         return SliceRecord()
 
     def _slice_attrs(self, slice_id: str) -> dict[str, Any]:
-        df = getattr(self._G, 'slice_attributes', None)
-        if df is None or 'slice_id' not in dataframe_columns(df):
-            return {}
-        rows = dataframe_to_rows(dataframe_filter_eq(df, 'slice_id', slice_id))
-        if not rows:
-            return {}
+        held = self._G._contextual.slice_attrs.get(slice_id, {})
         return {
             k: v
-            for k, v in rows[0].items()
-            if k != 'slice_id' and v is not None and not (isinstance(v, float) and math.isnan(v))
+            for k, v in held.items()
+            if v is not None and not (isinstance(v, float) and math.isnan(v))
         }
 
     def _ensure_slice(self, slice_id: str, **attributes: Any) -> SliceRecord:
@@ -85,7 +77,7 @@ class SliceManager:
         if slice_id not in G._slices:
             G._slices[slice_id] = self._empty_slice_record()
         if attributes:
-            G.attrs.set_slice_attrs(slice_id, **attributes)
+            G.attrs.update('slices', {slice_id: attributes})
         return G._slices[slice_id]
 
     # ── core mutations ────────────────────────────────────────────────────────
@@ -284,14 +276,6 @@ class SliceManager:
             'edges': data['edges'].copy(),
             'attributes': self._slice_attrs(slice_id),
         }
-
-    def attrs(self, slice_id: str) -> dict[str, Any]:
-        """Return every attribute of one slice.
-
-        A slice is a level of its own, so its attributes are held apart from
-        the attributes of the nodes and the edges it holds.
-        """
-        return self._slice_attrs(slice_id)
 
     def nodes(self, slice_id: str) -> set[str]:
         """Return a copy of the node IDs in a slice."""
@@ -679,20 +663,14 @@ class SliceManager:
         return dataframe_from_rows(rows, backend=backend)
 
     def _edge_slice_cells(self) -> dict:
-        """``(slice_id, edge_id) -> attrs``, read once off the per-slice table."""
-        df = getattr(self._G, 'edge_slice_attributes', None)
-        if df is None:
-            return {}
+        """``(slice_id, edge_id) -> attrs``, read once off the contextual store."""
+        if self._G._pending_edge_slice_drops:
+            self._G._flush_edge_slice_rows()
         held: dict[tuple, dict] = {}
-        for row in dataframe_to_rows(df):
-            sid, eid = row.get('slice_id'), row.get('edge_id')
-            if sid is None or eid is None:
-                continue
-            held[(str(sid), str(eid))] = {
-                key: value
-                for key, value in row.items()
-                if key not in ('slice_id', 'edge_id') and value is not None
-            }
+        for (sid, eid), attrs in self._G._contextual.edge_slice_attrs.items():
+            cell = {key: value for key, value in attrs.items() if value is not None}
+            if cell:
+                held[(str(sid), str(eid))] = cell
         return held
 
     @staticmethod

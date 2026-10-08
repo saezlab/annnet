@@ -7,6 +7,20 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "adjusttext"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b5/5c/496e506ad3313664df24a79f801719cadcd62af5999fcb299c9b08ff0d4b/adjusttext-1.4.0.tar.gz", hash = "sha256:1f73860ced8cccce3f85ee6989ca133c2579b67a7453f63dbeb38f39bf123154", size = 15852, upload-time = "2026-06-08T16:48:32.726Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b8/2c/897bdd17b05724c894a5b831c6b2e9853adcc2d07a70d6246c0cd5cd3912/adjusttext-1.4.0-py3-none-any.whl", hash = "sha256:6febd6484c0d45c39a22f44b2c1f4a8cd01ef58fada565cab4b629c771df79b5", size = 13262, upload-time = "2026-06-08T16:48:31.765Z" },
+]
+
+[[package]]
 name = "aiobotocore"
 version = "3.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -181,7 +195,7 @@ wheels = [
 
 [[package]]
 name = "annnet"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "narwhals" },
@@ -216,6 +230,15 @@ backends = [
     { name = "networkx" },
     { name = "python-igraph" },
 ]
+corneto = [
+    { name = "corneto" },
+    { name = "scipy" },
+]
+decoupler = [
+    { name = "anndata" },
+    { name = "decoupler" },
+    { name = "pandas" },
+]
 excel = [
     { name = "openpyxl" },
 ]
@@ -242,6 +265,13 @@ metabo = [
     { name = "cobra" },
     { name = "graphviz" },
     { name = "lxml" },
+]
+methods = [
+    { name = "anndata" },
+    { name = "corneto" },
+    { name = "decoupler" },
+    { name = "pandas" },
+    { name = "scipy" },
 ]
 networkx = [
     { name = "networkx" },
@@ -360,9 +390,15 @@ tests = [
 [package.metadata]
 requires-dist = [
     { name = "anndata", marker = "extra == 'all'", specifier = ">=0.12" },
+    { name = "anndata", marker = "extra == 'decoupler'", specifier = ">=0.12" },
+    { name = "anndata", marker = "extra == 'methods'", specifier = ">=0.12" },
     { name = "anndata", marker = "extra == 'scverse'", specifier = ">=0.12" },
     { name = "cobra", marker = "extra == 'all'", specifier = ">=0.26" },
     { name = "cobra", marker = "extra == 'metabo'", specifier = ">=0.26" },
+    { name = "corneto", marker = "extra == 'corneto'", specifier = ">=1.0.0rc5" },
+    { name = "corneto", marker = "extra == 'methods'", specifier = ">=1.0.0rc5" },
+    { name = "decoupler", marker = "extra == 'decoupler'", specifier = ">=2.0" },
+    { name = "decoupler", marker = "extra == 'methods'", specifier = ">=2.0" },
     { name = "graphviz", marker = "extra == 'all'" },
     { name = "graphviz", marker = "extra == 'graphviz'" },
     { name = "graphviz", marker = "extra == 'metabo'" },
@@ -392,7 +428,9 @@ requires-dist = [
     { name = "openpyxl", marker = "extra == 'excel'", specifier = ">=3.1" },
     { name = "openpyxl", marker = "extra == 'io'", specifier = ">=3.1" },
     { name = "pandas", marker = "extra == 'all'", specifier = ">=1.5" },
+    { name = "pandas", marker = "extra == 'decoupler'", specifier = ">=2.0" },
     { name = "pandas", marker = "extra == 'io'", specifier = ">=2.0" },
+    { name = "pandas", marker = "extra == 'methods'", specifier = ">=2.0" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=1.5" },
     { name = "pandas", marker = "extra == 'storage'", specifier = ">=2.0" },
     { name = "pkg-infra", specifier = ">=0.1.1" },
@@ -413,6 +451,8 @@ requires-dist = [
     { name = "python-libsbml", marker = "extra == 'io'", specifier = ">=5.20" },
     { name = "python-libsbml", marker = "extra == 'sbml'", specifier = ">=5.20" },
     { name = "scipy", specifier = ">=1.12" },
+    { name = "scipy", marker = "extra == 'corneto'", specifier = ">=1.11" },
+    { name = "scipy", marker = "extra == 'methods'", specifier = ">=1.11" },
     { name = "spatialdata", marker = "extra == 'scverse'", specifier = ">=0.2" },
     { name = "toml", marker = "extra == 'all'", specifier = ">=0.10" },
     { name = "toml", marker = "extra == 'io'", specifier = ">=0.10" },
@@ -423,7 +463,7 @@ requires-dist = [
     { name = "zarr", marker = "extra == 'storage'", specifier = ">=2.18" },
     { name = "zarr", marker = "extra == 'zarr-io'", specifier = ">=2.18" },
 ]
-provides-extras = ["polars", "pandas", "pyarrow", "networkx", "igraph", "pyg", "matplotlib", "pydot", "graphviz", "excel", "sbml", "notebook", "parquet", "zarr-io", "backends", "plot", "io", "scverse", "storage", "all", "metabo"]
+provides-extras = ["polars", "pandas", "pyarrow", "networkx", "igraph", "pyg", "matplotlib", "pydot", "graphviz", "excel", "sbml", "notebook", "parquet", "zarr-io", "backends", "plot", "io", "scverse", "decoupler", "corneto", "methods", "storage", "all", "metabo"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1027,15 +1067,16 @@ wheels = [
 
 [[package]]
 name = "corneto"
-version = "1.0.0b7"
+version = "1.0.0rc8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cvxpy-base" },
+    { name = "numpy" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/af/33/d81ff705af236f36f002d7f11dc6e0dbbe29ad5f876064e8d311949f3ec0/corneto-1.0.0b7.tar.gz", hash = "sha256:eba8786e52c0c060ce849a102d474defa1717359a55f15b194e175ab4fe62371", size = 230534, upload-time = "2026-02-10T08:44:04.445Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/78/b6/4b410869ea2a2d905d0f44673a87d8c3acf34db55e4fda6616dbe6636f05/corneto-1.0.0rc8.tar.gz", hash = "sha256:4bbe1ebe58dd020ea5a98729785ae1e88d2de488a5fabf8ec64254cc6590b689", size = 264099, upload-time = "2026-10-02T13:31:46.149Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f7/3a/2ed12f3edf59ef9be38fa8b500a50b482d3092594899ce3f5947d4194e46/corneto-1.0.0b7-py3-none-any.whl", hash = "sha256:e230c98121c071c5c65d504aab76e2fd2d234d49a59745a2c8472da742f61819", size = 288498, upload-time = "2026-02-10T08:44:03.064Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/6a/dafa587be4d917e2135e0ffb1354ad034fd30d4494fb27f57ca06baf3698/corneto-1.0.0rc8-py3-none-any.whl", hash = "sha256:4bf537cc0d6f8966602e17d2db4f8f8570be4f54904516ddeca3bae7eeb590fd", size = 323881, upload-time = "2026-10-02T13:31:44.512Z" },
 ]
 
 [[package]]
@@ -1415,6 +1456,26 @@ wheels = [
 ]
 
 [[package]]
+name = "decoupler"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "adjusttext" },
+    { name = "anndata" },
+    { name = "docrep" },
+    { name = "marsilea" },
+    { name = "numba" },
+    { name = "requests" },
+    { name = "scipy" },
+    { name = "session-info2" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/e9/7c65275561ab6801e5c45bc07ab26f52134cf6f7cd5cc510831fe5c9483d/decoupler-2.2.0.tar.gz", hash = "sha256:7e73ee9619b2006e4ab1c33cc465a952598f17c45dd74c6fd5056562c9e03233", size = 1209804, upload-time = "2026-07-11T00:57:34.017Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/29/28/83df019db913031ce826e3ed3fa655df9663d58cc1f083d1adc78a1bb528/decoupler-2.2.0-py3-none-any.whl", hash = "sha256:b44557e15438ef7af08011bd37101330cf0123c67e53d18ed738c53a832df137", size = 147413, upload-time = "2026-07-11T00:57:32.399Z" },
+]
+
+[[package]]
 name = "defusedxml"
 version = "0.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1502,6 +1563,15 @@ sdist = { url = "https://files.pythonhosted.org/packages/45/19/0c13efdffc55cb311
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b9/dc/6d709bcf8fed7611d8a510aeed23b0436cf6db5b61e63c8eb8451eb0d4d8/distributed-2026.1.1-py3-none-any.whl", hash = "sha256:506759b1ed88e45e12ba65e2a429de9911862db55d27dd8bb293c6268430374e", size = 1008417, upload-time = "2026-01-16T12:34:55.535Z" },
 ]
+
+[[package]]
+name = "docrep"
+version = "0.3.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/44/8e/250fab1cafeea43f4eb11f1d64cd6313f639965ff62cb0d9da3883655781/docrep-0.3.2.tar.gz", hash = "sha256:ed8a17e201abd829ef8da78a0b6f4d51fb99a4cbd0554adbed3309297f964314", size = 33197, upload-time = "2021-02-16T09:01:50.183Z" }
 
 [[package]]
 name = "docutils"
@@ -2401,6 +2471,18 @@ wheels = [
 ]
 
 [[package]]
+name = "legendkit"
+version = "0.5.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8f/29/a788c90ff1200444b487679507e93e5ad0c07783d34d93e1139ffc2d653a/legendkit-0.5.2.tar.gz", hash = "sha256:cb4f4c11f678b2af25f037a675c1f21120f7d160efb6f52ce1378a1906ef159c", size = 28802, upload-time = "2026-08-27T11:25:09.763Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/34/46/5b510d4452c1ba3c3935090263df7aad3367367a715a98806100d61b758a/legendkit-0.5.2-py3-none-any.whl", hash = "sha256:b3c547a1b84256e26d054740eac2fdafe128a1c8dd6bbbf363dbe3c2c2ba2f89", size = 32920, upload-time = "2026-08-27T11:25:08.749Z" },
+]
+
+[[package]]
 name = "llvmlite"
 version = "0.47.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2606,6 +2688,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0d/80/0985960e4b89922cb5a0bac0ed39c5b96cbc1a536a99f30e8c220a996ed9/MarkupSafe-3.0.2-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:131a3c7689c85f5ad20f9f6fb1b866f402c445b220c19fe4308c0b147ccd2ad9", size = 24098, upload-time = "2024-10-18T15:21:40.813Z" },
     { url = "https://files.pythonhosted.org/packages/82/78/fedb03c7d5380df2427038ec8d973587e90561b2d90cd472ce9254cf348b/MarkupSafe-3.0.2-cp313-cp313t-win32.whl", hash = "sha256:ba8062ed2cf21c07a9e295d5b8a2a5ce678b913b45fdf68c32d95d6c1291e0b6", size = 15208, upload-time = "2024-10-18T15:21:41.814Z" },
     { url = "https://files.pythonhosted.org/packages/4f/65/6079a46068dfceaeabb5dcad6d674f5f5c61a6fa5673746f42a9f4c233b3/MarkupSafe-3.0.2-cp313-cp313t-win_amd64.whl", hash = "sha256:e444a31f8db13eb18ada366ab3cf45fd4b31e4db1236a4448f68778c1d1a5a2f", size = 15739, upload-time = "2024-10-18T15:21:42.784Z" },
+]
+
+[[package]]
+name = "marsilea"
+version = "0.8.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "legendkit" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pandas", extra = ["parquet"] },
+    { name = "platformdirs" },
+    { name = "scipy" },
+    { name = "seaborn" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/98/7d/9f363524e27b64c185c3f0a2d510e386980affdde56a8a37ba3992ac5554/marsilea-0.8.1.tar.gz", hash = "sha256:9c717bbad18183e78bf912669b6743dfa4cfaa772687578b69af7d777dd53a61", size = 110502, upload-time = "2026-08-21T06:46:30.62Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/e0/f0ca9b23581803ca7f67a56b48e5f40e9dfeb6df3f6260cfc74012be3169/marsilea-0.8.1-py3-none-any.whl", hash = "sha256:5a941b5d5fd293af664b7807f399b6b72db7a6fcd40eea315aadd6f6b5753a91", size = 123916, upload-time = "2026-08-21T06:46:29.34Z" },
 ]
 
 [[package]]
@@ -3686,6 +3786,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a4/1e/1bac1a839d12e6a82ec6cb40cda2edde64a2013a66963293696bbf31fbbb/pandas-2.3.3-cp314-cp314t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:2e3ebdb170b5ef78f19bfb71b0dc5dc58775032361fa188e814959b74d726dd5", size = 12121582, upload-time = "2025-09-29T23:30:43.391Z" },
     { url = "https://files.pythonhosted.org/packages/44/91/483de934193e12a3b1d6ae7c8645d083ff88dec75f46e827562f1e4b4da6/pandas-2.3.3-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:d051c0e065b94b7a3cea50eb1ec32e912cd96dba41647eb24104b6c6c14c5788", size = 12699963, upload-time = "2025-09-29T23:31:10.009Z" },
     { url = "https://files.pythonhosted.org/packages/70/44/5191d2e4026f86a2a109053e194d3ba7a31a2d10a9c2348368c63ed4e85a/pandas-2.3.3-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:3869faf4bd07b3b66a9f462417d0ca3a9df29a9f6abd5d0d0dbab15dac7abe87", size = 13202175, upload-time = "2025-09-29T23:31:59.173Z" },
+]
+
+[package.optional-dependencies]
+parquet = [
+    { name = "pyarrow" },
 ]
 
 [[package]]
@@ -5222,6 +5327,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e1/6f/991549a8fc56c0e18e53b41819be8115eb767f0354e82bcba10d0eab9a0c/scverse_misc-0.0.7.tar.gz", hash = "sha256:d01467d806b4f783b52675451eccd913945d08d73609ea66470088b5446cca6a", size = 31565, upload-time = "2026-05-18T13:04:22.47Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/62/a5/a276bcdece26e2de16daa8de9e88979c40399f4ea6bdc352581c0a3f8b0f/scverse_misc-0.0.7-py3-none-any.whl", hash = "sha256:11c00be7b04fe903b6834df58159ae4910d4faae21356802a99303a18546f109", size = 13933, upload-time = "2026-05-18T13:04:21.071Z" },
+]
+
+[[package]]
+name = "seaborn"
+version = "0.13.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pandas" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/86/59/a451d7420a77ab0b98f7affa3a1d78a313d2f7281a57afb1a34bae8ab412/seaborn-0.13.2.tar.gz", hash = "sha256:93e60a40988f4d65e9f4885df477e2fdaff6b73a9ded434c1ab356dd57eefff7", size = 1457696, upload-time = "2024-01-25T13:21:52.551Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/11/00d3c3dfc25ad54e731d91449895a79e4bf2384dc3ac01809010ba88f6d5/seaborn-0.13.2-py3-none-any.whl", hash = "sha256:636f8336facf092165e27924f223d3c62ca560b1f2bb5dff7ab7fad265361987", size = 294914, upload-time = "2024-01-25T13:21:49.598Z" },
 ]
 
 [[package]]

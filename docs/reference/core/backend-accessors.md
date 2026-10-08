@@ -18,6 +18,11 @@ another Python graph object. Use `G.nx`, `G.ig`, or `G.gt` when `G` remains the
 source object and AnnNet should convert, cache, and dispatch a backend
 algorithm call for you.
 
+Cached projections are not invalidated by every mutation in the current
+implementation. After editing the source graph, call the accessor's `clear()`
+before another algorithm, or create a fresh projection with an adapter. The
+[computation guide](../../guide/computation-and-storage.ipynb) shows both forms.
+
 ## Common Accessor Methods
 
 All graph-owned backend accessors provide:

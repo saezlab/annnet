@@ -11,7 +11,7 @@ The eight attribute tables are read under `attrs`, each named for what addresses
 it: `nodes`, `edges`, `slices`, `aspects`, `layers`, `edge_slices`,
 `node_layers` and `elementary_layers`. `obs` and `var` are the same tables as
 `attrs.nodes` and `attrs.edges` under the anndata spelling. See
-[Reading the graph](../../explanations/reading-the-graph.md) for how these
+[Reading the graph](../../guide/annotations-and-views.ipynb) for how these
 differ from the frames `views` builds.
 
 ## AnnNet
@@ -77,7 +77,7 @@ differ from the frames `views` builds.
 
 One side of one edge: the node, and the layer it sits in. Read a stored endpoint
 through `as_endpoint` and it has the same shape whether or not the graph is
-layered — see [Reading the graph](../../explanations/reading-the-graph.md).
+layered — see [Reading the graph](../../guide/annotations-and-views.ipynb).
 
 ::: annnet.core._records.Endpoint
     options:
@@ -95,7 +95,7 @@ layered — see [Reading the graph](../../explanations/reading-the-graph.md).
 
 What a graph was built from, recorded as data rather than as a memory.
 
-::: annnet.core._provenance.ProvenanceAccessor
+::: annnet.core._provenance.Provenance
     options:
       show_root_heading: true
 

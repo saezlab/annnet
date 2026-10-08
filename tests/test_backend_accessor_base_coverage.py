@@ -82,7 +82,7 @@ def test_infer_label_field_prefers_default_label_field_when_set() -> None:
 
 def test_infer_label_field_falls_back_to_known_columns() -> None:
     a, G = _toy_accessor()
-    G.attrs.set_node_attrs('A', name='alice')
+    G.attrs.update('nodes', {'A': {'name': 'alice'}})
     assert a._infer_label_field() == 'name'
 
 
@@ -112,8 +112,8 @@ def test_node_id_col_returns_default_when_attribute_access_raises() -> None:
 
 def test_lookup_node_id_by_label_finds_known_value() -> None:
     a, G = _toy_accessor()
-    G.attrs.set_node_attrs('A', name='alice')
-    G.attrs.set_node_attrs('B', name='bob')
+    G.attrs.update('nodes', {'A': {'name': 'alice'}})
+    G.attrs.update('nodes', {'B': {'name': 'bob'}})
     assert a._lookup_node_id_by_label('name', 'bob') == 'B'
 
 
@@ -124,7 +124,7 @@ def test_lookup_node_id_by_label_returns_none_for_missing_column() -> None:
 
 def test_lookup_node_id_by_label_returns_none_for_missing_value() -> None:
     a, G = _toy_accessor()
-    G.attrs.set_node_attrs('A', name='alice')
+    G.attrs.update('nodes', {'A': {'name': 'alice'}})
     assert a._lookup_node_id_by_label('name', 'nope') is None
 
 

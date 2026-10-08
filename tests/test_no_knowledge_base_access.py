@@ -1,7 +1,6 @@
 """The package holds no access to any one knowledge base.
 
-Constitution Principle IV says that prior knowledge is reached through the
-`omnipath-client` package. A generic network data structure that downloads one
+Prior knowledge is reached through the `omnipath-client` package. A generic network data structure that downloads one
 knowledge base is not generic, and every consumer of it pays for a dependency it
 does not use.
 

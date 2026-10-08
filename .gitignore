@@ -70,6 +70,8 @@ notebooks/data
 docs/tutorials/notebooks/special/
 docs/tutorials/notebooks/use_cases/
 docs/tutorials/notebooks/the-loop.ipynb
+# Case studies are mirrored from notebooks/use_cases at docs build time.
+docs/examples/use_cases/
 site/
 
 # Track the benchmark suite code & ignore generated outputs

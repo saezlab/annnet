@@ -50,13 +50,12 @@ class TestPlottingWithRealGraph(unittest.TestCase):
 
         # Per-slice override for e1
         g.slices.add('Lw')
-        g.attrs.set_edge_slice_attrs('Lw', e1, weight=5.0)
+        g.attrs.update('edge_slices', {('Lw', e1): {'weight': 5.0}})
 
         self.g = g
         # Sanity: plotting relies on these
-        self.assertGreaterEqual(self.g.ne, 2)
-        self.assertTrue(hasattr(self.g, 'edges'))
-        self.assertTrue(hasattr(self.g, 'get_edge'))
+        self.assertGreaterEqual(len(self.g.E), 2)
+        self.assertTrue(hasattr(self.g.E, 'at'))
 
     def test_build_node_labels(self):
         labels = plotting.build_node_labels(self.g, key='label')

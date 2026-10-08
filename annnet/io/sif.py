@@ -229,7 +229,7 @@ def to_sif(
                     getter = getattr(graph, 'get_node_attrs', None)
                     if callable(getter):
                         try:
-                            for vid in graph.nodes():
+                            for vid in list(graph.N):
                                 if vid is None:
                                     continue
                                 svid = str(vid).strip()
@@ -240,7 +240,7 @@ def to_sif(
                         except AttributeError:
                             pass
 
-                for vid in graph.nodes():
+                for vid in list(graph.N):
                     if vid is None:
                         continue
                     svid = str(vid).strip()
@@ -646,8 +646,8 @@ def from_sif(
 
             weights = slice_info.get('weights', {})
             if weights:
-                H.attrs.set_edge_slice_attrs_bulk(
-                    lid, [{'edge_id': eid, 'weight': w} for eid, w in weights.items()]
+                H.attrs.update(
+                    'edge_slices', {(lid, eid): {'weight': w} for eid, w in weights.items()}
                 )
 
     # ===== MULTILAYER =====

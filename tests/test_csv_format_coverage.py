@@ -182,8 +182,8 @@ def test_ingest_edge_list_classic_src_dst_creates_edges_and_nodes() -> None:
     )
     G = AnnNet(directed=True)
     _ingest_edge_list(df, G, default_slice=None, default_directed=True, default_weight=1.0)
-    assert set(G.nodes()) == {'A', 'B', 'C'}
-    assert G.ne == 2
+    assert set(G.N) == {'A', 'B', 'C'}
+    assert len(G.E) == 2
 
 
 def test_ingest_edge_list_coo_triples_use_row_col_val() -> None:
@@ -195,8 +195,8 @@ def test_ingest_edge_list_coo_triples_use_row_col_val() -> None:
     )
     G = AnnNet(directed=True)
     _ingest_edge_list(df, G, default_slice=None, default_directed=True, default_weight=1.0)
-    assert set(G.nodes()) == {'A', 'B', 'C'}
-    assert G.ne == 2
+    assert set(G.N) == {'A', 'B', 'C'}
+    assert len(G.E) == 2
 
 
 def test_ingest_edge_list_raises_when_no_endpoints_anywhere() -> None:
@@ -215,7 +215,7 @@ def test_ingest_edge_list_honors_directed_column() -> None:
     )
     G = AnnNet(directed=True)
     _ingest_edge_list(df, G, default_slice=None, default_directed=None, default_weight=1.0)
-    assert G.ne == 2
+    assert len(G.E) == 2
 
 
 def test_ingest_edge_list_creates_per_slice_edges_with_weight_override() -> None:
@@ -240,7 +240,7 @@ def test_ingest_edge_list_skips_rows_with_empty_endpoints() -> None:
     )
     G = AnnNet(directed=True)
     _ingest_edge_list(df, G, default_slice=None, default_directed=True, default_weight=1.0)
-    assert G.ne == 1
+    assert len(G.E) == 1
 
 
 # ── ingest_hyperedge ───────────────────────────────────────────────────
@@ -250,16 +250,16 @@ def test_ingest_hyperedge_members_path_creates_undirected_hyper() -> None:
     df = dataframe_from_rows([{'members': 'A|B|C', 'weight': 2.0}])
     G = AnnNet(directed=False)
     _ingest_hyperedge(df, G, default_slice=None, default_weight=1.0)
-    assert set(G.nodes()) == {'A', 'B', 'C'}
-    assert G.ne == 1
+    assert set(G.N) == {'A', 'B', 'C'}
+    assert len(G.E) == 1
 
 
 def test_ingest_hyperedge_head_tail_path_creates_directed_hyper() -> None:
     df = dataframe_from_rows([{'head': 'A|B', 'tail': 'C|D', 'weight': 1.0}])
     G = AnnNet(directed=True)
     _ingest_hyperedge(df, G, default_slice=None, default_weight=1.0)
-    assert set(G.nodes()) == {'A', 'B', 'C', 'D'}
-    assert G.ne == 1
+    assert set(G.N) == {'A', 'B', 'C', 'D'}
+    assert len(G.E) == 1
 
 
 def test_ingest_hyperedge_raises_when_no_columns_match() -> None:
@@ -295,11 +295,11 @@ def test_ingest_incidence_handles_directed_undirected_and_hyper_columns() -> Non
     )
     G = AnnNet(directed=True)
     _ingest_incidence(df, G, default_slice=None, default_weight=1.0)
-    assert set(G.nodes()) == {'A', 'B', 'C', 'D'}
+    assert set(G.N) == {'A', 'B', 'C', 'D'}
     # The four incidence branches must produce at least 3 edges (e3 may
     # collapse depending on which branch it lands in — the goal here is
     # branch coverage, not exact edge count).
-    assert G.ne >= 3
+    assert len(G.E) >= 3
 
 
 def test_ingest_incidence_skips_non_numeric_columns() -> None:
@@ -311,7 +311,7 @@ def test_ingest_incidence_skips_non_numeric_columns() -> None:
     )
     G = AnnNet(directed=True)
     _ingest_incidence(df, G, default_slice=None, default_weight=1.0)
-    assert G.ne == 1  # only 'e1' becomes an edge; 'extra' skipped
+    assert len(G.E) == 1  # only 'e1' becomes an edge; 'extra' skipped
 
 
 def test_ingest_incidence_uses_explicit_node_id_col_when_first_column() -> None:
@@ -324,7 +324,7 @@ def test_ingest_incidence_uses_explicit_node_id_col_when_first_column() -> None:
     )
     G = AnnNet(directed=True)
     _ingest_incidence(df, G, default_slice=None, default_weight=1.0)
-    assert set(G.nodes()) == {'A', 'B'}
+    assert set(G.N) == {'A', 'B'}
 
 
 # ── ingest_adjacency ───────────────────────────────────────────────────
@@ -340,7 +340,7 @@ def test_ingest_adjacency_with_row_labels_directed_when_asymmetric() -> None:
     )
     G = AnnNet(directed=True)
     _ingest_adjacency(df, G, default_slice=None, default_directed=None, default_weight=1.0)
-    assert G.ne == 3  # directed cycle
+    assert len(G.E) == 3  # directed cycle
 
 
 def test_ingest_adjacency_with_row_labels_undirected_when_symmetric() -> None:
@@ -354,7 +354,7 @@ def test_ingest_adjacency_with_row_labels_undirected_when_symmetric() -> None:
     G = AnnNet(directed=False)
     _ingest_adjacency(df, G, default_slice=None, default_directed=None, default_weight=1.0)
     # symmetric — only the upper triangle is added
-    assert G.ne == 2
+    assert len(G.E) == 2
 
 
 def test_ingest_adjacency_no_labels_uses_integer_row_ids() -> None:
@@ -366,7 +366,7 @@ def test_ingest_adjacency_no_labels_uses_integer_row_ids() -> None:
     )
     G = AnnNet(directed=False)
     _ingest_adjacency(df, G, default_slice=None, default_directed=None, default_weight=1.0)
-    assert G.ne == 1
+    assert len(G.E) == 1
 
 
 def test_ingest_adjacency_raises_when_non_numeric_in_matrix_region() -> None:
@@ -406,8 +406,8 @@ def test_ingest_lil_creates_edges_per_neighbor() -> None:
     )
     G = AnnNet(directed=True)
     _ingest_lil(df, G, default_slice=None, default_directed=True, default_weight=1.0)
-    assert set(G.nodes()) == {'A', 'B', 'C'}
-    assert G.ne == 3
+    assert set(G.N) == {'A', 'B', 'C'}
+    assert len(G.E) == 3
 
 
 def test_ingest_lil_raises_when_no_neighbors_column() -> None:
@@ -437,7 +437,7 @@ def test_from_dataframe_constructs_anndnet_when_none_passed() -> None:
     df = dataframe_from_rows([{'source': 'A', 'target': 'B'}])
     G = from_dataframe(df, schema='edge_list')
     assert isinstance(G, AnnNet)
-    assert G.ne == 1
+    assert len(G.E) == 1
 
 
 def test_from_dataframe_auto_dispatches_to_each_branch() -> None:
@@ -446,7 +446,7 @@ def test_from_dataframe_auto_dispatches_to_each_branch() -> None:
         dataframe_from_rows([{'members': 'A|B|C'}]),
         schema='auto',
     )
-    assert G1.ne == 1
+    assert len(G1.E) == 1
     # incidence
     G2 = from_dataframe(
         dataframe_from_rows(
@@ -458,7 +458,7 @@ def test_from_dataframe_auto_dispatches_to_each_branch() -> None:
         ),
         schema='auto',
     )
-    assert G2.ne == 2
+    assert len(G2.E) == 2
     # adjacency
     G3 = from_dataframe(
         dataframe_from_rows(
@@ -469,13 +469,13 @@ def test_from_dataframe_auto_dispatches_to_each_branch() -> None:
         ),
         schema='auto',
     )
-    assert G3.ne == 1
+    assert len(G3.E) == 1
     # lil
     G4 = from_dataframe(
         dataframe_from_rows([{'node': 'A', 'neighbors': 'B|C'}]),
         schema='auto',
     )
-    assert G4.ne == 2
+    assert len(G4.E) == 2
 
 
 def test_from_dataframe_raises_on_unknown_schema() -> None:
@@ -491,8 +491,8 @@ def test_from_csv_reads_a_real_file(tmp_path: Path) -> None:
     p = tmp_path / 'edges.csv'
     p.write_text('source,target,weight\nA,B,1.0\nB,C,2.0\n', encoding='utf-8')
     G = from_csv(p)
-    assert set(G.nodes()) == {'A', 'B', 'C'}
-    assert G.ne == 2
+    assert set(G.N) == {'A', 'B', 'C'}
+    assert len(G.E) == 2
 
 
 # ── edges_to_csv / hyperedges_to_csv ───────────────────────────────────
@@ -572,5 +572,5 @@ def test_round_trip_edge_list_via_disk(tmp_path: Path) -> None:
     p = tmp_path / 'rt.csv'
     edges_to_csv(G, p)
     G2 = from_csv(p, schema='edge_list')
-    assert set(G2.nodes()) == {'A', 'B', 'C'}
-    assert G2.ne == 2
+    assert set(G2.N) == {'A', 'B', 'C'}
+    assert len(G2.E) == 2

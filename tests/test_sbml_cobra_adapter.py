@@ -32,10 +32,10 @@ class TestSBMLAdapter(unittest.TestCase):
         G = _graph_from_stoich(S, mets, rxns, graph=G, preserve_stoichiometry=True)
 
         # Nodes
-        self.assertGreaterEqual(G.ncount(), 3)
+        self.assertGreaterEqual(len(G.N), 3)
 
         # Edges present
-        self.assertEqual(G.ecount(), 2)
+        self.assertEqual(len(G.E), 2)
         self.assertIn('R1', G.E)
         self.assertIn('R2', G.E)
 
@@ -80,7 +80,7 @@ class TestSBMLAdapter(unittest.TestCase):
         model.add_reactions([R1, R2])
 
         G = from_cobra_model(model, graph=AnnNet(directed=True))
-        self.assertEqual(G.ecount(), 2)
+        self.assertEqual(len(G.E), 2)
         self.assertIn('R1', G.E)
 
     def test_boundary_reactions_are_one_sided_half_edges(self):
@@ -100,8 +100,8 @@ class TestSBMLAdapter(unittest.TestCase):
         )
 
         # No placeholder sink/source nodes — boundary reactions are one-sided half-edges.
-        assert set(G.nodes()) == {'A'}
-        assert BOUNDARY_SINK not in G.nodes() and BOUNDARY_SOURCE not in G.nodes()
+        assert set(G.N) == {'A'}
+        assert BOUNDARY_SINK not in list(G.N) and BOUNDARY_SOURCE not in list(G.N)
 
         # The single real metabolite is the only member; direction/sign lives in coeffs.
         assert G.hyperedge_definitions['deg']['members'] == {'A'}
@@ -110,8 +110,8 @@ class TestSBMLAdapter(unittest.TestCase):
         assert facade.edge_coefficients(G, 'syn') == {'A': 1.0}
 
         # Sink/source kind is preserved on the is_boundary edge attribute.
-        assert G.attrs.get_edge_attrs('deg') == {'is_boundary': True, 'boundary_kind': 'sink'}
-        assert G.attrs.get_edge_attrs('syn') == {'is_boundary': True, 'boundary_kind': 'source'}
+        assert dict(G.attrs.row('edges', 'deg')) == {'is_boundary': True, 'boundary_kind': 'sink'}
+        assert dict(G.attrs.row('edges', 'syn')) == {'is_boundary': True, 'boundary_kind': 'source'}
 
         # Boundary reactions are excluded from B @ B.T → A gets no spurious self-loop.
         adj = np.asarray(G.cache.adjacency.todense())

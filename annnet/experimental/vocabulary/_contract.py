@@ -116,8 +116,8 @@ def _weight_is_structural(graph) -> Iterator[str]:
     # incidence coefficient, so it lives on the edge itself — looking for it in
     # the attribute table is the same confusion this rule exists to catch.
     weights = []
-    for edge_id in graph.edges():
-        found = graph.get_edge(edge_id).weight
+    for edge_id in list(graph.E):
+        found = graph.E.at(edge_id).weight
         if found is None:
             continue
         try:
@@ -180,19 +180,19 @@ def _capability_problems(graph, name: str) -> Report:
 
     if name == 'signed':
         rows = _edge_attrs(graph)
-        missing = [e for e in graph.edges() if rows.get(e, {}).get(SIGN) is None]
-        return _shortfall(missing, len(list(graph.edges())), f'carry {SIGN!r}')
+        missing = [e for e in list(graph.E) if rows.get(e, {}).get(SIGN) is None]
+        return _shortfall(missing, len(graph.E), f'carry {SIGN!r}')
     if name == 'directed':
-        undirected = [e for e in graph.edges() if not graph.get_edge(e).directed]
-        return _shortfall(undirected, len(list(graph.edges())), 'run one way')
+        undirected = [e for e in list(graph.E) if not graph.E.at(e).directed]
+        return _shortfall(undirected, len(graph.E), 'run one way')
     if name == 'dyadic':
         if _structure.is_flat(graph):
             return []
         found = [ref.id for ref in _structure.iter_edges(graph) if ref.kind == _structure.HYPER]
-        return _shortfall(found, len(list(graph.edges())), 'join exactly two entities', have=False)
+        return _shortfall(found, len(graph.E), 'join exactly two entities', have=False)
     if name == 'weighted':
-        missing = [e for e in graph.edges() if graph.get_edge(e).weight is None]
-        return _shortfall(missing, len(list(graph.edges())), f'carry {WEIGHT!r}')
+        missing = [e for e in list(graph.E) if graph.E.at(e).weight is None]
+        return _shortfall(missing, len(graph.E), f'carry {WEIGHT!r}')
     if name == 'stoichiometric':
         if _structure.hyperedges_with_coefficients(graph):
             return []
@@ -217,8 +217,8 @@ def _shortfall(offending, total: int, what: str, *, have: bool = True) -> Report
 def _bipartite_problems(graph) -> Report:
     """No entity is both a source and a target."""
     sources, targets = set(), set()
-    for edge_id in graph.edges():
-        view = graph.get_edge(edge_id)
+    for edge_id in list(graph.E):
+        view = graph.E.at(edge_id)
         if view.source_id is not None:
             sources.add(view.source_id)
         if view.target_id is not None:
@@ -235,8 +235,8 @@ def _bipartite_problems(graph) -> Report:
 def _find_cycle(graph) -> list | None:
     """One directed cycle, or ``None``. Depth-first, and stops at the first."""
     successors: dict[str, list[str]] = {}
-    for edge_id in graph.edges():
-        view = graph.get_edge(edge_id)
+    for edge_id in list(graph.E):
+        view = graph.E.at(edge_id)
         if not view.directed or view.source_id is None or view.target_id is None:
             continue
         successors.setdefault(view.source_id, []).append(view.target_id)
@@ -369,9 +369,9 @@ def method_problems(graph, spec) -> Report:
     """Everything one method's requirements are not met by."""
     found: Report = []
     rows = _edge_attrs(graph)
-    total = len(list(graph.edges()))
+    total = len(graph.E)
     for name in spec.requires_edge:
-        missing = [e for e in graph.edges() if rows.get(e, {}).get(name) is None]
+        missing = [e for e in list(graph.E) if rows.get(e, {}).get(name) is None]
         if missing:
             shown = sorted(str(item) for item in missing)[:3]
             found.append(
@@ -380,7 +380,7 @@ def method_problems(graph, spec) -> Report:
             )
     node_rows = _node_attrs(graph)
     for name in spec.requires_node:
-        missing = [n for n in graph.nodes() if node_rows.get(n, {}).get(name) is None]
+        missing = [n for n in list(graph.N) if node_rows.get(n, {}).get(name) is None]
         if missing:
             shown = sorted(str(item) for item in missing)[:3]
             found.append(

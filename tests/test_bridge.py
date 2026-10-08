@@ -61,8 +61,8 @@ def G():
             aspects={'condition': list(CONDITIONS)},
         )
         graph.add_nodes([{'node_id': 'CPX', 'kind': 'complex', 'sym': 'SUBA_SUBB'}])
-        graph.attrs.set_node_attrs_bulk(
-            {n: {'sym': n, 'kind': 'protein'} for n in ('TF1', 'TG1', 'TG2')}
+        graph.attrs.update(
+            'nodes', {n: {'sym': n, 'kind': 'protein'} for n in ('TF1', 'TG1', 'TG2')}
         )
     return graph
 
@@ -175,9 +175,7 @@ class TestMultiplicity:
                 sign='effect',
                 aspects={'condition': list(CONDITIONS)},
             )
-            graph.attrs.set_node_attrs_bulk(
-                {n: {'sym': n, 'kind': 'protein'} for n in ('TF1', 'TG1')}
-            )
+            graph.attrs.update('nodes', {n: {'sym': n, 'kind': 'protein'} for n in ('TF1', 'TG1')})
             graph.add_nodes([{'node_id': 'TF1_copy', 'sym': 'TF1', 'kind': 'protein'}])
         with pytest.raises(ValueError, match='reaches 2 nodes'):
             exp.sysbio.attach(
@@ -303,14 +301,14 @@ class TestWriteBack:
 
     def test_obs_takes_a_per_condition_number(self, G, adata, mapper):
         _attach(G, adata, mapper)
-        G.layers.set_attrs(('ctrl',), n_active=3.0)
-        G.layers.set_attrs(('stim',), n_active=7.0)
+        G.attrs.update('layers', {('ctrl',): {'n_active': 3.0}})
+        G.attrs.update('layers', {('stim',): {'n_active': 7.0}})
         out = exp.sysbio.write_back(G, adata, key='n_active', aspect='condition', into='obs')
         assert list(out) == [3.0, 7.0]
         assert 'n_active' in adata.obs
 
     def test_var_takes_a_per_entity_number(self, G, adata, mapper):
-        G.attrs.set_node_attrs_bulk({'TF1': {'score': 9.0}})
+        G.attrs.update('nodes', {'TF1': {'score': 9.0}})
         out = exp.sysbio.write_back(G, adata, key='score', on='sym', mapper=mapper, into='var')
         assert out[0] == 9.0
         assert np.isnan(out[1])

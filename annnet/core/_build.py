@@ -8,7 +8,7 @@ and ``_mutate`` are the only two that write the canonical store.
 from __future__ import annotations
 
 from . import _store as ST, _derive as D, _structure as S
-from ._records import SliceRecord
+from ._records import SliceRecord, SliceRegistry
 
 _SLOT_ENTITY_KIND = {S.NODE: ST.NODE, S.EDGE_ENTITY: ST.EDGE_ENTITY}
 _SLOT_EDGE_KIND = {
@@ -139,7 +139,9 @@ def install_structure(g, *, store=None, definitions=None) -> None:
 
 def install_slices(g, slices, *, default=None, current=None) -> None:
     """Install the slice registry and (optionally) the default / active slice."""
-    g._slices = slices
+    held = getattr(g, '_slices', None)
+    clock = held.clock if isinstance(held, SliceRegistry) else None
+    g._slices = SliceRegistry(clock, slices)
     if default is not None:
         g._default_slice = default
     if current is not None:

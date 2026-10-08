@@ -7,12 +7,9 @@ from typing import TYPE_CHECKING, Any, cast
 
 from . import _build, _mutate, _structure
 from ._state import GraphState
-from ._stored_kinds import STORED_EDGE_KIND
+from ._records import SliceRecord
 from .._support.dataframe_backend import (
     clone_dataframe,
-    dataframe_columns,
-    dataframe_to_rows,
-    dataframe_filter_in,
     dataframe_memory_usage,
 )
 
@@ -42,85 +39,6 @@ def _new_graph(source: Any, *, aspects: Any = None) -> AnnNet:
     return graph_class(directed=source.directed, aspects=aspects)
 
 
-def _hyper_def(graph, edge_id):
-    """Return the definition of one hyperedge, as the bulk add API states it.
-
-    A directed hyperedge has a head and a tail. An undirected one has members on
-    one side alone.
-    """
-    sides = _structure.edge_sides(graph, edge_id)
-    if _structure.edge_ref(graph, edge_id).directed:
-        return {'directed': True, 'head': set(sides.source), 'tail': set(sides.target)}
-    return {'directed': False, 'members': set(sides.source)}
-
-
-def _edge_payload(graph, edge_id):
-    """Return one edge in the form the bulk add API takes.
-
-    A directed hyperedge states a head and a tail, and an undirected one states
-    members. A binary edge states a source and a target, and an open side of one
-    is ``None``, which is what the store holds there.
-    """
-    ref = _structure.edge_ref(graph, edge_id)
-    sides = _structure.edge_sides(graph, edge_id)
-    if ref.kind == _structure.HYPER:
-        if ref.directed:
-            return {
-                'head': list(sides.source),
-                'tail': list(sides.target),
-                'edge_id': edge_id,
-                'weight': ref.declared_weight,
-            }
-        return {
-            'members': list(sides.source),
-            'edge_id': edge_id,
-            'weight': ref.declared_weight,
-        }
-    default_directed = True if graph.directed is None else graph.directed
-    declared = ref.declared_directed
-    return {
-        'source': next(iter(sides.source)) if sides.source else None,
-        'target': next(iter(sides.target)) if sides.target else None,
-        'edge_id': edge_id,
-        'edge_type': STORED_EDGE_KIND[ref.kind],
-        'edge_directed': declared if declared is not None else default_directed,
-        'weight': ref.declared_weight,
-    }
-
-
-def _payload_endpoints(payload) -> set:
-    """Return every identity one edge payload names."""
-    if 'source' in payload:
-        return {payload['source'], payload['target']}
-    if 'members' in payload:
-        return set(payload['members'])
-    return set(payload['head']) | set(payload['tail'])
-
-
-def _payload_has_both_sides(payload) -> bool:
-    """Return False for a binary edge that leaves one of its sides open.
-
-    Such an edge names one endpoint alone, so a graph built from the payload
-    cannot hold it.
-    """
-    if 'source' not in payload:
-        return True
-    return payload['source'] is not None and payload['target'] is not None
-
-
-def _payload_inside(payload, node_ids, bare) -> bool:
-    """Return True when every identity of one edge payload lies in a node set."""
-    if not _payload_has_both_sides(payload):
-        return False
-    return {bare(member) for member in _payload_endpoints(payload)} <= node_ids
-
-
-def _is_hyper(graph, eid):
-    return _structure.has_edge(graph, eid) and (
-        _structure.edge_ref(graph, eid).kind == _structure.HYPER
-    )
-
-
 def _share_or_clone_table(df):
     return None if df is None else clone_dataframe(df)
 
@@ -143,11 +61,11 @@ def _take_attributes(target, source, node_ids, edge_ids) -> None:
     if node_ids:
         rows = source._attr_store.node_attr_rows(node_ids)
         if rows:
-            target.attrs.set_node_attrs_bulk(rows)
+            target.attrs.update('nodes', rows)
     if edge_ids:
         rows = source._attr_store.edge_attr_rows(edge_ids)
         if rows:
-            target.attrs.set_edge_attrs_bulk(rows)
+            target.attrs.update('edges', rows)
 
 
 def _take_slices(target, source) -> None:
@@ -160,11 +78,9 @@ def _take_slices(target, source) -> None:
     for slice_id, record in source._slices.items():
         held = target._slices.get(slice_id)
         if held is None:
-            target._slices[slice_id] = {
-                'nodes': set(record['nodes']),
-                'edges': set(record['edges']),
-                'attributes': dict(record['attributes']),
-            }
+            target._slices[slice_id] = SliceRecord(
+                set(record['nodes']), set(record['edges']), dict(record['attributes'])
+            )
             continue
         held['nodes'].update(record['nodes'])
         held['edges'].update(record['edges'])
@@ -180,108 +96,41 @@ class Operations(GraphState):
             return None
         return {aspect: list(self._layers.get(aspect, ())) for aspect in self._aspects}
 
-    def _copy_graph_attributes(self, new) -> None:
-        new.graph_attributes = self.graph_attributes.copy()
+    def _materialized(self, view, **kwargs) -> AnnNet:
+        """Materialize one view through the shared resolver (no selection record)."""
+        from . import _materialize
 
-    def _filter_attr_table(self, df, key_col: str, keys):
-        if df is None or key_col not in dataframe_columns(df):
-            return df
-        return dataframe_filter_in(df, key_col, keys)
+        return view._stable(
+            lambda resolved: _materialize.materialize(resolved, record=False, **kwargs)
+        )
 
-    def _flat_edge_nodes(self, edge_ids) -> set[str]:
-        nodes: set[Any] = set()
-        for eid in edge_ids:
-            if not _structure.has_edge(self, eid) or not _structure.carries_structure(self, eid):
-                continue
-            sides = _structure.edge_sides(self, eid)
-            if not sides.source:
-                continue
-            nodes.update(sides.source)
-            nodes.update(sides.target)
-        return nodes
+    def _known_nodes(self, nodes) -> list:
+        """The node references the graph holds, in the order given; unknown ones are skipped.
 
-    def _ordered_flat_node_ids(self, node_ids) -> list[str]:
-        wanted = set(node_ids)
-        return [key[0] for key in _structure.node_keys(self) if key[0] in wanted]
-
-    def _ordered_edge_ids(self, edge_ids) -> list[str]:
-        wanted = set(edge_ids)
-        return [edge_id for edge_id in _structure.edge_ids(self) if edge_id in wanted]
-
-    def _ordered_selection_rows(self, node_ids, edge_ids) -> list:
-        """Return the entities a selection holds, in the row order they had.
-
-        An edge-entity is one identity on both axes, so a selection that keeps
-        the edge keeps the entity. Leaving it behind gives the new graph an edge
-        that is an edge-entity with nothing to name it, which is the same shape a
-        removal used to leave and which data-model rule 6 forbids.
+        The subgraph operations have always ignored a node the graph does not
+        hold, and a reader that builds a selection from a file relies on it.
+        ``G.view`` itself rejects an unknown id.
         """
-        wanted_nodes = set(node_ids)
-        wanted_edges = set(edge_ids)
+        graph = _as_graph(self)
+        found: list = []
+        for item in nodes:
+            if isinstance(item, str):
+                if graph.has_node(item):
+                    found.append(item)
+            elif _structure.is_entity_key(item):
+                if graph._has_node_layer((item[0], tuple(item[1]))):
+                    found.append((item[0], tuple(item[1])))
+        return found
+
+    def _known_edges(self, edges) -> list:
+        graph = _as_graph(self)
+        if edges and all(isinstance(e, int) for e in edges):
+            edges = [_structure.edge_at_column(graph, e) for e in edges]
         return [
-            ref.key
-            for ref in _structure.iter_entities(self)
-            if ref.id in (wanted_edges if ref.kind == _structure.EDGE_ENTITY else wanted_nodes)
+            eid
+            for eid in edges
+            if _structure.has_edge(graph, eid) and _structure.carries_structure(graph, eid)
         ]
-
-    def _build_flat_graph_from_selection(
-        self,
-        *,
-        node_ids,
-        edge_ids,
-        slice_specs,
-        active_slice=None,
-        edge_weight_overrides=None,
-    ) -> AnnNet:
-        ordered_nodes = self._ordered_flat_node_ids(node_ids)
-        ordered_edges = self._ordered_edge_ids(edge_ids)
-        row_keys = self._ordered_selection_rows(ordered_nodes, ordered_edges)
-
-        new = _new_graph(self)
-
-        weight_overrides = edge_weight_overrides or {}
-        _build.install_structure(
-            new,
-            # The store selects the same elements in the same order, so it numbers
-            # its slots as the new graph numbers its rows and columns.
-            store=self._store.select(row_keys, ordered_edges, weights=weight_overrides),
-        )
-        new.node_aligned = self.node_aligned
-        new._next_edge_id = self._next_edge_id
-
-        _build.install_slices(
-            new,
-            _build.slices_from_specs(slice_specs),
-            current=active_slice if active_slice is not None else self._default_slice,
-        )
-
-        # The selection numbers its slots afresh, so the columns are carried over
-        # by id and not by address.
-        new._attr_store.load_node_rows(
-            {'node_id': node_id, **attrs}
-            for node_id, attrs in self._attr_store.node_attr_rows(ordered_nodes).items()
-        )
-        new._attr_store.load_edge_rows(
-            {'edge_id': edge_id, **attrs}
-            for edge_id, attrs in self._attr_store.edge_attr_rows(ordered_edges).items()
-        )
-        new.slice_attributes = self._filter_attr_table(
-            self.slice_attributes, 'slice_id', list(new._slices.keys())
-        )
-        new.edge_slice_attributes = self._filter_attr_table(
-            self.edge_slice_attributes, 'edge_id', []
-        )
-        new.layer_attributes = _share_or_clone_table(self.layer_attributes)
-        new.slice_edge_weights = type(self.slice_edge_weights)()
-        self._copy_graph_attributes(new)
-        new._install_history_hooks()
-        return new
-
-    @staticmethod
-    def _bare_vid(node):
-        if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
-            return node[0]
-        return node
 
     def edge_subgraph(self, edges) -> AnnNet:
         """Create a subgraph containing only a specified subset of edges.
@@ -289,250 +138,64 @@ class Operations(GraphState):
         Parameters
         ----------
         edges : Iterable[str] | Iterable[int]
-            Edge identifiers or edge indices to retain.
+            Edge identifiers or edge indices to retain. Unknown ids are skipped.
 
         Returns
         -------
         AnnNet
-            Subgraph containing selected edges and their incident nodes.
-
-        Notes
-        -----
-        Hyperedges are supported and retain all member nodes.
+            The selected edges with their full endpoint entities — a
+            hyperedge keeps every member, an edge entity brings its backing
+            edge — and nothing else. The same selection as
+            ``G.view(edges=edges).materialize()``.
         """
-        if all(isinstance(e, int) for e in edges):
-            E = {_structure.edge_at_column(self, e) for e in edges}
-        else:
-            E = set(edges)
-
-        if self._aspects == ('_',):
-            E = {eid for eid in E if _structure.has_edge(self, eid)}
-            E = {eid for eid in E if _structure.carries_structure(self, eid)}
-            V = self._flat_edge_nodes(E)
-            slice_specs = {}
-            for lid, meta in self._slices.items():
-                slice_specs[lid] = {
-                    'nodes': set(meta['nodes']) & V if lid == self._default_slice else set(),
-                    'edges': set(meta['edges']) & E,
-                    'attributes': dict(meta['attributes']),
-                }
-            return self._build_flat_graph_from_selection(
-                node_ids=V, edge_ids=E, slice_specs=slice_specs
-            )
-
-        V = set()
-        bin_payload, hyper_payload = [], []
-        for eid in E:
-            if not _structure.has_edge(self, eid) or not _structure.carries_structure(self, eid):
-                continue
-            payload = _edge_payload(self, eid)
-            if not _payload_has_both_sides(payload):
-                continue
-            V.update(_payload_endpoints(payload))
-            if 'source' in payload:
-                bin_payload.append(payload)
-            else:
-                hyper_payload.append(payload)
-
-        new_aspects = self._constructor_aspects()
-        if new_aspects is not None:
-            g = _new_graph(self, aspects=new_aspects)
-            bare_vid_attrs = self._attr_store.node_attr_rows({self._bare_vid(v) for v in V})
-            for node in V:
-                if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
-                    bare_vid, layer_coord = node
-                else:
-                    bare_vid, layer_coord = node, None
-                g.add_nodes(bare_vid, layer=layer_coord, **bare_vid_attrs.get(bare_vid, {}))
-        else:
-            g = _new_graph(self)
-            va_lookup = self._attr_store.node_attr_rows(V)
-            v_rows = [{'node_id': v, **va_lookup.get(v, {})} for v in V]
-            g._add_nodes_bulk(v_rows, slice=g._default_slice)
-
-        if bin_payload:
-            g._add_edges_bulk(bin_payload, slice=g._default_slice)
-        if hyper_payload:
-            g.add_edges(hyper_payload, slice=g._default_slice)
-
-        for lid, meta in self._slices.items():
-            if not g.slices.exists(lid):
-                g.slices.add(lid, **meta['attributes'])
-            kept_edges = set(meta['edges']) & E
-            if kept_edges:
-                g.slices.add_edges(lid, kept_edges)
-
-        self._copy_graph_attributes(g)
-        return g
+        graph = _as_graph(self)
+        return self._materialized(graph.view(edges=self._known_edges(list(edges))))
 
     def subgraph(self, nodes) -> AnnNet:
         """Create a node-induced subgraph.
 
         Parameters
         ----------
-        nodes : Iterable[str]
-            Node identifiers to retain.
+        nodes : Iterable[str | tuple]
+            Node identifiers, or explicit ``(node_id, layer)`` placements, to
+            retain. A bare id keeps every placement of the node. Unknown ids
+            are skipped.
 
         Returns
         -------
         AnnNet
-            Subgraph containing only the specified nodes and their internal edges.
-
-        Notes
-        -----
-        For hyperedges, all member nodes must be included to retain the edge.
+            The selected nodes and every edge whose complete endpoint set is
+            selected (a hyperedge is kept whole or dropped). The same
+            selection as ``G.view(nodes=nodes).materialize()``.
         """
-        V = set(nodes)
-
-        if self._aspects == ('_',):
-            E = set()
-            for ref in _structure.iter_edges(self):
-                sides = _structure.edge_sides(self, ref.id)
-                if not sides.source:
-                    continue
-                if ref.kind == _structure.HYPER:
-                    if sides.source <= V and sides.target <= V:
-                        E.add(ref.id)
-                elif sides.target and sides.source <= V and sides.target <= V:
-                    E.add(ref.id)
-            slice_specs = {}
-            for lid, meta in self._slices.items():
-                slice_specs[lid] = {
-                    'nodes': set(meta['nodes']) & V if lid == self._default_slice else set(),
-                    'edges': set(meta['edges']) & E,
-                    'attributes': dict(meta['attributes']),
-                }
-            return self._build_flat_graph_from_selection(
-                node_ids=V, edge_ids=E, slice_specs=slice_specs
-            )
-
-        bare = self._bare_vid
-        bin_payload, hyper_payload = [], []
-        for ref in _structure.iter_edges(self):
-            payload = _edge_payload(self, ref.id)
-            if not _payload_inside(payload, V, bare):
-                continue
-            if 'source' in payload:
-                bin_payload.append(payload)
-            else:
-                hyper_payload.append(payload)
-
-        va_lookup = self._attr_store.node_attr_rows(V)
-        v_rows = [{'node_id': v, **va_lookup.get(v, {})} for v in V]
-
-        new_aspects = self._constructor_aspects()
-        if new_aspects is not None:
-            g = _new_graph(self, aspects=new_aspects)
-            by_id = _structure.entities_by_id(self)
-            for vid in V:
-                attrs = va_lookup.get(vid, {})
-                placed = False
-                for ref in by_id.get(vid, ()):
-                    g.add_nodes(ref.id, layer=ref.layer, **attrs)
-                    placed = True
-                if not placed:
-                    g.add_nodes(vid, **attrs)
-        else:
-            g = _new_graph(self)
-            g._add_nodes_bulk(v_rows, slice=g._default_slice)
-        if bin_payload:
-            g._add_edges_bulk(bin_payload, slice=g._default_slice)
-        if hyper_payload:
-            g.add_edges(hyper_payload, slice=g._default_slice)
-
-        for lid, meta in self._slices.items():
-            if not g.slices.exists(lid):
-                g.slices.add(lid, **meta['attributes'])
-            keep = set()
-            for eid in meta['edges']:
-                if not _structure.has_edge(self, eid) or not _structure.carries_structure(
-                    self, eid
-                ):
-                    continue
-                payload = _edge_payload(self, eid)
-                if _payload_inside(payload, V, bare):
-                    keep.add(eid)
-            if keep:
-                g.slices.add_edges(lid, keep)
-
-        self._copy_graph_attributes(g)
-        return g
+        graph = _as_graph(self)
+        return self._materialized(graph.view(nodes=self._known_nodes(list(nodes))))
 
     def extract_subgraph(self, nodes=None, edges=None) -> AnnNet:
         """Create a subgraph based on node and/or edge filters.
 
         Parameters
         ----------
-        nodes : Iterable[str] | None, optional
+        nodes : Iterable[str], optional
             Node IDs to include. If None, no node filtering is applied.
-        edges : Iterable[str] | Iterable[int] | None, optional
+        edges : Iterable[str] | Iterable[int], optional
             Edge IDs or indices to include. If None, no edge filtering is applied.
 
         Returns
         -------
         AnnNet
-            Filtered subgraph.
-
-        Notes
-        -----
-        This is a convenience method that delegates to `subgraph()` and
-        `edge_subgraph()` internally.
+            The same selection as ``G.view(nodes=..., edges=...).materialize()``:
+            both constraints apply, with the closed boundary.
         """
         if nodes is None and edges is None:
             return Operations.copy(self)
-
-        if edges is not None:
-            E = (
-                {_structure.edge_at_column(self, e) for e in edges}
-                if all(isinstance(e, int) for e in edges)
-                else set(edges)
+        graph = _as_graph(self)
+        return self._materialized(
+            graph.view(
+                nodes=None if nodes is None else self._known_nodes(list(nodes)),
+                edges=None if edges is None else self._known_edges(list(edges)),
             )
-        else:
-            E = None
-        V = set(nodes) if nodes is not None else None
-
-        if self._aspects == ('_',) and V is not None and E is not None:
-            kept_edges = set()
-            for eid in E:
-                if not _structure.has_edge(self, eid) or not _structure.carries_structure(
-                    self, eid
-                ):
-                    continue
-                sides = _structure.edge_sides(self, eid)
-                if not sides.source:
-                    continue
-                if _structure.edge_ref(self, eid).kind == _structure.HYPER:
-                    if sides.source <= V and sides.target <= V:
-                        kept_edges.add(eid)
-                elif sides.target and sides.source <= V and sides.target <= V:
-                    kept_edges.add(eid)
-            slice_specs = {}
-            for lid, meta in self._slices.items():
-                slice_specs[lid] = {
-                    'nodes': set(meta['nodes']) & V if lid == self._default_slice else set(),
-                    'edges': set(meta['edges']) & kept_edges,
-                    'attributes': dict(meta['attributes']),
-                }
-            return self._build_flat_graph_from_selection(
-                node_ids=V, edge_ids=kept_edges, slice_specs=slice_specs
-            )
-
-        if E is None:
-            # Both cannot be None: the top of this method returned for that.
-            return Operations.subgraph(self, cast('set', V))
-        if V is None:
-            return Operations.edge_subgraph(self, E)
-
-        bare = self._bare_vid
-        kept_edges = set()
-        for eid in E:
-            if not _structure.has_edge(self, eid) or not _structure.carries_structure(self, eid):
-                continue
-            payload = _edge_payload(self, eid)
-            if _payload_inside(payload, V, bare):
-                kept_edges.add(eid)
-
-        return Operations.subgraph(Operations.edge_subgraph(self, kept_edges), set(V))
+        )
 
     # ── Set algebra between two graphs ────────────────────────────────────────
 
@@ -592,7 +255,7 @@ class Operations(GraphState):
         _require_one_layer_registry(self, other)
         return Operations.extract_subgraph(
             self,
-            nodes=set(self.nodes()) & set(other.nodes()),
+            nodes=set(_structure.node_ids(self)) & set(_structure.node_ids(other)),
             edges=set(_structure.edge_ids(self)) & set(_structure.edge_ids(other)),
         )
 
@@ -605,7 +268,7 @@ class Operations(GraphState):
         _require_one_layer_registry(self, other)
         return Operations.extract_subgraph(
             self,
-            nodes=set(self.nodes()) - set(other.nodes()),
+            nodes=set(_structure.node_ids(self)) - set(_structure.node_ids(other)),
             edges=set(_structure.edge_ids(self)) - set(_structure.edge_ids(other)),
         )
 
@@ -650,118 +313,35 @@ class Operations(GraphState):
         slice_id : str
             Slice identifier.
         resolve_slice_weights : bool, optional
-            If True, use per-slice edge weights when available.
+            If True, an edge whose weight this slice overrides takes the
+            override as its stored weight in the copy.
 
         Returns
         -------
         AnnNet
-            Subgraph containing the slice nodes and edges.
+            The slice's recorded nodes and edges (a slice is a membership
+            set, so no edge is induced), with that slice active.
 
         Raises
         ------
         KeyError
             If the slice does not exist.
         """
-        if slice_id not in self._slices:
+        graph = _as_graph(self)
+        if slice_id not in graph._slices:
             raise KeyError(f'slice {slice_id} not found')
-
-        slice_meta = self._slices[slice_id]
-        V = set(slice_meta['nodes'])
-        E = set(slice_meta['edges'])
-
-        if self._aspects == ('_',):
-            E = {eid for eid in E if _structure.has_edge(self, eid)}
-            E = {eid for eid in E if _structure.carries_structure(self, eid)}
-            weight_overrides = {}
-            if resolve_slice_weights:
-                df = self.edge_slice_attributes
-                if df is not None and {'slice_id', 'edge_id', 'weight'}.issubset(
-                    dataframe_columns(df)
-                ):
-                    for row in dataframe_to_rows(dataframe_filter_in(df, 'edge_id', E)):
-                        if row.get('slice_id') != slice_id:
-                            continue
-                        weight = row.get('weight')
-                        if weight is not None:
-                            weight_overrides[row['edge_id']] = float(weight)
-            return self._build_flat_graph_from_selection(
-                node_ids=V,
-                edge_ids=E,
-                slice_specs={
-                    self._default_slice: {
-                        'nodes': set(),
-                        'edges': set(),
-                        'attributes': dict(self._slices[self._default_slice]['attributes']),
-                    },
-                    slice_id: {
-                        'nodes': V,
-                        'edges': E,
-                        'attributes': dict(slice_meta['attributes']),
-                    },
-                },
-                active_slice=slice_id,
-                edge_weight_overrides=weight_overrides,
-            )
-
-        new_aspects = self._constructor_aspects()
-        if new_aspects is not None:
-            g = _new_graph(self, aspects=new_aspects)
-        else:
-            g = _new_graph(self)
-        g.slices.add(slice_id, **slice_meta['attributes'])
-        g.slices.active = slice_id
-
-        va_lookup = self._attr_store.node_attr_rows(V)
-        if new_aspects is not None:
-            by_id = _structure.entities_by_id(self)
-            for vid in V:
-                attrs = va_lookup.get(vid, {})
-                placed = False
-                for ref in by_id.get(vid, ()):
-                    if ref.kind != _structure.NODE:
-                        continue
-                    g.add_nodes(ref.id, layer=ref.layer, slice=slice_id, **attrs)
-                    placed = True
-                if not placed:
-                    g.add_nodes(vid, slice=slice_id, **attrs)
-        else:
-            v_rows = [{'node_id': v, **va_lookup.get(v, {})} for v in V]
-            g._add_nodes_bulk(v_rows, slice=slice_id)
-
-        e_attrs = self._attr_store.edge_attr_rows(E)
-        eff_w = {}
+        weights = {}
         if resolve_slice_weights:
-            df = self.edge_slice_attributes
-            if df is not None and {'slice_id', 'edge_id', 'weight'}.issubset(dataframe_columns(df)):
-                for row in dataframe_to_rows(dataframe_filter_in(df, 'edge_id', E)):
-                    if row.get('slice_id') != slice_id:
-                        continue
-                    weight = row.get('weight')
-                    if weight is not None:
-                        eff_w[row['edge_id']] = float(weight)
-
-        bin_payload, hyper_payload = [], []
-        for eid in E:
-            if not _structure.has_edge(self, eid) or not _structure.carries_structure(self, eid):
-                continue
-            payload = _edge_payload(self, eid)
-            base_weight = _structure.edge_ref(self, eid).weight
-            payload['weight'] = (
-                eff_w.get(eid, base_weight) if resolve_slice_weights else base_weight
-            )
-            payload['attributes'] = e_attrs.get(eid, {})
-            if 'source' in payload:
-                bin_payload.append(payload)
-            else:
-                hyper_payload.append(payload)
-
-        if bin_payload:
-            g._add_edges_bulk(bin_payload, slice=slice_id)
-        if hyper_payload:
-            g.add_edges(hyper_payload, slice=slice_id)
-
-        self._copy_graph_attributes(g)
-        return g
+            members = set(graph._slices[slice_id].edges)
+            for (sid, eid), attrs in graph._contextual.edge_slice_attrs.items():
+                if sid != slice_id or eid not in members:
+                    continue
+                weight = attrs.get('weight')
+                if weight is not None and not (isinstance(weight, float) and weight != weight):
+                    weights[eid] = float(weight)
+        new = self._materialized(graph.view(slices=slice_id), edge_weights=weights)
+        new.slices.active = slice_id
+        return new
 
     def copy(self, history: bool = False):
         """Deep copy of the entire AnnNet.
@@ -810,7 +390,7 @@ class Operations(GraphState):
         new.layer_attributes = _share_or_clone_table(self.layer_attributes)
 
         new.layers._all_layers = (
-            tuple(tuple(x) for x in self.layers._all_layers) if self.layers.aspects else ()
+            tuple(tuple(x) for x in self.layers._all_layers) if self.layers.list_aspects() else ()
         )
         new.layers._aspect_attrs = {a: m.copy() for a, m in self.layers._aspect_attrs.items()}
         new.layers._layer_attrs = {aa: m.copy() for aa, m in self.layers._layer_attrs.items()}
@@ -970,11 +550,10 @@ class OperationsAccessor:
     def __hash__(self) -> int:
         """Structural hash over nodes, edge endpoints/direction, and graph attrs."""
         G = self._G
-        node_ids = tuple(sorted(G.nodes()))
+        node_ids = tuple(sorted(_structure.node_ids(G)))
         edge_defs = []
-        for j in range(G.ne):
-            eid = _structure.edge_at_column(G, j)
-            S, T = G.get_edge(eid)
+        for eid in _structure.edge_ids(G):
+            S, T = _structure.edge_sides(G, eid)
             edge_defs.append((eid, tuple(sorted(S)), tuple(sorted(T)), G._is_directed_edge(eid)))
         ordered_defs = tuple(sorted(edge_defs))
         graph_meta = (

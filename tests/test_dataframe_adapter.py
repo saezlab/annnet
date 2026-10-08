@@ -88,7 +88,7 @@ class TestDataFrameAdapter(unittest.TestCase):
         expected_hyperedges: int | None = None,
     ):
         """Helper to verify graph structure."""
-        self.assertEqual(len(list(G.nodes())), expected_nodes)
+        self.assertEqual(len(list(G.N)), expected_nodes)
         if expected_edges is not None:
             binary_edges = sum(
                 1 for eid, (_, _, etype) in G.edge_definitions.items() if etype != 'hyper'
@@ -192,7 +192,7 @@ class TestDataFrameAdapter(unittest.TestCase):
             exploded_hyperedges=True,
         )
 
-        self.assertEqual(len(list(G1.nodes())), len(list(G2.nodes())))
+        self.assertEqual(len(list(G1.N)), len(list(G2.N)))
         self.assertEqual(len(G1.hyperedge_definitions), len(G2.hyperedge_definitions))
 
     def test_roundtrip_pandas_to_polars(self):
@@ -204,7 +204,7 @@ class TestDataFrameAdapter(unittest.TestCase):
         exported = to_dataframes(G1)
         G2 = from_dataframes(nodes=exported['nodes'], edges=exported['edges'])
 
-        self.assertEqual(len(list(G1.nodes())), len(list(G2.nodes())))
+        self.assertEqual(len(list(G1.N)), len(list(G2.N)))
 
     # -------------------------------------------------------------------------
     # Hyperedge format tests
@@ -332,14 +332,14 @@ class TestDataFrameAdapter(unittest.TestCase):
 
         G = from_dataframes(nodes=empty_nodes, edges=empty_edges)
 
-        self.assertEqual(len(list(G.nodes())), 0)
+        self.assertEqual(len(list(G.N)), 0)
         self.assertEqual(len(G.edge_definitions), 0)
 
     def test_none_inputs(self):
         """None inputs should be handled gracefully."""
         G = from_dataframes(nodes=None, edges=None)
 
-        self.assertEqual(len(list(G.nodes())), 0)
+        self.assertEqual(len(list(G.N)), 0)
 
     def test_nodes_only(self):
         """AnnNet with only nodes, no edges."""
@@ -360,7 +360,7 @@ class TestDataFrameAdapter(unittest.TestCase):
 
         G = from_dataframes(edges=edges)
 
-        nodes = list(G.nodes())
+        nodes = list(G.N)
         self.assertGreaterEqual(len(nodes), 2)
 
     # -------------------------------------------------------------------------

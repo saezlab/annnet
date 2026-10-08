@@ -1,1149 +1,737 @@
-"""Lazy graph views and materialized table builders."""
+"""Live, read-only graph views.
+
+GraphView stores its parent and filters and caches resolved membership against
+state clocks. Callable filters are re-evaluated on each read. Each operation
+uses a consistent resolution.
+
+Membership resolution lives in ``_resolve``; scoped sequences in ``_select``;
+attribute reads in ``_attribute_api.ScopedAttrs``; table rendering and summaries
+in ``_tables`` and ``_summary``; graph construction in ``_materialize``.
+Writes are rejected with a reference to ``materialize()``.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, MutableMapping
 
 import numpy as np
-import scipy.sparse as sp
 
-from . import _mutate, _structure
-from ._attrs import read_only
-from ._state import GraphState
-from ._records import as_endpoint, _external_entity_kind
-from ._stored_kinds import STORED_EDGE_KIND, STORED_ENTITY_KIND
-from .._support.dataframe_backend import (
-    clone_dataframe,
-    empty_dataframe,
-    dataframe_columns,
-    dataframe_to_rows,
-    dataframe_filter_in,
-    dataframe_from_rows,
-    dataframe_from_columns,
+from . import _structure
+from ._select import EdgeSequence, NodeSequence, ReadOnlyViewError, refuse_write
+from ._records import _external_entity_kind
+from ._resolve import Resolved, resolve, normalize_filters
+from ._stored_kinds import STORED_ENTITY_KIND
+from ._attribute_api import ScopedAttrs
+
+# ---------------------------------------------------------------------------
+# Read-only wrappers
+# ---------------------------------------------------------------------------
+
+
+class _FrozenMapping(Mapping):
+    """A read-only, nested view of a mapping; writes name ``.materialize()``."""
+
+    __slots__ = ('_held',)
+
+    def __init__(self, held):
+        self._held = held
+
+    def __getitem__(self, key):
+        return _frozen(self._held[key])
+
+    def __iter__(self):
+        return iter(self._held)
+
+    def __len__(self):
+        return len(self._held)
+
+    def __setitem__(self, key, value):
+        raise refuse_write('the metadata of a view')
+
+    def __delitem__(self, key):
+        raise refuse_write('the metadata of a view')
+
+    def update(self, *args, **kwargs):
+        raise refuse_write('the metadata of a view')
+
+    def pop(self, *args):
+        raise refuse_write('the metadata of a view')
+
+    def setdefault(self, *args):
+        raise refuse_write('the metadata of a view')
+
+    def clear(self):
+        raise refuse_write('the metadata of a view')
+
+    def __repr__(self):
+        return f'{dict(self._held)!r} (read-only)'
+
+
+def _frozen(value):
+    if isinstance(value, MutableMapping):
+        return _FrozenMapping(value)
+    if isinstance(value, list):
+        return tuple(_frozen(v) for v in value)
+    if isinstance(value, set):
+        return frozenset(value)
+    if isinstance(value, np.ndarray):
+        copy = value.copy()
+        copy.flags.writeable = False
+        return copy
+    return value
+
+
+class _ViewSlices:
+    """The slice reads of a view, restricted to the slices and elements it holds."""
+
+    __slots__ = ('_view',)
+
+    def __init__(self, view):
+        self._view = view
+
+    def _resolved(self):
+        return self._view._resolved()
+
+    def list(self, include_default: bool = True) -> list:
+        resolved = self._resolved()
+        default = self._view._graph._default_slice
+        return [sid for sid in resolved.slices if include_default or sid != default]
+
+    def exists(self, slice_id) -> bool:
+        return slice_id in self._resolved().slice_set
+
+    def count(self) -> int:
+        return len(self._resolved().slices)
+
+    @property
+    def active(self) -> str:
+        return self._view._graph._current_slice
+
+    def _record(self, slice_id):
+        resolved = self._resolved()
+        if slice_id not in resolved.slice_set:
+            raise KeyError(f'slice {slice_id!r} is not in this view')
+        record = self._view._graph._slices[slice_id]
+        return set(record.nodes) & resolved.node_set, set(record.edges) & resolved.edge_set
+
+    def nodes(self, slice_id) -> set:
+        return self._record(slice_id)[0]
+
+    def edges(self, slice_id) -> set:
+        return self._record(slice_id)[1]
+
+    def info(self, slice_id) -> dict:
+        nodes, edges = self._record(slice_id)
+        return {
+            'nodes': nodes,
+            'edges': edges,
+            'attributes': self._view.attrs._row('slices', slice_id),
+        }
+
+    def union(self, slice_ids) -> dict:
+        nodes: set = set()
+        edges: set = set()
+        for sid in slice_ids:
+            held = self._record(sid)
+            nodes |= held[0]
+            edges |= held[1]
+        return {'nodes': nodes, 'edges': edges}
+
+    def intersect(self, slice_ids) -> dict:
+        ids = list(slice_ids)
+        if not ids:
+            return {'nodes': set(), 'edges': set()}
+        nodes, edges = self._record(ids[0])
+        for sid in ids[1:]:
+            held = self._record(sid)
+            nodes &= held[0]
+            edges &= held[1]
+        return {'nodes': nodes, 'edges': edges}
+
+    def difference(self, slice_a, slice_b) -> dict:
+        left, right = self._record(slice_a), self._record(slice_b)
+        return {'nodes': left[0] - right[0], 'edges': left[1] - right[1]}
+
+    def compare(self, slice_a, slice_b, *, axis: str = 'edges', backend=None):
+        from .._support.dataframe_backend import empty_dataframe, dataframe_from_rows
+
+        if axis not in ('edges', 'nodes'):
+            raise ValueError(f"axis must be 'edges' or 'nodes', got {axis!r}")
+        index = 1 if axis == 'edges' else 0
+        left, right = self._record(slice_a)[index], self._record(slice_b)[index]
+        column = 'edge_id' if axis == 'edges' else 'node_id'
+        backend = backend or self._view._graph._annotations_backend
+        rows = []
+        for element in sorted(left | right):
+            in_left, in_right = element in left, element in right
+            status = 'both' if in_left and in_right else ('a_only' if in_left else 'b_only')
+            rows.append({column: element, 'status': status})
+        if not rows:
+            return empty_dataframe({column: 'text', 'status': 'text'}, backend=backend)
+        return dataframe_from_rows(rows, backend=backend)
+
+    def edge_frame(self, edges=None, slices=None, attrs=None, **kwargs):
+        resolved = self._resolved()
+        edge_list = (
+            list(resolved.edge_ids)
+            if edges is None
+            else [e for e in edges if e in resolved.edge_set]
+        )
+        slice_list = (
+            list(resolved.slices)
+            if slices is None
+            else [s for s in slices if s in resolved.slice_set]
+        )
+        return self._view._graph.slices.edge_frame(edge_list, slice_list, attrs, **kwargs)
+
+    def __getattr__(self, name):
+        raise AttributeError(
+            f'a view has no slice operation {name!r}; the read operations are list, exists, '
+            f'count, active, nodes, edges, info, union, intersect, difference, compare and '
+            f'edge_frame. Call .materialize() to edit slices.'
+        )
+
+    def __repr__(self):
+        return f'<view slices: {self.list()!r}>'
+
+
+class _ViewLayers:
+    """The layer reads of a view, restricted to its window and placements."""
+
+    __slots__ = ('_view',)
+
+    def __init__(self, view):
+        self._view = view
+
+    def _graph(self):
+        return self._view._graph
+
+    def list_aspects(self):
+        return self._graph().layers.list_aspects()
+
+    def aspect(self, name):
+        return self._graph().layers.aspect(name)
+
+    def list_layers(self, aspect=None, include_placeholder=False):
+        return self._graph().layers.list_layers(aspect, include_placeholder)
+
+    @property
+    def window(self) -> tuple:
+        """The layer coordinates in this view, in declaration order."""
+        resolved = self._view._resolved()
+        if resolved.layers is not None:
+            return resolved.layers
+        held = {key[1] for key in resolved.node_keys}
+        return tuple(
+            aa for aa in (tuple(x) for x in self._graph().layers._all_layers) if aa in held
+        )
+
+    def where(self, **predicates):
+        from ._selection import LayerSelection
+
+        selection = self._graph().layers.where(**predicates)
+        inside = set(self.window)
+        return LayerSelection(self._graph(), [aa for aa in selection.layers if aa in inside])
+
+    def has_presence(self, u, layer_tuple) -> bool:
+        return (u, tuple(layer_tuple)) in self._view._resolved().key_set
+
+    def layer_node_set(self, layer_tuple) -> set:
+        aa = tuple(layer_tuple)
+        return {key[0] for key in self._view._resolved().node_keys if key[1] == aa}
+
+    def layer_edge_set(self, layer_tuple, **kwargs) -> set:
+        found = self._graph().layers.layer_edge_set(tuple(layer_tuple), **kwargs)
+        return found & self._view._resolved().edge_set
+
+    def values(self):
+        return self._graph().layers.values()
+
+    def matrix(self, name, *, nodes=None, layers=None, missing=np.nan):
+        resolved = self._view._resolved()
+        node_list = (
+            list(resolved.node_ids)
+            if nodes is None
+            else [n for n in nodes if n in resolved.node_set]
+        )
+        window = set(self.window)
+        layer_list = (
+            list(self.window)
+            if layers is None
+            else [tuple(l) for l in layers if tuple(l) in window]
+        )
+        return self._graph().layers.matrix(
+            name, nodes=node_list, layers=layer_list, missing=missing
+        )
+
+    def node_frame(self, nodes=None, layers=None, attrs=None, **kwargs):
+        resolved = self._view._resolved()
+        node_list = (
+            list(resolved.node_ids)
+            if nodes is None
+            else [n for n in nodes if n in resolved.node_set]
+        )
+        window = set(self.window)
+        layer_list = (
+            list(self.window)
+            if layers is None
+            else [tuple(l) for l in layers if tuple(l) in window]
+        )
+        return self._graph().layers.node_frame(node_list, layer_list, attrs, **kwargs)
+
+    def __getattr__(self, name):
+        raise AttributeError(
+            f'a view has no layer operation {name!r}; the read operations are list_aspects, '
+            f'aspect, list_layers, window, where, has_presence, layer_node_set, '
+            f'layer_edge_set, values, matrix and node_frame. Call .materialize() to edit.'
+        )
+
+    def __repr__(self):
+        return f'<view layers: {list(self.window)!r}>'
+
+
+# ---------------------------------------------------------------------------
+# The view
+# ---------------------------------------------------------------------------
+
+_REMOVED_VIEW_NAMES = {
+    'obs': "V.attrs.table('nodes')",
+    'var': "V.attrs.table('edges')",
+    'nodes_df': "V.attrs.table('nodes', derived=True)",
+    'edges_df': "V.attrs.table('edges', derived=True)",
+    'node_count': 'len(V.N)',
+    'edge_count': 'len(V.E)',
+    'node_ids': 'V.N.ids',
+    'edge_ids': 'V.E.ids',
+    'subview': 'V.view(...)',
+    'X': 'V.B',
+    'nx': 'V.materialize().nx',
+    'ig': 'V.materialize().ig',
+    'gt': 'V.materialize().gt',
+    'cache': 'V.materialize().cache',
+}
+
+_MUTATORS = frozenset(
+    {
+        'add_nodes',
+        'add_edges',
+        'remove_nodes',
+        'remove_edges',
+        'ops',
+        'history',
+        'make_undirected',
+        'write',
+        'set_edge_coeffs',
+        'remove_orphans',
+        'validate',
+    }
 )
 
 
-def _side_identity(side):
-    """Return one side of an edge as ``(sorted node ids, the layer they share)``.
-
-    The layer is ``None`` when the side is empty, when the graph is flat, or when
-    the members of a hyperedge side do not all sit in one layer — three cases a
-    column holding one coordinate cannot tell apart, and none of which is a
-    coordinate.
-    """
-    if not side:
-        return [], None
-    if len(side) == 1:
-        # Every side of every binary edge, which is nearly every side there is.
-        # Sorting one element and reducing a one-member set are both answers
-        # already known, and the general path below spends most of the edge
-        # table's build time arriving at them.
-        endpoint = as_endpoint(next(iter(side)))
-        return [endpoint.node_id], endpoint.layer
-    # Sorted on the whole endpoint, not on the id: one node in two layers is two
-    # members of one side, and a sort on the id alone would order them by chance.
-    endpoints = sorted(
-        (as_endpoint(item) for item in side), key=lambda e: (e.node_id, e.layer or ())
-    )
-    layers = {endpoint.layer for endpoint in endpoints}
-    one = layers.pop() if len(layers) == 1 else None
-    return [endpoint.node_id for endpoint in endpoints], one
-
-
 class GraphView:
-    """Lazy, filtered view into a graph; materialize() for a concrete subgraph."""
+    """A live, read-only, composable selection of a graph.
 
-    def __init__(self, graph, nodes=None, edges=None, slices=None, predicate=None):
-        self._graph = graph
-        self._nodes_filter = nodes
-        self._edges_filter = edges
-        self._predicate = predicate
-        if slices is None:
-            self._slices = None
-        elif isinstance(slices, str):
-            self._slices = [slices]
-        else:
-            self._slices = list(slices)
-        self._node_ids_cache = None
-        self._edge_ids_cache = None
-        self._computed = False
+    Built by ``G.view(...)`` and narrowed by ``V.view(...)``. The membership
+    rules are documented in :mod:`annnet.core._resolve`; the reading
+    vocabulary is the graph's: ``N``, ``E``, ``attrs``, ``uns``, ``slices``,
+    ``layers``, the named matrices, ``shape``/``supra_shape``, the traversal
+    reads, ``view()``, ``materialize()`` and ``summary()``.
+    """
+
+    __slots__ = ('_graph', '_parent', '_filters', '_cache', '_snapshot')
+
+    def __init__(
+        self,
+        parent,
+        *,
+        nodes=None,
+        edges=None,
+        layers=None,
+        slices=None,
+        predicate=None,
+        boundary='closed',
+    ):
+        graph, _ = parent._selection_context()
+        object.__setattr__(self, '_parent', parent)
+        object.__setattr__(self, '_graph', graph)
+        object.__setattr__(
+            self,
+            '_filters',
+            normalize_filters(
+                parent,
+                nodes=nodes,
+                edges=edges,
+                layers=layers,
+                slices=slices,
+                predicate=predicate,
+                boundary=boundary,
+            ),
+        )
+        object.__setattr__(self, '_cache', None)
+        object.__setattr__(self, '_snapshot', None)
+
+    # -- resolution ---------------------------------------------------------
+
+    def _is_live(self) -> bool:
+        if self._filters.is_live():
+            return True
+        parent = self._parent
+        return isinstance(parent, GraphView) and parent._is_live()
+
+    def _parent_resolved(self):
+        parent = self._parent
+        return parent._resolved() if isinstance(parent, GraphView) else None
+
+    def _resolved(self) -> Resolved:
+        """The resolved state, cached against the graph's clocks."""
+        if self._is_live():
+            return resolve(self._graph, self._parent_resolved(), self._filters)
+        clock = self._graph._state_clock()
+        held = self._cache
+        if held is not None and held[0] == clock:
+            return held[1]
+        resolved = resolve(self._graph, self._parent_resolved(), self._filters)
+        object.__setattr__(self, '_cache', (clock, resolved))
+        return resolved
+
+    def _selection_context(self):
+        """The scope protocol of :mod:`annnet.core._select`: ``(graph, resolved)``."""
+        return self._graph, self._resolved()
+
+    def _stable(self, build):
+        """Run ``build(resolved)`` on one consistent resolution, or fail.
+
+        A mutation of the parent between the resolution and the result would
+        publish a table that describes no state the graph ever had, so the
+        clock is compared before and after and the read is retried.
+        """
+        for _attempt in range(3):
+            before = self._graph._state_clock()
+            resolved = self._resolved()
+            result = build(resolved)
+            if self._graph._state_clock() == before:
+                return result
+        raise RuntimeError(
+            'the graph changed while the view was being read; retry when it is quiet'
+        )
+
+    # -- identity ---------------------------------------------------------------
 
     @property
-    def obs(self):
-        """Return the filtered node attribute table for this view.
-
-        Returns
-        -------
-        DataFrame-like
-
-        Notes
-        -----
-        Materialized from the node table of the graph and filtered by the
-        node ids of this view. It is a table for the caller, not the storage
-        of the graph.
-        """
-        node_ids = self.node_ids
-        if node_ids is None:
-            return clone_dataframe(self._graph._node_table)
-        return dataframe_filter_in(self._graph._node_table, 'node_id', node_ids)
+    def graph(self):
+        """The root graph."""
+        return self._graph
 
     @property
-    def var(self):
-        """Return the filtered edge attribute table for this view.
+    def parent(self):
+        """The graph or view this one narrows."""
+        return self._parent
 
-        Returns
-        -------
-        DataFrame-like
+    @property
+    def boundary(self) -> str:
+        return self._filters.boundary
 
-        Notes
-        -----
-        Materialized from the edge table of the graph and filtered by the edge
-        ids of this view. It is a table for the caller, not the storage of the
-        graph.
+    @property
+    def directed(self):
+        return self._graph.directed
+
+    @property
+    def is_multilayer(self) -> bool:
+        return self._graph.is_multilayer
+
+    @property
+    def aspects(self) -> list:
+        return self._graph.aspects
+
+    # -- the reading vocabulary -------------------------------------------------
+
+    @property
+    def N(self) -> NodeSequence:
+        return NodeSequence(self)
+
+    @property
+    def E(self) -> EdgeSequence:
+        return EdgeSequence(self)
+
+    @property
+    def attrs(self) -> ScopedAttrs:
+        return ScopedAttrs(self)
+
+    @property
+    def uns(self):
+        return _FrozenMapping(self._graph.graph_attributes)
+
+    @property
+    def slices(self) -> _ViewSlices:
+        return _ViewSlices(self)
+
+    @property
+    def layers(self) -> _ViewLayers:
+        return _ViewLayers(self)
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        resolved = self._resolved()
+        return (len(resolved.node_ids), len(resolved.edge_ids))
+
+    @property
+    def supra_shape(self) -> tuple[int, int]:
+        resolved = self._resolved()
+        return (len(resolved.node_keys), len(resolved.edge_ids))
+
+    @property
+    def nv_supra(self) -> int:
+        return len(self._resolved().node_keys)
+
+    def supra_nodes(self) -> list:
+        return list(self._resolved().node_keys)
+
+    def __len__(self) -> int:
+        return len(self._resolved().node_ids)
+
+    def __iter__(self):
+        return iter(self._resolved().node_ids)
+
+    def __contains__(self, item) -> bool:
+        resolved = self._resolved()
+        if isinstance(item, str):
+            return item in resolved.node_set
+        if _structure.is_entity_key(item):
+            return (item[0], tuple(item[1])) in resolved.key_set
+        return False
+
+    def __bool__(self) -> bool:
+        return len(self._resolved().node_ids) > 0
+
+    def has_node(self, node_id) -> bool:
+        return node_id in self
+
+    def has_edge(self, source=None, target=None, edge_id=None):
+        resolved = self._resolved()
+        if edge_id is not None and source is None and target is None:
+            return edge_id in resolved.edge_set
+        if source is not None and target is not None:
+            found = [
+                eid
+                for eid in _structure.edges_between(self._graph, source, target)
+                if eid in resolved.edge_set
+            ]
+            if edge_id is not None:
+                return edge_id in found
+            return (bool(found), found)
+        raise ValueError('use has_edge(edge_id=...), has_edge(source, target) or all three')
+
+    def at(self, node_id: str, **aspects) -> tuple:
+        key = self._graph._node_layer_key(node_id, aspects)
+        if key not in self._resolved().key_set:
+            raise KeyError(f'{node_id!r} is not on layer {key[1]!r} in this view')
+        return key
+
+    def exists(self, node_id: str, **aspects) -> bool:
+        key = self._graph._node_layer_key(node_id, aspects)
+        return key in self._resolved().key_set
+
+    def entity_kinds(self) -> dict:
+        """The kind of every selected entity, by id (``'node'`` or ``'edge'``)."""
+        graph = self._graph
+        return {
+            key[0]: _external_entity_kind(
+                STORED_ENTITY_KIND[_structure.entity_ref(graph, key).kind]
+            )
+            for key in self._resolved().entity_keys
+        }
+
+    def degree(self, entity_id) -> int:
+        """The number of selected edges touching one selected entity."""
+        graph = self._graph
+        resolved = self._resolved()
+        try:
+            key = graph._resolve_entity_key(entity_id)
+        except (KeyError, ValueError, TypeError):
+            return 0
+        if key not in resolved.key_set:
+            return 0
+        return sum(1 for eid in _structure.entity_edges(graph, key) if eid in resolved.edge_set)
+
+    def neighbors(self, entity_id) -> list:
+        """The neighbours of one selected entity along selected edges."""
+        return self._snapshot_graph().neighbors(entity_id)
+
+    def out_neighbors(self, node_id) -> list:
+        return self._snapshot_graph().out_neighbors(node_id)
+
+    def in_neighbors(self, node_id) -> list:
+        return self._snapshot_graph().in_neighbors(node_id)
+
+    def successors(self, node_id) -> list:
+        return self._snapshot_graph().successors(node_id)
+
+    def predecessors(self, node_id) -> list:
+        return self._snapshot_graph().predecessors(node_id)
+
+    def incident_edges(self, nodes, direction: str = 'both') -> list:
+        return self._snapshot_graph().incident_edges(nodes, direction)
+
+    def edge_list(self) -> list:
+        return self._snapshot_graph().edge_list()
+
+    # -- matrices ----------------------------------------------------------------------
+
+    def _snapshot_graph(self):
+        """A materialized copy of the resolved state, kept against the clock.
+
+        The named matrices and the traversal reads answer from it, so an
+        algorithm asked about the view reads exactly the resolved graph and
+        nothing of the parent. It is rebuilt when the parent changes.
         """
-        edge_ids = self.edge_ids
-        if edge_ids is None:
-            return clone_dataframe(self._graph._edge_table)
-        return dataframe_filter_in(self._graph._edge_table, 'edge_id', edge_ids)
+        clock = self._graph._state_clock()
+        held = self._snapshot
+        if held is not None and held[0] == clock and not self._is_live():
+            return held[1]
+        graph = self.materialize()
+        object.__setattr__(self, '_snapshot', (clock, graph))
+        return graph
 
     @property
     def B(self):
-        """Return the filtered incidence matrix subview.
-
-        Named as the graph names it. ``X`` was the spelling of the incidence
-        matrix before cycle 002 renamed it, and it stayed here after it went
-        from the graph, so one object answered to a name the other refused.
-
-        Returns
-        -------
-        scipy.sparse.dok_matrix
-        """
-        node_ids = self.node_ids
-        edge_ids = self.edge_ids
-        if node_ids is not None:
-            rows = [
-                _structure.entity_row(self._graph, nid)
-                for nid in node_ids
-                if _structure.has_entity(self._graph, nid)
-            ]
-        else:
-            rows = list(range(self._graph._matrix.shape[0]))
-        if edge_ids is not None:
-            cols = []
-            for eid in edge_ids:
-                if not _structure.has_edge(self._graph, eid):
-                    continue
-                column = _structure.edge_column(self._graph, eid)
-                if column >= 0:
-                    cols.append(column)
-        else:
-            cols = list(range(self._graph._matrix.shape[1]))
-        if rows and cols:
-            return self._graph._matrix[rows, :][:, cols]
-        return sp.dok_array((len(rows), len(cols)), dtype=self._graph._matrix.dtype)
+        return self._snapshot_graph().B
 
     @property
-    def node_ids(self):
-        """Get filtered node IDs (cached).
-
-        Returns
-        -------
-        set[str] | None
-            None means no node filter (full graph).
-        """
-        if not self._computed:
-            self._compute_ids()
-        return self._node_ids_cache
+    def S(self):
+        return self._snapshot_graph().S
 
     @property
-    def edge_ids(self):
-        """Get filtered edge IDs (cached).
-
-        Returns
-        -------
-        set[str] | None
-            None means no edge filter (full graph).
-        """
-        if not self._computed:
-            self._compute_ids()
-        return self._edge_ids_cache
+    def H(self):
+        return self._snapshot_graph().H
 
     @property
-    def node_count(self):
-        """Return the number of nodes in this view.
-
-        Returns
-        -------
-        int
-        """
-        node_ids = self.node_ids
-        if node_ids is None:
-            return _structure.node_count(self._graph)
-        return len(node_ids)
+    def A(self):
+        return self._snapshot_graph().A
 
     @property
-    def edge_count(self):
-        """Return the number of edges in this view.
+    def L(self):
+        return self._snapshot_graph().L
 
-        Returns
-        -------
-        int
-        """
-        edge_ids = self.edge_ids
-        if edge_ids is None:
-            return _structure.edge_count(self._graph)
-        return len(edge_ids)
+    @property
+    def matrices(self):
+        return self._snapshot_graph().matrices
 
-    def _compute_ids(self):
-        node_ids = None
-        edge_ids = None
+    @property
+    def idx(self):
+        return self._snapshot_graph().idx
 
-        if self._slices is not None:
-            node_ids = set()
-            edge_ids = set()
-            for slice_id in self._slices:
-                if slice_id in self._graph._slices:
-                    node_ids.update(self._graph._slices[slice_id]['nodes'])
-                    edge_ids.update(self._graph._slices[slice_id]['edges'])
+    # -- composition -------------------------------------------------------------------
 
-        if self._nodes_filter is not None:
-            candidate_nodes = (
-                node_ids
-                if node_ids is not None
-                else {
-                    ref.id
-                    for ref in _structure.iter_entities(self._graph)
-                    if ref.kind == _structure.NODE
-                }
-            )
-            if callable(self._nodes_filter):
-                filtered = set()
-                for vid in candidate_nodes:
-                    try:
-                        if self._nodes_filter(vid):
-                            filtered.add(vid)
-                    except (AttributeError, KeyError, TypeError, ValueError):
-                        pass
-                node_ids = filtered
-            else:
-                specified = set(self._nodes_filter)
-                node_ids = (
-                    (node_ids & specified)
-                    if node_ids is not None
-                    else (specified & candidate_nodes)
-                )
+    def view(
+        self, nodes=None, edges=None, layers=None, slices=None, *, predicate=None, boundary='closed'
+    ):
+        """Narrow this view. Every argument intersects with what this view holds."""
+        return GraphView(
+            self,
+            nodes=nodes,
+            edges=edges,
+            layers=layers,
+            slices=slices,
+            predicate=predicate,
+            boundary=boundary,
+        )
 
-        if self._edges_filter is not None:
-            candidate_edges = (
-                edge_ids
-                if edge_ids is not None
-                else {ref.id for ref in _structure.iter_edges(self._graph)}
-            )
-            if callable(self._edges_filter):
-                filtered = set()
-                for eid in candidate_edges:
-                    try:
-                        if self._edges_filter(eid):
-                            filtered.add(eid)
-                    except (AttributeError, KeyError, TypeError, ValueError):
-                        pass
-                edge_ids = filtered
-            else:
-                specified = set(self._edges_filter)
-                edge_ids = (
-                    (edge_ids & specified)
-                    if edge_ids is not None
-                    else (specified & candidate_edges)
-                )
-
-        if self._predicate is not None and node_ids is not None:
-            filtered = set()
-            for vid in node_ids:
-                try:
-                    if self._predicate(vid):
-                        filtered.add(vid)
-                except (AttributeError, KeyError, TypeError, ValueError):
-                    pass
-            node_ids = filtered
-
-        if node_ids is not None and edge_ids is not None:
-            filtered = set()
-            for eid in edge_ids:
-                if not _structure.has_edge(self._graph, eid):
-                    continue
-                if not _structure.carries_structure(self._graph, eid):
-                    continue
-                sides = _structure.edge_sides(self._graph, eid)
-                if not (sides.source <= node_ids and sides.target <= node_ids):
-                    continue
-                # A binary edge needs both of its sides. A hyperedge with no target
-                # side is undirected, and its one side is the whole edge.
-                is_hyper = _structure.edge_ref(self._graph, eid).kind == _structure.HYPER
-                if is_hyper or (sides.source and sides.target):
-                    filtered.add(eid)
-            edge_ids = filtered
-
-        self._node_ids_cache = node_ids
-        self._edge_ids_cache = edge_ids
-        self._computed = True
-
-    def edges_df(self, **kwargs):
-        """Return an edge DataFrame view filtered to this view's edges.
+    def materialize(self, copy_attributes: bool = True):
+        """Build an independent, editable graph holding exactly this selection.
 
         Parameters
         ----------
-        **kwargs
-            Passed through to `AnnNet.edges_view()`.
-
-        Returns
-        -------
-        DataFrame-like
-
-        Notes
-        -----
-        Uses `AnnNet.edges_view()` and then filters by the view's edge IDs.
-        """
-        df = self._graph.views.edges(**kwargs)
-        edge_ids = self.edge_ids
-        if edge_ids is not None:
-            df = dataframe_filter_in(df, 'edge_id', edge_ids)
-        return df
-
-    def nodes_df(self, **kwargs):
-        """Return a node DataFrame view filtered to this view's nodes.
-
-        Parameters
-        ----------
-        **kwargs
-            Passed through to `AnnNet.nodes_view()`.
-
-        Returns
-        -------
-        DataFrame-like
-
-        Notes
-        -----
-        Uses `AnnNet.nodes_view()` and then filters by the view's node IDs.
-        """
-        df = self._graph.views.nodes(**kwargs)
-        node_ids = self.node_ids
-        if node_ids is not None:
-            df = dataframe_filter_in(df, 'node_id', node_ids)
-        return df
-
-    def materialize(self, copy_attributes=True):
-        """Create a concrete subgraph from this view.
-
-        Parameters
-        ----------
-        copy_attributes : bool, optional
-            If True, copy node/edge attributes into the new graph.
+        copy_attributes : bool, default True
+            Carry the attributes of every address over. ``False`` keeps the
+            structure, the slice memberships and the aspects alone.
 
         Returns
         -------
         AnnNet
-            Materialized subgraph.
+            A new graph; editing it changes nothing here, and editing the
+            parent changes nothing there. ``uns['selection']`` records what
+            was selected.
         """
-        subG = self._graph.ops.extract_subgraph(nodes=self.node_ids, edges=self.edge_ids)
-        if copy_attributes:
-            return subG
+        from . import _materialize
 
-        # The rows stay, because an element of the subgraph is a row of its
-        # tables. What goes is every attribute the caller asked not to carry
-        # over, which is every column beside the id.
-        subG._attr_store.drop_node_columns()
-        subG._attr_store.drop_edge_columns()
-        return subG
-
-    def subview(self, nodes=None, edges=None, slices=None, predicate=None):
-        """Create a new GraphView by further restricting this view.
-
-        Parameters
-        ----------
-        nodes : Iterable[str] | callable | None
-            Node IDs or predicate; intersects with current view if provided.
-        edges : Iterable[str] | callable | None
-            Edge IDs or predicate; intersects with current view if provided.
-        slices : Iterable[str] | None
-            Slice IDs to include. Defaults to current view's slices if None.
-        predicate : callable | None
-            Additional node predicate applied in conjunction with existing filters.
-
-        Returns
-        -------
-        GraphView
-
-        Notes
-        -----
-        Predicates are combined with logical AND.
-        """
-        base_nodes = self.node_ids
-        base_edges = self.edge_ids
-
-        if nodes is None:
-            new_nodes, node_pred = base_nodes, None
-        elif callable(nodes):
-            new_nodes, node_pred = base_nodes, nodes
-        else:
-            to_set = set(nodes)
-            new_nodes = (set(base_nodes) & to_set) if base_nodes is not None else to_set
-            node_pred = None
-
-        if edges is None or callable(edges):
-            new_edges = base_edges
-        else:
-            to_set = set(edges)
-            new_edges = (set(base_edges) & to_set) if base_edges is not None else to_set
-
-        new_slices = slices if slices is not None else (self._slices if self._slices else None)
-
-        def combined_pred(v):
-            ok = True
-            for pred in (self._predicate, predicate, node_pred):
-                if pred:
-                    try:
-                        ok = ok and bool(pred(v))
-                    except (AttributeError, TypeError, ValueError):
-                        ok = False
-            return ok
-
-        final_pred = combined_pred if (self._predicate or predicate or node_pred) else None
-        return GraphView(
-            self._graph,
-            nodes=new_nodes,
-            edges=new_edges,
-            slices=new_slices,
-            predicate=final_pred,
+        return self._stable(
+            lambda resolved: _materialize.materialize(resolved, copy_attributes=copy_attributes)
         )
+
+    # -- inspection -----------------------------------------------------------------------
 
     def summary(self):
-        """Return a human-readable summary of this view.
+        from ._summary import summarize
 
-        Returns
-        -------
-        str
-        """
-        lines = [
-            'GraphView Summary',
-            '─' * 30,
-            f'nodes: {self.node_count}',
-            f'Edges: {self.edge_count}',
-        ]
-        filters = []
-        if self._slices:
-            filters.append(f'slices={self._slices}')
-        if self._nodes_filter:
-            filters.append(
-                'nodes=<predicate>'
-                if callable(self._nodes_filter)
-                else f'nodes={len(list(self._nodes_filter))} specified'
-            )
-        if self._edges_filter:
-            filters.append(
-                'edges=<predicate>'
-                if callable(self._edges_filter)
-                else f'edges={len(list(self._edges_filter))} specified'
-            )
-        if self._predicate:
-            filters.append('predicate=<function>')
-        lines.append(f'Filters: {", ".join(filters)}' if filters else 'Filters: None (full graph)')
-        return '\n'.join(lines)
-
-    def __repr__(self):
-        return f'GraphView(nodes={self.node_count}, edges={self.edge_count})'
-
-    def __len__(self):
-        return self.node_count
-
-
-class ViewsClass(GraphState):
-    """Materialized table builders mixed into ``AnnNet``."""
-
-    def edges_view(
-        self,
-        slice=None,
-        include_directed=True,
-        include_weight=True,
-        resolved_weight=True,
-        copy=True,
-        *,
-        layer=None,
-        in_slice=None,
-        include_hyper=True,
-        include_binary=True,
-    ):
-        """Build a DataFrame view of edges with optional slice join.
-
-        Parameters
-        ----------
-        slice : str, optional
-            Slice id whose per-edge attributes are joined onto **every** row, as
-            ``slice_*`` columns. This does not filter — see ``in_slice``.
-        include_directed : bool, optional
-            Include directedness column.
-        include_weight : bool, optional
-            Include global weight column.
-        resolved_weight : bool, optional
-            Include effective weight (slice override if present).
-        copy : bool, optional
-            Return a cloned DataFrame if True.
-        layer : tuple[str, ...], optional
-            Keep only the edges of this layer, as
-            :meth:`LayerAccessor.layer_edge_set` names them.
-        in_slice : str, optional
-            Keep **only** the rows of this slice. Distinct from ``slice``, which
-            joins without filtering.
-        include_hyper : bool, optional
-            Include hyperedges. ``False`` leaves a table whose rows are all
-            binary, which is what an exporter that cannot hold a hyperedge wants.
-        include_binary : bool, optional
-            Include binary edges. ``False`` with ``include_hyper`` leaves the
-            hyperedges alone — which is what :meth:`ViewsAccessor.hyperedges`
-            asks for.
-
-        Returns
-        -------
-        DataFrame-like
-            ``source`` and ``target`` are bare node ids; ``src_layer`` and
-            ``dst_layer`` are the canonical layer ids of the two endpoints, and
-            are null when the graph is flat or a side does not sit in one layer.
-
-        Notes
-        -----
-        ``slice=`` joins, ``in_slice=`` filters. Both take a slice id and they do
-        different things, so a call that means "only this slice's edges" wants
-        the second.
-        """
-        _edge_refs = list(_structure.iter_edges(self))
-        if not include_hyper:
-            _edge_refs = [ref for ref in _edge_refs if ref.kind != _structure.HYPER]
-        if not include_binary:
-            _edge_refs = [ref for ref in _edge_refs if ref.kind == _structure.HYPER]
-        if layer is not None:
-            keep = self.layers.layer_edge_set(tuple(layer))
-            _edge_refs = [ref for ref in _edge_refs if ref.id in keep]
-        if in_slice is not None:
-            keep = self.slices.edges(in_slice)
-            _edge_refs = [ref for ref in _edge_refs if str(ref.id) in keep]
-        if not _edge_refs:
-            return empty_dataframe(
-                {
-                    'edge_id': 'text',
-                    'kind': 'text',
-                    'ml_kind': 'text',
-                    'source': 'text',
-                    'target': 'text',
-                    'src_layer': 'text',
-                    'dst_layer': 'text',
-                }
-            )
-
-        eids_raw = [ref.id for ref in _edge_refs]
-        eids_str = [str(eid) for eid in eids_raw]
-
-        kinds = ['hyper' if ref.kind == _structure.HYPER else 'binary' for ref in _edge_refs]
-        ml_kinds = [ref.ml_kind for ref in _edge_refs]
-
-        need_global = include_weight or resolved_weight
-        global_w = [ref.weight for ref in _edge_refs] if need_global else None
-        dirs = [ref.directed for ref in _edge_refs] if include_directed else None
-
-        layer_id = self.layers.layer_tuple_to_id
-        src, tgt, etype, head, tail, members = [], [], [], [], [], []
-        src_layer, dst_layer = [], []
-        for ref in _edge_refs:
-            sides = _structure.edge_sides(self, ref.id)
-            source_ids, source_layer = _side_identity(sides.source)
-            target_ids, target_layer = _side_identity(sides.target)
-            src_layer.append(None if source_layer is None else layer_id(source_layer))
-            dst_layer.append(None if target_layer is None else layer_id(target_layer))
-            if ref.kind == _structure.HYPER:
-                if target_ids:
-                    head.append(tuple(source_ids))
-                    tail.append(tuple(target_ids))
-                    members.append(None)
-                    src.append('|'.join(source_ids))
-                    tgt.append('|'.join(target_ids))
-                else:
-                    head.append(None)
-                    tail.append(None)
-                    members.append(tuple(source_ids))
-                    src.append('|'.join(source_ids))
-                    tgt.append(None)
-                etype.append(None)
-            else:
-                src.append(source_ids[0] if source_ids else None)
-                tgt.append(target_ids[0] if target_ids else None)
-                etype.append(STORED_EDGE_KIND.get(ref.kind, ref.kind))
-                head.append(None)
-                tail.append(None)
-                members.append(None)
-
-        edge_attrs_map = self._attr_store.edge_attr_rows()
-        slice_attrs_map = {}
-        if slice is not None:
-            for row in dataframe_to_rows(self.edge_slice_attributes):
-                if row.get('slice_id') != slice:
-                    continue
-                eid = row.get('edge_id')
-                if eid is None:
-                    continue
-                slice_attrs_map[str(eid)] = {
-                    f'slice_{k}': v for k, v in row.items() if k not in {'slice_id', 'edge_id'}
-                }
-
-        # Columns, not rows. The dict-per-edge shape this replaced allocated one
-        # dict and one key lookup per attribute per edge, and then made the
-        # backend pivot the whole thing back into columns — so the frame cost a
-        # multiple of what the data is. A column is a list built once, and an
-        # attribute column is filled only where some edge carries it.
-        out: dict[str, list] = {
-            'edge_id': eids_str,
-            'kind': kinds,
-            'ml_kind': ml_kinds,
-            'source': src,
-            'target': tgt,
-            'src_layer': src_layer,
-            'dst_layer': dst_layer,
-            'edge_type': etype,
-            'head': [list(v) if v is not None else None for v in head],
-            'tail': [list(v) if v is not None else None for v in tail],
-            'members': [list(v) if v is not None else None for v in members],
-        }
-        if include_directed:
-            out['directed'] = dirs
-        if include_weight:
-            out['global_weight'] = global_w
-
-        for source_map in (edge_attrs_map, slice_attrs_map):
-            names: list[str] = []
-            seen: set[str] = set()
-            for eid in eids_str:
-                for name in source_map.get(eid, ()):
-                    if name not in seen and name not in out:
-                        seen.add(name)
-                        names.append(name)
-            for name in names:
-                out[name] = [source_map.get(eid, {}).get(name) for eid in eids_str]
-
-        if resolved_weight:
-            override = out.get('slice_weight')
-            out['effective_weight'] = [
-                global_w[idx] if override is None or override[idx] is None else override[idx]
-                for idx in range(len(eids_str))
-            ]
-
-        frame = dataframe_from_columns(out)
-        return clone_dataframe(frame) if copy else frame
-
-    def nodes_view(self, copy=True):
-        """Read-only node attribute table.
-
-        Parameters
-        ----------
-        copy : bool, optional
-            Return a cloned DataFrame.
-
-        Returns
-        -------
-        DataFrame-like
-            Columns include `node_id` plus pure attributes.
-        """
-        df = self._node_table
-        if df is None or 'node_id' not in dataframe_columns(df):
-            out = empty_dataframe({'node_id': 'text'})
-        else:
-            out = clone_dataframe(df)
-        return clone_dataframe(out) if copy else out
-
-    def slices_view(self, copy=True):
-        """Read-only slice attribute table.
-
-        Parameters
-        ----------
-        copy : bool, optional
-            Return a cloned DataFrame.
-
-        Returns
-        -------
-        DataFrame-like
-            One row per slice (including the default slice), keyed by
-            ``slice_id``. User-set slice attributes appear as additional
-            columns; slices without user attrs still appear, with null
-            cells.
-        """
-        all_slice_ids = list(self.slices.list(include_default=True))
-        attr_df = self.slice_attributes
-        attr_rows: dict = {}
-        if attr_df is not None and 'slice_id' in dataframe_columns(attr_df):
-            for row in dataframe_to_rows(attr_df):
-                sid = row.get('slice_id')
-                if sid is not None:
-                    attr_rows[sid] = {k: v for k, v in row.items() if k != 'slice_id'}
-        rows = [{'slice_id': sid, **attr_rows.get(sid, {})} for sid in all_slice_ids]
-        out = dataframe_from_rows(rows) if rows else empty_dataframe({'slice_id': 'text'})
-        return clone_dataframe(out) if copy else out
-
-    def aspects_view(self, copy=True):
-        """Return a view of Kivela aspects and their metadata.
-
-        Parameters
-        ----------
-        copy : bool, optional
-            Return a cloned DataFrame.
-
-        Returns
-        -------
-        DataFrame-like
-
-        Notes
-        -----
-        Columns include `aspect`, `elem_layers`, and any aspect attribute keys.
-        """
-        if not getattr(self, 'aspects', None):
-            return empty_dataframe({'aspect': 'text', 'elem_layers': 'list_text'})
-        rows = []
-        for a in self.aspects:
-            base = {'aspect': a, 'elem_layers': list(self.elem_layers.get(a, []))}
-            base.update(self.layers._aspect_attrs.get(a, {}))
-            rows.append(base)
-        df = dataframe_from_rows(rows)
-        return clone_dataframe(df) if copy else df
-
-    def layers_view(self, copy=True):
-        """Return a read-only table of multi-aspect layers.
-
-        Parameters
-        ----------
-        copy : bool, optional
-            Return a cloned DataFrame.
-
-        Returns
-        -------
-        DataFrame-like
-
-        Notes
-        -----
-        Columns include `layer_tuple`, `layer_id`, aspect columns, layer attributes,
-        and prefixed elementary layer attributes.
-        """
-        if not self.aspects or not getattr(self.layers, '_all_layers', ()):
-            return empty_dataframe({'layer_tuple': 'list_text', 'layer_id': 'text'})
-
-        elem_attr_rows = {}
-        if self.layer_attributes is not None and 'layer_id' in dataframe_columns(
-            self.layer_attributes
-        ):
-            for row in dataframe_to_rows(self.layer_attributes):
-                layer_id = row.get('layer_id')
-                if layer_id is not None:
-                    elem_attr_rows[str(layer_id)] = {
-                        k: v for k, v in row.items() if k != 'layer_id'
-                    }
-
-        rows = []
-        for aa in self.layers._all_layers:
-            aa = tuple(aa)
-            base = {'layer_tuple': list(aa), 'layer_id': self.layers.layer_tuple_to_id(aa)}
-            for i, aspect in enumerate(self.aspects):
-                base[aspect] = aa[i]
-            base.update(self.layers._layer_attrs.get(aa, {}))
-            for i, aspect in enumerate(self.aspects):
-                for k, v in elem_attr_rows.get(f'{aspect}_{aa[i]}', {}).items():
-                    base[f'{aspect}__{k}'] = v
-            rows.append(base)
-        df = dataframe_from_rows(rows)
-        return clone_dataframe(df) if copy else df
-
-
-class ViewsAccessor:
-    """Namespace for materialized graph tables (``G.views``)."""
-
-    __slots__ = ('_G',)
-
-    def __init__(self, graph):
-        self._G = graph
-
-    def edges(self, *args, **kwargs):
-        """Materialize the edge table view."""
-        return ViewsClass.edges_view(self._G, *args, **kwargs)
-
-    def hyperedges(self, slice=None, copy=True, *, layer=None, in_slice=None):
-        """Materialize the hyperedge table view.
-
-        The same table :meth:`edges` builds, holding only the rows whose ``kind``
-        is ``"hyper"``. ``head``, ``tail`` and ``members`` are the columns that
-        carry a hyperedge's shape, and they are null on every binary row — which
-        is why reading hyperedges out of the full table means filtering it first.
-
-        Parameters
-        ----------
-        slice : str, optional
-            Slice id whose per-edge attributes are joined onto every row.
-        copy : bool, optional
-            Return a cloned DataFrame if True.
-        layer : tuple[str, ...], optional
-            Keep only the hyperedges of this layer.
-        in_slice : str, optional
-            Keep only the rows of this slice.
-
-        Returns
-        -------
-        DataFrame-like
-        """
-        return ViewsClass.edges_view(
-            self._G,
-            slice=slice,
-            copy=copy,
-            layer=layer,
-            in_slice=in_slice,
-            include_binary=False,
-        )
-
-    def entity_kinds(self) -> dict:
-        """Return the kind of every entity, as a mapping from its id.
-
-        An entity is a node, or an edge that is a node in its own right. The
-        answer is built on each call, so changing it changes nothing.
-        """
-        return {
-            ref.id: _external_entity_kind(STORED_ENTITY_KIND[ref.kind])
-            for ref in _structure.iter_entities(self._G)
-        }
-
-    def nodes(self, *args, **kwargs):
-        """Materialize the node table view."""
-        return ViewsClass.nodes_view(self._G, *args, **kwargs)
-
-    def slices(self, *args, **kwargs):
-        """Materialize the slice table view."""
-        return ViewsClass.slices_view(self._G, *args, **kwargs)
-
-    def aspects(self, *args, **kwargs):
-        """Materialize the aspect table view."""
-        return ViewsClass.aspects_view(self._G, *args, **kwargs)
-
-    def layers(self, *args, **kwargs):
-        """Materialize the layer table view."""
-        return ViewsClass.layers_view(self._G, *args, **kwargs)
-
-    def layers_view(self, copy=True):
-        """Materialize the layer table view."""
-        return ViewsClass.layers_view(self._G, copy=copy)
-
-
-# ---------------------------------------------------------------------------
-# The node sequence and the edge sequence
-# ---------------------------------------------------------------------------
-
-
-_MISSING = object()
-
-
-class ElementSequence:
-    """One axis of a graph, read and written as a sequence.
-
-    ``G.N`` is the node sequence and ``G.E`` is the edge sequence. Both hold ids
-    in the order the graph holds them, and both answer three kinds of key:
-
-    - an integer is a position in this sequence, and gives back the id there
-    - a slice is a range of positions, and gives back a subsequence
-    - a string is an attribute name, and gives back the column as a vector
-
-    A subsequence is a sequence in its own right, so a filter and a column read
-    compose. It holds the ids it selected and reads through the same graph.
-    """
-
-    id_key = 'id'
-    id_column = 'id'
-    intrinsic_names: tuple[str, ...] = ('id',)
-
-    def __init__(self, graph, ids=None):
-        self._graph = graph
-        self._ids = None if ids is None else tuple(ids)
-
-    # -- the ids ----------------------------------------------------------
-
-    def _all_ids(self) -> tuple:
-        raise NotImplementedError
-
-    @property
-    def ids(self) -> tuple:
-        """The ids of this sequence, in order."""
-        return self._all_ids() if self._ids is None else self._ids
-
-    def _subsequence(self, ids):
-        return type(self)(self._graph, ids)
-
-    def __len__(self) -> int:
-        return len(self.ids)
-
-    def __iter__(self):
-        return iter(self.ids)
-
-    def __contains__(self, item) -> bool:
-        return item in self.ids
+        return summarize(self)
 
     def __repr__(self) -> str:
-        return f'<{type(self).__name__} of {len(self)}>'
-
-    # -- the keys ---------------------------------------------------------
-
-    def __getitem__(self, key):
-        if isinstance(key, str):
-            return self.column(key)
-        if isinstance(key, slice):
-            return self._subsequence(self.ids[key])
-        if isinstance(key, (int, np.integer)):
-            return self.ids[key]
-        raise TypeError(
-            f'a sequence key is an attribute name, a position, or a range of '
-            f'positions, not {type(key).__name__}'
+        resolved = self._resolved()
+        filters = ', '.join(resolved.filters) or 'none'
+        return (
+            f'GraphView(nodes={len(resolved.node_ids)}, edges={len(resolved.edge_ids)}, '
+            f'boundary={resolved.boundary!r}, filters={filters})'
         )
 
-    def __setitem__(self, key, values):
-        if not isinstance(key, str):
-            raise TypeError('only an attribute column can be assigned to a sequence')
-        self.set_column(key, values)
+    # -- refusals ---------------------------------------------------------------------------
 
-    # -- the columns ------------------------------------------------------
+    def __setattr__(self, name, value):
+        raise refuse_write('a view')
 
-    def _attribute_map(self, name: str) -> dict | None:
-        """Return the value of one attribute per element, or None when unknown.
-
-        An attribute no element carries is not the same as an attribute every
-        element leaves empty. The first is a mistake by the caller and the
-        second is an ordinary graph, so this says which of the two it is.
-        """
-        raise NotImplementedError
-
-    def _intrinsic(self, name: str, ids):
-        """Return one structural field of the named elements, or ``_MISSING``."""
-        if name in (self.id_key, self.id_column):
-            return list(ids)
-        return _MISSING
-
-    def _attribute_vector(self, name: str):
-        """Return the whole column of this axis as the store holds it, or None."""
-        raise NotImplementedError
-
-    def _intrinsic_vector(self, name: str):
-        """Return one structural field of the whole axis as a vector, or None.
-
-        ``None`` means this axis has no such column to read off its arrays, and
-        the caller falls back to reading the elements. The id of an element is
-        always ``None`` here: the id column *is* the ids, and the caller has
-        them.
-        """
-        return None
-
-    def column(self, name: str, default=None):
-        """Return one attribute of every element of this sequence, as a vector.
-
-        A read of the whole axis is a slice of the array the store holds, so it
-        costs no walk over the elements. A subsequence, and a caller that names
-        a value for the elements that carry none, are read element by element.
-
-        **Every path gives back a read-only array**, so that a caller never has
-        to ask which one answered. A read of the whole axis borrows the array the
-        store holds, and a write into it would reach the graph with no validation
-        and no history entry. A caller who means to change values copies.
-        """
-        if self._ids is None and default is None:
-            # Neither branch asks for the ids. Building the id tuple of the whole
-            # axis is itself a walk, so a read that never needs them must not
-            # trigger one.
-            vector = (
-                self._intrinsic_vector(name)
-                if name in self.intrinsic_names
-                else self._attribute_vector(name)
+    def __getattr__(self, name):
+        if name in _MUTATORS:
+            raise AttributeError(
+                f'a view has no {name!r}: it is read-only. Call .materialize() for an '
+                f'independent graph, or apply the operation to the parent graph.'
             )
-            if vector is not None:
-                return read_only(vector)
-        ids = self.ids
-        found = self._intrinsic(name, ids)
-        if found is not _MISSING:
-            if isinstance(found, np.ndarray):
-                return read_only(found)
-            return read_only(np.array(found, dtype=object if not found else None))
-        values = self._attribute_map(name)
-        if values is None:
-            raise KeyError(f'no attribute named {name!r} on this sequence')
-        return read_only(np.array([values.get(element, default) for element in ids]))
+        if name in _REMOVED_VIEW_NAMES:
+            raise AttributeError(f'GraphView has no {name!r}; use {_REMOVED_VIEW_NAMES[name]}')
+        raise AttributeError(f'GraphView has no attribute {name!r}')
 
-    def set_column(self, name: str, values) -> None:
-        """Set one attribute of every element of this sequence."""
-        ids = self.ids
-        if isinstance(values, (str, bytes)) or not hasattr(values, '__len__'):
-            values = [values] * len(ids)
-        values = list(values)
-        if len(values) != len(ids):
-            raise ValueError(f'a column of {len(ids)} values is needed, {len(values)} were given')
-        self._write_column(name, dict(zip(ids, values, strict=True)))
-
-    def _write_column(self, name: str, values: dict) -> None:
-        raise NotImplementedError
-
-    # -- the filters ------------------------------------------------------
-
-    def _matches(self, conditions: dict) -> list:
-        ids = self.ids
-        columns = {name: self.column(name) for name in conditions}
-        keep = []
-        for position, element in enumerate(ids):
-            if all(columns[name][position] == want for name, want in conditions.items()):
-                keep.append(element)
-        return keep
-
-    def select(self, **conditions):
-        """Return the subsequence whose elements match every condition."""
-        if not conditions:
-            return self._subsequence(self.ids)
-        return self._subsequence(self._matches(conditions))
-
-    def find(self, **conditions):
-        """Return the one element that matches every condition.
-
-        A filter that matches nothing, and a filter that matches more than one
-        element, are both errors. A caller that wants either of those wants
-        :meth:`select`.
-        """
-        if not conditions:
-            raise TypeError('find needs at least one condition')
-        matched = self._matches(conditions)
-        if not matched:
-            raise KeyError(f'nothing matches {conditions!r}')
-        if len(matched) > 1:
-            raise ValueError(f'{len(matched)} elements match {conditions!r}, expected one')
-        return matched[0]
-
-
-class NodeSequence(ElementSequence):
-    """The nodes of a graph, in the order the graph holds them."""
-
-    id_key = 'id'
-    id_column = 'node_id'
-    intrinsic_names = ('id', 'node_id')
-
-    def _all_ids(self) -> tuple:
-        return tuple(self._graph.nodes())
-
-    def _attribute_map(self, name: str) -> dict | None:
-        return self._graph._attr_store.node_attr_map(name)
-
-    def _attribute_vector(self, name: str):
-        return self._graph._attr_store.node_vector(name)
-
-    def _write_column(self, name: str, values: dict) -> None:
-        if name in self.intrinsic_names:
-            raise KeyError(
-                f'{name!r} is the id of a node, not an attribute of one. '
-                'Renaming a node is a structural change, not a column write.'
-            )
-        self._graph.attrs.set_node_attrs_bulk(
-            {element: {name: value} for element, value in values.items()}
+    def __dir__(self):
+        return sorted(
+            {
+                'A',
+                'B',
+                'E',
+                'H',
+                'L',
+                'N',
+                'S',
+                'aspects',
+                'at',
+                'attrs',
+                'boundary',
+                'degree',
+                'directed',
+                'edge_list',
+                'entity_kinds',
+                'exists',
+                'graph',
+                'has_edge',
+                'has_node',
+                'idx',
+                'incident_edges',
+                'in_neighbors',
+                'is_multilayer',
+                'layers',
+                'materialize',
+                'matrices',
+                'neighbors',
+                'nv_supra',
+                'out_neighbors',
+                'parent',
+                'predecessors',
+                'shape',
+                'slices',
+                'successors',
+                'summary',
+                'supra_nodes',
+                'supra_shape',
+                'uns',
+                'view',
+            }
         )
 
 
-# The two intrinsic edge fields a caller may write. ``kind`` is not one: it
-# follows from how many members an edge holds and on which sides.
-_EDGE_STRUCTURAL_WRITES = frozenset({'weight', 'directed'})
-
-# The three that read as a column. All three come off the edge arrays, so all
-# three read as one pass over them rather than as one record per edge.
-_EDGE_INTRINSIC_COLUMNS = ('directed', 'weight', 'kind')
-
-# The kind of an edge, by the code the store holds for it, in the words the
-# public record uses. The store holds the code and this is the vocabulary, which
-# is why the table is passed down rather than kept there.
-#
-# ``hyper`` stands in for the two names a hyperedge takes. Which of them it takes
-# depends on whether its members hold roles, so the direction column decides it,
-# and the two are substituted after the table is applied.
-STORED_EDGE_KIND_NAMES = tuple(
-    STORED_EDGE_KIND[_structure._SLOT_EDGE_KIND[code]]
-    for code in sorted(_structure._SLOT_EDGE_KIND)
-)
-_HYPER_KIND_NAMES = ('hyper_undirected', 'hyper_directed')
-_HYPER_KIND_LABEL = STORED_EDGE_KIND[_structure.HYPER]
-
-
-class EdgeSequence(ElementSequence):
-    """The edges of a graph, in the order the graph holds them.
-
-    An edge carries three fields that are not attributes: its direction, its
-    weight, and its kind. They read like a column, because a filter over them
-    is as common as a filter over an attribute.
-    """
-
-    id_key = 'id'
-    id_column = 'edge_id'
-    intrinsic_names = ('id', 'edge_id', 'directed', 'weight', 'kind')
-
-    def _all_ids(self) -> tuple:
-        return tuple(self._graph.edges())
-
-    def _intrinsic(self, name: str, ids):
-        if name in (self.id_key, self.id_column):
-            return list(ids)
-        if name in _EDGE_INTRINSIC_COLUMNS:
-            return [getattr(self._graph.get_edge(element), name) for element in ids]
-        return _MISSING
-
-    def _intrinsic_vector(self, name: str):
-        """Return the whole intrinsic column from the edge arrays, or None.
-
-        The three fields are held differently and so they are read differently.
-        ``weight`` is the array the store holds, so the answer is a slice of it.
-        The other two are **derived from an array rather than held in one**, so
-        each is one vectorized pass that the store keeps against its clock:
-
-        - ``directed`` because an edge that declares nothing inherits the default
-          of the graph, and a hyperedge takes neither, resolving its direction
-          from whether its members hold roles,
-        - ``kind`` because it follows from the shape of the edge — the array
-          holds a code, the record shows a name, and a hyperedge shows one of two
-          names depending on that same direction.
-
-        The slice addresses the *structural* edges, which is what this sequence
-        holds. A placeholder edge occupies no column and is not one of them, so a
-        store that holds any falls back to the read element by element.
-        """
-        if name not in _EDGE_INTRINSIC_COLUMNS:
-            return None
-        store = self._graph._store
-        if not store.edge_axis_contiguous:
-            return None
-        count = store.edge_count
-        if name == 'weight':
-            return store.edge_weight[:count]
-        directed = store.edge_directed_column()[:count]
-        if name == 'directed':
-            return directed
-        kinds = store.edge_kind_column(STORED_EDGE_KIND_NAMES)[:count]
-        hyper = kinds == _HYPER_KIND_LABEL
-        if not hyper.any():
-            return kinds
-        named = kinds.astype(object)
-        named[hyper] = [_HYPER_KIND_NAMES[bool(value)] for value in directed[hyper]]
-        return named
-
-    def _attribute_map(self, name: str) -> dict | None:
-        return self._graph._attr_store.edge_attr_map(name)
-
-    def _attribute_vector(self, name: str):
-        return self._graph._attr_store.edge_vector(name)
-
-    def _write_column(self, name: str, values: dict) -> None:
-        # ``weight`` and ``directed`` read like a column and are not attributes,
-        # so a write of either reaches the field of the edge rather than the
-        # attribute store, which reserves both names.
-        if name in _EDGE_STRUCTURAL_WRITES:
-            for element, value in values.items():
-                _mutate.set_edge_field(self._graph, element, name, value)
-            self._graph._mark_structure_changed()
-            return
-        if name in self.intrinsic_names:
-            raise KeyError(
-                f'{name!r} follows from the shape of an edge, so it cannot be written. '
-                'Set the members of the edge instead.'
-            )
-        self._graph.attrs.set_edge_attrs_bulk(
-            {element: {name: value} for element, value in values.items()}
-        )
+__all__ = ['GraphView', 'ReadOnlyViewError']

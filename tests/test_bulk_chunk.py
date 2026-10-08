@@ -7,7 +7,7 @@ youngest generation is promoted, so every collection after it scans the batch
 again. A load of 25 600 edges written in one call spent 50 milliseconds in the
 collector, which is the whole of what the bulk write saves.
 
-Three call sites respected that by hand and nothing made them. `FR-020`: a caller
+Three call sites respected that by hand and nothing made them. A caller
 who submits work in any shape gets the result a caller who respects the limit
 gets — the same slots, the same arrays, the same clock and the same append log.
 """

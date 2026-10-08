@@ -294,7 +294,7 @@ class TestSnapshot(unittest.TestCase):
         G.add_nodes('A')
         G.add_nodes('B')
         G.history.snapshot(label='before')
-        G.remove_node('B')
+        G.remove_nodes('B')
         d = G.history.diff('before')
         self.assertIn('B', d.nodes_removed)
 

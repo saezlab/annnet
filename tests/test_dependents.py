@@ -18,6 +18,7 @@ is a rename or a removal of a name somebody already told us about.
 
 from __future__ import annotations
 
+import os
 import tomllib
 from pathlib import Path
 
@@ -28,6 +29,16 @@ from annnet import AnnNet
 from annnet.core._records import _EDGE_RESERVED, _node_RESERVED
 
 REGISTER = Path(annnet.__file__).parent.parent / 'dependents.toml'
+
+# Where a dependent's migration stands. The order is the order of confidence.
+#
+#   required_before_release  no migration is known to pass its tests
+#   verified_locally         a migration applied to ``upstream_revision`` passed the
+#                            package's own tests against AnnNet ``verified_annnet``;
+#                            the package's repository has not merged it
+#   merged_upstream          the migration is on the package's default branch
+STATUSES = ('required_before_release', 'verified_locally', 'merged_upstream')
+VERIFIED = ('verified_locally', 'merged_upstream')
 
 # The register sits beside the package, so it is there in a checkout and in an
 # unpacked sdist, and absent when the tests run against an installed wheel.
@@ -42,7 +53,6 @@ NAMESPACES = (
     'ops',
     'slices',
     'layers',
-    'views',
     'history',
     'idx',
     'cache',
@@ -85,8 +95,19 @@ def test_the_register_parses_and_is_not_empty():
     entries = packages()
     assert entries, 'dependents.toml lists no package'
     for entry in entries:
-        for field in ('name', 'owner', 'repository', 'contact', 'modules', 'calls'):
+        for field in (
+            'name',
+            'owner',
+            'repository',
+            'contact',
+            'modules',
+            'calls',
+            'previous_calls',
+            'migration',
+            'migration_status',
+        ):
             assert entry.get(field), f'{entry.get("name", entry)!r} is missing {field!r}'
+        assert entry['migration_status'] in STATUSES
 
 
 @pytest.mark.parametrize('entry', packages(), ids=lambda entry: entry['name'])
@@ -106,9 +127,98 @@ def test_every_name_a_dependent_calls_still_resolves(entry, graph):
     )
 
 
+@pytest.mark.parametrize('entry', packages(), ids=lambda entry: entry['name'])
+def test_every_previous_call_that_no_longer_resolves_has_a_migration_line(entry, graph):
+    """A removed name the package was seen
+    calling must be named in its migration record. This proves the record,
+    not the package — the package is edited in its own repository."""
+    gone = [name for name in entry['previous_calls'] if not resolves(graph, name)]
+    lines = ' '.join(entry['migration'])
+    missing = [name for name in gone if name.split('.')[-1] not in lines]
+    assert not missing, (
+        f'{entry["name"]} was observed calling {missing}, which no longer resolve, '
+        f'and the register names no migration for them'
+    )
+
+
+@pytest.mark.parametrize('entry', packages(), ids=lambda entry: entry['name'])
+def test_a_verified_entry_says_what_it_was_verified_against(entry):
+    """Verified means something specific, so the entry has to say what.
+
+    ``verified_locally`` and ``merged_upstream`` name the upstream commit the
+    migration was applied to, the AnnNet version it was run against, the digest
+    of the patch that was tested, and the command that ran. ``merged_upstream``
+    also names the commit that carries the migration.
+    """
+    if entry['migration_status'] not in VERIFIED:
+        return
+    required = ['upstream_revision', 'verified_annnet', 'verification', 'patch_sha256']
+    if entry['migration_status'] == 'merged_upstream':
+        required.append('merged_revision')
+    missing = [field for field in required if not entry.get(field)]
+    assert not missing, f'{entry["name"]} is {entry["migration_status"]} but lacks {missing}'
+    assert len(entry['upstream_revision']) >= 7
+
+
+def gate() -> str:
+    return os.environ.get('ANNNET_RELEASE_GATE', '').strip().lower()
+
+
+@pytest.mark.skipif(
+    gate() not in ('1', 'compat', 'public'),
+    reason='the compatibility gate runs with ANNNET_RELEASE_GATE=1',
+)
+def test_compatibility_gate_every_dependent_has_a_verified_migration():
+    """A migration exists, and passed the dependent's own tests against this AnnNet.
+
+    The gate fails while any entry is ``required_before_release``, and while a
+    verified entry was verified against a different AnnNet version than the one
+    in this tree, because a change of version is a change that has to be tested
+    again. It does not say the dependent's repository carries the change; that is
+    the public gate.
+    """
+    unresolved = [e['name'] for e in packages() if e['migration_status'] not in VERIFIED]
+    assert not unresolved, f'dependents with no verified migration: {unresolved}'
+    stale = [
+        f'{e["name"]} (verified against {e["verified_annnet"]})'
+        for e in packages()
+        if e['verified_annnet'] != annnet.__version__
+    ]
+    assert not stale, (
+        f'these were verified against another AnnNet than {annnet.__version__}: {stale}. '
+        f'Run their tests against this version and record it.'
+    )
+
+
+@pytest.mark.skipif(
+    gate() != 'public',
+    reason='the public-release gate runs with ANNNET_RELEASE_GATE=public',
+)
+def test_public_release_gate_every_dependent_has_merged_its_migration():
+    """The dependents' repositories carry the change, so a user of both keeps working.
+
+    A migration that passes only as a local patch means a user who upgrades
+    AnnNet and keeps the released version of a dependent meets the break the
+    register exists to prevent. This gate fails until each package's default
+    branch has merged its migration.
+    """
+    waiting = [
+        f'{e["name"]} ({e["migration_status"]})'
+        for e in packages()
+        if e['migration_status'] != 'merged_upstream'
+    ]
+    assert not waiting, f'dependents whose repository has not merged the migration: {waiting}'
+
+
 def test_every_namespace_the_register_uses_exists(graph):
     """A register entry that starts from a namespace we dropped is a stale entry."""
     used = {name.split('.')[0] for entry in packages() for name in entry['calls'] if '.' in name}
+    used |= {
+        '.'.join(name.split('.')[:1])
+        for entry in packages()
+        for name in entry['previous_calls']
+        if '.' in name and name.split('.')[0] != 'views'
+    }
     unknown = sorted(used - set(NAMESPACES))
     assert not unknown, f'the register reaches through namespaces that are not listed: {unknown}'
 
@@ -135,8 +245,8 @@ def test_the_structural_keys_a_dependent_writes_still_mean_what_they_did(graph):
 
 
 def test_the_edge_view_a_dependent_reads_still_carries_its_fields(graph):
-    """``get_edge`` hands back a record, and a bridge reads it by name."""
-    view = graph.get_edge('e')
+    """``E.at`` hands back a record, and a bridge reads it by name."""
+    view = graph.E.at('e')
     for field in ('edge_id', 'kind', 'source', 'target', 'weight', 'directed'):
         assert hasattr(view, field), f'EdgeView no longer carries {field!r}'
     source, target = view

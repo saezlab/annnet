@@ -27,16 +27,16 @@ def _graph():
     G.add_edges('C', 'D', edge_id='e3', weight=3.0)
     G.add_edges('D', 'A', edge_id='e4', weight=4.0)
     G.slices.add('treated')
-    G.attrs.set_edge_slice_attrs('treated', 'e1', weight=99.0)
-    G.attrs.set_edge_slice_attrs('treated', 'e2', weight=98.0)
+    G.attrs.update('edge_slices', {('treated', 'e1'): {'weight': 99.0}})
+    G.attrs.update('edge_slices', {('treated', 'e2'): {'weight': 98.0}})
     return G
 
 
 def _state(G):
     """Everything a removal touches, in a form two graphs can be compared by."""
     return {
-        'edges': sorted(G.edges()),
-        'nodes': sorted(G.nodes()),
+        'edges': sorted(G.E),
+        'nodes': sorted(G.N),
         'edge_rows': sorted(r['edge_id'] for r in G._edge_table.to_dicts()),
         'edge_slice_rows': sorted(
             (r['slice_id'], r['edge_id']) for r in G.edge_slice_attributes.to_dicts()
@@ -48,14 +48,14 @@ def _state(G):
 
 def test_the_two_removes_leave_the_same_graph():
     single, batched = _graph(), _graph()
-    single.remove_edge('e1')
+    single.remove_edges('e1')
     batched.remove_edges(['e1'])
     assert _state(single) == _state(batched)
 
 
 def test_a_remove_takes_the_edge_out_of_the_edge_slice_table():
     G = _graph()
-    G.remove_edge('e1')
+    G.remove_edges('e1')
     rows = {(r['slice_id'], r['edge_id']) for r in G.edge_slice_attributes.to_dicts()}
     assert ('treated', 'e1') not in rows
     assert ('treated', 'e2') in rows
@@ -64,14 +64,14 @@ def test_a_remove_takes_the_edge_out_of_the_edge_slice_table():
 def test_a_remove_takes_the_edge_out_of_the_slice_weight_cache():
     G = _graph()
     assert G.slice_edge_weights['treated']['e1'] == 99.0
-    G.remove_edge('e1')
+    G.remove_edges('e1')
     assert 'e1' not in G.slice_edge_weights['treated']
     assert G.slice_edge_weights['treated']['e2'] == 98.0
 
 
 def test_a_table_written_whole_owes_nothing_against_the_one_it_replaced():
     G = _graph()
-    G.remove_edge('e1')
+    G.remove_edges('e1')
     replacement = _graph().edge_slice_attributes
     G.edge_slice_attributes = replacement
     rows = {(r['slice_id'], r['edge_id']) for r in G.edge_slice_attributes.to_dicts()}
@@ -83,7 +83,7 @@ def test_a_removal_recorded_before_the_id_set_is_built_survives_the_build():
     # Nothing has asked for the id set of the edge table yet, and the removal
     # must not have to build one to be recorded against it.
     G._edge_attr_ids = None
-    G.remove_edge('e1')
+    G.remove_edges('e1')
     G.add_edges('A', 'C', edge_id='e5')
     ids = sorted(r['edge_id'] for r in G._edge_table.to_dicts())
     assert ids == ['e2', 'e3', 'e4', 'e5']
@@ -92,5 +92,5 @@ def test_a_removal_recorded_before_the_id_set_is_built_survives_the_build():
 def test_an_unknown_edge_is_still_a_key_error():
     G = _graph()
     with pytest.raises(KeyError):
-        G.remove_edge('nope')
-    assert sorted(G.edges()) == ['e1', 'e2', 'e3', 'e4']
+        G.remove_edges('nope')
+    assert sorted(G.E) == ['e1', 'e2', 'e3', 'e4']

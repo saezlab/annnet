@@ -6,6 +6,10 @@ from typing import Any
 from importlib import import_module
 
 _lazy_symbols: dict[str, tuple[str, str]] = {
+    'directed_pairs': ('annnet.algorithms.structure', 'directed_pairs'),
+    'sources': ('annnet.algorithms.structure', 'sources'),
+    'targets': ('annnet.algorithms.structure', 'targets'),
+    'directed_cycle': ('annnet.algorithms.structure', 'directed_cycle'),
     'Traversal': ('annnet.algorithms.traversal', 'Traversal'),
 }
 

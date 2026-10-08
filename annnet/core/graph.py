@@ -7,24 +7,21 @@ from collections.abc import Iterable, Iterator, MutableMapping
 from . import _build, _state, _derive, _mutate, _identity, _validate, _structure, _contextual
 from ._Ops import Operations, OperationsAccessor
 from ._attrs import AttributeStore
-from ._Views import GraphView, ViewsClass, EdgeSequence, NodeSequence, ViewsAccessor
+from ._Views import GraphView
 from ._Layers import LayerAccessor
 from ._Matrix import CacheManager, IndexManager, IndexMapping, MatrixNamespace
+from ._select import EdgeSequence, NodeSequence
 from ._Slices import SliceManager
 from ._aspects import OrderedLabels, as_aspect
 from ._History import History, HistoryAccessor
-from ._records import (
-    EdgeView,
-    NodeView,
-    _external_entity_kind,
-)
-from ._Annotation import AttributesClass, AttributesAccessor
+from ._records import EdgeView, edge_record, _external_entity_kind
+from ._Annotation import AttributesClass
 from ._contextual import ContextualStore
-from ._provenance import ProvenanceAccessor
+from ._provenance import Provenance
 from ._stored_kinds import STORED_EDGE_KIND, STORED_ENTITY_KIND
+from ._attribute_api import Attrs
 from ..algorithms.traversal import Traversal
 from .._support.dataframe_backend import (
-    clone_dataframe,
     empty_dataframe,
     dataframe_height,
     dataframe_columns,
@@ -153,6 +150,32 @@ class AnnNetMeta(type):
         return sorted(set(api))
 
 
+# Every name removed from the graph, with the expression that
+# replaces it. The descriptor below raises with the replacement, so a caller
+# holding an old name meets a failure that names the new one rather than a
+# silent change of meaning. CHANGELOG.md carries the same map.
+REMOVED_GRAPH_NAMES = {
+    'obs': 'G.attrs.nodes',
+    'var': 'G.attrs.edges',
+    'views': 'G.attrs.table(address, derived=True, ...)',
+    'nodes': 'list(G.N) or G.N.ids',
+    'edges': 'list(G.E) or G.E.ids',
+    'nv': 'len(G.N)',
+    'ne': 'len(G.E)',
+    'ncount': 'len(G.N), or G.nv_supra for ncount(supra=True)',
+    'ecount': 'len(G.E)',
+    'get_node': 'G.N.at(node_id)',
+    'get_edge': 'G.E.at(edge_id)',
+    'get_edge_ids': 'G.has_edge(source, target)[1]',
+    'get_edges_by_direction': 'G.E.select(directed=True).ids',
+    'in_edges': "G.incident_edges(nodes, direction='in')",
+    'out_edges': "G.incident_edges(nodes, direction='out')",
+    'remove_node': 'G.remove_nodes(node_id)',
+    'remove_edge': 'G.remove_edges(edge_id)',
+    'contextual_table': 'G.attrs.table(address)',
+}
+
+
 class _BlockedLegacyAttribute:
     """Descriptor that hides removed flat API names without global attr overhead."""
 
@@ -162,6 +185,9 @@ class _BlockedLegacyAttribute:
         self.name = name
 
     def __get__(self, instance, owner=None):
+        replacement = REMOVED_GRAPH_NAMES.get(self.name)
+        if replacement is not None:
+            raise AttributeError(f'AnnNet.{self.name} was removed; use {replacement}')
         raise AttributeError(
             f"AnnNet no longer exposes '{self.name}' directly; use the appropriate namespace or canonical API instead."
         )
@@ -207,7 +233,6 @@ def _element_operand(other):
 class AnnNet(
     Operations,
     History,
-    ViewsClass,
     IndexMapping,
     AttributesClass,
     Traversal,
@@ -264,27 +289,21 @@ class AnnNet(
         'remove_edges',
         'has_node',
         'has_edge',
-        'nodes',
-        'edges',
+        'at',
+        'exists',
         'degree',
         'incident_edges',
-        'ncount',
-        'ecount',
-        'nv',
-        'ne',
+        'entity_kinds',
         'nv_supra',
         'shape',
         'supra_shape',
         'supra_nodes',
         'N',
         'E',
-        'obs',
-        'var',
         'uns',
         'layers',
         'slices',
         'attrs',
-        'views',
         'history',
         'ops',
         'idx',
@@ -295,13 +314,18 @@ class AnnNet(
         'read',
         'write',
         'view',
+        'summary',
         'global_count',
-        'get_node',
-        'get_edge',
         'neighbors',
+        'in_neighbors',
+        'out_neighbors',
+        'predecessors',
+        'successors',
         'edge_list',
         'make_undirected',
         'is_multilayer',
+        'provenance',
+        'spaces',
         'A',
         'B',
         'H',
@@ -312,6 +336,7 @@ class AnnNet(
 
     _BLOCKED_LEGACY_API = frozenset(
         {
+            *REMOVED_GRAPH_NAMES,
             'add_node',
             'add_edge',
             'add_slice',
@@ -457,6 +482,13 @@ class AnnNet(
         return _derive.invalidate_sparse_caches(self, *args, **kwargs)
 
     @property
+    def spaces(self):
+        """Node membership in named external-axis bindings (see :class:`annnet.Space`)."""
+        from ._space import Spaces
+
+        return Spaces(self)
+
+    @property
     def slice_edge_weights(self):
         """Per-slice edge weight overrides, as ``{slice_id: {edge_id: weight}}``.
 
@@ -510,14 +542,8 @@ class AnnNet(
             self.layer_attributes = annotations.get('layer_attributes')
             return
 
-        # 2) Otherwise, create empty tables with the centrally selected backend.
-        backend = self._annotations_backend
-        self.slice_attributes = empty_dataframe({'slice_id': 'text'}, backend=backend)
-        self.edge_slice_attributes = empty_dataframe(
-            {'slice_id': 'text', 'edge_id': 'text', 'weight': 'float'},
-            backend=backend,
-        )
-        self.layer_attributes = empty_dataframe({'layer_id': 'text'}, backend=backend)
+        # 2) Otherwise nothing is built: an empty contextual level already is an
+        # empty table, and the properties render one on the first read.
 
     @property
     def directed(self):
@@ -578,7 +604,7 @@ class AnnNet(
         Built on each read from the contextual store, in this graph's annotation
         backend. It is a rendering of canonical state, not the state itself, so
         editing the returned table changes nothing — write through
-        ``G.attrs.set_edge_slice_attrs``.
+        ``G.attrs.update('edge_slices', ...)``.
         """
         if self._pending_edge_slice_drops:
             self._flush_edge_slice_rows()
@@ -608,29 +634,82 @@ class AnnNet(
 
     @property
     def layer_attributes(self):
-        """The layer attribute table.
+        """The elementary-layer attribute table, at the file-format boundary.
 
-        Two things share this name. ``G.layers.set_elementary_attrs`` writes rows
-        keyed by ``layer_id``, and those are canonical in the contextual store and
-        rendered here. A caller may also assign a table of their own that carries
-        no ``layer_id`` — the elementary-layer API cannot read it, but adapters
-        round-trip it, so it is kept verbatim and handed back unchanged.
+        The canonical store keys an elementary layer by ``(aspect, label)``;
+        the public table is ``G.attrs.elementary_layers``. This property is
+        the legacy rendering the native format and the adapters exchange: it
+        carries the structured ``aspect`` and ``elementary_layer`` columns
+        beside the legacy ``layer_id`` (``aspect_label``) display id, so a
+        file written now decodes without ambiguity and a file written before
+        still reads.
+
+        A caller may also assign a table that carries none of those columns —
+        the elementary-layer API cannot address it, but adapters round-trip
+        it, so it is kept verbatim and handed back unchanged.
         """
         if self._layer_table_passthrough is not None:
             return self._layer_table_passthrough
-        return self._contextual_table('elementary_attrs', 'layer_id', {'layer_id': 'text'})
+        token = (self._annotations_backend, self._contextual.version_of('elementary_attrs'))
+        cached = self._contextual_tables.get('elementary_attrs')
+        if cached is not None and cached[0] == token:
+            return cached[1]
+        rows = []
+        for (aspect, label), attrs in self._contextual.elementary_attrs.items():
+            row = {
+                'layer_id': f'{aspect}_{label}',
+                'aspect': aspect,
+                'elementary_layer': label,
+            }
+            row.update(attrs)
+            rows.append(row)
+        rows.sort(key=lambda row: (row['aspect'], row['elementary_layer']))
+        backend = self._annotations_backend
+        table = (
+            empty_dataframe(
+                {'layer_id': 'text', 'aspect': 'text', 'elementary_layer': 'text'},
+                backend=backend,
+            )
+            if not rows
+            else dataframe_from_rows(rows, backend=backend)
+        )
+        self._contextual_tables['elementary_attrs'] = (token, table)
+        return table
 
     @layer_attributes.setter
     def layer_attributes(self, value):
-        if value is not None and 'layer_id' not in dataframe_columns(value):
+        if value is None:
+            self._layer_table_passthrough = None
+            self._contextual.clear_level('elementary_attrs')
+            return
+        columns = set(dataframe_columns(value))
+        structured = {'aspect', 'elementary_layer'} <= columns
+        if not structured and ('layer_id' not in columns or self._aspects == ('_',)):
             # Not addressable by the elementary-layer API. Keep it as given.
             self._layer_table_passthrough = value
             self._contextual.clear_level('elementary_attrs')
             return
         self._layer_table_passthrough = None
-        self._install_contextual_table('elementary_attrs', 'layer_id', value)
+        level: dict = {}
+        for row in dataframe_to_rows(value):
+            row = dict(row)
+            if structured:
+                aspect, label = row.pop('aspect'), row.pop('elementary_layer')
+                row.pop('layer_id', None)
+                if aspect is None or label is None:
+                    continue
+                key = (aspect, label)
+            else:
+                layer_id = row.pop('layer_id')
+                if layer_id is None:
+                    continue
+                key = self.attrs._elementary_from_id(str(layer_id))
+            attrs = {name: v for name, v in row.items() if v is not None}
+            if attrs:
+                level[key] = attrs
+        self._contextual.replace('elementary_attrs', level)
 
-    def contextual_table(self, level_name, *, backend=None):
+    def _contextual_table_of(self, level_name, *, backend=None):
         """Render one contextual level as a table, in the backend you name.
 
         The store holds dicts, so the backend is a property of this call and not
@@ -694,7 +773,7 @@ class AnnNet(
     def __repr__(self) -> str:
         """Anndata-style multi-line summary."""
         lines = [
-            f'AnnNet object with n_nodes × n_edges = {self.nv} × {self.ne}',
+            f'AnnNet object with n_nodes × n_edges = {len(self.N)} × {len(self.E)}',
             f'    directed: {self.directed}',
         ]
 
@@ -706,20 +785,13 @@ class AnnNet(
             lines.append(f'    aspects: {list(self._aspects)}')
             lines.append(f'    supra_nodes (node × layer rows): {self.nv_supra}')
 
-        def _user_cols(df, id_field: str) -> list[str]:
-            try:
-                cols = [c for c in dataframe_columns(df) if c != id_field]
-            except (AttributeError, TypeError):
-                return []
-            return cols
+        node_cols = self._attr_store.node_column_names()
+        if node_cols:
+            lines.append(f'    attrs.nodes: {node_cols!r}')
 
-        obs_cols = _user_cols(self._node_table, 'node_id')
-        if obs_cols:
-            lines.append(f'    obs: {obs_cols!r}')
-
-        var_cols = _user_cols(self._edge_table, 'edge_id')
-        if var_cols:
-            lines.append(f'    var: {var_cols!r}')
+        edge_cols = self._attr_store.edge_column_names()
+        if edge_cols:
+            lines.append(f'    attrs.edges: {edge_cols!r}')
 
         uns_keys = list(self.graph_attributes.keys()) if self.graph_attributes else []
         if uns_keys:
@@ -728,12 +800,12 @@ class AnnNet(
         return '\n'.join(lines)
 
     def __len__(self) -> int:
-        """Number of nodes, the same count as :meth:`ncount`."""
-        return self.ncount()
+        """Number of distinct nodes, the same count as ``len(G.N)``."""
+        return _structure.distinct_node_count(self)
 
     def __iter__(self) -> Iterator[str]:
         """Iterate over node IDs (NetworkX convention)."""
-        return iter(self.nodes())
+        return iter(_structure.node_ids(self))
 
     def __contains__(self, item) -> bool:
         """Membership test. A string is a node and a pair is an edge.
@@ -756,7 +828,7 @@ class AnnNet(
 
     def __bool__(self) -> bool:
         """True when the graph holds any node."""
-        return self.ncount() > 0
+        return _structure.distinct_node_count(self) > 0
 
     # ── Operators ─────────────────────────────────────────────────────────────
     #
@@ -857,6 +929,9 @@ class AnnNet(
 
     def _set_entity_kinds(self, *args, **kwargs):
         return _mutate.set_entity_kinds(self, *args, **kwargs)
+
+    def _declare_edge_entities(self, *args, **kwargs):
+        return _mutate.declare_edge_entities(self, *args, **kwargs)
 
     def _remap_entity_keys(self, *args, **kwargs):
         return _mutate.remap_entity_keys(self, *args, **kwargs)
@@ -1010,7 +1085,7 @@ class AnnNet(
                 node_id = nodes
                 attrs = {}
             attrs.update(attributes)
-            return self._add_node(node_id, slice=slice, layer=layer, **attrs)
+            return self._add_node(node_id, slice=slice, layer=layer, attributes=attrs)
 
         items = list(nodes)
         self._add_nodes_batch(items, layer=layer, slice=slice, default_attrs=attributes or None)
@@ -1157,7 +1232,7 @@ class AnnNet(
 
         For a full guide covering all input forms, dispatch logic, parallel
         policy, propagation, flexible direction, and batch formats, see the
-        [Adding edges](../../explanations/add-edges.md) explanation page.
+        [Adding edges](adding-edges.md) reference page.
 
         Examples
         --------
@@ -1406,57 +1481,6 @@ class AnnNet(
 
     # Remove / mutate down
 
-    def remove_edge(self, *args, **kwargs):
-        """Remove an edge (binary or hyperedge) from the graph.
-
-        Parameters
-        ----------
-        edge_id : str
-            Edge identifier.
-
-        Raises
-        ------
-        KeyError
-            If the edge is not found.
-
-        Notes
-        -----
-        Physically removes the incidence column (no CSR round-trip) and cleans
-        edge attributes and slice memberships.
-
-        See Also
-        --------
-        remove_edges : Remove one or more edges through the compact public API.
-        """
-        return _mutate.remove_edge(self, *args, **kwargs)
-
-    def remove_node(self, node_id):
-        """Remove a node and all incident edges (binary + hyperedges).
-
-        Parameters
-        ----------
-        node_id : str
-            Node identifier.
-
-        Raises
-        ------
-        KeyError
-            If the node is not found.
-
-        See Also
-        --------
-        remove_nodes : Remove one or more nodes through the compact
-            public API.
-        """
-        # Single shrink + index shift via the bulk path. Doing it per call
-        # used to be O(M+V) per node (per-incident-edge remove_edge,
-        # then a full matrix row-shift); routing through the bulk path
-        # collapses that into a single pass.
-        ekey = self._resolve_entity_key(node_id)
-        if not _structure.has_entity(self, ekey):
-            raise KeyError(f'node {node_id!r} not found')
-        self._remove_nodes_bulk([node_id])
-
     def remove_orphans(self):
         """Remove all nodes with no incident edges from the AnnNet graph."""
         csr = self._get_csr()
@@ -1470,46 +1494,6 @@ class AnnNet(
         return len(orphans)
 
     # Basic queries & metrics
-
-    def get_node(self, node_id: str) -> NodeView:
-        """Return a :class:`NodeView` for one node.
-
-        Parameters
-        ----------
-        node_id : str
-            Node identifier. A lookup takes an id and nothing else. A caller
-            holding a row of the incidence matrix asks
-            ``G.idx.row_to_entity(row)`` for the identity on it, and a caller
-            who wants the n-th node of a sequence writes ``G.N[n]``.
-
-        Returns
-        -------
-        NodeView
-            A string-shaped record equal to the id. ``kind``, ``layers`` and
-            ``attrs`` are exposed as attributes.
-
-        Raises
-        ------
-        TypeError
-            If the argument is not an id.
-        KeyError
-            If the id is unknown.
-        """
-        if not isinstance(node_id, str):
-            raise TypeError(
-                f'get_node takes a node id, not {type(node_id).__name__}. For the '
-                f'node on a matrix row, use G.idx.row_to_entity(row).'
-            )
-        keys = self._store.entity_keys_of_id(node_id)
-        if not keys:
-            raise KeyError(f'Unknown node id: {node_id}')
-        ref = _structure.entity_ref(self, keys[0])
-        return NodeView(
-            node_id,
-            kind=_external_entity_kind(STORED_ENTITY_KIND[ref.kind]),
-            layers=tuple(layer for _id, layer in keys),
-            attrs=self._attr_store.node_attrs(node_id),
-        )
 
     def _node_layer_key(self, node_id: str, aspects: dict) -> tuple:
         """Return the ``(node_id, layer_coord)`` key one node-and-aspects names.
@@ -1537,11 +1521,13 @@ class AnnNet(
 
         A flat graph has one implicit layer, and asking the layer accessor about
         it raises rather than answering — so the question there is just whether
-        the node is present.
+        the node is present. A multilayer graph asks its store: presence is a
+        fact about what is held, and a key the store holds is present whatever
+        the aspects now say (a writer walks the store's own keys).
         """
         if tuple(self._aspects) == ('_',):
             return self.has_node(key[0])
-        return self.layers.has_presence(key[0], key[1])
+        return _structure.has_entity(self, (key[0], tuple(key[1])))
 
     def at(self, node_id: str, **aspects) -> tuple:
         """Return the node-layer key one node sits on, naming its aspects.
@@ -1609,70 +1595,6 @@ class AnnNet(
         """
         key = self._node_layer_key(node_id, aspects)
         return self._has_node_layer(key)
-
-    def get_edge(self, edge_id: str) -> EdgeView:
-        """Return an :class:`EdgeView` for one edge.
-
-        Parameters
-        ----------
-        edge_id : str
-            Edge identifier. A lookup takes an id and nothing else. A caller
-            holding a column of the incidence matrix asks
-            ``G.idx.col_to_edge(column)`` for the id on it.
-
-        Returns
-        -------
-        EdgeView
-            A tuple-shaped record. ``(source, target)`` tuple unpacking still
-            works; ``edge_id``, ``kind``, ``members``, ``weight`` and
-            ``directed`` are also exposed as attributes.
-
-        Raises
-        ------
-        TypeError
-            If the argument is not an id.
-        KeyError
-            If the id is unknown.
-        """
-        if not isinstance(edge_id, str):
-            raise TypeError(
-                f'get_edge takes an edge id, not {type(edge_id).__name__}. For the '
-                f'edge on a matrix column, use G.idx.col_to_edge(column).'
-            )
-        if not _structure.has_edge(self, edge_id):
-            raise KeyError(f'Unknown edge id: {edge_id}') from None
-
-        return self._edge_tuple(edge_id)
-
-    def _edge_tuple(self, eid: str) -> EdgeView:
-        """Return the public view of one edge.
-
-        An undirected edge shows the same members on both sides, because neither
-        side means a direction.
-        """
-        ref = _structure.edge_ref(self, eid)
-        sides = _structure.edge_sides(self, eid)
-        members = sides.source | sides.target
-
-        if ref.kind == _structure.HYPER:
-            kind = 'hyper_directed' if ref.directed else 'hyper_undirected'
-        else:
-            kind = STORED_EDGE_KIND[ref.kind]
-
-        if ref.directed or ref.kind in (_structure.NODE_EDGE, _structure.PLACEHOLDER):
-            source, target = sides.source, sides.target
-        else:
-            source = target = members
-
-        return EdgeView(
-            source,
-            target,
-            edge_id=eid,
-            kind=kind,
-            members=members,
-            weight=ref.weight,
-            directed=ref.directed,
-        )
 
     def _is_directed_edge(self, edge_id):
         if not _structure.has_edge(self, edge_id):
@@ -1768,30 +1690,24 @@ class AnnNet(
             return False
         return _structure.entity_ref(self, ekey).kind == _structure.NODE
 
-    def get_edge_ids(self, source, target):
-        """List all edge IDs between two endpoints.
-
-        Parameters
-        ----------
-        source : str
-            Source entity ID.
-        target : str
-            Target entity ID.
-
-        Returns
-        -------
-        list[str]
-            Edge IDs (may be empty).
-        """
-        return _structure.edges_between(self, source, target)
-
     def _get_csr(self):
         csr = self.cache.csr
         self._csr_cache = csr
         return csr
 
-    def degree(self, entity_id):
-        """Return the incidence degree of a node or edge-entity.
+    def entity_kinds(self) -> dict:
+        """Return the kind of every entity — ``'node'`` or ``'edge'`` — by its id.
+
+        An entity is a node, or an edge that is a node in its own right. The
+        mapping is built on each call, so changing it changes nothing.
+        """
+        return {
+            ref.id: _external_entity_kind(STORED_ENTITY_KIND[ref.kind])
+            for ref in _structure.iter_entities(self)
+        }
+
+    def degree(self, entity_id: str | tuple) -> int:
+        """Return the number of structural edges touching one entity.
 
         Parameters
         ----------
@@ -1801,33 +1717,22 @@ class AnnNet(
         Returns
         -------
         int
-            Number of non-zero incidence entries in the entity row. Missing
-            entities have degree ``0``.
+            The number of distinct incident structural edges, read off the
+            incident-edge index the store maintains, so the cost is the degree
+            and never the size of the graph and no matrix is built. A
+            self-loop and a hyperedge each count once; an edge of weight zero
+            still counts; a placeholder edge never does. A missing entity has
+            degree ``0``.
         """
-        ekey = self._resolve_entity_key(entity_id)
         try:
-            row = _structure.entity_row(self, ekey)
-        except KeyError:
+            ekey = self._resolve_entity_key(entity_id)
+        except ValueError as exc:
+            if 'Ambiguous' in str(exc):
+                raise
             return 0
-        csr = self._get_csr()
-        return int(csr.indptr[row + 1] - csr.indptr[row])
-
-    def nodes(self) -> list[str]:
-        """Return unique node IDs (one per node, deduplicated across layers).
-
-        Returns
-        -------
-        list[str]
-            Distinct node identifiers, excluding edge-entities. In a
-            multilayer graph each node appears exactly once regardless of
-            how many elementary layers it inhabits.
-
-        See Also
-        --------
-        supra_nodes : ``(node_id, layer_coord)`` pairs (one per row of
-            the supra-incidence matrix).
-        """
-        return _structure.node_ids(self)
+        except (KeyError, TypeError):
+            return 0
+        return _structure.incidence_degree(self, ekey)
 
     def supra_nodes(self) -> list[tuple[str, tuple[str, ...]]]:
         """Return all ``(node_id, layer_coord)`` supra-nodes.
@@ -1844,16 +1749,6 @@ class AnnNet(
         """
         return _structure.node_keys(self)
 
-    def edges(self) -> list[str]:
-        """Return all structural edge IDs.
-
-        Returns
-        -------
-        list[str]
-            Edge identifiers for edges with an incidence-matrix column.
-        """
-        return _structure.edge_ids(self)
-
     def edge_list(self) -> list[tuple[str, str, str, float]]:
         """Materialize binary edges as endpoint tuples.
 
@@ -1866,7 +1761,7 @@ class AnnNet(
             override when one is set; otherwise the edge's stored weight.
         """
         edges = []
-        get_eff = self.attrs.get_effective_edge_weight
+        get_eff = self.E.effective_weight
         for ref in _structure.iter_edges(self):
             if ref.kind == _structure.HYPER:
                 continue
@@ -1882,27 +1777,6 @@ class AnnNet(
                 )
             )
         return edges
-
-    def get_edges_by_direction(self, directed: bool):
-        """List edge identifiers matching a directedness flag.
-
-        Parameters
-        ----------
-        directed : bool
-            Desired directedness.
-
-        Returns
-        -------
-        list[str]
-            Edge identifiers whose effective directedness matches ``directed``.
-        """
-        default_dir = True if self.directed is None else self.directed
-        return [
-            ref.id
-            for ref in _structure.iter_edges(self)
-            if bool(ref.declared_directed if ref.declared_directed is not None else default_dir)
-            is bool(directed)
-        ]
 
     def global_count(self, kind: str) -> int:
         """Count unique members present across slices.
@@ -1939,16 +1813,6 @@ class AnnNet(
             if kind in {'edges', 'entities'}:
                 members.update(slice_data['edges'])
         return len(members)
-
-    # ── Backward-compat thin wrappers ─────────────────────────────────────────
-
-    def in_edges(self, nodes):
-        """Incoming edges. Prefer ``incident_edges(direction='in')``."""
-        return self.incident_edges(nodes, direction='in')
-
-    def out_edges(self, nodes):
-        """Outgoing edges. Prefer ``incident_edges(direction='out')``."""
-        return self.incident_edges(nodes, direction='out')
 
     # ── Traversal ────────────────────────────────────────────────────────────
 
@@ -1999,7 +1863,7 @@ class AnnNet(
                 seen.add(eid)
                 column = _structure.edge_column(self, eid)
                 if column >= 0:
-                    result.append((column, self._edge_tuple(eid)))
+                    result.append((column, edge_record(self, eid)))
         return result
 
     @property
@@ -2017,76 +1881,27 @@ class AnnNet(
         return _structure.node_count(self)
 
     @property
-    def nv(self) -> int:
-        """Number of unique nodes (deduplicated across layers).
-
-        Returns
-        -------
-        int
-            Distinct node IDs, ignoring layer multiplicity. Use
-            :attr:`nv_supra` for the supra-incidence row count.
-        """
-        return len(self._V)
-
-    @property
-    def ne(self) -> int:
-        """Number of structural edges.
-
-        Returns
-        -------
-        int
-            Count of incidence-matrix edge columns.
-        """
-        return _structure.edge_count(self)
-
-    def ncount(self, *, supra: bool = False) -> int:
-        """Number of nodes.
-
-        Parameters
-        ----------
-        supra : bool, optional
-            Count supra-nodes instead of nodes. A supra-node is one node on one
-            layer coordinate, so a flat graph gives the same answer either way.
-
-        Returns
-        -------
-        int
-            Node count, or supra-node count when ``supra`` is set.
-        """
-        return self.nv_supra if supra else self.nv
-
-    def ecount(self) -> int:
-        """Number of edges.
-
-        Returns
-        -------
-        int
-            Count of structural edges.
-        """
-        return self.ne
-
-    @property
     def shape(self) -> tuple[int, int]:
-        """Graph shape as ``(nv, ne)``.
+        """Graph shape as ``(len(G.N), len(G.E))``.
 
         Returns
         -------
         tuple[int, int]
-            Node count and edge count. Use :attr:`supra_shape` for
-            ``(nv_supra, ne)``.
+            Distinct node count and structural edge count, both maintained
+            counters. Use :attr:`supra_shape` for the placement count.
         """
-        return (self.nv, self.ne)
+        return (_structure.distinct_node_count(self), _structure.edge_count(self))
 
     @property
     def supra_shape(self) -> tuple[int, int]:
-        """Supra-matrix shape as ``(nv_supra, ne)``.
+        """Supra-matrix shape as ``(nv_supra, len(G.E))``.
 
         Returns
         -------
         tuple[int, int]
             Supra-incidence row count and edge count.
         """
-        return (self.nv_supra, self.ne)
+        return (self.nv_supra, _structure.edge_count(self))
 
     def get_or_create_node_by_attrs(self, slice=None, **attrs) -> str:
         """Return node ID for the given composite-key attributes.
@@ -2130,7 +1945,7 @@ class AnnNet(
         # Create new node
         vid = self._gen_node_id_from_key(key)
         # No need to pre-check entity_to_idx here; ids are namespaced by 'cid:' prefix
-        self._add_node(vid, slice=slice, **attrs)
+        self._add_node(vid, slice=slice, attributes=attrs)
 
         # Index ownership
         self._node_key_index[key] = vid
@@ -2151,7 +1966,7 @@ class AnnNet(
         return vid
 
     @property
-    def N(self):
+    def N(self) -> NodeSequence:
         """The node sequence.
 
         Returns
@@ -2171,7 +1986,7 @@ class AnnNet(
         return NodeSequence(self)
 
     @property
-    def E(self):
+    def E(self) -> EdgeSequence:
         """The edge sequence.
 
         Returns
@@ -2365,56 +2180,6 @@ class AnnNet(
         return other @ self.A
 
     @property
-    def obs(self) -> Any:
-        """The node attribute table, materialized on each read.
-
-        Returns
-        -------
-        DataFrame-like
-            One row per node, with the id column first.
-
-        Notes
-        -----
-        This is a table built for the caller and not the storage of the graph,
-        so writing to it changes nothing. Write through :attr:`N` for a whole
-        column, or through :attr:`attrs` for one value.
-
-        A whole table is the expensive way to read one column. ``G.N["kind"]``
-        is the cheap one.
-
-        Examples
-        --------
-        >>> G = AnnNet()
-        >>> G.add_nodes([{'node_id': 'A', 'kind': 'source'}])
-        >>> G.obs
-        """
-        return clone_dataframe(self._node_table)
-
-    @property
-    def var(self) -> Any:
-        """The edge attribute table, materialized on each read.
-
-        Returns
-        -------
-        DataFrame-like
-            One row per edge, with the id column first.
-
-        Notes
-        -----
-        This is a table built for the caller and not the storage of the graph,
-        so writing to it changes nothing. Write through :attr:`E` for a whole
-        column, or through :attr:`attrs` for one value.
-
-        Examples
-        --------
-        >>> G = AnnNet()
-        >>> G.add_nodes(['A', 'B'])
-        >>> G.add_edges([{'source': 'A', 'target': 'B', 'edge_id': 'e1'}])
-        >>> G.var
-        """
-        return clone_dataframe(self._edge_table)
-
-    @property
     def uns(self) -> dict[str, Any]:
         """Graph-level unstructured metadata.
 
@@ -2446,30 +2211,34 @@ class AnnNet(
         return self._slice_manager
 
     @property
-    def attrs(self) -> AttributesAccessor:
-        """Attribute operations namespace.
+    def attrs(self) -> Attrs:
+        """The eight attribute addresses, read and written one way.
 
         Returns
         -------
-        AttributesAccessor
-            Manager for graph-, node-, edge-, slice-, and edge-slice
-            annotations.
-
-        Notes
-        -----
-        Use this namespace for graph-, node-, edge-, and slice-level
-        annotations.
+        Attrs
+            Reads return detached copies: ``G.attrs.<address>`` is the stored
+            table, ``row(address, key)`` one row as a dict and ``rows(address)``
+            many. ``table(address, derived=True, ...)`` is the derived frame and
+            ``schema`` describes an address without building one. Writes are
+            named: ``update`` merges fields, ``replace`` swaps a whole table and
+            ``delete`` removes attributes. ``select`` is a live query over rows,
+            and ``from_frame`` turns the rows of a table you filtered into a
+            fixed selection.
 
         Examples
         --------
-        >>> G.attrs.set_node_attrs('A', symbol='TP53')
-        >>> G.attrs.get_node_attrs('A')
-        >>> G.attrs.set_edge_slice_attrs('baseline', 'e1', weight=0.5)
+        >>> G.attrs.update('nodes', {'A': {'symbol': 'TP53'}})
+        >>> G.attrs.row('nodes', 'A').get('symbol')
+        >>> G.attrs.update('edge_slices', {('baseline', 'e1'): {'weight': 0.5}})
+        >>> G.attrs.select('edges', confidence__gte=0.8).keys
+        >>> table = G.attrs.table('nodes')  # filter it with your dataframe library
+        >>> G.attrs.from_frame('nodes', table[table['score'] > 0.5]).keys
         """
         try:
             return self._attrs_accessor
         except AttributeError:
-            self._attrs_accessor = AttributesAccessor(self)
+            self._attrs_accessor = Attrs(self)
             return self._attrs_accessor
 
     @property
@@ -2492,33 +2261,6 @@ class AnnNet(
         except AttributeError:
             self._history_accessor = HistoryAccessor(self)
             return self._history_accessor
-
-    @property
-    def views(self) -> ViewsAccessor:
-        """Materialized table namespace.
-
-        Returns
-        -------
-        ViewsAccessor
-            Manager for dataframe-style materialized views.
-
-        Notes
-        -----
-        This is the preferred namespace for notebook inspection and export of
-        graph tables.
-
-        Examples
-        --------
-        >>> G.views.nodes()
-        >>> G.views.edges()
-        >>> G.views.slices()
-        >>> G.views.layers()
-        """
-        try:
-            return self._views_accessor
-        except AttributeError:
-            self._views_accessor = ViewsAccessor(self)
-            return self._views_accessor
 
     @property
     def ops(self) -> OperationsAccessor:
@@ -2560,7 +2302,7 @@ class AnnNet(
         --------
         >>> G.layers.set_aspects(['condition'], {'condition': ['ctrl', 'stim']})
         >>> G.layers.list_layers()
-        >>> G.views.layers()
+        >>> G.attrs.table('layers', derived=True)
         """
         try:
             return self._layer_accessor
@@ -2569,7 +2311,7 @@ class AnnNet(
             return self._layer_accessor
 
     @property
-    def provenance(self) -> ProvenanceAccessor:
+    def provenance(self) -> Provenance:
         """What this graph was built from (``G.provenance``).
 
         Callable, so ``G.provenance()`` is the table of sources and
@@ -2578,7 +2320,7 @@ class AnnNet(
 
         Returns
         -------
-        ProvenanceAccessor
+        Provenance
 
         Examples
         --------
@@ -2587,7 +2329,7 @@ class AnnNet(
         """
         found = getattr(self, '_provenance_accessor', None)
         if found is None:
-            found = ProvenanceAccessor(self)
+            found = Provenance(self)
             self._provenance_accessor = found
         return found
 
@@ -2677,31 +2419,101 @@ class AnnNet(
         return read(path, **kwargs)
 
     # View API
-    def view(self, nodes=None, edges=None, slices=None, predicate=None):
-        """Create a lazy graph view.
+    def view(
+        self,
+        nodes=None,
+        edges=None,
+        layers=None,
+        slices=None,
+        *,
+        predicate=None,
+        boundary: str = 'closed',
+    ) -> GraphView:
+        """Create a live, read-only, composable view of this graph.
 
         Parameters
         ----------
-        nodes : Iterable[str], optional
-            Node IDs to include.
-        edges : Iterable[str], optional
-            Edge IDs to include.
-        slices : Iterable[str], optional
-            Slice IDs to include.
+        nodes : id | (node_id, layer) | Iterable | NodeSequence | RowSelection | mask, optional
+            Bare ids select every existing placement of those nodes within the
+            other filters; explicit ``(node_id, layer)`` keys select those
+            placements alone. A ``G.N.select(...)`` selection is live; a
+            ``G.attrs.select('node_layers', ...)`` selection keeps its
+            placements. Nothing here ever creates a placeholder placement.
+        edges : id | Iterable | EdgeSequence | RowSelection, optional
+            Edge ids or a ``G.E.select(...)`` selection. Edge-slice rows must
+            be projected explicitly with ``.project('edges')``.
+        layers : coordinate | Iterable | LayerSelection | RowSelection, optional
+            One layer coordinate, a collection of them, ``G.layers.where(...)``
+            or ``G.attrs.select('layers', ...)``.
+        slices : id | Iterable | SliceMembership, optional
+            One slice id or several (their union), or the membership a slice
+            operation such as ``G.slices.intersect([...])`` gives back, taken
+            as an explicit node/edge constraint.
         predicate : callable, optional
-            Predicate used for additional filtering.
+            A node-id predicate, the advanced escape hatch. Its exceptions
+            propagate with the offending id.
+        boundary : {"closed", "open"}, default "closed"
+            ``closed`` keeps an edge only when its complete endpoint set is
+            selected. ``open`` keeps the edges touching the selected entities
+            and expands to their full endpoints — one hop, not a
+            neighbourhood.
 
         Returns
         -------
         GraphView
-            View object backed by this graph.
-
-        Notes
-        -----
-        Views are lightweight filters over an existing graph. Use
-        :attr:`views` for materialized dataframe views.
+            Live against this graph, read-only, and narrowed further with
+            ``V.view(...)``. ``V.materialize()`` builds an editable copy.
         """
-        return GraphView(self, nodes, edges, slices, predicate)
+        return GraphView(
+            self,
+            nodes=nodes,
+            edges=edges,
+            layers=layers,
+            slices=slices,
+            predicate=predicate,
+            boundary=boundary,
+        )
+
+    def summary(self):
+        """Return a structured summary of the graph, built without a frame or a matrix.
+
+        Returns
+        -------
+        Summary
+            Counts, aspects, slices, the attribute fields at every address and
+            the edge kind / direction tallies, with a bounded readable repr.
+        """
+        from ._summary import summarize
+
+        return summarize(self)
+
+    def _selection_context(self):
+        """The scope protocol of :mod:`annnet.core._select`: the graph itself, unscoped."""
+        return self, None
+
+    def _state_clock(self) -> tuple:
+        """Every clock a derived selection may depend on, as one tuple.
+
+        The structure, the two generic attribute axes, the six contextual
+        levels, slice membership and the aspect registry. A selection or a
+        view records this beside what it resolved and re-resolves when any
+        part has moved.
+        """
+        versions = self._contextual.versions
+        store = self._attr_store
+        return (
+            self._store.structure_version,
+            store.node_version,
+            store.edge_version,
+            self._slices.clock.value,
+            self._aspects_version,
+            versions['slice_attrs'],
+            versions['edge_slice_attrs'],
+            versions['node_layer_attrs'],
+            versions['aspect_attrs'],
+            versions['layer_attrs'],
+            versions['elementary_attrs'],
+        )
 
     def _resolve_snapshot(self, ref):
         if isinstance(ref, dict):
@@ -3112,6 +2924,13 @@ class AnnNet(
         missing = []
         to_drop = []
         for vid in node_ids:
+            if isinstance(vid, str):
+                # A bare id names the node: every placement it has goes.
+                if _structure.has_entity_id(self, vid):
+                    to_drop.append(vid)
+                else:
+                    missing.append(vid)
+                continue
             try:
                 ekey = self._resolve_entity_key(vid)
             except (KeyError, ValueError, TypeError):
@@ -3181,7 +3000,10 @@ _CONTEXTUAL_TABLE_SHAPE = {
         ('slice_id', 'edge_id'),
         {'slice_id': 'text', 'edge_id': 'text', 'weight': 'float'},
     ),
-    'elementary_attrs': ('layer_id', {'layer_id': 'text'}),
+    'elementary_attrs': (
+        ('aspect', 'elementary_layer'),
+        {'aspect': 'text', 'elementary_layer': 'text'},
+    ),
     'aspect_attrs': ('aspect', {'aspect': 'text'}),
     # A layer coordinate is one label per aspect, so the column holding it is a
     # list of strings and not a string. Declaring it text made an empty table and

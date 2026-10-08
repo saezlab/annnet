@@ -27,19 +27,19 @@ class TestGraphBasics(unittest.TestCase):
     def test_add_node_and_attributes(self):
         self.g.add_nodes('v1', color='red', value=3)
         self.g.add_nodes('v2')  # no attrs
-        self.assertEqual(self.g.nv, 2)
+        self.assertEqual(len(self.g.N), 2)
         # row exists even if no attrs were passed
         self.assertIn('v2', self.g._node_table.select('node_id').to_series().to_list())
         # attribute accessible
-        self.assertEqual(self.g.attrs.get_attr_node('v1', 'color'), 'red')
-        self.assertEqual(self.g.attrs.get_attr_node('v1', 'value'), 3)
+        self.assertEqual(self.g.attrs.row('nodes', 'v1').get('color'), 'red')
+        self.assertEqual(self.g.attrs.row('nodes', 'v1').get('value'), 3)
 
     def test_add_edge_directed_default_and_matrix_signs(self):
         eid = self.g.add_edges('a', 'b', weight=2.5, label='eab')
         self.assertTrue(self.g._is_directed_edge(eid))
-        self.assertIn(eid, self.g.get_edges_by_direction(True))
+        self.assertIn(eid, list(self.g.E.select(directed=True).ids))
         # get_edge canonical form
-        S, T = self.g.get_edge(eid)
+        S, T = self.g.E.at(eid)
         self.assertEqual(S, frozenset({'a'}))
         self.assertEqual(T, frozenset({'b'}))
         # matrix signs: +w at source, -w at target (directed)
@@ -49,13 +49,13 @@ class TestGraphBasics(unittest.TestCase):
         self.assertAlmostEqual(self.g._matrix[ai, col], 2.5, places=7)
         self.assertAlmostEqual(self.g._matrix[bi, col], -2.5, places=7)
         # attribute purity for edges (structural keys stripped)
-        self.assertEqual(self.g.attrs.get_attr_edge(eid, 'label'), 'eab')
-        self.assertIsNone(self.g.attrs.get_attr_edge(eid, 'source'))  # structural, not stored
+        self.assertEqual(self.g.attrs.row('edges', eid).get('label'), 'eab')
+        self.assertIsNone(self.g.attrs.row('edges', eid).get('source'))  # structural, not stored
 
     def test_add_edge_undirected_override(self):
         eid = self.g.add_edges('c', 'd', weight=1.0, directed=False)
-        self.assertIn(eid, self.g.get_edges_by_direction(False))
-        S, T = self.g.get_edge(eid)
+        self.assertIn(eid, list(self.g.E.select(directed=False).ids))
+        S, T = self.g.E.at(eid)
         self.assertEqual(S, T)
         self.assertEqual(S, frozenset({'c', 'd'}))
         # matrix signs: +w on both endpoints (undirected)
@@ -69,7 +69,7 @@ class TestGraphBasics(unittest.TestCase):
         e1 = self.g.add_edges('p', 'q', weight=1.0)
         e2 = self.g.add_edges('p', 'q', weight=3.0, parallel='parallel')
         self.assertNotEqual(e1, e2)
-        ids = self.g.get_edge_ids('p', 'q')
+        ids = self.g.has_edge('p', 'q')[1]
         self.assertCountEqual(ids, [e1, e2])
         self.assertTrue(self.g.has_edge('p', 'q'))
         self.assertTrue(self.g.has_edge('p', 'q', edge_id=e1))
@@ -79,7 +79,7 @@ class TestGraphBasics(unittest.TestCase):
         e2 = self.g.add_edges('p', 'q', edge_id='e2', parallel='parallel')
         g2 = self.g.ops.copy()
         e3 = g2.add_edges('p', 'q', edge_id='e3', parallel='parallel')
-        self.assertCountEqual(g2.get_edge_ids('p', 'q'), [e1, e2, e3])
+        self.assertCountEqual(g2.has_edge('p', 'q')[1], [e1, e2, e3])
         self.assertEqual(g2.has_edge('p', 'q'), (True, ['e1', 'e2', 'e3']))
 
     def test_has_node_flat_graph(self):
@@ -118,12 +118,12 @@ class TestGraphBasics(unittest.TestCase):
             'x', 'y', edge_id='edge_ghost', as_entity=True, weight=1.2, slice='Lx', label='meta'
         )
         # edge_ghost is registered as an entity (can be endpoint)
-        self.assertIn('edge_ghost', self.g.views.entity_kinds())
-        self.assertEqual(self.g.views.entity_kinds()['edge_ghost'], 'edge')
+        self.assertIn('edge_ghost', self.g.entity_kinds())
+        self.assertEqual(self.g.entity_kinds()['edge_ghost'], 'edge')
         # edge exists and has the right weight
         self.assertAlmostEqual(self.g.edge_weights[e], 1.2, places=7)
         # attributes stored as edge attrs
-        self.assertEqual(self.g.attrs.get_attr_edge('edge_ghost', 'label'), 'meta')
+        self.assertEqual(self.g.attrs.row('edges', 'edge_ghost').get('label'), 'meta')
         # can connect another edge TO this edge
         self.g.add_edges('z', 'edge_ghost', edge_id='meta_link')
         self.assertIn('meta_link', self.g.E)
@@ -147,7 +147,7 @@ class TestGraphBasics(unittest.TestCase):
     def test_hyperedge_undirected(self):
         hid = self.g.add_edges(src=['h1', 'h2', 'h3'], weight=2.0, tag='tri')
         self.assertEqual(self.g.edge_kind[hid], 'hyper')
-        S, T = self.g.get_edge(hid)
+        S, T = self.g.E.at(hid)
         self.assertEqual(S, T)
         self.assertEqual(S, frozenset({'h1', 'h2', 'h3'}))
         # matrix entries are +2.0 on all three members
@@ -155,19 +155,19 @@ class TestGraphBasics(unittest.TestCase):
         for v in ['h1', 'h2', 'h3']:
             self.assertAlmostEqual(self.g._matrix[self.g.idx.entity_to_row(v), col], 2.0, places=7)
         # attribute present
-        self.assertEqual(self.g.attrs.get_attr_edge(hid, 'tag'), 'tri')
+        self.assertEqual(self.g.attrs.row('edges', hid).get('tag'), 'tri')
 
     def test_hyperedge_directed(self):
         hid = self.g.add_edges(src=['s1', 's2'], tgt=['t1'], weight=4.0, category='flow')
         self.assertTrue(self.g.edge_directed[hid])
-        S, T = self.g.get_edge(hid)
+        S, T = self.g.E.at(hid)
         self.assertEqual(S, frozenset({'s1', 's2'}))
         self.assertEqual(T, frozenset({'t1'}))
         col = self.g.idx.edge_to_col(hid)
         for v in ['s1', 's2']:
             self.assertAlmostEqual(self.g._matrix[self.g.idx.entity_to_row(v), col], 4.0, places=7)
         self.assertAlmostEqual(self.g._matrix[self.g.idx.entity_to_row('t1'), col], -4.0, places=7)
-        self.assertEqual(self.g.attrs.get_attr_edge(hid, 'category'), 'flow')
+        self.assertEqual(self.g.attrs.row('edges', hid).get('category'), 'flow')
 
     def test_slices_and_activation_and_propagation(self):
         # add slices
@@ -197,14 +197,14 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_set_and_get_slice_attrs(self):
         self.g.slices.add('Geo', region='EMEA')
-        self.assertEqual(self.g.attrs.get_slice_attr('Geo', 'region'), 'EMEA')
+        self.assertEqual(self.g.attrs.row('slices', 'Geo').get('region'), 'EMEA')
         # upsert to new dtype
-        self.g.attrs.set_slice_attrs('Geo', region='APAC')
-        self.assertEqual(self.g.attrs.get_slice_attr('Geo', 'region'), 'APAC')
+        self.g.attrs.update('slices', {'Geo': {'region': 'APAC'}})
+        self.assertEqual(self.g.attrs.row('slices', 'Geo').get('region'), 'APAC')
 
     def test_slice_info_reads_attributes_from_dataframe_ssot(self):
         self.g.add_nodes('v1', slice='Geo')
-        self.g.attrs.set_slice_attrs('Geo', region='EMEA')
+        self.g.attrs.update('slices', {'Geo': {'region': 'EMEA'}})
         info = self.g.slices.info('Geo')
         self.assertEqual(info['attributes'], {'region': 'EMEA'})
 
@@ -225,7 +225,7 @@ class TestGraphBasics(unittest.TestCase):
         out = g.layers.flatten_layers()
         e3 = out.add_edges('u', 'v', edge_id='e3', parallel='parallel')
 
-        self.assertCountEqual(out.get_edge_ids('u', 'v'), ['e1', 'e2', e3])
+        self.assertCountEqual(out.has_edge('u', 'v')[1], ['e1', 'e2', e3])
         found, ids = out.has_edge('u', 'v')
         self.assertTrue(found)
         self.assertCountEqual(ids, ['e1', 'e2', e3])
@@ -242,32 +242,32 @@ class TestGraphBasics(unittest.TestCase):
     def test_subgraph_from_slice_flat_fast_path_preserves_slice_state(self):
         self.g.slices.add('L1', region='EMEA')
         eid = self.g.add_edges('u', 'v', edge_id='e1', weight=5.0, slice='L1')
-        self.g.attrs.set_edge_slice_attrs('L1', eid, weight=1.25)
+        self.g.attrs.update('edge_slices', {('L1', eid): {'weight': 1.25}})
 
         out = self.g.subgraph_from_slice('L1', resolve_slice_weights=True)
 
         self.assertEqual(out.slices.active, 'L1')
-        self.assertEqual(set(out.nodes()), {'u', 'v'})
-        self.assertEqual(set(out.edges()), {'e1'})
+        self.assertEqual(set(out.N), {'u', 'v'})
+        self.assertEqual(set(out.E), {'e1'})
         self.assertAlmostEqual(S.edge_ref(out, 'e1').weight, 1.25)
-        self.assertEqual(out.attrs.get_slice_attr('L1', 'region'), 'EMEA')
+        self.assertEqual(out.attrs.row('slices', 'L1').get('region'), 'EMEA')
         self.assertEqual(out._slices['default']['edges'], set())
         self.assertEqual(out._slices['L1']['edges'], {'e1'})
 
     def test_attrs_namespace_matches_flat_api(self):
-        self.g.attrs.set_graph_attribute('source', 'unit-test')
+        self.g.uns['source'] = 'unit-test'
         self.g.add_nodes('v1')
-        self.g.attrs.set_node_attrs('v1', color='blue')
+        self.g.attrs.update('nodes', {'v1': {'color': 'blue'}})
         eid = self.g.add_edges('v1', 'v2', edge_id='e1')
-        self.g.attrs.set_edge_attrs(eid, relation='binds')
+        self.g.attrs.update('edges', {eid: {'relation': 'binds'}})
         self.g.slices.add('Lw')
-        self.g.attrs.set_edge_slice_attrs('Lw', eid, weight=2.0)
+        self.g.attrs.update('edge_slices', {('Lw', eid): {'weight': 2.0}})
 
-        self.assertEqual(self.g.attrs.get_graph_attribute('source'), 'unit-test')
-        self.assertEqual(self.g.attrs.get_attr_node('v1', 'color'), 'blue')
-        self.assertEqual(self.g.attrs.get_attr_edge('e1', 'relation'), 'binds')
-        self.assertEqual(self.g.attrs.get_edge_slice_attr('Lw', 'e1', 'weight'), 2.0)
-        self.assertEqual(self.g.attrs.get_effective_edge_weight('e1', slice='Lw'), 2.0)
+        self.assertEqual(self.g.uns.get('source'), 'unit-test')
+        self.assertEqual(self.g.attrs.row('nodes', 'v1').get('color'), 'blue')
+        self.assertEqual(self.g.attrs.row('edges', 'e1').get('relation'), 'binds')
+        self.assertEqual(self.g.attrs.row('edge_slices', ('Lw', 'e1')).get('weight'), 2.0)
+        self.assertEqual(self.g.E.effective_weight('e1', slice='Lw'), 2.0)
 
     def test_per_slice_weight_and_effective_weight(self):
         # ensure the slice exists first
@@ -275,15 +275,11 @@ class TestGraphBasics(unittest.TestCase):
         # create the edge inside slice "Lw" so per-slice attrs apply
         eid = self.g.add_edges('u', 'v', weight=5.0, slice='Lw')
         # override via edge_slice_attributes table using the EDGE ID (string)
-        self.g.attrs.set_edge_slice_attrs('Lw', eid, weight=1.25, note='downweighted')
+        self.g.attrs.update('edge_slices', {('Lw', eid): {'weight': 1.25, 'note': 'downweighted'}})
         # effective weight in Lw reflects the override
-        self.assertAlmostEqual(
-            self.g.attrs.get_effective_edge_weight(eid, slice='Lw'), 1.25, places=7
-        )
+        self.assertAlmostEqual(self.g.E.effective_weight(eid, slice='Lw'), 1.25, places=7)
         # asking for a non-existent slice should fall back to the global weight
-        self.assertAlmostEqual(
-            self.g.attrs.get_effective_edge_weight(eid, slice='NonExistent'), 5.0, places=7
-        )
+        self.assertAlmostEqual(self.g.E.effective_weight(eid, slice='NonExistent'), 5.0, places=7)
 
     def test_incident_edges(self):
         e1 = self.g.add_edges('i1', 'i2', weight=1)
@@ -319,12 +315,12 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_remove_edge_then_node(self):
         e = self.g.add_edges('r1', 'r2', weight=1.0, tag='tmp')
-        self.g.remove_edge(e)
+        self.g.remove_edges(e)
         self.assertNotIn(e, self.g.E)
         # removing a node also removes incident edges
         e2 = self.g.add_edges('r1', 'r3', weight=2.0)
-        self.g.remove_node('r1')
-        self.assertNotIn('r1', self.g.views.entity_kinds())
+        self.g.remove_nodes('r1')
+        self.assertNotIn('r1', self.g.entity_kinds())
         self.assertNotIn(e2, self.g.E)
 
     def test_remove_slice_and_default_slice_guard(self):
@@ -346,7 +342,7 @@ class TestGraphBasics(unittest.TestCase):
             ],
             how='vertical',
         )
-        audit = self.g.attrs.audit_attributes()
+        audit = self.g.attrs.audit()
         self.assertEqual(audit['extra_node_rows'], [])
         self.assertEqual(audit['missing_node_rows'], [])
         self.assertIsInstance(audit['missing_edge_rows'], list)
@@ -354,7 +350,7 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_edges_views_and_counts(self):
         e = self.g.add_edges('x1', 'x2', weight=7.0, directed=False)
-        self.assertEqual(self.g.ne, len(self.g.edges()))
+        self.assertEqual(len(self.g.E), len(list(self.g.E)))
         elist = self.g.edge_list()
         found = [row for row in elist if row[2] == e]
         self.assertEqual(len(found), 1)
@@ -369,7 +365,7 @@ class TestGraphBasics(unittest.TestCase):
         # Update same edge_id: flip direction flag and endpoints
         self.g.add_edges('u2', 'u3', weight=3.5, edge_id=e, directed=False)
         # Now undirected, between u2 and u3, weight 3.5
-        S, T = self.g.get_edge(e)
+        S, T = self.g.E.at(e)
         self.assertEqual(S, T)
         self.assertEqual(S, frozenset({'u2', 'u3'}))
         col = self.g.idx.edge_to_col(e)
@@ -396,8 +392,8 @@ class TestGraphBasics(unittest.TestCase):
         self.assertIs(out, g)
         self.assertEqual(g.aspects, [])
         self.assertEqual(g.elem_layers, {})
-        self.assertIn('v1', set(g.nodes()))
-        self.assertIn('v2', set(g.nodes()))
+        self.assertIn('v1', set(g.N))
+        self.assertIn('v2', set(g.N))
         self.assertEqual(g._resolve_entity_key('v1'), ('v1', ('_',)))
         self.assertIn('e_intra', g.E)
         self.assertIn('e_couple', g.E)
@@ -409,7 +405,7 @@ class TestGraphBasics(unittest.TestCase):
         self.assertEqual(S.edge_ref(g, 'h1').ml_kind, 'intra')
         self.assertEqual(S.edge_ref(g, 'h1').ml_layers, None)
         g.add_nodes('isolated')
-        self.assertIn('isolated', set(g.nodes()))
+        self.assertIn('isolated', set(g.N))
 
     def test_make_undirected_returns_self_for_chaining(self):
         g = AnnNet(directed=True)
@@ -427,7 +423,7 @@ class TestGraphBasics(unittest.TestCase):
         g.add_nodes('isolated')
         removed = g.remove_orphans()
         self.assertEqual(removed, 1)
-        self.assertNotIn('isolated', set(g.nodes()))
+        self.assertNotIn('isolated', set(g.N))
 
     def test_layer_edge_set_can_select_inter_hyperedge(self):
         g = AnnNet(aspects={'condition': ['healthy', 'treated']})
@@ -555,15 +551,25 @@ class TestErrorPaths(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Ambiguous bare node_id'):
             self.g.degree('v1')
 
-    def test_remove_node_multilayer_bare_id_requires_explicit_supra_node(self):
+    def test_remove_nodes_bare_id_removes_every_placement(self):
+        """On the node axis a bare id names the node — all of its
+        placements — and an explicit ``(node_id, layer)`` key names one."""
         self.g.layers.set_aspects(['condition', 'time'])
         self.g.layers.set_elementary_layers(
             {'condition': ['healthy', 'treated'], 'time': ['t0', 't1']}
         )
         self.g.add_nodes('v1', layer=('healthy', 't0'))
         self.g.add_nodes('v1', layer=('treated', 't1'))
-        with self.assertRaisesRegex(ValueError, 'Ambiguous bare node_id'):
-            self.g.remove_node('v1')
+        self.g.add_nodes('v2', layer=('healthy', 't0'))
+        self.g.add_nodes('v2', layer=('treated', 't1'))
+        self.g.remove_nodes(('v2', ('treated', 't1')))
+        self.assertEqual(
+            set(self.g.supra_nodes()),
+            {('v1', ('healthy', 't0')), ('v1', ('treated', 't1')), ('v2', ('healthy', 't0'))},
+        )
+        self.g.remove_nodes('v1')
+        self.assertEqual(self.g.supra_nodes(), [('v2', ('healthy', 't0'))])
+        self.assertFalse(self.g.has_node('v1'))
 
     def test_add_nodes_bulk_without_layer_in_multilayer_warns_once(self):
         self.g.layers.set_aspects(['condition', 'time'])
@@ -630,13 +636,13 @@ class TestErrorPaths(unittest.TestCase):
 
     def test_remove_nonexistent_node_raises_key_error(self):
         with self.assertRaises(KeyError):
-            self.g.remove_node('does_not_exist')
+            self.g.remove_nodes('does_not_exist')
 
     def test_remove_node_twice_raises_on_second(self):
         self.g.add_nodes('A')
-        self.g.remove_node('A')
+        self.g.remove_nodes('A')
         with self.assertRaises(KeyError):
-            self.g.remove_node('A')
+            self.g.remove_nodes('A')
 
     # ------------------------------------------------------------------ #
     # remove_edge                                                          #
@@ -644,15 +650,15 @@ class TestErrorPaths(unittest.TestCase):
 
     def test_remove_nonexistent_edge_raises_key_error(self):
         with self.assertRaises(KeyError):
-            self.g.remove_edge('ghost_edge')
+            self.g.remove_edges('ghost_edge')
 
     def test_remove_edge_twice_raises_on_second(self):
         self.g.add_nodes('A')
         self.g.add_nodes('B')
         eid = self.g.add_edges('A', 'B', edge_id='e1')
-        self.g.remove_edge(eid)
+        self.g.remove_edges(eid)
         with self.assertRaises(KeyError):
-            self.g.remove_edge(eid)
+            self.g.remove_edges(eid)
 
     # ------------------------------------------------------------------ #
     # add_node — upsert semantics                                        #
@@ -661,8 +667,8 @@ class TestErrorPaths(unittest.TestCase):
     def test_duplicate_node_is_upsert_not_error(self):
         self.g.add_nodes('A', score=1.0)
         self.g.add_nodes('A', score=2.0)  # should update, not raise
-        self.assertEqual(self.g.nv, 1)
-        self.assertEqual(self.g.attrs.get_attr_node('A', 'score'), 2.0)
+        self.assertEqual(len(self.g.N), 1)
+        self.assertEqual(self.g.attrs.row('nodes', 'A').get('score'), 2.0)
 
     # ------------------------------------------------------------------ #
     # add_edge — auto-creates missing nodes                             #

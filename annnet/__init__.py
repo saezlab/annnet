@@ -23,7 +23,11 @@ from importlib.metadata import (
 # eager-import cost. Runtime behaviour is unchanged.
 if TYPE_CHECKING:
     from annnet.core.graph import AnnNet
+    from annnet.core._space import Set, Space
+    from annnet.core._Views import GraphView
+    from annnet.core._select import RowSelection
     from annnet.core._records import EdgeType, EdgeView, NodeView
+    from annnet.core._attribute_api import Attrs, Schema
     from annnet.algorithms.traversal import Traversal
 
     Graph = AnnNet
@@ -49,8 +53,15 @@ _lazy_submodules = {
 }
 
 _lazy_objects: dict[str, tuple[str, str]] = {
+    'Set': ('annnet.core._space', 'Set'),
+    'Space': ('annnet.core._space', 'Space'),
     'AnnNet': ('annnet.core.graph', 'AnnNet'),
     'Graph': ('annnet.core.graph', 'AnnNet'),
+    'GraphView': ('annnet.core._Views', 'GraphView'),
+    'Attrs': ('annnet.core._attribute_api', 'Attrs'),
+    'RowSelection': ('annnet.core._select', 'RowSelection'),
+    'Schema': ('annnet.core._attribute_api', 'Schema'),
+    'Provenance': ('annnet.core._provenance', 'Provenance'),
     'EdgeType': ('annnet.core._records', 'EdgeType'),
     'ON_CONFLICT': ('annnet.io._conflict', 'ON_CONFLICT'),
     'PROJECTIONS': ('annnet._support.projection', 'PROJECTIONS'),
@@ -81,6 +92,10 @@ _lazy_objects: dict[str, tuple[str, str]] = {
 }
 
 _lazy_functions: dict[str, tuple[str, str]] = {
+    'directed_pairs': ('annnet.algorithms.structure', 'directed_pairs'),
+    'sources': ('annnet.algorithms.structure', 'sources'),
+    'targets': ('annnet.algorithms.structure', 'targets'),
+    'directed_cycle': ('annnet.algorithms.structure', 'directed_cycle'),
     'available_backends': ('annnet.adapters', 'available_backends'),
     'available_dataframe_backends': (
         'annnet._support.dataframe_backend',

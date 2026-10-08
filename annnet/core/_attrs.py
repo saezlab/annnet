@@ -44,6 +44,7 @@ contextual attribute, written through ``G.layers.set_node_attrs``.
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 import numpy as np
@@ -72,6 +73,18 @@ def _is_null(value) -> bool:
     holds a NaN, so the two spellings of "nothing" both have to be read.
     """
     return value is None or (isinstance(value, float) and value != value)
+
+
+_ATOMS = (str, bytes, int, float, complex, bool, type(None), np.generic)
+
+
+def detach(value):
+    """A value the caller may edit without reaching the store.
+
+    A scalar is immutable and is returned as it is; a container is copied whole,
+    so that no read hands out the list or dict a column holds.
+    """
+    return value if isinstance(value, _ATOMS) else copy.deepcopy(value)
 
 
 def _empty_column(size: int, template) -> np.ndarray:
@@ -122,7 +135,12 @@ def _borrowed(column: np.ndarray, count: int) -> np.ndarray:
     """
     if column.size < count:  # pragma: no cover - eager growth keeps this unreachable
         column = _grown(column, count)
-    return read_only(column[:count])
+    window = column[:count]
+    if window.dtype.kind == 'O' and any(not isinstance(v, _ATOMS) for v in window):
+        # An object column that holds containers cannot be lent: an element
+        # edited through the window would change the graph.
+        window = np.array([detach(v) for v in window] + [None], dtype=object)[:-1]
+    return read_only(window)
 
 
 def _grown(column: np.ndarray, size: int) -> np.ndarray:
@@ -161,6 +179,13 @@ class AttributeStore:
         self._row_cache: dict[str, tuple] = {}
         self.table_builds = 0
 
+        # One clock per axis, rising on every write to a column of that axis.
+        # A selection that read a node attribute records ``node_version`` and
+        # re-evaluates when it has moved; a write to an edge attribute leaves
+        # it where it was.
+        self.node_version = 0
+        self.edge_version = 0
+
         # A freed slot must hold a null, so the store announces a free and these
         # hooks clear the cells that belonged to the element that went away. A
         # new slot has to be addressable in every column before a read indexes
@@ -184,6 +209,8 @@ class AttributeStore:
         self._forget_floors()
         self._tables.clear()
         self._row_cache.clear()
+        self.node_version += 1
+        self.edge_version += 1
 
     def _follow(self, store) -> None:
         """Subscribe to the slot lifecycle of one store."""
@@ -229,6 +256,16 @@ class AttributeStore:
         if capacity > self._edge_floor:
             self._edge_floor = self._grow_all(self.edge_columns, capacity)
 
+    def _touch_nodes(self) -> None:
+        """Note a write to the node columns: drop the table, move the clock."""
+        self._tables.pop(NODE_AXIS, None)
+        self.node_version += 1
+
+    def _touch_edges(self) -> None:
+        """Note a write to the edge columns: drop the table, move the clock."""
+        self._tables.pop(EDGE_AXIS, None)
+        self.edge_version += 1
+
     def _forget_floors(self) -> None:
         """Say that nothing is known about how long the columns are.
 
@@ -244,6 +281,10 @@ class AttributeStore:
     def _set(self, columns: dict, capacity: int, slot: int, name: str, value) -> None:
         column = columns.get(name)
         if column is None:
+            if _is_null(value):
+                # Removing a field the store never held is not a write, and it
+                # must not leave an empty column behind to say the field exists.
+                return
             column = _column_for(value, max(8, capacity))
             columns[name] = column
             self._forget_floors()
@@ -268,23 +309,23 @@ class AttributeStore:
         """Set one attribute of one node. The cost is one cell."""
         slot = self._require_entity(key)
         self._set(self.node_columns, self._store.entity_capacity, slot, name, value)
-        self._tables.pop(NODE_AXIS, None)
+        self._touch_nodes()
 
     def set_edge(self, edge_id: str, name: str, value) -> None:
         """Set one attribute of one edge. The cost is one cell."""
         slot = self._require_edge(edge_id)
         self._set(self.edge_columns, len(self._store._edge_id), slot, name, value)
-        self._tables.pop(EDGE_AXIS, None)
+        self._touch_edges()
 
     def set_node_column(self, name: str, values) -> None:
         """Set a whole node column, in the slot order of the live nodes."""
         self._set_column(self.node_columns, self._store.live_entity_slots(), name, values)
-        self._tables.pop(NODE_AXIS, None)
+        self._touch_nodes()
 
     def set_edge_column(self, name: str, values) -> None:
         """Set a whole edge column, in the slot order of the live edges."""
         self._set_column(self.edge_columns, self._store.live_edge_slots(), name, values)
-        self._tables.pop(EDGE_AXIS, None)
+        self._touch_edges()
 
     def _set_column(self, columns: dict, slots: np.ndarray, name: str, values) -> None:
         values = np.asarray(values, dtype=object) if not isinstance(values, np.ndarray) else values
@@ -320,7 +361,7 @@ class AttributeStore:
         for name, value in attrs.items():
             for slot in slots:
                 self._set(columns, capacity, slot, name, value)
-        self._tables.pop(NODE_AXIS, None)
+        self._touch_nodes()
 
     def set_edge_attrs(self, edge_id: str, attrs: dict) -> None:
         """Set attributes of one edge."""
@@ -333,7 +374,7 @@ class AttributeStore:
         columns = self.edge_columns
         for name, value in attrs.items():
             self._set(columns, capacity, slot, name, value)
-        self._tables.pop(EDGE_AXIS, None)
+        self._touch_edges()
 
     def node_attr(self, node_id: str, name: str, default=None):
         """Return one attribute of one node, or ``default`` when it carries none."""
@@ -378,7 +419,7 @@ class AttributeStore:
                 if slot < column.size:
                     value = column[slot]
                     if not _is_null(value):
-                        out[name] = value
+                        out[name] = detach(value)
                         break
         return out
 
@@ -388,7 +429,9 @@ class AttributeStore:
         if column is None:
             return None
         return {
-            node_id: (None if slot >= column.size or _is_null(column[slot]) else column[slot])
+            node_id: (
+                None if slot >= column.size or _is_null(column[slot]) else detach(column[slot])
+            )
             for node_id, slot in self._node_rows()
         }
 
@@ -398,21 +441,86 @@ class AttributeStore:
         if column is None:
             return None
         return {
-            edge_id: (None if slot >= column.size or _is_null(column[slot]) else column[slot])
+            edge_id: (
+                None if slot >= column.size or _is_null(column[slot]) else detach(column[slot])
+            )
             for edge_id, slot in self._edge_rows()
         }
+
+    # -- the schema of the generic columns --------------------------------
+    # A batch of writes can add a column, widen the type of one, or (through a
+    # delete) remove one. The columns themselves are restored cell by cell with
+    # the rows; these three keep the names, their order and their types.
+
+    def column_schema(self, axis: str) -> dict:
+        """The generic columns of one axis as ``{name: dtype}``, in insertion order."""
+        columns = self.node_columns if axis == NODE_AXIS else self.edge_columns
+        return {name: column.dtype for name, column in columns.items()}
+
+    def restore_column_schema(self, axis: str, schema: dict) -> None:
+        """Make the columns of one axis carry the names, order and types of ``schema``.
+
+        A column the schema does not name is dropped: a rolled-back batch
+        introduced it, and its cells were emptied with the rows. A column whose
+        type was widened is cast back. A column of the schema that is missing is
+        left for the row restore to recreate; only its place in the order is
+        fixed here.
+        """
+        columns = self.node_columns if axis == NODE_AXIS else self.edge_columns
+        before = list(columns)
+        for name in [name for name in columns if name not in schema]:
+            del columns[name]
+        for name, dtype in schema.items():
+            column = columns.get(name)
+            if column is not None and column.dtype != dtype:
+                try:
+                    columns[name] = column.astype(dtype)
+                except (TypeError, ValueError):
+                    pass
+        ordered = {name: columns[name] for name in schema if name in columns}
+        ordered.update({name: column for name, column in columns.items() if name not in ordered})
+        columns.clear()
+        columns.update(ordered)
+        if list(columns) != before or any(name not in columns for name in schema):
+            self._forget_floors()
+        self._touch_nodes() if axis == NODE_AXIS else self._touch_edges()
+
+    def drop_empty_columns(self, axis: str, names) -> list:
+        """Drop the named generic columns that hold no value, and return their names.
+
+        A field no row carries any more does not exist: it is not in the schema and
+        not a column of the table.
+        """
+        columns = self.node_columns if axis == NODE_AXIS else self.edge_columns
+        dropped = []
+        for name in names:
+            column = columns.get(name)
+            if column is None:
+                continue
+            empty = (
+                bool(np.isnan(column).all())
+                if column.dtype.kind == 'f'
+                else all(_is_null(value) for value in column)
+            )
+            if empty:
+                del columns[name]
+                dropped.append(name)
+        if dropped:
+            self._forget_floors()
+            self._touch_nodes() if axis == NODE_AXIS else self._touch_edges()
+        return dropped
 
     def drop_node_columns(self) -> None:
         """Forget every generic node attribute, keeping one row per node."""
         self.node_columns = {}
         self._forget_floors()
-        self._tables.pop(NODE_AXIS, None)
+        self._touch_nodes()
 
     def drop_edge_columns(self) -> None:
         """Forget every generic edge attribute, keeping one row per edge."""
         self.edge_columns = {}
         self._forget_floors()
-        self._tables.pop(EDGE_AXIS, None)
+        self._touch_edges()
 
     def load_node_rows(self, rows) -> None:
         """Replace every node column with what these rows say.
@@ -553,7 +661,10 @@ class AttributeStore:
             grown = _empty_column(int(slots[-1]) + 1, column)
             grown[: column.size] = column
             column = grown
-        return read_only(column[slots])
+        taken = column[slots]
+        if taken.dtype.kind == 'O':
+            taken = np.array([detach(v) for v in taken] + [None], dtype=object)[:-1]
+        return read_only(taken)
 
     def _rows(self, columns: dict, pairs: list[tuple], id_column: str) -> list[dict]:
         rows = []
@@ -563,7 +674,7 @@ class AttributeStore:
                 if slot < column.size:
                     value = column[slot]
                     if not _is_null(value):
-                        row[name] = value
+                        row[name] = detach(value)
             rows.append(row)
         return rows
 
@@ -584,7 +695,7 @@ class AttributeStore:
         data = {id_column: ids}
         for name, column in columns.items():
             data[name] = [
-                None if slot >= column.size or _is_null(column[slot]) else column[slot]
+                None if slot >= column.size or _is_null(column[slot]) else detach(column[slot])
                 for slot in slots
             ]
         table = dataframe_from_columns(data, backend=backend)
@@ -615,6 +726,8 @@ class AttributeStore:
         self.edge_columns = {name: column.copy() for name, column in other.edge_columns.items()}
         self._forget_floors()
         self._tables.clear()
+        self.node_version += 1
+        self.edge_version += 1
 
     def node_attr_rows(self, node_ids=None) -> dict:
         """Return the attributes of every node, keyed by bare id.
@@ -641,7 +754,7 @@ class AttributeStore:
                 if slot < size:
                     value = column[slot]
                     if not _is_null(value):
-                        out[element_id][name] = value
+                        out[element_id][name] = detach(value)
         return out
 
     def node_ids(self) -> list:
@@ -688,8 +801,8 @@ class AttributeStore:
         Contextual state keyed by a pair the edge belongs to lives outside this
         store, and its owner drops its own.
         """
-        self._tables.pop(EDGE_AXIS, None)
+        self._touch_edges()
 
     def forget_node(self, key: tuple) -> None:
         """Drop what this store held for one node. See :meth:`forget_edge`."""
-        self._tables.pop(NODE_AXIS, None)
+        self._touch_nodes()

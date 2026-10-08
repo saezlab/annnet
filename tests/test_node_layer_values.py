@@ -130,18 +130,18 @@ class TestMatrixValues:
 
 class TestResolverOrder:
     def test_a_later_backing_wins(self, G):
-        G.layers.set_node_attrs('n0', ('c0',), v=1.0)
+        G.attrs.update('node_layers', {('n0', ('c0',)): {'v': 1.0}})
         G.layers.attach_values(
             {'v': np.full((3, 4), 9.0)}, layers=[(c,) for c in CONDITIONS], nodes=list(NODES)
         )
         assert G.layers.values().get('n0', ('c0',), 'v') == 9.0
 
     def test_the_dict_store_answers_where_no_array_does(self, attached):
-        attached.layers.set_node_attrs('n0', ('c0',), typed=3.0)
+        attached.attrs.update('node_layers', {('n0', ('c0',)): {'typed': 3.0}})
         assert attached.layers.values().get('n0', ('c0',), 'typed') == 3.0
 
     def test_detaching_gives_the_earlier_answer_back(self, G):
-        G.layers.set_node_attrs('n0', ('c0',), v=1.0)
+        G.attrs.update('node_layers', {('n0', ('c0',)): {'v': 1.0}})
         backing = G.layers.attach_values(
             {'v': np.full((3, 4), 9.0)}, layers=[(c,) for c in CONDITIONS], nodes=list(NODES)
         )
@@ -154,7 +154,7 @@ class TestResolverOrder:
         assert backing.get('n0', ('c1',), 'v', MISSING) is MISSING
 
     def test_names_layers_and_nodes_are_the_union(self, attached):
-        attached.layers.set_node_attrs('n0', ('c0',), typed=1.0)
+        attached.attrs.update('node_layers', {('n0', ('c0',)): {'typed': 1.0}})
         resolver = attached.layers.values()
         assert {'expr', 'typed'} <= resolver.names()
         assert set(NODES) <= resolver.nodes()
@@ -173,7 +173,7 @@ class TestBlock:
         assert ContextualValues({}).block(['n0'], [('c0',)], 'v') is None
 
     def test_a_resolver_over_the_dict_store_alone_returns_none(self, G):
-        G.layers.set_node_attrs('n0', ('c0',), v=1.0)
+        G.attrs.update('node_layers', {('n0', ('c0',)): {'v': 1.0}})
         assert G.layers.values().block(list(NODES), [('c0',)], 'v') is None
 
     def test_a_name_no_backing_holds_returns_none(self, attached):
@@ -223,7 +223,7 @@ class TestBlock:
         cell no array covers is a cell only the slow path can reach, and telling
         the two cases apart costs more than taking the slow path does.
         """
-        attached.layers.set_node_attrs('n0', ('c0',), expr=99.0)
+        attached.attrs.update('node_layers', {('n0', ('c0',)): {'expr': 99.0}})
         layers = [(c,) for c in CONDITIONS]
         assert attached.layers.values().block(list(NODES), layers, 'expr') is None
         found = attached.layers.matrix('expr', nodes=list(NODES), layers=layers)
@@ -231,11 +231,11 @@ class TestBlock:
 
     def test_the_dict_store_answers_a_cell_no_array_covers(self, attached):
         """Which is why falling back is necessary rather than merely safe."""
-        attached.layers.set_node_attrs('n0', ('c0',), expr=99.0)
+        attached.attrs.update('node_layers', {('n0', ('c0',)): {'expr': 99.0}})
         outside = attached.layers.matrix('expr', nodes=['n0'], layers=[('c0',)])
         # The array covers this cell too and was attached later, so it wins.
         assert outside.values[0, 0] == 0.0
-        attached.layers.set_node_attrs('n0', ('c0',), only_typed=5.0)
+        attached.attrs.update('node_layers', {('n0', ('c0',)): {'only_typed': 5.0}})
         typed = attached.layers.matrix('only_typed', nodes=['n0'], layers=[('c0',)])
         assert typed.values[0, 0] == 5.0
 
@@ -273,7 +273,9 @@ class TestValueMatrix:
         layers = [(c,) for c in CONDITIONS]
         for node_id in NODES:
             for row, layer in enumerate(layers):
-                G.layers.set_node_attrs(node_id, layer, v=float(row * 10 + NODES.index(node_id)))
+                G.attrs.update(
+                    'node_layers', {(node_id, layer): {'v': float(row * 10 + NODES.index(node_id))}}
+                )
         typed = G.layers.matrix('v', nodes=list(NODES), layers=layers)
 
         other = an.Graph(directed=True)
@@ -391,7 +393,7 @@ class TestPlace:
                         graph.add_nodes([{'node_id': n} for n in NODES], layer=(condition,))
             made.append(graph)
         left, right = made
-        assert sorted(left.nodes()) == sorted(right.nodes())
+        assert sorted(left.N) == sorted(right.N)
         assert left.nv_supra == right.nv_supra
         for node_id in NODES:
             for condition in CONDITIONS:
@@ -400,26 +402,26 @@ class TestPlace:
 
 class TestSetNodeAttrsBulk:
     def test_explicit_pairs(self, G):
-        assert G.layers.set_node_attrs_bulk({('n0', ('c0',)): {'v': 1.0}}) == 1
-        assert G.layers.node_attrs('n0', ('c0',))['v'] == 1.0
+        assert G.attrs.update('node_layers', {('n0', ('c0',)): {'v': 1.0}}) == 1
+        assert dict(G.attrs.row('node_layers', ('n0', ('c0',))))['v'] == 1.0
 
     def test_bare_ids_with_a_layer(self, G):
         assert (
-            G.layers.set_node_attrs_bulk({'n0': {'v': 2.0}, 'n1': {'v': 3.0}}, layer=('c1',)) == 2
+            G.attrs.update('node_layers', {'n0': {'v': 2.0}, 'n1': {'v': 3.0}}, layer=('c1',)) == 2
         )
-        assert G.layers.node_attrs('n1', ('c1',))['v'] == 3.0
+        assert dict(G.attrs.row('node_layers', ('n1', ('c1',))))['v'] == 3.0
 
     def test_scalars_with_a_key(self, G):
-        assert G.layers.set_node_attrs_bulk({'n0': 4.0}, layer=('c2',), key='v') == 1
-        assert G.layers.node_attrs('n0', ('c2',))['v'] == 4.0
+        assert G.attrs.update('node_layers', {'n0': 4.0}, layer=('c2',), key='v') == 1
+        assert dict(G.attrs.row('node_layers', ('n0', ('c2',))))['v'] == 4.0
 
     def test_a_bare_id_without_a_layer_raises(self, G):
         with pytest.raises(ValueError, match='needs layer='):
-            G.layers.set_node_attrs_bulk({'n0': {'v': 1.0}})
+            G.attrs.update('node_layers', {'n0': {'v': 1.0}})
 
     def test_a_scalar_without_a_key_raises(self, G):
         with pytest.raises(ValueError, match='needs '):
-            G.layers.set_node_attrs_bulk({'n0': 1.0}, layer=('c0',))
+            G.attrs.update('node_layers', {'n0': 1.0}, layer=('c0',))
 
 
 def _rows(frame):

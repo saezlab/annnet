@@ -13,7 +13,7 @@ imports from underscore modules follow the [internal API policy](../api-boundary
 ## Aspects
 
 An aspect's values, and whether they come one before another. See
-[Aspects, order, and windows](../../explanations/aspects-and-windows.md).
+[Aspects, order, and windows](../../guide/layers.ipynb).
 
 ::: annnet.core._aspects.Aspect
     options:
@@ -53,7 +53,7 @@ An aspect's values, and whether they come one before another. See
 
 The two backings a value may live in, the resolver over them, and the array a
 method is handed. See
-[Node-layer values and scale](../../explanations/values-and-scale.md).
+[Node-layer values and scale](../../guide/annotations-and-views.ipynb).
 
 ::: annnet.core._values.ValueMatrix
     options:

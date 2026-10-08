@@ -61,7 +61,7 @@ def _build_multilayer_graph():
         aa = (s,)
         G.add_nodes(base_nodes, layer=aa)
         for v in base_nodes:
-            G.layers.set_node_attrs(v, aa, expr=float(hash((v, s)) % 1000) / 100.0)
+            G.attrs.update('node_layers', {(v, aa): {'expr': float(hash((v, s)) % 1000) / 100.0}})
         G.add_edges(
             [
                 {'source': (src, aa), 'target': (tgt, aa), 'weight': w}
@@ -74,7 +74,7 @@ def _build_multilayer_graph():
     consensus_nodes = ['TP53', 'AKT1', 'MYC']
     G.add_nodes(consensus_nodes, layer=consensus_aa)
     for v in consensus_nodes:
-        G.layers.set_node_attrs(v, consensus_aa, score=0.42, frequency=0.66)
+        G.attrs.update('node_layers', {(v, consensus_aa): {'score': 0.42, 'frequency': 0.66}})
 
     return G, samples, base_nodes, consensus_nodes, intra_edge_specs
 
@@ -115,8 +115,8 @@ def _snapshot(G, samples, probe_vid, consensus_aa):
         'slice_base_v': set(G.slices.nodes('base_pkn')),
         'slice_base_e': set(G.slices.edges('base_pkn')),
         'intra_per_sample': {s: len(G.layers.layer_edge_set((s,))) for s in samples},
-        'attr_probe': {s: G.layers.node_attrs(probe_vid, (s,)) for s in samples},
-        'consensus_attr': G.layers.node_attrs(probe_vid, consensus_aa),
+        'attr_probe': {s: dict(G.attrs.row('node_layers', (probe_vid, (s,)))) for s in samples},
+        'consensus_attr': dict(G.attrs.row('node_layers', (probe_vid, consensus_aa))),
         'aspects': tuple(G.aspects),
     }
 

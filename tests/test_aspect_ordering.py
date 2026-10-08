@@ -172,11 +172,11 @@ class TestDeclarationOrderSurvives:
     """The regression this whole module exists for."""
 
     def test_elem_layers_reads_back_in_declaration_order(self, timed):
-        assert timed.layers.elem_layers['time'] == list(TIMES)
+        assert timed.layers.list_layers('time') == list(TIMES)
 
     def test_it_is_not_merely_sorted(self, timed):
         """Sorted, `TIMES` would read ['0h', '12h', '1h', '24h'] — a different order."""
-        assert timed.layers.elem_layers['time'] != sorted(TIMES)
+        assert timed.layers.list_layers('time') != sorted(TIMES)
 
     def test_list_layers_agrees_with_the_declaration(self, timed):
         assert timed.layers.list_layers('time') == list(TIMES)
@@ -192,8 +192,8 @@ class TestDeclarationOrderSurvives:
                 ['time', 'mechanism'],
                 {'time': Aspect(TIMES, ordered=True), 'mechanism': list(MECHANISMS)},
             )
-        assert G.layers.elem_layers['time'] == list(TIMES)
-        assert G.layers.elem_layers['mechanism'] == list(MECHANISMS)
+        assert G.layers.list_layers('time') == list(TIMES)
+        assert G.layers.list_layers('mechanism') == list(MECHANISMS)
 
     def test_a_layer_added_later_goes_on_the_end(self, timed):
         timed.layers.add_elementary_layer('time', '48h')

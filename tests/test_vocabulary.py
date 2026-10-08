@@ -98,7 +98,7 @@ class TestContract:
 
     def test_an_edge_name_on_the_node_axis_is_caught(self):
         graph = _signed()
-        graph.attrs.set_node_attrs_bulk({'TF1': {'confidence': 0.5}})
+        graph.attrs.update('nodes', {'TF1': {'confidence': 0.5}})
         assert any('reserves for the edge axis' in m for m in V.check(graph))
 
     def test_strict_raises_instead_of_reporting(self):

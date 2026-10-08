@@ -261,7 +261,7 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
         )
     )
 
-    sub_v = base.nodes()[: max(1, scale.nodes // 2)]
+    sub_v = list(base.N)[: max(1, scale.nodes // 2)]
     recs.append(
         rec(
             'subgraph_half',
@@ -277,7 +277,7 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
     # --- Annotations bulk write -------------------------------------------
     # Re-applying identical attrs is stable, so time_repeat isolates the write
     # path from construction (unlike timing a build-then-annotate closure).
-    vids = base.nodes()
+    vids = list(base.N)
     payload = [(v, {'kind': 'gene', 'score': i % 7}) for i, v in enumerate(vids)]
     recs.append(
         rec(
@@ -285,7 +285,7 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
             scale.nodes,
             scale.edges,
             group='annotations',
-            time=harness.time_repeat(lambda: base.attrs.set_node_attrs_bulk(payload)),
+            time=harness.time_repeat(lambda: base.attrs.update('nodes', payload)),
             note='set_node_attrs_bulk over all nodes (write path only)',
         )
     )
@@ -369,7 +369,7 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
                 ),
                 slice=sid,
             )
-    v0 = G.nodes()[0]
+    v0 = list(G.N)[0]
 
     # --- slices (set algebra + presence + slice-induced subgraph) ----------
     recs.append(
@@ -466,15 +466,15 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
     )
 
     # --- algorithms / traversal (directional neighbor + edge queries) ------
-    sample = G.nodes()[: min(len(G.nodes()), 1000)]
+    sample = list(G.N)[: min(len(list(G.N)), 1000)]
     for op, fn in (
         ('out_neighbors', lambda: G.out_neighbors(v0)),
         ('in_neighbors', lambda: G.in_neighbors(v0)),
         ('successors', lambda: G.successors(v0)),
         ('predecessors', lambda: G.predecessors(v0)),
         ('incident_edges', lambda: G.incident_edges(v0)),
-        ('in_edges', lambda: list(G.in_edges([v0]))),
-        ('out_edges', lambda: list(G.out_edges([v0]))),
+        ('in_edges', lambda: list(G.incident_edges([v0], direction='in'))),
+        ('out_edges', lambda: list(G.incident_edges([v0], direction='out'))),
     ):
         recs.append(
             rec('algorithms', op, time=harness.time_repeat(fn), note='per-call traversal overhead')
@@ -597,7 +597,7 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
 # ---------------------------------------------------------------------------
 # The operation set the core refactor has to measure
 # ---------------------------------------------------------------------------
-# Each key is an operation the cycle promises to report. Each value is the record
+# Each key is an operation the report promises to carry. Each value is the record
 # ``op`` name that carries the measurement, so a missing measurement is visible
 # rather than silently absent.
 REQUIRED_OPERATIONS = {

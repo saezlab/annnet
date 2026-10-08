@@ -1,9 +1,13 @@
 """Experimental APIs for AnnNet, reachable as ``annnet.exp``.
 
-Nothing here is part of the stable public surface. Two of these packages are
-**going to leave this repository**, and the ``exp`` prefix is the point: a call
-site that reads ``exp.vocabulary.check(G)`` says out loud that the import will
-change.
+Nothing here is part of the stable public surface, and none of it is a finished
+integration with the packages it is written for. ``vocabulary`` and ``sysbio``
+are domain work that is intended to belong to the Biology and SysBioVerse
+packages; where they live is undecided, and until it is decided they stay here,
+with their tests, and keep working. The ``exp`` prefix is the point: a call site
+that reads ``exp.vocabulary.check(G)`` says out loud that the import may change.
+Nothing in AnnNet imports Biology or SysBioVerse, and
+``tests/test_no_domain_imports.py`` fails the build if it does.
 
     >>> from annnet import exp
     >>> exp.vocabulary.check(G)  # doctest: +SKIP

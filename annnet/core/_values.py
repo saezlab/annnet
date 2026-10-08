@@ -271,6 +271,17 @@ class ValueResolver:
     def __init__(self, backings: Sequence[Any]) -> None:
         self._backings = list(backings)
 
+    @property
+    def backings(self) -> tuple:
+        """The backings this resolver asks, in the order they were attached.
+
+        The contextual store comes first and every attached array after it, so
+        a caller who wants to know whether a graph holds attached measurements
+        looks for a :class:`MatrixValues` here rather than at the graph's
+        fields.
+        """
+        return tuple(self._backings)
+
     def names(self) -> set[str]:
         found: set[str] = set()
         for backing in self._backings:

@@ -7,21 +7,57 @@
 # `tests/test_dependents.py` asserts that every name below still resolves on the
 # public surface, so a rename fails the build here and names who to tell.
 #
-# The register is a promise to the packages listed, not a description of them.
-# It goes stale in one direction only: a bridge may call more than it lists, so
-# a passing gate is not proof that a package works. See DEPENDENTS.md.
+# The register covers known calls. Run downstream tests to check behavior and
+# calls missing from the register. See DEPENDENTS.md.
+#
+# For each package:
+#
+#   previous_calls   the names the bridge was seen calling before the surface
+#                    changed (the code at `upstream_revision`)
+#   calls            the current spellings those calls migrate to
+#   migration        one line per changed name: old -> new
+#   migration_status where the migration stands:
+#       required_before_release   no migration is known to pass the package's tests
+#       verified_locally          the migration, applied to `upstream_revision`,
+#                                 passed the package's own tests against AnnNet
+#                                 `verified_annnet`; the package's repository has
+#                                 NOT merged it
+#       merged_upstream           the package's default branch carries the migration
+#                                 (`merged_revision`)
+#   upstream_revision   the commit of the package the migration was applied to
+#   verified_annnet     the AnnNet version its tests were run against
+#   verification        the command that ran, and what it returned
+#   patch_sha256        the digest of the patch that was tested
+#
+# Two gates read this, and they answer different questions:
+#
+#   ANNNET_RELEASE_GATE=1        every package is at least verified_locally, and
+#                                verified against the version in this tree
+#   ANNNET_RELEASE_GATE=public   every package is merged_upstream, which is when a
+#                                user of both packages upgrades without meeting a
+#                                break
+#
+# `tests/test_dependents.py` checks `calls` against the surface (a rename here
+# fails the build) and checks that every `previous_calls` name that no longer
+# resolves has a `migration` line. Neither gate runs in the ordinary CI.
 #
 # The gate checks that a name resolves. It cannot check what that name *does*,
 # so a change to behaviour under an unchanged name passes it and still reaches
-# a caller. One such change is outstanding, from cycle 003:
+# a caller. Three such changes are outstanding:
 #
-#   A column read — `G.N[name]`, `G.E[name]` — gives back a read-only array.
-#   A caller that writes into what a read handed it now gets a ValueError, and
-#   the fix in their code is one `.copy()`. Neither package below did so when
-#   the register was last verified.
+#   A column read (`G.N[name]`, `G.E[name]`) gives back a read-only array. A
+#   caller that writes into what a read handed it gets a ValueError, and the
+#   fix in their code is one `.copy()`.
 #
-# A behaviour note belongs here rather than only in CHANGELOG.md, because this
-# is the file a maintainer reads when they ask what they have to do about us.
+#   `G.E.at(edge_id).kind` is the structural kind (`binary`, `hyper`,
+#   `node_edge`) and direction is the separate `directed` field. A caller that
+#   matched `hyper_directed` / `hyper_undirected` now reads `kind == 'hyper'`
+#   and `directed`.
+#
+#   `G.attrs.row(...)` and every other attribute read return a detached copy. A
+#   caller that wrote through a returned row must call `G.attrs.update`.
+#
+# Keep behavioral migration requirements alongside the registered method names.
 
 [[package]]
 name = "omnipath-client"
@@ -29,17 +65,46 @@ owner = "Saez lab"
 repository = "https://github.com/saezlab/omnipath-client"
 contact = "ours — push directly"
 modules = ["omnipath_client/_graph.py", "omnipath_client/cosmos/_annnet.py"]
-verified_against = "1fea29f"
-# `to_annnet`, `annotate_nodes` and `cosmos.to_annnet` build a graph from a
-# table. They write and never read, so the list is short.
-calls = [
+upstream_revision = "3350a5258b5326e611944041bc0ee31676545465"
+verified_annnet = "0.4.0"
+verification = "python -m pytest tests -q against the patched checkout: 135 passed; unpatched: 16 failed"
+patch_sha256 = "3b0e21516d4dbf46428edbd4972dc34f758338fefcbbede5eac2834ba7c55d58"
+migration_status = "verified_locally"
+# ,  and  build a graph from a
+# table and read back its size; its tests also read edges and one attribute.
+previous_calls = [
     "AnnNet",
     "add_nodes",
     "add_edges",
     "attrs.set_node_attrs_bulk",
+    "ncount",
+    "ecount",
+    "get_edge",
+    "attrs.get_attr_node",
     "slices.add",
     "slices.add_edges",
     "uns",
+]
+calls = [
+    "AnnNet",
+    "N",
+    "E",
+    "E.at",
+    "add_nodes",
+    "add_edges",
+    "attrs.update",
+    "attrs.row",
+    "slices.add",
+    "slices.add_edges",
+    "uns",
+]
+migration = [
+    "attrs.set_node_attrs_bulk(rows) -> attrs.update('nodes', rows)",
+    "ncount() -> len(G.N)",
+    "ecount() -> len(G.E)",
+    "get_edge(edge_id) -> E.at(edge_id)",
+    "attrs.get_attr_node(node, name) -> attrs.row('nodes', node).get(name)",
+    "extra annnet -> annnet>=0.4.0",
 ]
 
 [[package]]
@@ -48,10 +113,16 @@ owner = "Pablo Rodríguez-Mier"
 repository = "https://github.com/saezlab/corneto"
 contact = "pull request"
 modules = ["corneto/contrib/annnet.py", "corneto/methods/signaling/annnet.py"]
-verified_against = "1fea29f"
-# Two bridges. `contrib` converts a graph both ways; `methods.signaling` reads
-# and writes node-layer attributes for CellNOptDAG.
-calls = [
+upstream_revision = "12480e81bb1a77de5537bedf4f401e4bb399d2a3"
+verified_annnet = "0.4.0"
+verification = "python -m pytest tests/contrib/test_annnet.py tests/methods/signaling/test_cellnopt_annnet.py against the patched checkout: 8 passed; unpatched: 6 failed"
+patch_sha256 = "32769bf070d2290fb9bcbd46111e8247bc8add2d6f5f78ffef01ddfbf4d9f117"
+migration_status = "verified_locally"
+# Two bridges.  converts a graph both ways;  reads
+# and writes node-layer attributes for CellNOptDAG. The tutorial notebook under
+# docs/tutorials/annnet-signaling pins its own AnnNet revision and stays on the
+# calls of that revision until a release exists to pin.
+previous_calls = [
     "AnnNet",
     "N",
     "S",
@@ -63,16 +134,59 @@ calls = [
     "add_edges",
     "get_edge",
     "get_edges_by_direction",
+    "history.enable",
     "history.snapshot",
     "attrs.get_node_attrs",
     "attrs.get_edge_attrs",
+    "attrs.set_edge_attrs",
+    "layers.list_aspects",
+    "layers.list_layers",
     "layers.set_aspects",
     "layers.set_attrs",
     "layers.set_node_attrs",
     "layers.node_attrs",
     "layers.layer_node_set",
     "slices.add",
+    "slices.exists",
+    "slices.edges",
     "slices.add_edge_to_slice",
+]
+calls = [
+    "AnnNet",
+    "N",
+    "E",
+    "S",
+    "uns",
+    "add_nodes",
+    "add_edges",
+    "E.at",
+    "E.select",
+    "history.enable",
+    "history.snapshot",
+    "attrs.row",
+    "attrs.update",
+    "layers.list_aspects",
+    "layers.list_layers",
+    "layers.set_aspects",
+    "layers.layer_node_set",
+    "slices.add",
+    "slices.exists",
+    "slices.edges",
+    "slices.add_edge_to_slice",
+]
+migration = [
+    "nv -> len(G.N)",
+    "nodes() -> list(G.N)",
+    "edges() -> list(G.E)",
+    "get_edge(edge_id) -> E.at(edge_id)",
+    "get_edges_by_direction(directed) -> E.select(directed=directed).ids",
+    "attrs.get_node_attrs(node_id) -> attrs.row('nodes', node_id)",
+    "attrs.get_edge_attrs(edge_id) -> attrs.row('edges', edge_id)",
+    "attrs.set_edge_attrs(edge_id, **kw) -> attrs.update('edges', {edge_id: kw})",
+    "layers.set_attrs(layer, **kw) -> attrs.update('layers', {layer: kw})",
+    "layers.set_node_attrs(node, layer, **kw) -> attrs.update('node_layers', {(node, layer): kw})",
+    "layers.node_attrs(node, layer) -> attrs.row('node_layers', (node, layer))",
+    "extra annnet -> annnet[polars]>=0.4.0,<0.5",
 ]
 
 # Column and key names a bridge writes into a table or reads out of one. These

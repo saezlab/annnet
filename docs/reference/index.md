@@ -1,7 +1,9 @@
 # API Reference
 
 Use this section when you need exact signatures, public classes, and module-level
-entry points. See [Public and Internal APIs](api-boundary.md) for the stability
+entry points. [The public surface](api-contract.md) states the contract of the
+graph object, its namespaces, selections and views. See
+[Public and Internal APIs](api-boundary.md) for the stability
 policy for documented public APIs and internal underscore-prefixed APIs.
 
 ## Reference layout

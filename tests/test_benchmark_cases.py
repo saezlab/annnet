@@ -113,13 +113,29 @@ def test_report_emits_networkx_ratio_heatmap(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# The operation set the cycle has to measure
+# The operation set the benchmark has to measure
 # ---------------------------------------------------------------------------
 
 
+def _errors(rows):
+    """The records of operations that were attempted and failed."""
+    return [
+        f'{row.get("engine")}/{row.get("op")}: {row.get("error")}'
+        for row in rows
+        if row.get('status') == 'error'
+    ]
+
+
 def _ok(rows):
-    """Return the records that actually ran."""
-    return [row for row in rows if row.get('status') != 'error']
+    """Return the records that actually ran.
+
+    A record that failed is not filtered out: a benchmark that cannot run its own
+    operation is a defect in the benchmark, and an absent optional dependency is
+    the only reason a record may be missing (status ``skipped``).
+    """
+    failed = _errors(rows)
+    assert not failed, 'benchmark operations failed:\n' + '\n'.join(failed)
+    return [row for row in rows if row.get('status') != 'skipped']
 
 
 def _ops(rows):
@@ -182,7 +198,7 @@ def test_attribute_workload_compares_a_column_against_a_dataframe_column() -> No
 
 
 class TestTheAttributeBenchmarkNamesWhatItCompares:
-    """`FR-001` to `FR-005`: a record says what it measured and against what.
+    """A record says what it measured and against what.
 
     The record this replaces was called ``dataframe_column_op`` and summed a
     bare numpy array, with no dataframe of any kind involved. The number it
@@ -201,21 +217,21 @@ class TestTheAttributeBenchmarkNamesWhatItCompares:
             assert row['baseline'] in workloads.ATTRIBUTE_BASELINES
 
     def test_nothing_is_called_a_dataframe_unless_a_dataframe_produced_it(self) -> None:
-        """`FR-001`. The name of a record identifies the library behind it."""
+        """The name of a record identifies the library behind it."""
         for row in self._rows():
             named = f'{row["op"]} {row.get("note", "")} {row["baseline"]}'.lower()
             if 'dataframe' in named:
                 assert row['baseline'] in ('polars', 'pandas', 'pyarrow'), row
 
     def test_the_read_and_the_operation_are_separate_records(self) -> None:
-        """`FR-004`. A ratio says which of the two it comes from."""
+        """A ratio says which of the two it comes from."""
         rows = self._rows()
         for baseline in {row['baseline'] for row in _ok(rows)}:
             ops = {row['op'] for row in _ok(rows) if row['baseline'] == baseline}
             assert {'column_read', 'column_op', 'column_read_and_op'} <= ops, baseline
 
     def test_both_sides_of_a_pair_do_the_same_work(self) -> None:
-        """`FR-002`. One op name means one starting state and one operation.
+        """One op name means one starting state and one operation.
 
         A note is ``<the work>; <the baseline it ran on>``. The work half must
         be word for word the same across the baselines of one op, which is what
@@ -228,7 +244,7 @@ class TestTheAttributeBenchmarkNamesWhatItCompares:
             assert len(work) == 1, (op, work)
 
     def test_an_absent_backend_is_reported_as_skipped_and_named(self) -> None:
-        """`FR-005`. A smaller row count would otherwise hide a missing library."""
+        """A smaller row count would otherwise hide a missing library."""
         rows = workloads.attribute_ops(_tiny_scale(), samples=1)
         emitted = {(row['baseline'], row['op']) for row in rows}
         expected = {
@@ -304,3 +320,28 @@ def test_the_annnet_only_workload_reports_no_error() -> None:
     rows = workloads.annnet_only(_tiny_scale(), samples=1)
     assert rows, 'the AnnNet-only workload recorded nothing'
     assert not [row for row in rows if row.get('status') == 'error']
+
+
+@pytest.mark.parametrize('backend', ['auto', 'polars', 'pandas'])
+def test_every_installed_engine_runs_every_backend_operation(backend) -> None:
+    """Each engine's operation set runs; only a missing dependency may be skipped."""
+    from benchmarks.cases.backends import backend_operation_dimensions
+
+    if backend == 'polars':
+        pytest.importorskip('polars')
+    if backend == 'pandas':
+        pytest.importorskip('pandas')
+    rows = backend_operation_dimensions(_tiny_scale(), backend=backend, samples=1)
+    assert not _errors(rows), _errors(rows)
+    ran = {row['engine'] for row in rows if row['status'] == 'ok'}
+    assert 'annnet' in ran
+    for engine in ('networkx', 'igraph', 'graph-tool'):
+        module = {'networkx': 'networkx', 'igraph': 'igraph', 'graph-tool': 'graph_tool'}[engine]
+        engine_rows = [row for row in rows if row['engine'] == engine]
+        assert engine_rows, f'{engine} recorded nothing'
+        try:
+            __import__(module)
+        except ImportError:
+            assert {row['status'] for row in engine_rows} == {'skipped'}
+        else:
+            assert {row['status'] for row in engine_rows} == {'ok'}, engine

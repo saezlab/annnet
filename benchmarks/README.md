@@ -13,6 +13,7 @@ Pixi `gt` environment is active.
 | `cases/` | invoked by `run.py` | local non-overlapping benchmark cases: mutation primitives, annotation updates, backend mutation/annotation ops, lazy adapter accessors |
 | `reporting/specsheet.py` | `python -m benchmarks.reporting.specsheet` | one-page **spec-sheet PDF + charts** (build/query/memory across scales to 1M V / 4M edges, all edge types) → `SPEC_SHEET.pdf`, `SPEC_SHEET_CHARTS.pdf` |
 | `io_formats.py` | `python -m benchmarks.io_formats` | round-trip **write/read time + on-disk size + fidelity** for annnet / json / parquet / graphml / sif |
+| `api_costs.py` | `python -m benchmarks.api_costs` | **general-path costs**: empty construction, counts at 10 and 1M nodes, degree at 5k/50k nodes, warm build vs networkx, the cost of gaining aspects/hyperedges, and exploration reads at 20k/200k edges; `--compare-tree` measures another checkout under matched conditions → `docs/explanations/performance-measurements.json` (read in `docs/explanations/performance.md`) |
 | `adapters.py` | `python -m benchmarks.adapters` | **export/import time** for the NetworkX / igraph / graph-tool / PyG bridges (uninstalled backends are skipped) |
 
 `run.py` invokes `io_formats` and `adapters` for you (subprocess); run
@@ -81,7 +82,7 @@ reporting/     Markdown renderer, plot renderer, artifact CSVs, regeneration CLI
 
 - **Head-to-head** — comparable per-call medians; ratio columns and heatmaps are
   `AnnNet / baseline`. AnnNet carries an incidence matrix + annotation frames +
-  multilayer state, so parity on plain ops is the honest bar, not a tie.
+  multilayer state; interpret the ratios alongside these representation costs.
 - **Memory** — `retained` bytes and `bytes/edge` for the built graph.
 - **AnnNet-only** — hyperedges, multilayer, incidence/adjacency materialisation,
   copy/subgraph, annotations, IO: capabilities the baselines cannot express.

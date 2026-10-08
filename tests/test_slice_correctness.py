@@ -45,7 +45,7 @@ def test_slice_statistics_includes_default():
 
 def test_views_slices_populated():
     G = _build_graph()
-    df = G.views.slices()
+    df = G.attrs.table('slices', derived=True)
     assert df.shape[0] == G.slices.count()
 
 
@@ -54,8 +54,8 @@ def test_views_slices_populated():
 
 def test_set_slice_edge_weight_does_not_raise():
     G = _build_graph()
-    G.attrs.set_slice_edge_weight('treated', 'e1', 99.0)
-    assert G.attrs.get_effective_edge_weight('e1', slice='treated') == 99.0
+    G.attrs.update('edge_slices', {('treated', 'e1'): {'weight': 99.0}})
+    assert G.E.effective_weight('e1', slice='treated') == 99.0
 
 
 # ── active slice resolution on reads ──────────────────────────────────────
@@ -63,23 +63,23 @@ def test_set_slice_edge_weight_does_not_raise():
 
 def test_get_effective_edge_weight_uses_active_slice():
     G = _build_graph()
-    G.attrs.set_edge_slice_attrs('treated', 'e1', weight=99.0)
+    G.attrs.update('edge_slices', {('treated', 'e1'): {'weight': 99.0}})
     G.slices.active = 'treated'
-    assert G.attrs.get_effective_edge_weight('e1') == 99.0
+    assert G.E.effective_weight('e1') == 99.0
     G.slices.active = 'default'
-    assert G.attrs.get_effective_edge_weight('e1') == 1.0
+    assert G.E.effective_weight('e1') == 1.0
 
 
 def test_explicit_slice_arg_overrides_active():
     G = _build_graph()
-    G.attrs.set_edge_slice_attrs('treated', 'e1', weight=99.0)
+    G.attrs.update('edge_slices', {('treated', 'e1'): {'weight': 99.0}})
     G.slices.active = 'default'
-    assert G.attrs.get_effective_edge_weight('e1', slice='treated') == 99.0
+    assert G.E.effective_weight('e1', slice='treated') == 99.0
 
 
 def test_edge_list_reflects_active_slice_weight():
     G = _build_graph()
-    G.attrs.set_edge_slice_attrs('treated', 'e1', weight=99.0)
+    G.attrs.update('edge_slices', {('treated', 'e1'): {'weight': 99.0}})
     G.slices.active = 'treated'
     edges = G.edge_list()
     assert any(eid == 'e1' and weight == 99.0 for _src, _tgt, eid, weight in edges)

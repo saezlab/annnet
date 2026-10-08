@@ -104,11 +104,13 @@ def _graph_from_stoich(
         if preserve_stoichiometry:
             G.set_edge_coeffs(eid_added, coeffs)
         else:
-            G.attrs.set_edge_attrs(eid_added, stoich=coeffs)
+            G.attrs.update('edges', {eid_added: {'stoich': coeffs}})
 
         # mark boundary reactions for easy filtering
         if boundary_kind:
-            G.attrs.set_edge_attrs(eid_added, is_boundary=True, boundary_kind=boundary_kind)
+            G.attrs.update(
+                'edges', {eid_added: {'is_boundary': True, 'boundary_kind': boundary_kind}}
+            )
 
     return G
 
@@ -150,7 +152,7 @@ def from_cobra_model(
         # drop Nones
         clean = {k: v for k, v in attrs.items() if v is not None}
         if clean:
-            G.attrs.set_edge_attrs(eid, **clean)
+            G.attrs.update('edges', {eid: dict(clean)})
 
     return G
 

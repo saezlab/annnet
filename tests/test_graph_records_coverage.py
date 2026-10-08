@@ -54,10 +54,9 @@ def test_iter_node_ids_yields_only_node_entities_in_row_order() -> None:
     assert out == ['A', 'B', 'C']
 
 
-def test_iter_node_ids_falls_back_to_nodes_method_when_there_is_no_store() -> None:
+def test_iter_node_ids_falls_back_to_the_node_axis_when_there_is_no_store() -> None:
     class Stub:
-        def nodes(self):
-            return ['x', 'y']
+        N = ['x', 'y']
 
     assert list(_iter_node_ids(Stub())) == ['x', 'y']
 

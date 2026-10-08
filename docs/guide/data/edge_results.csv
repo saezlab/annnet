@@ -1,0 +1,17 @@
+edge_id,condition,activity
+egfr_grb2,control,1.0
+grb2_sos1,control,0.8
+sos1_ras,control,0.5
+ras_raf,control,0.4
+raf_mek,control,0.3
+mek_erk,control,0.2
+egfr_akt,control,0.5
+akt_foxo3,control,-0.3
+egfr_grb2,treated,1.2
+grb2_sos1,treated,1.0
+sos1_ras,treated,1.1
+ras_raf,treated,1.2
+raf_mek,treated,1.0
+mek_erk,treated,0.9
+erk_dusp6,treated,0.7
+dusp6_erk,treated,-0.5

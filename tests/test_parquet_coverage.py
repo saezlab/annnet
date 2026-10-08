@@ -102,8 +102,9 @@ class _StubGraph:
         def __init__(self, owner):
             self._owner = owner
 
-        def get_attr_edge(self, eid, key, default=None):
-            return self._owner._edge_attrs.get(eid, {}).get(key, default)
+        def row(self, address, eid):
+            assert address == 'edges'
+            return dict(self._owner._edge_attrs.get(eid, {}))
 
     @property
     def attrs(self):
@@ -149,24 +150,24 @@ def test_round_trip_empty_graph(tmp_path: Path) -> None:
     p = tmp_path / 'empty'
     to_parquet(G, p)
     H = from_parquet(p)
-    assert H.nv == 0
-    assert H.ne == 0
+    assert len(H.N) == 0
+    assert len(H.E) == 0
 
 
 def test_round_trip_simple_directed_graph_with_attrs(tmp_path: Path) -> None:
     G = AnnNet(directed=True)
     G.add_nodes(['A', 'B', 'C'])
-    G.attrs.set_node_attrs('A', color='red')
-    G.attrs.set_node_attrs('B', color='blue')
+    G.attrs.update('nodes', {'A': {'color': 'red'}})
+    G.attrs.update('nodes', {'B': {'color': 'blue'}})
     G.add_edges('A', 'B', edge_id='e1', weight=2.0)
     G.add_edges('B', 'C', edge_id='e2', weight=3.0)
-    G.attrs.set_edge_attrs('e1', label='alpha')
+    G.attrs.update('edges', {'e1': {'label': 'alpha'}})
 
     p = tmp_path / 'simple'
     to_parquet(G, p)
     H = from_parquet(p)
-    assert set(H.nodes()) == {'A', 'B', 'C'}
-    assert H.ne == 2
+    assert set(H.N) == {'A', 'B', 'C'}
+    assert len(H.E) == 2
 
 
 def test_round_trip_with_undirected_hyperedge(tmp_path: Path) -> None:
@@ -176,8 +177,8 @@ def test_round_trip_with_undirected_hyperedge(tmp_path: Path) -> None:
     p = tmp_path / 'hyper'
     to_parquet(G, p)
     H = from_parquet(p)
-    assert set(H.nodes()) >= {'A', 'B', 'C'}
-    assert H.ne == 1
+    assert set(H.N) >= {'A', 'B', 'C'}
+    assert len(H.E) == 1
 
 
 def test_round_trip_with_directed_hyperedge(tmp_path: Path) -> None:
@@ -187,7 +188,7 @@ def test_round_trip_with_directed_hyperedge(tmp_path: Path) -> None:
     p = tmp_path / 'dhyper'
     to_parquet(G, p)
     H = from_parquet(p)
-    assert H.ne == 1
+    assert len(H.E) == 1
 
 
 def test_round_trip_with_slices_and_per_slice_weights(tmp_path: Path) -> None:
@@ -196,14 +197,14 @@ def test_round_trip_with_slices_and_per_slice_weights(tmp_path: Path) -> None:
     G.slices.add('s1')
     G.add_edges('A', 'B', edge_id='e1', slice='s1', weight=1.0)
     G.add_edges('B', 'C', edge_id='e2', slice='s1', weight=2.0)
-    G.attrs.set_edge_slice_attrs('s1', 'e1', weight=99.0)
+    G.attrs.update('edge_slices', {('s1', 'e1'): {'weight': 99.0}})
 
     p = tmp_path / 'sliced'
     to_parquet(G, p)
     H = from_parquet(p)
     # slice and edges round-tripped
     assert 's1' in H.slices.list()
-    assert H.ne == 2
+    assert len(H.E) == 2
 
 
 def test_round_trip_with_multilayer_graph_via_manifest(tmp_path: Path) -> None:
@@ -215,7 +216,7 @@ def test_round_trip_with_multilayer_graph_via_manifest(tmp_path: Path) -> None:
     p = tmp_path / 'multilayer'
     to_parquet(G, p)
     H = from_parquet(p)
-    assert set(H.nodes()) == {'A', 'B'}
+    assert set(H.N) == {'A', 'B'}
     assert H.is_multilayer
     assert tuple(H.layers.list_aspects()) == ('condition',)
 
@@ -225,13 +226,13 @@ def test_round_trip_with_hyper_edge_attrs(tmp_path: Path) -> None:
     G = AnnNet(directed=False)
     G.add_nodes(['A', 'B', 'C'])
     G.add_edges(['A', 'B', 'C'], edge_id='h1')
-    G.attrs.set_edge_attrs('h1', confidence=0.95, label='triple')
+    G.attrs.update('edges', {'h1': {'confidence': 0.95, 'label': 'triple'}})
 
     p = tmp_path / 'hyper_attrs'
     to_parquet(G, p)
     H = from_parquet(p)
-    assert H.ne == 1
-    out = H.attrs.get_edge_attrs('h1')
+    assert len(H.E) == 1
+    out = dict(H.attrs.row('edges', 'h1'))
     assert out.get('confidence') == 0.95
     assert out.get('label') == 'triple'
 
@@ -241,12 +242,12 @@ def test_round_trip_with_per_slice_weight_round_trips_weight(tmp_path: Path) -> 
     G.add_nodes(['A', 'B'])
     G.slices.add('s1')
     G.add_edges('A', 'B', edge_id='e1', slice='s1', weight=1.0)
-    G.attrs.set_edge_slice_attrs('s1', 'e1', weight=42.0)
+    G.attrs.update('edge_slices', {('s1', 'e1'): {'weight': 42.0}})
 
     p = tmp_path / 'sweight'
     to_parquet(G, p)
     H = from_parquet(p)
-    w = H.attrs.get_edge_slice_attr('s1', 'e1', 'weight')
+    w = H.attrs.row('edge_slices', ('s1', 'e1')).get('weight')
     assert w == 42.0
 
 

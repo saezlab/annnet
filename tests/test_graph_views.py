@@ -1,4 +1,4 @@
-"""Unit tests for annnet/core/_Views.py — GraphView and ViewsClass."""
+"""Unit tests for annnet/core/_Views.py — GraphView and the derived tables ."""
 
 import os
 import sys
@@ -15,15 +15,15 @@ def _build_graph():
     """Directed graph: A→B, B→C, with attributes and a slice."""
     G = AnnNet(directed=True)
     G.add_nodes('A')
-    G.attrs.set_node_attrs('A', gene='TP53', score=1.0)
+    G.attrs.update('nodes', {'A': {'gene': 'TP53', 'score': 1.0}})
     G.add_nodes('B')
-    G.attrs.set_node_attrs('B', gene='EGFR', score=0.5)
+    G.attrs.update('nodes', {'B': {'gene': 'EGFR', 'score': 0.5}})
     G.add_nodes('C')
-    G.attrs.set_node_attrs('C', gene='MYC', score=0.2)
+    G.attrs.update('nodes', {'C': {'gene': 'MYC', 'score': 0.2}})
     G.add_edges('A', 'B', edge_id='e1', weight=2.0)
-    G.attrs.set_edge_attrs('e1', relation='activates')
+    G.attrs.update('edges', {'e1': {'relation': 'activates'}})
     G.add_edges('B', 'C', edge_id='e2', weight=3.0)
-    G.attrs.set_edge_attrs('e2', relation='inhibits')
+    G.attrs.update('edges', {'e2': {'relation': 'inhibits'}})
     G.slices.add('sig')
     G.slices.add_edge_to_slice('sig', 'e1')
     return G
@@ -43,21 +43,21 @@ class TestGraphViewNodeFilter(unittest.TestCase):
     def test_no_filter_returns_all_nodes(self):
         G = _build_graph()
         view = GraphView(G)
-        # No filter → node_ids is None (all nodes)
-        self.assertIsNone(view.node_ids)
-        self.assertEqual(view.node_count, 3)
+        # No filter → every node, in graph order.
+        self.assertEqual(view.N.ids, ('A', 'B', 'C'))
+        self.assertEqual(len(view.N), 3)
 
     def test_list_filter_restricts_nodes(self):
         G = _build_graph()
         view = GraphView(G, nodes=['A', 'B'])
-        self.assertEqual(view.node_ids, {'A', 'B'})
-        self.assertEqual(view.node_count, 2)
+        self.assertEqual(view.N.ids, ('A', 'B'))
+        self.assertEqual(len(view.N), 2)
 
     def test_callable_predicate_filter(self):
         G = _build_graph()
         # Keep only nodes whose gene attribute starts with "E"
         view = GraphView(G, nodes=lambda v: v in ['A', 'C'])
-        ids = view.node_ids
+        ids = set(view.N.ids)
         self.assertIn('A', ids)
         self.assertIn('C', ids)
         self.assertNotIn('B', ids)
@@ -65,7 +65,7 @@ class TestGraphViewNodeFilter(unittest.TestCase):
     def test_extra_predicate_further_restricts(self):
         G = _build_graph()
         view = GraphView(G, nodes=['A', 'B', 'C'], predicate=lambda v: v != 'C')
-        ids = view.node_ids
+        ids = set(view.N.ids)
         self.assertIn('A', ids)
         self.assertIn('B', ids)
         self.assertNotIn('C', ids)
@@ -75,19 +75,19 @@ class TestGraphViewEdgeFilter(unittest.TestCase):
     def test_no_filter_returns_all_edges(self):
         G = _build_graph()
         view = GraphView(G)
-        self.assertIsNone(view.edge_ids)
-        self.assertEqual(view.edge_count, 2)
+        self.assertEqual(view.E.ids, ('e1', 'e2'))
+        self.assertEqual(len(view.E), 2)
 
     def test_list_filter_restricts_edges(self):
         G = _build_graph()
         view = GraphView(G, edges=['e1'])
-        self.assertEqual(view.edge_ids, {'e1'})
-        self.assertEqual(view.edge_count, 1)
+        self.assertEqual(view.E.ids, ('e1',))
+        self.assertEqual(len(view.E), 1)
 
     def test_callable_edge_filter(self):
         G = _build_graph()
         view = GraphView(G, edges=lambda e: e == 'e2')
-        ids = view.edge_ids
+        ids = set(view.E.ids)
         self.assertIn('e2', ids)
         self.assertNotIn('e1', ids)
 
@@ -99,7 +99,7 @@ class TestGraphViewSliceFilter(unittest.TestCase):
         G.slices.add_node_to_slice('sig', 'A')
         G.slices.add_node_to_slice('sig', 'B')
         view = GraphView(G, slices='sig')
-        edge_ids = view.edge_ids
+        edge_ids = set(view.E.ids)
         self.assertIn('e1', edge_ids)
         self.assertNotIn('e2', edge_ids)
 
@@ -112,7 +112,7 @@ class TestGraphViewSliceFilter(unittest.TestCase):
         G.slices.add_node_to_slice('reg', 'B')
         G.slices.add_node_to_slice('reg', 'C')
         view = GraphView(G, slices=['sig', 'reg'])
-        edge_ids = view.edge_ids
+        edge_ids = set(view.E.ids)
         self.assertIn('e1', edge_ids)
         self.assertIn('e2', edge_ids)
 
@@ -123,7 +123,7 @@ class TestGraphViewObs(unittest.TestCase):
     def test_obs_no_filter_returns_all(self):
         G = _build_graph()
         view = GraphView(G)
-        obs = view.obs
+        obs = view.attrs.nodes
         try:
             rows = obs.to_dicts()
         except Exception:
@@ -136,7 +136,7 @@ class TestGraphViewObs(unittest.TestCase):
     def test_obs_filtered_to_subset(self):
         G = _build_graph()
         view = GraphView(G, nodes=['A'])
-        obs = view.obs
+        obs = view.attrs.nodes
         try:
             rows = obs.to_dicts()
         except Exception:
@@ -152,7 +152,7 @@ class TestGraphViewVar(unittest.TestCase):
     def test_var_no_filter_returns_all(self):
         G = _build_graph()
         view = GraphView(G)
-        var = view.var
+        var = view.attrs.edges
         try:
             rows = var.to_dicts()
         except Exception:
@@ -164,7 +164,7 @@ class TestGraphViewVar(unittest.TestCase):
     def test_var_filtered_to_subset(self):
         G = _build_graph()
         view = GraphView(G, edges=['e1'])
-        var = view.var
+        var = view.attrs.edges
         try:
             rows = var.to_dicts()
         except Exception:
@@ -208,8 +208,8 @@ class TestGraphViewMaterialize(unittest.TestCase):
         G = _build_graph()
         view = GraphView(G)
         sub = view.materialize()
-        self.assertEqual(sub.nv, 3)
-        self.assertEqual(sub.ne, 2)
+        self.assertEqual(len(sub.N), 3)
+        self.assertEqual(len(sub.E), 2)
 
     def test_materialize_preserves_explicit_edge_ids_in_flat_graph(self):
         G = AnnNet()
@@ -218,8 +218,8 @@ class TestGraphViewMaterialize(unittest.TestCase):
 
         H = G.view().materialize()
 
-        self.assertEqual(H.edges(), ['e1'])
-        self.assertEqual(H.attrs.get_attr_edge('e1', 'score'), 7)
+        self.assertEqual(list(H.E), ['e1'])
+        self.assertEqual(H.attrs.row('edges', 'e1').get('score'), 7)
 
     def test_materialize_preserves_multilayer_aspects_supra_nodes_and_edges(self):
         G = AnnNet(aspects={'time': ['t1', 't2']})
@@ -235,7 +235,7 @@ class TestGraphViewMaterialize(unittest.TestCase):
             set(H.supra_nodes()),
             {('A', ('t1',)), ('A', ('t2',)), ('B', ('t1',))},
         )
-        self.assertEqual(H.edges(), ['e1'])
+        self.assertEqual(list(H.E), ['e1'])
         self.assertEqual(S.edge_sides(H, 'e1').source, frozenset({('A', ('t1',))}))
         self.assertEqual(S.edge_sides(H, 'e1').target, frozenset({('B', ('t1',))}))
 
@@ -244,8 +244,8 @@ class TestViewNamespace(unittest.TestCase):
     def test_views_namespace_matches_flat_api(self):
         G = _build_graph()
 
-        flat = G.views.edges(include_weight=True)
-        namespaced = G.views.edges(include_weight=True)
+        flat = G.attrs.table('edges', derived=True, include_weight=True)
+        namespaced = G.attrs.table('edges', derived=True, include_weight=True)
 
         try:
             self.assertEqual(flat.to_dicts(), namespaced.to_dicts())
@@ -260,14 +260,14 @@ class TestViewNamespace(unittest.TestCase):
         # Only A and B → only e1 survives (both endpoints present)
         view = GraphView(G, nodes=['A', 'B'], edges=['e1'])
         sub = view.materialize()
-        self.assertEqual(sub.nv, 2)
-        self.assertEqual(sub.ne, 1)
+        self.assertEqual(len(sub.N), 2)
+        self.assertEqual(len(sub.E), 1)
 
     def test_materialize_copies_node_attrs(self):
         G = _build_graph()
         view = GraphView(G)
         sub = view.materialize(copy_attributes=True)
-        attrs = sub.attrs.get_node_attrs('A') or {}
+        attrs = dict(sub.attrs.row('nodes', 'A')) or {}
         # gene attribute should survive
         self.assertIn('gene', attrs)
 
@@ -275,16 +275,16 @@ class TestViewNamespace(unittest.TestCase):
         G = _build_graph()
         view = GraphView(G)
         sub = view.materialize(copy_attributes=False)
-        self.assertEqual(sub.nv, 3)
+        self.assertEqual(len(sub.N), 3)
 
     def test_materialize_with_hyperedges(self):
         G = _build_hyperedge_graph()
         view = GraphView(G)
         sub = view.materialize()
         # All 4 nodes must survive the round-trip
-        self.assertEqual(sub.nv, G.nv)
+        self.assertEqual(len(sub.N), len(G.N))
         # At minimum the binary edge must survive
-        self.assertGreaterEqual(sub.ne, 1)
+        self.assertGreaterEqual(len(sub.E), 1)
 
 
 class TestGraphViewSubview(unittest.TestCase):
@@ -293,8 +293,8 @@ class TestGraphViewSubview(unittest.TestCase):
     def test_subview_narrows_nodes(self):
         G = _build_graph()
         base = GraphView(G, nodes=['A', 'B', 'C'])
-        sub = base.subview(nodes=['A', 'B'])
-        ids = sub.node_ids
+        sub = base.view(nodes=['A', 'B'])
+        ids = set(sub.N.ids)
         self.assertIn('A', ids)
         self.assertIn('B', ids)
         self.assertNotIn('C', ids)
@@ -302,9 +302,9 @@ class TestGraphViewSubview(unittest.TestCase):
     def test_subview_narrows_edges(self):
         G = _build_graph()
         base = GraphView(G, edges=['e1', 'e2'])
-        sub = base.subview(edges=['e1'])
-        self.assertIn('e1', sub.edge_ids)
-        self.assertNotIn('e2', sub.edge_ids)
+        sub = base.view(edges=['e1'])
+        self.assertIn('e1', set(sub.E.ids))
+        self.assertNotIn('e2', set(sub.E.ids))
 
 
 class TestGraphViewConvenience(unittest.TestCase):
@@ -314,9 +314,8 @@ class TestGraphViewConvenience(unittest.TestCase):
         G = _build_graph()
         view = GraphView(G)
         s = view.summary()
-        self.assertIsInstance(s, str)
-        self.assertIn('3', s)  # 3 nodes
-        self.assertIn('2', s)  # 2 edges
+        self.assertEqual((s['nodes'], s['edges']), (3, 2))
+        self.assertIn('3 node(s), 2 edge(s)', repr(s))
 
     def test_repr(self):
         G = _build_graph()
@@ -331,11 +330,11 @@ class TestGraphViewConvenience(unittest.TestCase):
 
 
 class TestViewsClassEdgesView(unittest.TestCase):
-    """ViewsClass.views.edges() (mixin on AnnNet)."""
+    """list(ViewsClass.views.E) (mixin on AnnNet)."""
 
     def test_basic_edges_view(self):
         G = _build_graph()
-        df = G.views.edges()
+        df = G.attrs.table('edges', derived=True)
         try:
             rows = df.to_dicts()
         except Exception:
@@ -346,14 +345,16 @@ class TestViewsClassEdgesView(unittest.TestCase):
 
     def test_edges_view_includes_weight_column(self):
         G = _build_graph()
-        df = G.views.edges(include_weight=True)
+        df = G.attrs.table('edges', derived=True, include_weight=True)
         cols = list(df.columns)
-        self.assertIn('global_weight', cols)
+        # The canonical structural field is ``weight``.
+        self.assertIn('weight', cols)
+        self.assertNotIn('global_weight', cols)
 
     def test_edges_view_with_slice_weight(self):
         G = _build_graph()
-        G.attrs.set_edge_slice_attrs('sig', 'e1', weight=99.0)
-        df = G.views.edges(slice='sig', resolved_weight=True)
+        G.attrs.update('edge_slices', {('sig', 'e1'): {'weight': 99.0}})
+        df = G.attrs.table('edges', derived=True, slice='sig', resolved_weight=True)
         try:
             import polars as pl
 
@@ -364,30 +365,35 @@ class TestViewsClassEdgesView(unittest.TestCase):
 
     def test_edges_view_empty_graph(self):
         G = AnnNet(directed=True)
-        df = G.views.edges()
+        df = G.attrs.table('edges', derived=True)
         # Should return empty DataFrame without error
         self.assertEqual(len(df), 0)
 
     def test_edges_view_uses_source_target_for_hyperedges(self):
         G = _build_hyperedge_graph()
-        df = G.views.edges()
+        df = G.attrs.table('edges', derived=True)
         try:
             rows = {r['edge_id']: r for r in df.to_dicts()}
         except Exception:
             rows = {r['edge_id']: r for r in df.to_dict(orient='records')}
 
-        self.assertEqual(rows['h1']['source'], 'A|B')
-        self.assertEqual(rows['h1']['target'], 'C')
-        self.assertEqual(rows['h2']['source'], 'B|C|D')
-        self.assertIsNone(rows['h2']['target'])
+        # A column advertised as a node id never holds a pipe-joined
+        # list. A hyperedge's participants live in head/tail/members.
+        self.assertIsNone(rows['h1']['source'])
+        self.assertIsNone(rows['h1']['target'])
+        self.assertEqual(sorted(rows['h1']['head']), ['A', 'B'])
+        self.assertEqual(rows['h1']['tail'], ['C'])
+        self.assertEqual(sorted(rows['h2']['members']), ['B', 'C', 'D'])
+        self.assertIsNone(rows['h2']['head'])
+        self.assertEqual(rows['e1']['source'], 'A')
 
 
 class TestViewsClassNodesView(unittest.TestCase):
-    """ViewsClass.views.nodes() (mixin on AnnNet)."""
+    """list(ViewsClass.views.N) (mixin on AnnNet)."""
 
     def test_basic_nodes_view(self):
         G = _build_graph()
-        df = G.views.nodes()
+        df = G.attrs.table('nodes', derived=True)
         try:
             rows = df.to_dicts()
         except Exception:
@@ -399,7 +405,7 @@ class TestViewsClassNodesView(unittest.TestCase):
 
     def test_nodes_view_empty_graph(self):
         G = AnnNet(directed=True)
-        df = G.views.nodes()
+        df = G.attrs.table('nodes', derived=True)
         self.assertEqual(len(df), 0)
 
 
@@ -414,15 +420,14 @@ class TestAnnNetView(unittest.TestCase):
     def test_view_with_node_list(self):
         G = _build_graph()
         v = G.view(nodes=['A'])
-        self.assertEqual(v.node_ids, {'A'})
+        self.assertEqual(v.N.ids, ('A',))
 
     def test_view_with_predicate(self):
         G = _build_graph()
         v = G.view(predicate=lambda x: x == 'B')
-        # predicate applied to all nodes; only B survives
-        # (predicate alone doesn't set node_ids, need nodes too)
-        # test that it doesn't raise and returns a GraphView
+        # The predicate applies to every node: only B survives.
         self.assertIsInstance(v, GraphView)
+        self.assertEqual(v.N.ids, ('B',))
 
 
 if __name__ == '__main__':

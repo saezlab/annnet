@@ -24,7 +24,7 @@ def run(n_nodes: int = 2000, n_edges: int = 10000, samples: int = 5) -> list[dic
     import annnet.adapters as aad
 
     G = build_graph(n_nodes, n_edges)
-    n_e = G.ecount()
+    n_e = len(G.E)
     recs: list[dict] = []
 
     def _rt(name, to_fn, from_fn, note):
@@ -39,7 +39,7 @@ def run(n_nodes: int = 2000, n_edges: int = 10000, samples: int = 5) -> list[dic
                     lambda: from_fn(*exported), samples=samples
                 ).as_dict()
                 back = from_fn(*exported)
-                rec['edges_ok'] = back.ecount() == n_e
+                rec['edges_ok'] = len(back.E) == n_e
         except (ImportError, RuntimeError) as e:
             rec['skipped'] = f'{type(e).__name__}: {str(e)[:60]}'
         except Exception as e:

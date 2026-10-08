@@ -82,9 +82,9 @@ def test_set_edge_coeffs_invalidates_incidence_cache() -> None:
 
 def test_cache_get_methods_match_property_access() -> None:
     G = _build_graph()
-    assert G.cache.get_csr() is G.cache.csr
-    assert G.cache.get_csc() is G.cache.csc
-    assert G.cache.get_adjacency() is G.cache.adjacency
+    assert G.cache.csr is G.cache.csr
+    assert G.cache.csc is G.cache.csc
+    assert G.cache.adjacency is G.cache.adjacency
 
 
 def test_cache_invalidate_selective_and_full() -> None:
@@ -234,7 +234,7 @@ def test_idx_has_entity_has_node_has_edge_id() -> None:
 
 def test_idx_count_helpers_match_graph_shape() -> None:
     G = _build_graph()
-    assert G.idx.edge_count() == G.ne
+    assert G.idx.edge_count() == len(G.E)
     assert G.idx.entity_count() == S.entity_count(G)
     assert G.idx.node_count() == G.nv_supra
 

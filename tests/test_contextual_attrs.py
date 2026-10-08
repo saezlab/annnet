@@ -39,14 +39,14 @@ def graph():
     G.slices.add('core')
     G.slices.add_edges('core', ['e0'])
 
-    G.attrs.set_node_attrs('A', kind='protein')
-    G.attrs.set_edge_attrs('e0', assay='y2h')
-    G.attrs.set_slice_attrs('core', kind='curated')
-    G.attrs.set_edge_slice_attrs('core', 'e0', confidence=0.9)
-    G.layers.set_attrs(('t0',), when='baseline')
-    G.layers.set_node_attrs('A', ('t0',), abundance=12.5)
-    G.layers.set_aspect_attrs('phase', description='time bin')
-    G.layers.set_elementary_attrs('phase', 't0', colour='blue')
+    G.attrs.update('nodes', {'A': {'kind': 'protein'}})
+    G.attrs.update('edges', {'e0': {'assay': 'y2h'}})
+    G.attrs.update('slices', {'core': {'kind': 'curated'}})
+    G.attrs.update('edge_slices', {('core', 'e0'): {'confidence': 0.9}})
+    G.attrs.update('layers', {('t0',): {'when': 'baseline'}})
+    G.attrs.update('node_layers', {('A', ('t0',)): {'abundance': 12.5}})
+    G.attrs.update('aspects', {'phase': {'description': 'time bin'}})
+    G.attrs.update('elementary_layers', {('phase', 't0'): {'colour': 'blue'}})
     G.uns['source'] = 'a file'
     return G
 
@@ -57,20 +57,28 @@ def graph():
 
 
 def test_each_contextual_level_reads_back_what_was_written(graph):
-    assert graph.slices.attrs('core') == {'kind': 'curated'}
-    assert graph.attrs.edge_slice('core', 'e0') == {'confidence': 0.9}
-    assert graph.layers.attrs(('t0',)) == {'when': 'baseline'}
-    assert graph.layers.node_attrs('A', ('t0',)) == {'abundance': 12.5}
-    assert graph.layers.aspect_attrs('phase') == {'description': 'time bin'}
-    assert graph.layers.elementary_attrs('phase', 't0') == {'colour': 'blue'}
+    assert dict(graph.attrs.row('slices', 'core')) == {'kind': 'curated'}
+    assert dict(graph.attrs.row('edge_slices', ('core', 'e0'))) == {'confidence': 0.9}
+    assert dict(graph.attrs.row('layers', ('t0',))) == {'when': 'baseline'}
+    assert dict(graph.attrs.row('node_layers', ('A', ('t0',)))) == {'abundance': 12.5}
+    assert dict(graph.attrs.row('aspects', 'phase')) == {'description': 'time bin'}
+    assert dict(graph.attrs.row('elementary_layers', ('phase', 't0'))) == {'colour': 'blue'}
     assert graph.uns == {'source': 'a file'}
 
 
 def test_a_pair_that_carries_nothing_answers_empty(graph):
-    """The level of a contextual store is the pair, not either half of it."""
-    assert graph.attrs.edge_slice('other', 'e0') == {}
-    assert graph.layers.node_attrs('B', ('t0',)) == {}
-    assert graph.layers.attrs(('t1',)) == {}
+    """The level of a contextual store is the pair, not either half of it.
+
+    An existing pair that carries nothing is an empty row; a pair naming a
+    slice, placement or layer the graph does not hold is an error,
+    not an empty answer.
+    """
+    graph.slices.add('other')
+    assert dict(graph.attrs.row('edge_slices', ('other', 'e0'))) == {}
+    assert dict(graph.attrs.row('node_layers', ('B', ('t0',)))) == {}
+    assert dict(graph.attrs.row('layers', ('t1',))) == {}
+    with pytest.raises(KeyError, match='unknown slice'):
+        graph.attrs.row('edge_slices', ('nope', 'e0'))
 
 
 # ---------------------------------------------------------------------------
@@ -79,13 +87,13 @@ def test_a_pair_that_carries_nothing_answers_empty(graph):
 
 
 def test_a_slice_attribute_never_reaches_the_edge_table(graph):
-    rows = {row['edge_id']: row for row in graph.var.to_dicts()}
+    rows = {row['edge_id']: row for row in graph.attrs.edges.to_dicts()}
     assert rows['e0']['assay'] == 'y2h'
     assert 'confidence' not in rows['e0']
 
 
 def test_a_layer_attribute_never_reaches_the_node_table(graph):
-    rows = {row['node_id']: row for row in graph.obs.to_dicts()}
+    rows = {row['node_id']: row for row in graph.attrs.nodes.to_dicts()}
     assert rows['A']['kind'] == 'protein'
     assert 'abundance' not in rows['A']
 
@@ -96,15 +104,15 @@ def test_a_layer_attribute_never_reaches_the_node_table(graph):
 
 
 def test_an_edge_keeps_its_own_weight_when_no_slice_overrides_it(graph):
-    assert graph.get_edge('e0').weight == pytest.approx(2.0)
+    assert graph.E.at('e0').weight == pytest.approx(2.0)
     assert graph.slice_edge_weights.get('core', {}).get('e0') is None
 
 
 def test_a_slice_overrides_the_weight_of_an_edge(graph):
-    graph.attrs.set_edge_slice_attrs('core', 'e0', weight=10.0)
+    graph.attrs.update('edge_slices', {('core', 'e0'): {'weight': 10.0}})
     assert graph.slice_edge_weights['core']['e0'] == pytest.approx(10.0)
     # The override belongs to the pair, so the edge itself is untouched.
-    assert graph.get_edge('e0').weight == pytest.approx(2.0)
+    assert graph.E.at('e0').weight == pytest.approx(2.0)
 
 
 # ---------------------------------------------------------------------------
@@ -162,9 +170,9 @@ def test_the_attribute_store_still_owns_the_generic_axes():
 
 def test_forgetting_an_element_drops_the_table_that_named_it(graph):
     """The freed-slot hooks still invalidate the materialized tables."""
-    _ = graph.var
+    _ = graph.attrs.edges
     graph._attr_store.forget_edge('e0')
     assert 'edge' not in graph._attr_store._tables
-    _ = graph.obs
+    _ = graph.attrs.nodes
     graph._attr_store.forget_node(('A', ('t0',)))
     assert 'node' not in graph._attr_store._tables

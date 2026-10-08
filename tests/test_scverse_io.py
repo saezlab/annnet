@@ -27,8 +27,8 @@ def _build_multilayer_graph() -> AnnNet:
     g.add_nodes('B', layer=('treated',))
     g.add_edges(('A', ('healthy',)), ('B', ('healthy',)), edge_id='e_h')
     g.add_edges(('A', ('treated',)), ('B', ('treated',)), edge_id='e_t')
-    g.layers.set_node_attrs('A', ('healthy',), abundance=3.5)
-    g.layers.set_attrs(('healthy',), cohort='ctrl')
+    g.attrs.update('node_layers', {('A', ('healthy',)): {'abundance': 3.5}})
+    g.attrs.update('layers', {('healthy',): {'cohort': 'ctrl'}})
     return g
 
 
@@ -36,7 +36,7 @@ def test_to_anndata_roundtrip_complex_graph(complex_graph):
     adata = to_anndata(complex_graph)
 
     assert adata.n_obs == complex_graph.nv_supra
-    assert adata.n_vars == complex_graph.ne
+    assert adata.n_vars == len(complex_graph.E)
     assert sparse.issparse(adata.X)
     assert '__annnet__' in adata.uns
     assert {'source', 'target', 'weight', 'directed', 'edge_type'} <= set(adata.var.columns)
@@ -72,11 +72,11 @@ def test_from_anndata_generic_binary_graph():
 
     g = from_anndata(obs_df)
 
-    assert set(g.nodes()) == {'A', 'B', 'C'}
-    assert set(g.edges()) == {'e1', 'e2'}
+    assert set(g.N) == {'A', 'B', 'C'}
+    assert set(g.E) == {'e1', 'e2'}
     assert g.edge_weights['e2'] == 2.0
-    assert g.attrs.get_attr_edge('e1', 'relation') == 'ab'
-    assert g.attrs.get_attr_node('B', 'score') == 2.0
+    assert g.attrs.row('edges', 'e1').get('relation') == 'ab'
+    assert g.attrs.row('nodes', 'B').get('score') == 2.0
 
 
 def test_multilayer_anndata_roundtrip_preserves_supra_nodes():

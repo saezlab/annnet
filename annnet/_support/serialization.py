@@ -195,9 +195,14 @@ def serialize_multilayer_manifest(
     """
     if attached not in ATTACHED_POLICIES:
         raise ValueError(f'attached must be one of {ATTACHED_POLICIES}, got {attached!r}')
+    # The registry level itself, not the attribute address: the ordered flag is
+    # a declaration the address hides, and the file has to carry it.
     aspect_attrs = {}
+    held = graph._contextual.aspect_attrs
     for aspect in graph.aspects:
-        attrs = graph.layers.aspect_attrs(aspect)
+        attrs = {
+            name: value for name, value in (held.get(aspect) or {}).items() if value is not None
+        }
         if attrs:
             aspect_attrs[aspect] = attrs
 
@@ -216,7 +221,7 @@ def serialize_multilayer_manifest(
     node_layer_attrs = []
     for uu, layer_tuple in graph._VM_ordered():
         vm_rows.append({'node': uu, 'layer': list(layer_tuple)})
-        attrs = graph.layers.node_attrs(uu, layer_tuple)
+        attrs = dict(graph.attrs.row('node_layers', (uu, layer_tuple)))
         if attached_names:
             held = _attached_cells(backings, attached_names, uu, layer_tuple)
             if held:
@@ -226,7 +231,7 @@ def serialize_multilayer_manifest(
 
     layer_tuple_attrs = []
     for layer_tuple in graph.layers.iter_layers():
-        attrs = graph.layers.attrs(layer_tuple)
+        attrs = dict(graph.attrs.row('layers', layer_tuple))
         if attrs:
             layer_tuple_attrs.append({'layer': list(layer_tuple), 'attrs': attrs})
 
@@ -295,8 +300,15 @@ def restore_multilayer_manifest(
         return
 
     for aspect, attrs in manifest.get('aspect_attrs', {}).items():
+        if not attrs:
+            continue
+        attrs = dict(attrs)
+        # The ordered flag is a declaration of the registry, not an attribute:
+        # it goes back through the declaration's own API.
+        if '__ordered__' in attrs:
+            graph.layers.set_ordered(aspect, bool(attrs.pop('__ordered__')))
         if attrs:
-            graph.layers.set_aspect_attrs(aspect, **attrs)
+            graph.attrs.update('aspects', {aspect: attrs})
 
     # VM rows: group by normalized layer_tuple, then one bulk insert per layer.
     # Cache _normalize_layer_tuple results — the same raw layer recurs many times.
@@ -400,7 +412,7 @@ def restore_multilayer_manifest(
         layer_tuple = _normalize_layer_tuple(row.get('layer'))
         attrs = row.get('attributes') or row.get('attrs') or {}
         if layer_tuple and attrs:
-            graph.layers.set_attrs(layer_tuple, **attrs)
+            graph.attrs.update('layers', {layer_tuple: dict(attrs)})
 
     layer_attr_rows = manifest.get('layer_attributes', [])
     if layer_attr_rows:
@@ -485,7 +497,7 @@ def restore_slice_manifest(graph, slices_section: dict, slice_weights: dict):
             graph.slices.add(lid)
             known_slices.add(lid)
         if per_edge:
-            graph.attrs.set_edge_slice_attrs_bulk(
-                lid,
-                {eid: {'weight': float(weight)} for eid, weight in per_edge.items()},
+            graph.attrs.update(
+                'edge_slices',
+                {(lid, eid): {'weight': float(weight)} for eid, weight in per_edge.items()},
             )

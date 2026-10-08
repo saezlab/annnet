@@ -207,7 +207,7 @@ def _slot_edge_ref(store, edge_id: str) -> EdgeRef:
         _SLOT_EDGE_KIND.get(kind, BINARY),
         directed,
         weight,
-        store.edge_ml_kind.get(slot),
+        store.edge_ml_kind_of(slot),
         store.edge_ml_layers.get(slot),
         declared_directed,
         weight,
@@ -311,13 +311,22 @@ def entity_count(graph) -> int:
 
 
 def node_count(graph) -> int:
-    """Return how many nodes the graph holds, leaving out the edge entities."""
-    store = store_of(graph)
-    return sum(
-        1
-        for slot, _key in store.live_entities()
-        if _SLOT_ENTITY_KIND[int(store.entity_kind[slot])] == NODE
-    )
+    """Return how many node placements the graph holds, leaving out the edge entities.
+
+    One per ``(node_id, layer)`` entity, which is the supra-node count. The store
+    maintains it, so this is one read and never a walk.
+    """
+    return store_of(graph).node_layer_count
+
+
+def distinct_node_count(graph) -> int:
+    """Return how many distinct node ids the graph holds, across every layer.
+
+    This is ``len(G.N)``. The store keeps a per-id counter on a layered graph
+    and answers from the placement count on a flat one, so the cost does not
+    grow with the graph.
+    """
+    return store_of(graph).node_count
 
 
 def has_hyperedges(graph) -> bool:
@@ -331,9 +340,11 @@ def edge_count(graph) -> int:
     """Return how many edges carry structure.
 
     An edge that occupies no column holds no members, so it counts for nothing
-    here. :func:`iter_edges` leaves the same edges out.
+    here. :func:`iter_edges` leaves the same edges out. Both counts are
+    maintained by the store, so this is two reads and never a walk.
     """
-    return len(_slot_structural_edges(store_of(graph)))
+    store = store_of(graph)
+    return store.edge_count - store.placeholder_edge_count
 
 
 # ---------------------------------------------------------------------------
@@ -459,6 +470,50 @@ def _edge_directed(graph, record) -> bool:
         record.directed,
         record.tgt is not None,
     )
+
+
+def edge_entity_record(graph) -> dict:
+    """Describe the edge entities of ``graph`` in JSON-safe terms.
+
+    ``entities`` lists each edge entity with the layer coordinate it sits on,
+    ``node_edges`` the edges that join an entity to a node, and ``attributes``
+    the attributes stored under each entity's identity. A format that has no
+    place for an edge entity records this beside what it writes; a reader gives
+    it back to the graph it builds. A graph without edge entities gives ``{}``.
+    """
+    entities = [
+        {'id': ref.id, 'layer': list(ref.layer)}
+        for ref in iter_entities(graph)
+        if ref.kind == EDGE_ENTITY
+    ]
+    if not entities:
+        return {}
+    ids = [item['id'] for item in entities]
+    rows = graph.attrs.rows('edges', ids)
+    return {
+        'entities': entities,
+        'node_edges': [ref.id for ref in iter_edges(graph) if ref.kind == NODE_EDGE],
+        'attributes': {key: row for key, row in rows.items() if row},
+    }
+
+
+def binary_ends(source, target, directed) -> tuple:
+    """The two endpoints of a binary edge, in the order the edge holds them.
+
+    A directed edge keeps its direction: the source is the source and the target
+    the target, whichever sorts first. An undirected edge has no order of its
+    own, so its endpoints are sorted to make an export deterministic. A self-loop
+    names its one endpoint twice, and a half-edge (one side empty) names the
+    endpoints it has.
+    """
+    if directed and len(source) == 1 and len(target) == 1:
+        return next(iter(source)), next(iter(target))
+    members = set(source) | set(target)
+    if len(members) == 1:
+        only = next(iter(members))
+        return only, only
+    first, second = sorted(members)
+    return first, second
 
 
 def edge_ref(graph, edge_id: str) -> EdgeRef:
@@ -894,6 +949,27 @@ def entity_edges(graph, ref, direction: str = 'both') -> tuple:
     return _slot_entity_edges(store, key, direction)
 
 
+def incidence_degree(graph, ref) -> int:
+    """Return how many structural edges touch one entity.
+
+    Read off the incident-edge index the store maintains, so the cost is the
+    degree of the entity and never the size of the graph, and no matrix is
+    built. A self-loop and a hyperedge each count once, as one incident edge,
+    whatever number of roles the entity takes in them; an edge whose weight is
+    zero still touches the entity. An entity the graph does not hold has
+    degree zero.
+    """
+    store = store_of(graph)
+    slot = store.entity_slot(_slot_key(store, ref))
+    if slot is None:
+        return 0
+    incident = store._entity_edges.get(slot)
+    if not incident:
+        return 0
+    edge_kind = store.edge_kind
+    return sum(1 for edge_slot in incident if int(edge_kind[edge_slot]) != _SLOT_PLACEHOLDER)
+
+
 def edges_of_id(graph, entity_id: str) -> set:
     """Return the ids of the edges that name any entity carrying this id.
 
@@ -959,10 +1035,10 @@ def edges_between(graph, source, target) -> list:
 # ---------------------------------------------------------------------------
 # How the adapters and the file formats read an edge
 # ---------------------------------------------------------------------------
-# They were written against the record layout the core used to keep, and for one
-# cycle they read it through a five-field record kept here over the store that
-# answers now. D37 said that record would go when the last of those callers asked
-# for an :class:`EdgeRef` instead, and this is that. What they read now is the
+# They were written against the record layout the core used to keep, and for a
+# while they read it through a five-field record kept here over the store that
+# answers now. That record was to go when the last of those callers asked for an
+# :class:`EdgeRef` instead, and this is that. What they read now is the
 # reference and the two sides, which is what the store holds and one fewer shape
 # to explain.
 
@@ -975,7 +1051,7 @@ def _is_directed_eid(graph, eid):
     except (AttributeError, TypeError):
         pass
     try:
-        value = graph.attrs.get_attr_edge(eid, 'directed')
+        value = graph._attr_store.edge_attr(eid, 'directed')
         return bool(value) if value is not None else True
     except (AttributeError, KeyError, TypeError, ValueError):
         return True
@@ -988,7 +1064,7 @@ def _iter_node_ids(graph):
         return
 
     try:
-        yield from graph.nodes()
+        yield from graph.N
         return
     except AttributeError as exc:
         raise AttributeError('Graph does not expose an adapter-readable node store') from exc

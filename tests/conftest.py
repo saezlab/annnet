@@ -39,34 +39,34 @@ def complex_graph():
 
     # Nodes with attributes
     G.add_nodes('A')
-    G.attrs.set_node_attrs('A', gene='TP53', type='protein', score=0.95)
+    G.attrs.update('nodes', {'A': {'gene': 'TP53', 'type': 'protein', 'score': 0.95}})
     G.add_nodes('B')
-    G.attrs.set_node_attrs('B', gene='EGFR', type='protein', score=0.88)
+    G.attrs.update('nodes', {'B': {'gene': 'EGFR', 'type': 'protein', 'score': 0.88}})
     G.add_nodes('C')
-    G.attrs.set_node_attrs('C', gene='MYC', type='protein')
+    G.attrs.update('nodes', {'C': {'gene': 'MYC', 'type': 'protein'}})
     G.add_nodes('D')
     G.add_nodes('E')
     G.add_nodes('node with space')
 
     # Binary edges (mixed directed/undirected)
     G.add_edges('A', 'B', edge_id='e1', directed=True, weight=1.5)
-    G.attrs.set_edge_attrs('e1', relation='activates', confidence=0.9)
+    G.attrs.update('edges', {'e1': {'relation': 'activates', 'confidence': 0.9}})
 
     G.add_edges('B', 'A', edge_id='e2', directed=False, weight=2.0)
-    G.attrs.set_edge_attrs('e2', relation='interacts', confidence=0.85)
+    G.attrs.update('edges', {'e2': {'relation': 'interacts', 'confidence': 0.85}})
 
     G.add_edges('C', 'C', edge_id='loop', directed=True, weight=0.5)
-    G.attrs.set_edge_attrs('loop', relation='self_regulation')
+    G.attrs.update('edges', {'loop': {'relation': 'self_regulation'}})
 
     G.add_edges('A', 'B', edge_id='parallel', directed=True, weight=3.14)
-    G.attrs.set_edge_attrs('parallel', relation='inhibits', tag='secondary')
+    G.attrs.update('edges', {'parallel': {'relation': 'inhibits', 'tag': 'secondary'}})
 
     # Hyperedges
     G.add_edges(src=['B', 'C'], tgt=['A'], edge_id='h1', directed=True, weight=0.7)
-    G.attrs.set_edge_attrs('h1', pathway='signaling', complex='ABC')
+    G.attrs.update('edges', {'h1': {'pathway': 'signaling', 'complex': 'ABC'}})
 
     G.add_edges(src=['A', 'D', 'E'], edge_id='h2', directed=False, weight=5.0)
-    G.attrs.set_edge_attrs('h2', complex='trimer', stability=0.75)
+    G.attrs.update('edges', {'h2': {'complex': 'trimer', 'stability': 0.75}})
 
     # slices
     G.slices.add('core')
@@ -80,8 +80,8 @@ def complex_graph():
     G.slices.add_edge_to_slice('regulatory', 'loop')
 
     # Per-slice weights
-    G.attrs.set_edge_slice_attrs('core', 'e1', weight=10.0)
-    G.attrs.set_edge_slice_attrs('signaling', 'h1', weight=0.33)
+    G.attrs.update('edge_slices', {('core', 'e1'): {'weight': 10.0}})
+    G.attrs.update('edge_slices', {('signaling', 'h1'): {'weight': 0.33}})
 
     return G
 
@@ -102,10 +102,10 @@ def tmpdir_fixture():
 def assert_graphs_equal(G1, G2, check_slices=True, check_hyperedges=True):
     """Assert two graphs are structurally identical."""
     # Nodes
-    assert set(G1.nodes()) == set(G2.nodes()), 'Node sets differ'
+    assert set(G1.N) == set(G2.N), 'Node sets differ'
 
     # Edge count
-    assert G1.ne == G2.ne, 'Edge counts differ'
+    assert len(G1.E) == len(G2.E), 'Edge counts differ'
 
     # Edge IDs
     assert set(G1.E) == set(G2.E), 'Edge IDs differ'
@@ -151,8 +151,8 @@ def assert_graphs_equal(G1, G2, check_slices=True, check_hyperedges=True):
 
 def assert_node_attrs_equal(G1, G2, node_id, ignore_none=True):
     """Assert node attributes are equal."""
-    attrs1 = G1.attrs.get_node_attrs(node_id) or {}
-    attrs2 = G2.attrs.get_node_attrs(node_id) or {}
+    attrs1 = dict(G1.attrs.row('nodes', node_id)) or {}
+    attrs2 = dict(G2.attrs.row('nodes', node_id)) or {}
 
     if ignore_none:
         attrs1 = {k: v for k, v in attrs1.items() if v is not None}
@@ -217,8 +217,8 @@ def build_adapter_graph() -> AnnNet:
     g.add_edges(src=['A', 'B'], tgt=['C'], weight=0.5, interaction=+1)
 
     g.slices.add('Lw', region='EMEA')
-    g.attrs.set_edge_slice_attrs('Lw', e1, weight=5.0)
+    g.attrs.update('edge_slices', {('Lw', e1): {'weight': 5.0}})
     g.slices.add('L0')
 
-    assert g.ne >= 3
+    assert len(g.E) >= 3
     return g

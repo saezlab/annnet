@@ -32,7 +32,9 @@ from ._shared.common import (
     serialize_multilayer_manifest,
 )
 from ._shared.sidecar import restores, preserves
+from ..core._structure import edge_entity_record
 from ._shared.importing import delivers
+from .._support.entities import restore_entities
 from ._shared.contextual import contextual_payload, restore_contextual
 
 if TYPE_CHECKING:
@@ -64,7 +66,7 @@ def _is_directed_eid(graph, eid):
         return bool(graph.edge_directed[eid])
 
     # Check attribute
-    val = graph.attrs.get_attr_edge(eid, 'directed', None)
+    val = graph.attrs.row('edges', eid).get('directed', None)
     if val is not None:
         return bool(val)
 
@@ -185,7 +187,7 @@ def to_parquet(graph: AnnNet, path):
     # nodes
     v_attr_map = _build_attr_map(getattr(graph, '_node_table', None), 'node_id')
     v_rows = []
-    for v in graph.nodes():
+    for v in list(graph.N):
         row = {'node_id': v}
         attrs = v_attr_map.get(v)
         if attrs:
@@ -334,6 +336,7 @@ def to_parquet(graph: AnnNet, path):
             serialize_edge_layers=serialize_edge_layers,
         ),
         'contextual': contextual_payload(graph),
+        'edge_entities': edge_entity_record(graph),
         'uns': dict((getattr(graph, 'uns', {}) or {}).items()),
     }
     (path / 'manifest.json').write_text(json.dumps(manifest, indent=2))
@@ -456,7 +459,7 @@ def from_parquet(path) -> AnnNet:
             if attrs:
                 extra_binary_attrs[eid] = attrs
         if extra_binary_attrs:
-            H.attrs.set_edge_attrs_bulk(extra_binary_attrs)
+            H.attrs.update('edges', extra_binary_attrs)
 
     else:
         # Fallback path (still bulk, but from Python rows)
@@ -483,7 +486,7 @@ def from_parquet(path) -> AnnNet:
         if edge_rows:
             H._add_edges_bulk(edge_rows)
             if extra_attrs:
-                H.attrs.set_edge_attrs_bulk(extra_attrs)
+                H.attrs.update('edges', extra_attrs)
 
     # ---- Hyperedges ----
     if is_polars_like:
@@ -562,7 +565,7 @@ def from_parquet(path) -> AnnNet:
             if attrs:
                 extra[eid] = attrs
         if extra:
-            H.attrs.set_edge_attrs_bulk(extra)
+            H.attrs.update('edges', extra)
 
     else:
         hyper_rows = []
@@ -601,7 +604,7 @@ def from_parquet(path) -> AnnNet:
         if hyper_rows:
             H.add_hyperedges_bulk(hyper_rows)
             if extra_attrs:
-                H.attrs.set_edge_attrs_bulk(extra_attrs)
+                H.attrs.update('edges', extra_attrs)
 
     # -------------------------
     # Slices
@@ -636,9 +639,7 @@ def from_parquet(path) -> AnnNet:
         # would rebuild the edge_slice_attributes dataframe per call.
         for lid, mp in slice_weights.items():
             if mp:
-                H.attrs.set_edge_slice_attrs_bulk(
-                    lid, {eid: {'weight': w} for eid, w in mp.items()}
-                )
+                H.attrs.update('edge_slices', {(lid, eid): {'weight': w} for eid, w in mp.items()})
 
     # -------------------------
     # Manifest (unchanged)
@@ -646,6 +647,7 @@ def from_parquet(path) -> AnnNet:
     manifest_path = path / 'manifest.json'
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text())
+        restore_entities(H, manifest.get('edge_entities'))
         restore_contextual(H, manifest.get('contextual') or {})
         H.graph_attributes.update(manifest.get('uns') or {})
         restore_multilayer_manifest(

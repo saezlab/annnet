@@ -210,12 +210,11 @@ class _DummyAttrs:
     def __init__(self, graph):
         self._graph = graph
 
-    def set_edge_attrs(self, edge_id, **attrs):
-        self._graph._set_edge_attrs(edge_id, **attrs)
-
-    def set_edge_attrs_bulk(self, updates):
-        for edge_id, attrs in updates.items():
-            self.set_edge_attrs(edge_id, **attrs)
+    def update(self, address, updates):
+        assert address == 'edges'
+        for edge_id, attrs in dict(updates).items():
+            self._graph._set_edge_attrs(edge_id, **attrs)
+        return len(updates)
 
 
 class _DummySlices:

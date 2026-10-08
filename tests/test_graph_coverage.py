@@ -27,21 +27,21 @@ def _toy() -> AnnNet:
 def test_add_nodes_with_dict_entries_uses_attrs() -> None:
     G = AnnNet(directed=True)
     G.add_nodes([{'node_id': 'A', 'color': 'red'}, {'node_id': 'B'}])
-    assert set(G.nodes()) == {'A', 'B'}
-    assert G.attrs.get_attr_node('A', 'color') == 'red'
+    assert set(G.N) == {'A', 'B'}
+    assert G.attrs.row('nodes', 'A').get('color') == 'red'
 
 
 def test_add_nodes_with_tuple_entries_uses_attrs() -> None:
     G = AnnNet(directed=True)
     G.add_nodes([('A', {'color': 'red'}), 'B'])
-    assert set(G.nodes()) == {'A', 'B'}
+    assert set(G.N) == {'A', 'B'}
 
 
 def test_add_node_singular_creates_one_node() -> None:
     """The compact ``add_nodes('A')`` form must create exactly one node."""
     G = AnnNet(directed=True)
     G.add_nodes('A')
-    assert set(G.nodes()) == {'A'}
+    assert set(G.N) == {'A'}
 
 
 # ── make_undirected branches ──────────────────────────────────────────
@@ -115,9 +115,9 @@ def test_edge_kind_setter_marks_ml_kind_for_non_hyper() -> None:
 
 def test_edge_kind_setter_ignores_unknown_eid() -> None:
     G = _toy()
-    before = {eid: S.edge_ref(G, eid).kind for eid in G.edges()}
+    before = {eid: S.edge_ref(G, eid).kind for eid in list(G.E)}
     G.edge_kind = {'unknown-eid': 'hyper'}
-    assert {eid: S.edge_ref(G, eid).kind for eid in G.edges()} == before
+    assert {eid: S.edge_ref(G, eid).kind for eid in list(G.E)} == before
 
 
 def test_edge_definitions_setter_updates_src_tgt_etype() -> None:
@@ -204,8 +204,8 @@ def test_set_node_key_rejects_empty_field_list() -> None:
 def test_set_node_key_rebuilds_index_from_existing_attrs() -> None:
     G = AnnNet(directed=True)
     G.add_nodes(['A', 'B'])
-    G.attrs.set_node_attrs('A', symbol='TP53')
-    G.attrs.set_node_attrs('B', symbol='MYC')
+    G.attrs.update('nodes', {'A': {'symbol': 'TP53'}})
+    G.attrs.update('nodes', {'B': {'symbol': 'MYC'}})
     G.set_node_key('symbol')
     assert G._node_key_index[('TP53',)] == 'A'
     assert G._node_key_index[('MYC',)] == 'B'
@@ -214,8 +214,8 @@ def test_set_node_key_rebuilds_index_from_existing_attrs() -> None:
 def test_set_node_key_detects_conflict_on_existing_attrs() -> None:
     G = AnnNet(directed=True)
     G.add_nodes(['A', 'B'])
-    G.attrs.set_node_attrs('A', symbol='TP53')
-    G.attrs.set_node_attrs('B', symbol='TP53')  # collision
+    G.attrs.update('nodes', {'A': {'symbol': 'TP53'}})
+    G.attrs.update('nodes', {'B': {'symbol': 'TP53'}})  # collision
     with pytest.raises(ValueError, match='Composite key conflict'):
         G.set_node_key('symbol')
 
@@ -231,9 +231,9 @@ def test_remove_edges_with_unknown_id_raises_by_default() -> None:
 
 def test_remove_edges_with_errors_ignore_silently_skips_unknown() -> None:
     G = _toy()
-    before = sorted(G.edges())
+    before = sorted(G.E)
     G.remove_edges('not-an-edge', errors='ignore')
-    assert sorted(G.edges()) == before
+    assert sorted(G.E) == before
 
 
 def test_remove_edges_rejects_invalid_errors_value() -> None:
@@ -245,7 +245,7 @@ def test_remove_edges_rejects_invalid_errors_value() -> None:
 def test_remove_edges_bulk_removes_each_edge() -> None:
     G = _toy()
     G.remove_edges(['e1', 'e2'])
-    assert G.ne == 0
+    assert len(G.E) == 0
 
 
 def test_remove_edge_leaves_no_query_that_still_finds_it() -> None:
@@ -253,7 +253,7 @@ def test_remove_edge_leaves_no_query_that_still_finds_it() -> None:
     G.add_nodes(['A', 'B'])
     G.add_edges('A', 'B', edge_id='e1')
 
-    G.remove_edge('e1')
+    G.remove_edges('e1')
 
     assert G.has_edge('A', 'B') == (False, [])
     assert G.incident_edges('A') == []
@@ -268,9 +268,9 @@ def test_remove_nodes_with_unknown_id_raises_by_default() -> None:
 
 def test_remove_nodes_with_errors_ignore_silently_skips() -> None:
     G = _toy()
-    before = sorted(G.nodes())
+    before = sorted(G.N)
     G.remove_nodes('not-a-node', errors='ignore')
-    assert sorted(G.nodes()) == before
+    assert sorted(G.N) == before
 
 
 def test_remove_nodes_rejects_invalid_errors_value() -> None:
@@ -283,7 +283,7 @@ def test_remove_nodes_cascades_incident_edges() -> None:
     G = _toy()
     G.remove_nodes('A')
     # e1 (A,B) is gone; e2 (B,C) survives.
-    assert 'A' not in G.nodes()
+    assert 'A' not in list(G.N)
     assert not S.has_edge(G, 'e1')
     assert S.has_edge(G, 'e2')
 
@@ -310,7 +310,7 @@ def test_remove_node_cascades_multilayer_hyperedge_with_supra_member_storage() -
 def test_remove_nodes_bulk_removes_each() -> None:
     G = _toy()
     G.remove_nodes(['A', 'B'])
-    assert set(G.nodes()) == {'C'}
+    assert set(G.N) == {'C'}
 
 
 # ── add_edges_to_slice batch ──────────────────────────────────────────
@@ -395,13 +395,13 @@ def test_add_edges_as_entity_promotes_to_edge_entity() -> None:
 
 def test_remove_edge_singular_raises_for_unknown() -> None:
     G = _toy()
-    with pytest.raises(KeyError, match='not found'):
-        G.remove_edge('no-such')
+    with pytest.raises(KeyError, match='Unknown edge'):
+        G.remove_edges('no-such')
 
 
 def test_remove_edge_singular_drops_the_edge() -> None:
     G = _toy()
-    G.remove_edge('e1')
+    G.remove_edges('e1')
     assert not S.has_edge(G, 'e1')
 
 
@@ -413,7 +413,7 @@ def test_remove_edge_leaves_no_query_that_still_finds_it_in_a_layer() -> None:
     tgt = ('B', ('t1',))
     G.add_edges(src, tgt, edge_id='e1')
 
-    G.remove_edge('e1')
+    G.remove_edges('e1')
 
     assert G.has_edge(src, tgt) == (False, [])
     assert G.incident_edges(src) == []
@@ -440,7 +440,7 @@ def test_removing_the_edge_of_an_edge_entity_removes_the_entity_too() -> None:
     # e_meta held the entity as an endpoint, so it goes the way an edge goes when
     # one of its nodes is removed.
     assert G.has_edge(edge_id='e_meta') is False
-    assert sorted(G.nodes()) == ['A', 'B', 'C']
+    assert sorted(G.N) == ['A', 'B', 'C']
 
 
 def test_removing_an_edge_that_names_an_edge_entity_leaves_the_entity_alone() -> None:
@@ -457,8 +457,8 @@ def test_removing_every_node_of_an_edge_entity_graph_empties_it() -> None:
 
     G.remove_nodes(['A', 'B', 'C'])
 
-    assert G.nv == 0
-    assert G.ne == 0
+    assert len(G.N) == 0
+    assert len(G.E) == 0
     assert G.validate(strict=False) == []
 
 
@@ -503,8 +503,8 @@ def test_the_edge_an_entity_was_given_is_replaced_by_its_definition() -> None:
 
 def test_remove_node_singular_cascades_incident_edges() -> None:
     G = _toy()
-    G.remove_node('B')
-    assert 'B' not in G.nodes()
+    G.remove_nodes('B')
+    assert 'B' not in list(G.N)
     # both e1 (A,B) and e2 (B,C) had B as endpoint → both gone.
     assert not S.has_edge(G, 'e1')
     assert not S.has_edge(G, 'e2')
@@ -516,13 +516,13 @@ def test_remove_node_singular_cascades_incident_edges() -> None:
 def test_remove_all_edges_via_bulk_with_empty_iterable_is_noop() -> None:
     G = _toy()
     G.remove_edges([])
-    assert G.ne == 2
+    assert len(G.E) == 2
 
 
 def test_remove_all_nodes_via_bulk_with_empty_iterable_is_noop() -> None:
     G = _toy()
     G.remove_nodes([])
-    assert G.nv == 3
+    assert len(G.N) == 3
 
 
 # ── add_nodes key-form branches ────────────────────────────────────
@@ -531,20 +531,20 @@ def test_remove_all_nodes_via_bulk_with_empty_iterable_is_noop() -> None:
 def test_add_nodes_single_dict_with_node_id_key() -> None:
     G = AnnNet(directed=True)
     G.add_nodes({'node_id': 'A', 'color': 'red'})
-    assert 'A' in G.nodes()
-    assert G.attrs.get_attr_node('A', 'color') == 'red'
+    assert 'A' in list(G.N)
+    assert G.attrs.row('nodes', 'A').get('color') == 'red'
 
 
 def test_add_nodes_single_dict_with_id_key() -> None:
     G = AnnNet(directed=True)
     G.add_nodes({'id': 'A'})
-    assert 'A' in G.nodes()
+    assert 'A' in list(G.N)
 
 
 def test_add_nodes_single_dict_with_name_key() -> None:
     G = AnnNet(directed=True)
     G.add_nodes({'name': 'A'})
-    assert 'A' in G.nodes()
+    assert 'A' in list(G.N)
 
 
 def test_add_nodes_single_dict_without_known_key_raises() -> None:
@@ -556,7 +556,7 @@ def test_add_nodes_single_dict_without_known_key_raises() -> None:
 def test_add_nodes_single_tuple_form() -> None:
     G = AnnNet(directed=True)
     G.add_nodes(('A', {'color': 'red'}))
-    assert 'A' in G.nodes()
+    assert 'A' in list(G.N)
 
 
 def test_add_nodes_bulk_returns_ids_in_input_order() -> None:

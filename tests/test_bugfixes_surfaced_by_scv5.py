@@ -1,8 +1,8 @@
 """Regressions for two bugs surfaced during SCV-5 coverage work.
 
 1. ``hash(G.ops)`` raised ``AttributeError`` because
-   ``OperationsAccessor.__hash__`` was looking up ``self.nodes()`` /
-   ``self.ne`` / ``self.get_edge()`` etc. on itself instead of on the
+   ``OperationsAccessor.__hash__`` was looking up ``list(self.N)`` /
+   ``len(self.E)`` / ``self.get_edge()`` etc. on itself instead of on the
    wrapped graph ``self._G``.
 
 2. ``G.views.layers_view()`` always returned the empty placeholder for
@@ -77,15 +77,15 @@ def test_views_layers_view_returns_real_rows_on_multilayer_graph() -> None:
     G = AnnNet(directed=True)
     G.layers.set_aspects(['condition'], {'condition': ['healthy', 'treated']})
     G.add_nodes(['A'], layer={'condition': 'healthy'})
-    df = G.views.layers_view()
+    df = G.attrs.table('layers', derived=True)
     # Two elementary layers should produce two rows.
     height = df.height if hasattr(df, 'height') else len(df)
     assert height == 2
 
-    # The aspect column should be present alongside layer_tuple / layer_id.
+    # The aspect column should be present alongside layer / coordinate_id.
     cols = list(df.columns) if hasattr(df, 'columns') else list(df.schema.keys())
-    assert 'layer_tuple' in cols
-    assert 'layer_id' in cols
+    assert 'layer' in cols
+    assert 'coordinate_id' in cols
     assert 'condition' in cols
 
 
@@ -93,6 +93,6 @@ def test_views_layers_view_empty_for_flat_graph() -> None:
     """Flat (single-aspect placeholder) graphs still get the empty shape."""
     G = AnnNet(directed=False)
     G.add_nodes(['A'])
-    df = G.views.layers_view()
+    df = G.attrs.table('layers', derived=True)
     height = df.height if hasattr(df, 'height') else len(df)
     assert height == 0

@@ -28,7 +28,7 @@ def test_remove_nodes_errors_ignore_restores_legacy_behavior():
     G = AnnNet(directed=False)
     G.add_nodes(['A', 'B'])
     G.remove_nodes(['NOPE', 'A'], errors='ignore')
-    assert set(G.nodes()) == {'B'}
+    assert set(G.N) == {'B'}
 
 
 def test_remove_edges_raises_on_unknown_id_by_default():
@@ -44,7 +44,7 @@ def test_remove_edges_errors_ignore_restores_legacy_behavior():
     G.add_nodes(['A', 'B', 'C'])
     G.add_edges([('A', 'B'), ('B', 'C')])
     G.remove_edges(['edge_0', 'nope'], errors='ignore')
-    assert len(G.edges()) == 1
+    assert len(list(G.E)) == 1
 
 
 def test_add_edges_missing_target_raises_value_error_with_index():
