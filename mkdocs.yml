@@ -7,6 +7,8 @@ exclude_docs: |
     tutorials/**
 theme:
     name: material
+    custom_dir: overrides
+    favicon: assets/favicon.ico
     font:
         text: Lato
         code: Roboto Mono
@@ -17,14 +19,14 @@ theme:
     -   navigation.footer
     palette:
     -   scheme: default
-        primary: teal
-        accent: light blue
+        primary: custom
+        accent: custom
         toggle:
             icon: material/toggle-switch
             name: Switch to dark mode
     -   scheme: slate
-        primary: teal
-        accent: light blue
+        primary: custom
+        accent: custom
         toggle:
             icon: material/toggle-switch-off
             name: Switch to light mode
@@ -168,6 +170,8 @@ hooks:
   - tools/mkdocs_hooks.py
 
 extra_css:
+  - assets/palette-sysbioverse.css
+  - assets/docs-theme.css
   - assets/overrides.css
 
 copyright: © Copyright 2021-2026, Saez-lab development team.

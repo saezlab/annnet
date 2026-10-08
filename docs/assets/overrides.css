@@ -5,7 +5,7 @@
   --annnet-surface: color-mix(in srgb, var(--md-default-bg-color) 86%, var(--md-primary-fg-color) 14%);
   --annnet-surface-strong: color-mix(in srgb, var(--md-default-bg-color) 74%, var(--md-primary-fg-color) 26%);
   --annnet-border: color-mix(in srgb, var(--md-primary-fg-color) 18%, transparent);
-  --annnet-shadow: 0 18px 40px rgba(7, 33, 41, 0.09);
+  --annnet-shadow: none;
 }
 
 .md-grid {
@@ -13,7 +13,7 @@
 }
 
 .md-typeset {
-  --md-code-font-size: 0.68rem;
+  --md-code-font-size: 0.765rem;
 }
 
 .md-typeset pre,
@@ -66,7 +66,7 @@
 .output pre,
 .cell_output pre {
   font-family: var(--md-code-font) !important;
-  font-size: 0.68rem !important;
+  font-size: var(--md-code-font-size) !important;
   font-variant-ligatures: none !important;
 }
 
@@ -163,9 +163,9 @@
 /* Make links clearly clickable */
 .md-typeset a,
 .md-nav__link {
-  color: var(--md-primary-fg-color);
+  color: var(--md-typeset-a-color);
   text-decoration: underline;
-  text-decoration-thickness: 2px;
+  text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
 }
 
@@ -175,25 +175,24 @@
   text-decoration-color: var(--md-accent-fg-color);
 }
 
-/* Simple badges */
+/* Simple badges: solid labels, as .sv-label in docs-theme.css */
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   padding: 0.2rem 0.55rem;
-  border: 1px solid var(--md-primary-fg-color);
-  border-radius: 999px;
+  border: none;
+  border-radius: 0;
   font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--md-primary-fg-color);
-  background: color-mix(in srgb, var(--md-primary-fg-color) 12%, transparent);
+  font-weight: 700;
+  color: #FFFFFF;
+  background: var(--sv-main);
   text-decoration: none;
 }
 
 .badge:hover {
-  color: var(--md-accent-fg-color);
-  border-color: var(--md-accent-fg-color);
-  background: color-mix(in srgb, var(--md-accent-fg-color) 16%, transparent);
+  color: var(--sv-accent-fg);
+  background: var(--sv-accent);
 }
 
 /* Landing page and docs marketing blocks */
@@ -202,12 +201,9 @@
   overflow: hidden;
   padding: 2rem;
   margin: 0 0 1.5rem;
-  border: 1px solid var(--annnet-border);
-  border-radius: 1.5rem;
-  background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--md-accent-fg-color) 22%, transparent), transparent 34%),
-    linear-gradient(135deg, color-mix(in srgb, var(--md-primary-fg-color) 10%, var(--md-default-bg-color)) 0%, var(--md-default-bg-color) 62%, color-mix(in srgb, var(--md-accent-fg-color) 10%, var(--md-default-bg-color)) 100%);
-  box-shadow: var(--annnet-shadow);
+  border: none;
+  border-radius: 0;
+  background: var(--sv-main-light);
 }
 
 .annnet-hero > * {
@@ -218,11 +214,11 @@
 .annnet-kicker {
   display: inline-flex;
   align-items: center;
-  padding: 0.35rem 0.75rem;
+  padding: 0.2rem 0.6rem;
   margin-bottom: 1rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--md-primary-fg-color) 14%, transparent);
-  color: var(--md-primary-fg-color);
+  border-radius: 0;
+  background: var(--sv-main);
+  color: #FFFFFF;
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -249,11 +245,7 @@
 
 .annnet-actions .md-button {
   margin: 0;
-  border-radius: 999px;
-}
-
-.annnet-actions .md-button--primary {
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--md-primary-fg-color) 22%, transparent);
+  border-radius: 0;
 }
 
 .md-typeset .annnet-feature-cards {
@@ -265,10 +257,10 @@
 }
 
 .md-typeset .annnet-feature-cards > ul > li {
-  border: 1px solid var(--annnet-border);
-  border-radius: 1.1rem;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--md-default-bg-color) 92%, var(--md-primary-fg-color) 8%), var(--md-default-bg-color));
-  box-shadow: var(--annnet-shadow);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0;
+  background: var(--md-default-bg-color);
+  box-shadow: none;
 }
 
 .md-typeset .annnet-feature-cards > ul > li > p:last-child {
@@ -289,9 +281,9 @@
 }
 
 .md-typeset .annnet-mini-feature-cards > ul > li {
-  border: 1px solid var(--annnet-border);
-  border-radius: 1rem;
-  background: var(--annnet-surface);
+  border: none;
+  border-radius: 0;
+  background: var(--sv-main-light);
   box-shadow: none;
 }
 
@@ -306,9 +298,10 @@
 .annnet-callout {
   padding: 1rem 1.15rem;
   margin: 1.25rem 0;
-  border-left: 4px solid var(--md-primary-fg-color);
-  border-radius: 0.9rem;
-  background: var(--annnet-surface);
+  border: 1px solid var(--sv-main);
+  border-left-width: 5px;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--sv-main) 6%, var(--md-default-bg-color));
 }
 
 .annnet-visual {
@@ -317,14 +310,13 @@
 
 .annnet-visual img {
   width: 100%;
-  border-radius: 1rem;
+  border-radius: 0;
   border: 1px solid var(--annnet-border);
 }
 
 @media screen and (max-width: 760px) {
   .annnet-hero {
     padding: 1.4rem;
-    border-radius: 1.15rem;
   }
 
   .annnet-lead {
