@@ -1,5 +1,5 @@
 <div class="annnet-hero">
-  <div class="annnet-kicker">Typed graph data for complex networks</div>
+  <div class="annnet-kicker">Annotated data structure for complex networks</div>
   <h1>annnet</h1>
   <p class="annnet-lead">
     annnet (Annotated Network) is a high-expressivity data structure for
