@@ -22,13 +22,13 @@ theme:
         primary: custom
         accent: custom
         toggle:
-            icon: material/toggle-switch
+            icon: material/brightness-7
             name: Switch to dark mode
     -   scheme: slate
         primary: custom
         accent: custom
         toggle:
-            icon: material/toggle-switch-off
+            icon: material/brightness-4
             name: Switch to light mode
 
 #=======    Website Navigation settings   =====
@@ -174,4 +174,4 @@ extra_css:
   - assets/docs-theme.css
   - assets/overrides.css
 
-copyright: © Copyright 2021-2026, Saez-lab development team.
+copyright: "&copy; 2025&ndash;2026 Saez lab, Korcsmaros lab &amp; sysbioverse contributors"

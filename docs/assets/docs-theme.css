@@ -59,6 +59,18 @@
   max-width: var(--sv-measure);
 }
 
+/* The same limit for the text cells of notebooks (mkdocs-jupyter) */
+.md-typeset .jp-MarkdownOutput > p,
+.md-typeset .jp-MarkdownOutput > ul,
+.md-typeset .jp-MarkdownOutput > ol,
+.md-typeset .jp-MarkdownOutput > blockquote,
+.md-typeset .jp-MarkdownOutput > h1,
+.md-typeset .jp-MarkdownOutput > h2,
+.md-typeset .jp-MarkdownOutput > h3,
+.md-typeset .jp-MarkdownOutput > h4 {
+  max-width: var(--sv-measure);
+}
+
 /* A paragraph with only an image is a figure: keep the full width */
 .md-typeset > p:has(> img:only-child),
 .md-typeset > p:has(> a:only-child > img:only-child) {
@@ -78,8 +90,11 @@
   display: none;
 }
 
-.md-header__title {
-  margin-left: 1rem;
+/* The title starts at the same left edge as the navigation tabs */
+[dir] .md-header__title {
+  margin-left: 0.6rem;
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .md-header__site-link,
@@ -91,6 +106,52 @@
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
+}
+
+/* Navigation tabs: bold, full white; the active tab is underlined */
+.md-tabs__link {
+  font-size: 0.8rem;
+  font-weight: 700;
+  opacity: 1;
+}
+
+.md-tabs__item--active .md-tabs__link {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.35em;
+}
+
+.md-tabs__link:hover {
+  opacity: 1;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.35em;
+}
+
+/* ---- Side navigation and table of contents ------------------------ */
+
+/* Every item is a link, so an underline adds nothing */
+.md-nav__link,
+.md-nav__link:hover {
+  text-decoration: none;
+}
+
+/*
+ * Hide the left navigation when it would list only the current page
+ * (a top-level page with no sub-pages, e.g. Home or Installation).
+ * Only on wide screens: on narrow screens the same element is the
+ * navigation drawer.
+ */
+@media screen and (min-width: 76.25em) {
+  .md-sidebar--primary:has(.md-nav--primary > .md-nav__list > .md-nav__item--active:not(.md-nav__item--nested)) {
+    visibility: hidden;
+  }
+}
+
+/* Buttons are links that need no underline */
+.md-typeset a.md-button,
+.md-typeset a.md-button:hover {
+  text-decoration: none;
 }
 
 /* ---- Square corners everywhere ------------------------------------ */

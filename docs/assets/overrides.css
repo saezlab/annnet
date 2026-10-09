@@ -161,16 +161,14 @@
 }
 
 /* Make links clearly clickable */
-.md-typeset a,
-.md-nav__link {
+.md-typeset a {
   color: var(--md-typeset-a-color);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
 }
 
-.md-typeset a:hover,
-.md-nav__link:hover {
+.md-typeset a:hover {
   color: var(--md-accent-fg-color);
   text-decoration-color: var(--md-accent-fg-color);
 }
@@ -228,6 +226,38 @@
 .annnet-hero h1,
 .annnet-section-heading {
   margin-top: 0;
+}
+
+.annnet-hero h1 {
+  margin-bottom: 0.3em;
+}
+
+/* Get started: one row per entry, button on the left, what it is for on the right */
+.annnet-start {
+  margin-top: 1.5rem;
+}
+
+.annnet-start-title {
+  margin: 0 0 0.6rem;
+  font-weight: 700;
+}
+
+.annnet-start-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.6rem 1rem;
+  align-items: center;
+}
+
+.annnet-start-list .md-button {
+  margin: 0;
+  width: 100%;
+  text-align: center;
+  border-radius: 0;
+}
+
+.annnet-start-list p {
+  margin: 0;
 }
 
 .annnet-lead {
