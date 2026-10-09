@@ -1,0 +1,1093 @@
+{
+  "trees": {
+    "working": {
+      "label": "working",
+      "annnet_version": "0.4.0",
+      "environment": {
+        "timestamp_utc": "2026-09-30T13:34:57.295216+00:00",
+        "git_commit": "8e6fc75",
+        "python": "3.13.9",
+        "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+        "processor": "x86_64",
+        "cpu": {
+          "logical": 6,
+          "affinity": 6
+        },
+        "libraries": {
+          "networkx": "3.5",
+          "igraph": "1.0.0",
+          "graph_tool": null,
+          "numpy": "2.3.5",
+          "scipy": "1.16.3",
+          "polars": "1.35.2",
+          "pandas": "2.3.3",
+          "pyarrow": "22.0.0"
+        }
+      },
+      "workload": {
+        "n_nodes": 5000,
+        "n_edges": 20000,
+        "seed": 4
+      },
+      "sections": {
+        "cold_start": [
+          {
+            "name": "cold_start",
+            "runs": 9,
+            "library": "annnet",
+            "import_s": {
+              "min": 0.08448494199546985,
+              "median": 0.08810148399788886,
+              "max": 0.09501206301501952
+            },
+            "first_construct_s": {
+              "min": 0.29473154799779877,
+              "median": 0.31712782199610956,
+              "max": 0.3658145870140288
+            },
+            "second_construct_s": {
+              "min": 0.00010746202315203846,
+              "median": 0.00011842799722217023,
+              "max": 0.0001832490088418126
+            },
+            "modules_loaded": 530,
+            "dataframe_libraries_loaded": []
+          },
+          {
+            "name": "cold_start_libraries_preloaded",
+            "runs": 9,
+            "library": "annnet",
+            "import_s": {
+              "min": 0.048177315009525046,
+              "median": 0.05068066800595261,
+              "max": 0.056260445999214426
+            },
+            "first_construct_s": {
+              "min": 0.22808280101162381,
+              "median": 0.24020103298244067,
+              "max": 0.26818808499956504
+            },
+            "second_construct_s": {
+              "min": 9.566100197844207e-05,
+              "median": 0.00011359000927768648,
+              "max": 0.00026955001521855593
+            },
+            "modules_loaded": 1045,
+            "dataframe_libraries_loaded": [
+              "pandas",
+              "polars",
+              "pyarrow"
+            ]
+          }
+        ],
+        "flat_costs": [
+          {
+            "name": "construct_empty",
+            "warm": {
+              "min_s": 5.2794630658436216e-05,
+              "median_s": 5.3668432098765434e-05,
+              "mean_s": 5.405172824808936e-05,
+              "stdev_s": 1.0066340970144721e-06,
+              "p95_s": 5.543891275720164e-05,
+              "samples": 7,
+              "inner": 972,
+              "total_calls": 6804
+            },
+            "library": "annnet"
+          },
+          {
+            "name": "construct_empty",
+            "warm": {
+              "min_s": 9.069135590719634e-07,
+              "median_s": 9.222494559403932e-07,
+              "mean_s": 9.271663900261887e-07,
+              "stdev_s": 1.7360154451929715e-08,
+              "p95_s": 9.548165818302533e-07,
+              "samples": 7,
+              "inner": 54222,
+              "total_calls": 379554
+            },
+            "library": "networkx"
+          },
+          {
+            "name": "count_nodes",
+            "warm": {
+              "min_s": 4.0941287562241025e-07,
+              "median_s": 4.106913062780738e-07,
+              "mean_s": 4.107142210482856e-07,
+              "stdev_s": 8.301027694459606e-10,
+              "p95_s": 4.11862814251889e-07,
+              "samples": 7,
+              "inner": 229752,
+              "total_calls": 1608264
+            },
+            "library": "annnet",
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "count_edges",
+            "warm": {
+              "min_s": 4.039842850166706e-07,
+              "median_s": 4.0559121257535446e-07,
+              "mean_s": 4.055782700107288e-07,
+              "stdev_s": 1.0050960566440534e-09,
+              "p95_s": 4.070229224901492e-07,
+              "samples": 7,
+              "inner": 237544,
+              "total_calls": 1662808
+            },
+            "library": "annnet",
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "count_nodes",
+            "warm": {
+              "min_s": 9.734028164780874e-08,
+              "median_s": 9.998828554671274e-08,
+              "mean_s": 9.971561675646132e-08,
+              "stdev_s": 2.266521803641182e-09,
+              "p95_s": 1.0303353318347183e-07,
+              "samples": 7,
+              "inner": 958218,
+              "total_calls": 6707526
+            },
+            "library": "networkx",
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "count_edges",
+            "warm": {
+              "min_s": 0.0005224035,
+              "median_s": 0.0005247660584415584,
+              "mean_s": 0.0005257037189239333,
+              "stdev_s": 2.1612085263344145e-06,
+              "p95_s": 0.0005284049512987013,
+              "samples": 7,
+              "inner": 154,
+              "total_calls": 1078
+            },
+            "library": "networkx",
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "degree_one_node",
+            "warm": {
+              "min_s": 1.567767092154421e-06,
+              "median_s": 1.589621513075965e-06,
+              "mean_s": 1.5887132894502757e-06,
+              "stdev_s": 1.4341944811720192e-08,
+              "p95_s": 1.6092036892901619e-06,
+              "samples": 7,
+              "inner": 32120,
+              "total_calls": 224840
+            },
+            "library": "annnet",
+            "node": "n2481",
+            "degree": 8,
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "incident_edges_one_node",
+            "warm": {
+              "min_s": 4.400092484662577e-05,
+              "median_s": 4.42308773006135e-05,
+              "mean_s": 4.435952114373357e-05,
+              "stdev_s": 3.122981244414161e-07,
+              "p95_s": 4.48841259202454e-05,
+              "samples": 7,
+              "inner": 1304,
+              "total_calls": 9128
+            },
+            "library": "annnet",
+            "node": "n2481",
+            "degree": 8,
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "degree_one_node",
+            "warm": {
+              "min_s": 2.3006203351505689e-07,
+              "median_s": 2.3758679374538903e-07,
+              "mean_s": 2.366302516982687e-07,
+              "stdev_s": 2.8940188383463246e-09,
+              "p95_s": 2.3926187518563586e-07,
+              "samples": 7,
+              "inner": 417484,
+              "total_calls": 2922388
+            },
+            "library": "networkx",
+            "node": "n2481",
+            "degree": 8,
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "build_warm",
+            "warm": {
+              "min_s": 0.0871426,
+              "median_s": 0.087578048,
+              "mean_s": 0.0882796256,
+              "stdev_s": 0.001225772366901229,
+              "p95_s": 0.0900895114,
+              "samples": 5,
+              "inner": 1,
+              "total_calls": 5
+            },
+            "library": "annnet",
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "build_memory",
+            "library": "annnet",
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "peak_bytes": 17108767,
+            "retained_bytes": 10808628,
+            "rss_delta_bytes": 8908800
+          },
+          {
+            "name": "build_warm",
+            "warm": {
+              "min_s": 0.02840711,
+              "median_s": 0.030352606,
+              "mean_s": 0.029822739600000002,
+              "stdev_s": 0.0007683438317109347,
+              "p95_s": 0.030390829600000002,
+              "samples": 5,
+              "inner": 1,
+              "total_calls": 5
+            },
+            "library": "networkx",
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "build_memory",
+            "library": "networkx",
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "peak_bytes": 11572058,
+            "retained_bytes": 7708191,
+            "rss_delta_bytes": 524288
+          }
+        ],
+        "count_scaling": [
+          {
+            "name": "count_nodes",
+            "warm": {
+              "min_s": 3.6646585473220833e-07,
+              "median_s": 3.676316874541453e-07,
+              "mean_s": 3.684828948747511e-07,
+              "stdev_s": 1.9055621922269867e-09,
+              "p95_s": 3.716281841526045e-07,
+              "samples": 7,
+              "inner": 272600,
+              "total_calls": 1908200
+            },
+            "n_nodes": 10,
+            "add_nodes_first_call_s": 0.000133811
+          },
+          {
+            "name": "count_edges",
+            "warm": {
+              "min_s": 3.560663348816634e-07,
+              "median_s": 3.590898510653985e-07,
+              "mean_s": 3.586358633256443e-07,
+              "stdev_s": 1.2070640716157097e-09,
+              "p95_s": 3.5990656233871563e-07,
+              "samples": 7,
+              "inner": 271260,
+              "total_calls": 1898820
+            },
+            "n_nodes": 10
+          },
+          {
+            "name": "shape",
+            "warm": {
+              "min_s": 2.67457328042328e-07,
+              "median_s": 2.68657455026455e-07,
+              "mean_s": 2.6838284731670443e-07,
+              "stdev_s": 6.477031951494326e-10,
+              "p95_s": 2.690182042328042e-07,
+              "samples": 7,
+              "inner": 189000,
+              "total_calls": 1323000
+            },
+            "n_nodes": 10
+          },
+          {
+            "name": "count_nodes",
+            "warm": {
+              "min_s": 3.9157759879246776e-07,
+              "median_s": 4.0712386278342775e-07,
+              "mean_s": 4.0327628485883255e-07,
+              "stdev_s": 7.248321338504502e-09,
+              "p95_s": 4.1178890414800525e-07,
+              "samples": 7,
+              "inner": 242478,
+              "total_calls": 1697346
+            },
+            "n_nodes": 1000000,
+            "add_nodes_first_call_s": 3.40739146
+          },
+          {
+            "name": "count_edges",
+            "warm": {
+              "min_s": 3.74405898720089e-07,
+              "median_s": 3.823470450751252e-07,
+              "mean_s": 3.868827225269629e-07,
+              "stdev_s": 1.2050297950159874e-08,
+              "p95_s": 4.0535311111111105e-07,
+              "samples": 7,
+              "inner": 269550,
+              "total_calls": 1886850
+            },
+            "n_nodes": 1000000
+          },
+          {
+            "name": "shape",
+            "warm": {
+              "min_s": 2.8593600464359764e-07,
+              "median_s": 2.879162103773234e-07,
+              "mean_s": 2.877359539152197e-07,
+              "stdev_s": 9.158986187671646e-10,
+              "p95_s": 2.888642442979352e-07,
+              "samples": 7,
+              "inner": 322164,
+              "total_calls": 2255148
+            },
+            "n_nodes": 1000000
+          }
+        ],
+        "degree_scaling": [
+          {
+            "name": "degree_one_node",
+            "warm": {
+              "min_s": 1.5679229045271178e-06,
+              "median_s": 1.5729504706409682e-06,
+              "mean_s": 1.573202929042527e-06,
+              "stdev_s": 2.5489636151161208e-09,
+              "p95_s": 1.5762614954856887e-06,
+              "samples": 7,
+              "inner": 62468,
+              "total_calls": 437276
+            },
+            "node": "n2481",
+            "degree": 8,
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "incident_edges_one_node",
+            "warm": {
+              "min_s": 4.3870210355987056e-05,
+              "median_s": 4.4207309870550164e-05,
+              "mean_s": 4.428979935275081e-05,
+              "stdev_s": 4.902174228197299e-07,
+              "p95_s": 4.5084170307443364e-05,
+              "samples": 7,
+              "inner": 1236,
+              "total_calls": 8652
+            },
+            "node": "n2481",
+            "degree": 8,
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "degree_one_node_with_loop_zero_hyper",
+            "warm": {
+              "min_s": 1.7902606832892027e-06,
+              "median_s": 1.8027801927037364e-06,
+              "mean_s": 1.8089804721977052e-06,
+              "stdev_s": 1.6894360301274027e-08,
+              "p95_s": 1.834834495439835e-06,
+              "samples": 7,
+              "inner": 54384,
+              "total_calls": 380688
+            },
+            "node": "n2481",
+            "degree": 11,
+            "n_nodes": 5000,
+            "n_edges": 20003
+          },
+          {
+            "name": "degree_one_node",
+            "warm": {
+              "min_s": 1.5682715225413124e-06,
+              "median_s": 1.5921850794160115e-06,
+              "mean_s": 1.5899563658866402e-06,
+              "stdev_s": 1.549004004766114e-08,
+              "p95_s": 1.61116334991176e-06,
+              "samples": 7,
+              "inner": 31165,
+              "total_calls": 218155
+            },
+            "node": "n2541",
+            "degree": 8,
+            "n_nodes": 50000,
+            "n_edges": 200000
+          },
+          {
+            "name": "incident_edges_one_node",
+            "warm": {
+              "min_s": 4.26220640569395e-05,
+              "median_s": 4.278780649466192e-05,
+              "mean_s": 4.289706043467209e-05,
+              "stdev_s": 2.0930617147126358e-07,
+              "p95_s": 4.3178958896797156e-05,
+              "samples": 7,
+              "inner": 2248,
+              "total_calls": 15736
+            },
+            "node": "n2541",
+            "degree": 8,
+            "n_nodes": 50000,
+            "n_edges": 200000
+          },
+          {
+            "name": "degree_one_node_with_loop_zero_hyper",
+            "warm": {
+              "min_s": 1.7791050847457628e-06,
+              "median_s": 1.8038738347457627e-06,
+              "mean_s": 1.8048553016545602e-06,
+              "stdev_s": 1.233721673107251e-08,
+              "p95_s": 1.818732743644068e-06,
+              "samples": 7,
+              "inner": 28320,
+              "total_calls": 198240
+            },
+            "node": "n2541",
+            "degree": 11,
+            "n_nodes": 50000,
+            "n_edges": 200003
+          }
+        ],
+        "promotion": [
+          {
+            "name": "gain_aspects",
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "first_call_s": 0.00473709,
+            "samples_s": [
+              0.00473709,
+              0.004740268,
+              0.004667583,
+              0.005037344,
+              0.005147742
+            ],
+            "median_s": 0.004740268
+          },
+          {
+            "name": "first_hyperedge",
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "one_more_binary_edge_s": 5.9355e-05,
+            "first_hyperedge_s": 9.3617e-05,
+            "second_hyperedge_s": 3.5626e-05,
+            "degree_after_s": 9.807e-06
+          },
+          {
+            "name": "mixed_batch_order_independent",
+            "n_edges": 202,
+            "independent": true
+          }
+        ],
+        "exploration": [
+          {
+            "name": "composed_selection",
+            "warm": {
+              "min_s": 0.0014957632068965518,
+              "median_s": 0.001506783551724138,
+              "mean_s": 0.001505769539408867,
+              "stdev_s": 8.276419111316163e-06,
+              "p95_s": 0.0015166134931034483,
+              "samples": 7,
+              "inner": 58,
+              "total_calls": 406
+            },
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "first_call_s": 0.00119273,
+            "selected_nodes": 298
+          },
+          {
+            "name": "read_one_row",
+            "warm": {
+              "min_s": 1.9353983389606864e-06,
+              "median_s": 1.9500259246322817e-06,
+              "mean_s": 1.9472915523177486e-06,
+              "stdev_s": 8.17938902368244e-09,
+              "p95_s": 1.9574665191912135e-06,
+              "samples": 7,
+              "inner": 25767,
+              "total_calls": 180369
+            },
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "table_preview_nodes",
+            "warm": {
+              "min_s": 0.0008985820694444444,
+              "median_s": 0.0009105914305555555,
+              "mean_s": 0.0009139229325396826,
+              "stdev_s": 1.4158192613718782e-05,
+              "p95_s": 0.000932812125,
+              "samples": 7,
+              "inner": 72,
+              "total_calls": 504
+            },
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "first_call_s": 0.007673441,
+            "rows": 20
+          },
+          {
+            "name": "table_preview_edges_derived",
+            "warm": {
+              "min_s": 0.00159087275,
+              "median_s": 0.001598486931818182,
+              "mean_s": 0.0016377151071428572,
+              "stdev_s": 9.1492135454609e-05,
+              "p95_s": 0.0017869126954545454,
+              "samples": 7,
+              "inner": 44,
+              "total_calls": 308
+            },
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "first_call_s": 0.016141658,
+            "rows": 20
+          },
+          {
+            "name": "view_open_boundary_edges",
+            "warm": {
+              "min_s": 0.01148821775,
+              "median_s": 0.011537766125,
+              "mean_s": 0.0115697967,
+              "stdev_s": 0.00010787589836249939,
+              "p95_s": 0.011733457075,
+              "samples": 5,
+              "inner": 8,
+              "total_calls": 40
+            },
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "first_call_s": 0.013361062,
+            "selected_nodes": 298,
+            "view_edges": 2262
+          },
+          {
+            "name": "view_table_preview_edges",
+            "warm": {
+              "min_s": 0.0016891664545454544,
+              "median_s": 0.0016982128636363635,
+              "mean_s": 0.0016984311272727273,
+              "stdev_s": 5.903039514139891e-06,
+              "p95_s": 0.001706022359090909,
+              "samples": 5,
+              "inner": 44,
+              "total_calls": 220
+            },
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "first_call_s": 0.012575099,
+            "rows": 20
+          },
+          {
+            "name": "materialize",
+            "warm": {
+              "min_s": 0.01952106,
+              "median_s": 0.019677392,
+              "mean_s": 0.019846621,
+              "stdev_s": 0.00035564287483466747,
+              "p95_s": 0.0202750091,
+              "samples": 3,
+              "inner": 1,
+              "total_calls": 3
+            },
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "first_call_s": 0.02733103,
+            "copy_nodes": 2058,
+            "copy_edges": 2262,
+            "peak_bytes": 2765319,
+            "retained_bytes": 1723867
+          },
+          {
+            "name": "summary",
+            "warm": {
+              "min_s": 0.0003221398656716418,
+              "median_s": 0.00032245670149253733,
+              "mean_s": 0.000323930344278607,
+              "stdev_s": 2.062367705061701e-06,
+              "p95_s": 0.0003266024676616916,
+              "samples": 5,
+              "inner": 201,
+              "total_calls": 1005
+            },
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "first_call_s": 0.000593142
+          },
+          {
+            "name": "composed_selection",
+            "warm": {
+              "min_s": 0.01418137425,
+              "median_s": 0.01425440475,
+              "mean_s": 0.014268068571428571,
+              "stdev_s": 7.727846406476473e-05,
+              "p95_s": 0.01438252935,
+              "samples": 7,
+              "inner": 4,
+              "total_calls": 28
+            },
+            "n_nodes": 50000,
+            "n_edges": 200000,
+            "first_call_s": 0.010615514,
+            "selected_nodes": 2944
+          },
+          {
+            "name": "read_one_row",
+            "warm": {
+              "min_s": 1.9958992643236976e-06,
+              "median_s": 2.0248436487945305e-06,
+              "mean_s": 2.021768938809781e-06,
+              "stdev_s": 2.2832578576693585e-08,
+              "p95_s": 2.0561632701611292e-06,
+              "samples": 7,
+              "inner": 50022,
+              "total_calls": 350154
+            },
+            "n_nodes": 50000,
+            "n_edges": 200000
+          },
+          {
+            "name": "table_preview_nodes",
+            "warm": {
+              "min_s": 0.00352681905,
+              "median_s": 0.00357990925,
+              "mean_s": 0.00359324385,
+              "stdev_s": 5.750859393147257e-05,
+              "p95_s": 0.00368535724,
+              "samples": 7,
+              "inner": 20,
+              "total_calls": 140
+            },
+            "n_nodes": 50000,
+            "n_edges": 200000,
+            "first_call_s": 0.006248771,
+            "rows": 20
+          },
+          {
+            "name": "table_preview_edges_derived",
+            "warm": {
+              "min_s": 0.005031456,
+              "median_s": 0.005163870111111111,
+              "mean_s": 0.005196845920634921,
+              "stdev_s": 0.00016449406254393753,
+              "p95_s": 0.005471865255555555,
+              "samples": 7,
+              "inner": 18,
+              "total_calls": 126
+            },
+            "n_nodes": 50000,
+            "n_edges": 200000,
+            "first_call_s": 0.064974678,
+            "rows": 20
+          },
+          {
+            "name": "view_open_boundary_edges",
+            "warm": {
+              "min_s": 0.169559005,
+              "median_s": 0.172456074,
+              "mean_s": 0.1732091714,
+              "stdev_s": 0.003490570201806607,
+              "p95_s": 0.17840580779999998,
+              "samples": 5,
+              "inner": 1,
+              "total_calls": 5
+            },
+            "n_nodes": 50000,
+            "n_edges": 200000,
+            "first_call_s": 0.173491584,
+            "selected_nodes": 2944,
+            "view_edges": 22964
+          },
+          {
+            "name": "view_table_preview_edges",
+            "warm": {
+              "min_s": 0.005229552777777778,
+              "median_s": 0.005348911444444444,
+              "mean_s": 0.005348904,
+              "stdev_s": 8.007347926681191e-05,
+              "p95_s": 0.0054556102555555555,
+              "samples": 5,
+              "inner": 18,
+              "total_calls": 90
+            },
+            "n_nodes": 50000,
+            "n_edges": 200000,
+            "first_call_s": 0.174397714,
+            "rows": 20
+          },
+          {
+            "name": "materialize",
+            "warm": {
+              "min_s": 0.22053796,
+              "median_s": 0.220563771,
+              "mean_s": 0.2208179233333333,
+              "stdev_s": 0.00037782377811561323,
+              "p95_s": 0.2212732122,
+              "samples": 3,
+              "inner": 1,
+              "total_calls": 3
+            },
+            "n_nodes": 50000,
+            "n_edges": 200000,
+            "first_call_s": 0.241234267,
+            "copy_nodes": 20743,
+            "copy_edges": 22964,
+            "peak_bytes": 26779557,
+            "retained_bytes": 16544219
+          },
+          {
+            "name": "summary",
+            "warm": {
+              "min_s": 0.00424314145,
+              "median_s": 0.0043497373,
+              "mean_s": 0.004352195200000001,
+              "stdev_s": 7.546488044278627e-05,
+              "p95_s": 0.00445257195,
+              "samples": 5,
+              "inner": 20,
+              "total_calls": 100
+            },
+            "n_nodes": 50000,
+            "n_edges": 200000,
+            "first_call_s": 0.010214818
+          }
+        ]
+      }
+    },
+    "previous": {
+      "label": "previous",
+      "annnet_version": "0.3.0",
+      "environment": {
+        "timestamp_utc": "2026-09-30T13:36:02.583666+00:00",
+        "git_commit": "8e6fc75",
+        "python": "3.13.9",
+        "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+        "processor": "x86_64",
+        "cpu": {
+          "logical": 6,
+          "affinity": 6
+        },
+        "libraries": {
+          "networkx": "3.5",
+          "igraph": "1.0.0",
+          "graph_tool": null,
+          "numpy": "2.3.5",
+          "scipy": "1.16.3",
+          "polars": "1.35.2",
+          "pandas": "2.3.3",
+          "pyarrow": "22.0.0"
+        }
+      },
+      "workload": {
+        "n_nodes": 5000,
+        "n_edges": 20000,
+        "seed": 4
+      },
+      "sections": {
+        "cold_start": [
+          {
+            "name": "cold_start",
+            "runs": 9,
+            "library": "annnet",
+            "import_s": {
+              "min": 0.08090096400701441,
+              "median": 0.08505297201918438,
+              "max": 0.09649840299971402
+            },
+            "first_construct_s": {
+              "min": 0.2838995970087126,
+              "median": 0.3018655040068552,
+              "max": 0.3153138819907326
+            },
+            "second_construct_s": {
+              "min": 0.00010847198427654803,
+              "median": 0.00011445200652815402,
+              "max": 0.00022618199000135064
+            },
+            "modules_loaded": 530,
+            "dataframe_libraries_loaded": []
+          },
+          {
+            "name": "cold_start_libraries_preloaded",
+            "runs": 9,
+            "library": "annnet",
+            "import_s": {
+              "min": 0.04654785597813316,
+              "median": 0.05032462201779708,
+              "max": 0.055899009021231905
+            },
+            "first_construct_s": {
+              "min": 0.20457192801404744,
+              "median": 0.2404653099947609,
+              "max": 0.26244084202335216
+            },
+            "second_construct_s": {
+              "min": 8.747199899517e-05,
+              "median": 9.918899741023779e-05,
+              "max": 0.00030473500373773277
+            },
+            "modules_loaded": 1045,
+            "dataframe_libraries_loaded": [
+              "pandas",
+              "polars",
+              "pyarrow"
+            ]
+          }
+        ],
+        "flat_costs": [
+          {
+            "name": "construct_empty",
+            "warm": {
+              "min_s": 0.0006438585326086956,
+              "median_s": 0.0006494921413043479,
+              "mean_s": 0.0006555180978260869,
+              "stdev_s": 1.1689755161504605e-05,
+              "p95_s": 0.0006740887586956521,
+              "samples": 7,
+              "inner": 92,
+              "total_calls": 644
+            },
+            "library": "annnet"
+          },
+          {
+            "name": "construct_empty",
+            "warm": {
+              "min_s": 9.020865136398521e-07,
+              "median_s": 9.051508058326938e-07,
+              "mean_s": 9.052267195582621e-07,
+              "stdev_s": 1.9585176121173676e-09,
+              "p95_s": 9.080423009837438e-07,
+              "samples": 7,
+              "inner": 57332,
+              "total_calls": 401324
+            },
+            "library": "networkx"
+          },
+          {
+            "name": "count_nodes",
+            "warm": {
+              "min_s": 0.0002567563519736842,
+              "median_s": 0.0002598084046052632,
+              "mean_s": 0.0002597837890037594,
+              "stdev_s": 2.062006568363972e-06,
+              "p95_s": 0.00026223328914473686,
+              "samples": 7,
+              "inner": 304,
+              "total_calls": 2128
+            },
+            "library": "annnet",
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "count_edges",
+            "warm": {
+              "min_s": 0.0002845069615384615,
+              "median_s": 0.00028853553418803417,
+              "mean_s": 0.000287822010989011,
+              "stdev_s": 1.859509117898768e-06,
+              "p95_s": 0.0002900892623931624,
+              "samples": 7,
+              "inner": 234,
+              "total_calls": 1638
+            },
+            "library": "annnet",
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "count_nodes",
+            "warm": {
+              "min_s": 1.0096535415840931e-07,
+              "median_s": 1.0705467821046374e-07,
+              "mean_s": 1.0644301385585944e-07,
+              "stdev_s": 5.329245463413446e-09,
+              "p95_s": 1.1451981664519752e-07,
+              "samples": 7,
+              "inner": 484416,
+              "total_calls": 3390912
+            },
+            "library": "networkx",
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "count_edges",
+            "warm": {
+              "min_s": 0.00048617285227272727,
+              "median_s": 0.0005228991306818182,
+              "mean_s": 0.0006557077637987013,
+              "stdev_s": 0.00023991910551730936,
+              "p95_s": 0.0010656962846590909,
+              "samples": 7,
+              "inner": 176,
+              "total_calls": 1232
+            },
+            "library": "networkx",
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "degree_one_node",
+            "warm": {
+              "min_s": 2.584267249352571e-06,
+              "median_s": 2.9747652145763967e-06,
+              "mean_s": 3.0858840309708787e-06,
+              "stdev_s": 3.5559950515044754e-07,
+              "p95_s": 3.5990023677395483e-06,
+              "samples": 7,
+              "inner": 21624,
+              "total_calls": 151368
+            },
+            "library": "annnet",
+            "node": "n2481",
+            "degree": 8,
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "incident_edges_one_node",
+            "warm": {
+              "min_s": 3.8667056231003036e-05,
+              "median_s": 4.279912993920973e-05,
+              "mean_s": 4.247454374728615e-05,
+              "stdev_s": 2.3291797492580357e-06,
+              "p95_s": 4.5290136702127654e-05,
+              "samples": 7,
+              "inner": 1316,
+              "total_calls": 9212
+            },
+            "library": "annnet",
+            "node": "n2481",
+            "degree": 8,
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "degree_one_node",
+            "warm": {
+              "min_s": 2.4250204341701137e-07,
+              "median_s": 2.466923773825346e-07,
+              "mean_s": 2.484301511922362e-07,
+              "stdev_s": 4.792934079431556e-09,
+              "p95_s": 2.5548717824271115e-07,
+              "samples": 7,
+              "inner": 401778,
+              "total_calls": 2812446
+            },
+            "library": "networkx",
+            "node": "n2481",
+            "degree": 8,
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "build_warm",
+            "warm": {
+              "min_s": 0.094074444,
+              "median_s": 0.095411705,
+              "mean_s": 0.0958231834,
+              "stdev_s": 0.0013261561161775183,
+              "p95_s": 0.0977208492,
+              "samples": 5,
+              "inner": 1,
+              "total_calls": 5
+            },
+            "library": "annnet",
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "build_memory",
+            "library": "annnet",
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "peak_bytes": 17701670,
+            "retained_bytes": 11400852,
+            "rss_delta_bytes": 10125312
+          },
+          {
+            "name": "build_warm",
+            "warm": {
+              "min_s": 0.029674252,
+              "median_s": 0.031488594,
+              "mean_s": 0.031208873999999998,
+              "stdev_s": 0.0012458968219949827,
+              "p95_s": 0.032676257,
+              "samples": 5,
+              "inner": 1,
+              "total_calls": 5
+            },
+            "library": "networkx",
+            "n_nodes": 5000,
+            "n_edges": 20000
+          },
+          {
+            "name": "build_memory",
+            "library": "networkx",
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "peak_bytes": 11572058,
+            "retained_bytes": 7708191,
+            "rss_delta_bytes": 393216
+          }
+        ],
+        "promotion": [
+          {
+            "name": "gain_aspects",
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "first_call_s": 0.002619159,
+            "samples_s": [
+              0.002619159,
+              0.002461103,
+              0.002993478,
+              0.002533612,
+              0.002487175
+            ],
+            "median_s": 0.002533612
+          },
+          {
+            "name": "first_hyperedge",
+            "n_nodes": 5000,
+            "n_edges": 20000,
+            "one_more_binary_edge_s": 9.6442e-05,
+            "first_hyperedge_s": 7.2776e-05,
+            "second_hyperedge_s": 7.5699e-05,
+            "degree_after_s": 0.001982364
+          },
+          {
+            "name": "mixed_batch_order_independent",
+            "n_edges": 202,
+            "independent": true
+          }
+        ]
+      }
+    }
+  },
+  "command": "python -m benchmarks.api_costs --out <out> --compare-tree <tree> --compare-label previous --compare-sections cold_start,flat_costs,promotion"
+}

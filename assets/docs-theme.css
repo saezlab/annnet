@@ -1,0 +1,452 @@
+/*
+ * Shared look of the saezlab MkDocs Material sites.
+ *
+ * Load a palette file first (palette-sysbioverse.css or
+ * palette-omnipath.css), then this file. Do not edit the copy in a
+ * package repository: change the original in saezverse
+ * (guidelines/docs-theme/) and copy it again.
+ */
+
+/* ---- Colors: map the palette onto Material ---------------------- */
+
+:root,
+[data-md-color-scheme="default"],
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: var(--sv-main);
+  --md-primary-fg-color--light: var(--sv-main);
+  --md-primary-fg-color--dark: var(--sv-link);
+  --md-primary-bg-color: #FFFFFF;
+  --md-accent-fg-color: var(--sv-link-hover);
+  --md-accent-fg-color--transparent: color-mix(in srgb, var(--sv-accent) 10%, transparent);
+  --md-typeset-a-color: var(--sv-link);
+
+  /* Box colors (RWTH palette) */
+  --sv-blue: #176FC1;
+  --sv-green: #4CBD38;
+  --sv-violet: #7264B9;
+  --sv-purple: #5B205F;
+  --sv-orange: #F89D0E;
+  --sv-red: #D22027;
+  --sv-grey: #918F90;
+}
+
+/* ---- Page width --------------------------------------------------- */
+
+/*
+ * Wider than Material's 61rem, so code, tables and notebook output have
+ * room. Running text keeps its own line-length limit (below).
+ */
+.md-grid {
+  max-width: 82rem;
+}
+
+@media screen and (min-width: 1220px) {
+  .md-grid {
+    max-width: 90rem;
+  }
+
+  .md-sidebar--primary .md-sidebar__scrollwrap {
+    box-sizing: border-box;
+    padding-left: clamp(0.75rem, 1.25vw, 1.4rem);
+  }
+
+  .md-sidebar--secondary .md-sidebar__scrollwrap {
+    box-sizing: border-box;
+    padding-right: clamp(0.75rem, 1.25vw, 1.4rem);
+  }
+}
+
+/* ---- Text size and line length ------------------------------------ */
+
+/*
+ * Material sets body text to 16px. We use 18px, and limit running text
+ * to about 60-70 characters per line. Code blocks, tables, figures and
+ * notebook cells keep the full width of the content column.
+ */
+.md-typeset {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  --sv-measure: 32em;
+}
+
+.md-typeset > p,
+.md-typeset > ul,
+.md-typeset > ol,
+.md-typeset > dl,
+.md-typeset > blockquote,
+.md-typeset > h1,
+.md-typeset > h2,
+.md-typeset > h3,
+.md-typeset > h4,
+.md-typeset > h5,
+.md-typeset > h6,
+.md-typeset > .admonition,
+.md-typeset > details {
+  max-width: var(--sv-measure);
+}
+
+/* The same limit for the text cells of notebooks (mkdocs-jupyter) */
+.md-typeset .jp-MarkdownOutput > p,
+.md-typeset .jp-MarkdownOutput > ul,
+.md-typeset .jp-MarkdownOutput > ol,
+.md-typeset .jp-MarkdownOutput > blockquote,
+.md-typeset .jp-MarkdownOutput > h1,
+.md-typeset .jp-MarkdownOutput > h2,
+.md-typeset .jp-MarkdownOutput > h3,
+.md-typeset .jp-MarkdownOutput > h4 {
+  max-width: var(--sv-measure);
+}
+
+/* A paragraph with only an image is a figure: keep the full width */
+.md-typeset > p:has(> img:only-child),
+.md-typeset > p:has(> a:only-child > img:only-child) {
+  max-width: none;
+}
+
+.md-typeset code,
+.md-typeset kbd,
+.md-typeset pre {
+  font-size: 0.85em;
+}
+
+/* ---- Header: no logo, site name links to the home page ------------ */
+
+.md-header__button.md-logo,
+.md-nav__button.md-logo {
+  display: none;
+}
+
+/* The title starts at the same left edge as the navigation tabs */
+[dir] .md-header__title {
+  margin-left: 0.6rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.md-header__site-link,
+.md-header__site-link:hover {
+  color: inherit;
+}
+
+.md-header__site-link:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+/* Navigation tabs: bold, full white; the active tab is underlined */
+.md-tabs__link {
+  font-size: 0.8rem;
+  font-weight: 700;
+  opacity: 1;
+}
+
+.md-tabs__item--active .md-tabs__link {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.35em;
+}
+
+.md-tabs__link:hover {
+  opacity: 1;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.35em;
+}
+
+/* ---- Side navigation and table of contents ------------------------ */
+
+/* Every item is a link, so an underline adds nothing */
+.md-nav__link,
+.md-nav__link:hover {
+  text-decoration: none;
+}
+
+/*
+ * Hide the left navigation when it would list only the current page
+ * (a top-level page with no sub-pages, e.g. Home or Installation).
+ * Only on wide screens: on narrow screens the same element is the
+ * navigation drawer.
+ */
+@media screen and (min-width: 76.25em) {
+  .md-sidebar--primary:has(.md-nav--primary > .md-nav__list > .md-nav__item--active:not(.md-nav__item--nested)) {
+    visibility: hidden;
+  }
+}
+
+/* Buttons are links that need no underline */
+.md-typeset a.md-button,
+.md-typeset a.md-button:hover {
+  text-decoration: none;
+}
+
+/* ---- Square corners everywhere ------------------------------------ */
+
+.md-typeset .admonition,
+.md-typeset details,
+.md-typeset pre > code,
+.md-typeset code,
+.md-typeset kbd,
+.md-typeset .md-button,
+.md-typeset .tabbed-set,
+.md-typeset table:not([class]),
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid > .card,
+.md-typeset img,
+.md-clipboard,
+.md-search__form,
+.md-source__fact,
+.md-top {
+  border-radius: 0;
+}
+
+/* ---- Labels: solid, saturated background ------------------------- */
+
+.md-typeset .sv-label {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: #FFFFFF;
+  background-color: var(--sv-main);
+  border: none;
+  border-radius: 0;
+}
+
+.md-typeset .sv-label--accent {
+  color: var(--sv-accent-fg);
+  background-color: var(--sv-accent);
+}
+
+.md-typeset .md-button {
+  border-width: 1px;
+  box-shadow: none;
+}
+
+.md-typeset .md-button--primary {
+  color: #FFFFFF;
+  background-color: var(--sv-main);
+  border-color: var(--sv-main);
+}
+
+.md-typeset .md-button:focus,
+.md-typeset .md-button:hover {
+  color: var(--sv-accent-fg);
+  background-color: var(--sv-accent);
+  border-color: var(--sv-accent);
+}
+
+/* ---- Boxes -------------------------------------------------------- */
+
+/*
+ * Two box styles:
+ *
+ * - admonitions and .sv-box: 1px border with a 5px rule on the left
+ *   and a light tint of the same color (as in the Arch Wiki);
+ * - .sv-panel: light tone background, no border.
+ *
+ * The doubled .md-typeset outranks the per-type colors of Material.
+ */
+.md-typeset.md-typeset .admonition,
+.md-typeset.md-typeset details,
+.md-typeset.md-typeset .sv-box {
+  --sv-box: var(--sv-main);
+  border: 1px solid var(--sv-box);
+  border-left-width: 5px;
+  border-radius: 0;
+  box-shadow: none;
+  background-color: color-mix(in srgb, var(--sv-box) 6%, var(--md-default-bg-color));
+  font-size: 0.9em;
+}
+
+.md-typeset.md-typeset .sv-box {
+  padding: 0.6em 1em;
+  margin: 1.25em 0;
+}
+
+.md-typeset.md-typeset .admonition > .admonition-title,
+.md-typeset.md-typeset details > summary {
+  background-color: transparent;
+  color: var(--sv-box);
+  font-weight: 700;
+}
+
+.md-typeset.md-typeset .admonition > .admonition-title::before,
+.md-typeset.md-typeset details > summary::before {
+  background-color: var(--sv-box);
+}
+
+.md-typeset.md-typeset .admonition:focus-within,
+.md-typeset.md-typeset details:focus-within {
+  box-shadow: none;
+}
+
+.md-typeset.md-typeset .sv-panel {
+  padding: 1em 1.25em;
+  margin: 1.25em 0;
+  border: none;
+  border-radius: 0;
+  background-color: var(--sv-main-light);
+}
+
+/* Admonition types: one color each */
+.md-typeset.md-typeset :is(.admonition, details):is(.abstract, .summary, .tldr, .info, .todo) {
+  --sv-box: var(--sv-blue);
+}
+
+.md-typeset.md-typeset :is(.admonition, details):is(.tip, .hint, .important, .success, .check, .done) {
+  --sv-box: var(--sv-green);
+}
+
+.md-typeset.md-typeset :is(.admonition, details):is(.question, .help, .faq) {
+  --sv-box: var(--sv-violet);
+}
+
+.md-typeset.md-typeset :is(.admonition, details):is(.warning, .caution, .attention) {
+  --sv-box: var(--sv-orange);
+}
+
+.md-typeset.md-typeset :is(.admonition, details):is(.failure, .fail, .missing, .danger, .error, .bug) {
+  --sv-box: var(--sv-red);
+}
+
+.md-typeset.md-typeset :is(.admonition, details).example {
+  --sv-box: var(--sv-purple);
+}
+
+.md-typeset.md-typeset :is(.admonition, details):is(.quote, .cite) {
+  --sv-box: var(--sv-grey);
+}
+
+/* Content tabs and cards follow the same rules */
+.md-typeset .tabbed-labels > label:hover {
+  color: var(--sv-link-hover);
+}
+
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid > .card {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  box-shadow: none;
+}
+
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid > .card:hover {
+  border-color: var(--sv-main);
+  box-shadow: none;
+}
+
+/* ---- Landing page box -------------------------------------------- */
+
+/*
+ * The opening box of a package's home page: logo on the left, then a
+ * label, the package name and one intro paragraph. Light tone, no
+ * border. Markup:
+ *
+ * <div class="sv-hero"><div class="sv-hero-grid">
+ *   <img class="sv-hero-logo" src="assets/logo.png" alt="...">
+ *   <div class="sv-hero-text">
+ *     <div class="sv-kicker">...</div>
+ *     <h1>package</h1>
+ *     <p class="sv-lead">...</p>
+ *   </div>
+ * </div></div>
+ */
+.md-typeset .sv-hero {
+  padding: 2rem;
+  margin: 0 0 1.5rem;
+  background: var(--sv-main-light);
+}
+
+.md-typeset .sv-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(6rem, 10rem) 1fr;
+  gap: 1.5rem 2rem;
+  align-items: center;
+}
+
+.md-typeset .sv-hero-text {
+  min-width: 0;
+}
+
+.md-typeset .sv-hero h1 {
+  margin: 0 0 0.3em;
+}
+
+.md-typeset .sv-hero-logo {
+  width: 100%;
+  height: auto;
+}
+
+/* Logos are drawn for a light background: in dark mode they sit on a light tile */
+[data-md-color-scheme="slate"] .md-typeset .sv-hero-logo {
+  background: #E6F7F4;
+  padding: 0.6rem;
+  box-sizing: border-box;
+}
+
+.md-typeset .sv-kicker {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  margin-bottom: 1rem;
+  background: var(--sv-main);
+  color: #FFFFFF;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.md-typeset .sv-lead {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+@media screen and (max-width: 760px) {
+  .md-typeset .sv-hero {
+    padding: 1.4rem;
+  }
+
+  .md-typeset .sv-hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .md-typeset .sv-hero-logo {
+    width: 9rem;
+  }
+}
+
+/* ---- Part of sysbioverse ------------------------------------------- */
+
+/*
+ * The last block of a package's home page: the sysbioverse logo and one
+ * sentence on the ecosystem, linked to sysbioverse.org. Markup:
+ *
+ * <div class="sv-ecosystem">
+ *   <a href="https://sysbioverse.org/"><img src="assets/sysbioverse-logo.svg" alt="sysbioverse logo"></a>
+ *   <p>... part of <a href="https://sysbioverse.org/">sysbioverse</a> ...</p>
+ * </div>
+ */
+.md-typeset .sv-ecosystem {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  margin: 2.5rem 0 1rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-typeset .sv-ecosystem img {
+  width: 4.5rem;
+  height: auto;
+  flex: none;
+}
+
+.md-typeset .sv-ecosystem p {
+  margin: 0;
+  max-width: var(--sv-measure);
+}

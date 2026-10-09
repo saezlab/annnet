@@ -1,0 +1,2972 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://annnet.sysbioverse.org/reference/migration/">
+      
+      
+        <link rel="prev" href="../api-boundary/">
+      
+      
+        <link rel="next" href="../support/">
+      
+      
+      <link rel="icon" href="../../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>Migrating existing code - annnet</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Raleway:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Raleway";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../assets/palette-sysbioverse.css">
+    
+      <link rel="stylesheet" href="../../assets/docs-theme.css">
+    
+      <link rel="stylesheet" href="../../assets/overrides.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#migrating-to-the-current-surface" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <a href="../.." class="md-header__site-link md-ellipsis" title="annnet">
+            annnet
+          </a>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Migrating existing code
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/saezlab/annnet" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    saezlab/annnet
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../quickstart/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Quickstart
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guide/" class="md-tabs__link">
+          
+  
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../examples/" class="md-tabs__link">
+          
+  
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../community/" class="md-tabs__link">
+          
+  
+  
+  Community
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="annnet" class="md-nav__button md-logo" aria-label="annnet" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    annnet
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/saezlab/annnet" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    saezlab/annnet
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Guide
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Guide
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Start here
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/graph-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Graph model and matrices
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/annotations-and-views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Annotations, selections, and views
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/slices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Slices and analysis contexts
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/layers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Layers: coordinates, coupling, measurements, and mathematics
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/computation-and-storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Computation and storage
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Examples
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Choose an example
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Case studies
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
+            <span class="md-nav__icon md-icon"></span>
+            Case studies
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/use_cases/UC1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Fitting a multi-condition signaling network stored in AnnNet
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/use_cases/UC2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tracing a TGF-beta fibrosis response in one AnnNet object
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Integrations
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            Integrations
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/scenarios/omnipath_table_ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    OmniPath table ingestion
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/scenarios/cytoscape_cx2_export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Cytoscape CX2 export
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/scenarios/pyg_heterodata_export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    PyG HeteroData export
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/scenarios/causal_activity_bridge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Causal activity bridge
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    API Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            API Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Reference Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    The public surface (contract)
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-boundary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Public and internal APIs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Migrating existing code
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Migrating existing code
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-graph-object" class="md-nav__link">
+    <span class="md-ellipsis">
+      The graph object
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#attributes-gattrs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Attributes: G.attrs
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attributes: G.attrs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#if-you-already-used-gattrsaddress-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      If you already used G.attrs[address, key]
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#matrix-caches" class="md-nav__link">
+    <span class="md-ellipsis">
+      Matrix caches
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#views" class="md-nav__link">
+    <span class="md-ellipsis">
+      Views
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#selections" class="md-nav__link">
+    <span class="md-ellipsis">
+      Selections
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#edge-records" class="md-nav__link">
+    <span class="md-ellipsis">
+      Edge records
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#registered-dependents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Registered dependents
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Support helpers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_6" id="__nav_6_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Core
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            Core
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/graph/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Graph
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/adding-edges/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Edge construction
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/backend-accessors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Backend accessors
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/indexing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Indexing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/attributes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Attributes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/bulk-operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Operations
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/history/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    History
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Cache
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Views
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/slices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Slices
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/layers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Layers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_7" id="__nav_6_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Algorithms
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_7">
+            <span class="md-nav__icon md-icon"></span>
+            Algorithms
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../algorithms/traversal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Traversal
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_8" id="__nav_6_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    IO
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_8">
+            <span class="md-nav__icon md-icon"></span>
+            IO
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/format-comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Format comparison
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/annnet-format/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Native .annnet format
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/parquet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Parquet
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/graphml-gexf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    GraphML and GEXF
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/sif/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    SIF
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/sbml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    SBML
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/cx2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CX2
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/json/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    JSON and NDJSON
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/csv/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CSV
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/excel/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Excel
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/dataframes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    DataFrames
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/pyg/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    PyTorch Geometric
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_9" id="__nav_6_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Adapters
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_9">
+            <span class="md-nav__icon md-icon"></span>
+            Adapters
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adapters/networkx/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    NetworkX adapter
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adapters/igraph/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    igraph adapter
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adapters/graphtool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    graph-tool adapter
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_10" id="__nav_6_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Utilities
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_10">
+            <span class="md-nav__icon md-icon"></span>
+            Utilities
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../utils/plotting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Plotting
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Community
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            Community
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Join us
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/contribute-docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contribute documentation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/contribute-codebase/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contribute code
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    In-memory architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Performance report
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-graph-object" class="md-nav__link">
+    <span class="md-ellipsis">
+      The graph object
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#attributes-gattrs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Attributes: G.attrs
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Attributes: G.attrs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#if-you-already-used-gattrsaddress-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      If you already used G.attrs[address, key]
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#matrix-caches" class="md-nav__link">
+    <span class="md-ellipsis">
+      Matrix caches
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#views" class="md-nav__link">
+    <span class="md-ellipsis">
+      Views
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#selections" class="md-nav__link">
+    <span class="md-ellipsis">
+      Selections
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#edge-records" class="md-nav__link">
+    <span class="md-ellipsis">
+      Edge records
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#registered-dependents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Registered dependents
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/saezlab/annnet/edit/master/docs/reference/migration.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="migrating-to-the-current-surface">Migrating to the current surface</h1>
+<p>This release gave every attribute address one way to be read and written,
+made selections typed and live, and made views resolve correctly. It removed
+the names that duplicated those. The package is before its first stable release,
+so a removed name carries no alias: it raises <code>AttributeError</code> naming its
+replacement. This page is the complete map, old to new, with the shape of the
+call on both sides. The surface after the change is stated in
+<code>docs/reference/api-contract.md</code>.</p>
+<h2 id="the-graph-object">The graph object</h2>
+<table>
+<thead>
+<tr>
+<th>old</th>
+<th>new</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>G.obs</code></td>
+<td><code>G.attrs.nodes</code></td>
+</tr>
+<tr>
+<td><code>G.var</code></td>
+<td><code>G.attrs.edges</code></td>
+</tr>
+<tr>
+<td><code>G.nodes()</code></td>
+<td><code>list(G.N)</code> or <code>G.N.ids</code></td>
+</tr>
+<tr>
+<td><code>G.edges()</code></td>
+<td><code>list(G.E)</code> or <code>G.E.ids</code></td>
+</tr>
+<tr>
+<td><code>G.nv</code>, <code>G.ncount()</code></td>
+<td><code>len(G.N)</code></td>
+</tr>
+<tr>
+<td><code>G.ne</code>, <code>G.ecount()</code></td>
+<td><code>len(G.E)</code></td>
+</tr>
+<tr>
+<td><code>G.ncount(supra=True)</code></td>
+<td><code>G.nv_supra</code></td>
+</tr>
+<tr>
+<td><code>G.get_node(node_id)</code></td>
+<td><code>G.N.at(node_id)</code></td>
+</tr>
+<tr>
+<td><code>G.get_edge(edge_id)</code></td>
+<td><code>G.E.at(edge_id)</code></td>
+</tr>
+<tr>
+<td><code>G.get_edge_ids(source, target)</code></td>
+<td><code>G.has_edge(source, target)[1]</code></td>
+</tr>
+<tr>
+<td><code>G.get_edges_by_direction(directed)</code></td>
+<td><code>G.E.select(directed=directed).ids</code></td>
+</tr>
+<tr>
+<td><code>G.in_edges(nodes)</code></td>
+<td><code>G.incident_edges(nodes, direction='in')</code></td>
+</tr>
+<tr>
+<td><code>G.out_edges(nodes)</code></td>
+<td><code>G.incident_edges(nodes, direction='out')</code></td>
+</tr>
+<tr>
+<td><code>G.remove_node(node_id)</code></td>
+<td><code>G.remove_nodes(node_id)</code></td>
+</tr>
+<tr>
+<td><code>G.remove_edge(edge_id)</code></td>
+<td><code>G.remove_edges(edge_id)</code></td>
+</tr>
+<tr>
+<td><code>G.contextual_table(level)</code></td>
+<td><code>G.attrs.table(address)</code></td>
+</tr>
+<tr>
+<td><code>G.views.nodes(...)</code></td>
+<td><code>G.attrs.table('nodes', derived=True)</code></td>
+</tr>
+<tr>
+<td><code>G.views.edges(slice=, layer=, in_slice=, ...)</code></td>
+<td><code>G.attrs.table('edges', derived=True, slice=, layer=, in_slice=, ...)</code></td>
+</tr>
+<tr>
+<td><code>G.views.hyperedges(...)</code></td>
+<td><code>G.attrs.table('edges', derived=True, include_binary=False, ...)</code></td>
+</tr>
+<tr>
+<td><code>G.views.slices()</code> / <code>aspects()</code> / <code>layers()</code> / <code>layers_view()</code></td>
+<td><code>G.attrs.table('slices' / 'aspects' / 'layers', derived=True)</code></td>
+</tr>
+<tr>
+<td><code>G.views.entity_kinds()</code></td>
+<td><code>G.entity_kinds()</code></td>
+</tr>
+</tbody>
+</table>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># before</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">n</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">nv</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">first</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">nodes</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">e</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">get_edge</span><span class="p">(</span><span class="s1">&#39;e1&#39;</span><span class="p">)</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">frame</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">views</span><span class="o">.</span><span class="n">edges</span><span class="p">(</span><span class="n">in_slice</span><span class="o">=</span><span class="s1">&#39;fit&#39;</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># after</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="p">)</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">first</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">e</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">E</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="s1">&#39;e1&#39;</span><span class="p">)</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">frame</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">table</span><span class="p">(</span><span class="s1">&#39;edges&#39;</span><span class="p">,</span> <span class="n">derived</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">in_slice</span><span class="o">=</span><span class="s1">&#39;fit&#39;</span><span class="p">)</span>
+</span></code></pre></div>
+<h2 id="attributes-gattrs">Attributes: <code>G.attrs</code></h2>
+<p>The eight addresses are <code>nodes</code>, <code>edges</code>, <code>slices</code>, <code>aspects</code>, <code>layers</code>,
+<code>edge_slices</code>, <code>node_layers</code> and <code>elementary_layers</code>. Every one answers the
+same expressions; below, <code>address</code> stands for any of them and <code>key</code> for the
+key that address takes (<code>docs/reference/api-contract.md</code>, section 3).</p>
+<table>
+<thead>
+<tr>
+<th>old</th>
+<th>new</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>G.attrs.get_node_attrs(node_id)</code></td>
+<td><code>G.attrs.row('nodes', node_id)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.get_attr_node(node_id, name, default)</code></td>
+<td><code>G.attrs.row('nodes', node_id).get(name, default)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.get_attr_nodes(ids)</code></td>
+<td><code>G.attrs.rows('nodes', ids)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.set_node_attrs(node_id, **attrs)</code></td>
+<td><code>G.attrs.update('nodes', {node_id: attrs})</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.set_node_attrs_bulk(rows)</code></td>
+<td><code>G.attrs.update('nodes', rows)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.get_edge_attrs(edge_id)</code></td>
+<td><code>G.attrs.row('edges', edge_id)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.get_attr_edge(edge_id, name, default)</code></td>
+<td><code>G.attrs.row('edges', edge_id).get(name, default)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.get_attr_edges(ids)</code></td>
+<td><code>G.attrs.rows('edges', ids)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.get_attr_from_edges(name, default)</code></td>
+<td><code>dict(zip(G.E.ids, G.E.column(name, default)))</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.get_edges_by_attr(name, value)</code></td>
+<td><code>G.E.select(**{name: value}).ids</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.set_edge_attrs(edge_id, **attrs)</code></td>
+<td><code>G.attrs.update('edges', {edge_id: attrs})</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.set_edge_attrs_bulk(rows)</code></td>
+<td><code>G.attrs.update('edges', rows)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.get_slice_attr(slice_id, name, default)</code></td>
+<td><code>G.attrs.row('slices', slice_id).get(name, default)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.set_slice_attrs(slice_id, **attrs)</code></td>
+<td><code>G.attrs.update('slices', {slice_id: attrs})</code></td>
+</tr>
+<tr>
+<td><code>G.slices.attrs(slice_id)</code></td>
+<td><code>G.attrs.row('slices', slice_id)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.edge_slice(slice_id, edge_id)</code></td>
+<td><code>G.attrs.row('edge_slices', (slice_id, edge_id))</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.get_edge_slice_attr(slice_id, edge_id, name, default)</code></td>
+<td><code>G.attrs.row('edge_slices', (slice_id, edge_id)).get(name, default)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.set_edge_slice_attrs(slice_id, edge_id, **attrs)</code></td>
+<td><code>G.attrs.update('edge_slices', {(slice_id, edge_id): attrs})</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.set_edge_slice_attrs_bulk(slice_id, items)</code></td>
+<td><code>G.attrs.update('edge_slices', {(slice_id, edge_id): attrs for edge_id, attrs in items})</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.set_slice_edge_weight(slice_id, edge_id, w)</code></td>
+<td><code>G.attrs.update('edge_slices', {(slice_id, edge_id): {'weight': w}})</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.get_effective_edge_weight(edge_id, slice)</code></td>
+<td><code>G.E.effective_weight(edge_id, slice)</code></td>
+</tr>
+<tr>
+<td><code>G.layers.attrs(layer)</code></td>
+<td><code>G.attrs.row('layers', layer)</code></td>
+</tr>
+<tr>
+<td><code>G.layers.set_attrs(layer, **attrs)</code></td>
+<td><code>G.attrs.update('layers', {layer: attrs})</code></td>
+</tr>
+<tr>
+<td><code>G.layers.node_attrs(node_id, layer)</code></td>
+<td><code>G.attrs.row('node_layers', (node_id, layer))</code></td>
+</tr>
+<tr>
+<td><code>G.layers.set_node_attrs(node_id, layer, **attrs)</code></td>
+<td><code>G.attrs.update('node_layers', {(node_id, layer): attrs})</code></td>
+</tr>
+<tr>
+<td><code>G.layers.set_node_attrs_bulk(values, layer=, key=)</code></td>
+<td><code>G.attrs.update('node_layers', values, layer=, key=)</code></td>
+</tr>
+<tr>
+<td><code>G.layers.aspect_attrs(aspect)</code></td>
+<td><code>G.attrs.row('aspects', aspect)</code></td>
+</tr>
+<tr>
+<td><code>G.layers.set_aspect_attrs(aspect, **attrs)</code></td>
+<td><code>G.attrs.update('aspects', {aspect: attrs})</code></td>
+</tr>
+<tr>
+<td><code>G.layers.elementary_attrs(aspect, label)</code></td>
+<td><code>G.attrs.row('elementary_layers', (aspect, label))</code></td>
+</tr>
+<tr>
+<td><code>G.layers.set_elementary_attrs(aspect, label, **attrs)</code></td>
+<td><code>G.attrs.update('elementary_layers', {(aspect, label): attrs})</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.get_graph_attribute(key, default)</code></td>
+<td><code>G.uns.get(key, default)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.get_graph_attributes()</code></td>
+<td><code>dict(G.uns)</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.set_graph_attribute(key, value)</code></td>
+<td><code>G.uns[key] = value</code></td>
+</tr>
+<tr>
+<td><code>G.attrs.audit_attributes()</code></td>
+<td><code>G.attrs.audit()</code></td>
+</tr>
+</tbody>
+</table>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># before</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">set_node_attrs</span><span class="p">(</span><span class="s1">&#39;akt&#39;</span><span class="p">,</span> <span class="n">score</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">G</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">set_node_attrs</span><span class="p">(</span><span class="s1">&#39;akt&#39;</span><span class="p">,</span> <span class="p">(</span><span class="s1">&#39;stim&#39;</span><span class="p">,),</span> <span class="n">expr</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">set_slice_edge_weight</span><span class="p">(</span><span class="s1">&#39;fit&#39;</span><span class="p">,</span> <span class="s1">&#39;e1&#39;</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">)</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">w</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">get_effective_edge_weight</span><span class="p">(</span><span class="s1">&#39;e1&#39;</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=</span><span class="s1">&#39;fit&#39;</span><span class="p">)</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># after</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;akt&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;score&#39;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">}})</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s1">&#39;node_layers&#39;</span><span class="p">,</span> <span class="p">{(</span><span class="s1">&#39;akt&#39;</span><span class="p">,</span> <span class="p">(</span><span class="s1">&#39;stim&#39;</span><span class="p">,)):</span> <span class="p">{</span><span class="s1">&#39;expr&#39;</span><span class="p">:</span> <span class="mf">0.95</span><span class="p">}})</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s1">&#39;edge_slices&#39;</span><span class="p">,</span> <span class="p">{(</span><span class="s1">&#39;fit&#39;</span><span class="p">,</span> <span class="s1">&#39;e1&#39;</span><span class="p">):</span> <span class="p">{</span><span class="s1">&#39;weight&#39;</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">}})</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">w</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">E</span><span class="o">.</span><span class="n">effective_weight</span><span class="p">(</span><span class="s1">&#39;e1&#39;</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=</span><span class="s1">&#39;fit&#39;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Two rules that hold at every address and did not before: writing <code>None</code> (or
+NaN) for a field in <code>update</code> deletes it, and a batch that fails partway leaves
+the graph as it was, schema included.</p>
+<h3 id="if-you-already-used-gattrsaddress-key">If you already used <code>G.attrs[address, key]</code></h3>
+<p>An earlier form of this surface indexed <code>G.attrs</code>: a live row you could write
+through, and a table you could assign. That never shipped in a release, and
+the final surface names each action instead. Reading returns a detached copy;
+nothing you do to what you read reaches the graph.</p>
+<table>
+<thead>
+<tr>
+<th>transitional</th>
+<th>final</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>G.attrs['nodes', key]</code> (read)</td>
+<td><code>G.attrs.row('nodes', key)</code>, a <code>dict</code></td>
+</tr>
+<tr>
+<td><code>G.attrs['nodes', key]['score'] = 3</code></td>
+<td><code>G.attrs.update('nodes', {key: {'score': 3}})</code></td>
+</tr>
+<tr>
+<td><code>G.attrs['nodes', key] = {...}</code> (replace the row)</td>
+<td><code>G.attrs.delete('nodes', keys=[key])</code>, then <code>G.attrs.update('nodes', {key: {...}})</code></td>
+</tr>
+<tr>
+<td><code>del G.attrs['nodes', key]</code></td>
+<td><code>G.attrs.delete('nodes', keys=[key])</code></td>
+</tr>
+<tr>
+<td><code>del G.attrs['nodes', key]['score']</code></td>
+<td><code>G.attrs.delete('nodes', keys=[key], names=['score'])</code></td>
+</tr>
+<tr>
+<td><code>G.attrs['nodes']</code> (read)</td>
+<td><code>G.attrs.nodes</code> or <code>G.attrs.table('nodes')</code></td>
+</tr>
+<tr>
+<td><code>G.attrs['nodes'] = table</code>, <code>G.attrs.nodes = table</code></td>
+<td><code>G.attrs.replace('nodes', table)</code></td>
+</tr>
+</tbody>
+</table>
+<p>Each old form raises <code>TypeError</code> naming its replacement. New in the final
+surface:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;note&#39;</span><span class="p">])</span>  <span class="c1"># drop a field from every row</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">])</span>  <span class="c1"># clear those rows&#39; attributes</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;a&#39;</span><span class="p">],</span> <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;note&#39;</span><span class="p">])</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">table</span><span class="p">)</span>  <span class="c1"># the whole address, from a table</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">table</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">table</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">)</span>  <span class="c1"># any dataframe backend</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">kept</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="n">table</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.5</span><span class="p">]</span>  <span class="c1"># filter with your own dataframe library</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">chosen</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">from_frame</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">kept</span><span class="p">)</span>  <span class="c1"># a fixed selection of the graph&#39;s keys</span>
+</span></code></pre></div>
+<p><code>G.attrs.select(...)</code> is the other way to choose rows, and it is a different
+thing: a live query that keeps its conditions and answers again after the graph
+changes. <code>from_frame</code> keeps the identities the frame named and does not follow
+the graph.</p>
+<p>Elementary layers are keyed <code>(aspect, label)</code>. A caller that wrote
+<code>'time_0h'</code> writes <code>('time', '0h')</code>; the legacy string is decoded only where a
+file or a legacy frame delivers it, and refused when it could name two rows.</p>
+<h2 id="matrix-caches">Matrix caches</h2>
+<table>
+<thead>
+<tr>
+<th>old</th>
+<th>new</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>G.cache.get_adjacency()</code></td>
+<td><code>G.cache.adjacency</code></td>
+</tr>
+<tr>
+<td><code>G.cache.get_csr()</code></td>
+<td><code>G.cache.csr</code></td>
+</tr>
+<tr>
+<td><code>G.cache.get_csc()</code></td>
+<td><code>G.cache.csc</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="views">Views</h2>
+<p>A view carries the graph's reading vocabulary under the graph's names, and
+nothing under another name.</p>
+<table>
+<thead>
+<tr>
+<th>old</th>
+<th>new</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>V.obs</code>, <code>V.var</code></td>
+<td><code>V.attrs.table('nodes')</code>, <code>V.attrs.table('edges')</code></td>
+</tr>
+<tr>
+<td><code>V.nodes_df(...)</code>, <code>V.edges_df(...)</code></td>
+<td><code>V.attrs.table('nodes', derived=True, ...)</code>, <code>V.attrs.table('edges', derived=True, ...)</code></td>
+</tr>
+<tr>
+<td><code>V.node_count</code>, <code>V.edge_count</code></td>
+<td><code>len(V.N)</code>, <code>len(V.E)</code></td>
+</tr>
+<tr>
+<td><code>V.node_ids</code>, <code>V.edge_ids</code></td>
+<td><code>V.N.ids</code>, <code>V.E.ids</code></td>
+</tr>
+<tr>
+<td><code>V.subview(...)</code></td>
+<td><code>V.view(...)</code></td>
+</tr>
+<tr>
+<td><code>V.X</code></td>
+<td><code>V.B</code></td>
+</tr>
+<tr>
+<td><code>V.nx</code>, <code>V.ig</code>, <code>V.gt</code>, <code>V.cache</code></td>
+<td><code>V.materialize().nx</code>, and likewise</td>
+</tr>
+</tbody>
+</table>
+<p>What changed underneath: a view resolves over placement keys and edge ids
+with a stated boundary rule (<code>closed</code> by default, <code>open</code> on request), keeps a
+hyperedge whole or drops it, keeps selected isolated nodes, resolves an
+edge-entity endpoint through its backing edge, and lets a nested view only
+restrict. A view re-resolves when the graph changes. Every write through a
+view — a column, <code>V.attrs.update</code>, <code>replace</code> or <code>delete</code>, <code>uns</code>, a table
+property, a selection made from <code>V</code> — raises <code>ReadOnlyViewError</code>;
+<code>V.materialize()</code> gives an independent graph.</p>
+<h2 id="selections">Selections</h2>
+<p><code>G.N.select(...)</code> and <code>G.E.select(...)</code> kept their names and gained an
+algebra. A selection is live, ordered, and combines with <code>&amp;</code>, <code>|</code> and <code>-</code>. Code
+that turned two selections into Python sets can keep the selections:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># before</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">hits</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">score__gte</span><span class="o">=</span><span class="mf">0.5</span><span class="p">))</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">))</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">hits</span> <span class="o">-=</span> <span class="nb">set</span><span class="p">(</span><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">flag</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">V</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="nb">sorted</span><span class="p">(</span><span class="n">hits</span><span class="p">))</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="c1"># after</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">hits</span> <span class="o">=</span> <span class="p">(</span><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">score__gte</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span> <span class="o">|</span> <span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">))</span> <span class="o">-</span> <span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">flag</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">V</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="n">hits</span><span class="p">)</span>  <span class="c1"># live: V follows the graph</span>
+</span></code></pre></div>
+<p>The same operators — <code>eq</code>, <code>ne</code>, <code>in</code>, <code>not_in</code>, <code>lt</code>, <code>lte</code>, <code>gt</code>, <code>gte</code>,
+<code>isnull</code> — parse in <code>G.attrs.select(address, ...)</code> and in <code>G.layers.where</code>. A
+row selection on <code>node_layers</code> or <code>edge_slices</code> names composite keys; it
+projects onto an axis explicitly, <code>.project('nodes')</code> or <code>.project('edges')</code>,
+and nothing collapses a placement to a bare id on its own.</p>
+<h2 id="edge-records">Edge records</h2>
+<p><code>G.E.at(edge_id).kind</code> is the structural kind — <code>binary</code>, <code>hyper</code> or
+<code>node_edge</code> — and <code>directed</code> is the direction. A caller that matched
+<code>hyper_directed</code> or <code>hyper_undirected</code> reads <code>kind == 'hyper'</code> and <code>directed</code>.
+The derived edges table and <code>G.E['kind']</code> say the same.</p>
+<h2 id="registered-dependents">Registered dependents</h2>
+<p><code>dependents.toml</code> lists, per package, the names it was observed calling before
+this release, the spellings they migrate to and one line per changed name.
+<code>tests/test_dependents.py</code> fails the build when a listed name stops resolving,
+and the release gate (<code>ANNNET_RELEASE_GATE=1</code>) fails while a package's
+migration is still <code>required_before_release</code>. <code>DEPENDENTS.md</code> says what each
+package has to do.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../api-boundary/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Public and internal APIs">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Public and internal APIs
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../support/" class="md-footer__link md-footer__link--next" aria-label="Next: Support helpers">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Support helpers
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      &copy; 2025&ndash;2026 Saez lab, Korcsmaros lab &amp; sysbioverse contributors
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy", "content.action.edit", "navigation.tabs", "navigation.footer"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>

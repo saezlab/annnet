@@ -1,0 +1,3363 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://annnet.sysbioverse.org/reference/api-contract/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../api-boundary/">
+      
+      
+      <link rel="icon" href="../../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>The public surface (contract) - annnet</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Raleway:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Raleway";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../assets/palette-sysbioverse.css">
+    
+      <link rel="stylesheet" href="../../assets/docs-theme.css">
+    
+      <link rel="stylesheet" href="../../assets/overrides.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#contract-the-annnet-public-surface" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <a href="../.." class="md-header__site-link md-ellipsis" title="annnet">
+            annnet
+          </a>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              The public surface (contract)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/saezlab/annnet" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    saezlab/annnet
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../quickstart/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Quickstart
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guide/" class="md-tabs__link">
+          
+  
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../examples/" class="md-tabs__link">
+          
+  
+  
+  Examples
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../community/" class="md-tabs__link">
+          
+  
+  
+  Community
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="annnet" class="md-nav__button md-logo" aria-label="annnet" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    annnet
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/saezlab/annnet" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    saezlab/annnet
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Installation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Quickstart
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Guide
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Guide
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Start here
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/graph-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Graph model and matrices
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/annotations-and-views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Annotations, selections, and views
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/slices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Slices and analysis contexts
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/layers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Layers: coordinates, coupling, measurements, and mathematics
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/computation-and-storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Computation and storage
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Examples
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Choose an example
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Case studies
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
+            <span class="md-nav__icon md-icon"></span>
+            Case studies
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/use_cases/UC1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Fitting a multi-condition signaling network stored in AnnNet
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/use_cases/UC2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tracing a TGF-beta fibrosis response in one AnnNet object
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Integrations
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
+            <span class="md-nav__icon md-icon"></span>
+            Integrations
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/scenarios/omnipath_table_ingestion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    OmniPath table ingestion
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/scenarios/cytoscape_cx2_export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Cytoscape CX2 export
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/scenarios/pyg_heterodata_export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    PyG HeteroData export
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../examples/scenarios/causal_activity_bridge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Causal activity bridge
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    API Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            API Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Reference Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    The public surface (contract)
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    The public surface (contract)
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-exports" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Exports
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-the-graph-object" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. The graph object
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. The graph object">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.1 Construction
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-add-and-remove-elements" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.2 Add and remove elements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-axes-counts-and-identity" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.3 Axes, counts and identity
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-attributes-and-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.4 Attributes and metadata
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#25-matrices" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.5 Matrices
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#26-lookups-and-traversal" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.6 Lookups and traversal
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#27-namespaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.7 Namespaces
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#28-views-and-io" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.8 Views and IO
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#29-the-complete-graph-surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.9 The complete graph surface
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-attributes-eight-addresses-one-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Attributes: eight addresses, one shape
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-predicates-and-selections" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Predicates and selections
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Predicates and selections">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-one-predicate-language" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.1 One predicate language
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-typed-selections" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.2 Typed selections
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-row-selections-and-projections" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.3 Row selections and projections
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-a-live-query-and-a-table-you-filtered-are-different-things" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.4 A live query and a table you filtered are different things
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-views-live-read-only-composable" class="md-nav__link">
+    <span class="md-ellipsis">
+      5. Views: live, read-only, composable
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-records-and-edge-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      6. Records and edge fields
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-exceptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      7. Exceptions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-removed-names-and-their-replacements" class="md-nav__link">
+    <span class="md-ellipsis">
+      8. Removed names and their replacements
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-boundary/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Public and internal APIs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Migrating existing code
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Support helpers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_6" id="__nav_6_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Core
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_6">
+            <span class="md-nav__icon md-icon"></span>
+            Core
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/graph/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Graph
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/adding-edges/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Edge construction
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/backend-accessors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Backend accessors
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/indexing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Indexing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/attributes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Attributes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/bulk-operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Operations
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/history/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    History
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Cache
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Views
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/slices/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Slices
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core/layers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Layers
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_7" id="__nav_6_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Algorithms
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_7">
+            <span class="md-nav__icon md-icon"></span>
+            Algorithms
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../algorithms/traversal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Traversal
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_8" id="__nav_6_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    IO
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_8">
+            <span class="md-nav__icon md-icon"></span>
+            IO
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/format-comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Format comparison
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/annnet-format/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Native .annnet format
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/parquet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Parquet
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/graphml-gexf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    GraphML and GEXF
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/sif/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    SIF
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/sbml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    SBML
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/cx2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CX2
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/json/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    JSON and NDJSON
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/csv/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    CSV
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/excel/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Excel
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/dataframes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    DataFrames
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/pyg/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    PyTorch Geometric
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_9" id="__nav_6_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Adapters
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_9">
+            <span class="md-nav__icon md-icon"></span>
+            Adapters
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adapters/networkx/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    NetworkX adapter
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adapters/igraph/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    igraph adapter
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../adapters/graphtool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    graph-tool adapter
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_10" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_10" id="__nav_6_10_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Utilities
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_10">
+            <span class="md-nav__icon md-icon"></span>
+            Utilities
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../utils/plotting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Plotting
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Community
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            Community
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Join us
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/contribute-docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contribute documentation
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/contribute-codebase/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contribute code
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    In-memory architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Performance report
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-exports" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Exports
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-the-graph-object" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. The graph object
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. The graph object">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-construction" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.1 Construction
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-add-and-remove-elements" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.2 Add and remove elements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-axes-counts-and-identity" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.3 Axes, counts and identity
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-attributes-and-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.4 Attributes and metadata
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#25-matrices" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.5 Matrices
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#26-lookups-and-traversal" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.6 Lookups and traversal
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#27-namespaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.7 Namespaces
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#28-views-and-io" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.8 Views and IO
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#29-the-complete-graph-surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      2.9 The complete graph surface
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-attributes-eight-addresses-one-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Attributes: eight addresses, one shape
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-predicates-and-selections" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Predicates and selections
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Predicates and selections">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#41-one-predicate-language" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.1 One predicate language
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#42-typed-selections" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.2 Typed selections
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#43-row-selections-and-projections" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.3 Row selections and projections
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#44-a-live-query-and-a-table-you-filtered-are-different-things" class="md-nav__link">
+    <span class="md-ellipsis">
+      4.4 A live query and a table you filtered are different things
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-views-live-read-only-composable" class="md-nav__link">
+    <span class="md-ellipsis">
+      5. Views: live, read-only, composable
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-records-and-edge-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      6. Records and edge fields
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-exceptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      7. Exceptions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-removed-names-and-their-replacements" class="md-nav__link">
+    <span class="md-ellipsis">
+      8. Removed names and their replacements
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/saezlab/annnet/edit/master/docs/reference/api-contract.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="contract-the-annnet-public-surface">Contract: the AnnNet public surface</h1>
+<p><strong>Status</strong>: the authority for the public surface of the package. An earlier
+contract, written when the node and edge tables were still <code>obs</code> and <code>var</code>,
+is superseded by this one.</p>
+<p>This page states what the package exports and what an <code>AnnNet</code> object, its
+namespaces, a view and a selection answer to, with the semantics a caller can
+rely on. <code>tests/test_public_surface.py</code> reads it both ways: every name this
+page states as <code>G.&lt;name&gt;</code> must be on the object, and every public name the
+object carries must be stated here. The machine-readable inventory of the same
+surface is <code>docs/reference/public-surface.json</code>, regenerated by
+<code>python tools/public_surface.py</code> after a deliberate change of the surface.</p>
+<p><code>G</code> is an <code>AnnNet</code>; <code>V</code> is a <code>GraphView</code>; <code>address</code> is one of the eight
+attribute addresses. Anything not stated here — every name beginning with an
+underscore, every module under <code>annnet.core</code> other than the names <code>annnet.core</code>
+exports — is internal and carries no promise (<code>docs/reference/api-boundary.md</code>).</p>
+<h2 id="1-exports">1. Exports</h2>
+<p><code>annnet</code> exports the graph and its types, the IO functions, the adapters, the
+backend selectors and the subpackages. The exact list is <code>annnet.__all__</code>, and
+the inventory holds it. The types a caller meets through the graph surface:</p>
+<table>
+<thead>
+<tr>
+<th>name</th>
+<th>what it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AnnNet</code> (<code>Graph</code> is the same class)</td>
+<td>the graph</td>
+</tr>
+<tr>
+<td><code>GraphView</code></td>
+<td>the live, read-only view <code>G.view(...)</code> returns</td>
+</tr>
+<tr>
+<td><code>Attrs</code></td>
+<td>the attribute namespace <code>G.attrs</code></td>
+</tr>
+<tr>
+<td><code>NodeSequence</code>, <code>EdgeSequence</code> (from <code>annnet.core</code>)</td>
+<td><code>G.N</code>, <code>G.E</code>, and every selection made from them</td>
+</tr>
+<tr>
+<td><code>RowSelection</code></td>
+<td>what <code>G.attrs.select(address, ...)</code> and <code>G.attrs.from_frame(address, frame)</code> return</td>
+</tr>
+<tr>
+<td><code>Schema</code></td>
+<td>what <code>G.attrs.schema(address)</code> returns</td>
+</tr>
+<tr>
+<td><code>NodeView</code>, <code>EdgeView</code>, <code>EdgeType</code></td>
+<td>the records <code>G.N.at(id)</code> and <code>G.E.at(id)</code> return</td>
+</tr>
+<tr>
+<td><code>Aspect</code>, <code>OrderedLabels</code>, <code>as_aspect</code>, <code>LayerSelection</code></td>
+<td>aspect declarations and a layer window</td>
+</tr>
+<tr>
+<td><code>Endpoint</code>, <code>as_endpoint</code>, <code>as_endpoints</code></td>
+<td>endpoint identities</td>
+</tr>
+<tr>
+<td><code>Provenance</code>, <code>Set</code>, <code>Space</code>, <code>ValueMatrix</code>, <code>ValueResolver</code>, <code>MatrixValues</code>, <code>ContextualValues</code></td>
+<td>provenance, spaces and attached numerical backings</td>
+</tr>
+<tr>
+<td><code>BOUNDARIES</code></td>
+<td><code>('closed', 'open')</code>, the two boundary rules of a view</td>
+</tr>
+</tbody>
+</table>
+<p><code>annnet.core.__all__</code> is exactly: <code>AnnNet</code>, <code>Aspect</code>, <code>Attrs</code>, <code>BOUNDARIES</code>,
+<code>ContextualValues</code>, <code>EdgeSequence</code>, <code>EdgeType</code>, <code>EdgeView</code>, <code>Endpoint</code>,
+<code>Graph</code>, <code>GraphView</code>, <code>LayerSelection</code>, <code>MatrixValues</code>, <code>NodeSequence</code>,
+<code>NodeView</code>, <code>OrderedLabels</code>, <code>Provenance</code>, <code>RowSelection</code>, <code>Schema</code>, <code>Set</code>,
+<code>Space</code>, <code>ValueMatrix</code>, <code>ValueResolver</code>, <code>as_aspect</code>, <code>as_endpoint</code>,
+<code>as_endpoints</code>.</p>
+<h2 id="2-the-graph-object">2. The graph object</h2>
+<h3 id="21-construction">2.1 Construction</h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">G</span> <span class="o">=</span> <span class="n">AnnNet</span><span class="p">(</span><span class="n">directed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">aspects</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span></code></pre></div>
+<p><code>directed</code> is the default of a binary edge that declares none; <code>aspects</code> is
+<code>{aspect: [label, ...]}</code> for a multilayer graph. Nothing else is built: an
+empty graph holds no table, index or per-element record it was not asked for.
+A flat graph gains aspects through <code>G.layers.set_aspects(...)</code> and hyperedges
+through <code>G.add_edges(...)</code> with no change of surface.</p>
+<h3 id="22-add-and-remove-elements">2.2 Add and remove elements</h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">G</span><span class="o">.</span><span class="n">add_nodes</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">layer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">attributes</span><span class="p">)</span>   <span class="c1"># one or many</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">G</span><span class="o">.</span><span class="n">add_edges</span><span class="p">(</span><span class="n">edges_or_source</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">edge_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">directed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>            <span class="n">parallel</span><span class="o">=</span><span class="s1">&#39;update&#39;</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">as_entity</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">propagate</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>            <span class="n">flexible</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">attributes</span><span class="p">)</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">G</span><span class="o">.</span><span class="n">remove_nodes</span><span class="p">(</span><span class="n">node_ids</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s1">&#39;raise&#39;</span><span class="p">)</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">G</span><span class="o">.</span><span class="n">remove_edges</span><span class="p">(</span><span class="n">edge_ids</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s1">&#39;raise&#39;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>A string is a node, a <code>(node_id, layer_coord)</code> tuple is a placement, a list
+holds many. An edge is <code>(source, target)</code>, a mapping with <code>source</code>/<code>target</code> or
+<code>head</code>/<code>tail</code> or <code>members</code>, or a list of those; a mapping with <code>members</code> is a
+hyperedge; a <code>head</code>/<code>tail</code> mapping is a directed hyperedge. On a multilayer
+graph a bare id names a node only while it sits on one layer; otherwise the
+placement tuple is required and a bare id raises <code>ValueError</code>. <code>remove_nodes</code>
+of a bare id removes every placement of that id.</p>
+<h3 id="23-axes-counts-and-identity">2.3 Axes, counts and identity</h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">G</span><span class="o">.</span><span class="n">N</span>  <span class="c1"># NodeSequence: the nodes, in row order</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">G</span><span class="o">.</span><span class="n">E</span>  <span class="c1"># EdgeSequence: the structural edges, in column order</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nb">len</span><span class="p">(</span><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">G</span><span class="o">.</span><span class="n">E</span><span class="p">)</span>  <span class="c1"># constant time, whatever the size of the graph</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">G</span><span class="o">.</span><span class="n">shape</span>  <span class="c1"># (len(G.N), len(G.E))</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">G</span><span class="o">.</span><span class="n">supra_shape</span>  <span class="c1"># (placements, edges)</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">G</span><span class="o">.</span><span class="n">nv_supra</span>  <span class="c1"># the number of placements</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">G</span><span class="o">.</span><span class="n">supra_nodes</span><span class="p">()</span>  <span class="c1"># every (node_id, layer_coord) placement, in row order</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">G</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">node_id</span><span class="p">,</span> <span class="o">**</span><span class="n">aspects</span><span class="p">)</span>  <span class="c1"># the placement key one node sits on; KeyError if it does not</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">G</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">node_id</span><span class="p">,</span> <span class="o">**</span><span class="n">aspects</span><span class="p">)</span>  <span class="c1"># the same question, answered with a bool</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="n">G</span><span class="o">.</span><span class="n">has_node</span><span class="p">(</span><span class="n">node_id</span><span class="p">)</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="n">G</span><span class="o">.</span><span class="n">has_edge</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">edge_id</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="n">G</span><span class="o">.</span><span class="n">entity_kinds</span><span class="p">()</span>  <span class="c1"># {entity_id: &#39;node&#39; | &#39;edge&#39;}</span>
+</span></code></pre></div>
+<p><code>len(G.N)</code> is the number of distinct node ids; <code>G.nv_supra</code> counts placements.
+Both are maintained counters and never enumerate. Iterating <code>G.N</code> yields ids;
+<code>G.N[i]</code> is the id at one position; <code>G.N['field']</code> reads a column as a
+read-only array and <code>G.N['field'] = values</code> writes one; <code>G.N.at(id)</code> is one
+record. The same holds of <code>G.E</code>.</p>
+<h3 id="24-attributes-and-metadata">2.4 Attributes and metadata</h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span>  <span class="c1"># the Attrs namespace (section 3)</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">G</span><span class="o">.</span><span class="n">uns</span>  <span class="c1"># graph-level metadata, a dict</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">G</span><span class="o">.</span><span class="n">summary</span><span class="p">()</span>  <span class="c1"># counts, aspects, slices, fields and edge tallies, built without a frame or a matrix</span>
+</span></code></pre></div>
+<h3 id="25-matrices">2.5 Matrices</h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">G</span><span class="o">.</span><span class="n">B</span>  <span class="c1"># incidence matrix over every entity row (placements and edge entities)</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">G</span><span class="o">.</span><span class="n">S</span>  <span class="c1"># signed incidence matrix</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">G</span><span class="o">.</span><span class="n">A</span>  <span class="c1"># adjacency matrix</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">G</span><span class="o">.</span><span class="n">H</span>  <span class="c1"># hypergraph incidence matrix</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">G</span><span class="o">.</span><span class="n">L</span>  <span class="c1"># Laplacian</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">G</span><span class="o">.</span><span class="n">matrices</span>  <span class="c1"># the named-matrix namespace (build, cache, drop)</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">G</span><span class="o">.</span><span class="n">idx</span>  <span class="c1"># position &lt;-&gt; identity translation for a materialized matrix</span>
+</span></code></pre></div>
+<h3 id="26-lookups-and-traversal">2.6 Lookups and traversal</h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">G</span><span class="o">.</span><span class="n">degree</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span>             <span class="c1"># distinct incident structural edges; costs the degree, not the graph</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">G</span><span class="o">.</span><span class="n">neighbors</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span>          <span class="c1"># every neighbour; the directed reads:</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">G</span><span class="o">.</span><span class="n">out_neighbors</span><span class="p">(</span><span class="n">node_id</span><span class="p">),</span> <span class="n">G</span><span class="o">.</span><span class="n">in_neighbors</span><span class="p">(</span><span class="n">node_id</span><span class="p">),</span> <span class="n">G</span><span class="o">.</span><span class="n">successors</span><span class="p">(</span><span class="n">node_id</span><span class="p">),</span> <span class="n">G</span><span class="o">.</span><span class="n">predecessors</span><span class="p">(</span><span class="n">node_id</span><span class="p">)</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">G</span><span class="o">.</span><span class="n">incident_edges</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s1">&#39;both&#39;</span><span class="p">)</span>   <span class="c1"># [(column, EdgeView), ...]</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">G</span><span class="o">.</span><span class="n">edge_list</span><span class="p">()</span>                <span class="c1"># every binary edge as (source, target, edge_id, weight)</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">G</span><span class="o">.</span><span class="n">global_count</span><span class="p">(</span><span class="n">kind</span><span class="p">)</span>         <span class="c1"># one count of one kind of slice member, by name</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">G</span><span class="o">.</span><span class="n">is_multilayer</span>              <span class="c1"># whether the graph declares aspects beyond the flat one</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">G</span><span class="o">.</span><span class="n">make_undirected</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">drop_flexible</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">update_default</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span></code></pre></div>
+<p>A self-loop and a hyperedge each count once in the degree; a zero-weight edge
+counts; a placeholder edge never does; an unknown entity has degree 0; an
+ambiguous bare id on a multilayer graph raises <code>ValueError</code>.</p>
+<h3 id="27-namespaces">2.7 Namespaces</h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">G</span><span class="o">.</span><span class="n">layers</span>  <span class="c1"># aspects, layer windows (where), placements, values, layer algebra</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">G</span><span class="o">.</span><span class="n">slices</span>  <span class="c1"># slice registry, membership, compare, edge_frame</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">G</span><span class="o">.</span><span class="n">ops</span>  <span class="c1"># copy, subgraph, extract, union/intersection/difference, reverse, incidence</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">G</span><span class="o">.</span><span class="n">history</span>  <span class="c1"># snapshots and diffs</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">G</span><span class="o">.</span><span class="n">provenance</span>  <span class="c1"># provenance records</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="n">G</span><span class="o">.</span><span class="n">spaces</span>  <span class="c1"># the spaces a node belongs to</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">G</span><span class="o">.</span><span class="n">cache</span>  <span class="c1"># matrix caches</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="n">G</span><span class="o">.</span><span class="n">nx</span><span class="p">,</span> <span class="n">G</span><span class="o">.</span><span class="n">ig</span><span class="p">,</span> <span class="n">G</span><span class="o">.</span><span class="n">gt</span>  <span class="c1"># proxies onto networkx / igraph / graph-tool over this graph</span>
+</span></code></pre></div>
+<p>The public names of each owned namespace are in the inventory. <code>G.nx</code>,
+<code>G.ig</code> and <code>G.gt</code> expose the surface of the library they wrap, which is that
+library's and changes with its version.</p>
+<h3 id="28-views-and-io">2.8 Views and IO</h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">G</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">layers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">slices</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">predicate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">boundary</span><span class="o">=</span><span class="s1">&#39;closed&#39;</span><span class="p">)</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">G</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">matrix</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">AnnNet</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="29-the-complete-graph-surface">2.9 The complete graph surface</h3>
+<p>Every public name an <code>AnnNet</code> object answers to, and nothing else:</p>
+<p><code>G.A</code>, <code>G.B</code>, <code>G.E</code>, <code>G.H</code>, <code>G.L</code>, <code>G.N</code>, <code>G.S</code>, <code>G.add_edges</code>, <code>G.add_nodes</code>,
+<code>G.at</code>, <code>G.attrs</code>, <code>G.cache</code>, <code>G.degree</code>, <code>G.edge_list</code>, <code>G.entity_kinds</code>,
+<code>G.exists</code>, <code>G.global_count</code>, <code>G.gt</code>, <code>G.has_edge</code>, <code>G.has_node</code>,
+<code>G.history</code>, <code>G.idx</code>, <code>G.ig</code>, <code>G.in_neighbors</code>, <code>G.incident_edges</code>,
+<code>G.is_multilayer</code>, <code>G.layers</code>, <code>G.make_undirected</code>, <code>G.matrices</code>,
+<code>G.neighbors</code>, <code>G.nv_supra</code>, <code>G.nx</code>, <code>G.ops</code>, <code>G.out_neighbors</code>,
+<code>G.predecessors</code>, <code>G.provenance</code>, <code>G.read</code>, <code>G.remove_edges</code>,
+<code>G.remove_nodes</code>, <code>G.shape</code>, <code>G.slices</code>, <code>G.spaces</code>, <code>G.successors</code>,
+<code>G.summary</code>, <code>G.supra_nodes</code>, <code>G.supra_shape</code>, <code>G.uns</code>, <code>G.view</code>, <code>G.write</code>.</p>
+<h2 id="3-attributes-eight-addresses-one-shape">3. Attributes: eight addresses, one shape</h2>
+<p>An address is what a set of attributes is keyed by. The eight, with the key
+each takes:</p>
+<table>
+<thead>
+<tr>
+<th>address</th>
+<th>key</th>
+<th>key columns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nodes</code></td>
+<td><code>node_id</code></td>
+<td><code>node_id</code></td>
+</tr>
+<tr>
+<td><code>edges</code></td>
+<td><code>edge_id</code></td>
+<td><code>edge_id</code></td>
+</tr>
+<tr>
+<td><code>slices</code></td>
+<td><code>slice_id</code></td>
+<td><code>slice_id</code></td>
+</tr>
+<tr>
+<td><code>aspects</code></td>
+<td><code>aspect</code></td>
+<td><code>aspect</code></td>
+</tr>
+<tr>
+<td><code>layers</code></td>
+<td>layer coordinate tuple</td>
+<td><code>layer</code></td>
+</tr>
+<tr>
+<td><code>edge_slices</code></td>
+<td><code>(slice_id, edge_id)</code></td>
+<td><code>slice_id</code>, <code>edge_id</code></td>
+</tr>
+<tr>
+<td><code>node_layers</code></td>
+<td><code>(node_id, layer_coord)</code></td>
+<td><code>node_id</code>, <code>layer</code></td>
+</tr>
+<tr>
+<td><code>elementary_layers</code></td>
+<td><code>(aspect, label)</code></td>
+<td><code>aspect</code>, <code>elementary_layer</code></td>
+</tr>
+</tbody>
+</table>
+<p>Every address answers the same expressions, differing only in the name of the
+address. A read returns a copy, and a write is a named call:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Read: detached copies. Editing one changes nothing in the graph.</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">nodes</span>                      <span class="c1"># the stored table, a dataframe; one property per address</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">table</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">derived</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">layout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">query</span><span class="p">)</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">row</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>          <span class="c1"># one row, a dict; a cell is row(...).get(name, default)</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">rows</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>   <span class="c1"># {key: dict}</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">schema</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">derived</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>      <span class="c1"># keys and fields without a frame</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">audit</span><span class="p">()</span>                    <span class="c1"># rows whose structural key no longer exists</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">backend</span>                    <span class="c1"># the dataframe backend tables are rendered in</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="c1"># Write: each call is checked whole before anything changes.</span>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="p">{</span><span class="o">...</span><span class="p">},</span> <span class="o">...</span><span class="p">},</span> <span class="o">*</span><span class="p">,</span> <span class="n">layer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>   <span class="c1"># merge the fields named</span>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">table</span><span class="p">)</span>                  <span class="c1"># replace the whole address with a table</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>   <span class="c1"># remove attributes, never elements</span>
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>
+</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="c1"># Select.</span>
+</span><span id="__span-8-16"><a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">score__gte</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>     <span class="c1"># a live RowSelection (section 4)</span>
+</span><span id="__span-8-17"><a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">from_frame</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">frame</span><span class="p">)</span>          <span class="c1"># a fixed RowSelection from a frame&#39;s key columns</span>
+</span><span id="__span-8-18"><a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a>
+</span><span id="__span-8-19"><a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a><span class="n">address</span> <span class="ow">in</span> <span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="p">;</span> <span class="nb">iter</span><span class="p">(</span><span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="p">)</span>  <span class="c1"># the eight addresses</span>
+</span></code></pre></div>
+<p><code>G.attrs</code> is not indexed and its table properties are read-only. The forms
+<code>G.attrs[address]</code>, <code>G.attrs[address, key]</code>, assigning to or deleting either,
+and <code>G.attrs.nodes = table</code> raise <code>TypeError</code> naming the call to use instead
+(<code>row</code>, <code>update</code>, <code>replace</code>, <code>delete</code>).</p>
+<p>Semantics:</p>
+<ul>
+<li><strong>A null in an update removes the field.</strong> <code>update</code> with <code>None</code> or NaN for a
+  field removes it from the row; a row never shows a null field; a table cell
+  that is null means the same. <code>delete</code> is the explicit way to say it. One
+  rule for every address and every backend.</li>
+<li><strong><code>delete(address, keys=None, names=None)</code></strong> removes attributes and never the
+  node, edge, slice or layer that carries them:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th><code>keys</code></th>
+<th><code>names</code></th>
+<th>effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>given</td>
+<td>omitted</td>
+<td>clear every attribute of those rows</td>
+</tr>
+<tr>
+<td>omitted</td>
+<td>given</td>
+<td>drop those fields from every row of the address</td>
+</tr>
+<tr>
+<td>given</td>
+<td>given</td>
+<td>drop those fields from those rows</td>
+</tr>
+<tr>
+<td>omitted</td>
+<td>omitted</td>
+<td><code>ValueError</code>; never "everything"</td>
+</tr>
+</tbody>
+</table>
+<p>An explicit empty <code>keys</code> or <code>names</code> selects nothing and is a no-op. A name
+  the address holds no attribute for raises <code>KeyError</code>, a reserved name
+  <code>ValueError</code>. A field that no row carries after the call is gone from the
+  schema and the table columns. The return value is the number of rows that
+  lost an attribute.
+- <strong><code>replace(address, table)</code></strong> needs the address's key columns; a key the
+  table omits loses its attributes and keeps its existence. Elements are never
+  added or removed by a table.
+- <strong>A write is all or nothing.</strong> <code>update</code>, <code>replace</code> and <code>delete</code> are checked
+  whole before any write. If one fails partway — an unknown key, a reserved
+  field, a duplicate key, a composite-key collision, a value a
+  flexible-direction policy cannot evaluate — the attribute values, <strong>the
+  fields and their types and order</strong>, the topology any policy rewrote, the
+  node-key index and every derived cache are as they were, and the exception
+  propagates. A scalar write never copies the graph.
+- <strong>Reserved fields</strong> — the key columns and, for edges, the structural columns
+  (<code>source</code>, <code>target</code>, <code>head</code>, <code>tail</code>, <code>members</code>, <code>weight</code>, <code>directed</code>, <code>kind</code>,
+  <code>slice</code>, <code>slice_weight</code>, <code>flexible</code>, <code>edge_type</code>) — are refused with
+  <code>ValueError</code>. A node attribute named <code>kind</code> is a user attribute and is never
+  overwritten by the entity kind.
+- <strong>Keys</strong> are validated: an unknown key raises <code>KeyError</code>; a key of the wrong
+  shape raises <code>TypeError</code>; a key that appears twice in one batch, however it
+  is spelled, raises <code>ValueError</code> before anything is written. <code>node_layers</code>
+  takes <code>(node_id, layer_coord)</code>; a bare node id needs <code>layer=</code> in <code>update()</code>.
+  Elementary layers are keyed <code>(aspect, label)</code>; the legacy <code>aspect_label</code>
+  string is accepted only at the IO boundary and rejected as ambiguous when it
+  could name two rows.
+- <code>table(...)</code> with <code>derived=True</code> renders everything the graph can say about
+  the subject: for <code>edges</code>, <code>kind</code> (<code>binary</code>, <code>hyper</code>, <code>node_edge</code>),
+  <code>directed</code>, <code>weight</code>, <code>ml_kind</code>, <code>source</code>, <code>target</code>, <code>src_layer</code>,
+  <code>dst_layer</code>, <code>head</code>, <code>tail</code>, <code>members</code>; with <code>layout='incidences'</code>, one row
+  per endpoint with <code>edge_id</code>, <code>position</code>, <code>entity_id</code>, <code>entity_kind</code>,
+  <code>layer</code>, <code>layer_id</code>, <code>role</code>, <code>coefficient</code>, <code>kind</code> and <code>directed</code>, so an
+  endpoint joins to its node, layer and edge rows without parsing anything.
+  <code>limit=</code> builds that many rows and no more; it is a preview, never a
+  selection. Query arguments (<code>slice=</code>, <code>in_slice=</code>, <code>layer=</code>,
+  <code>include_hyper=</code>, <code>include_binary=</code>, <code>include_directed=</code>, <code>include_weight=</code>,
+  <code>resolved_weight=</code>) apply to the derived edges table only.
+- <code>schema(address)</code> reports <code>keys</code>, <code>fields</code> (name, type), <code>names</code>, <code>count</code>
+  and <code>index</code> without building a frame.</p>
+<h2 id="4-predicates-and-selections">4. Predicates and selections</h2>
+<h3 id="41-one-predicate-language">4.1 One predicate language</h3>
+<p>Every <code>select</code> — <code>G.N.select</code>, <code>G.E.select</code>, <code>G.attrs.select</code>,
+<code>G.layers.where</code> — parses the same conditions: <code>field=value</code> or
+<code>field__operator=value</code>, with operators <code>eq</code>, <code>ne</code>, <code>in</code>, <code>not_in</code>, <code>lt</code>,
+<code>lte</code>, <code>gt</code>, <code>gte</code>, <code>isnull</code>. A mapping with <code>(field, operator)</code> tuple keys
+names a field that itself contains <code>__</code>; a literal field named <code>a__b</code> wins
+over the split. A null value satisfies nothing but <code>isnull=True</code>. An ordered
+aspect compares by its declared order; an ordering operator on a categorical
+aspect raises <code>ValueError</code>; an unknown field raises <code>KeyError</code>; an
+incomparable pair raises <code>TypeError</code>, at the call.</p>
+<h3 id="42-typed-selections">4.2 Typed selections</h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">sel</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">score__gte</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>  <span class="c1"># NodeSequence, live</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">sel</span><span class="o">.</span><span class="n">ids</span>  <span class="c1"># tuple of ids, in the graph&#39;s order</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nb">len</span><span class="p">(</span><span class="n">sel</span><span class="p">)</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="nb">id</span> <span class="ow">in</span> <span class="n">sel</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="nb">list</span><span class="p">(</span><span class="n">sel</span><span class="p">)</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="n">sel</span> <span class="o">&amp;</span> <span class="n">other</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="n">sel</span> <span class="o">|</span> <span class="n">other</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="n">sel</span> <span class="o">-</span> <span class="n">other</span>  <span class="c1"># typed algebra; result is ordered by the root graph</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="n">sel</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>  <span class="c1"># narrows further</span>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">select</span><span class="p">([</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">])</span>  <span class="c1"># explicit ids: checked to exist, fixed</span>
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>  <span class="c1"># a boolean mask over this sequence, bound now</span>
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="nb">callable</span><span class="p">)</span>  <span class="c1"># an id predicate; its exceptions propagate</span>
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="o">**</span><span class="n">conditions</span><span class="p">)</span>  <span class="c1"># the one match, or KeyError</span>
+</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">node_id</span><span class="p">)</span>  <span class="c1"># NodeView; G.E.at(edge_id) -&gt; EdgeView</span>
+</span><span id="__span-9-15"><a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-9-16"><a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span>
+</span><span id="__span-9-17"><a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a><span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">axis</span><span class="p">,</span> <span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">id_key</span><span class="p">,</span> <span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">id_column</span><span class="p">,</span> <span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">intrinsic_names</span><span class="p">,</span> <span class="n">G</span><span class="o">.</span><span class="n">N</span><span class="o">.</span><span class="n">graph</span>
+</span><span id="__span-9-18"><a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a><span class="n">G</span><span class="o">.</span><span class="n">E</span><span class="o">.</span><span class="n">effective_weight</span><span class="p">(</span><span class="n">edge_id</span><span class="p">,</span> <span class="nb">slice</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span></code></pre></div>
+<p>A selection keeps its plan, so a view built on it re-evaluates when the graph
+changes; explicit ids and masks are fixed at the call and never retarget after
+a slot is reused. A callable is evaluated again on every read, and so is
+everything derived from a view that holds one: a selection made in it, a union
+or difference, the projection of its attribute rows and a view built on any of
+these, even when the state the callable reads changed without any change of the
+graph. Each leaf is evaluated in the scope it was made in — a
+selection from <code>V.N</code> inside <code>V</code> — and two selections from different scopes
+combine by the root graph's order. Combining selections of different graphs
+raises <code>ValueError</code>; a node selection with an edge selection raises
+<code>TypeError</code>.</p>
+<h3 id="43-row-selections-and-projections">4.3 Row selections and projections</h3>
+<p><code>G.attrs.select(address, ...)</code> returns a <code>RowSelection</code> with <code>address</code>,
+<code>graph</code>, <code>keys</code> (the address's keys, in the address's order), <code>ids</code> (the same
+for single-key addresses), <code>rows()</code>, <code>len</code>, iteration, membership and the same
+<code>&amp;</code>, <code>|</code>, <code>-</code>. A selection on a composite address projects explicitly:
+<code>select('node_layers', ...).project('nodes')</code> and
+<code>select('edge_slices', ...).project('edges')</code> or <code>.project('slices')</code>. Any
+other projection raises <code>TypeError</code>; nothing collapses a placement to a bare
+id silently.</p>
+<h3 id="44-a-live-query-and-a-table-you-filtered-are-different-things">4.4 A live query and a table you filtered are different things</h3>
+<p><code>select</code> (on <code>G.N</code>, <code>G.E</code>, <code>G.attrs</code>, <code>G.layers</code>) is a query over the graph.
+It keeps its conditions and answers again after the graph changes. A table read
+with <code>G.attrs.table</code> or <code>G.attrs.&lt;address&gt;</code> is a snapshot of the moment it was
+read, and filtering it is the dataframe library's job:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">table</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">table</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">)</span>  <span class="c1"># any supported backend</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">kept</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">pl</span><span class="o">.</span><span class="n">col</span><span class="p">(</span><span class="s1">&#39;score&#39;</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.5</span><span class="p">)</span>  <span class="c1"># the caller&#39;s own dataframe API</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">chosen</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">from_frame</span><span class="p">(</span><span class="s1">&#39;nodes&#39;</span><span class="p">,</span> <span class="n">kept</span><span class="p">)</span>  <span class="c1"># a fixed RowSelection</span>
+</span></code></pre></div>
+<p><code>from_frame(address, frame)</code> reads only the address's key columns, validates
+them (a missing key column or a null key raises <code>ValueError</code>, an unknown key
+<code>KeyError</code>), and returns a <code>RowSelection</code> of exactly those keys, in the
+address's order and without repeats. It is fixed: it holds the identities the
+frame named, not the condition that produced the frame, so a node added later
+that satisfies the same filter is not picked up, and a key that is removed and
+added again is the same key. An empty frame is an empty selection. It composes
+with live selections through <code>&amp;</code>, <code>|</code> and <code>-</code> and projects like any other row
+selection. AnnNet accepts no dataframe expression in <code>select</code> and has no second
+keyword syntax for fields.</p>
+<h2 id="5-views-live-read-only-composable">5. Views: live, read-only, composable</h2>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">V</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">layers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">slices</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">predicate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">boundary</span><span class="o">=</span><span class="s1">&#39;closed&#39;</span><span class="p">)</span>
+</span></code></pre></div>
+<p><code>nodes</code> takes ids, placement keys, a <code>NodeSequence</code>, a <code>RowSelection</code> of
+<code>nodes</code> or <code>node_layers</code>, a mask or a callable; <code>edges</code> takes ids, an
+<code>EdgeSequence</code>, a <code>RowSelection</code> of <code>edges</code>, a mask or a callable; <code>layers</code>
+takes coordinates or <code>G.layers.where(...)</code>; <code>slices</code> takes ids or a slice
+selection. An unknown id raises <code>KeyError</code>. A selection of another graph
+raises <code>ValueError</code>.</p>
+<p>Resolution, over stable placement keys and edge ids, in the graph's order:</p>
+<ul>
+<li><strong>closed</strong> (the default): an edge is kept only when every endpoint is
+  selected; a hyperedge is kept whole or dropped; a self-loop has one
+  endpoint; a half-edge is judged by its nonempty side; a selected isolated
+  node stays. An edge-only filter keeps its edges and their endpoints, not
+  every unrelated node. A slice is a membership set, not a request to induce
+  edges.</li>
+<li><strong>open</strong>: the edges touching a selected placement are kept with their full
+  endpoints — one hop — with the edge and slice restrictions still applied
+  and never beyond the parent view. The added endpoints are reported by
+  <code>V.summary()['expanded']</code>.</li>
+<li><strong>edge entities</strong>: an edge that ends on an edge entity needs the backing
+  edge; an edge-only filter brings it along, a closed node filter keeps the
+  dependent edge only when the backing edge is kept, an open filter brings the
+  backing edge when the filters allow it and drops the dependent edge
+  otherwise. Nothing substitutes a node or leaves a dangling reference.</li>
+<li><strong>nested</strong>: <code>V.view(...)</code> only restricts; its filters intersect with <code>V</code>'s
+  and keep every predicate.</li>
+</ul>
+<p>The surface of a view:</p>
+<p><code>V.A</code>, <code>V.B</code>, <code>V.E</code>, <code>V.H</code>, <code>V.L</code>, <code>V.N</code>, <code>V.S</code>, <code>V.aspects</code>, <code>V.at</code>,
+<code>V.attrs</code>, <code>V.boundary</code>, <code>V.degree</code>, <code>V.directed</code>, <code>V.edge_list</code>,
+<code>V.entity_kinds</code>, <code>V.exists</code>, <code>V.graph</code>, <code>V.has_edge</code>, <code>V.has_node</code>, <code>V.idx</code>,
+<code>V.in_neighbors</code>, <code>V.incident_edges</code>, <code>V.is_multilayer</code>, <code>V.layers</code>,
+<code>V.materialize</code>, <code>V.matrices</code>, <code>V.neighbors</code>, <code>V.nv_supra</code>,
+<code>V.out_neighbors</code>, <code>V.parent</code>, <code>V.predecessors</code>, <code>V.shape</code>, <code>V.slices</code>,
+<code>V.successors</code>, <code>V.summary</code>, <code>V.supra_nodes</code>, <code>V.supra_shape</code>, <code>V.uns</code>,
+<code>V.view</code>.</p>
+<ul>
+<li><code>V.N</code>, <code>V.E</code>, <code>V.attrs</code> are the graph's sequences and attribute namespace
+  scoped to the resolved membership: the same expressions, the same eight
+  addresses, keys kept only while their elements remain in the view.</li>
+<li><code>V.B</code> rows are the selected placements and the edge entities of the
+  selected edges, in row order; <code>V.shape</code> follows the graph's collapsed-node
+  convention and <code>V.supra_shape</code> the placement convention. Each named matrix
+  follows its own documented projection.</li>
+<li><code>V.layers</code> and <code>V.slices</code> carry the read operations of the graph's
+  namespaces (<code>where</code>, <code>window</code>, <code>aspect</code>, <code>list_layers</code>, <code>has_presence</code>,
+  <code>layer_node_set</code>, <code>layer_edge_set</code>, <code>values</code>, <code>matrix</code>, <code>node_frame</code>;
+  <code>list</code>, <code>exists</code>, <code>count</code>, <code>active</code>, <code>nodes</code>, <code>edges</code>, <code>info</code>, <code>union</code>,
+  <code>intersect</code>, <code>difference</code>, <code>compare</code>, <code>edge_frame</code>), restricted to the view.</li>
+<li><code>V.uns</code> is a read-only mapping over the graph's metadata.</li>
+<li>A view is live: it re-resolves when any clock of the graph moves (structure,
+  either attribute axis, slice membership, aspects, the six contextual
+  levels), and on every read when a filter is a callable.</li>
+<li><strong>Every write is refused</strong> with <code>ReadOnlyViewError</code> (a <code>TypeError</code>) naming
+  <code>.materialize()</code>: through <code>V.N[...] =</code>, <code>V.attrs.update</code>, <code>V.attrs.replace</code>,
+  <code>V.attrs.delete</code>, the <code>V.attrs.backend</code> setter, <code>V.uns</code>, the table
+  properties, and every selection made from <code>V</code>. <code>V.attrs.row</code>, <code>rows</code>,
+  <code>table</code>, <code>select</code> and <code>from_frame</code> read, scoped to the view, and a row is a
+  detached dict. A mutating graph method (<code>add_nodes</code>, <code>remove_edges</code>, ...) is absent
+  and <code>AttributeError</code> names <code>.materialize()</code>. A read the view does not
+  support raises rather than answering from the parent.</li>
+<li><code>V.materialize(copy_attributes=True)</code> returns an independent <code>AnnNet</code> that
+  describes exactly the selection: the kept edges with their full endpoints,
+  coefficients, direction, weight, kind, layer assignment and policy; the
+  aspect declarations whole; the slices in scope with memberships cut to the
+  selection (the default slice always exists); the attributes at all eight
+  addresses cut to the selected keys (elementary-layer attributes travel with
+  the declarations); <code>uns</code> deep-copied where it can be, with
+  <code>uns['selection']</code> recording what was selected; attached numerical backings
+  by reference. No placeholder placement is inserted.</li>
+</ul>
+<h2 id="6-records-and-edge-fields">6. Records and edge fields</h2>
+<p><code>G.E.at(edge_id)</code> is an <code>EdgeView</code>: <code>kind</code> is the structural kind — <code>binary</code>,
+<code>hyper</code> or <code>node_edge</code> — and <code>directed</code> is the separate direction. <code>ml_kind</code>
+is the multilayer role (<code>intra</code>, <code>inter</code>, <code>coupling</code>), answered as <code>intra</code> for
+every structural edge of a flat graph without a per-edge record. The same
+three fields appear under the same names in <code>G.E[...]</code> columns, the derived
+edges table and the summary, so no reader has to translate between spellings.</p>
+<h2 id="7-exceptions">7. Exceptions</h2>
+<table>
+<thead>
+<tr>
+<th>situation</th>
+<th>exception</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>unknown node, edge, slice, aspect, layer or attribute key</td>
+<td><code>KeyError</code></td>
+</tr>
+<tr>
+<td>a key or argument of the wrong shape or type; an incomparable predicate pair; a node selection given as edges; a removed subscription or table assignment of <code>G.attrs</code></td>
+<td><code>TypeError</code></td>
+</tr>
+<tr>
+<td>a reserved field; a repeated key in one batch; a null or missing key column; <code>delete</code> given neither keys nor names; an ordering operator on a categorical aspect; an ambiguous bare id; a selection of another graph; a bad <code>boundary</code>, <code>limit</code>, <code>layout</code> or operator</td>
+<td><code>ValueError</code></td>
+</tr>
+<tr>
+<td>any write through a view</td>
+<td><code>ReadOnlyViewError</code> (subclass of <code>TypeError</code>)</td>
+</tr>
+<tr>
+<td>a removed name</td>
+<td><code>AttributeError</code> naming the replacement (section 8)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="8-removed-names-and-their-replacements">8. Removed names and their replacements</h2>
+<p>Every removed name raises <code>AttributeError</code> with its replacement in the
+message. The full old → new map, with examples, is
+<code>docs/reference/migration.md</code>; the changelog entry is the record.</p>
+<table>
+<thead>
+<tr>
+<th>removed</th>
+<th>replacement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>G.obs</code>, <code>G.var</code></td>
+<td><code>G.attrs.nodes</code>, <code>G.attrs.edges</code></td>
+</tr>
+<tr>
+<td><code>G.views.*</code></td>
+<td><code>G.attrs.table(address, derived=True, ...)</code></td>
+</tr>
+<tr>
+<td><code>G.nodes()</code>, <code>G.edges()</code></td>
+<td><code>list(G.N)</code>, <code>list(G.E)</code></td>
+</tr>
+<tr>
+<td><code>G.nv</code>, <code>G.ne</code>, <code>G.ncount()</code>, <code>G.ecount()</code></td>
+<td><code>len(G.N)</code>, <code>len(G.E)</code>, <code>G.nv_supra</code></td>
+</tr>
+<tr>
+<td><code>G.get_node</code>, <code>G.get_edge</code></td>
+<td><code>G.N.at</code>, <code>G.E.at</code></td>
+</tr>
+<tr>
+<td><code>G.get_edge_ids</code>, <code>G.get_edges_by_direction</code></td>
+<td><code>G.has_edge(s, t)[1]</code>, <code>G.E.select(directed=...)</code></td>
+</tr>
+<tr>
+<td><code>G.in_edges</code>, <code>G.out_edges</code></td>
+<td><code>G.incident_edges(nodes, direction=...)</code></td>
+</tr>
+<tr>
+<td><code>G.remove_node</code>, <code>G.remove_edge</code></td>
+<td><code>G.remove_nodes</code>, <code>G.remove_edges</code></td>
+</tr>
+<tr>
+<td>the 24 <code>get_*</code>/<code>set_*</code> attribute methods</td>
+<td><code>G.attrs.row</code>, <code>G.attrs.update</code>, <code>G.attrs.rows</code>, <code>G.attrs.select</code>, <code>G.E.effective_weight</code>, <code>G.uns</code></td>
+</tr>
+<tr>
+<td><code>G.attrs[address]</code>, <code>G.attrs[address, key]</code>, their assignment and <code>del</code>, <code>G.attrs.&lt;address&gt; = table</code>; the live <code>Row</code></td>
+<td><code>G.attrs.&lt;address&gt;</code> / <code>table</code>, <code>row</code>, <code>update</code>, <code>replace</code>, <code>delete</code></td>
+</tr>
+<tr>
+<td><code>G.layers.*attrs*</code>, <code>G.slices.attrs</code></td>
+<td>the <code>layers</code>, <code>aspects</code>, <code>elementary_layers</code>, <code>node_layers</code> and <code>slices</code> addresses of <code>G.attrs</code></td>
+</tr>
+<tr>
+<td><code>G.cache.get_adjacency/get_csr/get_csc</code></td>
+<td><code>G.cache.adjacency/csr/csc</code></td>
+</tr>
+<tr>
+<td><code>V.obs</code>, <code>V.var</code>, <code>V.nodes_df</code>, <code>V.edges_df</code>, <code>V.node_count</code>, <code>V.edge_count</code>, <code>V.node_ids</code>, <code>V.edge_ids</code>, <code>V.subview</code></td>
+<td><code>V.attrs.table(...)</code>, <code>len(V.N)</code>, <code>len(V.E)</code>, <code>V.N.ids</code>, <code>V.E.ids</code>, <code>V.view(...)</code></td>
+</tr>
+<tr>
+<td><code>annnet.core.ProvenanceAccessor</code></td>
+<td><code>annnet.core.Provenance</code></td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../" class="md-footer__link md-footer__link--prev" aria-label="Previous: API Reference Overview">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                API Reference Overview
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../api-boundary/" class="md-footer__link md-footer__link--next" aria-label="Next: Public and internal APIs">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Public and internal APIs
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      &copy; 2025&ndash;2026 Saez lab, Korcsmaros lab &amp; sysbioverse contributors
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy", "content.action.edit", "navigation.tabs", "navigation.footer"], "search": "../../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
