@@ -232,6 +232,41 @@
   margin-bottom: 0.3em;
 }
 
+/* Logo on the left of the kicker, title and intro; stacked on phones */
+.annnet-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) 1fr;
+  gap: 1.5rem 2rem;
+  align-items: center;
+}
+
+.annnet-hero-text {
+  min-width: 0;
+}
+
+.md-typeset .annnet-hero-logo {
+  width: 100%;
+  height: auto;
+  border: none;
+}
+
+/* The logo is drawn for a light background: in dark mode it sits on a light tile */
+[data-md-color-scheme="slate"] .md-typeset .annnet-hero-logo {
+  background: #E6F7F4;
+  padding: 0.6rem;
+  box-sizing: border-box;
+}
+
+@media screen and (max-width: 760px) {
+  .annnet-hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .md-typeset .annnet-hero-logo {
+    width: 9rem;
+  }
+}
+
 .annnet-lead {
   max-width: 52rem;
   font-size: 1.05rem;

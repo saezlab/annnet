@@ -1,4 +1,7 @@
 <div class="annnet-hero">
+<div class="annnet-hero-grid">
+  <img class="annnet-hero-logo" src="assets/annnet-logo.png" alt="annnet logo">
+  <div class="annnet-hero-text">
   <div class="annnet-kicker">Annotated data structure for complex networks</div>
   <h1>annnet</h1>
   <p class="annnet-lead">
@@ -9,6 +12,8 @@
     and any domain that needs fully flexible graph semantics, with stable
     storage and interoperability.
   </p>
+  </div>
+</div>
 </div>
 
 ## Get started
