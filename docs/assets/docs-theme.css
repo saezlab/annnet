@@ -311,3 +311,84 @@
   border-color: var(--sv-main);
   box-shadow: none;
 }
+
+/* ---- Landing page box -------------------------------------------- */
+
+/*
+ * The opening box of a package's home page: logo on the left, then a
+ * label, the package name and one intro paragraph. Light tone, no
+ * border. Markup:
+ *
+ * <div class="sv-hero"><div class="sv-hero-grid">
+ *   <img class="sv-hero-logo" src="assets/logo.png" alt="...">
+ *   <div class="sv-hero-text">
+ *     <div class="sv-kicker">...</div>
+ *     <h1>package</h1>
+ *     <p class="sv-lead">...</p>
+ *   </div>
+ * </div></div>
+ */
+.md-typeset .sv-hero {
+  padding: 2rem;
+  margin: 0 0 1.5rem;
+  background: var(--sv-main-light);
+}
+
+.md-typeset .sv-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) 1fr;
+  gap: 1.5rem 2rem;
+  align-items: center;
+}
+
+.md-typeset .sv-hero-text {
+  min-width: 0;
+}
+
+.md-typeset .sv-hero h1 {
+  margin: 0 0 0.3em;
+}
+
+.md-typeset .sv-hero-logo {
+  width: 100%;
+  height: auto;
+}
+
+/* Logos are drawn for a light background: in dark mode they sit on a light tile */
+[data-md-color-scheme="slate"] .md-typeset .sv-hero-logo {
+  background: #E6F7F4;
+  padding: 0.6rem;
+  box-sizing: border-box;
+}
+
+.md-typeset .sv-kicker {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  margin-bottom: 1rem;
+  background: var(--sv-main);
+  color: #FFFFFF;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.md-typeset .sv-lead {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+@media screen and (max-width: 760px) {
+  .md-typeset .sv-hero {
+    padding: 1.4rem;
+  }
+
+  .md-typeset .sv-hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .md-typeset .sv-hero-logo {
+    width: 9rem;
+  }
+}

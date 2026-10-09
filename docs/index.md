@@ -1,10 +1,10 @@
-<div class="annnet-hero">
-<div class="annnet-hero-grid">
-  <img class="annnet-hero-logo" src="assets/annnet-logo.png" alt="annnet logo">
-  <div class="annnet-hero-text">
-  <div class="annnet-kicker">Annotated data structure for complex networks</div>
+<div class="sv-hero">
+<div class="sv-hero-grid">
+  <img class="sv-hero-logo" src="assets/annnet-logo.png" alt="annnet logo">
+  <div class="sv-hero-text">
+  <div class="sv-kicker">Annotated data structure for complex networks</div>
   <h1>annnet</h1>
-  <p class="annnet-lead">
+  <p class="sv-lead">
     annnet (Annotated Network) is a high-expressivity data structure for
     networks. One container holds simple graphs, multilayer networks and
     hypergraphs, together with their annotations. It is designed for systems

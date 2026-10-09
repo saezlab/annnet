@@ -10,7 +10,7 @@ theme:
     custom_dir: overrides
     favicon: assets/favicon.ico
     font:
-        text: Lato
+        text: Raleway
         code: Roboto Mono
     features:
     -   content.code.copy
