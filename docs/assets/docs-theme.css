@@ -418,3 +418,35 @@
     width: 9rem;
   }
 }
+
+/* ---- Part of sysbioverse ------------------------------------------- */
+
+/*
+ * The last block of a package's home page: the sysbioverse logo and one
+ * sentence on the ecosystem, linked to sysbioverse.org. Markup:
+ *
+ * <div class="sv-ecosystem">
+ *   <a href="https://sysbioverse.org/"><img src="assets/sysbioverse-logo.svg" alt="sysbioverse logo"></a>
+ *   <p>... part of <a href="https://sysbioverse.org/">sysbioverse</a> ...</p>
+ * </div>
+ */
+.md-typeset .sv-ecosystem {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  margin: 2.5rem 0 1rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-typeset .sv-ecosystem img {
+  width: 4.5rem;
+  height: auto;
+  flex: none;
+}
+
+.md-typeset .sv-ecosystem p {
+  margin: 0;
+  max-width: var(--sv-measure);
+}

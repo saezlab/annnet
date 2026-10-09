@@ -217,3 +217,14 @@ explicitly:
     [CORNETO](examples/scenarios/causal_activity_bridge.ipynb)
 
 </div>
+
+<div class="sv-ecosystem">
+  <a href="https://sysbioverse.org/"><img src="assets/sysbioverse-logo.svg" alt="sysbioverse logo"></a>
+  <p>
+    annnet is part of <a href="https://sysbioverse.org/">sysbioverse</a>, an
+    ecosystem of free open source packages for molecular systems biology. The
+    packages share data structures, design principles and workflows, and build
+    on the <a href="https://scverse.org/">scverse</a> ecosystem for single-cell
+    omics analysis.
+  </p>
+</div>
