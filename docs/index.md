@@ -9,20 +9,70 @@
     and any domain that needs fully flexible graph semantics, with stable
     storage and interoperability.
   </p>
-  <div class="annnet-start">
-    <p class="annnet-start-title">Get started</p>
-    <div class="annnet-start-list">
-      <a class="md-button md-button--primary" href="installation/">Installation</a>
-      <p>Install annnet and the optional dependencies for your workflow</p>
-      <a class="md-button" href="quickstart/">Quickstart</a>
-      <p>Import a graph and try annnet</p>
-      <a class="md-button" href="guide/">Guide</a>
-      <p>Concepts and practical API usage</p>
-      <a class="md-button" href="examples/">Examples</a>
-      <p>Complete workflows with biological data and other tools</p>
-    </div>
-  </div>
 </div>
+
+## Get started
+
+### 1. Install
+
+```bash
+pip install "annnet[polars,networkx,storage]"
+```
+
+This installs annnet with the Polars tables, the NetworkX backend and the native
+file format. The core package alone is `pip install annnet`. For all optional
+extras, see [Installation](installation.md).
+
+### 2. Try it
+
+Build a small signaling network from a table, select the confident
+interactions, run a NetworkX algorithm on the same object, and save the result:
+
+```python
+import annnet as an
+import polars as pl
+
+interactions = pl.DataFrame({
+    'source': ['EGFR', 'GRB2', 'SOS1', 'KRAS', 'BRAF', 'PTEN'],
+    'target': ['GRB2', 'SOS1', 'KRAS', 'BRAF', 'MAPK1', 'AKT1'],
+    'sign': [1, 1, 1, 1, 1, -1],
+    'confidence': [0.95, 0.9, 0.8, 0.9, 0.7, 0.85],
+})
+
+G = an.from_edge_frame(interactions, sign='sign', directed=True)
+print(G.summary())  # 8 nodes, 6 edges
+
+confident = G.view(edges=G.E.select(confidence__gte=0.85))
+print(len(confident.N), len(confident.E))  # 7 nodes, 4 edges
+
+scores = G.nx.betweenness_centrality(G)
+G.attrs.update('nodes', {n: {'betweenness': v} for n, v in scores.items()})
+
+G.write('signaling.annnet')
+G2 = an.read('signaling.annnet')
+```
+
+The [Quickstart](quickstart.md) goes through the same steps with a larger
+table, and explains views, annotations and the saved file.
+
+### 3. Learn more
+
+- **Guide**, five notebooks with concepts, mathematics and runnable code:
+  [graph model and matrices](guide/graph-model.ipynb) ·
+  [annotations and views](guide/annotations-and-views.ipynb) ·
+  [slices](guide/slices.ipynb) ·
+  [layers](guide/layers.ipynb) ·
+  [computation and storage](guide/computation-and-storage.ipynb)
+- **Examples**, complete analyses:
+  [multi-condition causal signaling](examples/use_cases/UC1.ipynb) ·
+  [TGF-beta fibrosis response](examples/use_cases/UC2.ipynb),
+  and integrations with
+  [OmniPath](examples/scenarios/omnipath_table_ingestion.ipynb),
+  [Cytoscape](examples/scenarios/cytoscape_cx2_export.ipynb),
+  [PyG](examples/scenarios/pyg_heterodata_export.ipynb) and
+  [CORNETO](examples/scenarios/causal_activity_bridge.ipynb)
+- **[API reference](reference/index.md)**: exact signatures and options
+- **[Community](community/index.md)**: how to contribute to the docs and the code
 
 ## Main features
 
@@ -158,77 +208,5 @@ explicitly:
     See: [Cytoscape](examples/scenarios/cytoscape_cx2_export.ipynb) ·
     [PyG](examples/scenarios/pyg_heterodata_export.ipynb) ·
     [CORNETO](examples/scenarios/causal_activity_bridge.ipynb)
-
-</div>
-
-## Documentation
-
-Start with installation and the quickstart, then choose a Guide topic or an
-Example. The Guide combines concepts, mathematics, and runnable code in five
-topic notebooks. Examples cover longer analyses and integrations; the API
-Reference provides exact signatures and options.
-
-<div class="grid cards annnet-feature-cards" markdown>
-
--   __Installation__
-
-    ---
-
-    Install annnet and choose the optional dependencies for your workflow.
-
-    [Install annnet](installation.md)
-
--   __Quickstart__
-
-    ---
-
-    Import an interaction table, inspect annotations, select a view, and save your first graph.
-
-    [Open the quickstart](quickstart.md)
-
--   __Guide__
-
-    ---
-
-    Five notebooks explain the
-    [graph model and matrices](guide/graph-model.ipynb),
-    [annotations and views](guide/annotations-and-views.ipynb),
-    [slices](guide/slices.ipynb),
-    [layers](guide/layers.ipynb), and
-    [computation and storage](guide/computation-and-storage.ipynb),
-    with practical API examples.
-
-    [Open the guide](guide/index.md)
-
--   __Examples__
-
-    ---
-
-    Two case studies,
-    [multi-condition causal signaling](examples/use_cases/UC1.ipynb) and
-    [TGF-beta fibrosis response](examples/use_cases/UC2.ipynb),
-    and four integrations:
-    [OmniPath](examples/scenarios/omnipath_table_ingestion.ipynb),
-    [Cytoscape](examples/scenarios/cytoscape_cx2_export.ipynb),
-    [PyG](examples/scenarios/pyg_heterodata_export.ipynb), and
-    [CORNETO](examples/scenarios/causal_activity_bridge.ipynb).
-
-    [Explore examples](examples/index.md)
-
--   __API Reference__
-
-    ---
-
-    Detailed reference for the object model, bulk APIs, IO, utilities, and public entry points.
-
-    [Open the API reference](reference/index.md)
-
--   __Community__
-
-    ---
-
-    Contribution guidance for documentation, package development, and project standards.
-
-    [Open community pages](community/index.md)
 
 </div>
