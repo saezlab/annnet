@@ -37,12 +37,14 @@ interactions, run a NetworkX algorithm on the same object, and save the result:
 import annnet as an
 import polars as pl
 
-interactions = pl.DataFrame({
-    'source': ['EGFR', 'GRB2', 'SOS1', 'KRAS', 'BRAF', 'PTEN'],
-    'target': ['GRB2', 'SOS1', 'KRAS', 'BRAF', 'MAPK1', 'AKT1'],
-    'sign': [1, 1, 1, 1, 1, -1],
-    'confidence': [0.95, 0.9, 0.8, 0.9, 0.7, 0.85],
-})
+interactions = pl.DataFrame(
+    {
+        'source': ['EGFR', 'GRB2', 'SOS1', 'KRAS', 'BRAF', 'PTEN'],
+        'target': ['GRB2', 'SOS1', 'KRAS', 'BRAF', 'MAPK1', 'AKT1'],
+        'sign': [1, 1, 1, 1, 1, -1],
+        'confidence': [0.95, 0.9, 0.8, 0.9, 0.7, 0.85],
+    }
+)
 
 G = an.from_edge_frame(interactions, sign='sign', directed=True)
 print(G.summary())  # 8 nodes, 6 edges
