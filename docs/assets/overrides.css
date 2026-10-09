@@ -8,10 +8,6 @@
   --annnet-shadow: none;
 }
 
-.md-grid {
-  max-width: 82rem;
-}
-
 .md-typeset {
   --md-code-font-size: 0.765rem;
 }
@@ -144,23 +140,6 @@
   white-space: normal;
 }
 
-@media screen and (min-width: 1220px) {
-  .md-grid {
-    max-width: 90rem;
-  }
-
-  .md-sidebar--primary .md-sidebar__scrollwrap {
-    box-sizing: border-box;
-    padding-left: clamp(0.75rem, 1.25vw, 1.4rem);
-  }
-
-  .md-sidebar--secondary .md-sidebar__scrollwrap {
-    box-sizing: border-box;
-    padding-right: clamp(0.75rem, 1.25vw, 1.4rem);
-  }
-}
-
-/* Make links clearly clickable */
 /* Links are colored, so they need no underline */
 .md-typeset a {
   color: var(--md-typeset-a-color);

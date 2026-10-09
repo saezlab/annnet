@@ -30,6 +30,32 @@
   --sv-grey: #918F90;
 }
 
+/* ---- Page width --------------------------------------------------- */
+
+/*
+ * Wider than Material's 61rem, so code, tables and notebook output have
+ * room. Running text keeps its own line-length limit (below).
+ */
+.md-grid {
+  max-width: 82rem;
+}
+
+@media screen and (min-width: 1220px) {
+  .md-grid {
+    max-width: 90rem;
+  }
+
+  .md-sidebar--primary .md-sidebar__scrollwrap {
+    box-sizing: border-box;
+    padding-left: clamp(0.75rem, 1.25vw, 1.4rem);
+  }
+
+  .md-sidebar--secondary .md-sidebar__scrollwrap {
+    box-sizing: border-box;
+    padding-right: clamp(0.75rem, 1.25vw, 1.4rem);
+  }
+}
+
 /* ---- Text size and line length ------------------------------------ */
 
 /*
@@ -336,7 +362,7 @@
 
 .md-typeset .sv-hero-grid {
   display: grid;
-  grid-template-columns: minmax(7rem, 11rem) 1fr;
+  grid-template-columns: minmax(6rem, 10rem) 1fr;
   gap: 1.5rem 2rem;
   align-items: center;
 }
