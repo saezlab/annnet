@@ -23,7 +23,7 @@ AnnData already owns:
 from annnet import exp
 
 report = exp.sysbio.attach(
-    G,
+    anet,
     adata,
     aspect='condition',
     on='gene_symbol',
@@ -90,7 +90,7 @@ another branch in the same function. So a `Mapper` is the seam:
 
 ```python
 mapper = exp.vocabulary.SymbolMapper(separator='_', known=measured)
-exp.sysbio.attach(G, adata, aspect='condition', on='symbol', mapper=mapper)
+exp.sysbio.attach(anet, adata, aspect='condition', on='symbol', mapper=mapper)
 ```
 
 `known=` is load-bearing: a composite is only split when every part is a name the
@@ -100,9 +100,9 @@ separator is not mistaken for one. That is the failure mode splitting invites.
 ## The write-back is a projection
 
 ```python
-exp.sysbio.write_back(G, adata, key='activity', aspect='condition')  # layers
-exp.sysbio.write_back(G, adata, key='score', on='symbol', into='var')  # var
-exp.sysbio.write_back(G, adata, key='n_active', aspect='condition', into='obs')  # obs
+exp.sysbio.write_back(anet, adata, key='activity', aspect='condition')  # layers
+exp.sysbio.write_back(anet, adata, key='score', on='symbol', into='var')  # var
+exp.sysbio.write_back(anet, adata, key='n_active', aspect='condition', into='obs')  # obs
 ```
 
 A result has three shapes and an AnnData has three places for them: per entity
@@ -118,8 +118,8 @@ Anyone expecting symmetry should learn it here rather than discover it later.
 ## Is this graph connected?
 
 ```python
-exp.sysbio.connected(G)  # does it hold attached measurements
-exp.sysbio.measurements(G)  # which attribute names they answer for
+exp.sysbio.connected(anet)  # does it hold attached measurements
+exp.sysbio.measurements(anet)  # which attribute names they answer for
 ```
 
 Two lines, and they turn *a connected AnnNet* from a phrase in a docstring into
@@ -139,9 +139,9 @@ reading this page. The second is written in terms of the first — there is no
 third code path.
 
 ```python
-activity = exp.sysbio.methods.decoupler.run(G, pdata, aspect='condition', slice='regulon')
+activity = exp.sysbio.methods.decoupler.run(anet, pdata, aspect='condition', slice='regulon')
 fit = exp.sysbio.methods.corneto.run(
-    G,
+    anet,
     inputs='perturbation',
     outputs=activity.key,
     aspect='condition',
@@ -149,7 +149,7 @@ fit = exp.sysbio.methods.corneto.run(
 )
 
 # or, the whole thing at once
-exp.sysbio.usecases.tf_activity(G, pdata, aspect='condition', on='symbol')
+exp.sysbio.usecases.tf_activity(anet, pdata, aspect='condition', on='symbol')
 ```
 
 `outputs=activity.key` is the join between two steps: it names the attribute the
@@ -163,8 +163,8 @@ things around it:
 
 - **The declaration before.** `SPEC` is a `MethodSpec`, checked before anything
   runs.
-- **Reading the input off the graph.** `decoupler.regulon(G, slice=...)` and
-  `corneto.pkn(G, slice=...)` produce what each package reads.
+- **Reading the input off the graph.** `decoupler.regulon(anet, slice=...)` and
+  `corneto.pkn(anet, slice=...)` produce what each package reads.
 - **The additive write-back after.** A new slice plus new attributes; nothing is
   replaced, so a prior and two fits coexist on one object and any pair can be
   diffed.

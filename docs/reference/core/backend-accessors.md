@@ -1,55 +1,77 @@
-# Backend Accessors
+# Backend accessors
 
-`AnnNet` has graph-owned backend accessors:
+An `AnnNet` object gives access to the algorithms of three graph libraries:
 
-- `G.nx` for NetworkX
-- `G.ig` for igraph
-- `G.gt` for graph-tool
+| accessor | library | what `anet.<accessor>.<name>` calls |
+|---|---|---|
+| `anet.nx` | [NetworkX](https://networkx.org/) | the function `networkx.<name>`, for example from the [NetworkX algorithms](https://networkx.org/documentation/stable/reference/algorithms/index.html) |
+| `anet.ig` | [igraph](https://python.igraph.org/) | the method `igraph.Graph.<name>` of the converted graph (see the [`Graph` API](https://python.igraph.org/en/stable/api/igraph.Graph.html) and [graph analysis](https://python.igraph.org/en/stable/analysis.html)), or else the function `igraph.<name>` |
+| `anet.gt` | [graph-tool](https://graph-tool.skewed.de/) | the function `graph_tool.<namespace>.<name>`, called as `anet.gt.<namespace>.<name>` |
 
-These are public access points on `AnnNet`. They are different from the
-module-level conversion functions in `annnet.adapters`:
-
-- `annnet.adapters.to_nx(...)` / `annnet.adapters.from_nx(...)`
-- `annnet.adapters.to_igraph(...)` / `annnet.adapters.from_igraph(...)`
-- `annnet.adapters.to_graphtool(...)` / `annnet.adapters.from_graphtool(...)`
-
-Use `annnet.adapters` when you want an explicit in-memory conversion to or from
-another Python graph object. Use `G.nx`, `G.ig`, or `G.gt` when `G` remains the
-source object and AnnNet should convert, cache, and dispatch a backend
-algorithm call for you.
-
-Cached projections are not invalidated by every mutation in the current
-implementation. After editing the source graph, call the accessor's `clear()`
-before another algorithm, or create a fresh projection with an adapter. The
-[computation guide](../../guide/computation-and-storage.ipynb) shows both forms.
-
-## Common Accessor Methods
-
-All graph-owned backend accessors provide:
-
-- `backend(...)`: return the concrete projected backend graph object.
-- `clear()`: clear cached backend projections for that accessor.
-
-NetworkX and igraph accessors also provide:
-
-- `peek_nodes(k=10)`: return a small sample of backend node identifiers.
-
-## Algorithm Dispatch
-
-The accessors resolve backend functions dynamically. For example:
+The accessor converts `anet` to a graph of the library, calls the function,
+and gives back the result of the library. The conversion is cached.
 
 ```python
-centrality = G.nx.degree_centrality(G)
-distances = G.ig.distances(source='a', target='c', weights='weight')
+# networkx.betweenness_centrality(...)
+scores = anet.nx.betweenness_centrality(anet)
+
+# igraph.Graph.pagerank() on the converted graph
+pagerank = anet.ig.pagerank()
+
+# graph_tool.centrality.pagerank(...)
+pagerank = anet.gt.centrality.pagerank(anet)
 ```
 
-In these calls AnnNet projects the graph to the backend, replaces the `G`
-argument with the projected backend graph where needed, calls the backend
-function, and maps node identifiers back where supported.
+Pass `anet` where the library function expects its graph. The accessor puts the
+converted graph in its place. Where the library takes a node, you can give the
+annnet node ID.
 
-## NetworkX Options
+The graph-tool namespaces are those of the
+[graph-tool documentation](https://graph-tool.skewed.de/static/docs/stable/):
+[`topology`](https://graph-tool.skewed.de/static/docs/stable/topology.html),
+[`centrality`](https://graph-tool.skewed.de/static/docs/stable/centrality.html),
+[`clustering`](https://graph-tool.skewed.de/static/docs/stable/clustering.html),
+[`flow`](https://graph-tool.skewed.de/static/docs/stable/flow.html),
+[`inference`](https://graph-tool.skewed.de/static/docs/stable/inference.html),
+[`generation`](https://graph-tool.skewed.de/static/docs/stable/generation.html),
+[`search`](https://graph-tool.skewed.de/static/docs/stable/search_module.html)
+and [`util`](https://graph-tool.skewed.de/static/docs/stable/util.html). A name
+that only one namespace has also works without the namespace:
+`anet.gt.pagerank(anet)`.
 
-`G.nx.backend(...)` accepts options such as:
+## Accessors and adapters
+
+The adapter functions in `annnet.adapters` also convert, but they give you the
+graph of the other library:
+
+- `annnet.adapters.to_nx(...)` and `annnet.adapters.from_nx(...)`
+- `annnet.adapters.to_igraph(...)` and `annnet.adapters.from_igraph(...)`
+- `annnet.adapters.to_graphtool(...)` and `annnet.adapters.from_graphtool(...)`
+
+Use an adapter when you want to work with the other graph object yourself. Use
+`anet.nx`, `anet.ig` or `anet.gt` when `anet` stays your data and you only
+want the result of an algorithm.
+
+!!! warning "Clear the cache after a change"
+
+    Not every change of `anet` clears the cached conversion. After you edit the
+    graph, call `clear()` on the accessor before you run another algorithm, or
+    convert again with an adapter. The
+    [computation guide](../../guide/computation-and-storage.ipynb) shows both
+    forms.
+
+## Methods of every accessor
+
+- `backend(...)`: the converted graph of the library.
+- `clear()`: remove the cached conversions of this accessor.
+
+`anet.nx` and `anet.ig` also have:
+
+- `peek_nodes(k=10)`: a few node identifiers of the converted graph.
+
+## Conversion options
+
+`anet.nx.backend(...)` and `anet.ig.backend(...)` take these options:
 
 - `directed`
 - `hyperedge_mode`
@@ -59,32 +81,14 @@ function, and maps node identifiers back where supported.
 - `simple`
 - `edge_aggs`
 
-Dynamic `G.nx.<algorithm>(...)` calls accept the corresponding underscore
-options, such as `_nx_directed`, `_nx_hyperedge`, `_nx_slice`, `_nx_slices`,
-`_nx_label_field`, `_nx_simple`, and `_nx_edge_aggs`.
+An algorithm call takes the same options with a prefix, so that they do not
+mix with the arguments of the library function: `_nx_directed`,
+`_nx_hyperedge`, `_nx_slice`, `_nx_slices`, `_nx_label_field`, `_nx_simple`
+and `_nx_edge_aggs` for NetworkX, and the same names with `_ig_` for igraph.
 
-## igraph Options
+```python
+# Betweenness on the graph read as undirected
+scores = anet.nx.betweenness_centrality(anet, _nx_directed=False)
+```
 
-`G.ig.backend(...)` accepts options such as:
-
-- `directed`
-- `hyperedge_mode`
-- `slice`
-- `slices`
-- `needed_attrs`
-- `simple`
-- `edge_aggs`
-
-Dynamic `G.ig.<algorithm>(...)` calls accept the corresponding underscore
-options, such as `_ig_directed`, `_ig_hyperedge`, `_ig_slice`, `_ig_slices`,
-`_ig_label_field`, `_ig_simple`, and `_ig_edge_aggs`.
-
-## graph-tool Options
-
-`G.gt.backend()` returns the projected graph-tool graph object. Dynamic
-`G.gt.<namespace>.<algorithm>(...)` calls dispatch to graph-tool namespaces
-where supported.
-
-The implementation classes for these accessors live in
-`annnet.core.backend_accessors` and are underscore-prefixed. Direct imports from
-those implementation modules follow the [internal API policy](../api-boundary.md).
+`anet.gt.backend()` takes no options and gives the converted graph-tool graph.

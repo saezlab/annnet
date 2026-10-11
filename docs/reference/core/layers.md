@@ -1,9 +1,8 @@
 # Layers
 
-Multilayer helpers from `annnet.core._Layers`.
-
-Use `G.layers` and the `AnnNet` layer methods for layer workflows. Direct
-imports from underscore modules follow the [internal API policy](../api-boundary.md).
+`anet.layers` declares the aspects of a multilayer graph, places nodes on
+layers, selects layers, couples them, and holds the values of nodes on each
+layer. See the [layers guide](../../guide/layers.ipynb).
 
 ::: annnet.core._Layers.LayerAccessor
     options:

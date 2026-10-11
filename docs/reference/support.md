@@ -1,14 +1,10 @@
-# Support Helpers
+# Support helpers
 
-These helpers expose package metadata plus backend-selection utilities for
-dataframe and plotting support. Use them through the documented top-level
-`annnet` namespace.
+Functions in the top-level `annnet` namespace that report the package version
+and its optional components, and that select the dataframe and plotting
+libraries.
 
-Their implementations live in private `annnet._support.*` modules. Direct
-imports from those underscore-prefixed modules follow the
-[internal API policy](api-boundary.md).
-
-## Package Metadata
+## Package metadata
 
 ```python
 annnet.__version__
@@ -29,7 +25,7 @@ annnet.get_latest_version()
 
 Fetch the latest version declared on the default branch.
 
-## Dataframe Backends
+## Dataframe backends
 
 ```python
 annnet.available_dataframe_backends()
@@ -56,7 +52,7 @@ annnet.set_default_dataframe_backend(backend='auto')
 
 Set the default dataframe backend for new AnnNet annotation tables.
 
-## Plotting Backends
+## Plotting backends
 
 ```python
 annnet.available_plot_backends()

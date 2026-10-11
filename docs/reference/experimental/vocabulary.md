@@ -43,9 +43,9 @@ without knowing which resource produced the edge.
 ```python
 from annnet import exp
 
-exp.vocabulary.check(G)  # a list of problems; empty is clean
-exp.vocabulary.check(G, strict=True)  # raise instead
-exp.vocabulary.requires(G, 'signed', 'directed')  # capabilities, strict by default
+exp.vocabulary.check(anet)  # a list of problems; empty is clean
+exp.vocabulary.check(anet, strict=True)  # raise instead
+exp.vocabulary.requires(anet, 'signed', 'directed')  # capabilities, strict by default
 ```
 
 `check` reads meaning; `requires` reads shape. `requires` is strict by default
@@ -69,7 +69,7 @@ SPEC = exp.vocabulary.MethodSpec(
     directed=True,
     hyperedges='none',
 )
-exp.vocabulary.check(G, method=SPEC, strict=True)
+exp.vocabulary.check(anet, method=SPEC, strict=True)
 ```
 
 !!! warning "An over-declared spec is worse than none"

@@ -1,14 +1,12 @@
 # Views and selections
 
-The live, read-only view from `annnet.core._Views` and the typed selections
-from `annnet.core._select`. Use `G.view(...)` for view workflows and `G.N` /
-`G.E` for selections. Direct imports from underscore modules follow the
-[internal API policy](../api-boundary.md); the public names are exported as
-`annnet.GraphView`, `annnet.core.NodeSequence` and `annnet.core.EdgeSequence`.
+`anet.view(...)` gives a `GraphView`: a live, read-only part of the graph.
+`anet.N` and `anet.E` are the node and edge sequences (`NodeSequence`,
+`EdgeSequence`), and their `select` method makes a selection. A write through a
+view raises `ReadOnlyViewError`.
 
-The resolution rules — closed and open boundaries, hyperedge integrity,
-edge-entity closure, nested restriction — are stated in
-[the API contract](../api-contract.md), section 5.
+The rules that decide which nodes and edges a view keeps are in
+[The public surface](../api-contract.md), section 5.
 
 ::: annnet.core._Views.GraphView
     options:

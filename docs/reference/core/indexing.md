@@ -1,9 +1,7 @@
 # Indexing
 
-Indexing and topology helpers from `annnet.core._Matrix`.
-
-Use `G.idx` for graph-owned row/column lookup operations. Direct imports from
-underscore modules follow the [internal API policy](../api-boundary.md).
+`anet.idx` translates between node and edge IDs and their row and column
+positions in the matrices.
 
 ::: annnet.core._Matrix.IndexManager
     options:

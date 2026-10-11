@@ -1,9 +1,7 @@
 # Cache
 
-Cache helpers from `annnet.core._Matrix`.
-
-Use `G.cache` for graph-owned cache helpers. Direct imports from
-underscore modules follow the [internal API policy](../api-boundary.md).
+`anet.cache` holds the sparse matrices that annnet builds from the graph, so
+that a second read does not build them again.
 
 ::: annnet.core._Matrix.CacheManager
     options:

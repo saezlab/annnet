@@ -5,7 +5,7 @@ when you need to re-import it. The comparison below concerns structural round
 trips with that metadata present; it is not a claim that other tools understand
 all AnnNet features.
 
-`tests/test_roundtrip_semantics.py` checks a flat graph with parallel edges,
+The round-trip tests of annnet check a flat graph with parallel edges,
 self-loops, directed and undirected hyperedges, an edge entity, edge attributes,
 and slice membership. That fixture does not establish complete preservation of
 every contextual annotation, attached array, or multilayer configuration.

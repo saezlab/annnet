@@ -1,15 +1,13 @@
 # History
 
-Change tracking helpers from `annnet.core._History`.
+`anet.history` logs changes to the graph and takes snapshots that you can
+compare.
 
-Snapshots compare node, edge, and slice ID sets; they do not capture attribute values
-or reconstruct a prior graph. The event log currently omits some mutations,
-including edge removal and attribute updates. Save a native `.annnet` artifact
-for an analysis checkpoint. See the executed
-[history example](../../guide/computation-and-storage.ipynb).
-
-History methods are mixed into `AnnNet`. Direct imports from underscore modules
-follow the [internal API policy](../api-boundary.md).
+A snapshot compares the sets of node, edge and slice IDs. It does not keep
+attribute values, and it cannot restore an earlier graph. The log does not
+record all changes: edge removal and attribute updates are not in it. To keep a
+state of an analysis, write the graph to a native `.annnet` file. The
+[computation guide](../../guide/computation-and-storage.ipynb) shows an example.
 
 ::: annnet.core._History.GraphDiff
     options:

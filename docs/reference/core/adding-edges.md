@@ -1,103 +1,84 @@
 # Adding edges
 
-Use `an.from_edge_frame` to import an interaction table; see the
-[quickstart](../../quickstart.md). Use `G.add_edges` for individual additions,
-batched records, explicit multilayer placements, and structures that need more
-than a source and target column.
+`anet.add_edges` adds one edge, or a batch of edges. This page lists the input
+forms and options it accepts. To make a graph from a table of edges, use
+[`from_edge_frame`](../io/dataframes.md). The
+[graph model guide](../../guide/graph-model.ipynb) explains edges, hyperedges
+and the incidence matrix.
 
-A single-edge call returns the edge ID as a string. A batch call returns a list
-of IDs. The input forms below describe both paths.
+A call with one edge returns the edge ID as a string. A batch returns a list of
+IDs. A node that does not exist yet is created.
 
-## Input forms — single edge
+## One edge
 
 ### Binary edge
 
 ```python
-G.add_edges('A', 'B')
-G.add_edges('A', 'B', weight=0.5, edge_id='e1', directed=True)
+anet.add_edges('A', 'B')
+anet.add_edges('A', 'B', weight=0.5, edge_id='e1', directed=True)
 ```
 
-Both endpoints must be strings. If either node does not exist yet, it is
-created automatically.
-
-### Supra-node edge (multilayer)
+### Edge between layers
 
 ```python
-G.add_edges(('A', ('healthy',)), ('B', ('treated',)))
+anet.add_edges(('A', ('healthy',)), ('B', ('treated',)))
 ```
 
-Each endpoint is a `(node_id, layer_coord_tuple)` pair. Required when the graph
-was created with `aspects=`. The multilayer kind is inferred:
+Each endpoint is a `(node_id, layer)` pair. On a graph with aspects, always
+give the pairs. annnet sets the multilayer kind of the edge:
 
-| Condition | Kind |
+| endpoints | kind |
 |---|---|
-| Same node ID, different layers | `coupling` |
-| Same layer, different node IDs | `intra` |
-| Different node ID and layer | `inter` |
-
-Use explicit endpoint pairs in batch records too. Bare IDs are not a reliable
-shortcut: the single-edge path rejects them, while some batch import paths can
-create unintended placeholders.
+| same node ID, different layers | `coupling` |
+| same layer, different node IDs | `intra` |
+| different node IDs and layers | `inter` |
 
 ### Undirected hyperedge
 
 ```python
-G.add_edges(['A', 'B', 'C'])
+anet.add_edges(['A', 'B', 'C'])
 ```
-
-`src` is a list; `tgt` defaults to `None`. All members get `+weight` in the
-incidence column.
 
 ### Directed hyperedge
 
 ```python
-G.add_edges(['A', 'B'], ['C', 'D'])  # source → target
+anet.add_edges(['A', 'B'], ['C', 'D'])  # sources, then targets
 ```
 
-First list is the source side (`+weight`), second is the target side (`-weight`).
-Some legacy records use `head` for sources and `tail` for targets; use
-`source` and `target` to avoid confusing conventions.
-
-### Stoichiometric edge
+### Edge with coefficients
 
 ```python
-# Negative coeff → source side, positive coeff → target side
-G.add_edges({'glucose': -1.0, 'atp': -1.0, 'glucose-6p': 1.0, 'adp': 1.0})
-
-# Explicit two-dict form
-G.add_edges({'A': -1.0, 'B': -2.0}, {'C': 3.0})
+anet.add_edges({'glucose': -1.0, 'atp': -1.0}, {'glucose-6p': 1.0, 'adp': 1.0})
 ```
 
-Literal coefficient values are written directly into the incidence matrix column.
-This form is **single-edge only**.
+The first dictionary is the source side, the second the target side. annnet
+writes the coefficients into the incidence matrix as they are. Only a call with
+one edge accepts this form.
 
-### Edge-entity placeholder (single)
+### Edge entity without endpoints
 
 ```python
-G.add_edges(None, None, as_entity=True, edge_id='virtual_e1', role='enzyme')
+anet.add_edges(None, None, as_entity=True, edge_id='virtual_e1', role='enzyme')
 ```
 
-Creates a named edge that has no incident nodes yet, but occupies a row in the
-entity space so it can later be used as an endpoint.
-`edge_id` is required here — there is nothing to derive an auto-ID from.
+This makes an edge that has no endpoints yet. Another edge can use it as an
+endpoint. `edge_id` is necessary.
 
----
+## A batch of edges
 
-## Input forms — batch
+Give one list or generator as the only positional argument.
 
-Pass a single list (or generator) as the first argument. No positional `src`/`tgt`.
-
-### Binary batch
+### Binary edges
 
 ```python
 # 2-tuples
-G.add_edges([('A', 'B'), ('C', 'D')])
+anet.add_edges([('A', 'B'), ('C', 'D')])
 
-# 3-tuples  (weight in position 2)
-G.add_edges([('A', 'B', 0.5), ('C', 'D', 2.0)])
+# 3-tuples: the third item is the weight
+anet.add_edges([('A', 'B', 0.5), ('C', 'D', 2.0)])
 
-# dicts  (keys: source/target or src/tgt)
-G.add_edges(
+# dictionaries, with the keys source/target or src/tgt
+anet.add_edges(
     [
         {'source': 'A', 'target': 'B', 'weight': 0.5, 'edge_id': 'e1'},
         {'src': 'C', 'tgt': 'D'},
@@ -105,41 +86,31 @@ G.add_edges(
 )
 ```
 
-### Hyperedge batch
+### Hyperedges
 
-The shape of `src` (and optionally `tgt`) determines hyperedge kind:
-
-- list-shaped `src`, no `tgt` → undirected hyperedge (`src` is the member set)
-- list-shaped `src` and list-shaped `tgt` → directed hyperedge (`src` is the
-  source group, `tgt` is the target group)
-
-`source` / `target` are accepted as aliases for `src` / `tgt`.
+A list in `src` without `tgt` is an undirected hyperedge. A list in `src` and
+a list in `tgt` is a directed hyperedge. `source` and `target` are the same as
+`src` and `tgt`.
 
 ```python
-# Undirected
-G.add_edges(
+anet.add_edges(
     [
-        {'src': ['A', 'B', 'C']},
-        {'src': ['B', 'D'], 'edge_id': 'h2'},
-    ]
-)
-
-# Directed (source → target)
-G.add_edges(
-    [
-        {'src': ['A', 'B'], 'tgt': ['C']},
+        {'src': ['A', 'B', 'C']},  # undirected
+        {'src': ['B', 'D'], 'edge_id': 'h2'},  # undirected
+        {'src': ['A', 'B'], 'tgt': ['C']},  # directed
     ]
 )
 ```
 
-### Edge-entity placeholder batch
+A batch can mix binary edges and hyperedges.
 
-Pass dicts with no `source`/`target` and set `as_entity=True` at the batch level.
-Each item is registered as a null-endpoint entity — a connectable row in the entity
-space with no incidence column.
+### Edge entities without endpoints
+
+Give dictionaries without `source` and `target`, and set `as_entity=True`.
+`edge_id` is optional.
 
 ```python
-G.add_edges(
+anet.add_edges(
     [
         {'edge_id': 'EE1', 'role': 'enzyme', 'pathway': 'glycolysis'},
         {'edge_id': 'EE2', 'role': 'enzyme', 'pathway': 'tca'},
@@ -149,139 +120,97 @@ G.add_edges(
 )
 ```
 
-Any keys other than `edge_id`, `slice`, `weight`, `edge_directed`, `edge_type`,
-and `propagate` are stored as edge attributes. `as_entity=True` is required; omitting
-it when items have no source/target raises `ValueError`.
+In a batch item, the keys other than `edge_id`, `slice`, `weight`,
+`edge_directed`, `edge_type` and `propagate` are edge attributes.
 
-### Mixed batch
+## Options
 
-A list that contains both binary and hyperedge items is accepted, but dispatches
-item-by-item and loses the bulk-path optimisation.
+### One edge
 
----
-
-## Parameters
-
-### Single-edge parameters
-
-| Parameter | Default | Description |
+| option | default | description |
 |---|---|---|
-| `weight` | `1.0` | Incidence coefficient. Written as `+weight` on the source side, `−weight` on the target side (directed), or `+weight` on both sides (undirected). Ignored for the stoich form. |
-| `edge_id` | auto | Explicit ID. If the ID exists → update in-place. If new → create. |
-| `directed` | `None` | Per-edge override. `None` inherits the graph default, then falls back to `True`. |
-| `parallel` | `"update"` | Policy when `edge_id` is `None` and the same endpoints already have an edge. See below. |
-| `slice` | active slice | Slice that receives the edge. Auto-created if it doesn't exist. |
-| `as_entity` | `False` | Register the edge as a connectable entity row in the incidence matrix. |
-| `propagate` | `"none"` | Slice propagation after insertion. See below. |
-| `flexible` | `None` | Data-driven direction policy dict. See below. |
-| `**attrs` | — | Arbitrary edge attributes upserted into the edge attribute table. |
+| `weight` | `1.0` | The edge weight. In the incidence matrix: `+weight` on the source side and `-weight` on the target side of a directed edge, `+weight` on all members of an undirected edge. Not used for an edge with coefficients. |
+| `edge_id` | automatic | The edge ID. If the ID exists, annnet updates that edge. |
+| `directed` | `None` | The direction of this edge. `None` uses the default of the graph, and then `True`. |
+| `parallel` | `'update'` | What to do when `edge_id` is `None` and the endpoints already have an edge. See below. |
+| `slice` | active slice | The slice that gets the edge. annnet creates the slice if it does not exist. |
+| `as_entity` | `False` | Make the edge an entity that other edges can use as an endpoint. |
+| `propagate` | `'none'` | Which other slices get the edge. See below. |
+| `flexible` | `None` | Set the direction from an attribute value. See below. |
+| other keywords | | Edge attributes. |
 
-### Batch-level defaults
+### Batch
 
-| Parameter | Default | Description |
+| option | default | description |
 |---|---|---|
-| `default_weight` | `1.0` | Weight for items that don't carry one. |
-| `default_edge_directed` | `None` | Directedness for items that don't specify it. |
-| `default_propagate` | `"none"` | Propagate policy for items that don't specify it. |
-| `slice` | active slice | Default slice for items that don't specify one. |
-| `as_entity` | `False` | Apply to all inserted edges. |
+| `default_weight` | `1.0` | The weight of an item that does not give one. |
+| `default_edge_directed` | `None` | The direction of an item that does not give one. |
+| `default_propagate` | `'none'` | The `propagate` value of an item that does not give one. |
+| `default_slice_weight` | `None` | The slice weight of an item that does not give one. |
+| `slice` | active slice | The slice of an item that does not give one. |
+| `layer` | `None` | The layer of the items. |
+| `as_entity` | `False` | Make all edges entities. |
 
----
+### `parallel`
 
-## The `parallel` policy
+Only for one edge, and only when `edge_id` is `None`.
 
-Applies **only in the single-edge path and only when `edge_id` is `None`**.
-
-| Value | Behaviour |
+| value | result |
 |---|---|
-| `"update"` (default) | If an edge with the same endpoint set already exists, return that edge's ID and update it in-place. No new edge is created. |
-| `"parallel"` | Always create a new edge, even if one already exists between the same endpoints. |
-| `"error"` | Raise `ValueError` if any edge already exists between the same endpoints. |
+| `'update'` (default) | If the endpoints already have an edge, annnet updates that edge and returns its ID. |
+| `'parallel'` | annnet adds a new edge. |
+| `'error'` | If the endpoints already have an edge, annnet raises `ValueError`. |
 
-When you supply an explicit `edge_id`:
+With an `edge_id` that exists, annnet updates that edge. With a new `edge_id`,
+annnet adds a new edge. If `parallel='error'` and the endpoints already have a
+different edge, annnet raises `ValueError`.
 
-- The ID already exists → always update in-place (parallel policy is ignored).
-- The ID is new → always create. If `parallel="error"` and the same endpoints are
-  already connected by a different edge, `ValueError` is raised.
+### `propagate`
 
----
-
-## The `propagate` policy
-
-Controls which slices receive the edge after insertion.
-
-| Value | Behaviour |
+| value | result |
 |---|---|
-| `"none"` (default) | Edge is added only to the specified slice. |
-| `"shared"` | Edge is added to every slice that already contains **both** endpoints. |
-| `"all"` | Edge is added to every slice that contains **either** endpoint. |
+| `'none'` (default) | Only the slice in `slice` gets the edge. |
+| `'shared'` | Each slice that holds **both** endpoints also gets the edge. |
+| `'all'` | Each slice that holds **one or both** endpoints also gets the edge. |
 
----
+### `flexible`
 
-## Flexible direction
-
-An edge's effective direction can be driven by one of its own attribute values.
+The value of an edge attribute sets the direction of the edge.
 
 ```python
-G.add_edges(
+anet.add_edges(
     'A',
     'B',
+    score=-0.4,
     flexible={
-        'var': 'score',  # which edge attribute to read
-        'threshold': 0.0,  # decision boundary
-        'scope': 'edge',  # "edge" (read from this edge) or "global"
-        'above': 'forward',  # direction when var > threshold
-        'tie': 'undirected',  # direction when var == threshold
+        'var': 'score',  # the attribute to read
+        'threshold': 0.0,  # compare the value to this number
+        'scope': 'edge',  # read it from the edge
+        'above': 's->t',  # direction when the value is above the threshold
+        'tie': 'undirected',  # when the value is equal to the threshold
     },
 )
 ```
 
-`flexible` is **single-edge path only**. Setting it causes `_apply_flexible_direction`
-to run immediately after the edge is stored.
+`above` is `'s->t'` (from source to target) or `'t->s'`. Below the threshold,
+the direction is the opposite. `tie` is `'keep'`, `'undirected'`, `'s->t'` or
+`'t->s'`. With `'scope': 'node'`, annnet compares the attribute of the source
+node to that of the target node.
 
----
+## Limits
 
-## What cannot be done
-
-| Limitation | Detail |
+| limit | detail |
 |---|---|
-| Stoich form in batch mode | The stoichiometric dict is not normalised on the batch path. |
-| `parallel` policy per batch item | The batch path is optimised for throughput and has no per-item dedup logic. |
-| `flexible` direction in batch mode | Not wired into the batch path. |
-| Bare string IDs in a multilayer graph | `_add_edge_impl` raises `ValueError` if any endpoint is not a supra-node when `G.is_multilayer` is `True`. |
-| Items without `source`/`target` without `as_entity=True` | Batch items with no endpoints raise `ValueError` unless `as_entity=True` is set. |
-| Single-edge `src=None, tgt=None` without `edge_id` | In the single-edge path, `edge_id` is mandatory for null-endpoint entities — the auto-ID counter has no input to derive from. In batch mode, `edge_id` can be omitted and an auto-ID is assigned. |
-| Passing an exhausted generator | The dispatcher materialises the generator once. An already-exhausted generator produces an empty batch silently. |
-
----
-
-## How the incidence matrix is written
-
-For a directed binary edge `A → B` with `weight=2.0`:
-
-```
-Rows:      A     B
-Column:  +2.0  -2.0
-```
-
-For an undirected edge `{A, B}`:
-
-```
-Rows:      A     B
-Column:  +2.0  +2.0
-```
-
-For a directed hyperedge with `source=[A,B]`, `target=[C]`, `weight=1.0`:
-
-```
-Rows:      A      B      C
-Column:  +1.0   +1.0   -1.0
-```
-
----
+| Coefficients in a batch | Only a call with one edge takes the form with coefficients. |
+| `parallel` in a batch | A batch adds each item as a new edge, also when the endpoints already have an edge. A batch does not accept `parallel=`. |
+| `flexible` in a batch | A batch does not accept `flexible=`. |
+| Items without endpoints | In a batch, they need `as_entity=True`, else annnet raises `ValueError`. |
+| One edge without endpoints | It needs `edge_id`, else annnet raises `ValueError`. In a batch, annnet makes the ID. |
 
 ## See also
 
-- [Multilayer and multi-aspect graphs](../../guide/layers.ipynb) — supra-node form in depth
-- [Slices and views](../../guide/slices.ipynb) — how `slice=` and `propagate=` interact with slice state
-- API reference: [`AnnNet.add_edges`][annnet.core.graph.AnnNet.add_edges]
+- [Graph model guide](../../guide/graph-model.ipynb): edges, hyperedges and
+  the incidence matrix
+- [Layers guide](../../guide/layers.ipynb): edges between layers
+- [Slices guide](../../guide/slices.ipynb): slices and their edges
+- [`AnnNet.add_edges`][annnet.core.graph.AnnNet.add_edges]

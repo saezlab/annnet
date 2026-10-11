@@ -7,7 +7,7 @@
 [![Docs](https://img.shields.io/badge/docs_built_with-MkDocs-blue)](https://annnet.sysbioverse.org/)
 [![License](https://img.shields.io/github/license/saezlab/annnet)](https://github.com/saezlab/annnet/blob/main/LICENSE)
 
-AnnNet keeps a network, its annotations, and analysis contexts in one Python
+annnet keeps a network, its annotations, and analysis contexts in one Python
 object. Import an interaction table or an existing graph, attach measurements
 and results, select the part you need, and use it with other graph libraries.
 
@@ -26,10 +26,10 @@ annnet aims to combine graph expressiveness, annotation-centric data handling, a
 
 - Rich graph semantics: directed and undirected edges, parallel edges, self-loops, hyperedges, and edge-as-entity semantic.
 - Multilayer and slice-aware modeling: represent layers, aspects, inter-layer links, and named graph slices.
-- Annotated tables throughout: keep structured metadata for nodes, edges, slices, layers, and graph-level state, using Narwhals-compatible dataframes.
-- Import and export: import/export with NetworkX, igraph, graph-tool, GraphML, GEXF, SIF, SBML, CX2 (Cytoscape exchange format v2), Excel/CSV/TSV/JSON, Parquet graph directories, and DataFrames.
-- Algorithm access: lazy calls into NetworkX/igraph/graph‑tool via the graph-owned `G.nx`, `G.ig`, and `G.gt` accessors.
-- Native storage: persist graph structure and annotations in a `.annnet` layout built from Zarr, Parquet, and JSON.
+- Annotated tables throughout: keep structured metadata for nodes, edges, slices, layers, and graph-level state, using [Narwhals](https://narwhals-dev.github.io/narwhals/)-compatible dataframes.
+- Import and export: [NetworkX](https://networkx.org/), [igraph](https://python.igraph.org/), [graph-tool](https://graph-tool.skewed.de/), [GraphML](http://graphml.graphdrawing.org/), [GEXF](https://gexf.net/), SIF, [SBML](https://sbml.org/), CX2 ([Cytoscape](https://cytoscape.org/) exchange format v2), Excel/CSV/TSV/JSON, [Parquet](https://parquet.apache.org/) graph directories, and dataframes.
+- Algorithm access: lazy calls into NetworkX/igraph/graph‑tool via the graph-owned `anet.nx`, `anet.ig`, and `anet.gt` accessors.
+- Native storage: persist graph structure and annotations in a `.annnet` layout built from [Zarr](https://zarr.dev/), Parquet, and JSON.
 
 
 ## Features
@@ -56,7 +56,7 @@ The base package keeps the required runtime small. `numpy`, `scipy`, `narwhals`,
 [![pandas](https://img.shields.io/badge/or-pandas-150458?logo=pandas&logoColor=150458)](https://pandas.pydata.org/)
 [![PyArrow](https://img.shields.io/badge/or-PyArrow-5C2D91?logo=apachearrow&logoColor=white)](https://arrow.apache.org/docs/python/)
 
-AnnNet separates tabular in-memory backends from file formats. For annotated tables in memory, it can work through Narwhals with Polars DataFrames, pandas DataFrames, or PyArrow-backed tabular objects, letting you keep the table engine that best fits the rest of your workflow.
+annnet separates tabular in-memory backends from file formats. For annotated tables in memory, it can work through Narwhals with Polars DataFrames, pandas DataFrames, or PyArrow-backed tabular objects, letting you keep the table engine that best fits the rest of your workflow.
 
 The file-format IO modules cover graph exchange and persistence formats such as:
 
@@ -68,12 +68,12 @@ The file-format IO modules cover graph exchange and persistence formats such as:
 ### Runtime backend interoperability
 
 [![NetworkX](https://img.shields.io/badge/graph_backend-NetworkX-blue?logo=networkx)](https://networkx.org/)
-[![igraph](https://img.shields.io/badge/and/or-igraph-blue)](https://igraph.org/python/)
+[![igraph](https://img.shields.io/badge/and/or-igraph-blue)](https://python.igraph.org/)
 [![graph-tool](https://img.shields.io/badge/and/or-graph--tool-blue)](https://graph-tool.skewed.de/)
 
-- NetworkX via `G.nx` and `to_nx` / `from_nx`
-- igraph via `G.ig` and `to_igraph` / `from_igraph`
-- graph-tool via `G.gt` and `to_graphtool` / `from_graphtool`
+- NetworkX via `anet.nx` and `to_nx` / `from_nx`
+- igraph via `anet.ig` and `to_igraph` / `from_igraph`
+- graph-tool via `anet.gt` and `to_graphtool` / `from_graphtool`
 
 ### Cytoscape Web integration and other network visualizations
 
@@ -82,12 +82,12 @@ The file-format IO modules cover graph exchange and persistence formats such as:
 [![pydot](https://img.shields.io/badge/or-pydot-blue)](https://github.com/pydot/pydot)
 [![Matplotlib](https://img.shields.io/badge/or-Matplotlib-blue)](https://matplotlib.org/)
 
-annnet can export CX2 for Cytoscape and also render Cytoscape.js views directly from Python. That makes it practical to inspect graphs in a browser or notebook-oriented workflow without first leaving the AnnNet data model. For static outputs, it also supports Graphviz, pydot, and matplotlib-based rendering for scripts, reports, and export-to-file workflows.
+annnet can export CX2 for Cytoscape and also show [Cytoscape.js](https://js.cytoscape.org/) views directly from Python. That makes it practical to inspect graphs in a browser or notebook-oriented workflow without first leaving the annnet data model. For static outputs, `annnet.utils.plot` draws with Graphviz, pydot or Matplotlib, and `annnet.utils.save` writes the drawing to a file.
 
 ### Disk-backed storage
 
 [![Zarr](https://img.shields.io/badge/matrix_stored_with-Zarr-blue)](https://zarr.readthedocs.io/)
-[![Parquet](https://img.shields.io/badge/annotation_tables_strored_with-Parquet-50ABF1?logo=apacheparquet)](https://parquet.apache.org/)
+[![Parquet](https://img.shields.io/badge/annotation_tables_stored_with-Parquet-50ABF1?logo=apacheparquet)](https://parquet.apache.org/)
 
 The native `.annnet` format is intended to be lossless and analysis-friendly. Sparse structure is stored in Zarr, annotated tables are stored in Parquet, and metadata is stored in JSON so graphs can be reopened without flattening away structure or annotations.
 
@@ -134,7 +134,7 @@ pip install "annnet[graphviz]"
 pip install "annnet[all]"
 ```
 
-`graph-tool` is supported through the adapters and the `G.gt` accessor when installed, but it is not distributed on PyPI. Install it through your OS or conda-based package manager and annnet will detect it.
+`graph-tool` is supported through the adapters and the `anet.gt` accessor when installed, but it is not distributed on PyPI. Install it through your OS or conda-based package manager and annnet will detect it.
 
 
 ## Quick Start
@@ -147,21 +147,21 @@ import annnet as an
 import polars as pl
 
 interactions = pl.read_csv('docs/guide/data/interactions.csv')
-G = an.from_edge_frame(
+anet = an.from_edge_frame(
     interactions,
     edge_id='edge_id',
     sign='effect',
     directed=True,
     slice='prior',
 )
-G.attrs.backend = 'polars'
-G.summary()  # 10 nodes, 11 edges
+anet.attrs.backend = 'polars'
+anet.summary()  # 10 nodes, 11 edges
 
-supported = G.view(edges=G.E.select(confidence__gte=0.85))
+supported = anet.view(edges=anet.E.select(confidence__gte=0.85))
 supported.attrs.table('edges', derived=True)
 
-G.attrs.update('nodes', {'ERK': {'label': 'ERK response'}})
-G.write('analysis.annnet')
+anet.attrs.update('nodes', {'ERK': {'label': 'ERK response'}})
+anet.write('analysis.annnet')
 restored = an.read('analysis.annnet')
 ```
 
@@ -173,24 +173,24 @@ computation and storage. Longer analyses and integrations are in
 
 ## Backend-Specific Integration
 
-If an optional backend is installed, AnnNet can dispatch directly to that backend while handling conversion for you:
+If an optional backend is installed, annnet can dispatch directly to that backend while handling conversion for you:
 
 ```python
-centrality = G.nx.degree_centrality(G)
+centrality = anet.nx.degree_centrality(anet)
 ```
 
-`G.ig` and `G.gt` behave similarly for igraph and graph-tool. On calls such as `G.nx.<function>(G, ...)`, annnet resolves the backend callable, converts the AnnNet graph using the requested projection options, swaps in the converted backend graph, executes the algorithm call, and returns the backend result. Converted backend graphs are cached. After edits, call the accessor's `clear()` or use a fresh adapter conversion; automatic invalidation does not cover every mutation.
+`anet.nx.<function>` is the function `networkx.<function>`: annnet converts the graph, puts the converted graph in place of `anet` in the call, and returns the result of NetworkX. `anet.ig` and `anet.gt` do the same for igraph and graph-tool. The converted graphs are cached. After edits, call the accessor's `clear()` or use a fresh adapter conversion; automatic invalidation does not cover every mutation. See [Backend accessors](https://annnet.sysbioverse.org/reference/core/backend-accessors/).
 
-Use `G.nx.backend(...)`, `G.ig.backend(...)`, or `G.gt.backend(...)` when you want the concrete projected graph object. Use `G.nx.<function>(G, ...)`, `G.ig.<function>(G, ...)`, or `G.gt.<namespace>.<function>(G, ...)` when you want conversion plus dispatch in one step.
+Use `anet.nx.backend(...)`, `anet.ig.backend(...)`, or `anet.gt.backend(...)` when you want the concrete projected graph object. Use `anet.nx.<function>(anet, ...)`, `anet.ig.<function>(anet, ...)`, or `anet.gt.<namespace>.<function>(anet, ...)` when you want conversion plus dispatch in one step.
 
 Examples:
 
 ```python
 # Operate on the active slice
-bc = G.nx.betweenness_centrality(G)
+bc = anet.nx.betweenness_centrality(anet)
 
 # Build a projected NetworkX graph explicitly
-nxG = G.nx.backend(
+nx_graph = anet.nx.backend(
     directed=True,
     hyperedge_mode='skip',  # or "expand"
     slice='prior',
@@ -198,7 +198,7 @@ nxG = G.nx.backend(
 )
 
 # igraph interoperability
-pagerank = G.ig.pagerank()
+pagerank = anet.ig.pagerank()
 ```
 
 
@@ -216,18 +216,18 @@ NetworkX:
 ```python
 import annnet as an
 
-nxG, manifest = an.adapters.to_nx(G, directed=True, hyperedge_mode='skip')
+nx_graph, manifest = an.adapters.to_nx(anet, directed=True, hyperedge_mode='skip')
 
-# ... run algorithms or edit nxG ...
+# ... run algorithms or edit nx_graph ...
 
-G2 = an.adapters.from_nx(nxG, manifest)
+from_networkx = an.adapters.from_nx(nx_graph, manifest)
 ```
 
 igraph:
 
 ```python
-igG, ig_manifest = an.adapters.to_igraph(G, directed=True, hyperedge_mode='skip')
-G2 = an.adapters.from_igraph(igG, ig_manifest)
+ig_graph, ig_manifest = an.adapters.to_igraph(anet, directed=True, hyperedge_mode='skip')
+from_igraph = an.adapters.from_igraph(ig_graph, ig_manifest)
 ```
 
 File formats and dataframes:
@@ -236,30 +236,31 @@ File formats and dataframes:
 import annnet as an
 
 # GraphML / GEXF / SIF
-an.io.to_graphml(G, 'graph.graphml', directed=True, hyperedge_mode='reify')
-G2 = an.io.from_graphml('graph.graphml')
+# What the format cannot hold goes into a sidecar file beside it
+an.io.to_graphml(anet, 'graph.graphml', directed=True, hyperedge_mode='reify')
+from_graphml = an.io.from_graphml('graph.graphml')
 
-an.io.to_sif(G, 'graph.sif', lossless=True, manifest_path='graph.sif.manifest.json')
-G3 = an.io.from_sif('graph.sif', manifest='graph.sif.manifest.json')
+an.io.to_sif(anet, 'graph.sif')
+from_sif = an.io.from_sif('graph.sif')
 
 # JSON / NDJSON
-an.io.to_json(G, 'graph.json')
-H = an.io.from_json('graph.json')
+an.io.to_json(anet, 'graph.json')
+from_json = an.io.from_json('graph.json')
 
 # Parquet graph directory
-an.io.to_parquet(G, 'graph_dir/')
-K = an.io.from_parquet('graph_dir/')
+an.io.to_parquet(anet, 'graph_dir/')
+from_parquet = an.io.from_parquet('graph_dir/')
 
 # CX2 (Cytoscape exchange format v2)
-cx2 = an.io.to_cx2(G, hyperedges='reify')
-L = an.io.from_cx2(cx2, hyperedges='manifest')
+cx2 = an.io.to_cx2(anet, hyperedges='reify')
+from_cx2 = an.io.from_cx2(cx2, hyperedges='manifest')
 ```
 
 Notes:
 
 - Hyperedges may be dropped, expanded, or reified depending on the target and conversion mode.
 - Backend graphs are single-view projections, so slice handling should be chosen explicitly when it matters.
-- Returned manifests improve round-trip fidelity when the external target cannot encode all AnnNet semantics directly.
+- Returned manifests and sidecar files improve round-trip fidelity when the external target cannot encode all annnet semantics directly. See [What each format keeps](https://annnet.sysbioverse.org/reference/io/format-comparison/).
 
 ## Storage
 
@@ -268,8 +269,8 @@ The `.annnet` format is the native persisted representation for annnet graphs. I
 ```python
 import annnet as an
 
-an.io.write(G, 'my_graph.annnet', overwrite=True)
-R = an.io.read('my_graph.annnet')
+an.io.write(anet, 'my_graph.annnet', overwrite=True)
+restored = an.io.read('my_graph.annnet')
 ```
 
 Layout highlights:
@@ -278,7 +279,7 @@ Layout highlights:
 - `structure/incidence.zarr` stores sparse topology data
 - `structure/*.parquet` stores structural indices and edge definitions
 - `tables/*.parquet` stores node, edge, and slice annotations
-- `layers/`, `slices/`, `audit/`, and `uns/` keep multilayer state, slice state, history, and unstructured metadata
+- `slices/`, `audit/`, `uns/` and, for a multilayer graph, `layers/` keep slice state, history, unstructured metadata and multilayer state
 
 ## Package Overview
 

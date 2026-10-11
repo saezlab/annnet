@@ -56,8 +56,8 @@ nav:
         -   Causal activity bridge: examples/scenarios/causal_activity_bridge.ipynb
 -   API Reference:
     -   API Reference Overview: reference/index.md
-    -   The public surface (contract): reference/api-contract.md
-    -   Public and internal APIs: reference/api-boundary.md
+    -   API overview: reference/api-boundary.md
+    -   The public surface: reference/api-contract.md
     -   Support helpers: reference/support.md
     -   Core:
         -   Graph: reference/core/graph.md
@@ -72,7 +72,7 @@ nav:
         -   Slices: reference/core/slices.md
         -   Layers: reference/core/layers.md
     -   Algorithms:
-        -   Traversal: reference/algorithms/traversal.md
+        -   Traversal and structure: reference/algorithms/traversal.md
     -   Experimental (LOCAL ONLY):
         -   Experimental API reference (LOCAL ONLY): reference/experimental/index.md
         -   Vocabulary (LOCAL ONLY): reference/experimental/vocabulary.md

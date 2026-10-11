@@ -1,83 +1,93 @@
 # Graph
 
-Primary graph objects from `annnet.core.graph`.
+`AnnNet` is the graph object. `annnet.Graph` is the same class.
 
-The main graph API centers on `AnnNet`/`Graph`, bulk node and edge
-construction with `add_nodes` and `add_edges`, graph-owned accessors
-(`slices`, `layers`, `attrs`, `views`, `ops`, `idx`, `cache`), annotation
-tables (`obs`, `var`, `uns`), and backend accessors (`nx`, `ig`, `gt`).
+An `AnnNet` object holds the structure (nodes, edges, hyperedges), the
+attribute tables, and the slices and layers. The members below are grouped by
+what they do:
 
-The eight attribute tables are read under `attrs`, each named for what addresses
-it: `nodes`, `edges`, `slices`, `aspects`, `layers`, `edge_slices`,
-`node_layers` and `elementary_layers`. `obs` and `var` are the same tables as
-`attrs.nodes` and `attrs.edges` under the anndata spelling. See
-[Reading the graph](../../guide/annotations-and-views.ipynb) for how these
-differ from the frames `views` builds.
+- **Build and edit:** `add_nodes`, `add_edges`, `remove_nodes`, `remove_edges`,
+  `make_undirected`.
+- **Nodes and edges:** `N`, `E`, `shape`, `has_node`, `has_edge`, `degree`,
+  `neighbors`, `in_neighbors`, `out_neighbors`, `predecessors`, `successors`,
+  `incident_edges`, `edge_list`, `entity_kinds`.
+- **Layers:** `at`, `exists`, `is_multilayer`, `nv_supra`, `supra_nodes`,
+  `supra_shape`.
+- **Attributes and metadata:** `attrs`, `uns`, `summary`, `provenance`.
+- **Matrices:** `A`, `B`, `H`, `S`, `L`, `matrices`, `idx`, `cache`.
+- **Namespaces:** `slices`, `layers`, `ops`, `history`, `spaces`, and the
+  [backend accessors](backend-accessors.md) `nx`, `ig`, `gt`.
+- **Views and files:** `view`, `read`, `write`.
+
+The eight attribute tables are under `attrs`: `nodes`, `edges`, `slices`,
+`aspects`, `layers`, `edge_slices`, `node_layers` and `elementary_layers`. See
+[Attributes](attributes.md) and the
+[annotations guide](../../guide/annotations-and-views.ipynb).
 
 ## AnnNet
 
 ::: annnet.core.graph.AnnNet
     options:
       filters: public
-      inherited_members: false
+      inherited_members: true
       members:
         - add_nodes
         - add_edges
         - remove_nodes
         - remove_edges
+        - make_undirected
+        - N
+        - E
+        - shape
         - has_node
         - has_edge
-        - nodes
-        - edges
         - degree
+        - neighbors
+        - in_neighbors
+        - out_neighbors
+        - predecessors
+        - successors
         - incident_edges
-        - num_nodes
-        - num_edges
-        - nv
-        - ne
-        - number_of_nodes
-        - number_of_edges
-        - shape
-        - V
-        - E
-        - obs
-        - var
-        - uns
+        - edge_list
+        - entity_kinds
+        - global_count
+        - at
+        - exists
+        - is_multilayer
+        - nv_supra
+        - supra_nodes
+        - supra_shape
         - attrs
-        - views
-        - history
-        - ops
-        - layers
-        - slices
+        - uns
+        - summary
+        - provenance
+        - A
+        - B
+        - H
+        - S
+        - L
+        - matrices
         - idx
         - cache
+        - slices
+        - layers
+        - ops
+        - history
+        - spaces
         - nx
         - ig
         - gt
+        - view
         - read
         - write
-        - view
-        - global_count
-        - get_node
-        - get_edge
-        - edge_list
-        - make_undirected
-        - X
-        - is_multilayer
       show_root_heading: true
       show_bases: false
 
-## EdgeType
-
-::: annnet.core._records.EdgeType
-    options:
-      show_root_heading: true
-
 ## Endpoint
 
-One side of one edge: the node, and the layer it sits in. Read a stored endpoint
-through `as_endpoint` and it has the same shape whether or not the graph is
-layered — see [Reading the graph](../../guide/annotations-and-views.ipynb).
+One side of one edge: the node, and the layer it sits in. `as_endpoint` gives
+a stored endpoint the same shape, whether or not the graph has layers. See the
+[annotations guide](../../guide/annotations-and-views.ipynb).
 
 ::: annnet.core._records.Endpoint
     options:
@@ -93,12 +103,10 @@ layered — see [Reading the graph](../../guide/annotations-and-views.ipynb).
 
 ## Provenance
 
-What a graph was built from, recorded as data rather than as a memory.
+The sources that a graph was built from. The readers of annnet add a record for
+each source they read: its name, format, location, version, the time and a
+checksum. Read the records with `anet.provenance()`.
 
 ::: annnet.core._provenance.Provenance
-    options:
-      show_root_heading: true
-
-::: annnet.core._provenance.checksum_of
     options:
       show_root_heading: true
