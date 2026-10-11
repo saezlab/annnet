@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import posixpath
 import re
-import shutil
 import warnings
 from html import escape
 from pathlib import Path
@@ -28,16 +27,6 @@ warnings.filterwarnings(
     message="Jupyter is migrating its paths to use standard platformdirs",
     category=DeprecationWarning,
 )
-
-
-def _sync_case_studies() -> None:
-    """Publish the two case studies; topic guides live directly in docs/guide."""
-    repo_root = Path(__file__).resolve().parent.parent
-    source_dir = repo_root / "notebooks" / "use_cases"
-    destination_dir = repo_root / "docs" / "examples" / "use_cases"
-    destination_dir.mkdir(parents=True, exist_ok=True)
-    for name in ("UC1.ipynb", "UC2.ipynb"):
-        shutil.copy2(source_dir / name, destination_dir / name)
 
 
 def on_page_content(html, page, config, files):
@@ -64,7 +53,6 @@ def on_page_content(html, page, config, files):
 # Preserve bookmarks while keeping superseded articles out of navigation/search.
 _REDIRECTS = {
     "explanations": "guide",
-    "tutorials": "examples",
     **{f"explanations/{name}": "guide/graph-model" for name in (
         "math-incidence", "edge-tables-and-formats",
     )},
@@ -72,9 +60,9 @@ _REDIRECTS = {
         "math-multilayer", "aspects-and-windows", "values-and-scale",
     )},
     "explanations/design-philosophy": "guide",
-    "explanations/internal-representation": "community/internals",
-    "explanations/architecture-overview": "community/internals",
-    "explanations/mutation-and-derived-state": "community/internals",
+    "explanations/internal-representation": "guide",
+    "explanations/architecture-overview": "guide",
+    "explanations/mutation-and-derived-state": "guide",
     "explanations/reading-the-graph": "guide/annotations-and-views",
     "explanations/managers-and-views": "guide/slices",
     "explanations/history-and-diffs": "guide/computation-and-storage",
@@ -82,8 +70,8 @@ _REDIRECTS = {
     "explanations/io-annnet": "guide/computation-and-storage",
     "explanations/format-semantics": "reference/io/format-comparison",
     "explanations/add-edges": "reference/core/adding-edges",
-    "explanations/api-migration": "reference/migration",
-    "explanations/performance": "community/performance",
+    "explanations/api-migration": "reference/api-boundary",
+    "explanations/performance": "guide",
     "tutorials/notebooks/special/sp03_flexible_edge_orientation": "reference/core/adding-edges",
     **{f"tutorials/notebooks/tutos/{name}": f"guide/{target}" for name, target in (
         ("01_quickstart", "annotations-and-views"),
@@ -101,10 +89,21 @@ _REDIRECTS = {
         ("sp04_backend_lazy_proxies", "computation-and-storage"),
         ("sp05_exploration_workflow", "annotations-and-views"),
     )},
-    **{f"tutorials/notebooks/use_cases/{name}": f"examples/use_cases/{name}" for name in ("UC1", "UC2")},
-    **{f"tutorials/notebooks/scenarios/{name}": f"examples/scenarios/{name}" for name in (
+    "tutorials/notebooks/use_cases/UC1": "tutorials/multi-condition-signaling",
+    "tutorials/notebooks/use_cases/UC2": "tutorials/tgfb-fibrosis",
+    **{f"tutorials/notebooks/scenarios/{name}": f"tutorials/{name.replace('_', '-')}" for name in (
         "omnipath_table_ingestion", "cytoscape_cx2_export", "pyg_heterodata_export", "causal_activity_bridge",
     )},
+    "examples": "tutorials",
+    "examples/use_cases/UC1": "tutorials/multi-condition-signaling",
+    "examples/use_cases/UC2": "tutorials/tgfb-fibrosis",
+    **{f"examples/scenarios/{name}": f"tutorials/{name.replace('_', '-')}" for name in (
+        "omnipath_table_ingestion", "cytoscape_cx2_export", "pyg_heterodata_export", "causal_activity_bridge",
+    )},
+    "reference/migration": "reference/api-boundary",
+    "reference/api-contract": "reference/api-boundary",
+    "community/internals": "community",
+    "community/performance": "community",
 }
 
 
@@ -122,5 +121,3 @@ def on_post_build(config):
             encoding="utf-8",
         )
 
-
-_sync_case_studies()

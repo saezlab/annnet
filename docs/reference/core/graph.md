@@ -24,6 +24,45 @@ The eight attribute tables are under `attrs`: `nodes`, `edges`, `slices`,
 [Attributes](attributes.md) and the
 [annotations guide](../../guide/annotations-and-views.ipynb).
 
+## Matrices
+
+All matrices are SciPy sparse arrays. Rows are nodes (placements, on a
+multilayer graph) and edge entities. The properties use the default options.
+`anet.matrices.<name>(...)` takes options, and gives the matrix together with
+the maps between IDs and positions (see [Indexing](indexing.md)).
+
+| property | `anet.matrices` | rows × columns | edges in it | values |
+|---|---|---|---|---|
+| `anet.B` | `binary()` | entities × edges | binary edges | `+weight` on the source, `-weight` on the target |
+| `anet.S` | `signed()`, `incidence()` | entities × edges | all edges | the coefficients; the two entries of a self-loop cancel |
+| `anet.H` | `hypergraph()` | entities × edges | hyperedges | 1 if the edge holds the entity, on any side |
+| `anet.A` | `adjacency()` | entities × entities | binary edges | the edge weight, in the row of the source; a self-loop is on the diagonal |
+| `anet.L` | `laplacian()` | entities × entities | binary edges | the degree matrix minus `A`; each row sums to zero |
+
+A hyperedge is not in `A` or `L`: give `kinds=` to `adjacency()` to choose how
+to include it. `incidence(kinds=None, signed=True)` gives the incidence for the
+edge kinds that you select, with or without the coefficients.
+
+On a multilayer graph, `anet.layers` has the matrices over all placements:
+`supra_adjacency()`, its parts `build_intra_block()`, `build_inter_block()` and
+`build_coupling_block()`, `supra_laplacian()` and `transition_matrix()`. See
+[Layers](layers.md) and the [layers guide](../../guide/layers.ipynb#supra-adjacency-and-its-blocks).
+
+The [graph model guide](../../guide/graph-model.ipynb#structure-and-numerical-representations)
+explains the matrices with an example.
+
+## Edge records
+
+`anet.E.at(edge_id)` gives an `EdgeView`. Its fields:
+
+- `kind`: the structure, `binary`, `hyper` or `node_edge`;
+- `directed`: the direction, separate from the kind;
+- `ml_kind`: the place in a multilayer graph, `intra`, `inter` or `coupling`.
+  For a graph without layers, it is `intra`.
+
+The same fields have the same names in the `anet.E[...]` columns, in the
+derived edge table and in `anet.summary()`.
+
 ## AnnNet
 
 ::: annnet.core.graph.AnnNet

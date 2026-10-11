@@ -23,7 +23,7 @@ corneto = { version = "*", extras = ["plot"] }
 annnet = { path = "../..", editable = true, extras = ["polars", "networkx", "zarr_io", "pyg", "plot", "notebook"] }
 
 [tasks]
-check-uc1-imports = 'python -c "import annnet, corneto, matplotlib, numpy, pandas, networkx; from corneto.methods import signaling; print(\"UC1 imports OK\")"'
-check-uc2-imports = 'python -c "import annnet, matplotlib, numpy, pandas, polars, pyreadr, sklearn, torch, torch_geometric; print(\"UC2 imports OK\")"'
+check-signaling-imports = 'python -c "import annnet, corneto, matplotlib, numpy, pandas, networkx; from corneto.methods import signaling; print(\"multi-condition signaling imports OK\")"'
+check-fibrosis-imports = 'python -c "import annnet, matplotlib, numpy, pandas, polars, pyreadr, sklearn, torch, torch_geometric; print(\"TGF-beta fibrosis imports OK\")"'
 register-kernel = 'python -m ipykernel install --user --name annnet-use-cases --display-name "AnnNet use cases (pixi)"'
-lab = 'jupyter lab UC1.ipynb UC2.ipynb'
+lab = 'jupyter lab multi-condition-signaling.ipynb tgfb-fibrosis.ipynb'

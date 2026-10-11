@@ -25,7 +25,8 @@ anet.add_edges(('A', ('healthy',)), ('B', ('treated',)))
 ```
 
 Each endpoint is a `(node_id, layer)` pair. On a graph with aspects, always
-give the pairs. annnet sets the multilayer kind of the edge:
+give the pairs. annnet sets the multilayer kind of the edge (see
+[edge kinds](../../guide/layers.ipynb#edge-kinds) in the layers guide):
 
 | endpoints | kind |
 |---|---|
@@ -173,6 +174,9 @@ different edge, annnet raises `ValueError`.
 | `'shared'` | Each slice that holds **both** endpoints also gets the edge. |
 | `'all'` | Each slice that holds **one or both** endpoints also gets the edge. |
 
+The [slices guide](../../guide/slices.ipynb#contextual-weights-and-mutation-scope)
+shows an example.
+
 ### `flexible`
 
 The value of an edge attribute sets the direction of the edge.
@@ -201,9 +205,9 @@ node to that of the target node.
 
 | limit | detail |
 |---|---|
-| Coefficients in a batch | Only a call with one edge takes the form with coefficients. |
-| `parallel` in a batch | A batch adds each item as a new edge, also when the endpoints already have an edge. A batch does not accept `parallel=`. |
-| `flexible` in a batch | A batch does not accept `flexible=`. |
+| Coefficients in a batch | Only a call with one edge takes the form with coefficients. A batch raises `TypeError`. |
+| `parallel` in a batch | A batch adds each item as a new edge, also when the endpoints already have an edge. A batch does not accept `parallel=`, and raises `TypeError`. |
+| `flexible` in a batch | A batch does not accept `flexible=`, and raises `TypeError`. |
 | Items without endpoints | In a batch, they need `as_entity=True`, else annnet raises `ValueError`. |
 | One edge without endpoints | It needs `edge_id`, else annnet raises `ValueError`. In a batch, annnet makes the ID. |
 

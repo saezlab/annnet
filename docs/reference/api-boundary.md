@@ -7,10 +7,9 @@ import annnet as an
 ```
 
 All names below are in the top-level `annnet` namespace, unless the name shows
-a subpackage. A name that is not on this page or in
-[The public surface](api-contract.md) is internal: for example a name that
-begins with an underscore, or a module such as `annnet.core._store`. Internal
-names can change without notice.
+a subpackage. A name that is not on this page or on the page of
+its object is internal: for example a name that begins with an underscore, or a
+module such as `annnet.core._store`. Internal names can change without notice.
 
 ## Graph
 
@@ -65,7 +64,7 @@ names can change without notice.
 | [`from_graphml`, `to_graphml`, `from_gexf`, `to_gexf`](io/graphml-gexf.md) | GraphML and GEXF files. |
 | [`from_sif`, `to_sif`](io/sif.md) | Simple Interaction Format. |
 | [`from_sbml`, `to_sbml`, `from_sbml_cobra`, `from_cobra_model`](io/sbml.md) | SBML models. |
-| [`from_cx2`, `to_cx2`, `show_cx2`](io/cx2.md) | Cytoscape CX2, and a Cytoscape.js view. |
+| [`from_cx2`, `to_cx2`](io/cx2.md) | Cytoscape CX2. |
 | [`from_pyg`, `to_pyg`](io/pyg.md) | PyTorch Geometric. |
 
 [What each format keeps](io/format-comparison.md) compares the formats.
@@ -89,7 +88,7 @@ names can change without notice.
 
 | name | description |
 |---|---|
-| [`annnet.utils.plot`, `annnet.utils.save`](utils/plotting.md) | Draw a graph, and write the drawing to a file. |
+| [`annnet.utils.plot`, `annnet.utils.save`, `annnet.utils.show_cytoscape`](utils/plotting.md) | Draw a graph, write the drawing to a file, or show the graph as an interactive network. |
 
 ## Package and settings
 
@@ -98,3 +97,16 @@ names can change without notice.
 | [`info`, `__version__`, `get_latest_version`](support.md#package-metadata) | The package version and its optional components. |
 | [`set_default_dataframe_backend` and others](support.md#dataframe-backends) | The dataframe library for new tables. |
 | [`set_default_plot_backend` and others](support.md#plotting-backends) | The plotting library. |
+
+## Errors
+
+annnet raises the standard Python exceptions, with a message that names the
+problem:
+
+| situation | exception |
+|---|---|
+| An unknown node, edge, slice, aspect, layer or attribute key. | `KeyError` |
+| A key or argument of the wrong shape or type. A predicate that compares values that cannot be compared. A node selection given where edges are expected. | `TypeError` |
+| A reserved field. A key that occurs two times in one batch. A missing or null key column. `delete` without `keys` and without `names`. An ordering operator on a categorical aspect. A selection from another graph. A bad `boundary`, `limit`, `layout` or operator. | `ValueError` |
+| A write through a view. | `ReadOnlyViewError`, a subclass of `TypeError` |
+| A name that annnet removed. | `AttributeError`, with the name to use instead |

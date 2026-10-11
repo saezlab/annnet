@@ -215,7 +215,7 @@ uv sync --group docs
 uv run --group docs python -m mkdocs serve --dev-addr 127.0.0.1:8000
 ```
 
-Open <http://127.0.0.1:8000>. This executes the Quickstart and the five Guide notebooks; Examples
+Open <http://127.0.0.1:8000>. This executes the Quickstart and the five Guide notebooks; Tutorials
 render their saved outputs. For a strict build without the preview server:
 
 ```bash

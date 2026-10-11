@@ -3,7 +3,6 @@ INHERIT: mkdocs.yml
 # The public site excludes experimental reference pages retained for local work.
 exclude_docs: |
     changelog.md
-    tutorials/**
     reference/experimental/**
 
 nav:
@@ -17,20 +16,19 @@ nav:
     -   Slices and analysis contexts: guide/slices.ipynb
     -   Layers: guide/layers.ipynb
     -   Computation and storage: guide/computation-and-storage.ipynb
--   Examples:
-    -   Choose an example: examples/index.md
+-   Tutorials:
+    -   Choose a tutorial: tutorials/index.md
     -   Case studies:
-        -   Multi-condition causal signaling: examples/use_cases/UC1.ipynb
-        -   TGF-beta fibrosis response: examples/use_cases/UC2.ipynb
+        -   Multi-condition causal signaling: tutorials/multi-condition-signaling.ipynb
+        -   TGF-beta fibrosis response: tutorials/tgfb-fibrosis.ipynb
     -   Integrations:
-        -   OmniPath table ingestion: examples/scenarios/omnipath_table_ingestion.ipynb
-        -   Cytoscape CX2 export: examples/scenarios/cytoscape_cx2_export.ipynb
-        -   PyG HeteroData export: examples/scenarios/pyg_heterodata_export.ipynb
-        -   Causal activity bridge: examples/scenarios/causal_activity_bridge.ipynb
+        -   OmniPath table ingestion: tutorials/omnipath-table-ingestion.ipynb
+        -   Cytoscape CX2 export: tutorials/cytoscape-cx2-export.ipynb
+        -   PyG HeteroData export: tutorials/pyg-heterodata-export.ipynb
+        -   Causal activity bridge: tutorials/causal-activity-bridge.ipynb
 -   API Reference:
     -   API Reference Overview: reference/index.md
     -   API overview: reference/api-boundary.md
-    -   The public surface: reference/api-contract.md
     -   Support helpers: reference/support.md
     -   Core:
         -   Graph: reference/core/graph.md

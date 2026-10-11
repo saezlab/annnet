@@ -71,14 +71,14 @@ table, and explains views, annotations and the saved file.
   [slices](guide/slices.ipynb) ·
   [layers](guide/layers.ipynb) ·
   [computation and storage](guide/computation-and-storage.ipynb)
-- **Examples**, complete analyses:
-  [multi-condition causal signaling](examples/use_cases/UC1.ipynb) ·
-  [TGF-beta fibrosis response](examples/use_cases/UC2.ipynb),
+- **Tutorials**, complete analyses:
+  [multi-condition causal signaling](tutorials/multi-condition-signaling.ipynb) ·
+  [TGF-beta fibrosis response](tutorials/tgfb-fibrosis.ipynb),
   and integrations with
-  [OmniPath](examples/scenarios/omnipath_table_ingestion.ipynb),
-  [Cytoscape](examples/scenarios/cytoscape_cx2_export.ipynb),
-  [PyG](examples/scenarios/pyg_heterodata_export.ipynb) and
-  [CORNETO](examples/scenarios/causal_activity_bridge.ipynb)
+  [OmniPath](tutorials/omnipath-table-ingestion.ipynb),
+  [Cytoscape](tutorials/cytoscape-cx2-export.ipynb),
+  [PyG](tutorials/pyg-heterodata-export.ipynb) and
+  [CORNETO](tutorials/causal-activity-bridge.ipynb)
 - **[API reference](reference/index.md)**: exact signatures and options
 - **[Community](community/index.md)**: how to contribute to the docs and the code
 
@@ -118,7 +118,7 @@ multilayer structure without duplicating the underlying graph.
     Store node, edge, slice, layer, and edge-slice metadata in indexed tabular structures instead of flat per-object dictionaries.
 
     See: [annotations in the guide](guide/annotations-and-views.ipynb#import-identities-and-annotations) ·
-    [OmniPath table example](examples/scenarios/omnipath_table_ingestion.ipynb) ·
+    [OmniPath table example](tutorials/omnipath-table-ingestion.ipynb) ·
     [attributes](reference/core/attributes.md)
 
 -   __Named slices for conditions and views__
@@ -128,7 +128,7 @@ multilayer structure without duplicating the underlying graph.
     Define condition-specific or context-specific graph views without copying the full topology, with optional per-slice edge-weight overrides.
 
     See: [slices in the guide](guide/slices.ipynb#what-a-slice-represents) ·
-    [multi-condition example](examples/use_cases/UC1.ipynb) ·
+    [multi-condition example](tutorials/multi-condition-signaling.ipynb) ·
     [slices](reference/core/slices.md)
 
 -   __Multilayer network support__
@@ -148,7 +148,7 @@ multilayer structure without duplicating the underlying graph.
     Run [NetworkX](https://networkx.org/), [igraph](https://python.igraph.org/) and [graph-tool](https://graph-tool.skewed.de/) algorithms directly on an annnet graph through `anet.nx`, `anet.ig` and `anet.gt`. annnet converts lazily and stays the canonical representation.
 
     See: [backends in the guide](guide/computation-and-storage.ipynb#make-the-algorithm-input-explicit) ·
-    [PyG example](examples/scenarios/pyg_heterodata_export.ipynb) ·
+    [PyG example](tutorials/pyg-heterodata-export.ipynb) ·
     [backend accessors](reference/core/backend-accessors.md)
 
 -   __Native, loss-aware storage__
@@ -158,7 +158,7 @@ multilayer structure without duplicating the underlying graph.
     Persist topology, annotations, and metadata together in a format designed for round-trip fidelity and scalable IO.
 
     See: [storage in the guide](guide/computation-and-storage.ipynb#persistence-and-reconstruction-channels) ·
-    [Cytoscape example](examples/scenarios/cytoscape_cx2_export.ipynb) ·
+    [Cytoscape example](tutorials/cytoscape-cx2-export.ipynb) ·
     [format comparison](reference/io/format-comparison.md)
 
 </div>
@@ -196,7 +196,7 @@ explicitly:
 
     Model regulatory, signaling, metabolic, and cross-modal networks with typed metadata and multiple analysis contexts.
 
-    See: [TGF-beta fibrosis example](examples/use_cases/UC2.ipynb)
+    See: [TGF-beta fibrosis example](tutorials/tgfb-fibrosis.ipynb)
 
 -   __Condition-specific and temporal networks__
 
@@ -205,7 +205,7 @@ explicitly:
     Keep one shared graph with named slices for perturbations, time points, cohorts, or filtered analytical views.
 
     See: [slices in the guide](guide/slices.ipynb#work-on-one-condition) ·
-    [multi-condition example](examples/use_cases/UC1.ipynb)
+    [multi-condition example](tutorials/multi-condition-signaling.ipynb)
 
 -   __Multimodal and layered data__
 
@@ -221,9 +221,9 @@ explicitly:
 
     Move between annnet and standard graph ecosystems, file formats, and ML pipelines without flattening the original structure too early.
 
-    See: [Cytoscape](examples/scenarios/cytoscape_cx2_export.ipynb) ·
-    [PyG](examples/scenarios/pyg_heterodata_export.ipynb) ·
-    [CORNETO](examples/scenarios/causal_activity_bridge.ipynb)
+    See: [Cytoscape](tutorials/cytoscape-cx2-export.ipynb) ·
+    [PyG](tutorials/pyg-heterodata-export.ipynb) ·
+    [CORNETO](tutorials/causal-activity-bridge.ipynb)
 
 </div>
 

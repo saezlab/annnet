@@ -35,4 +35,4 @@ and does not depend on the other notebooks.
 
 The data are small and synthetic, so these notebooks require no external data
 service. For longer analyses with biological data or other software, see
-[Examples](../examples/index.md).
+[Tutorials](../tutorials/index.md).

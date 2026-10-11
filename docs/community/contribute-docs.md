@@ -10,10 +10,8 @@ docstrings with mkdocstrings.
 - **Guide:** five topic notebooks. Explain a concept, its mathematics where
   needed, and its practical API in the same notebook. Extend the relevant
   topic before adding another tutorial about it.
-- **Examples:** complete analyses and integrations. The case-study sources are
-  `notebooks/use_cases/UC1.ipynb` and `UC2.ipynb`; the build copies them into
-  `docs/examples/use_cases/`. Edit the originals. Integration notebooks live
-  directly in `docs/examples/scenarios/`.
+- **Tutorials:** complete analyses and integrations, all in `docs/tutorials/`.
+  Each one has its environment file in `docs/tutorials/environments/`.
 - **API Reference:** signatures, input forms, file-format details, and migration.
 - **Community:** contribution instructions and implementation reports.
 
@@ -33,7 +31,7 @@ uv run --group docs python -m mkdocs serve --dev-addr 127.0.0.1:8000
 Open <http://127.0.0.1:8000>. MkDocs rebuilds after edits. The default build
 executes the five Guide notebooks and fails on execution errors. Case studies
 and integration examples render their saved outputs using the
-[example environments](../examples/index.md) when run separately.
+[example environments](../tutorials/index.md) when run separately.
 
 For faster prose and layout work, render the notebooks' saved outputs:
 

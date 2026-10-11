@@ -169,7 +169,7 @@ The [quickstart](https://annnet.sysbioverse.org/quickstart/) explains the input
 columns and each step. The [Guide](https://annnet.sysbioverse.org/guide/) has five
 topic notebooks covering the model, annotations and views, slices, layers, and
 computation and storage. Longer analyses and integrations are in
-[Examples](https://annnet.sysbioverse.org/examples/).
+[Tutorials](https://annnet.sysbioverse.org/tutorials/).
 
 ## Backend-Specific Integration
 
@@ -348,7 +348,7 @@ uv run --group docs python -m mkdocs serve --dev-addr 127.0.0.1:8000
 ```
 
 Open <http://127.0.0.1:8000>. The build executes the five Guide notebooks and
-renders saved outputs for Examples. Run `uv run --group docs python -m mkdocs
+renders saved outputs for the Tutorials. Run `uv run --group docs python -m mkdocs
 build --strict` to validate the site. See the [documentation contribution
 guide](docs/community/contribute-docs.md) for faster previews and notebook environments.
 
