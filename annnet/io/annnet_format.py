@@ -2,7 +2,7 @@
 Native AnnNet archive format.
 
 Provides:
-    write(G, filename) -> None
+    write(anet, filename) -> None
     read(filename)     -> AnnNet
 
 The native format stores graph structure, sparse matrices, dataframe-backed

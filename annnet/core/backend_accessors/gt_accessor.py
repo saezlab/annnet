@@ -14,8 +14,8 @@ class _GTBackendAccessor(_BackendAccessorBase):
     """graph-tool backend accessor attached to an AnnNet instance.
 
     This accessor lets you call graph-tool algorithms via namespaces such as:
-    `G.gt.topology.shortest_distance(...)`, `G.gt.centrality.betweenness(...)`,
-    and `G.gt.flow.push_relabel_max_flow(...)`.
+    `anet.gt.topology.shortest_distance(...)`, `anet.gt.centrality.betweenness(...)`,
+    and `anet.gt.flow.push_relabel_max_flow(...)`.
 
     On first use (or after a graph mutation), AnnNet is converted to a graph-tool
     graph and cached; subsequent calls reuse the cached backend until the AnnNet
@@ -27,7 +27,7 @@ class _GTBackendAccessor(_BackendAccessorBase):
     Notes
     -----
     - Requires the optional `graph-tool` dependency (not on PyPI).
-    - The typical usage pattern is `G.gt.<namespace>.<algo>(...)`, which lazily
+    - The typical usage pattern is `anet.gt.<namespace>.<algo>(...)`, which lazily
       converts, runs the graph-tool algorithm, and returns its output.
     """
 

@@ -72,7 +72,7 @@ def tf_activity(
 
     Examples
     --------
-    >>> result = usecases.tf_activity(G, pdata, aspect='condition', on='symbol')
+    >>> result = usecases.tf_activity(anet, pdata, aspect='condition', on='symbol')
     >>> pdata.obs['n_active'].head()  # doctest: +SKIP
     """
     from .methods import decoupler
@@ -138,9 +138,9 @@ def causal_subnetwork(
     Examples
     --------
     >>> fit = usecases.causal_subnetwork(  # doctest: +SKIP
-    ...     G, inputs='perturbation', outputs='score', aspect='condition'
+    ...     anet, inputs='perturbation', outputs='score', aspect='condition'
     ... )
-    >>> G.slices.edge_frame(slices=fit.slices, attrs=['activity'])  # doctest: +SKIP
+    >>> anet.slices.edge_frame(slices=fit.slices, attrs=['activity'])  # doctest: +SKIP
     """
     from .methods import corneto
 

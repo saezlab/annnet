@@ -430,7 +430,7 @@ def attach(
     Examples
     --------
     >>> report = exp.sysbio.attach(  # doctest: +SKIP
-    ...     G,
+    ...     anet,
     ...     adata,
     ...     aspect='condition',
     ...     on='symbol',

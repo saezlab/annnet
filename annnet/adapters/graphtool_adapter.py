@@ -2,7 +2,7 @@
 AnnNet-tool adapter for AnnNet AnnNet.
 
 Provides:
-    to_graphtool(G)      -> (gt.Graph, manifest_dict)
+    to_graphtool(anet)      -> (gt.Graph, manifest_dict)
     from_graphtool(gtG, manifest=None) -> AnnNet
 
 graph-tool only gets what it can natively represent:

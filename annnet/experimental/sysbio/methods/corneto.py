@@ -7,7 +7,7 @@ second from the first.
 Run per condition, the answer is one sub-network each — and each goes into its
 own slice, so the result is a value per **edge, per condition**::
 
-    G.slices.edge_frame(slices=fit.slices, attrs=['activity'])
+    anet.slices.edge_frame(slices=fit.slices, attrs=['activity'])
 
 ``inputs=`` and ``outputs=`` name **node-layer attributes**, so the activities a
 previous step wrote are what this fits: no intermediate dictionary, and no way
@@ -243,9 +243,9 @@ def run(
     Examples
     --------
     >>> fit = corneto.run(  # doctest: +SKIP
-    ...     G, inputs='perturbation', outputs=activity.key, aspect='condition'
+    ...     anet, inputs='perturbation', outputs=activity.key, aspect='condition'
     ... )
-    >>> G.slices.edge_frame(slices=fit.slices, attrs=['activity'])  # doctest: +SKIP
+    >>> anet.slices.edge_frame(slices=fit.slices, attrs=['activity'])  # doctest: +SKIP
     """
     require_dependency('corneto', "annnet[corneto] or pip install 'corneto>=1.0.0rc5'")
     from corneto.methods.carnival import CarnivalFlow

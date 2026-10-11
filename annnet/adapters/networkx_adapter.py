@@ -2,7 +2,7 @@
 AnnNet-NetworkX adapter for AnnNet.
 
 Provides:
-    to_nx(G)      -> networkx.Graph, networkx.DiGraph, networkx.MultiGraph, or networkx.MultiDiGraph
+    to_nx(anet)      -> networkx.Graph, networkx.DiGraph, networkx.MultiGraph, or networkx.MultiDiGraph
     from_nx(nxG)  -> AnnNet
 
 NetworkX natively represents:
@@ -248,7 +248,7 @@ def to_nx(
 
     Both halves are returned because the manifest carries the state a NetworkX
     graph cannot hold, and :func:`from_nx` takes it as its second argument:
-    ``from_nx(*to_nx(G))`` is the round trip.
+    ``from_nx(*to_nx(anet))`` is the round trip.
 
     Manifest preserves hyperedges with per-endpoint coefficients, slices,
     node/edge attrs, and stable edge IDs.

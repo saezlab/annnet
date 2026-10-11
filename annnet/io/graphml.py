@@ -2,9 +2,9 @@
 GraphML/GEXF import and export helpers for AnnNet.
 
 Provides:
-    to_graphml(G, path, ...)   -> None
+    to_graphml(anet, path, ...)   -> None
     from_graphml(path, ...)    -> AnnNet
-    to_gexf(G, path, ...)      -> None
+    to_gexf(anet, path, ...)      -> None
     from_gexf(path, ...)       -> AnnNet
 
 GraphML and GEXF support are implemented through NetworkX because NetworkX

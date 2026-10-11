@@ -2,7 +2,7 @@
 AnnNet-igraph adapter for AnnNet.
 
 Provides:
-    to_igraph(G)      -> igraph.Graph
+    to_igraph(anet)      -> igraph.Graph
     from_igraph(igG)  -> AnnNet
 
 igraph natively represents:
@@ -289,7 +289,7 @@ def to_igraph(
     """Export AnnNet → ``(igraph graph, manifest)``.
 
     ``from_igraph`` takes the manifest as its second argument, so
-    ``from_igraph(*to_igraph(G))`` is the round trip.
+    ``from_igraph(*to_igraph(anet))`` is the round trip.
 
     hyperedges : str, optional
         The same choice as ``hyperedge_mode``, under the name every exporter

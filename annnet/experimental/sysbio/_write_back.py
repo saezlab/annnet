@@ -96,8 +96,8 @@ def write_back(
 
     Examples
     --------
-    >>> write_back(G, adata, key='activity', aspect='condition')  # doctest: +SKIP
-    >>> write_back(G, adata, key='n_active', aspect='condition', into='obs')
+    >>> write_back(anet, adata, key='activity', aspect='condition')  # doctest: +SKIP
+    >>> write_back(anet, adata, key='n_active', aspect='condition', into='obs')
     """
     require_dependency('anndata', 'annnet[scverse] or pip install anndata')
     if into not in TARGETS:

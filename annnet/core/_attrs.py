@@ -39,7 +39,7 @@ backend matters only when a table materializes.
 multilayer graph holds one entity per layer the node lives in, so one bare id
 covers several slots. A write by bare id lands in the cell of each of them, and
 the derived table shows the id once. What one node-layer carries alone is a
-contextual attribute, written through ``G.layers.set_node_attrs``.
+contextual attribute, written through ``anet.layers.set_node_attrs``.
 """
 
 from __future__ import annotations

@@ -21,7 +21,7 @@ membership and boundary resolution of a whole view in
 The scope protocol: an owner of an axis (a graph or a view) answers
 ``_selection_context()`` with ``(root_graph, resolved)`` where ``resolved`` is
 ``None`` for the graph itself and the view's resolved membership otherwise. An
-attribute reader (``G.attrs`` or ``V.attrs``) answers ``_domain``, ``_row``,
+attribute reader (``anet.attrs`` or ``V.attrs``) answers ``_domain``, ``_row``,
 ``_query_row``, ``_orders``, ``_key``, ``_selection_owner`` and ``_root_reader``.
 """
 
@@ -792,7 +792,7 @@ class EdgeSequence(ElementSequence):
 class RowSelection:
     """The rows of one attribute address that satisfy a query, keyed as the address keys them.
 
-    Built by ``G.attrs.select`` / ``V.attrs.select``. It keeps the full keys —
+    Built by ``anet.attrs.select`` / ``V.attrs.select``. It keeps the full keys —
     a node-layer row keeps its ``(node_id, layer)`` — until :meth:`project` is
     called. It is live: ``.keys`` re-evaluates the query against the graph as
     it is now, each leaf inside the scope it was asked in. Two selections of

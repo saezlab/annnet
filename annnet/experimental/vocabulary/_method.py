@@ -5,7 +5,7 @@ strings. An adapter's requirement is a property of the method — the same on ev
 call, and readable without running anything — so it becomes a value instead::
 
     SPEC = MethodSpec(name='decoupler', requires_edge=('sign',), directed=True, hyperedges='none')
-    exp.vocabulary.check(G, method=SPEC, strict=True)
+    exp.vocabulary.check(anet, method=SPEC, strict=True)
 
 A dataclass and not a registry: designing a lookup is for when there are enough
 specs that looking one up by name is the awkward part.

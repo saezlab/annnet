@@ -239,7 +239,7 @@ class History(GraphState):
         """Return the append-only mutation history.
 
         The name carries the ``_impl`` suffix its three siblings carry, because
-        ``G.history`` is the accessor and an instance holds it. A method of the
+        ``anet.history`` is the accessor and an instance holds it. A method of the
         same name on the mixin would be one every instance shadows.
 
         Parameters
@@ -395,7 +395,7 @@ class History(GraphState):
 
 
 class HistoryAccessor:
-    """Callable ``G.history`` namespace for logs and snapshots."""
+    """Callable ``anet.history`` namespace for logs and snapshots."""
 
     __slots__ = ('_G',)
 

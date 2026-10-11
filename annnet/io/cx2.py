@@ -2,7 +2,7 @@
 CX2 Adapter for AnnNet AnnNet.
 
 Provides:
-    to_cx2(G)        -> List[Dict[str, Any]] (CX2 JSON object)
+    to_cx2(anet)        -> List[Dict[str, Any]] (CX2 JSON object)
     from_cx2(cx2_data) -> AnnNet
 
 This adapter maps AnnNet Graphs to the Cytoscape Exchange (CX2) format.

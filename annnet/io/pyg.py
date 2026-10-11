@@ -2,7 +2,7 @@
 AnnNet-PyTorch Geometric adapter for AnnNet.
 
 Provides:
-    to_pyg(G) -> torch_geometric.data.HeteroData
+    to_pyg(anet) -> torch_geometric.data.HeteroData
 
 PyTorch Geometric represents graph data as tensors. This adapter exports AnnNet
 nodes and edges into a heterogeneous graph structure suitable for downstream

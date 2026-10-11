@@ -1,7 +1,7 @@
 """The slice registry, the public records, and the reserved attribute names.
 
 A slice is a membership record, :class:`EdgeView` and :class:`NodeView` are the
-records ``G.E.at`` and ``G.N.at`` hand back, :func:`edge_record` and
+records ``anet.E.at`` and ``anet.N.at`` hand back, :func:`edge_record` and
 :func:`node_record` build them from the structural facade, and the reserved
 sets say which attribute names the structural columns own.
 """
@@ -385,7 +385,7 @@ def _one_endpoint(side) -> Endpoint | None:
 
 
 class EdgeView(tuple):
-    """Tuple-shaped edge record returned by ``G.E.at``.
+    """Tuple-shaped edge record returned by ``anet.E.at``.
 
     ``source``, ``target`` and ``members`` hold endpoints as the store spells
     them. :func:`as_endpoints` normalises a side; :attr:`source_id`,
@@ -443,7 +443,7 @@ class EdgeView(tuple):
 
 
 class NodeView(str):
-    """String-shaped node record returned by ``G.N.at``.
+    """String-shaped node record returned by ``anet.N.at``.
 
     A node is its id, so this is the id, and everything the graph holds about
     it hangs off that. An edge is a pair, which is why :class:`EdgeView` is a

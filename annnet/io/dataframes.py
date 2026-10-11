@@ -2,7 +2,7 @@
 DataFrame import/export helpers for AnnNet.
 
 Provides:
-    to_dataframes(G)      -> dict[str, DataFrame]
+    to_dataframes(anet)      -> dict[str, DataFrame]
     from_dataframes(...)  -> AnnNet
 
 This module converts AnnNet graphs to and from dataframe-backed tables using

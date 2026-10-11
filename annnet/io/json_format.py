@@ -2,7 +2,7 @@
 JSON import/export helpers for AnnNet.
 
 Provides:
-    to_json(G, ...)       -> dict
+    to_json(anet, ...)       -> dict
     from_json(data, ...)  -> AnnNet
     write_ndjson(...)     -> None
 

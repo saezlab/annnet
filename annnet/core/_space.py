@@ -1,6 +1,6 @@
 """Sets of keys and bindings to an external feature axis.
 
-``Set``, ``Space`` and ``G.spaces`` are generic mechanisms: a set of keys, and a
+``Set``, ``Space`` and ``anet.spaces`` are generic mechanisms: a set of keys, and a
 name for the axis of an external array those keys index. They know nothing about
 what the keys mean. They are kept in AnnNet while the integrations built on them
 (``annnet.experimental`` and the optional AnnData accessor) are still being

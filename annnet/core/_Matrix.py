@@ -17,7 +17,7 @@ _ABSENT = object()
 class CacheManager:
     """The named sparse formats of one graph, over the one matrix cache.
 
-    ``G.B`` and the rest are built by :class:`_matrices.MatrixCache`, which keeps
+    ``anet.B`` and the rest are built by :class:`_matrices.MatrixCache`, which keeps
     them against the clock of the store and extends a cached matrix when a write
     only appended edges at the frontier. The CSR form, the CSC form and the
     boundary-filtered adjacency are derived from those, and they used to be kept
@@ -224,7 +224,7 @@ class MatrixNamespace:
     The ``_matrix`` form returns the matrix alone. The maps cost an entry per row
     and per column, which is more than the matrix costs to build, so a caller
     that only wants to do arithmetic must not pay for them. The named properties
-    of the graph — ``G.B``, ``G.H``, ``G.S``, ``G.A`` and ``G.L`` — are the
+    of the graph — ``anet.B``, ``anet.H``, ``anet.S``, ``anet.A`` and ``anet.L`` — are the
     default parameterization of these, and they take the ``_matrix`` form.
     """
 
@@ -277,7 +277,7 @@ class MatrixNamespace:
         return self.incidence(**BINARY)
 
     def binary_matrix(self):
-        """Return the incidence matrix of the binary edges (``G.B``)."""
+        """Return the incidence matrix of the binary edges (``anet.B``)."""
         return self.incidence_matrix(**BINARY)
 
     def hypergraph(self):
@@ -285,7 +285,7 @@ class MatrixNamespace:
         return self.incidence(**HYPERGRAPH)
 
     def hypergraph_matrix(self):
-        """Return the incidence matrix of the hyperedges (``G.H``)."""
+        """Return the incidence matrix of the hyperedges (``anet.H``)."""
         return self.incidence_matrix(**HYPERGRAPH)
 
     def signed(self):
@@ -293,11 +293,11 @@ class MatrixNamespace:
         return self.incidence(**SIGNED)
 
     def signed_matrix(self):
-        """Return the coefficient incidence matrix of every edge (``G.S``)."""
+        """Return the coefficient incidence matrix of every edge (``anet.S``)."""
         return self.incidence_matrix(**SIGNED)
 
     def adjacency(self, **kwargs):
-        """Return the adjacency matrix with its maps (``G.A``).
+        """Return the adjacency matrix with its maps (``anet.A``).
 
         A self-loop lands on the diagonal. A boundary edge joins nothing, so it
         is left out, and so is a hyperedge: projecting one onto pairs is a choice
@@ -310,7 +310,7 @@ class MatrixNamespace:
         return self.cache.adjacency(**kwargs)
 
     def adjacency_matrix(self, **kwargs):
-        """Return the adjacency matrix alone (``G.A``).
+        """Return the adjacency matrix alone (``anet.A``).
 
         Returns
         -------
@@ -330,7 +330,7 @@ class MatrixNamespace:
         return self.cache.laplacian(**kwargs)
 
     def laplacian_matrix(self, **kwargs):
-        """Return the Laplacian alone (``G.L``).
+        """Return the Laplacian alone (``anet.L``).
 
         Returns
         -------

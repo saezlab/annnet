@@ -1,8 +1,8 @@
 """The one predicate engine every selection surface shares.
 
-``G.N.select(score__gt=0.5)``, ``G.E.select(kind='hyper')``,
-``G.attrs.select('node_layers', score__gte=0.8)`` and
-``G.layers.where(time__lte='12h')`` are four spellings of one question: which
+``anet.N.select(score__gt=0.5)``, ``anet.E.select(kind='hyper')``,
+``anet.attrs.select('node_layers', score__gte=0.8)`` and
+``anet.layers.where(time__lte='12h')`` are four spellings of one question: which
 rows of this axis satisfy these conditions. They parse the conditions here,
 evaluate them here, and report a bad field, operator or value the same way.
 

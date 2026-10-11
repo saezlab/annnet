@@ -285,6 +285,8 @@ Nothing removed here carries an alias: each removed name raises
 - The native format writes the new words. Its reader takes both, so an archive
   written before this release still loads: four member names, two columns and
   the entity kind each map the old spelling forward.
+- `annnet.utils.render` is `annnet.utils.save`: it writes a plot to a file.
+  The old name has no alias.
 
 ### Added
 

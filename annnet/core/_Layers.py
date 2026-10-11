@@ -252,7 +252,7 @@ class LayerAccessor:
         Examples
         --------
         ```python
-        G.set_aspects(['time', 'relation'], {'time': ['t1', 't2'], 'relation': ['F', 'A']})
+        anet.set_aspects(['time', 'relation'], {'time': ['t1', 't2'], 'relation': ['F', 'A']})
         ```
         """
         if isinstance(aspects, dict):
@@ -335,7 +335,7 @@ class LayerAccessor:
 
         Examples
         --------
-        >>> G.layers.aspect('time').consecutive_pairs()  # doctest: +SKIP
+        >>> anet.layers.aspect('time').consecutive_pairs()  # doctest: +SKIP
         [('0h', '1h'), ('1h', '12h')]
         """
         if name not in self._aspects:
@@ -410,7 +410,7 @@ class LayerAccessor:
 
         Examples
         --------
-        >>> G.layers.attach_values(  # doctest: +SKIP
+        >>> anet.layers.attach_values(  # doctest: +SKIP
         ...     {'response': matrix},
         ...     layers=[(c,) for c in conditions],
         ...     nodes=node_ids,
@@ -461,7 +461,7 @@ class LayerAccessor:
 
         Examples
         --------
-        >>> block = G.layers.matrix('expression', nodes=['akt', 'erk'])  # doctest: +SKIP
+        >>> block = anet.layers.matrix('expression', nodes=['akt', 'erk'])  # doctest: +SKIP
         >>> block.values.mean(axis=0)  # doctest: +SKIP
         """
         resolver = self.values()
@@ -538,8 +538,8 @@ class LayerAccessor:
 
         Examples
         --------
-        >>> G.layers.node_frame(nodes=['akt'], attrs=['observed'])  # doctest: +SKIP
-        >>> G.layers.node_frame(pairs={'TGFA': ('tgfa', 'input')})  # doctest: +SKIP
+        >>> anet.layers.node_frame(nodes=['akt'], attrs=['observed'])  # doctest: +SKIP
+        >>> anet.layers.node_frame(pairs={'TGFA': ('tgfa', 'input')})  # doctest: +SKIP
         """
         if format not in ('wide', 'long'):
             raise ValueError(f"format must be 'wide' or 'long', got {format!r}")
@@ -650,7 +650,7 @@ class LayerAccessor:
 
         Examples
         --------
-        >>> G.layers.place(node_ids, [(c,) for c in conditions])  # doctest: +SKIP
+        >>> anet.layers.place(node_ids, [(c,) for c in conditions])  # doctest: +SKIP
         """
         node_list = [str(node_id) for node_id in nodes]
         layer_list = [tuple(layer) for layer in layers]
@@ -714,9 +714,9 @@ class LayerAccessor:
 
         Examples
         --------
-        >>> G.layers.where(time__lte='12h')  # doctest: +SKIP
+        >>> anet.layers.where(time__lte='12h')  # doctest: +SKIP
         LayerSelection(3 layer(s): [('0h',), ('1h',), ('12h',)])
-        >>> G.layers.where(time__lte='12h', mechanism='mapk').nodes  # doctest: +SKIP
+        >>> anet.layers.where(time__lte='12h', mechanism='mapk').nodes  # doctest: +SKIP
         {'akt', 'erk'}
         """
         aspects = tuple(self._aspects)
@@ -768,7 +768,7 @@ class LayerAccessor:
 
         Examples
         --------
-        >>> G.layers.set_ordered('time')  # doctest: +SKIP
+        >>> anet.layers.set_ordered('time')  # doctest: +SKIP
         """
         if name not in self._aspects:
             raise KeyError(f'unknown aspect {name!r}; known: {list(self._aspects)!r}')
@@ -1658,7 +1658,7 @@ class LayerAccessor:
         Examples
         --------
         ```python
-        G.create_slice_from_layer('t1_F', ('t1', 'F'))
+        anet.create_slice_from_layer('t1_F', ('t1', 'F'))
         ```
         """
         result = self.layer_union(
@@ -1984,7 +1984,7 @@ class LayerAccessor:
         Examples
         --------
         ```python
-        A = G.supra_adjacency()
+        A = anet.supra_adjacency()
         ```
         """
         return self._supra_matrix(
@@ -2108,7 +2108,7 @@ class LayerAccessor:
         Examples
         --------
         ```python
-            B, eids, skipped = G.supra_incidence()
+            B, eids, skipped = anet.supra_incidence()
         ```
         """
         layers_t: list[tuple[str, ...]] | None
@@ -2642,9 +2642,9 @@ class LayerAccessor:
 
         Examples
         --------
-        >>> G.layers.couple('time')  # consecutive timepoints  # doctest: +SKIP
-        >>> G.layers.couple('mechanism', kind='categorical')  # doctest: +SKIP
-        >>> G.layers.couple('assay', kind='categorical', on='symbol')  # doctest: +SKIP
+        >>> anet.layers.couple('time')  # consecutive timepoints  # doctest: +SKIP
+        >>> anet.layers.couple('mechanism', kind='categorical')  # doctest: +SKIP
+        >>> anet.layers.couple('assay', kind='categorical', on='symbol')  # doctest: +SKIP
         """
         index = self._aspect_index(aspect)
         declared = self.aspect(aspect)
@@ -2889,7 +2889,7 @@ class LayerAccessor:
         Examples
         --------
         ```python
-        nodes, layers_t, v2i, l2i = G.tensor_index()
+        nodes, layers_t, v2i, l2i = anet.tensor_index()
         ```
         """
         layers_t = self._normalize_layers_arg(layers)
@@ -3487,7 +3487,7 @@ class LayerAccessor:
         Examples
         --------
         ```python
-        Q = G.multislice_modularity(partition)
+        Q = anet.multislice_modularity(partition)
         ```
         """
 

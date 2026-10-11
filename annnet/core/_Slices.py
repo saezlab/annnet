@@ -1,4 +1,4 @@
-"""Slice operations, exposed as ``G.slices``."""
+"""Slice operations, exposed as ``anet.slices``."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def _bare(v):
 
 
 class SliceManager:
-    """Namespace for all slice operations, exposed as ``G.slices``."""
+    """Namespace for all slice operations, exposed as ``anet.slices``."""
 
     __slots__ = ('_G',)
 
@@ -110,7 +110,7 @@ class SliceManager:
 
         Examples
         --------
-        >>> G.slices.add('prior', edges=prior_ids, role='input')  # doctest: +SKIP
+        >>> anet.slices.add('prior', edges=prior_ids, role='input')  # doctest: +SKIP
         """
         G = self._G
         if slice_id in G._slices and slice_id != 'default':
@@ -617,8 +617,8 @@ class SliceManager:
 
         Examples
         --------
-        >>> G.slices.edge_frame(attrs=['activity'])  # doctest: +SKIP
-        >>> G.slices.edge_frame(slices=fit, attrs=['activity'], format='long')  # doctest: +SKIP
+        >>> anet.slices.edge_frame(attrs=['activity'])  # doctest: +SKIP
+        >>> anet.slices.edge_frame(slices=fit, attrs=['activity'], format='long')  # doctest: +SKIP
         """
         if format not in ('wide', 'long'):
             raise ValueError(f"format must be 'wide' or 'long', got {format!r}")
@@ -730,7 +730,7 @@ class SliceManager:
 
         Examples
         --------
-        >>> G.slices.compare('prior', 'fitted', axis='edges')  # doctest: +SKIP
+        >>> anet.slices.compare('prior', 'fitted', axis='edges')  # doctest: +SKIP
         """
         if axis not in ('edges', 'nodes'):
             raise ValueError(f"axis must be 'edges' or 'nodes', got {axis!r}")
@@ -780,7 +780,7 @@ class SliceManager:
 
         Examples
         --------
-        >>> G.slices.induce_edges('selected')  # doctest: +SKIP
+        >>> anet.slices.induce_edges('selected')  # doctest: +SKIP
         """
         if mode not in ('both', 'any'):
             raise ValueError(f"mode must be 'both' or 'any', got {mode!r}")

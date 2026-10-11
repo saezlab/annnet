@@ -138,7 +138,7 @@ def regulon(
 
     Examples
     --------
-    >>> net = decoupler.regulon(G, slice='regulon')  # doctest: +SKIP
+    >>> net = decoupler.regulon(anet, slice='regulon')  # doctest: +SKIP
     """
     pd = require_dependency('pandas', 'pandas')
     # in_slice filters rows; slice would join attributes onto every row instead.
@@ -242,7 +242,7 @@ def run(
 
     Examples
     --------
-    >>> result = decoupler.run(G, pdata, aspect='condition', slice='regulon')
+    >>> result = decoupler.run(anet, pdata, aspect='condition', slice='regulon')
     """
     dc = require_dependency('decoupler', "annnet[decoupler] or pip install 'decoupler>=2'")
     if contract:

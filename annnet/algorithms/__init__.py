@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import Any
 from importlib import import_module
 
+# The graph class mixes in Traversal, so the core loads first: importing
+# annnet.algorithms.traversal on its own would otherwise be circular.
+from .. import core as _core
+
 _lazy_symbols: dict[str, tuple[str, str]] = {
     'directed_pairs': ('annnet.algorithms.structure', 'directed_pairs'),
     'sources': ('annnet.algorithms.structure', 'sources'),

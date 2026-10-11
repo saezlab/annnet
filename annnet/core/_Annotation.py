@@ -1,7 +1,7 @@
 """The internal attribute helpers mixed into ``AnnNet``.
 
 The public attribute surface is :class:`annnet.core._attribute_api.Attrs`
-(``G.attrs``): eight addresses, one shape. What remains here is what the
+(``anet.attrs``): eight addresses, one shape. What remains here is what the
 graph itself needs when an attribute changes — the flexible-direction
 policies that re-orient an edge from a node or edge attribute — and the
 audit of contextual rows against the structure.
@@ -46,7 +46,7 @@ class AttributesClass(GraphState):
     """Flexible-direction policies and the attribute audit (mixed into AnnNet)."""
 
     def audit_attributes(self):
-        """Audit the contextual rows against the structure. See ``G.attrs.audit``."""
+        """Audit the contextual rows against the structure. See ``anet.attrs.audit``."""
         return self.attrs.audit()
 
     # ── flexible direction ─────────────────────────────────────────────────

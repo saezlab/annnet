@@ -1,7 +1,7 @@
 """Build an independent graph from one resolved selection.
 
-``V.materialize()``, every subgraph operation of ``G.ops`` and the layer
-subgraphs of ``G.layers`` arrive here with a
+``V.materialize()``, every subgraph operation of ``anet.ops`` and the layer
+subgraphs of ``anet.layers`` arrive here with a
 :class:`~annnet.core._resolve.Resolved` state and leave with a new
 :class:`~annnet.core.graph.AnnNet` that holds exactly the selected placements,
 edge entities and structural edges, in the parent's order. All these paths use

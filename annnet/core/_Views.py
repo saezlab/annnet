@@ -331,7 +331,7 @@ _MUTATORS = frozenset(
 class GraphView:
     """A live, read-only, composable selection of a graph.
 
-    Built by ``G.view(...)`` and narrowed by ``V.view(...)``. The membership
+    Built by ``anet.view(...)`` and narrowed by ``V.view(...)``. The membership
     rules are documented in :mod:`annnet.core._resolve`; the reading
     vocabulary is the graph's: ``N``, ``E``, ``attrs``, ``uns``, ``slices``,
     ``layers``, the named matrices, ``shape``/``supra_shape``, the traversal

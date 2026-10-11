@@ -109,7 +109,7 @@ class Operations(GraphState):
 
         The subgraph operations have always ignored a node the graph does not
         hold, and a reader that builds a selection from a file relies on it.
-        ``G.view`` itself rejects an unknown id.
+        ``anet.view`` itself rejects an unknown id.
         """
         graph = _as_graph(self)
         found: list = []
@@ -146,7 +146,7 @@ class Operations(GraphState):
             The selected edges with their full endpoint entities — a
             hyperedge keeps every member, an edge entity brings its backing
             edge — and nothing else. The same selection as
-            ``G.view(edges=edges).materialize()``.
+            ``anet.view(edges=edges).materialize()``.
         """
         graph = _as_graph(self)
         return self._materialized(graph.view(edges=self._known_edges(list(edges))))
@@ -166,7 +166,7 @@ class Operations(GraphState):
         AnnNet
             The selected nodes and every edge whose complete endpoint set is
             selected (a hyperedge is kept whole or dropped). The same
-            selection as ``G.view(nodes=nodes).materialize()``.
+            selection as ``anet.view(nodes=nodes).materialize()``.
         """
         graph = _as_graph(self)
         return self._materialized(graph.view(nodes=self._known_nodes(list(nodes))))
@@ -184,7 +184,7 @@ class Operations(GraphState):
         Returns
         -------
         AnnNet
-            The same selection as ``G.view(nodes=..., edges=...).materialize()``:
+            The same selection as ``anet.view(nodes=..., edges=...).materialize()``:
             both constraints apply, with the closed boundary.
         """
         if nodes is None and edges is None:
@@ -202,7 +202,7 @@ class Operations(GraphState):
     def merge(self, other) -> AnnNet:
         """Take every element of ``other`` that this graph does not hold.
 
-        This is the in-place union, and it is what ``G |= H`` runs. The graph on
+        This is the in-place union, and it is what ``anet |= H`` runs. The graph on
         the left is the answer wherever the two disagree: an element both graphs
         hold keeps the attributes it has here, and only an element this graph
         does not hold arrives with the attributes of ``other``.
@@ -540,7 +540,7 @@ _OPS_DELEGATED = {
 
 
 class OperationsAccessor:
-    """Namespace for structural graph operations (``G.ops``)."""
+    """Namespace for structural graph operations (``anet.ops``)."""
 
     __slots__ = ('_G',)
 

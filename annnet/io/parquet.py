@@ -2,7 +2,7 @@
 Parquet import/export helpers for AnnNet.
 
 Provides:
-    to_parquet(G, path, ...)   -> None
+    to_parquet(anet, path, ...)   -> None
     from_parquet(path, ...)    -> AnnNet
 
 This module stores AnnNet graph tables and metadata as Parquet-backed files.

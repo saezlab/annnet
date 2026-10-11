@@ -1,7 +1,7 @@
 """SIF import/export helpers for AnnNet.
 
 Provides:
-    to_sif(G, path, ...)      -> None | tuple[None, dict]
+    to_sif(anet, path, ...)      -> None | tuple[None, dict]
     from_sif(path, ...)       -> AnnNet
 
 SIF is a simple binary interaction format. Standard export is necessarily

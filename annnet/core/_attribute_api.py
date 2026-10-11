@@ -1,4 +1,4 @@
-"""The eight attribute addresses, read and written one way (``G.attrs``).
+"""The eight attribute addresses, read and written one way (``anet.attrs``).
 
 An *address* is what a set of attributes is keyed by: a node, an edge, a slice,
 an aspect, a layer coordinate, an edge inside a slice, a node inside a layer, or
@@ -7,23 +7,23 @@ a label inside an aspect. Eight of them, and every one answers the same shape.
 Reading always gives a detached copy; editing what comes back changes nothing
 the graph holds:
 
-- ``G.attrs.nodes`` — the stored table, as a dataframe. ``G.attrs.table(address,
+- ``anet.attrs.nodes`` — the stored table, as a dataframe. ``anet.attrs.table(address,
   ...)`` is the same read for an address held in a variable, with the backend,
   columns, a preview limit and the derived fields as arguments;
-- ``G.attrs.row('nodes', 'A')`` — one row, a dict; ``G.attrs.rows('nodes',
+- ``anet.attrs.row('nodes', 'A')`` — one row, a dict; ``anet.attrs.rows('nodes',
   keys)`` — many, ``{key: dict}``. A cell is ``row(...).get(name, default)``;
-- ``G.attrs.schema('edges')`` — the key and value fields without a frame.
+- ``anet.attrs.schema('edges')`` — the key and value fields without a frame.
 
 Writing names what it does and is checked as a whole before it changes anything:
 
-- ``G.attrs.update('nodes', {...})`` merges the fields it names into rows;
-- ``G.attrs.replace('nodes', table)`` replaces the whole address with a table;
-- ``G.attrs.delete('nodes', keys=..., names=...)`` removes attributes and never
+- ``anet.attrs.update('nodes', {...})`` merges the fields it names into rows;
+- ``anet.attrs.replace('nodes', table)`` replaces the whole address with a table;
+- ``anet.attrs.delete('nodes', keys=..., names=...)`` removes attributes and never
   the nodes, edges or other structure that carry them.
 
-``G.attrs.select('nodes', score__gt=0.5)`` retains a live predicate over the
+``anet.attrs.select('nodes', score__gt=0.5)`` retains a live predicate over the
 graph. For snapshot filtering, use the returned dataframe's native operations
-and pass the result to ``G.attrs.from_frame('nodes', frame)`` to select its keys.
+and pass the result to ``anet.attrs.from_frame('nodes', frame)`` to select its keys.
 
 This module owns the public *addressing* of attributes: which keys an address
 accepts, how they are normalized and validated, what each address's domain is,
@@ -250,7 +250,7 @@ def _column_type(column: np.ndarray) -> str:
 
 
 class Attrs:
-    """Every attribute of a graph, at eight addresses (``G.attrs``).
+    """Every attribute of a graph, at eight addresses (``anet.attrs``).
 
     See the module docstring for the shape. The reader protocol the selection
     machinery uses is the set of underscored methods ``_domain``, ``_row``,
@@ -738,7 +738,7 @@ class Attrs:
     def select(self, address, conditions=None, /, **keywords) -> RowSelection:
         """Select the rows of one address that satisfy every condition.
 
-        The conditions are the ones ``G.N.select`` takes, over the address's
+        The conditions are the ones ``anet.N.select`` takes, over the address's
         key columns, its stored fields, and — for the layer-keyed addresses —
         the declared aspects, compared by their order when ordered. Keys are
         kept as the address keys them; see :meth:`RowSelection.project`.
@@ -1131,9 +1131,9 @@ class Attrs:
         Read a table, filter it with the dataframe library it came in, and pass
         what is left here to get a selection of the graph's own keys::
 
-            table = G.attrs.table('nodes')
+            table = anet.attrs.table('nodes')
             kept = table.filter(pl.col('score') > 0.5)
-            chosen = G.attrs.from_frame('nodes', kept)
+            chosen = anet.attrs.from_frame('nodes', kept)
 
         Parameters
         ----------

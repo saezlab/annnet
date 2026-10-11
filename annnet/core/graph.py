@@ -604,7 +604,7 @@ class AnnNet(
         Built on each read from the contextual store, in this graph's annotation
         backend. It is a rendering of canonical state, not the state itself, so
         editing the returned table changes nothing — write through
-        ``G.attrs.update('edge_slices', ...)``.
+        ``anet.attrs.update('edge_slices', ...)``.
         """
         if self._pending_edge_slice_drops:
             self._flush_edge_slice_rows()
@@ -637,7 +637,7 @@ class AnnNet(
         """The elementary-layer attribute table, at the file-format boundary.
 
         The canonical store keys an elementary layer by ``(aspect, label)``;
-        the public table is ``G.attrs.elementary_layers``. This property is
+        the public table is ``anet.attrs.elementary_layers``. This property is
         the legacy rendering the native format and the adapters exchange: it
         carries the structured ``aspect`` and ``elementary_layer`` columns
         beside the legacy ``layer_id`` (``aspect_label``) display id, so a
@@ -713,7 +713,7 @@ class AnnNet(
         """Render one contextual level as a table, in the backend you name.
 
         The store holds dicts, so the backend is a property of this call and not
-        of the graph. ``G.contextual_table('slice_attrs', backend='pandas')``
+        of the graph. ``anet.contextual_table('slice_attrs', backend='pandas')``
         answers in pandas whatever the graph was constructed with.
 
         Parameters
@@ -800,7 +800,7 @@ class AnnNet(
         return '\n'.join(lines)
 
     def __len__(self) -> int:
-        """Number of distinct nodes, the same count as ``len(G.N)``."""
+        """Number of distinct nodes, the same count as ``len(anet.N)``."""
         return _structure.distinct_node_count(self)
 
     def __iter__(self) -> Iterator[str]:
@@ -837,7 +837,7 @@ class AnnNet(
     # either, and a graph runs set algebra over the two element sets.
 
     def __iadd__(self, other):
-        """Add nodes or edges. ``G += "A"`` and ``G += ("A", "B")``."""
+        """Add nodes or edges. ``anet += "A"`` and ``anet += ("A", "B")``."""
         kind, items = _element_operand(other)
         if kind is None:
             return NotImplemented
@@ -848,7 +848,7 @@ class AnnNet(
         return self
 
     def __isub__(self, other):
-        """Remove nodes or edges. ``G -= "A"`` and ``G -= ("A", "B")``."""
+        """Remove nodes or edges. ``anet -= "A"`` and ``anet -= ("A", "B")``."""
         kind, items = _element_operand(other)
         if kind is None:
             return NotImplemented
@@ -1046,10 +1046,10 @@ class AnnNet(
 
         Examples
         --------
-        >>> G = AnnNet()
-        >>> G.add_nodes('A', kind='source')
+        >>> anet = AnnNet()
+        >>> anet.add_nodes('A', kind='source')
         'A'
-        >>> G.add_nodes(
+        >>> anet.add_nodes(
         ...     [
         ...         {'node_id': 'B', 'kind': 'relay'},
         ...         ('C', {'kind': 'sink'}),
@@ -1156,13 +1156,13 @@ class AnnNet(
         *args
             Edge specification. Common forms are:
 
-            - ``G.add_edges("A", "B")``
-            - ``G.add_edges("A", "B", weight=2.0, edge_id="e1")``
-            - ``G.add_edges({"source": "A", "target": "B"})``
-            - ``G.add_edges([{"source": "A", "target": "B"}, ...])``
-            - ``G.add_edges([{"members": ["A", "B", "C"]}, ...])``
-            - ``G.add_edges([{"tail": ["A"], "head": ["B", "C"]}, ...])``
-            - ``G.add_edges([{"edge_id": "EE1", ...}, ...], as_entity=True)``
+            - ``anet.add_edges("A", "B")``
+            - ``anet.add_edges("A", "B", weight=2.0, edge_id="e1")``
+            - ``anet.add_edges({"source": "A", "target": "B"})``
+            - ``anet.add_edges([{"source": "A", "target": "B"}, ...])``
+            - ``anet.add_edges([{"members": ["A", "B", "C"]}, ...])``
+            - ``anet.add_edges([{"tail": ["A"], "head": ["B", "C"]}, ...])``
+            - ``anet.add_edges([{"edge_id": "EE1", ...}, ...], as_entity=True)``
         **kwargs
             Options for single-edge or batch insertion.
 
@@ -1236,12 +1236,12 @@ class AnnNet(
 
         Examples
         --------
-        >>> G = AnnNet(directed=True)
-        >>> G.add_nodes(['A', 'B', 'C'])
+        >>> anet = AnnNet(directed=True)
+        >>> anet.add_nodes(['A', 'B', 'C'])
         ['A', 'B', 'C']
-        >>> G.add_edges('A', 'B', edge_id='e1', weight=0.5)
+        >>> anet.add_edges('A', 'B', edge_id='e1', weight=0.5)
         'e1'
-        >>> G.add_edges(
+        >>> anet.add_edges(
         ...     [
         ...         {'source': 'B', 'target': 'C'},
         ...         {'members': ['A', 'B', 'C'], 'edge_id': 'h1'},
@@ -1419,7 +1419,7 @@ class AnnNet(
             If ``True``, clear flexible-direction policies after rewriting
             edge incidence signs.
         update_default : bool, optional
-            If ``True``, set ``G.directed = False`` so future edges are
+            If ``True``, set ``anet.directed = False`` so future edges are
             undirected unless explicitly overridden.
 
         Returns
@@ -1436,12 +1436,12 @@ class AnnNet(
 
         Examples
         --------
-        >>> G = AnnNet(directed=True)
-        >>> G.add_nodes(['A', 'B'])
+        >>> anet = AnnNet(directed=True)
+        >>> anet.add_nodes(['A', 'B'])
         ['A', 'B']
-        >>> G.add_edges('A', 'B')
+        >>> anet.add_edges('A', 'B')
         'edge_0'
-        >>> G.make_undirected()
+        >>> anet.make_undirected()
         AnnNet(...)
         """
         return _mutate.make_undirected(
@@ -1471,10 +1471,10 @@ class AnnNet(
 
         Examples
         --------
-        >>> G = AnnNet(directed=True)
-        >>> G.add_edges('A', 'B')
+        >>> anet = AnnNet(directed=True)
+        >>> anet.add_edges('A', 'B')
         'edge_0'
-        >>> G.validate()
+        >>> anet.validate()
         []
         """
         return _validate.validate_internal_consistency(self, strict=strict)
@@ -1557,7 +1557,7 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.at('akt', condition='stim')  # doctest: +SKIP
+        >>> anet.at('akt', condition='stim')  # doctest: +SKIP
         ('akt', ('stim',))
         """
         key = self._node_layer_key(node_id, aspects)
@@ -1590,7 +1590,7 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.exists('akt', condition='stim')  # doctest: +SKIP
+        >>> anet.exists('akt', condition='stim')  # doctest: +SKIP
         True
         """
         key = self._node_layer_key(node_id, aspects)
@@ -1634,9 +1634,9 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.has_edge(edge_id='e1')
+        >>> anet.has_edge(edge_id='e1')
         True
-        >>> G.has_edge('A', 'B')
+        >>> anet.has_edge('A', 'B')
         (True, ['e1'])
         """
 
@@ -1846,7 +1846,7 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.incident_edges('A', direction='out')
+        >>> anet.incident_edges('A', direction='out')
         [(0, EdgeView(edge_id='e0', kind='binary', ...))]
         """
         if direction not in {'in', 'out', 'both'}:
@@ -1882,7 +1882,7 @@ class AnnNet(
 
     @property
     def shape(self) -> tuple[int, int]:
-        """Graph shape as ``(len(G.N), len(G.E))``.
+        """Graph shape as ``(len(anet.N), len(anet.E))``.
 
         Returns
         -------
@@ -1894,7 +1894,7 @@ class AnnNet(
 
     @property
     def supra_shape(self) -> tuple[int, int]:
-        """Supra-matrix shape as ``(nv_supra, len(G.E))``.
+        """Supra-matrix shape as ``(nv_supra, len(anet.E))``.
 
         Returns
         -------
@@ -1978,10 +1978,10 @@ class AnnNet(
 
         Examples
         --------
-        >>> list(G.N)
-        >>> G.N['kind']
-        >>> G.N['kind'] = values
-        >>> G.N.find(id='A')
+        >>> list(anet.N)
+        >>> anet.N['kind']
+        >>> anet.N['kind'] = values
+        >>> anet.N.find(id='A')
         """
         return NodeSequence(self)
 
@@ -1998,9 +1998,9 @@ class AnnNet(
 
         Examples
         --------
-        >>> list(G.E)
-        >>> G.E['weight']
-        >>> G.E.select(directed=True)
+        >>> list(anet.E)
+        >>> anet.E['weight']
+        >>> anet.E.select(directed=True)
         """
         return EdgeSequence(self)
 
@@ -2019,8 +2019,8 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.nx.backend()
-        >>> G.nx.shortest_path(G, 'A', 'B')
+        >>> anet.nx.backend()
+        >>> anet.nx.shortest_path(anet, 'A', 'B')
         """
         if not hasattr(self, '_nx_proxy'):
             from .backend_accessors.nx_accessor import _NXBackendAccessor
@@ -2172,11 +2172,11 @@ class AnnNet(
     __array_ufunc__ = None
 
     def __matmul__(self, other):
-        """Apply the adjacency matrix to ``other``, so ``G @ x`` is ``G.A @ x``."""
+        """Apply the adjacency matrix to ``other``, so ``anet @ x`` is ``anet.A @ x``."""
         return self.A @ other
 
     def __rmatmul__(self, other):
-        """Apply ``other`` to the adjacency matrix, so ``x @ G`` is ``x @ G.A``."""
+        """Apply ``other`` to the adjacency matrix, so ``x @ anet`` is ``x @ anet.A``."""
         return other @ self.A
 
     @property
@@ -2202,9 +2202,9 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.slices.add('baseline')
-        >>> G.slices.active = 'baseline'
-        >>> G.slices.list()
+        >>> anet.slices.add('baseline')
+        >>> anet.slices.active = 'baseline'
+        >>> anet.slices.list()
         """
         if not hasattr(self, '_slice_manager'):
             self._slice_manager = SliceManager(self)
@@ -2217,7 +2217,7 @@ class AnnNet(
         Returns
         -------
         Attrs
-            Reads return detached copies: ``G.attrs.<address>`` is the stored
+            Reads return detached copies: ``anet.attrs.<address>`` is the stored
             table, ``row(address, key)`` one row as a dict and ``rows(address)``
             many. ``table(address, derived=True, ...)`` is the derived frame and
             ``schema`` describes an address without building one. Writes are
@@ -2228,12 +2228,12 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.attrs.update('nodes', {'A': {'symbol': 'TP53'}})
-        >>> G.attrs.row('nodes', 'A').get('symbol')
-        >>> G.attrs.update('edge_slices', {('baseline', 'e1'): {'weight': 0.5}})
-        >>> G.attrs.select('edges', confidence__gte=0.8).keys
-        >>> table = G.attrs.table('nodes')  # filter it with your dataframe library
-        >>> G.attrs.from_frame('nodes', table[table['score'] > 0.5]).keys
+        >>> anet.attrs.update('nodes', {'A': {'symbol': 'TP53'}})
+        >>> anet.attrs.row('nodes', 'A').get('symbol')
+        >>> anet.attrs.update('edge_slices', {('baseline', 'e1'): {'weight': 0.5}})
+        >>> anet.attrs.select('edges', confidence__gte=0.8).keys
+        >>> table = anet.attrs.table('nodes')  # filter it with your dataframe library
+        >>> anet.attrs.from_frame('nodes', table[table['score'] > 0.5]).keys
         """
         try:
             return self._attrs_accessor
@@ -2248,13 +2248,13 @@ class AnnNet(
         Returns
         -------
         HistoryAccessor
-            Callable namespace: ``G.history()`` reads the log, and its methods
+            Callable namespace: ``anet.history()`` reads the log, and its methods
             enable it, clear it, export it, mark it, and snapshot the graph.
 
         Examples
         --------
-        >>> G.history()
-        >>> G.history.snapshot('before')
+        >>> anet.history()
+        >>> anet.history.snapshot('before')
         """
         try:
             return self._history_accessor
@@ -2274,9 +2274,9 @@ class AnnNet(
 
         Examples
         --------
-        >>> H = G.ops.subgraph(['A', 'B', 'C'])
-        >>> M = G.ops.node_incidence_matrix(sparse=True)
-        >>> usage = G.ops.memory_usage()
+        >>> H = anet.ops.subgraph(['A', 'B', 'C'])
+        >>> M = anet.ops.node_incidence_matrix(sparse=True)
+        >>> usage = anet.ops.memory_usage()
         """
         try:
             return self._ops_accessor
@@ -2300,9 +2300,9 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.layers.set_aspects(['condition'], {'condition': ['ctrl', 'stim']})
-        >>> G.layers.list_layers()
-        >>> G.attrs.table('layers', derived=True)
+        >>> anet.layers.set_aspects(['condition'], {'condition': ['ctrl', 'stim']})
+        >>> anet.layers.list_layers()
+        >>> anet.attrs.table('layers', derived=True)
         """
         try:
             return self._layer_accessor
@@ -2312,10 +2312,10 @@ class AnnNet(
 
     @property
     def provenance(self) -> Provenance:
-        """What this graph was built from (``G.provenance``).
+        """What this graph was built from (``anet.provenance``).
 
-        Callable, so ``G.provenance()`` is the table of sources and
-        ``G.provenance.record(...)`` is how a reader adds to it. The records live
+        Callable, so ``anet.provenance()`` is the table of sources and
+        ``anet.provenance.record(...)`` is how a reader adds to it. The records live
         in ``uns``, so they survive whatever the graph survives.
 
         Returns
@@ -2324,8 +2324,8 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.provenance.record('OmniPath', version='2024.1')  # doctest: +SKIP
-        >>> G.provenance()  # doctest: +SKIP
+        >>> anet.provenance.record('OmniPath', version='2024.1')  # doctest: +SKIP
+        >>> anet.provenance()  # doctest: +SKIP
         """
         found = getattr(self, '_provenance_accessor', None)
         if found is None:
@@ -2387,8 +2387,8 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.write('graph.annnet')  # matrix rebuilt on demand
-        >>> G.write('graph.annnet', matrix=True)  # cache it alongside
+        >>> anet.write('graph.annnet')  # matrix rebuilt on demand
+        >>> anet.write('graph.annnet', matrix=True)  # cache it alongside
         """
         from .. import write
 
@@ -2412,7 +2412,7 @@ class AnnNet(
 
         Examples
         --------
-        >>> G = AnnNet.read('graph.annnet')
+        >>> anet = AnnNet.read('graph.annnet')
         """
         from .. import read
 
@@ -2436,18 +2436,18 @@ class AnnNet(
         nodes : id | (node_id, layer) | Iterable | NodeSequence | RowSelection | mask, optional
             Bare ids select every existing placement of those nodes within the
             other filters; explicit ``(node_id, layer)`` keys select those
-            placements alone. A ``G.N.select(...)`` selection is live; a
-            ``G.attrs.select('node_layers', ...)`` selection keeps its
+            placements alone. A ``anet.N.select(...)`` selection is live; a
+            ``anet.attrs.select('node_layers', ...)`` selection keeps its
             placements. Nothing here ever creates a placeholder placement.
         edges : id | Iterable | EdgeSequence | RowSelection, optional
-            Edge ids or a ``G.E.select(...)`` selection. Edge-slice rows must
+            Edge ids or a ``anet.E.select(...)`` selection. Edge-slice rows must
             be projected explicitly with ``.project('edges')``.
         layers : coordinate | Iterable | LayerSelection | RowSelection, optional
-            One layer coordinate, a collection of them, ``G.layers.where(...)``
-            or ``G.attrs.select('layers', ...)``.
+            One layer coordinate, a collection of them, ``anet.layers.where(...)``
+            or ``anet.attrs.select('layers', ...)``.
         slices : id | Iterable | SliceMembership, optional
             One slice id or several (their union), or the membership a slice
-            operation such as ``G.slices.intersect([...])`` gives back, taken
+            operation such as ``anet.slices.intersect([...])`` gives back, taken
             as an explicit node/edge constraint.
         predicate : callable, optional
             A node-id predicate, the advanced escape hatch. Its exceptions
@@ -2856,9 +2856,9 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.remove_edges('e1')
-        >>> G.remove_edges(['e2', 'e3'])
-        >>> G.remove_edges('nope', errors='ignore')
+        >>> anet.remove_edges('e1')
+        >>> anet.remove_edges(['e2', 'e3'])
+        >>> anet.remove_edges('nope', errors='ignore')
         """
         if errors not in {'raise', 'ignore'}:
             raise ValueError(f"errors must be 'raise' or 'ignore', got {errors!r}")
@@ -2908,9 +2908,9 @@ class AnnNet(
 
         Examples
         --------
-        >>> G.remove_nodes('A')
-        >>> G.remove_nodes(['B', 'C'])
-        >>> G.remove_nodes('nope', errors='ignore')
+        >>> anet.remove_nodes('A')
+        >>> anet.remove_nodes(['B', 'C'])
+        >>> anet.remove_nodes('nope', errors='ignore')
         """
         if errors not in {'raise', 'ignore'}:
             raise ValueError(f"errors must be 'raise' or 'ignore', got {errors!r}")

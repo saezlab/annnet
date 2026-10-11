@@ -5,12 +5,12 @@ integration with the packages it is written for. ``vocabulary`` and ``sysbio``
 are domain work that is intended to belong to the Biology and SysBioVerse
 packages; where they live is undecided, and until it is decided they stay here,
 with their tests, and keep working. The ``exp`` prefix is the point: a call site
-that reads ``exp.vocabulary.check(G)`` says out loud that the import may change.
+that reads ``exp.vocabulary.check(anet)`` says out loud that the import may change.
 Nothing in AnnNet imports Biology or SysBioVerse, and
 ``tests/test_no_domain_imports.py`` fails the build if it does.
 
     >>> from annnet import exp
-    >>> exp.vocabulary.check(G)  # doctest: +SKIP
+    >>> exp.vocabulary.check(anet)  # doctest: +SKIP
 
 ``vocabulary``
     What a number in a graph *means*. Reserved attribute names with declared

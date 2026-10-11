@@ -4,7 +4,7 @@ A *stored* table holds what was written at an address. A *derived* table adds
 what the graph computes — the endpoints, kind, direction and weight of an edge;
 the counts of a slice; the coordinate of a layer — and takes filters and joins
 as explicit arguments. Both come through one entry point,
-``G.attrs.table(address, derived=True, ...)``, so a caller never has to know a
+``anet.attrs.table(address, derived=True, ...)``, so a caller never has to know a
 second spelling for the richer frame.
 
 Every builder here takes an optional *scope*, the resolved state of a view, and

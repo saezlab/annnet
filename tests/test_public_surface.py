@@ -292,7 +292,7 @@ def test_no_name_means_two_things_in_two_namespaces(graph):
 def test_the_contract_states_the_graph_surface_both_ways(graph):
     """Section 2.9 of the contract is exactly what the object answers to."""
     stated = _contract_names(
-        'Every public name an `AnnNet` object answers to, and nothing else:', 'G'
+        'Every public name an `AnnNet` object answers to, and nothing else:', 'anet'
     )
     assert stated == set(dir(graph)), {
         'stated but absent': sorted(stated - set(dir(graph))),
@@ -347,7 +347,7 @@ def test_public_inventory_matches_package_and_namespaces(graph):
 
 
 CHANGELOG = Path(annnet.__file__).parent.parent / 'CHANGELOG.md'
-MIGRATION = DOCS / 'migration.md'
+MIGRATION = Path(annnet.__file__).parent.parent / 'dev' / 'migration.md'
 
 # Every public name the attribute/selection/view rework removed, by holder. The
 # graph ones are the keys of REMOVED_GRAPH_NAMES; the rest were read off the
@@ -425,7 +425,10 @@ def test_every_removed_name_is_gone(graph):
     assert still == []
 
 
-@pytest.mark.skipif(not CHANGELOG.is_file(), reason='CHANGELOG.md is not beside the package')
+@pytest.mark.skipif(
+    not (CHANGELOG.is_file() and MIGRATION.is_file()),
+    reason='CHANGELOG.md or dev/migration.md is not beside the package',
+)
 def test_every_removed_name_is_in_the_changelog_and_the_migration_page():
     """A removed name is findable with its replacement."""
     changelog = CHANGELOG.read_text()

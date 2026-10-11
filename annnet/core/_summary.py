@@ -1,6 +1,6 @@
 """A structured summary of a graph or a view, built without a frame or a matrix.
 
-``G.summary()`` and ``V.summary()`` answer the first questions of an
+``anet.summary()`` and ``V.summary()`` answer the first questions of an
 exploration — how big is this, what aspects and slices does it declare, what
 attributes are there to filter on, what kinds of edges does it hold — from the
 counters and registries the graph already keeps. Nothing here builds a

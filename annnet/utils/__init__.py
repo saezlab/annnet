@@ -12,7 +12,7 @@ _lazy_symbols: dict[str, tuple[str, str]] = {
     'to_matplotlib': ('annnet.utils.plotting', 'to_matplotlib'),
     'to_pydot': ('annnet.utils.plotting', 'to_pydot'),
     'plot': ('annnet.utils.plotting', 'plot'),
-    'render': ('annnet.utils.plotting', 'render'),
+    'save': ('annnet.utils.plotting', 'save'),
 }
 
 __all__ = sorted(_lazy_symbols)

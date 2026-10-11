@@ -591,12 +591,12 @@ def plot(
     suppress_warnings: bool = True,
     **kwargs,
 ):
-    """Build a fully styled graph object ready for rendering.
+    """Build a styled graph object to display or to write with :func:`save`.
 
     Parameters
     ----------
-    graph : object
-        AnnNet-like object with `nodes()`, `get_edge()`, `get_attr_edge()`, etc.
+    graph : AnnNet or GraphView
+        The graph or view to draw.
     backend : {'auto', 'graphviz', 'pydot', 'matplotlib'} or None, optional
         Visualization backend to use. ``None`` uses AnnNet's configured
         plotting default. ``'auto'`` prefers Graphviz, then pydot, then
@@ -738,11 +738,11 @@ def plot(
         raise ValueError("backend must be 'auto', 'graphviz', 'pydot', or 'matplotlib'")
 
 
-# Renderer
+# Write to a file
 
 
-def render(obj: Any, path: str, format: str = 'svg') -> str:
-    """Render a Graphviz, Pydot, or matplotlib graph object to disk.
+def save(obj: Any, path: str, format: str = 'svg') -> str:
+    """Write a Graphviz, pydot or matplotlib graph object to a file.
 
     Parameters
     ----------

@@ -4,7 +4,7 @@ Selecting layers meant building the coordinates by hand — a comprehension over
 ``_all_layers`` with an index into the tuple, and the aspect's position written
 out at the call site::
 
-    window = [aa for aa in G.layers._all_layers if aa[0] in TIMES[:3]]
+    window = [aa for aa in anet.layers._all_layers if aa[0] in TIMES[:3]]
 
 Three facts about the graph live in that line: which position ``time`` is in,
 what its values are, and what order they come in. All three are the graph's, and
@@ -12,7 +12,7 @@ all three go wrong silently the first time an aspect is added.
 
 :meth:`LayerAccessor.where` takes them back:
 
-    G.layers.where(time__lte='12h')
+    anet.layers.where(time__lte='12h')
 
 The window itself is resolved off the aspect declaration, so it costs the number
 of *layers* and not the size of the graph. What the window is then asked for —

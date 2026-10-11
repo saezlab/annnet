@@ -475,8 +475,8 @@ def test_plotting_helpers_with_fake_graph(tmp_path):
     )
     assert fig is ax.figure
     assert ax.collections
-    rendered = plotting.render((fig, ax), str(tmp_path / 'fake_graph'), format='png')
-    assert Path(rendered).exists()
+    saved = plotting.save((fig, ax), str(tmp_path / 'fake_graph'), format='png')
+    assert Path(saved).exists()
 
     class ReprNoisy:
         def __init__(self):

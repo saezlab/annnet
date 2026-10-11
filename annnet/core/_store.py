@@ -388,7 +388,7 @@ class CoreState:
 
         Maintained, never counted: the entity count is the size of the identity
         map and the edge-entities are counted as they arrive, so the difference
-        is the node placements. This is ``G.nv_supra``.
+        is the node placements. This is ``anet.nv_supra``.
         """
         return len(self._entity_slot) - self._edge_entity_count
 
@@ -398,7 +398,7 @@ class CoreState:
 
         A flat graph holds one entity per id, so the answer is the placement
         count. A layered graph keeps a per-id counter beside the identity map,
-        and the answer is the size of that map. This is ``len(G.N)``.
+        and the answer is the size of that map. This is ``len(anet.N)``.
         """
         counts = self._node_counts
         return self.node_layer_count if counts is None else len(counts)

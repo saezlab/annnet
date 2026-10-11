@@ -322,7 +322,7 @@ def node_count(graph) -> int:
 def distinct_node_count(graph) -> int:
     """Return how many distinct node ids the graph holds, across every layer.
 
-    This is ``len(G.N)``. The store keeps a per-id counter on a layered graph
+    This is ``len(anet.N)``. The store keeps a per-id counter on a layered graph
     and answers from the placement count on a flat one, so the cost does not
     grow with the graph.
     """

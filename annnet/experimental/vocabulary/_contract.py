@@ -319,9 +319,9 @@ def check(graph, contract: str = DEFAULT_CONTRACT, *, method=None, strict: bool 
 
     Examples
     --------
-    >>> exp.vocabulary.check(G)  # doctest: +SKIP
+    >>> exp.vocabulary.check(anet)  # doctest: +SKIP
     []
-    >>> exp.vocabulary.check(G, method=SPEC, strict=True)  # doctest: +SKIP
+    >>> exp.vocabulary.check(anet, method=SPEC, strict=True)  # doctest: +SKIP
     """
     found: Report = []
     for rule in _rules(contract):

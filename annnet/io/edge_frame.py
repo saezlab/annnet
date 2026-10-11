@@ -9,8 +9,8 @@ comparison could name the edges again::
     prior_edge_ids = []
     for index, (source, effect, target) in enumerate(rows):
         edge_id = f'prior_{index:02d}'
-        G.add_edges(source, target, edge_id=edge_id, slice='prior')
-        G.attrs.update('edges', {edge_id: {'interaction': effect}})
+        anet.add_edges(source, target, edge_id=edge_id, slice='prior')
+        anet.attrs.update('edges', {edge_id: {'interaction': effect}})
         prior_edge_ids.append(edge_id)
 
 Two of those are defects rather than verbosity. A **positional id** means
@@ -149,7 +149,7 @@ def add_edges_from_frame(
 
     Examples
     --------
-    >>> ids = add_edges_from_frame(G, table, sign='effect', slice='prior')  # doctest: +SKIP
+    >>> ids = add_edges_from_frame(anet, table, sign='effect', slice='prior')  # doctest: +SKIP
     """
     if on_conflict not in ON_CONFLICT:
         raise ValueError(f'on_conflict must be one of {ON_CONFLICT}, got {on_conflict!r}')
@@ -238,7 +238,7 @@ def from_edge_frame(
 
     Examples
     --------
-    >>> G = from_edge_frame(table, sign='effect', slice='prior')  # doctest: +SKIP
+    >>> anet = from_edge_frame(table, sign='effect', slice='prior')  # doctest: +SKIP
     """
     graph = AnnNet(directed=directed)
     if aspects:

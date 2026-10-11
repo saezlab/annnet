@@ -190,9 +190,9 @@ class TestBackends(unittest.TestCase):
         self.assertNotIn('e_1_center', node_names)
         self.assertEqual(len(Gd.get_edges()), 2)
 
-    def test_render_type_error_for_unknown_object(self):
+    def test_save_type_error_for_unknown_object(self):
         with self.assertRaises(TypeError):
-            plotting.render(object(), 'out.svg', format='svg')
+            plotting.save(object(), 'out.svg', format='svg')
 
 
 if __name__ == '__main__':

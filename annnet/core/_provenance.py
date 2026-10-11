@@ -130,9 +130,9 @@ def as_frame(graph, *, backend: str | None = None):
 
 
 class Provenance:
-    """What one graph was built from (``G.provenance``).
+    """What one graph was built from (``anet.provenance``).
 
-    Callable, so ``G.provenance()`` is the table and ``G.provenance.record(...)``
+    Callable, so ``anet.provenance()`` is the table and ``anet.provenance.record(...)``
     is how a reader adds to it. A reader reaching for the module directly would
     be reading a private part of the core from outside it, which is what this
     accessor exists to avoid.
