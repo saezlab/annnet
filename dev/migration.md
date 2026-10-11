@@ -218,5 +218,5 @@ The derived edges table and `G.E['kind']` say the same.
 this release, the spellings they migrate to and one line per changed name.
 `tests/test_dependents.py` fails the build when a listed name stops resolving,
 and the release gate (`ANNNET_RELEASE_GATE=1`) fails while a package's
-migration is still `required_before_release`. `DEPENDENTS.md` says what each
+migration is still `required_before_release`. `dependents.md` says what each
 package has to do.

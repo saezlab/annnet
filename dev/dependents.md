@@ -1,8 +1,8 @@
 # Packages that call AnnNet
 
-AnnNet is before its first stable release. `CHANGELOG.md` says what that means
-for a user: a removed name carries no deprecation and no alias, and each removal
-names its replacement.
+AnnNet is before its first stable release: a removed name carries no deprecation
+and no alias. [`migration.md`](migration.md) names the replacement of each
+removed name.
 
 Renaming an AnnNet method can break downstream integrations without failing
 AnnNet's own tests. `dependents.toml` records known callers, and
@@ -30,7 +30,7 @@ caller's value into an ordinary attribute **without raising anything**.
 
 ## When you remove or rename a public name
 
-1. Name the replacement in `CHANGELOG.md`, as every removal there already does.
+1. Name the replacement in `dev/migration.md`, as every removal there already does.
 2. Update `dependents.toml` to the new spelling, in the same change.
 3. Open a pull request against every repository the register names for that
    name, or push directly where the entry says the package is ours.
@@ -40,7 +40,7 @@ Update and test the downstream integration as part of each breaking API change.
 ## Where each migration stands
 
 The attribute, selection and view changes in 0.4.0 removed and renamed public
-names (`CHANGELOG.md`; `docs/explanations/api-migration.md`). For every
+names (`dev/migration.md`). For every
 registered package, `dependents.toml` carries `previous_calls`, the `calls`
 they migrate to and one `migration` line per changed name, and says how far the
 migration has got. There are three states, and they are different claims:

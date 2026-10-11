@@ -1,14 +1,14 @@
 # The packages that call AnnNet, and the names each one calls.
 #
 # AnnNet is before its first stable release, so a removed name carries no
-# deprecation and no alias (CHANGELOG.md). The cost of that choice is that a
+# deprecation and no alias (dev/migration.md). The cost of that choice is that a
 # rename lands silently in every package that bridges to us, and none of them
 # is in this repository's test suite. This file is what makes the cost visible:
 # `tests/test_dependents.py` asserts that every name below still resolves on the
 # public surface, so a rename fails the build here and names who to tell.
 #
 # The register covers known calls. Run downstream tests to check behavior and
-# calls missing from the register. See DEPENDENTS.md.
+# calls missing from the register. See dev/dependents.md.
 #
 # For each package:
 #

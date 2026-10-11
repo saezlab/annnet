@@ -32,14 +32,14 @@ the inventory holds it. The types a caller meets through the graph surface:
 | `NodeSequence`, `EdgeSequence` (from `annnet.core`) | `anet.N`, `anet.E`, and every selection made from them |
 | `RowSelection` | what `anet.attrs.select(address, ...)` and `anet.attrs.from_frame(address, frame)` return |
 | `Schema` | what `anet.attrs.schema(address)` returns |
-| `NodeView`, `EdgeView`, `EdgeType` | the records `anet.N.at(id)` and `anet.E.at(id)` return |
+| `NodeView`, `EdgeView` | the records `anet.N.at(id)` and `anet.E.at(id)` return |
 | `Aspect`, `OrderedLabels`, `as_aspect`, `LayerSelection` | aspect declarations and a layer window |
 | `Endpoint`, `as_endpoint`, `as_endpoints` | endpoint identities |
 | `Provenance`, `Set`, `Space`, `ValueMatrix`, `ValueResolver`, `MatrixValues`, `ContextualValues` | provenance, spaces and attached numerical backings |
 | `BOUNDARIES` | `('closed', 'open')`, the two boundary rules of a view |
 
 `annnet.core.__all__` is exactly: `AnnNet`, `Aspect`, `Attrs`, `BOUNDARIES`,
-`ContextualValues`, `EdgeSequence`, `EdgeType`, `EdgeView`, `Endpoint`,
+`ContextualValues`, `EdgeSequence`, `EdgeView`, `Endpoint`,
 `Graph`, `GraphView`, `LayerSelection`, `MatrixValues`, `NodeSequence`,
 `NodeView`, `OrderedLabels`, `Provenance`, `RowSelection`, `Schema`, `Set`,
 `Space`, `ValueMatrix`, `ValueResolver`, `as_aspect`, `as_endpoint`,
