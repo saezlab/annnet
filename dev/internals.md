@@ -1,7 +1,7 @@
 # In-memory architecture
 
 This page is for contributors changing the implementation. For the user-facing
-model, start with [The graph model](../guide/graph-model.ipynb).
+model, start with [the graph model](https://annnet.sysbioverse.org/guide/graph-model/).
 
 ## Canonical state
 
@@ -71,6 +71,5 @@ and adapter round trips. Check actual endpoints, coefficients, IDs, and
 contextual values; matching node and edge counts alone does not establish an
 equivalent graph.
 
-The [performance report](performance.md) records measured costs and workloads.
 Keep benchmark results separate from semantic guarantees and qualify timing
 claims by their workload and environment.

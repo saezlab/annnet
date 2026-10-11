@@ -101,3 +101,6 @@ _repo_analysis/*
 logs/
 **/logs/
 *.log
+
+# Personal notes and files, not for the repository
+local/

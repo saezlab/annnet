@@ -1,8 +1,11 @@
 {#-
-  Copy of partials/header.html from mkdocs-material 9.7.6 with two changes:
-  the logo button is gone, and the site name links to the home page.
+  Copy of partials/header.html from mkdocs-material 9.7.6 with three changes:
+  the logo button is gone, the site name links to the home page, and the
+  navigation tabs are in the header, so they stay visible on scroll. The
+  theme CSS hides Material's own tab bar.
   Original in saezverse: guidelines/docs-theme/overrides/partials/header.html
 -#}
+{% import "partials/tabs-item.html" as item with context %}
 {% set class = "md-header" %}
 {% if "navigation.tabs.sticky" in features %}
   {% set class = class ~ " md-header--shadow md-header--lifted" %}
@@ -33,6 +36,15 @@
         </div>
       </div>
     </div>
+    {% if "navigation.tabs" in features %}
+      <nav class="sv-header-tabs" aria-label="{{ lang.t('tabs') }}">
+        <ul class="md-tabs__list">
+          {% for nav_item in nav.items %}
+            {{ item.render(nav_item) }}
+          {% endfor %}
+        </ul>
+      </nav>
+    {% endif %}
     {% if config.theme.palette %}
       {% if not config.theme.palette is mapping %}
         {% include "partials/palette.html" %}

@@ -24,7 +24,8 @@
 pip install "annnet[polars,networkx,storage]"
 ```
 
-This installs annnet with the Polars tables, the NetworkX backend and the native
+This installs annnet with the [Polars](https://pola.rs/) tables, the
+[NetworkX](https://networkx.org/) backend and the native
 file format. The core package alone is `pip install annnet`. For all optional
 extras, see [Installation](installation.md).
 
@@ -46,20 +47,20 @@ interactions = pl.DataFrame(
     }
 )
 
-G = an.from_edge_frame(interactions, sign='sign', directed=True)
-print(G.summary())  # 8 nodes, 6 edges
+anet = an.from_edge_frame(interactions, sign='sign', directed=True)
+print(anet.summary())  # 8 nodes, 6 edges
 
-confident = G.view(edges=G.E.select(confidence__gte=0.85))
+confident = anet.view(edges=anet.E.select(confidence__gte=0.85))
 print(len(confident.N), len(confident.E))  # 7 nodes, 4 edges
 
-scores = G.nx.betweenness_centrality(G)
-G.attrs.update('nodes', {n: {'betweenness': v} for n, v in scores.items()})
+scores = anet.nx.betweenness_centrality(anet)
+anet.attrs.update('nodes', {n: {'betweenness': v} for n, v in scores.items()})
 
-G.write('signaling.annnet')
-G2 = an.read('signaling.annnet')
+anet.write('signaling.annnet')
+anet2 = an.read('signaling.annnet')
 ```
 
-The [Quickstart](quickstart.md) goes through the same steps with a larger
+The [Quickstart](quickstart.ipynb) goes through the same steps with a larger
 table, and explains views, annotations and the saved file.
 
 ### 3. Learn more
@@ -83,7 +84,13 @@ table, and explains views, annotations and the saved file.
 
 ## Main features
 
-![annnet unifies rich graph semantics, annotated tables, and lossless storage.](assets/annnet_fig1_layout.png)
+<figure class="sv-figure" markdown>
+[![annnet unifies rich graph semantics, annotated tables, and lossless storage.](assets/annnet_fig1_layout.png)](assets/annnet_fig1_layout.pdf)
+<figcaption>
+annnet unifies rich graph semantics, annotated tables and lossless storage.
+<a href="assets/annnet_fig1_layout.pdf" download>Download the figure as PDF</a>.
+</figcaption>
+</figure>
 
 At the core is a sparse incidence-based representation that supports mixed
 graph types within the same object. Edges are first-class entities with stable
@@ -138,7 +145,7 @@ multilayer structure without duplicating the underlying graph.
 
     ---
 
-    Run NetworkX, igraph, and graph-tool algorithms directly on an annnet graph through `G.nx`, `G.ig`, and `G.gt`. annnet converts lazily and stays the canonical representation.
+    Run [NetworkX](https://networkx.org/), [igraph](https://python.igraph.org/) and [graph-tool](https://graph-tool.skewed.de/) algorithms directly on an annnet graph through `anet.nx`, `anet.ig` and `anet.gt`. annnet converts lazily and stays the canonical representation.
 
     See: [backends in the guide](guide/computation-and-storage.ipynb#make-the-algorithm-input-explicit) ·
     [PyG example](examples/scenarios/pyg_heterodata_export.ipynb) ·
@@ -168,13 +175,15 @@ compare conditions, or preserve structure across analysis steps.
 
 annnet keeps graph topology, annotation tables, and graph views aligned in a
 single container. It does not replace the existing graph libraries: it makes
-the most popular ones (NetworkX, igraph, graph-tool) available on the same
-object, and exchanges data with formats and tools such as Cytoscape, GraphML,
-SBML, and PyTorch Geometric. You keep one consistent data model and still use the established
+the most popular ones ([NetworkX](https://networkx.org/),
+[igraph](https://python.igraph.org/), [graph-tool](https://graph-tool.skewed.de/))
+available on the same object, and exchanges data with formats and tools such as
+[Cytoscape](https://cytoscape.org/), [GraphML](http://graphml.graphdrawing.org/),
+[SBML](https://sbml.org/) and [PyTorch Geometric](https://pyg.org/). You keep one consistent data model and still use the established
 tooling.
 
 The design follows the matrix-plus-annotation pattern of omics containers such
-as AnnData, and adapts it to graphs with heterogeneous topology. annnet is most
+as [AnnData](https://anndata.readthedocs.io/), and adapts it to graphs with heterogeneous topology. annnet is most
 useful where graph structure is only one part of the data model, and where
 annotations, conditions, or multiple representations must be handled
 explicitly:

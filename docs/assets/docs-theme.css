@@ -64,9 +64,16 @@
  * notebook cells keep the full width of the content column.
  */
 .md-typeset {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   line-height: 1.6;
   --sv-measure: 32em;
+}
+
+/* Wide screens: a bit larger text (Material scales rem from 1600px too) */
+@media screen and (min-width: 100em) {
+  .md-typeset {
+    font-size: 1rem;
+  }
 }
 
 .md-typeset > p,
@@ -95,6 +102,21 @@
 .md-typeset .jp-MarkdownOutput > h3,
 .md-typeset .jp-MarkdownOutput > h4 {
   max-width: var(--sv-measure);
+}
+
+/*
+ * When the content column is only a little wider than the line-length
+ * limit, the limit looks like a formatting error: use the full width.
+ * The query container is the content column.
+ */
+.md-content {
+  container-type: inline-size;
+}
+
+@container (max-width: 42rem) {
+  .md-typeset {
+    --sv-measure: none;
+  }
 }
 
 /* A paragraph with only an image is a figure: keep the full width */
@@ -132,6 +154,78 @@
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
+}
+
+/*
+ * Navigation tabs are in the header (overrides/partials/header.html),
+ * right of the title, so they stay visible on scroll. Material's own tab
+ * bar under the header is not used. Narrow screens use the drawer, as in
+ * Material.
+ */
+.md-tabs {
+  display: none;
+}
+
+.sv-header-tabs {
+  flex: none;
+  align-self: stretch;
+  display: none;
+}
+
+@media screen and (min-width: 76.25em) {
+  .sv-header-tabs {
+    display: block;
+  }
+
+  /* The site name never gives up its space to the tabs */
+  [dir] .md-header__title {
+    flex: 1 0 auto;
+  }
+
+  .md-header__title .md-header__ellipsis {
+    position: relative;
+  }
+}
+
+/*
+ * Until 1600px the tabs leave less room: a narrower search field and
+ * only the icon of the repository link.
+ */
+@media screen and (min-width: 76.25em) and (max-width: 99.99em) {
+  .md-search__inner {
+    width: 8rem;
+  }
+
+  [data-md-toggle="search"]:checked ~ .md-header .md-search__inner {
+    width: 23.4rem;
+  }
+
+  .md-header__source {
+    width: auto;
+    margin-left: 0.6rem;
+  }
+
+  .md-header__source .md-source__repository {
+    display: none;
+  }
+
+  .md-header__source .md-source__icon {
+    margin-right: 0;
+  }
+}
+
+.sv-header-tabs .md-tabs__list {
+  margin: 0 0.4rem 0 0;
+}
+
+.sv-header-tabs .md-tabs__item {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.sv-header-tabs .md-tabs__link {
+  margin-top: 0.75rem;
+  color: inherit;
 }
 
 /* Navigation tabs: bold, full white; the active tab is underlined */
@@ -341,9 +435,8 @@
 /* ---- Landing page box -------------------------------------------- */
 
 /*
- * The opening box of a package's home page: logo on the left, then a
- * label, the package name and one intro paragraph. Light tone, no
- * border. Markup:
+ * The opening box of a package's home page: logo, label, package name
+ * and one intro paragraph. Light tone, no border. Markup:
  *
  * <div class="sv-hero"><div class="sv-hero-grid">
  *   <img class="sv-hero-logo" src="assets/logo.png" alt="...">
@@ -353,8 +446,19 @@
  *     <p class="sv-lead">...</p>
  *   </div>
  * </div></div>
+ *
+ * Three layouts, by the width of the box:
+ *
+ * - wide: the logo on the left, all text on the right;
+ * - medium (the label would wrap): the logo left of the label and the
+ *   name, the paragraph below at full width;
+ * - narrow: everything in one column, the logo on top.
+ *
+ * .sv-hero-text has display: contents, so its children are items of
+ * the grid.
  */
 .md-typeset .sv-hero {
+  container-type: inline-size;
   padding: 2rem;
   margin: 0 0 1.5rem;
   background: var(--sv-main-light);
@@ -363,21 +467,84 @@
 .md-typeset .sv-hero-grid {
   display: grid;
   grid-template-columns: minmax(6rem, 10rem) 1fr;
-  gap: 1.5rem 2rem;
-  align-items: center;
+  grid-template-rows: 1fr auto auto auto 1fr;
+  grid-template-areas:
+    "logo ."
+    "logo kicker"
+    "logo title"
+    "logo lead"
+    "logo .";
+  column-gap: 2rem;
 }
 
 .md-typeset .sv-hero-text {
-  min-width: 0;
-}
-
-.md-typeset .sv-hero h1 {
-  margin: 0 0 0.3em;
+  display: contents;
 }
 
 .md-typeset .sv-hero-logo {
+  grid-area: logo;
+  align-self: center;
   width: 100%;
   height: auto;
+}
+
+.md-typeset .sv-hero .sv-kicker {
+  grid-area: kicker;
+  justify-self: start;
+}
+
+.md-typeset .sv-hero h1 {
+  grid-area: title;
+  margin: 0 0 0.3em;
+}
+
+.md-typeset .sv-hero .sv-lead {
+  grid-area: lead;
+}
+
+@container (max-width: 37rem) {
+  .md-typeset .sv-hero-grid {
+    grid-template-columns: 6rem 1fr;
+    grid-template-rows: 1fr auto auto 1fr auto;
+    grid-template-areas:
+      "logo ."
+      "logo kicker"
+      "logo title"
+      "logo ."
+      "lead lead";
+    column-gap: 1.5rem;
+  }
+
+  .md-typeset .sv-hero h1 {
+    margin: 0;
+  }
+
+  .md-typeset .sv-hero .sv-lead {
+    margin-top: 1.2rem;
+  }
+}
+
+@container (max-width: 24rem) {
+  .md-typeset .sv-hero-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    grid-template-areas:
+      "logo"
+      "kicker"
+      "title"
+      "lead";
+  }
+
+  .md-typeset .sv-hero-logo {
+    width: 8rem;
+    margin-bottom: 1.2rem;
+  }
+}
+
+@media screen and (max-width: 760px) {
+  .md-typeset .sv-hero {
+    padding: 1.4rem;
+  }
 }
 
 /* Logos are drawn for a light background: in dark mode they sit on a light tile */
@@ -403,20 +570,6 @@
   font-size: 1.05rem;
   line-height: 1.6;
   margin: 0;
-}
-
-@media screen and (max-width: 760px) {
-  .md-typeset .sv-hero {
-    padding: 1.4rem;
-  }
-
-  .md-typeset .sv-hero-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .md-typeset .sv-hero-logo {
-    width: 9rem;
-  }
 }
 
 /* ---- Part of sysbioverse ------------------------------------------- */
@@ -449,4 +602,70 @@
 .md-typeset .sv-ecosystem p {
   margin: 0;
   max-width: var(--sv-measure);
+}
+
+/* ---- Figures -------------------------------------------------------- */
+
+/*
+ * A figure with a caption. Markup (needs md_in_html):
+ *
+ * <figure class="sv-figure" markdown>
+ * [![alt text](assets/figure.png)](assets/figure.pdf)
+ * <figcaption>... <a href="assets/figure.pdf" download>PDF</a></figcaption>
+ * </figure>
+ */
+.md-typeset .sv-figure {
+  max-width: none;
+  margin: 1.5em 0;
+}
+
+.md-typeset .sv-figure img {
+  width: 100%;
+  height: auto;
+}
+
+.md-typeset .sv-figure figcaption {
+  max-width: var(--sv-measure);
+  margin: 0.6em 0 0;
+  font-size: 0.85em;
+  font-style: normal;
+  text-align: left;
+}
+
+/* ---- Notebooks (mkdocs-jupyter) ------------------------------------- */
+
+/* The text cells use the site font */
+.md-content .jupyter-wrapper {
+  --jp-content-font-family: var(--md-text-font-family);
+  --jp-ui-font-family: var(--md-text-font-family);
+}
+
+/* No In [n] / Out [n] column: the cells use the full width */
+.md-content .jupyter-wrapper .jp-Cell .jp-InputArea .jp-InputPrompt,
+.md-content .jupyter-wrapper .jp-Cell .jp-OutputArea .jp-OutputPrompt {
+  display: none;
+}
+
+/* Plots open at full size on click (docs-theme.js) */
+.md-content .jupyter-wrapper .jp-RenderedImage img {
+  cursor: zoom-in;
+}
+
+.sv-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2vmin;
+  background: rgba(0, 0, 0, 0.8);
+  cursor: zoom-out;
+}
+
+.sv-zoom img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #FFFFFF;
 }

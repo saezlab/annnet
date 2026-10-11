@@ -1,0 +1,30 @@
+{#-
+  Copy of partials/actions.html from mkdocs-material 9.7.6 with one change:
+  a download button on notebook pages (mkdocs-jupyter with
+  include_source: true sets page.nb_url).
+  Original in saezverse: guidelines/docs-theme/overrides/partials/actions.html
+-#}
+{% if page.nb_url %}
+  <a href="{{ page.nb_url }}" title="Download the notebook" class="md-content__button md-icon" download>
+    {% include ".icons/material/download.svg" %}
+  </a>
+{% endif %}
+{% if page.edit_url %}
+  {% if "content.action.edit" in features %}
+    <a href="{{ page.edit_url }}" title="{{ lang.t('action.edit') }}" class="md-content__button md-icon" rel="edit">
+      {% set icon = config.theme.icon.edit or "material/file-edit-outline" %}
+      {% include ".icons/" ~ icon ~ ".svg" %}
+    </a>
+  {% endif %}
+  {% if "content.action.view" in features %}
+    {% if "/blob/" in page.edit_url %}
+      {% set part = "blob" %}
+    {% else %}
+      {% set part = "edit" %}
+    {% endif %}
+    <a href="{{ page.edit_url | replace(part, 'raw') }}" title="{{ lang.t('action.view') }}" class="md-content__button md-icon">
+      {% set icon = config.theme.icon.view or "material/file-eye-outline" %}
+      {% include ".icons/" ~ icon ~ ".svg" %}
+    </a>
+  {% endif %}
+{% endif %}

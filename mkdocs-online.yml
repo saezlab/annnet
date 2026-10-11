@@ -9,7 +9,7 @@ exclude_docs: |
 nav:
 -   Home: index.md
 -   Installation: installation.md
--   Quickstart: quickstart.md
+-   Quickstart: quickstart.ipynb
 -   Guide:
     -   Start here: guide/index.md
     -   Graph model and matrices: guide/graph-model.ipynb
@@ -31,7 +31,6 @@ nav:
     -   API Reference Overview: reference/index.md
     -   The public surface (contract): reference/api-contract.md
     -   Public and internal APIs: reference/api-boundary.md
-    -   Migrating existing code: reference/migration.md
     -   Support helpers: reference/support.md
     -   Core:
         -   Graph: reference/core/graph.md
@@ -71,5 +70,3 @@ nav:
     -   Join us: community/index.md
     -   Contribute documentation: community/contribute-docs.md
     -   Contribute code: community/contribute-codebase.md
-    -   In-memory architecture: community/internals.md
-    -   Performance report: community/performance.md
