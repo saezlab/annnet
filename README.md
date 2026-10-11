@@ -20,7 +20,7 @@ and results, select the part you need, and use it with other graph libraries.
 
 ## Why annnet?
 
-![AnnNet](docs/assets/annnet_fig1_layout.png)
+![AnnNet](https://raw.githubusercontent.com/saezlab/annnet/main/docs/assets/annnet_fig1_layout.png)
 
 annnet aims to combine graph expressiveness, annotation-centric data handling, and practical interoperability in one model:
 
@@ -140,7 +140,7 @@ pip install "annnet[all]"
 ## Quick Start
 
 Install `annnet[polars,storage]`. From a repository checkout, import the small
-[synthetic interaction table](docs/guide/data/interactions.csv):
+[synthetic interaction table](https://github.com/saezlab/annnet/blob/main/docs/guide/data/interactions.csv):
 
 ```python
 import annnet as an
@@ -350,7 +350,7 @@ uv run --group docs python -m mkdocs serve --dev-addr 127.0.0.1:8000
 Open <http://127.0.0.1:8000>. The build executes the five Guide notebooks and
 renders saved outputs for the Tutorials. Run `uv run --group docs python -m mkdocs
 build --strict` to validate the site. See the [documentation contribution
-guide](docs/community/contribute-docs.md) for faster previews and notebook environments.
+guide](https://annnet.sysbioverse.org/community/contribute-docs/) for faster previews and notebook environments.
 
 ## Contributing
 
