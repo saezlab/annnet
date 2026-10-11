@@ -1,0 +1,9 @@
+name: annnet-guide
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.11,<3.14
+  - pip
+  - jupyterlab
+  - pip:
+      - annnet[polars,networkx,storage] @ git+https://github.com/saezlab/annnet.git

@@ -1,0 +1,24 @@
+/*
+ * sysbioverse color scheme for MkDocs Material sites.
+ * Load before docs-theme.css. Colors from the RWTH palette:
+ * main turquoise #00AAB0, accent magenta #ED0772, dark teal #0A6167.
+ */
+
+:root,
+[data-md-color-scheme="default"] {
+  --sv-main: #00AAB0;
+  --sv-main-light: #E6F7F4;
+  --sv-accent: #ED0772;
+  --sv-accent-fg: #FFFFFF;
+  --sv-link: #0A6167;
+  --sv-link-hover: #ED0772;
+}
+
+[data-md-color-scheme="slate"] {
+  --sv-main: #00AAB0;
+  --sv-main-light: #10393C;
+  --sv-accent: #F1438E;
+  --sv-accent-fg: #FFFFFF;
+  --sv-link: #40BFBC;
+  --sv-link-hover: #F1438E;
+}

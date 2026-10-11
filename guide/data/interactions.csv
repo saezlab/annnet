@@ -1,0 +1,12 @@
+edge_id,source,target,effect,confidence,evidence
+egfr_grb2,EGFR,GRB2,1,0.95,example_primary
+egfr_grb2_alt,EGFR,GRB2,1,0.65,example_alternative
+grb2_sos1,GRB2,SOS1,1,0.90,example_primary
+sos1_ras,SOS1,RAS,1,0.90,example_primary
+ras_raf,RAS,RAF,1,0.95,example_primary
+raf_mek,RAF,MEK,1,0.98,example_primary
+mek_erk,MEK,ERK,1,0.98,example_primary
+erk_dusp6,ERK,DUSP6,1,0.85,example_primary
+dusp6_erk,DUSP6,ERK,-1,0.90,example_primary
+egfr_akt,EGFR,AKT,1,0.60,example_branch
+akt_foxo3,AKT,FOXO3,-1,0.75,example_branch

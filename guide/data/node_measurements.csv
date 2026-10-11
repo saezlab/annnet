@@ -1,0 +1,11 @@
+node_id,control,treated
+EGFR,1.0,1.2
+GRB2,0.8,1.0
+SOS1,0.5,1.1
+RAS,0.4,1.2
+RAF,0.3,1.0
+MEK,0.2,0.9
+ERK,0.2,1.1
+DUSP6,0.1,0.7
+AKT,0.5,0.2
+FOXO3,-0.3,-0.1
