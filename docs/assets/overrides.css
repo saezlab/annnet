@@ -131,7 +131,6 @@
   width: 100%;
   max-width: 100%;
   table-layout: auto;
-  font-size: 0.66rem;
 }
 
 .md-typeset .jupyter-wrapper table.dataframe th,
