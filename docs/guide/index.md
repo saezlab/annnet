@@ -1,10 +1,10 @@
 # Guide
 
-AnnNet keeps graph structure, annotations, and analysis contexts in one object.
+annnet keeps graph structure, annotations, and analysis contexts in one object.
 These five notebooks explain how those parts work together. Each topic includes
 the concepts, relevant mathematics, working examples, and links to the API.
 
-Start with the [quickstart](../quickstart.md), then read the topics you need:
+Start with the [quickstart](../quickstart.ipynb), then read the topics you need:
 
 | Topic | What you will learn |
 | --- | --- |
@@ -28,10 +28,10 @@ python -m pip install 'annnet[polars,networkx,storage]' jupyterlab
 ```
 
 Alternatively, use the [conda environment](environment.yml). Download a notebook
-using its source link and put the three [sample CSV files](data/index.md) in a
-`data/` directory beside it. From a repository checkout, the notebooks also find
-`docs/guide/data` automatically. Run cells in order; each notebook imports its
-own graph and can be run independently.
+from its page, and put the three [sample CSV files](data/index.md) in a
+`data/` directory beside it. In a repository checkout, the files are already in
+`docs/guide/data`. Run the cells in order; each notebook imports its own graph
+and does not depend on the other notebooks.
 
 The data are small and synthetic, so these notebooks require no external data
 service. For longer analyses with biological data or other software, see

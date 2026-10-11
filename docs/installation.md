@@ -1,12 +1,12 @@
 # Installation guide
 
-`annnet` is designed to stay lightweight by default. The base package only requires `numpy`, `scipy`, `narwhals`, and `pkg-infra`, and everything heavier is exposed as an optional extra.
+`annnet` is designed to stay lightweight by default. The base package only requires [NumPy](https://numpy.org/), [SciPy](https://scipy.org/), [Narwhals](https://narwhals-dev.github.io/narwhals/), and [pkg-infra](https://github.com/saezlab/pkg-infra), and everything heavier is exposed as an optional extra.
 
 ## Requirements
 
 - Python `3.11+`
 - `pip` for standard installs
-- `uv` if you want a fast local or development workflow
+- [uv](https://docs.astral.sh/uv/) if you want a fast local or development workflow
 - `git` if you want to install from GitHub
 
 Check your environment:
@@ -42,11 +42,11 @@ pip install "annnet[pandas]"
 pip install "annnet[pyarrow]"
 ```
 
-- `polars`: recommended dataframe backend for annnet tables and annotations
-- `pandas`: pandas-native dataframe support
-- `pyarrow`: Arrow table support and parquet-related tabular workflows
+- `polars`: [Polars](https://pola.rs/), the recommended dataframe backend for annnet tables and annotations
+- `pandas`: [pandas](https://pandas.pydata.org/) dataframe support
+- `pyarrow`: [Apache Arrow](https://arrow.apache.org/) table support and parquet-related tabular workflows
 
-If more than one dataframe backend is installed, AnnNet has a built-in
+If more than one dataframe backend is installed, annnet has a built-in
 preference order. You can still choose a backend globally or for graph
 construction when needed; see the [support helper reference](reference/support.md).
 
@@ -66,12 +66,12 @@ Bundle:
 pip install "annnet[backends]"
 ```
 
-- `networkx`: interoperability and access to NetworkX algorithms
-- `igraph`: interoperability with `python-igraph`
-- `pyg`: PyTorch Geometric support
+- `networkx`: interoperability with [NetworkX](https://networkx.org/) and access to its algorithms
+- `igraph`: interoperability with [python-igraph](https://python.igraph.org/)
+- `pyg`: [PyTorch Geometric](https://pyg.org/) support
 - `backends`: installs the pip-installable graph backends `networkx` and `igraph`
 
-`graph-tool` is supported by the codebase, but it is not published on PyPI, so it must be installed separately with Pixi, conda, or your system package manager.
+annnet also supports [graph-tool](https://graph-tool.skewed.de/). graph-tool is not available on PyPI: install it separately with [Pixi](https://pixi.sh/), [conda](https://conda-forge.org/), or your system package manager.
 
 ### Plotting backends
 
@@ -89,12 +89,12 @@ Bundle:
 pip install "annnet[plot]"
 ```
 
-- `matplotlib`: plotting support for matplotlib-based rendering
-- `pydot`: DOT export and pydot-based rendering
-- `graphviz`: Python Graphviz bindings
+- `matplotlib`: plots with [Matplotlib](https://matplotlib.org/)
+- `pydot`: DOT export and plots with [pydot](https://github.com/pydot/pydot)
+- `graphviz`: Python bindings for [Graphviz](https://graphviz.org/)
 - `plot`: installs all pip-installable plotting backends together
 
-When `plot(..., backend="auto")` is used, AnnNet selects the first installed
+When `plot(..., backend="auto")` is used, annnet selects the first installed
 backend in its plotting preference order. You can still choose a plotting
 backend globally or for individual plotting calls; see the
 [support helper reference](reference/support.md).
@@ -119,12 +119,12 @@ pip install "annnet[metabo]"
 ```
 
 - `excel`: Excel import/export support
-- `parquet`: parquet I/O support via `pyarrow`
-- `zarr_io`: `.annnet` storage support with `zarr` and `numcodecs`
-- `sbml`: SBML parsing support
+- `parquet`: [Parquet](https://parquet.apache.org/) I/O support with `pyarrow`
+- `zarr_io`: `.annnet` storage support with [Zarr](https://zarr.dev/) and `numcodecs`
+- `sbml`: [SBML](https://sbml.org/) parsing support
 - `io`: broader I/O bundle including pandas, openpyxl, pyarrow, zarr, numcodecs, lxml, and toml
 - `storage`: storage-oriented subset for parquet/zarr/pandas workflows
-- `metabo`: metabolomics-oriented bundle with SBML, COBRA, and Graphviz
+- `metabo`: metabolomics bundle with SBML, [COBRApy](https://opencobra.github.io/cobrapy/), and Graphviz
 
 ### Other install bundles
 
@@ -187,7 +187,7 @@ uv run pytest -vv
 
 ## Use Pixi for non-pip dependencies
 
-Use Pixi when you want the repository's fuller development environment, especially for dependencies that are not reliably available from PyPI such as `graph-tool`.
+Use [Pixi](https://pixi.sh/) when you want the repository's fuller development environment, especially for dependencies that are not reliably available from PyPI such as `graph-tool`.
 
 ```bash
 pixi install -e gt
@@ -215,7 +215,7 @@ uv sync --group docs
 uv run --group docs python -m mkdocs serve --dev-addr 127.0.0.1:8000
 ```
 
-Open <http://127.0.0.1:8000>. This executes the five Guide notebooks; Examples
+Open <http://127.0.0.1:8000>. This executes the Quickstart and the five Guide notebooks; Examples
 render their saved outputs. For a strict build without the preview server:
 
 ```bash

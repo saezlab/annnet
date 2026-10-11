@@ -11,7 +11,7 @@ notebooks. Download them together to run a notebook outside this repository.
 
 ## Provenance and meaning
 
-This is a **synthetic teaching dataset**, assembled for the AnnNet documentation
+This is a **synthetic teaching dataset**, assembled for the annnet documentation
 from the signaling examples previously built inside its notebooks. The names
 evoke a signaling network, but the topology is simplified and the confidence,
 activity, and measurement values are invented. No biological conclusion should
@@ -31,5 +31,5 @@ these values automatically.
 
 To use your own network, replace the input files and specify your source,
 target, identifier, and annotation columns at import. Start with the
-[quickstart](../../quickstart.md) or
+[quickstart](../../quickstart.ipynb) or
 [Annotations, selections, and views](../annotations-and-views.ipynb).
