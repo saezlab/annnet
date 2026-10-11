@@ -12,7 +12,6 @@ import annnet as an
 class TestPublicAPI:
     def test_top_level_exports_resolve(self):
         assert an.AnnNet is not None
-        assert an.EdgeType is not None
         assert an.Traversal is not None
         assert an.__version__
         assert an.__license__
@@ -34,7 +33,6 @@ class TestPublicAPI:
             'from_sif',
             'to_cx2',
             'from_cx2',
-            'show_cx2',
             'to_parquet',
             'from_parquet',
             'to_dataframes',

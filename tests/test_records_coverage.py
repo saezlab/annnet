@@ -5,7 +5,6 @@ from __future__ import annotations
 import narwhals as nw
 
 from annnet.core._records import (
-    EdgeType,
     EdgeView,
     SliceRecord,
     _df_filter_not_equal,
@@ -77,14 +76,6 @@ def test_slice_record_dict_style_get_returns_field_value() -> None:
     # default-returning .get path
     assert sr.get('nodes') == {'a'}
     assert sr.get('nonexistent', 'fallback') == 'fallback'
-
-
-# ── EdgeType ───────────────────────────────────────────────────────────
-
-
-def test_edge_type_enum_members() -> None:
-    assert EdgeType.DIRECTED.value == 'DIRECTED'
-    assert EdgeType.UNDIRECTED.value == 'UNDIRECTED'
 
 
 # ── EdgeView ───────────────────────────────────────────────────────────

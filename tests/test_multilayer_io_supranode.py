@@ -5,7 +5,7 @@ These paths were not previously exercised by the suite:
     - ``to_cx2`` crashed in ``reify`` / ``expand`` and silently dropped binary
       edges (supra-node endpoints were never mapped to visual node ids).
     - ``_cx2_to_cytoscapejs`` gave edges ids that collided with node ids, so
-      Cytoscape.js dropped them (``show_cx2`` showed nodes but no edges).
+      Cytoscape.js dropped them (``show_cytoscape`` showed nodes but no edges).
     - ``to_parquet`` / ``from_parquet`` crashed building a String column from
       list-of-supra-node ``head`` / ``tail`` / ``members`` values.
 """
@@ -109,7 +109,7 @@ def test_from_cx2_multilayer_roundtrip(tmp_path):
 
 
 def test_cx2_cytoscapejs_edge_ids_unique_and_present():
-    from annnet.io.cx2 import _cx2_to_cytoscapejs
+    from annnet.utils.plotting import _cx2_to_cytoscapejs
 
     G = _build_two_aspect_graph()
     cj = _cx2_to_cytoscapejs(annnet.to_cx2(G, hyperedges='reify'))

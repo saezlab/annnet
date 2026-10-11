@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 from annnet.core.graph import AnnNet
+from annnet.utils.plotting import _cx2_to_cytoscapejs
 from annnet.io.cx2 import (
     _cx2_collect_reified,
-    _cx2_to_cytoscapejs,
     _infer_cx2_type,
     _infer_cx2_types,
     _jsonify,

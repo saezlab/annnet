@@ -16,7 +16,6 @@ from ._select import EdgeSequence, NodeSequence, RowSelection
 from ._values import ValueMatrix, MatrixValues, ValueResolver, ContextualValues
 from ._aspects import BOUNDARIES, Aspect, OrderedLabels, as_aspect
 from ._records import (
-    EdgeType,
     EdgeView,
     Endpoint,
     NodeView,
@@ -49,7 +48,6 @@ __all__ = [
     'ValueMatrix',
     'ValueResolver',
     'OrderedLabels',
-    'EdgeType',
     'EdgeView',
     'Endpoint',
     'NodeView',

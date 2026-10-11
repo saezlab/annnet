@@ -122,7 +122,7 @@ graphviz = ["graphviz"]
 # IO modules
 excel    = ["openpyxl>=3.1"]          # used by excel.py
 sbml     = ["lxml>=4.9", "python-libsbml>=5.20"]   # used by sbml.py
-notebook = ["ipython>=8.0"]           # used by cx2.show_cx2(inline=True)
+notebook = ["ipython>=8.0"]           # used by plotting.show_cytoscape(inline=True)
 parquet  = ["pyarrow>=10"]            # used by parquet.py
 zarr_io  = ["zarr>=2.18", "numcodecs>=0.12"]  # used by annnet_format.py
 
@@ -225,7 +225,6 @@ include = [
   "pyproject.toml",
   "README.md",
   "CHANGELOG.md",
-  "DEPENDENTS.md",
   "dependents.toml",
   "LICENSE",
   "docs/**/*.ipynb",
@@ -395,7 +394,7 @@ section-order = [
 # run before the loop moves on; the warning does not apply.
 "benchmarks/api_costs.py" = ["ANN", "BLE", "D", "E402", "B023"]
 "notebooks/*" = ["ANN", "BLE", "D", "E402", "I001"]
-"docs/tutorials/notebooks/*" = ["ANN", "BLE", "D", "E402", "I001"]
+"docs/tutorials/*" = ["ANN", "BLE", "D", "E402", "I001"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

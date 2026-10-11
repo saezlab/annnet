@@ -2,7 +2,7 @@
 
 A curated surface is only worth having when something checks it. These tests
 read the names the package exports and the names a graph object answers to,
-and compare them to the contract in ``docs/reference/api-contract.md``
+and compare them to the contract in ``dev/api-contract.md``
 and to the machine-readable inventory ``docs/reference/public-surface.json``,
 in both directions: a name the contract states must be on the object, and a
 name the object carries must be in the contract.
@@ -25,7 +25,7 @@ from annnet.core.graph import AnnNet, REMOVED_GRAPH_NAMES
 
 DOCS = Path(annnet.__file__).parent.parent / 'docs' / 'reference'
 INVENTORY = DOCS / 'public-surface.json'
-CONTRACT = DOCS / 'api-contract.md'
+CONTRACT = DOCS.parent.parent / 'dev' / 'api-contract.md'
 
 
 def _contract_paragraph(marker: str) -> str:
@@ -217,7 +217,6 @@ def test_the_core_exports_the_graph_and_the_records():
             'ValueMatrix',
             'ValueResolver',
             'OrderedLabels',
-            'EdgeType',
             'EdgeView',
             'Endpoint',
             'NodeView',
@@ -286,9 +285,7 @@ def test_no_name_means_two_things_in_two_namespaces(graph):
     assert not hasattr(graph.slices, 'attrs')
 
 
-@pytest.mark.skipif(
-    not CONTRACT.is_file(), reason='docs/reference/api-contract.md is not beside the package'
-)
+@pytest.mark.skipif(not CONTRACT.is_file(), reason='dev/api-contract.md is not beside the package')
 def test_the_contract_states_the_graph_surface_both_ways(graph):
     """Section 2.9 of the contract is exactly what the object answers to."""
     stated = _contract_names(
@@ -300,9 +297,7 @@ def test_the_contract_states_the_graph_surface_both_ways(graph):
     }
 
 
-@pytest.mark.skipif(
-    not CONTRACT.is_file(), reason='docs/reference/api-contract.md is not beside the package'
-)
+@pytest.mark.skipif(not CONTRACT.is_file(), reason='dev/api-contract.md is not beside the package')
 def test_the_contract_states_the_view_surface_both_ways(graph):
     """The view paragraph of section 5 is exactly what a view answers to."""
     view = graph.view()
@@ -313,9 +308,7 @@ def test_the_contract_states_the_view_surface_both_ways(graph):
     }
 
 
-@pytest.mark.skipif(
-    not CONTRACT.is_file(), reason='docs/reference/api-contract.md is not beside the package'
-)
+@pytest.mark.skipif(not CONTRACT.is_file(), reason='dev/api-contract.md is not beside the package')
 def test_the_contract_states_the_core_exports():
     import annnet.core as core
 
@@ -346,7 +339,6 @@ def test_public_inventory_matches_package_and_namespaces(graph):
     )
 
 
-CHANGELOG = Path(annnet.__file__).parent.parent / 'CHANGELOG.md'
 MIGRATION = Path(annnet.__file__).parent.parent / 'dev' / 'migration.md'
 
 # Every public name the attribute/selection/view rework removed, by holder. The
@@ -426,23 +418,16 @@ def test_every_removed_name_is_gone(graph):
 
 
 @pytest.mark.skipif(
-    not (CHANGELOG.is_file() and MIGRATION.is_file()),
-    reason='CHANGELOG.md or dev/migration.md is not beside the package',
+    not MIGRATION.is_file(),
+    reason='dev/migration.md is not beside the package',
 )
-def test_every_removed_name_is_in_the_changelog_and_the_migration_page():
+def test_every_removed_name_is_on_the_migration_page():
     """A removed name is findable with its replacement."""
-    changelog = CHANGELOG.read_text()
-    section = changelog[
-        changelog.index('### One way to reach every attribute') : changelog.index(
-            '### Changed, and a caller can see it\n\n- **A column read'
-        )
-    ]
     migration = MIGRATION.read_text()
-    missing = []
-    for holder, names in REMOVED_NAMES_BY_HOLDER.items():
-        for name in names:
-            if re.search(rf'\b{name}\b', section) is None:
-                missing.append(f'{holder}.{name} (changelog)')
-            if re.search(rf'\b{name}\b', migration) is None:
-                missing.append(f'{holder}.{name} (migration page)')
+    missing = [
+        f'{holder}.{name}'
+        for holder, names in REMOVED_NAMES_BY_HOLDER.items()
+        for name in names
+        if re.search(rf'\b{name}\b', migration) is None
+    ]
     assert missing == []

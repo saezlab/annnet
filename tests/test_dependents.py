@@ -122,8 +122,8 @@ def test_every_name_a_dependent_calls_still_resolves(entry, graph):
         f'{entry["name"]} calls {missing}, which the public surface no longer carries. '
         f'It bridges through {", ".join(entry["modules"])}. '
         f'Owner: {entry["owner"]} ({entry["contact"]}) at {entry["repository"]}. '
-        f'Name the replacement in CHANGELOG.md, update dependents.toml, '
-        f'and see DEPENDENTS.md.'
+        f'Name the replacement in dev/migration.md, update dependents.toml, '
+        f'and see dev/dependents.md.'
     )
 
 

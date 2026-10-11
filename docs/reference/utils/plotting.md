@@ -16,11 +16,25 @@ save(drawing, 'network', format='svg')  # writes network.svg
 Graphviz, pydot, Matplotlib. The Matplotlib backend needs no other library. To
 change the default backend, call `annnet.set_default_plot_backend`.
 
+`show_cytoscape` shows the graph as an interactive
+[Cytoscape.js](https://js.cytoscape.org/) network: in the notebook with
+`inline=True`, otherwise in the browser.
+
+```python
+from annnet.utils import show_cytoscape
+
+show_cytoscape(anet, inline=True)
+```
+
 ::: annnet.utils.plotting.plot
     options:
       show_root_heading: true
 
 ::: annnet.utils.plotting.save
+    options:
+      show_root_heading: true
+
+::: annnet.utils.plotting.show_cytoscape
     options:
       show_root_heading: true
 

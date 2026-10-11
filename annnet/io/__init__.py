@@ -38,7 +38,6 @@ _lazy_symbols: dict[str, tuple[str, str]] = {
     'from_gexf': ('annnet.io.graphml', 'from_gexf'),
     'to_cx2': ('annnet.io.cx2', 'to_cx2'),
     'from_cx2': ('annnet.io.cx2', 'from_cx2'),
-    'show_cx2': ('annnet.io.cx2', 'show_cx2'),
     # PyTorch Geometric
     'to_pyg': ('annnet.io.pyg', 'to_pyg'),
     'to_csv': ('annnet.io.csv_format', 'to_csv'),

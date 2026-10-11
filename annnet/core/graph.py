@@ -153,7 +153,7 @@ class AnnNetMeta(type):
 # Every name removed from the graph, with the expression that
 # replaces it. The descriptor below raises with the replacement, so a caller
 # holding an old name meets a failure that names the new one rather than a
-# silent change of meaning. CHANGELOG.md carries the same map.
+# silent change of meaning. dev/migration.md carries the same map.
 REMOVED_GRAPH_NAMES = {
     'obs': 'G.attrs.nodes',
     'var': 'G.attrs.edges',

@@ -13,6 +13,7 @@ _lazy_symbols: dict[str, tuple[str, str]] = {
     'to_pydot': ('annnet.utils.plotting', 'to_pydot'),
     'plot': ('annnet.utils.plotting', 'plot'),
     'save': ('annnet.utils.plotting', 'save'),
+    'show_cytoscape': ('annnet.utils.plotting', 'show_cytoscape'),
 }
 
 __all__ = sorted(_lazy_symbols)

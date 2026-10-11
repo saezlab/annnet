@@ -3,7 +3,7 @@
 ``docs/reference/public-surface.json`` lists every name the package exports,
 every name a graph and a view answer to, and every public name of each
 namespace. ``tests/test_public_surface.py`` checks it against the package both
-ways, and ``docs/reference/api-contract.md`` is its prose. Regenerate it after
+ways, and ``dev/api-contract.md`` is its prose. Regenerate it after
 a deliberate change of the surface, never to make a test pass::
 
     python tools/public_surface.py            # writes the file

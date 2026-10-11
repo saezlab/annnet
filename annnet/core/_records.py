@@ -8,7 +8,6 @@ sets say which attribute names the structural columns own.
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Any, NamedTuple
 
 import narwhals as nw
@@ -51,11 +50,6 @@ def build_dataframe_from_rows(rows):
 
 def _df_filter_not_equal(df, col: str, value):
     return dataframe_filter_ne(df, col, value)
-
-
-class EdgeType(Enum):
-    DIRECTED = 'DIRECTED'
-    UNDIRECTED = 'UNDIRECTED'
 
 
 class Clock:

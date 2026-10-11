@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from annnet.core._space import Set, Space
     from annnet.core._Views import GraphView
     from annnet.core._select import RowSelection
-    from annnet.core._records import EdgeType, EdgeView, NodeView
+    from annnet.core._records import EdgeView, NodeView
     from annnet.core._attribute_api import Attrs, Schema
     from annnet.algorithms.traversal import Traversal
 
@@ -62,7 +62,6 @@ _lazy_objects: dict[str, tuple[str, str]] = {
     'RowSelection': ('annnet.core._select', 'RowSelection'),
     'Schema': ('annnet.core._attribute_api', 'Schema'),
     'Provenance': ('annnet.core._provenance', 'Provenance'),
-    'EdgeType': ('annnet.core._records', 'EdgeType'),
     'ON_CONFLICT': ('annnet.io._conflict', 'ON_CONFLICT'),
     'PROJECTIONS': ('annnet._support.projection', 'PROJECTIONS'),
     'CoefficientsWouldBeLost': (
@@ -149,7 +148,6 @@ _lazy_functions: dict[str, tuple[str, str]] = {
     'from_gexf': ('annnet.io.graphml', 'from_gexf'),
     'to_cx2': ('annnet.io.cx2', 'to_cx2'),
     'from_cx2': ('annnet.io.cx2', 'from_cx2'),
-    'show_cx2': ('annnet.io.cx2', 'show_cx2'),
     'to_parquet': ('annnet.io.parquet', 'to_parquet'),
     'from_parquet': ('annnet.io.parquet', 'from_parquet'),
     'from_sbml': ('annnet.io.sbml', 'from_sbml'),

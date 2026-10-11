@@ -206,7 +206,8 @@ def _add_nodes_graphviz(
 ):
     custom_node_attr = custom_node_attr or {}
     for v in node_names:
-        attrs = {'shape': 'circle'}
+        # An ellipse grows with its label, so long names stay inside the node
+        attrs = {'shape': 'ellipse'}
         attrs.update(custom_node_attr.get(v, {}))
         Gv.node(v, **attrs)
 
@@ -218,7 +219,8 @@ def _add_nodes_pydot(
 
     custom_node_attr = custom_node_attr or {}
     for v in node_names:
-        attrs = {'shape': 'circle'}
+        # An ellipse grows with its label, so long names stay inside the node
+        attrs = {'shape': 'ellipse'}
         attrs.update(custom_node_attr.get(v, {}))
         Gd.add_node(pydot.Node(v, **attrs))
 
@@ -286,7 +288,7 @@ def to_graphviz(
 
         if _is_true_hyperedge(S, T):
             center = f'e_{j}_center'
-            Gv.node(center, shape='square', width='0.1', height='0.1', label='')
+            Gv.node(center, shape='square', width='0.1', height='0.1', fixedsize='true', label='')
             label_attr = {}
             hyper_label = e_attr.pop('label', None)
             if hyper_label is not None:
@@ -384,7 +386,11 @@ def to_pydot(
 
         if _is_true_hyperedge(S, T):
             center = f'e_{j}_center'
-            Gd.add_node(pydot.Node(center, shape='square', width='0.1', height='0.1', label=''))
+            Gd.add_node(
+                pydot.Node(
+                    center, shape='square', width='0.1', height='0.1', fixedsize='true', label=''
+                )
+            )
             label_attr = {}
             hyper_label = e_attr.pop('label', None)
             if hyper_label is not None:
@@ -657,7 +663,7 @@ def plot(
             graph,
             layout=layout,
             graph_attr=kwargs.get('graph_attr'),
-            node_attr=kwargs.get('node_attr', {'fixedsize': 'true'}),
+            node_attr=kwargs.get('node_attr'),
             edge_attr=kwargs.get('edge_attr'),
             custom_edge_attr=custom_edge_attr,
             custom_node_attr=custom_node_attr,
@@ -678,7 +684,7 @@ def plot(
                 graph,
                 layout=layout,
                 graph_attr=kwargs.get('graph_attr'),
-                node_attr=kwargs.get('node_attr', {'fixedsize': 'true'}),
+                node_attr=kwargs.get('node_attr'),
                 edge_attr=kwargs.get('edge_attr'),
                 custom_edge_attr=custom_edge_attr,
                 custom_node_attr=custom_node_attr,
@@ -797,3 +803,306 @@ def save(obj: Any, path: str, format: str = 'svg') -> str:
         raise TypeError(
             'Unknown graph object; expected graphviz.Digraph, pydot.Dot, or matplotlib Figure/Axes'
         )
+
+
+# Interactive view with Cytoscape.js
+
+
+def show_cytoscape(  # pragma: no cover  — local web server, not covered in unit tests
+    graph,
+    *,
+    export_name='annnet export',
+    layer=None,
+    include_inter=False,
+    include_coupling=False,
+    hyperedges='skip',
+    port=None,
+    auto_open=True,
+    inline=False,
+    height='520px',
+):
+    """Show the graph as an interactive Cytoscape.js network.
+
+    The graph goes through :func:`annnet.io.to_cx2` first, so the layer and
+    hyperedge options are those of the CX2 export. In a Jupyter notebook,
+    ``inline=True`` shows the network in the cell output. Otherwise the
+    function starts a local web server and opens the view in the browser.
+
+    Parameters
+    ----------
+    graph : AnnNet
+        The graph to show.
+    export_name : str, default "annnet export"
+        Name of the network display.
+    layer : tuple of str, optional
+        Elementary layer tuple specifying which layer to visualize. If None,
+        shows the entire graph (may include coupling edges as self-loops).
+        Example: layer=("social", "2020") for a 2-aspect multilayer network.
+    include_inter : bool, default False
+        When layer is specified, whether to include interlayer edges (edges
+        between nodes in different layers but same aspect). Only relevant if
+        layer is not None.
+    include_coupling : bool, default False
+        When layer is specified, whether to include coupling edges (edges
+        connecting the same node across layers). Only relevant if layer is not None.
+        Warning: Including coupling creates self-loops in the visualization.
+    hyperedges : {"skip", "expand", "reify"}, default "skip"
+        How to handle hyperedges:
+        - "skip": Omit hyperedges entirely
+        - "expand": Convert to cartesian product of pairwise edges
+        - "reify": Create explicit hyperedge nodes with membership edges
+    port : int, optional
+        Port for local web server. If None, finds available port automatically.
+    auto_open : bool, default True
+        If True, automatically open browser.
+    inline : bool, default False
+        If True, return the view as notebook output instead of starting a
+        web server.
+    height : str, default "520px"
+        Height of the inline view.
+
+    Returns
+    -------
+    str or IPython.display.HTML
+        The local URL of the view, or the inline view if ``inline=True``.
+
+    Notes
+    -----
+    For multilayer graphs:
+    - Without layer parameter: shows entire flattened graph with coupling edges
+      appearing as self-loops (messy but shows full structure)
+    - With layer parameter: shows clean single-layer view without coupling edges
+      (recommended for visualization)
+
+    Press Ctrl+C in terminal to stop the web server.
+
+    Examples
+    --------
+    >>> show_cytoscape(anet, inline=True)  # in a notebook
+    >>> show_cytoscape(anet)  # all layers flattened, in the browser
+    >>> show_cytoscape(anet, layer=('social', '2020'))  # one layer
+    """
+    import json
+    import socket
+    from pathlib import Path
+    import tempfile
+    import threading
+    import webbrowser
+    from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+    def find_free_port():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('', 0))
+            s.listen(1)
+            port = s.getsockname()[1]
+        return port
+
+    if port is None:
+        port = find_free_port()
+
+    from annnet.io.cx2 import to_cx2
+
+    # to_cx2 already handles layer extraction internally
+    cx2_data = to_cx2(
+        graph,
+        export_name=export_name,
+        layer=layer,
+        include_inter=include_inter,
+        include_coupling=include_coupling,
+        hyperedges=hyperedges,
+    )
+
+    cytoscape_json = _cx2_to_cytoscapejs(cx2_data)
+
+    if inline:
+        # Render directly in the notebook cell; no server, no browser.
+        from IPython.display import HTML
+
+        # Canonical Cytoscape.js element form is a flat array; nodes first, then
+        # edges (so an edge never references a not-yet-registered node).
+        elements = list(cytoscape_json.get('nodes', [])) + list(cytoscape_json.get('edges', []))
+        cid = f'cy_{abs(hash((export_name, len(elements)))) % 10**8}'
+        inline_html = f"""
+<div id="{cid}" style="width:100%;height:{height};border:1px solid #ddd;position:relative;"></div>
+<div style="font:12px sans-serif;color:#555;margin-top:4px">{export_name} —
+{len(cytoscape_json.get('nodes', []))} nodes, {len(cytoscape_json.get('edges', []))} edges</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+<script>
+(function() {{
+  function draw() {{
+    cytoscape({{
+      container: document.getElementById("{cid}"),
+      elements: {json.dumps(elements)},
+      style: [
+        {{selector: 'node', style: {{'background-color': '#0074D9', 'label': 'data(label)',
+          'width': 22, 'height': 22, 'font-size': '9px', 'color': '#222',
+          'text-outline-width': 2, 'text-outline-color': '#fff'}}}},
+        {{selector: 'node[?is_hyperedge]', style: {{'background-color': '#ff851b', 'shape': 'diamond'}}}},
+        {{selector: 'edge', style: {{'width': 2.5, 'line-color': '#555',
+          'target-arrow-color': '#555', 'target-arrow-shape': 'triangle',
+          'arrow-scale': 0.9, 'curve-style': 'bezier', 'opacity': 1}}}}
+      ],
+      layout: {{name: 'cose', animate: false, numIter: 800, nodeRepulsion: 8000, idealEdgeLength: 70}}
+    }});
+  }}
+  if (window.cytoscape) {{ draw(); }}
+  else {{ var iv = setInterval(function() {{ if (window.cytoscape) {{ clearInterval(iv); draw(); }} }}, 100); }}
+}})();
+</script>"""
+        return HTML(inline_html)
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>{export_name}</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+        <style>
+            body {{ margin: 0; padding: 0; font-family: sans-serif; }}
+            #cy {{ width: 100vw; height: 100vh; }}
+            #info {{
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                background: rgba(255,255,255,0.9);
+                padding: 10px;
+                border-radius: 5px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }}
+        </style>
+    </head>
+    <body>
+        <div id="info">
+            <strong>{export_name}</strong><br>
+            Nodes: <span id="nodeCount">0</span> | Edges: <span id="edgeCount">0</span>
+        </div>
+        <div id="cy"></div>
+        <script>
+            var cy = cytoscape({{
+                container: document.getElementById('cy'),
+                elements: {json.dumps(cytoscape_json)},
+                style: [
+                    {{
+                        selector: 'node',
+                        style: {{
+                            'background-color': '#0074D9',
+                            'label': 'data(label)',
+                            'width': 40,
+                            'height': 40,
+                            'font-size': '12px',
+                            'text-valign': 'center',
+                            'text-halign': 'center',
+                            'color': '#000',
+                            'text-outline-width': 2,
+                            'text-outline-color': '#fff'
+                        }}
+                    }},
+                    {{
+                        selector: 'edge',
+                        style: {{
+                            'width': 2,
+                            'line-color': '#ccc',
+                            'target-arrow-color': '#ccc',
+                            'target-arrow-shape': 'triangle',
+                            'curve-style': 'bezier',
+                            'opacity': 0.6
+                        }}
+                    }},
+                    {{
+                        selector: 'edge[source = target]',
+                        style: {{
+                            'curve-style': 'loop',
+                            'loop-direction': '0deg',
+                            'loop-sweep': '45deg',
+                            'line-color': '#ff6b6b',
+                            'target-arrow-color': '#ff6b6b',
+                            'width': 1.5
+                        }}
+                    }}
+                ],
+                layout: {{
+                    name: 'cose',
+                    animate: true,
+                    nodeRepulsion: 8000,
+                    idealEdgeLength: 100,
+                    numIter: 1000
+                }}
+            }});
+
+            document.getElementById('nodeCount').textContent = cy.nodes().length;
+            document.getElementById('edgeCount').textContent = cy.edges().length;
+        </script>
+    </body>
+    </html>
+    """
+
+    temp_dir = tempfile.mkdtemp()
+    html_path = Path(temp_dir) / 'index.html'
+    html_path.write_text(html_content)
+
+    class Handler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=temp_dir, **kwargs)
+
+        def log_message(self, format, *args):
+            pass
+
+    try:
+        server = HTTPServer(('localhost', port), Handler)
+    except OSError as e:
+        if e.errno == 98:
+            port = find_free_port()
+            server = HTTPServer(('localhost', port), Handler)
+        else:
+            raise
+
+    url = f'http://localhost:{port}'
+
+    def run_server():
+        print(f'Serving visualization at {url}')
+        print('Press Ctrl+C to stop')
+        server.serve_forever()
+
+    thread = threading.Thread(target=run_server, daemon=True)
+    thread.start()
+
+    if auto_open:
+        webbrowser.open(url)
+
+    return url
+
+
+def _cx2_to_cytoscapejs(cx2_data: list[dict]) -> dict:
+    """Convert CX2 format to Cytoscape.js format."""
+    nodes = []
+    edges = []
+
+    node_map = {}
+
+    for aspect in cx2_data:
+        if 'nodes' in aspect:
+            for node in aspect['nodes']:
+                node_id = str(node['id'])
+                node_map[node['id']] = node_id
+                label = node.get('v', {}).get('name', node_id)
+                nodes.append({'data': {'id': node_id, 'label': label, **node.get('v', {})}})
+
+        if 'edges' in aspect:
+            for edge in aspect['edges']:
+                source = str(edge['s'])
+                target = str(edge['t'])
+                edges.append(
+                    {
+                        'data': {
+                            # Cytoscape.js requires ids unique across nodes AND
+                            # edges; CX2 numbers them in separate spaces, so
+                            # namespace the edge id to avoid colliding with a node.
+                            'id': f'e{edge["id"]}',
+                            'source': source,
+                            'target': target,
+                            **edge.get('v', {}),
+                        }
+                    }
+                )
+
+    return {'nodes': nodes, 'edges': edges}
