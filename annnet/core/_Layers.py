@@ -14,7 +14,7 @@ from . import _structure
 if TYPE_CHECKING:
     from .graph import AnnNet
 
-from . import _build, _derive, _mutate
+from . import _build, _derive, _mutate, _removed
 from ._values import (
     ValueMatrix,
     MatrixValues,
@@ -182,6 +182,7 @@ class LayerAccessor:
         if name == '_G':
             raise AttributeError(name)
         if not name.startswith('_') and name not in LayerAccessor._FORWARDED:
+            _removed.refuse('G.layers', name)
             raise AttributeError(
                 f'G.layers has no operation {name!r}; if it is a graph operation, call it on the graph'
             )

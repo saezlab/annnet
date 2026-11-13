@@ -66,12 +66,14 @@ repository = "https://github.com/saezlab/omnipath-client"
 contact = "ours — push directly"
 modules = ["omnipath_client/_graph.py", "omnipath_client/cosmos/_annnet.py"]
 upstream_revision = "3350a5258b5326e611944041bc0ee31676545465"
-verified_annnet = "0.4.0"
-verification = "python -m pytest tests -q against the patched checkout: 135 passed; unpatched: 16 failed"
+merged_revision = "0b7c0e69a308fb4ec437ef82fd007384e6dd3c51"
+verified_annnet = "0.4.1"
+verification = "2026-11-13, annnet main at 0.4.1: python -m pytest tests -q in omnipath-client at 792a2a7: 139 passed. The migration is on its main branch at 0b7c0e6, which pins annnet>=0.4.1"
 patch_sha256 = "3b0e21516d4dbf46428edbd4972dc34f758338fefcbbede5eac2834ba7c55d58"
-migration_status = "verified_locally"
-# ,  and  build a graph from a
-# table and read back its size; its tests also read edges and one attribute.
+migration_status = "merged_upstream"
+# `omnipath_client/_graph.py` and `omnipath_client/cosmos/_annnet.py` build a
+# graph from a table and read back its size. Its tests also read edges and one
+# attribute.
 previous_calls = [
     "AnnNet",
     "add_nodes",
@@ -118,7 +120,8 @@ verified_annnet = "0.4.0"
 verification = "python -m pytest tests/contrib/test_annnet.py tests/methods/signaling/test_cellnopt_annnet.py against the patched checkout: 8 passed; unpatched: 6 failed"
 patch_sha256 = "32769bf070d2290fb9bcbd46111e8247bc8add2d6f5f78ffef01ddfbf4d9f117"
 migration_status = "verified_locally"
-# Two bridges.  converts a graph both ways;  reads
+# Two bridges. `corneto/contrib/annnet.py` converts a graph both ways.
+# `corneto/methods/signaling/annnet.py` reads
 # and writes node-layer attributes for CellNOptDAG. The tutorial notebook under
 # docs/tutorials/annnet-signaling pins its own AnnNet revision and stays on the
 # calls of that revision until a release exists to pin.

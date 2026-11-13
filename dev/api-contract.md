@@ -21,7 +21,9 @@ In the examples, `anet` is an `AnnNet`, `V` is a `GraphView`, and `address`
 is one of the eight attribute addresses. A name that this page does not state
 is internal: a name that begins with an underscore, and a module under
 `annnet.core` other than the names that `annnet.core` exports. Internal names
-can change without notice. See [Public and internal APIs](api-boundary.md).
+can change without notice. See the
+[API overview](../docs/reference/api-boundary.md), which lists the same names
+for a reader of the documentation.
 
 ## 1. Exports
 
@@ -69,19 +71,36 @@ through `anet.add_edges(...)` with no change of surface.
 ```python
 anet.add_nodes(nodes, slice=None, layer=None, **attributes)   # one or many
 anet.add_edges(edges_or_source, target=None, *, weight=1.0, edge_id=None, directed=None,
-            parallel='update', slice=None, as_entity=False, propagate='none',
+            parallel='update', slice=None, layer=None, as_entity=False, propagate='none',
             flexible=None, **attributes)
 anet.remove_nodes(node_ids, *, errors='raise')
 anet.remove_edges(edge_ids, *, errors='raise')
 ```
 
-A string is a node, a `(node_id, layer_coord)` tuple is a placement, a list
-holds many. An edge is `(source, target)`, a mapping with `source`/`target` or
-`head`/`tail` or `members`, or a list of those; a mapping with `members` is a
-hyperedge; a `head`/`tail` mapping is a directed hyperedge. On a multilayer
-graph a bare id names a node only while it sits on one layer; otherwise the
-placement tuple is required and a bare id raises `ValueError`. `remove_nodes`
-of a bare id removes every placement of that id.
+A string is a node. A `(node_id, layer_coord)` tuple is a placement, and the
+coordinate is a tuple of labels, one per aspect: `('A', ('control',))`. A
+mapping in that position is the attributes of the node instead, so
+`('A', {'kind': 'source'})` says what the node is and not where it sits. A
+placement that carries attributes as well writes the three in order:
+`('A', ('control',), {'kind': 'source'})`. A list holds many of any of these
+forms, and one item of a list reads the way the same item reads on its own.
+A tuple of ids is a list of nodes, so `anet.add_nodes(('A', 'B'))` adds two.
+
+An edge is `(source, target)`, a mapping with `source`/`target` or `head`/`tail`
+or `members`, or a list of those. A mapping with `members` is a hyperedge, and a
+`head`/`tail` mapping is a directed hyperedge.
+
+On a multilayer graph a bare id names a node while it sits on one layer. An id
+on two layers names neither, so it raises `ValueError` and names the choices,
+in a single call and in a batch alike. An id the graph does not hold yet
+becomes a node on the placeholder layer, with a `UserWarning` that asks for
+`layer=`. `remove_nodes` of a bare id removes every placement of that id.
+
+`layer=` places every endpoint that a bare id names, in `add_nodes` and in
+`add_edges`, in one call and in a batch. An item of a batch names its own with
+a `layer` key, which overrides the argument for that item. `layer` is
+therefore not the name of an attribute: a field of that name on an edge or a
+node goes in through `anet.attrs.update`.
 
 ### 2.3 Axes, counts and identity
 

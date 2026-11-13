@@ -6,7 +6,7 @@ import math
 from typing import TYPE_CHECKING, Any, TypedDict
 from collections.abc import Mapping, Iterable
 
-from . import _structure
+from . import _removed, _structure
 from ._records import SliceRecord
 from .._support.dataframe_backend import (
     empty_dataframe,
@@ -60,6 +60,12 @@ class SliceManager:
 
     def __init__(self, graph: AnnNet) -> None:
         self._G = graph
+
+    def __getattr__(self, name):
+        # Reached only when the ordinary lookup failed, which is where a name
+        # this namespace used to carry now lands.
+        _removed.refuse('G.slices', name)
+        raise AttributeError(f'G.slices has no attribute {name!r}')
 
     def _empty_slice_record(self) -> SliceRecord:
         return SliceRecord()

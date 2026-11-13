@@ -16,7 +16,7 @@ from collections.abc import Mapping, MutableMapping
 
 import numpy as np
 
-from . import _structure
+from . import _removed, _structure
 from ._select import EdgeSequence, NodeSequence, ReadOnlyViewError, refuse_write
 from ._records import _external_entity_kind
 from ._resolve import Resolved, resolve, normalize_filters
@@ -294,22 +294,6 @@ class _ViewLayers:
 # The view
 # ---------------------------------------------------------------------------
 
-_REMOVED_VIEW_NAMES = {
-    'obs': "V.attrs.table('nodes')",
-    'var': "V.attrs.table('edges')",
-    'nodes_df': "V.attrs.table('nodes', derived=True)",
-    'edges_df': "V.attrs.table('edges', derived=True)",
-    'node_count': 'len(V.N)',
-    'edge_count': 'len(V.E)',
-    'node_ids': 'V.N.ids',
-    'edge_ids': 'V.E.ids',
-    'subview': 'V.view(...)',
-    'X': 'V.B',
-    'nx': 'V.materialize().nx',
-    'ig': 'V.materialize().ig',
-    'gt': 'V.materialize().gt',
-    'cache': 'V.materialize().cache',
-}
 
 _MUTATORS = frozenset(
     {
@@ -684,8 +668,7 @@ class GraphView:
                 f'a view has no {name!r}: it is read-only. Call .materialize() for an '
                 f'independent graph, or apply the operation to the parent graph.'
             )
-        if name in _REMOVED_VIEW_NAMES:
-            raise AttributeError(f'GraphView has no {name!r}; use {_REMOVED_VIEW_NAMES[name]}')
+        _removed.refuse('V', name)
         raise AttributeError(f'GraphView has no attribute {name!r}')
 
     def __dir__(self):

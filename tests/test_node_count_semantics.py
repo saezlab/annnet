@@ -41,7 +41,9 @@ def test_nv_supra_counts_supra_nodes_in_multilayer():
 
 def test_shape_uses_unique_nodes_supra_shape_uses_supra_nodes():
     G = _build_multilayer(n_nodes=2, n_layers=3)
-    G.add_edges([('v0', 'v1')])
+    # The nodes sit on every layer, so the edge says which one it joins. A bare
+    # id would name four placements and the call refuses it.
+    G.add_edges([('v0', 'v1')], layer=('L0',))
     assert G.shape == (len(G.N), len(G.E))
     assert G.supra_shape == (G.nv_supra, len(G.E))
     assert G.shape != G.supra_shape  # multilayer: V ≠ S

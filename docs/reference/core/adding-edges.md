@@ -24,8 +24,11 @@ anet.add_edges('A', 'B', weight=0.5, edge_id='e1', directed=True)
 anet.add_edges(('A', ('healthy',)), ('B', ('treated',)))
 ```
 
-Each endpoint is a `(node_id, layer)` pair. On a graph with aspects, always
-give the pairs. annnet sets the multilayer kind of the edge (see
+Each endpoint is a `(node_id, layer)` pair. On a graph with aspects, give the
+pairs, or name one layer for the whole call with `layer=`. A bare ID names a
+node that sits on one layer, and annnet refuses one that sits on two.
+
+annnet sets the multilayer kind of the edge (see
 [edge kinds](../../guide/layers.ipynb#edge-kinds) in the layers guide):
 
 | endpoints | kind |
@@ -121,7 +124,7 @@ anet.add_edges(
 )
 ```
 
-In a batch item, the keys other than `edge_id`, `slice`, `weight`,
+In a batch item, the keys other than `edge_id`, `slice`, `layer`, `weight`,
 `edge_directed`, `edge_type` and `propagate` are edge attributes.
 
 ## Options
@@ -135,6 +138,7 @@ In a batch item, the keys other than `edge_id`, `slice`, `weight`,
 | `directed` | `None` | The direction of this edge. `None` uses the default of the graph, and then `True`. |
 | `parallel` | `'update'` | What to do when `edge_id` is `None` and the endpoints already have an edge. See below. |
 | `slice` | active slice | The slice that gets the edge. annnet creates the slice if it does not exist. |
+| `layer` | `None` | The layer of an endpoint that the call names by a bare ID, on a graph with aspects. An endpoint given as a `(node_id, layer)` pair says where it goes by itself. |
 | `as_entity` | `False` | Make the edge an entity that other edges can use as an endpoint. |
 | `propagate` | `'none'` | Which other slices get the edge. See below. |
 | `flexible` | `None` | Set the direction from an attribute value. See below. |
@@ -149,7 +153,7 @@ In a batch item, the keys other than `edge_id`, `slice`, `weight`,
 | `default_propagate` | `'none'` | The `propagate` value of an item that does not give one. |
 | `default_slice_weight` | `None` | The slice weight of an item that does not give one. |
 | `slice` | active slice | The slice of an item that does not give one. |
-| `layer` | `None` | The layer of the items. |
+| `layer` | `None` | The layer of an endpoint that an item names by a bare ID. An item overrides it with its own `layer` key. |
 | `as_entity` | `False` | Make all edges entities. |
 
 ### `parallel`

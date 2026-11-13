@@ -276,9 +276,15 @@ def add_edge(
     as_entity=False,
     propagate='none',
     flexible=None,
+    layer=None,
     **attrs,
 ):
-    """Add or update an edge of any type; returns its id. The only edge writer."""
+    """Add or update an edge of any type; returns its id. The only edge writer.
+
+    ``layer`` places an endpoint the call names by a bare id, as it does in
+    ``add_nodes``. An endpoint written as a ``(node_id, layer_coord)`` tuple
+    says where it goes by itself.
+    """
     if parallel not in {'update', 'error', 'parallel'}:
         raise ValueError(f"parallel must be 'update'|'error'|'parallel', got {parallel!r}")
     if propagate not in {'none', 'shared', 'all'}:
@@ -308,6 +314,7 @@ def add_edge(
 
     is_multilayer = g._aspects != ('_',)
     if is_multilayer and col_entries_literal is None:
+        placement = I.make_layer_coord(g, layer) if layer is not None else None
 
         def _promote(node_set):
             promoted = set()
@@ -315,6 +322,9 @@ def add_edge(
             for node in node_set:
                 if isinstance(node, tuple) and len(node) == 2 and isinstance(node[1], tuple):
                     promoted.add(node)
+                    continue
+                if placement is not None:
+                    promoted.add((node, placement))
                     continue
                 ekey = I.resolve_ekey(g, node)
                 promoted.add(ekey)
@@ -954,6 +964,7 @@ _BINARY_BATCH_RESERVED_KEYS = frozenset(
         'src',
         'tgt',
         'edge_id',
+        'layer',
         'slice',
         'weight',
         'edge_directed',
@@ -987,6 +998,61 @@ _HYPER_BATCH_RESERVED_KEYS = frozenset(
 )
 
 
+def node_item(item) -> tuple:
+    """One item of ``add_nodes`` as its id, its attributes and its layer.
+
+    An item is a bare id, or a tuple that carries more than the id. In a tuple,
+    a mapping is the attributes of the node and a tuple or a list is a layer
+    coordinate. A placement that carries attributes as well writes the three in
+    that order: ``('A', ('control',), {'kind': 'source'})``.
+
+    Both the single-node path and the batch path read an item here, so the
+    forms a caller may write are the same in either, which is what section 2.2
+    of the contract says.
+    """
+    if not isinstance(item, (tuple, list)) or not item:
+        return item, {}, None
+    vid = item[0]
+    attrs: dict = {}
+    item_layer = None
+    for part in item[1:3]:
+        if isinstance(part, dict):
+            attrs = part
+        elif isinstance(part, (tuple, list)):
+            item_layer = part
+    return vid, attrs, item_layer
+
+
+def is_one_node(nodes) -> bool:
+    """Whether ``add_nodes`` holds one node rather than many.
+
+    A tuple is one node when it says more about one id: ``('A',)``,
+    ``('A', {'kind': 'source'})``, ``('A', ('control',))`` and the two
+    together. A tuple of ids is many nodes, so ``('A', 'B')`` adds two, and a
+    tuple that holds an item is a batch of one.
+    """
+    if isinstance(nodes, (str, bytes, dict)):
+        return True
+    if not isinstance(nodes, tuple) or not nodes:
+        return False
+    if not isinstance(nodes[0], (str, bytes)):
+        return False
+    if len(nodes) == 1:
+        return True
+    if len(nodes) > 3:
+        return False
+    return all(isinstance(part, (dict, tuple, list)) for part in nodes[1:])
+
+
+def _layer_group_key(layer_spec):
+    """A hashable stand-in for a layer specification, to resolve it once."""
+    if isinstance(layer_spec, dict):
+        return ('map', tuple(sorted(layer_spec.items())))
+    if isinstance(layer_spec, (tuple, list)):
+        return ('coord', tuple(layer_spec))
+    return ('one', layer_spec)
+
+
 def batch_add_nodes(g, nodes, layer=None, slice=None, default_attrs=None):
     """Add many nodes through the bulk mutation path."""
     slice = slice or g._current_slice
@@ -1010,23 +1076,23 @@ def batch_add_nodes(g, nodes, layer=None, slice=None, default_attrs=None):
             if vid is None:
                 continue
             attrs = {k: v for k, v in it.items() if k not in _id_keys}
-        elif isinstance(it, (tuple, list)) and it:
-            vid = it[0]
-            attrs = it[1] if len(it) > 1 and isinstance(it[1], dict) else {}
+            item_layer = None
         else:
-            vid = it
-            attrs = {}
+            vid, attrs, item_layer = node_item(it)
         if default_attrs:
             merged = dict(default_attrs)
             merged.update(attrs)
             attrs = merged
-        norm.append((vid, attrs))
+        norm.append((vid, attrs, item_layer))
 
     if not norm:
         return
 
     try:
-        norm = [(_intern(vid) if isinstance(vid, str) else vid, attrs) for vid, attrs in norm]
+        norm = [
+            (_intern(vid) if isinstance(vid, str) else vid, attrs, item_layer)
+            for vid, attrs, item_layer in norm
+        ]
         if isinstance(slice, str):
             slice = _intern(slice)
     except TypeError:
@@ -1036,14 +1102,33 @@ def batch_add_nodes(g, nodes, layer=None, slice=None, default_attrs=None):
     # Written straight to the store rather than through the general door, which
     # re-checks the kind of an entity the graph already holds. Nothing here
     # changes a kind, so only the unseen keys are added.
-    coord = g._resolve_node_insert_coord(
-        layer, node_ids=[vid for vid, _ in norm], context='_add_nodes_batch'
-    )
+    # An item that carries its own coordinate goes where it says, and the rest
+    # go where the call says. Each distinct coordinate is resolved once, and
+    # the warning about the placeholder names only the nodes that fall back to
+    # it, so a batch of placements is as quiet as a single one.
+    groups: dict = {}
+    item_keys = []
+    default_key = _layer_group_key(layer)
+    for _vid, _attrs, item_layer in norm:
+        if item_layer is None:
+            spec, key = layer, default_key
+        else:
+            spec, key = item_layer, _layer_group_key(item_layer)
+        group = groups.get(key)
+        if group is None:
+            groups[key] = group = (spec, [])
+        group[1].append(_vid)
+        item_keys.append(key)
+    coord_of = {
+        key: g._resolve_node_insert_coord(spec, node_ids=vids, context='_add_nodes_batch')
+        for key, (spec, vids) in groups.items()
+    }
+
     store = g._store
     entity_slot = store.entity_slot
     new_rows = 0
-    for vid, _ in norm:
-        ekey = (vid, coord)
+    for (vid, _attrs, _item_layer), key in zip(norm, item_keys, strict=True):
+        ekey = (vid, coord_of[key])
         if entity_slot(ekey) is None:
             store.add_entity(ekey, ST.NODE)
             new_rows += 1
@@ -1051,14 +1136,14 @@ def batch_add_nodes(g, nodes, layer=None, slice=None, default_attrs=None):
         D.bump_structure(g)
 
     # --- slice ---
-    g.slices._ensure_slice(slice)['nodes'].update(vid for vid, _ in norm)
+    g.slices._ensure_slice(slice)['nodes'].update(vid for vid, _, _ in norm)
 
     # --- attributes ---
     # A cell each, straight into the columns. There is no table to rebuild and no
     # backend to take a fast path for: a non-string id names a supra-node, which
     # the node table does not hold a row for either way.
     attr_store = g._attr_store
-    for vid, attrs in norm:
+    for vid, attrs, _item_layer in norm:
         if attrs and isinstance(vid, str):
             attr_store.set_node_attrs(vid, {k: _sanitize(v) for k, v in attrs.items()})
 
@@ -1074,8 +1159,13 @@ def batch_add_edges(
     default_propagate='none',
     default_slice_weight=None,
     default_edge_directed=None,
+    layer=None,
 ):
-    """Add many binary edges through the bulk mutation path."""
+    """Add many binary edges through the bulk mutation path.
+
+    ``layer`` places every endpoint the batch names by a bare id, and an item
+    names its own with a ``layer`` key, as an item of a hyperedge batch does.
+    """
     slice = g._current_slice if slice is None else slice
     pending_attrs = {}
 
@@ -1114,17 +1204,19 @@ def batch_add_edges(
     _specs: list = []
     _spec_at: dict = {}
 
-    def _ensure_endpoint(vid, et):
+    def _ensure_endpoint(vid, et, place=None):
         """Register the entity one endpoint names, and return its key."""
         if isinstance(vid, tuple) and len(vid) == 2 and isinstance(vid[1], tuple):
             ekey = vid
         elif _flat:
             ekey = (vid, _flat_coord)
+        elif place is not None:
+            ekey = (vid, g._make_layer_coord(place))
         else:
-            ekey = (
-                vid,
-                g._resolve_node_insert_coord(None, node_ids=vid, context='_add_edges_batch'),
-            )
+            # A bare id names the node the graph already holds, as the
+            # single-edge path reads it. Without this, an edge over placed
+            # nodes gave each endpoint a second placement on the placeholder.
+            ekey = I.resolve_endpoint_insert_key(g, vid, context='_add_edges_batch')
         if _entity_slot(ekey) is None:
             if (
                 (et == 'node_edge' or et == 'edge_placeholder')
@@ -1205,12 +1297,14 @@ def batch_add_edges(
                 slice_w = default_slice_weight
                 e_dir = default_edge_directed
                 edge_id = None
+                item_layer = layer
                 _item = None
             else:
                 w = it.get('weight', default_weight)
                 edge_type = it.get('edge_type', default_edge_type)
                 prop = it.get('propagate', default_propagate)
                 slice_local = it.get('slice', slice)
+                item_layer = it.get('layer', layer)
                 slice_w = it.get('slice_weight', default_slice_weight)
                 if 'edge_directed' in it:
                     e_dir = it['edge_directed']
@@ -1230,6 +1324,7 @@ def batch_add_edges(
             slice_w = default_slice_weight
             e_dir = default_edge_directed
             edge_id = None
+            item_layer = layer
             _item = None
         else:
             continue
@@ -1255,12 +1350,12 @@ def batch_add_edges(
             source_key = (s, _flat_coord)
             target_key = (t, _flat_coord)
             if _entity_slot(source_key) is None:
-                source_key = _ensure_endpoint(s, edge_type)
+                source_key = _ensure_endpoint(s, edge_type, item_layer)
             if _entity_slot(target_key) is None:
-                target_key = _ensure_endpoint(t, edge_type)
+                target_key = _ensure_endpoint(t, edge_type, item_layer)
         else:
-            source_key = _ensure_endpoint(s, edge_type)
-            target_key = _ensure_endpoint(t, edge_type)
+            source_key = _ensure_endpoint(s, edge_type, item_layer)
+            target_key = _ensure_endpoint(t, edge_type, item_layer)
 
         # ── direction ──────────────────────────────────────────────────────────
         if e_dir is not None:

@@ -4,7 +4,17 @@ import time
 from typing import TYPE_CHECKING, Any
 from collections.abc import Iterable, Iterator, MutableMapping
 
-from . import _build, _state, _derive, _mutate, _identity, _validate, _structure, _contextual
+from . import (
+    _build,
+    _state,
+    _derive,
+    _mutate,
+    _removed,
+    _identity,
+    _validate,
+    _structure,
+    _contextual,
+)
 from ._Ops import Operations, OperationsAccessor
 from ._attrs import AttributeStore
 from ._Views import GraphView
@@ -150,30 +160,12 @@ class AnnNetMeta(type):
         return sorted(set(api))
 
 
-# Every name removed from the graph, with the expression that
-# replaces it. The descriptor below raises with the replacement, so a caller
-# holding an old name meets a failure that names the new one rather than a
-# silent change of meaning. dev/migration.md carries the same map.
-REMOVED_GRAPH_NAMES = {
-    'obs': 'G.attrs.nodes',
-    'var': 'G.attrs.edges',
-    'views': 'G.attrs.table(address, derived=True, ...)',
-    'nodes': 'list(G.N) or G.N.ids',
-    'edges': 'list(G.E) or G.E.ids',
-    'nv': 'len(G.N)',
-    'ne': 'len(G.E)',
-    'ncount': 'len(G.N), or G.nv_supra for ncount(supra=True)',
-    'ecount': 'len(G.E)',
-    'get_node': 'G.N.at(node_id)',
-    'get_edge': 'G.E.at(edge_id)',
-    'get_edge_ids': 'G.has_edge(source, target)[1]',
-    'get_edges_by_direction': 'G.E.select(directed=True).ids',
-    'in_edges': "G.incident_edges(nodes, direction='in')",
-    'out_edges': "G.incident_edges(nodes, direction='out')",
-    'remove_node': 'G.remove_nodes(node_id)',
-    'remove_edge': 'G.remove_edges(edge_id)',
-    'contextual_table': 'G.attrs.table(address)',
-}
+# Every name removed from the graph, with the expression that replaces it. The
+# descriptor below raises with the replacement, so a caller holding an old name
+# meets a failure that names the new one rather than a silent change of
+# meaning. _removed.py is the record for the graph and for every namespace, and
+# dev/migration.md carries the same map in prose.
+REMOVED_GRAPH_NAMES = _removed.GRAPH
 
 
 class _BlockedLegacyAttribute:
@@ -1013,15 +1005,21 @@ class AnnNet(
             - ``{"id": "A", ...}``
             - ``{"name": "A", ...}``
             - ``("A", {"kind": "source"})``
+            - ``("A", ("control",))`` places the node on one layer
+            - ``("A", ("control",), {"kind": "source"})`` says where and what
 
-            Accepted batch forms are iterables of the same specifications.
+            Accepted batch forms are iterables of the same specifications. An
+            item of a batch reads the way the same item reads on its own, so a
+            coordinate inside an item places that node, whatever ``layer``
+            says. A tuple of ids is a batch, so ``("A", "B")`` adds two nodes.
         slice : str, optional
             Slice receiving the inserted nodes. If omitted, the active slice
             is used.
         layer : str | tuple | dict, optional
-            Layer coordinate for inserted nodes in multilayer graphs. A
-            string is valid only for single-aspect graphs; a tuple must already
-            be in aspect order; a dict maps aspect name to layer value.
+            Layer coordinate for every inserted node that carries none of its
+            own, in multilayer graphs. A string is valid only for single-aspect
+            graphs. A tuple must already be in aspect order. A dict maps aspect
+            name to layer value.
         **attributes
             Attributes applied to a single node. These are merged with
             attributes in ``nodes`` when ``nodes`` is a single node.
@@ -1056,16 +1054,15 @@ class AnnNet(
         ...     ]
         ... )
         ['B', 'C']
-        """
-        is_single = False
-        if isinstance(nodes, (str, bytes, dict)):
-            is_single = True
-        elif isinstance(nodes, tuple) and nodes:
-            is_single = len(nodes) == 1 or (
-                len(nodes) == 2 and isinstance(nodes[0], str) and isinstance(nodes[1], dict)
-            )
 
-        if is_single:
+        A multilayer graph takes a coordinate per node:
+
+        >>> anet = AnnNet()
+        >>> anet.layers.set_aspects(['condition'], {'condition': ['ctl', 'tnf']})
+        >>> anet.add_nodes([('A', ('ctl',)), ('B', ('tnf',))])
+        ['A', 'B']
+        """
+        if _mutate.is_one_node(nodes):
             if isinstance(nodes, dict):
                 if nodes.get('node_id') is not None:
                     node_id = nodes['node_id']
@@ -1078,12 +1075,11 @@ class AnnNet(
                     attrs = {k: v for k, v in nodes.items() if k != 'name'}
                 else:
                     raise ValueError('node dict must contain one of: node_id, id, name')
-            elif isinstance(nodes, tuple):
-                node_id = nodes[0]
-                attrs = nodes[1] if len(nodes) > 1 and isinstance(nodes[1], dict) else {}
             else:
-                node_id = nodes
-                attrs = {}
+                node_id, item_attrs, item_layer = _mutate.node_item(nodes)
+                attrs = dict(item_attrs)
+                if item_layer is not None:
+                    layer = item_layer
             attrs.update(attributes)
             return self._add_node(node_id, slice=slice, layer=layer, attributes=attrs)
 
@@ -1183,6 +1179,11 @@ class AnnNet(
         slice : str, optional
             Slice receiving the inserted edges. If omitted, the active slice is
             used.
+        layer : str | tuple | dict, optional
+            Layer coordinate for every endpoint the call names by a bare id, in
+            multilayer graphs, as in :meth:`add_nodes`. An endpoint written as a
+            ``(node_id, layer_coord)`` tuple says where it goes by itself, and an
+            item of a batch names its own layer with a ``layer`` key.
         as_entity : bool, default False
             If ``True``, each created edge is also registered as an entity so it
             can be used as the endpoint of later edges. In batch mode, items
@@ -1319,6 +1320,7 @@ class AnnNet(
                     default_propagate=default_propagate,
                     default_slice_weight=default_slice_weight,
                     default_edge_directed=default_edge_directed,
+                    layer=default_layer,
                 )
 
             out = []
@@ -1344,6 +1346,7 @@ class AnnNet(
                             default_propagate=default_propagate,
                             default_slice_weight=default_slice_weight,
                             default_edge_directed=default_edge_directed,
+                            layer=default_layer,
                         )
                     )
             return out
@@ -1361,6 +1364,7 @@ class AnnNet(
         default_propagate='none',
         default_slice_weight=None,
         default_edge_directed=None,
+        layer=None,
     ):
         return self._add_edges_batch(
             list(edges),
@@ -1371,6 +1375,7 @@ class AnnNet(
             default_propagate=default_propagate,
             default_slice_weight=default_slice_weight,
             default_edge_directed=default_edge_directed,
+            layer=layer,
         )
 
     def _add_edge(self, *args, **kwargs):

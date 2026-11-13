@@ -6,7 +6,7 @@ the names that duplicated those. The package is before its first stable release,
 so a removed name carries no alias: it raises `AttributeError` naming its
 replacement. This page is the complete map, old to new, with the shape of the
 call on both sides. The surface after the change is stated in
-`docs/reference/api-contract.md`.
+[`api-contract.md`](api-contract.md), beside this page.
 
 ## The graph object
 
@@ -53,7 +53,7 @@ frame = G.attrs.table('edges', derived=True, in_slice='fit')
 The eight addresses are `nodes`, `edges`, `slices`, `aspects`, `layers`,
 `edge_slices`, `node_layers` and `elementary_layers`. Every one answers the
 same expressions; below, `address` stands for any of them and `key` for the
-key that address takes (`docs/reference/api-contract.md`, section 3).
+key that address takes ([`api-contract.md`](api-contract.md), section 3).
 
 | old | new |
 |---|---|

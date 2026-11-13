@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import _store as ST, _matrices, _structure
+from . import _store as ST, _removed, _matrices, _structure
 from ._state import GraphState
 from ._records import _external_entity_kind
 from ._stored_kinds import STORED_ENTITY_KIND
@@ -33,6 +33,12 @@ class CacheManager:
 
     def __init__(self, graph):
         self._G = graph
+
+    def __getattr__(self, name):
+        # Reached only when the ordinary lookup failed, which is where a name
+        # this namespace used to carry now lands.
+        _removed.refuse('G.cache', name)
+        raise AttributeError(f'G.cache has no attribute {name!r}')
 
     @property
     def _cache(self):

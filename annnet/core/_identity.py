@@ -113,19 +113,33 @@ def _keys_of_id(g, vid) -> list:
     return g._store.entity_keys_of_id(vid)
 
 
+def unique_key_of_id(g, vid):
+    """The one key a bare id names, or ``None`` when the graph holds no such node.
+
+    A bare id names a node while it sits on one layer. On two layers it names
+    neither, so it raises and says which choices there are. This is the rule
+    section 2.2 of the contract states, and every path that takes a bare id
+    reads it here.
+    """
+    if g._aspects == ('_',):
+        return (vid, ('_',))
+    matches = _keys_of_id(g, vid)
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError(
+            f'Ambiguous bare node_id {vid!r} in multilayer graph; '
+            f'use an explicit (node_id, layer_coord) tuple. Choices: {matches!r}'
+        )
+    return None
+
+
 def resolve_ekey(g, vid_or_key) -> tuple:
     """Resolve a node identifier to an internal ``(vid, layer_coord)`` key."""
     if isinstance(vid_or_key, str):
-        if g._aspects == ('_',):
-            return (vid_or_key, ('_',))
-        matches = _keys_of_id(g, vid_or_key)
-        if len(matches) == 1:
-            return matches[0]
-        if len(matches) > 1:
-            raise ValueError(
-                f'Ambiguous bare node_id {vid_or_key!r} in multilayer graph; '
-                f'use an explicit (node_id, layer_coord) tuple. Choices: {matches!r}'
-            )
+        key = unique_key_of_id(g, vid_or_key)
+        if key is not None:
+            return key
         return (vid_or_key, placeholder_layer_coord(g))
     if is_explicit_entity_key(vid_or_key):
         vid, layer_coord = vid_or_key
@@ -145,6 +159,23 @@ def resolve_node_insert_coord(g, layer_spec, *, node_ids=None, context='add_node
     if node_ids is not None:
         warn_placeholder_node_assignment(g, node_ids, context=context)
     return coord
+
+
+def resolve_endpoint_insert_key(g, vid, *, context='add_node') -> tuple:
+    """The key an edge endpoint names, for a path that may have to create it.
+
+    An explicit ``(node_id, layer_coord)`` key stands as it is. A bare id names
+    the node the graph already holds, so an edge over placed nodes adds no
+    second placement. An id the graph has not met becomes a node on the
+    placeholder layer, with the warning the insert path gives.
+    """
+    if is_explicit_entity_key(vid):
+        return vid
+    if isinstance(vid, str):
+        key = unique_key_of_id(g, vid)
+        if key is not None:
+            return key
+    return (vid, resolve_node_insert_coord(g, None, node_ids=vid, context=context))
 
 
 # ---------------------------------------------------------------------------

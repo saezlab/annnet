@@ -59,7 +59,7 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from . import _structure
+from . import _removed, _structure
 from ._attrs import EDGE_AXIS, NODE_AXIS
 from ._select import Leaf, RowSelection, ReadOnlyViewError, project_keys, refuse_write
 from ._aspects import ORDERED_KEY
@@ -307,6 +307,12 @@ class Attrs:
                 'update',
             )
         )
+
+    def __getattr__(self, name):
+        # Python reaches this only when the ordinary lookup failed, which is
+        # where a name this namespace used to carry now lands.
+        _removed.refuse('G.attrs', name)
+        raise AttributeError(f'G.attrs has no attribute {name!r}')
 
     def __repr__(self):
         counts = ', '.join(f'{address}={len(self._domain(address))}' for address in ADDRESSES)

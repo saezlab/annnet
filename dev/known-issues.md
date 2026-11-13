@@ -3,31 +3,41 @@
 Defects found while the documentation was revised in October 2026. Each one has
 a short script that shows it. The scripts were run against `main` at `d19c195`.
 
-## Batch `add_edges` puts bare ids on a placeholder layer
+The package now reads a placement the same way in one call and in a batch, so
+the batch `add_edges` defect leaves this page.
+`tests/test_add_nodes_placement.py` holds both forms of `add_nodes` and of
+`add_edges` to that one rule.
 
-On a multilayer graph, a bare node id names the node only while it sits on one
-layer (contract, section 2.2). The single-edge form follows this rule. The
-batch form does not: it puts the endpoints on the placeholder layer `('_',)`,
-although the node already sits on exactly one layer.
+## A hyperedge batch reads a bare id by its own rule
+
+A bare node id names the node while it sits on one layer (contract, section
+2.2). `add_edges` and the binary batch refuse an id that sits on two, and they
+name the choices. The hyperedge batch drops the placeholder placement before
+it counts. So an id on the placeholder and on one real layer resolves to the
+real one.
 
 ```python
 from annnet import AnnNet
 
 anet = AnnNet(directed=True)
 anet.layers.set_aspects(['condition'], {'condition': ['control', 'treated']})
-anet.add_nodes(['A', 'B'], layer={'condition': 'control'})
+anet.add_nodes(['A', 'B'])
+anet.add_nodes(['A', 'B'], layer=('control',))
+anet.N.at('A').layers
+# (('_',), ('control',))
 
-anet.add_edges([{'source': 'A', 'target': 'B', 'edge_id': 'e1'}])
-anet.E.at('e1').members
-# frozenset({('A', ('_',)), ('B', ('_',))})
+anet.add_edges([{'members': ['A', 'B'], 'edge_id': 'h'}])
+anet.E.at('h').members
+# frozenset({('A', ('control',)), ('B', ('control',))})
+
+anet.add_edges('A', 'B', edge_id='e')
+# ValueError: Ambiguous bare node_id 'A' in multilayer graph; ...
 ```
 
-**Expected:** `('A', ('control',))` and `('B', ('control',))`, as
-`anet.add_edges('A', 'B', edge_id='e1')` gives.
-
-**Related question:** a bare id of a node that is not in the graph yet goes to
-`('_',)` in both forms, for example `anet.add_edges('X', 'Y')`. The contract
-does not say whether that is correct, or whether it must raise `ValueError`.
+**Expected:** one rule for all three paths. Either the placeholder counts as a
+layer, and the hyperedge batch raises as well. Or it does not, and the other
+two paths resolve the way the hyperedge batch does. The code is
+`_resolve_member_key` in `annnet/core/_mutate.py`.
 
 ## `flexible` changes the coefficients but not the direction
 
