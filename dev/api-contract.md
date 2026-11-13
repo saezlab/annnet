@@ -6,6 +6,11 @@ as `anet.<name>` must be on the object, and every public name the object
 carries must be stated here. The machine-readable inventory of the same
 surface is docs/reference/public-surface.json. Regenerate it with
 `python tools/public_surface.py` after a deliberate change of the surface.
+
+Both of those read dir(), which answers with the curated list AnnNet._PUBLIC_API.
+`python tools/surface_inventory.py` walks the classes instead, so it also lists
+the public names that dir() hides. Run it to find a name this page has to state
+or the package has to make private.
 -->
 
 This page lists what the package exports, and what an `AnnNet` object, its
