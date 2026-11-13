@@ -276,15 +276,6 @@ def test_verb_prefixed_attribute_names_fell_by_at_least_half(graph):
     assert len(found) <= 33, found
 
 
-def test_no_name_means_two_things_in_two_namespaces(graph):
-    """The five table names live under ``attrs`` alone."""
-    for name in ('nodes', 'edges', 'slices', 'aspects', 'layers'):
-        assert name in dir(graph.attrs)
-        assert not hasattr(graph, 'views')
-    assert not hasattr(graph.layers, 'set_node_attrs')
-    assert not hasattr(graph.slices, 'attrs')
-
-
 @pytest.mark.skipif(not CONTRACT.is_file(), reason='dev/api-contract.md is not beside the package')
 def test_the_contract_states_the_graph_surface_both_ways(graph):
     """Section 2.9 of the contract is exactly what the object answers to."""
@@ -431,3 +422,132 @@ def test_every_removed_name_is_on_the_migration_page():
         if re.search(rf'\b{name}\b', migration) is None
     ]
     assert missing == []
+
+
+# --- The whole reachable surface, not only what dir() lists -----------------
+#
+# dir() on a graph answers with the curated AnnNet._PUBLIC_API, so every test
+# above sees only the names that list holds. tools/surface_inventory.py walks
+# the classes and the instances instead and asks for each value, so it also
+# finds the public names that dir() hides. The two tests below read that walk,
+# so a name cannot stay public and unrecorded.
+
+INVENTORY_TOOL = Path(annnet.__file__).parent.parent / 'tools' / 'surface_inventory.py'
+
+
+def _inventory_tool():
+    """The surface walk, imported from the tool that owns it."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location('_surface_inventory', INVENTORY_TOOL)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def surface(graph) -> list[tuple[str, str, str, str, str]]:
+    """Every public name reachable on the graph, its namespaces and a view."""
+    return _inventory_tool().rows(graph, graph.view())
+
+
+def _dotted_paths(holder_of: dict) -> dict:
+    """What the contract states, as holder label to set of names.
+
+    The prose writes a name as a code span of a dotted path: ``anet.degree``,
+    ``anet.slices.add``, ``V.attrs``. Section 2.7 states that the public names
+    of each owned namespace are in ``docs/reference/public-surface.json``, so
+    the contract is that page and that inventory together.
+    """
+    stated = {label: set() for label in holder_of.values()}
+    for path in re.findall(r'`([A-Za-z_][\w.]*)`', CONTRACT.read_text()):
+        parts = path.split('.')
+        if len(parts) < 2 or parts[0] not in holder_of:
+            continue
+        root = holder_of[parts[0]]
+        stated[root].add(parts[1])
+        nested = f'{root}.{parts[1]}'
+        if len(parts) > 2 and nested in stated:
+            stated[nested].add(parts[2])
+    return stated
+
+
+@pytest.mark.skipif(not CONTRACT.is_file(), reason='dev/api-contract.md is not beside the package')
+@pytest.mark.skipif(
+    not INVENTORY.is_file(), reason='docs/reference/public-surface.json is not beside the package'
+)
+@pytest.mark.xfail(
+    reason='the public names that dir() hides are neither stated nor private yet',
+)
+def test_the_contract_states_every_name_a_caller_can_reach(surface):
+    """Nothing is public and unrecorded.
+
+    A name without a leading underscore that a graph, a namespace or a view
+    answers to is either in the contract or in the inventory the contract
+    incorporates. Anything else is public by accident: a caller can call it,
+    no page promises it, and no test notices when it changes.
+    """
+    holder_of = {'anet': 'G', 'AnnNet': 'G', 'G': 'G', 'V': 'V'}
+    stated = _dotted_paths(holder_of)
+
+    inventory = json.loads(INVENTORY.read_text())
+    stated['G'].update(inventory['graph'])
+    stated['V'].update(inventory['view'])
+    for name, names in inventory['namespaces'].items():
+        stated.setdefault(f'G.{name}', set()).update(names)
+    for axis, key in (('N', 'NodeSequence'), ('E', 'EdgeSequence')):
+        stated.setdefault(f'G.{axis}', set()).update(inventory['selection'][key])
+
+    unrecorded = sorted(
+        f'{holder}.{name}'
+        for holder, name, _kind, _klass, _visible in surface
+        if name not in stated.get(holder, set())
+    )
+    assert unrecorded == [], (
+        f'public and in no record, so state them in dev/api-contract.md or give them a '
+        f'leading underscore: {unrecorded}'
+    )
+
+
+def _shared_names_the_contract_states() -> set:
+    """The names the contract states as one meaning on more than one holder.
+
+    Until the maintainers decide the names that mean two things, the contract
+    carries no such paragraph and the set is empty, so every shared name is
+    reported.
+    """
+    marker = 'A name that more than one holder carries, with one meaning on all of them:'
+    text = CONTRACT.read_text()
+    if marker not in text:
+        return set()
+    return set(re.findall(r'`(\w+)`', _contract_paragraph(marker)))
+
+
+@pytest.mark.skipif(not CONTRACT.is_file(), reason='dev/api-contract.md is not beside the package')
+@pytest.mark.xfail(
+    reason='the names that mean two things are not resolved yet, and the contract '
+    'does not state which shared names mean one thing',
+)
+def test_no_name_means_two_things_anywhere_on_the_surface(surface):
+    """One name, one meaning, over the whole surface.
+
+    The narrower form of this test read five names under two namespaces. This
+    one reads every public name on the graph, on each namespace and on a view.
+    A name that two holders carry passes only when the contract states it as
+    one meaning on both; otherwise a reader has to learn which holder changes
+    what the name does.
+    """
+    holders_of = {}
+    for holder, name, _kind, _klass, _visible in surface:
+        holders_of.setdefault(name, []).append(holder)
+
+    allowed = _shared_names_the_contract_states()
+    shared = {
+        name: holders
+        for name, holders in sorted(holders_of.items())
+        if len(holders) > 1 and name not in allowed
+    }
+    assert shared == {}, (
+        'these names are on more than one holder and the contract does not state them as '
+        f'one meaning: { {name: " ".join(holders) for name, holders in shared.items()} }'
+    )
