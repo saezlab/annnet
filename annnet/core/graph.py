@@ -484,10 +484,8 @@ class AnnNet(
     def slice_edge_weights(self):
         """Per-slice edge weight overrides, as ``{slice_id: {edge_id: weight}}``.
 
-        Derived from the edge-by-slice attributes on each read. It used to be a
-        cache kept beside them and synchronised by two routines, which is one
-        copy of the same fact too many: the two could disagree, and a removal had
-        to remember to prune both.
+        Derived from the edge-by-slice attributes on each read, so it never
+        disagrees with them.
         """
         if self._pending_edge_slice_drops:
             self._flush_edge_slice_rows()

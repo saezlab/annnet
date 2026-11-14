@@ -20,10 +20,7 @@ class CacheManager:
     ``anet.B`` and the rest are built by :class:`_matrices.MatrixCache`, which keeps
     them against the clock of the store and extends a cached matrix when a write
     only appended edges at the frontier. The CSR form, the CSC form and the
-    boundary-filtered adjacency are derived from those, and they used to be kept
-    here instead, against a second clock the graph advanced itself. So one matrix
-    could be current in one cache and stale in the other, and the two between
-    them held the same entries twice.
+    boundary-filtered adjacency are derived from those.
 
     **This holds nothing.** Every format below is an entry of the one cache, and
     dropping that cache drops these with it.

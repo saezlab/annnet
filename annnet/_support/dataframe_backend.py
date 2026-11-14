@@ -165,9 +165,8 @@ def dataframe_schema(df) -> dict[str, str]:
 def dataframe_column_values(df, column: str) -> list[Any]:
     """Return one dataframe column as a Python list.
 
-    One column is read as one column. The shape before this built every row of
-    the frame as a dict and then read one key out of each, which costs the width
-    of the frame where the caller asked for a single column of it.
+    Reads the one column only, so the cost does not grow with the width of the
+    frame.
     """
     if df is None:
         return []

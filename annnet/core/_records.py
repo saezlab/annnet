@@ -296,17 +296,10 @@ class SliceRegistry(dict):
 class Endpoint(NamedTuple):
     """One side of one edge: the node, and the layer it sits in.
 
-    The store spells an endpoint two ways — a bare id in a flat graph, an
-    ``(id, layer)`` pair in a layered one — so reading one meant asking which it
-    was::
-
-        node = next(iter(sides.source))
-        node_id = node[0] if isinstance(node, tuple) else node
-
-    That check is a defect rather than an idiom. A graph holding both layered and
-    unlayered edges makes it wrong, and nothing reports it. An endpoint read
-    through :func:`as_endpoint` has one shape everywhere, and ``layer`` is
-    ``None`` when there is not one.
+    The store spells an endpoint two ways: a bare id in a flat graph, and an
+    ``(id, layer)`` pair in a layered one. An endpoint read through
+    :func:`as_endpoint` has one shape for both, and ``layer`` is ``None`` when
+    there is no layer.
 
     The positional shape is the store's, so ``endpoint[0]`` is the id and
     ``endpoint[1]`` is the layer. ``str(endpoint)`` is the id, which is what a

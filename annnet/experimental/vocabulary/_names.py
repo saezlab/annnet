@@ -17,10 +17,10 @@ So each reserved name has a **declared domain**, and
 :func:`annnet.experimental.vocabulary.check` reads a graph and says where the
 data does not honour it.
 
-The three-way split that used to be one column
-----------------------------------------------
+Three fields, one job each
+--------------------------
 
-``weight`` was doing three jobs. It is now one:
+``weight`` has one job:
 
 - **weight** is structural — the incidence coefficient, and on a directed
   hyperedge the per-member coefficient. Arithmetic over the matrix is arithmetic

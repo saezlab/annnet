@@ -2,23 +2,10 @@
 
 Most exchange formats are narrower than AnnNet. A SIF file is an edge list; a
 GraphML document has no idea what a slice is; even JSON and Parquet, as this
-package writes them, carry no contextual attributes. What each of them dropped
-used to be its own business, and the result was five conventions:
+package writes them, carry no contextual attributes.
 
-===============  ==========================================================
-GraphML / GEXF   ``<path>.manifest.json``, written and read automatically
-SIF              ``manifest_path=``, opt-in, different shape
-Parquet          ``manifest_path=``, different shape again
-PyG              a ``.manifest`` attribute on the returned object
-nx / ig / gt     returned as the second half of a tuple, caller must keep it
-CX2 / JSON       nothing at all
-===============  ==========================================================
-
-None of them declared *what* was lost, so the only way to find out was to
-compare the graph you got back with the one you sent.
-
-This module replaces all of that with one file, one schema, and one rule: a
-writer records what its format cannot represent, and a reader puts it back.
+This module gives all of them one file, one schema, and one rule: a writer
+records what its format cannot represent, and a reader puts it back.
 
 **The sidecar is bound to its primary.** It stores the SHA-256 of the file it
 was written beside. Edit the SIF by hand and the sidecar refuses to apply rather

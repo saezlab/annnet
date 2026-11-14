@@ -1,14 +1,9 @@
 """The one import path every reader ends in.
 
-A reader parses a file. Where the result *goes* is not the reader's business,
-and it used to be: five of the thirteen readers accepted a ``graph=`` to merge
-into, three took a slice, one took a layer, and the rest could only ever build a
-new graph. Which one you got depended on who wrote the adapter.
-
-This module holds that decision once. A reader builds a graph the way it always
-did and calls :func:`deliver`, which either hands it back, or merges it into a
-graph the caller already has, placing what it carries in a named slice or on a
-named layer.
+A reader parses a file into a new graph and calls :func:`deliver`, which either
+hands it back, or merges it into a graph the caller already has, placing what it
+carries in a named slice or on a named layer. Every reader therefore takes the
+same ``graph=``, ``slice=`` and ``layer=`` arguments.
 
 Merging reads the source through the structural facade and writes through the
 public surface, so it works for any pair of graphs and knows nothing about the

@@ -6,19 +6,10 @@ which :mod:`annnet.core._attrs` owns. A **contextual** attribute belongs to a
 one aspect. Almost no pair carries a value, so a dense column per pair would
 waste nearly every cell, and these stores stay keyed by the pair instead.
 
-**Canonical contextual state is a plain dict, never a dataframe.** Three of these
-levels used to be stored as backend dataframes on the graph, which had two costs.
-
-*It made the graph's own state depend on an optional dependency.* A stored
-``polars.DataFrame`` means the type of a canonical field, its null handling and
-its dtype promotion are decided by which library happens to be installed. Nothing
-about a graph should change because a different table engine is available.
-
-*It made a write cost the size of the table.* Every single attribute write went
-through an upsert that filtered the whole frame and stacked one row back on, so
-the per-write cost grew with the table and the total was quadratic — 3 200 writes
-took over 17 seconds, against a flat 0.0025 ms per write on the generic axes. A
-dict write is one hash insert and does not care how much is already there.
+**Canonical contextual state is a plain dict, never a dataframe.** The type,
+null handling and dtype of a canonical field therefore do not depend on which
+table library is installed, and a write is one hash insert whatever the size of
+the store.
 
 A dataframe is what a *reader* gets, built on demand in whatever backend the
 caller asks for. That is what makes the backend a rendering choice rather than a

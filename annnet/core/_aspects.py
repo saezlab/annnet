@@ -33,9 +33,7 @@ ORDERED_KEY = '__ordered__'
 #:
 #: ``"closed"`` keeps only the edges whose every layer the selection named, so a
 #: selection cannot reach outside the window it names. ``"open"`` keeps an edge
-#: that merely touches the window, which is what the layer algebra did before
-#: this was a word — the leak had no name, so nobody could ask for it or refuse
-#: it.
+#: that merely touches the window.
 BOUNDARIES = ('closed', 'open')
 
 

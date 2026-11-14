@@ -1,23 +1,9 @@
 """Build a graph from a table of edges, in one call and with stable ids.
 
-An edge list — one row per relation, a column for each endpoint, a column for
-whatever the relation carries — is the most common way a network is handed
-around. Turning one into a graph took a loop per row, two calls inside it, an id
-minted from the row's *position*, and a list kept on the side so a later
-comparison could name the edges again::
-
-    prior_edge_ids = []
-    for index, (source, effect, target) in enumerate(rows):
-        edge_id = f'prior_{index:02d}'
-        anet.add_edges(source, target, edge_id=edge_id, slice='prior')
-        anet.attrs.update('edges', {edge_id: {'interaction': effect}})
-        prior_edge_ids.append(edge_id)
-
-Two of those are defects rather than verbosity. A **positional id** means
-re-sorting the input renames every edge, so two runs over the same data disagree
-about what anything is called. And the **side list** exists only because nothing
-on the graph could answer *which edges came from this table* — which slices do,
-and did.
+An edge list has one row per relation, a column for each endpoint and a column
+for each value the relation carries. :func:`from_edge_frame` turns one into a
+graph and can record the rows in a slice, so the graph answers which edges came
+from the table.
 
 An id here is derived from what the edge **is**: its endpoints, where it sits,
 and everything the row says about it. Re-sort the table and the ids are the same;
