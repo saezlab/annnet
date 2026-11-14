@@ -410,17 +410,22 @@ class LayerAccessor:
         >>> anet.layers.couple(kind='layers', layers=[(('t1',), ('t2',))])  # doctest: +SKIP
         >>> anet.layers.couple(kind='diagonal', within={'time': {'t1', 't2'}})  # doctest: +SKIP
         """
-        common = {'weight': weight, 'directed': directed, 'edge_kind': edge_kind}
         if kind == 'layers':
             if layers is None:
                 raise ValueError("kind='layers' needs layers=[(coordinate, coordinate), ...]")
-            return self._add_layer_coupling_pairs(layers, **common)
+            return self._add_layer_coupling_pairs(
+                layers, weight=weight, directed=directed, edge_kind=edge_kind
+            )
         if kind == 'diagonal':
-            return self._add_diagonal_coupling_filter(self._within_filter(within), **common)
+            return self._add_diagonal_coupling_filter(
+                self._within_filter(within), weight=weight, directed=directed, edge_kind=edge_kind
+            )
         if aspect is None:
             raise ValueError(f'kind={kind!r} couples along an aspect; pass aspect=')
         if kind == 'categorical' and groups is not None:
-            return self._add_categorical_coupling(aspect, groups, **common)
+            return self._add_categorical_coupling(
+                aspect, groups, weight=weight, directed=directed, edge_kind=edge_kind
+            )
         return self._couple_aspect(
             aspect,
             kind=kind,
@@ -428,7 +433,9 @@ class LayerAccessor:
             within=within,
             on=on,
             both_present=both_present,
-            **common,
+            weight=weight,
+            directed=directed,
+            edge_kind=edge_kind,
         )
 
     _SUPRA_KINDS = ('adjacency', 'incidence', 'laplacian', 'degree', 'transition')
