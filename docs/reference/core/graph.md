@@ -43,9 +43,9 @@ A hyperedge is not in `A` or `L`: give `kinds=` to `adjacency()` to choose how
 to include it. `incidence(kinds=None, signed=True)` gives the incidence for the
 edge kinds that you select, with or without the coefficients.
 
-On a multilayer graph, `anet.layers` has the matrices over all placements:
-`supra_adjacency()`, its parts `build_intra_block()`, `build_inter_block()` and
-`build_coupling_block()`, `supra_laplacian()` and `transition_matrix()`. See
+On a multilayer graph, `anet.layers.supra(kind)` builds the matrices over all
+placements: `"adjacency"` (with `block="intra"`, `"inter"` or `"coupling"` for
+one part), `"incidence"`, `"laplacian"`, `"degree"` and `"transition"`. See
 [Layers](layers.md) and the [layers guide](../../guide/layers.ipynb#supra-adjacency-and-its-blocks).
 
 The [graph model guide](../../guide/graph-model.ipynb#structure-and-numerical-representations)

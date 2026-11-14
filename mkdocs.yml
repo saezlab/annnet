@@ -71,6 +71,7 @@ nav:
         -   Layers: reference/core/layers.md
     -   Algorithms:
         -   Traversal and structure: reference/algorithms/traversal.md
+        -   Multilayer measures: reference/algorithms/multilayer.md
     -   Experimental (LOCAL ONLY):
         -   Experimental API reference (LOCAL ONLY): reference/experimental/index.md
         -   Vocabulary (LOCAL ONLY): reference/experimental/vocabulary.md

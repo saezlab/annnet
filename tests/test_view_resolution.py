@@ -123,7 +123,7 @@ def layered():
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         G = AnnNet(directed=True, aspects={'t': ['t1', 't2', 't3']})
-        G.layers.set_ordered('t')
+        G.layers.set_aspects(['t'], mode='extend', ordered={'t': True})
         G.layers.place(['a', 'b', 'c'], [('t1',), ('t2',)])
         G.add_nodes('lonely', layer=('t3',))
         G.add_edges(('a', ('t1',)), ('b', ('t1',)), edge_id='ab1')

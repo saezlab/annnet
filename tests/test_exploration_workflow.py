@@ -36,7 +36,7 @@ def G():
             directed=True,
             aspects={'time': ['0h', '6h', '24h'], 'condition': ['ctrl', 'stim', 'stim_x']},
         )
-        g.layers.set_ordered('time')
+        g.layers.set_aspects(['time'], mode='extend', ordered={'time': True})
         # a: every time point under stim; b: 0h/6h under ctrl and stim; c: 0h only.
         g.layers.place(['a'], [('0h', 'stim'), ('6h', 'stim'), ('24h', 'stim')])
         g.layers.place(['b'], [('0h', 'ctrl'), ('6h', 'ctrl'), ('0h', 'stim'), ('6h', 'stim')])

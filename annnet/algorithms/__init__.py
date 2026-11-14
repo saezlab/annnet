@@ -15,6 +15,13 @@ _lazy_symbols: dict[str, tuple[str, str]] = {
     'targets': ('annnet.algorithms.structure', 'targets'),
     'directed_cycle': ('annnet.algorithms.structure', 'directed_cycle'),
     'Traversal': ('annnet.algorithms.traversal', 'Traversal'),
+    'diffusion_step': ('annnet.algorithms.multilayer', 'diffusion_step'),
+    'layer_degree_vectors': ('annnet.algorithms.multilayer', 'layer_degree_vectors'),
+    'multislice_modularity': ('annnet.algorithms.multilayer', 'multislice_modularity'),
+    'participation_coefficient': ('annnet.algorithms.multilayer', 'participation_coefficient'),
+    'random_walk_step': ('annnet.algorithms.multilayer', 'random_walk_step'),
+    'sweep_coupling_regime': ('annnet.algorithms.multilayer', 'sweep_coupling_regime'),
+    'versatility': ('annnet.algorithms.multilayer', 'versatility'),
 }
 
 __all__ = sorted(_lazy_symbols)

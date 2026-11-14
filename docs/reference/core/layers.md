@@ -36,6 +36,13 @@ An aspect's values, and whether they come one before another. See
 
 ## Layer selection
 
+`anet.layers.where(...)` names layers by predicate; `anet.layers.select(...)`
+returns the nodes and edges they hold as a `LayerSet`.
+
+::: annnet.core._Layers.LayerSet
+    options:
+      show_root_heading: true
+
 ::: annnet.core._selection.LayerSelection
     options:
       show_root_heading: true
@@ -73,3 +80,8 @@ method is handed. See
 ::: annnet.core._values.ValueBacking
     options:
       show_root_heading: true
+
+## Multilayer measures
+
+Measures and dynamics over the supra-graph are functions of the graph in
+[`annnet.algorithms.multilayer`](../algorithms/multilayer.md).

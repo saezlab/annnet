@@ -80,6 +80,76 @@ NAMESPACES = {
         'set_elementary_attrs': "G.attrs.update('elementary_layers', {(aspect, label): attrs})",
         'set_node_attrs': "G.attrs.update('node_layers', {(node_id, layer): attrs})",
         'set_node_attrs_bulk': "G.attrs.update('node_layers', values, layer=, key=)",
+        # The layer operations that became one verb each, or moved to
+        # annnet.algorithms.multilayer.
+        'set_elementary_layers': "G.layers.set_aspects({aspect: [label, ...]}, mode='extend')",
+        'augment_elementary_layers': "G.layers.set_aspects({aspect: [label, ...]}, mode='extend')",
+        'add_elementary_layer': "G.layers.set_aspects({aspect: [label]}, mode='extend')",
+        'set_ordered': "G.layers.set_aspects([aspect], mode='extend', ordered={aspect: flag})",
+        'iter_layers': 'G.layers.where().layers',
+        'iter_node_layers': 'G.layers.list_layers(node=node_id)',
+        'has_presence': 'G.exists(node_id, **aspects) or layer in list_layers(node=node_id)',
+        'layer_node_set': 'G.layers.select(layer).nodes',
+        'layer_edge_set': 'G.layers.select(layer).edges',
+        'layer_union': 'G.layers.select(layers)',
+        'layer_intersection': "G.layers.select(layers, op='intersection')",
+        'layer_difference': "G.layers.select([a, b], op='difference')",
+        'create_slice_from_layer': 'G.layers.select(layer).to_slice(slice_id)',
+        'create_slice_from_layer_union': 'G.layers.select(layers).to_slice(slice_id)',
+        'create_slice_from_layer_intersection': (
+            "G.layers.select(layers, op='intersection').to_slice(slice_id)"
+        ),
+        'create_slice_from_layer_difference': (
+            "G.layers.select([a, b], op='difference').to_slice(slice_id)"
+        ),
+        'subgraph_from_layer_tuple': 'G.layers.select(layer).subgraph()',
+        'subgraph_from_layer_union': 'G.layers.select(layers).subgraph()',
+        'subgraph_from_layer_intersection': (
+            "G.layers.select(layers, op='intersection').subgraph()"
+        ),
+        'subgraph_from_layer_difference': "G.layers.select([a, b], op='difference').subgraph()",
+        'add_categorical_coupling': "G.layers.couple(aspect, kind='categorical', groups=groups)",
+        'add_layer_coupling_pairs': "G.layers.couple(kind='layers', layers=pairs)",
+        'add_diagonal_coupling_filter': "G.layers.couple(kind='diagonal', within=filter)",
+        'supra_adjacency': 'G.layers.supra()',
+        'supra_adjacency_scaled': 'G.layers.supra(scale=..., include_inter=...)',
+        'supra_incidence': "G.layers.supra('incidence')",
+        'supra_laplacian': "G.layers.supra('laplacian', laplacian='norm')",
+        'supra_degree': "G.layers.supra('degree')",
+        'transition_matrix': "G.layers.supra('transition')",
+        'build_intra_block': "G.layers.supra(block='intra')",
+        'build_inter_block': "G.layers.supra(block='inter')",
+        'build_coupling_block': "G.layers.supra(block='coupling')",
+        'tensor_index': 'G.layers.tensor()',
+        'adjacency_tensor_view': 'G.layers.tensor()',
+        'flatten_to_supra': 'G.layers.flatten_tensor(tensor)',
+        'unflatten_from_supra': 'G.layers.tensor(from_supra=A)',
+        'algebraic_connectivity': 'G.layers.spectral()',
+        'k_smallest_laplacian_eigs': "G.layers.spectral('eigs', k=k)",
+        'dominant_rw_eigenpair': "G.layers.spectral('rw_dominant')",
+        'flatten_layers': 'G.layers.flatten()',
+        'participation_coefficient': (
+            'annnet.algorithms.multilayer.participation_coefficient(anet)'
+        ),
+        'versatility': 'annnet.algorithms.multilayer.versatility(anet)',
+        'multislice_modularity': (
+            'annnet.algorithms.multilayer.multislice_modularity(anet, partition)'
+        ),
+        'layer_degree_vectors': 'annnet.algorithms.multilayer.layer_degree_vectors(anet)',
+        'diffusion_step': 'annnet.algorithms.multilayer.diffusion_step(anet, x)',
+        'random_walk_step': 'annnet.algorithms.multilayer.random_walk_step(anet, p)',
+        'sweep_coupling_regime': (
+            'annnet.algorithms.multilayer.sweep_coupling_regime(anet, scales)'
+        ),
+        'nl_to_row': 'G.nl_to_row',
+        'row_to_nl': 'G.row_to_nl',
+        'layer_id_to_tuple': '(label,) on a single-aspect graph',
+        'layer_tuple_to_id': "'×'.join(layer)",
+        'ensure_node_layer_index': 'nothing: the supra index is built on demand',
+        'add_nodes': 'G.add_nodes(..., layer=...)',
+        'add_edges': 'G.add_edges(...)',
+        'remove_node': 'G.remove_nodes',
+        'remove_edge': 'G.remove_edges',
     },
     'G.slices': {
         'attrs': "G.attrs.row('slices', slice_id)",

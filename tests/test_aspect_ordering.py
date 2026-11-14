@@ -196,7 +196,7 @@ class TestDeclarationOrderSurvives:
         assert G.layers.list_layers('mechanism') == list(MECHANISMS)
 
     def test_a_layer_added_later_goes_on_the_end(self, timed):
-        timed.layers.add_elementary_layer('time', '48h')
+        timed.layers.set_aspects({'time': ['48h']}, mode='extend')
         assert timed.layers.list_layers('time') == [*TIMES, '48h']
 
 
@@ -213,15 +213,15 @@ class TestOrderedness:
         assert timed.layers.aspect('time').values == TIMES
 
     def test_set_ordered_declares_it_after_the_fact(self, categorical):
-        categorical.layers.set_ordered('mechanism')
+        categorical.layers.set_aspects(['mechanism'], mode='extend', ordered={'mechanism': True})
         assert categorical.layers.aspect('mechanism').ordered is True
 
     def test_set_ordered_takes_it_back(self, timed):
-        timed.layers.set_ordered('time', False)
+        timed.layers.set_aspects(['time'], mode='extend', ordered={'time': False})
         assert timed.layers.aspect('time').ordered is False
 
     def test_an_unknown_aspect_raises_on_both(self, timed):
         with pytest.raises(KeyError, match='unknown aspect'):
             timed.layers.aspect('absent')
         with pytest.raises(KeyError, match='unknown aspect'):
-            timed.layers.set_ordered('absent')
+            timed.layers.set_aspects(['absent'], mode='extend', ordered={'absent': True})

@@ -85,7 +85,7 @@ def _side_identity(side):
 def _layer_display(graph, coordinate):
     if coordinate is None or graph._aspects == ('_',):
         return None
-    return graph.layers.layer_tuple_to_id(coordinate)
+    return graph.layers._layer_tuple_to_id(coordinate)
 
 
 def _scoped_edge_refs(graph, scope):
@@ -175,7 +175,7 @@ def edges_table(
     if layer is not None:
         coordinate = tuple(layer) if not isinstance(layer, str) else (layer,)
         graph.layers._validate_layer_tuple(coordinate)
-        keep_layer = graph.layers.layer_edge_set(coordinate)
+        keep_layer = graph.layers._layer_edge_set(coordinate)
         refs = (ref for ref in refs if ref.id in keep_layer)
     if in_slice is not None:
         keep_slice = set(graph._slices[in_slice].edges)
@@ -296,7 +296,7 @@ def _incidence_rows(graph, refs, *, backend=None):
                     'entity_id': key[0],
                     'entity_kind': 'edge' if entity_kind == 'edge_entity' else entity_kind,
                     'layer': None if flat else list(key[1]),
-                    'layer_id': None if flat else graph.layers.layer_tuple_to_id(key[1]),
+                    'layer_id': None if flat else graph.layers._layer_tuple_to_id(key[1]),
                     'role': _ROLE_NAMES.get(int(role), 'member'),
                     'coefficient': float(coefficient),
                     'kind': kind,
@@ -320,7 +320,7 @@ def nodes_table(graph, *, scope=None, backend=None, limit=None):
         for node_id, coordinate in keys:
             if node_id in wanted:
                 placements.setdefault(node_id, []).append(
-                    graph.layers.layer_tuple_to_id(coordinate)
+                    graph.layers._layer_tuple_to_id(coordinate)
                 )
     rows = []
     for node_id in ids:
@@ -405,7 +405,7 @@ def layers_table(graph, *, scope=None, backend=None, limit=None):
         coordinates = (aa for aa in coordinates if scope.holds('layers', aa))
     rows = []
     for aa in _first(coordinates, limit):
-        row = {'layer': list(aa), 'coordinate_id': graph.layers.layer_tuple_to_id(aa)}
+        row = {'layer': list(aa), 'coordinate_id': graph.layers._layer_tuple_to_id(aa)}
         for index, aspect in enumerate(graph._aspects):
             row[aspect] = aa[index]
         row.update({k: v for k, v in layer_attrs.get(aa, {}).items() if v is not None})
@@ -431,7 +431,7 @@ def node_layers_table(graph, *, scope=None, backend=None, limit=None):
             {
                 'node_id': node_id,
                 'layer': list(coordinate),
-                'layer_id': None if flat else graph.layers.layer_tuple_to_id(coordinate),
+                'layer_id': None if flat else graph.layers._layer_tuple_to_id(coordinate),
                 **{k: v for k, v in attrs.items() if v is not None},
             }
         )

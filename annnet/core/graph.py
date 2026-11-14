@@ -2981,7 +2981,7 @@ class AnnNet(
 
     def row_to_nl(self, *args, **kwargs):
         """Convert a matrix row index to its (node, layer) key."""
-        return self.layers.row_to_nl(*args, **kwargs)
+        return self.layers._row_to_nl(*args, **kwargs)
 
     def _build_supra_index(self, *args, **kwargs):
         return self.layers._build_supra_index(*args, **kwargs)

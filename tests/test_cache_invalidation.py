@@ -100,7 +100,7 @@ def _probe_adjacency(G):
 
 
 def _probe_supra_adjacency(G):
-    m = G.layers.supra_adjacency()
+    m = G.layers.supra()
     return (m.shape, sorted(zip(*m.nonzero(), strict=False)))
 
 

@@ -81,6 +81,7 @@ _lazy_objects: dict[str, tuple[str, str]] = {
     'OrderedLabels': ('annnet.core._aspects', 'OrderedLabels'),
     'as_aspect': ('annnet.core._aspects', 'as_aspect'),
     'LayerSelection': ('annnet.core._selection', 'LayerSelection'),
+    'LayerSet': ('annnet.core._Layers', 'LayerSet'),
     'ValueMatrix': ('annnet.core._values', 'ValueMatrix'),
     'MatrixValues': ('annnet.core._values', 'MatrixValues'),
     'ValueResolver': ('annnet.core._values', 'ValueResolver'),

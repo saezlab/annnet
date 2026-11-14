@@ -69,7 +69,7 @@ def _build_multilayer_graph():
             ]
         )
 
-    G.layers.add_elementary_layer('sample', 'consensus')
+    G.layers.set_aspects({'sample': ['consensus']}, mode='extend')
     consensus_aa = ('consensus',)
     consensus_nodes = ['TP53', 'AKT1', 'MYC']
     G.add_nodes(consensus_nodes, layer=consensus_aa)
@@ -114,7 +114,7 @@ def _snapshot(G, samples, probe_vid, consensus_aa):
         'ne': G.global_count('edges'),
         'slice_base_v': set(G.slices.nodes('base_pkn')),
         'slice_base_e': set(G.slices.edges('base_pkn')),
-        'intra_per_sample': {s: len(G.layers.layer_edge_set((s,))) for s in samples},
+        'intra_per_sample': {s: len(G.layers.select((s,)).edges) for s in samples},
         'attr_probe': {s: dict(G.attrs.row('node_layers', (probe_vid, (s,)))) for s in samples},
         'consensus_attr': dict(G.attrs.row('node_layers', (probe_vid, consensus_aa))),
         'aspects': tuple(G.aspects),
@@ -171,7 +171,7 @@ def test_multilayer_intra_edges_preserve_ml_kind(tmp_path: Path, compression):
 
     for s in samples:
         aa = (s,)
-        edges = G2.layers.layer_edge_set(aa)
+        edges = G2.layers.select(aa).edges
         assert len(edges) == len(intra_edge_specs), (
             f'sample {s}: expected {len(intra_edge_specs)} intra edges, got {len(edges)}'
         )

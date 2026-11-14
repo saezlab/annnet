@@ -208,6 +208,7 @@ def test_the_core_exports_the_graph_and_the_records():
             'EdgeSequence',
             'LayerSelection',
             'MatrixValues',
+            'LayerSet',
             'NodeSequence',
             'Provenance',
             'RowSelection',

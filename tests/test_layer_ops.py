@@ -15,6 +15,7 @@ import pytest
 
 from annnet import AnnNet
 from annnet.core import _structure as S
+from annnet.algorithms import multilayer
 
 
 def two_layer(directed: bool = True) -> AnnNet:
@@ -29,7 +30,7 @@ def two_layer(directed: bool = True) -> AnnNet:
 
 
 def row(G: AnnNet, node: str, label: str) -> int:
-    return G.layers.nl_to_row(node, (label,))
+    return G.layers._nl_to_row(node, (label,))
 
 
 # ---------------------------------------------------------------------------
@@ -39,40 +40,40 @@ def row(G: AnnNet, node: str, label: str) -> int:
 
 def test_a_directed_intra_edge_occupies_one_cell():
     G = two_layer(directed=True)
-    A = G.layers.supra_adjacency().toarray()
+    A = G.layers.supra().toarray()
     assert A[row(G, 'x', 'a'), row(G, 'y', 'a')] == 1.0
     assert A[row(G, 'y', 'a'), row(G, 'x', 'a')] == 0.0
 
 
 def test_the_supra_matrix_of_a_directed_graph_is_not_symmetric():
-    A = two_layer(directed=True).layers.supra_adjacency().toarray()
+    A = two_layer(directed=True).layers.supra().toarray()
     assert not np.allclose(A, A.T)
 
 
 def test_an_undirected_graph_is_still_symmetric():
-    A = two_layer(directed=False).layers.supra_adjacency().toarray()
+    A = two_layer(directed=False).layers.supra().toarray()
     assert np.allclose(A, A.T)
 
 
 def test_the_supra_projection_agrees_with_the_flat_matrix():
     """One layer holding every node is the flat graph, so the two must agree."""
     G = two_layer(directed=True)
-    A = G.layers.supra_adjacency().toarray()
+    A = G.layers.supra().toarray()
     assert A.sum() == G.A.toarray().sum()
 
 
 def test_a_coupling_edge_is_symmetric_because_it_joins_a_node_to_itself():
     G = two_layer(directed=True)
-    G.layers.add_categorical_coupling('cond', [['a', 'b']])
-    A = G.layers.supra_adjacency().toarray()
+    G.layers.couple('cond', kind='categorical', groups=[['a', 'b']])
+    A = G.layers.supra().toarray()
     assert A[row(G, 'x', 'a'), row(G, 'x', 'b')] == 1.0
     assert A[row(G, 'x', 'b'), row(G, 'x', 'a')] == 1.0
 
 
 def test_an_ordinal_coupling_can_be_asked_for_and_points_one_way():
     G = two_layer(directed=True)
-    G.layers.add_categorical_coupling('cond', [['a', 'b']], directed=True)
-    A = G.layers.supra_adjacency().toarray()
+    G.layers.couple('cond', kind='categorical', groups=[['a', 'b']], directed=True)
+    A = G.layers.supra().toarray()
     assert A[row(G, 'x', 'a'), row(G, 'x', 'b')] == 1.0
     assert A[row(G, 'x', 'b'), row(G, 'x', 'a')] == 0.0
 
@@ -104,13 +105,13 @@ def test_an_edge_is_classified_by_what_it_joins_not_how_it_was_written(explicit)
 @pytest.mark.parametrize('explicit', [True, False])
 def test_a_bare_id_edge_reaches_the_supra_matrix(explicit):
     G = spelled(explicit)
-    assert G.layers.supra_adjacency().nnz == 1
-    assert G.layers.layer_edge_set(('a',))
+    assert G.layers.supra().nnz == 1
+    assert G.layers.select(('a',)).edges
 
 
 def test_both_spellings_give_the_same_matrix():
-    left = spelled(True).layers.supra_adjacency().toarray()
-    right = spelled(False).layers.supra_adjacency().toarray()
+    left = spelled(True).layers.supra().toarray()
+    right = spelled(False).layers.supra().toarray()
     assert np.array_equal(left, right)
 
 
@@ -124,36 +125,36 @@ def test_a_node_added_after_a_read_widens_the_matrix():
     this cache, so the index kept the old node count and the matrix the old shape.
     """
     G = two_layer(directed=False)
-    before = G.layers.supra_adjacency().shape[0]
+    before = G.layers.supra().shape[0]
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         G.add_nodes(['z'], layer=('a',))
-    assert G.layers.supra_adjacency().shape[0] == before + 1
+    assert G.layers.supra().shape[0] == before + 1
 
 
 def test_an_edge_added_after_a_read_shows_up():
     G = two_layer(directed=False)
-    before = G.layers.supra_adjacency().nnz
+    before = G.layers.supra().nnz
     G.add_edges([{'source': ('x', ('b',)), 'target': ('y', ('b',))}])
-    assert G.layers.supra_adjacency().nnz > before
+    assert G.layers.supra().nnz > before
 
 
 def test_a_weight_write_moves_the_matrix():
     G = two_layer(directed=False)
-    G.layers.supra_adjacency()
+    G.layers.supra()
     G.E['weight'] = [5.0] * len(G.E)
-    assert G.layers.supra_adjacency().max() == 5.0
+    assert G.layers.supra().max() == 5.0
 
 
 def test_a_second_read_is_the_cached_matrix():
     G = two_layer(directed=False)
-    assert G.layers.supra_adjacency() is G.layers.supra_adjacency()
+    assert G.layers.supra() is G.layers.supra()
 
 
 def test_the_derived_matrices_cost_no_second_build():
     """They are built from the adjacency, so a warm read must not rebuild it."""
     G = two_layer(directed=False)
-    G.layers.supra_adjacency()
+    G.layers.supra()
     calls = []
     accessor = type(G.layers)
     original = accessor._build_supra_adjacency
@@ -161,9 +162,9 @@ def test_the_derived_matrices_cost_no_second_build():
         calls.append(1) or original(self, layers)
     )
     try:
-        G.layers.supra_laplacian()
-        G.layers.transition_matrix()
-        G.layers.supra_degree()
+        G.layers.supra('laplacian')
+        G.layers.supra('transition')
+        G.layers.supra('degree')
     finally:
         accessor._build_supra_adjacency = original
     assert calls == [], f'the adjacency was rebuilt {len(calls)} times'
@@ -182,39 +183,39 @@ def test_the_layer_namespace_does_not_advertise_the_fields_of_the_graph():
     listed = dir(G.layers)
     assert 'graph_attributes' not in listed
     assert 'node_aligned' not in listed
-    # the layer-aware mutation forwarders stay, because they take a layer=
+    # mutation belongs to the graph; the namespace lists layer operations only
     for name in ('add_nodes', 'add_edges', 'remove_node', 'remove_edge'):
-        assert name in listed
-    for name in ('supra_adjacency', 'versatility', 'iter_layers'):
+        assert name not in listed
+    for name in ('select', 'supra', 'couple', 'spectral', 'tensor', 'set_aspects'):
         assert name in listed
 
 
 def modularity_graph() -> AnnNet:
     G = two_layer(directed=False)
-    G.layers.add_categorical_coupling('cond', [['a', 'b']])
+    G.layers.couple('cond', kind='categorical', groups=[['a', 'b']])
     return G
 
 
 def test_a_partition_may_be_a_mapping_or_a_sequence():
     """Every metric beside this one returns a mapping, so it accepts one."""
     G = modularity_graph()
-    n = G.layers.supra_adjacency().shape[0]
-    from_sequence = G.layers.multislice_modularity([0] * n)
-    from_mapping = G.layers.multislice_modularity(dict.fromkeys(range(n), 0))
+    n = G.layers.supra().shape[0]
+    from_sequence = multilayer.multislice_modularity(G, [0] * n)
+    from_mapping = multilayer.multislice_modularity(G, dict.fromkeys(range(n), 0))
     assert from_sequence == from_mapping
 
 
 def test_a_partition_that_does_not_cover_every_row_says_so():
     G = modularity_graph()
     with pytest.raises(ValueError, match='missing'):
-        G.layers.multislice_modularity({0: 0})
+        multilayer.multislice_modularity(G, {0: 0})
 
 
 def test_a_partition_of_the_wrong_length_says_so():
     G = modularity_graph()
-    n = G.layers.supra_adjacency().shape[0]
+    n = G.layers.supra().shape[0]
     with pytest.raises(ValueError, match='partition length'):
-        G.layers.multislice_modularity([0] * (n - 1))
+        multilayer.multislice_modularity(G, [0] * (n - 1))
 
 
 # ---------------------------------------------------------------------------
@@ -225,15 +226,15 @@ def test_a_partition_of_the_wrong_length_says_so():
 @pytest.mark.parametrize(
     'call',
     [
-        lambda L: L.supra_adjacency(),
-        lambda L: L.supra_adjacency_scaled(),
-        lambda L: L.build_intra_block(),
-        lambda L: L.build_coupling_block(),
+        lambda L: L.supra(),
+        lambda L: L.supra(),
+        lambda L: L.supra(block='intra'),
+        lambda L: L.supra(block='coupling'),
     ],
 )
 def test_a_cached_matrix_is_rebuilt_after_a_mutation(call):
     G = two_layer(directed=False)
-    G.layers.add_categorical_coupling('cond', [['a', 'b']])
+    G.layers.couple('cond', kind='categorical', groups=[['a', 'b']])
     before = call(G.layers).shape[0]
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -243,9 +244,9 @@ def test_a_cached_matrix_is_rebuilt_after_a_mutation(call):
 
 def test_a_scaled_matrix_keeps_its_parameters_apart():
     G = two_layer(directed=False)
-    G.layers.add_categorical_coupling('cond', [['a', 'b']])
-    assert G.layers.supra_adjacency_scaled(coupling_scale=3.0).max() == 3.0
-    assert G.layers.supra_adjacency_scaled(coupling_scale=1.0).max() == 1.0
+    G.layers.couple('cond', kind='categorical', groups=[['a', 'b']])
+    assert G.layers.supra(scale=3.0).max() == 3.0
+    assert G.layers.supra(scale=1.0).max() == 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -267,7 +268,7 @@ def three_node_two_layer() -> AnnNet:
                 {'source': ('x', ('b',)), 'target': ('y', ('b',))},
             ]
         )
-        G.layers.add_categorical_coupling('cond', [['a', 'b']])
+        G.layers.couple('cond', kind='categorical', groups=[['a', 'b']])
     return G
 
 
@@ -282,18 +283,18 @@ def test_one_layer_reached_two_ways_gives_one_answer(include_inter, include_coup
     place a node on and dropped it on the placeholder instead.
     """
     kwargs = {'include_inter': include_inter, 'include_coupling': include_coupling}
-    from_tuple = three_node_two_layer().layers.subgraph_from_layer_tuple(('a',), **kwargs)
-    from_union = three_node_two_layer().layers.subgraph_from_layer_union([('a',)], **kwargs)
+    from_tuple = three_node_two_layer().layers.select(('a',), **kwargs).subgraph()
+    from_union = three_node_two_layer().layers.select([('a',)], **kwargs).subgraph()
     assert entity_keys(from_tuple) == entity_keys(from_union)
 
 
 @pytest.mark.parametrize(
     'call',
     [
-        lambda L: L.subgraph_from_layer_tuple(('a',)),
-        lambda L: L.subgraph_from_layer_union([('a',), ('b',)]),
-        lambda L: L.subgraph_from_layer_intersection([('a',), ('b',)]),
-        lambda L: L.subgraph_from_layer_difference(('a',), ('b',)),
+        lambda L: L.select(('a',)).subgraph(),
+        lambda L: L.select([('a',), ('b',)]).subgraph(),
+        lambda L: L.select([('a',), ('b',)], op='intersection').subgraph(),
+        lambda L: L.select([('a',), ('b',)], op='difference').subgraph(),
     ],
 )
 def test_no_subgraph_leaves_a_node_on_the_placeholder_layer(call):
@@ -303,7 +304,7 @@ def test_no_subgraph_leaves_a_node_on_the_placeholder_layer(call):
 
 
 def test_a_subgraph_keeps_the_aspects_it_came_from():
-    sub = three_node_two_layer().layers.subgraph_from_layer_union([('a',)])
+    sub = three_node_two_layer().layers.select([('a',)]).subgraph()
     assert sub.is_multilayer
     assert sub.layers.list_aspects() == ('cond',)
 
@@ -317,6 +318,6 @@ def test_a_node_is_only_placed_on_a_layer_it_is_really_in():
         G.add_nodes(['only_a'], layer=('a',))
         G.add_nodes(['both'], layer=('a',))
         G.add_nodes(['both'], layer=('b',))
-    sub = G.layers.subgraph_from_layer_union([('a',), ('b',)])
+    sub = G.layers.select([('a',), ('b',)]).subgraph()
     assert "('only_a', ('b',))" not in entity_keys(sub)
     assert "('only_a', ('a',))" in entity_keys(sub)

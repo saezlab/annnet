@@ -212,7 +212,9 @@ class _ViewLayers:
     def aspect(self, name):
         return self._graph().layers.aspect(name)
 
-    def list_layers(self, aspect=None, include_placeholder=False):
+    def list_layers(self, aspect=None, include_placeholder=False, *, node=None):
+        if node is not None:
+            return [key[1] for key in self._view._resolved().node_keys if key[0] == node]
         return self._graph().layers.list_layers(aspect, include_placeholder)
 
     @property
@@ -233,16 +235,21 @@ class _ViewLayers:
         inside = set(self.window)
         return LayerSelection(self._graph(), [aa for aa in selection.layers if aa in inside])
 
-    def has_presence(self, u, layer_tuple) -> bool:
-        return (u, tuple(layer_tuple)) in self._view._resolved().key_set
+    def select(self, layers, **kwargs):
+        """:meth:`LayerAccessor.select`, restricted to the placements and edges of the view."""
+        from ._Layers import LayerSet
 
-    def layer_node_set(self, layer_tuple) -> set:
-        aa = tuple(layer_tuple)
-        return {key[0] for key in self._view._resolved().node_keys if key[1] == aa}
-
-    def layer_edge_set(self, layer_tuple, **kwargs) -> set:
-        found = self._graph().layers.layer_edge_set(tuple(layer_tuple), **kwargs)
-        return found & self._view._resolved().edge_set
+        found = self._graph().layers.select(layers, **kwargs)
+        resolved = self._view._resolved()
+        held = {key[0] for key in resolved.node_keys if key[1] in set(found._window)}
+        return LayerSet(
+            self._graph().layers,
+            frozenset(found.nodes & held),
+            frozenset(found.edges & resolved.edge_set),
+            found.layers,
+            found.op,
+            window=found._window,
+        )
 
     def values(self):
         return self._graph().layers.values()
@@ -282,8 +289,8 @@ class _ViewLayers:
     def __getattr__(self, name):
         raise AttributeError(
             f'a view has no layer operation {name!r}; the read operations are list_aspects, '
-            f'aspect, list_layers, window, where, has_presence, layer_node_set, '
-            f'layer_edge_set, values, matrix and node_frame. Call .materialize() to edit.'
+            f'aspect, list_layers, window, where, select, values, matrix and node_frame. '
+            f'Call .materialize() to edit.'
         )
 
     def __repr__(self):

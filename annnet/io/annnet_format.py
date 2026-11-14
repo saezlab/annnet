@@ -308,8 +308,6 @@ def write(
         What to do with node-layer values held in an *attached array* — which is
         every value a matrix join brought in.
 
-        These were **not written at all** before this parameter existed: the file
-        read back null in their place and said nothing about it.
         ``"materialise"`` writes them out as ordinary node-layer attributes, one
         stored cell per non-null pair the graph holds a node-layer for.
         ``"drop"`` leaves them out deliberately. ``"error"`` refuses to write,
@@ -991,7 +989,7 @@ def read(path: str | Path, *, lazy: bool = False) -> AnnNet:
         if meta_aspects:
             G.layers.set_aspects(meta_aspects)
             if meta_elem:
-                G.layers.set_elementary_layers(meta_elem)
+                G.layers._set_elementary_layers(meta_elem)
             # Pre-register the '_' placeholder per aspect so any entity
             # stored at a placeholder coord (legacy or current) validates
             # cleanly when `_make_layer_coord` runs on it later.

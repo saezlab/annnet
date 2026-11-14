@@ -189,7 +189,7 @@ def annnet_only(scale, *, backend='auto', samples=5) -> list[dict]:
 
         G = AnnNet(directed=True, annotations_backend=backend)
         G.layers.set_aspects(aspects, elem)
-        layer_tuples = list(G.layers.iter_layers())
+        layer_tuples = list(iter(G.layers.where().layers))
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             G.add_nodes(({'node_id': v} for v in ml_names), slice='base')
@@ -506,7 +506,7 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
         warnings.simplefilter('ignore')
         Gml = AnnNet(directed=True)
         Gml.layers.set_aspects(['layer'], {'layer': [f'L{k}' for k in range(n_layers)]})
-        coords = list(Gml.layers.iter_layers())
+        coords = list(iter(Gml.layers.where().layers))
         for aa in coords:
             Gml.add_edges(
                 [
@@ -520,7 +520,7 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
         rec(
             'layers',
             'nl_to_row',
-            time=harness.time_repeat(lambda: Gml.layers.nl_to_row('m0', aa0)),
+            time=harness.time_repeat(lambda: Gml.nl_to_row('m0', aa0)),
             note=f'single node-layer lookup (V_M={v_m}); must be ~O(1)',
         )
     )
@@ -536,9 +536,7 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
         rec(
             'layers',
             'supra_adjacency',
-            time=harness.time_oneshot(
-                lambda: Gml.layers.supra_adjacency(), samples=max(3, samples // 2)
-            ),
+            time=harness.time_oneshot(lambda: Gml.layers.supra(), samples=max(3, samples // 2)),
             note=f'supra-adjacency over {v_m} node-layer nodes',
         )
     )
@@ -547,7 +545,7 @@ def annnet_features(scale, *, backend='auto', samples=5) -> list[dict]:
             'layers',
             'subgraph_from_layer',
             time=harness.time_oneshot(
-                lambda: Gml.layers.subgraph_from_layer_tuple(aa0), samples=max(3, samples // 2)
+                lambda: Gml.layers.select(aa0).subgraph(), samples=max(3, samples // 2)
             ),
             note='single-layer induced subgraph',
         )

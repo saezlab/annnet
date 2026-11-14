@@ -170,7 +170,7 @@ class TestViewFilters:
     def test_layer_agrees_with_layer_edge_set(self, layered):
         for condition in CONDITIONS:
             assert set(_ids(layered.attrs.table('edges', derived=True, layer=(condition,)))) == set(
-                layered.layers.layer_edge_set((condition,))
+                layered.layers.select((condition,)).edges
             )
 
     def test_include_hyper_false_leaves_only_binary_rows(self, layered):

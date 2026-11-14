@@ -117,12 +117,12 @@ class TestTheFamilyIsInTheId:
         assert len(list(timed.E)) == 8
 
     def test_the_older_generators_carry_a_family_too(self, categorical):
-        categorical.layers.add_categorical_coupling('mechanism', [list(MECHANISMS)])
+        categorical.layers.couple('mechanism', kind='categorical', groups=[list(MECHANISMS)])
         assert all(eid.startswith('categorical:') for eid in list(categorical.E))
 
     def test_and_take_edge_kind(self, categorical):
-        categorical.layers.add_categorical_coupling(
-            'mechanism', [list(MECHANISMS)], edge_kind='mine'
+        categorical.layers.couple(
+            'mechanism', kind='categorical', groups=[list(MECHANISMS)], edge_kind='mine'
         )
         assert all(eid.startswith('mine:') for eid in list(categorical.E))
 

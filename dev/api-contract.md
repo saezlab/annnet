@@ -41,13 +41,14 @@ the inventory holds it. The types a caller meets through the graph surface:
 | `Schema` | what `anet.attrs.schema(address)` returns |
 | `NodeView`, `EdgeView` | the records `anet.N.at(id)` and `anet.E.at(id)` return |
 | `Aspect`, `OrderedLabels`, `as_aspect`, `LayerSelection` | aspect declarations and a layer window |
+| `LayerSet` | what `anet.layers.select(...)` returns: `.nodes`, `.edges`, `.to_slice(id)`, `.subgraph()` |
 | `Endpoint`, `as_endpoint`, `as_endpoints` | endpoint identities |
 | `Provenance`, `Set`, `Space`, `ValueMatrix`, `ValueResolver`, `MatrixValues`, `ContextualValues` | provenance, spaces and attached numerical backings |
 | `BOUNDARIES` | `('closed', 'open')`, the two boundary rules of a view |
 
 `annnet.core.__all__` is exactly: `AnnNet`, `Aspect`, `Attrs`, `BOUNDARIES`,
 `ContextualValues`, `EdgeSequence`, `EdgeView`, `Endpoint`,
-`Graph`, `GraphView`, `LayerSelection`, `MatrixValues`, `NodeSequence`,
+`Graph`, `GraphView`, `LayerSelection`, `LayerSet`, `MatrixValues`, `NodeSequence`,
 `NodeView`, `OrderedLabels`, `Provenance`, `RowSelection`, `Schema`, `Set`,
 `Space`, `ValueMatrix`, `ValueResolver`, `as_aspect`, `as_endpoint`,
 `as_endpoints`.
@@ -100,6 +101,7 @@ becomes a node on the placeholder layer, with a `UserWarning` that asks for
 A `flexible` policy is accepted per item in a batch, as it is in a single
 call. When the policy reverses an edge, the source and the target change
 places, so `E.at`, `successors` and `predecessors` follow it.
+`layer=` places every endpoint that a bare id names, in `add_nodes` and in
 
 `add_edges`, in one call and in a batch. An item of a batch names its own with
 a `layer` key, which overrides the argument for that item. `layer` is
@@ -176,7 +178,7 @@ anet.history  # snapshots and diffs
 anet.provenance  # provenance records
 anet.spaces  # the spaces a node belongs to
 anet.cache  # matrix caches
-anet.nx, anet.ig, anet.gt  # proxies onto networkx / igraph / graph-tool over this graph
+anet.nx, anet.ig, anet.gt, anet.rx  # proxies onto networkx / igraph / graph-tool / rustworkx
 ```
 
 The public names of each owned namespace are in the inventory. `anet.nx`,
@@ -201,7 +203,7 @@ Every public name an `AnnNet` object answers to, and nothing else:
 `anet.history`, `anet.idx`, `anet.ig`, `anet.in_neighbors`, `anet.incident_edges`,
 `anet.is_multilayer`, `anet.layers`, `anet.make_undirected`, `anet.matrices`,
 `anet.neighbors`, `anet.nv_supra`, `anet.nx`, `anet.ops`, `anet.out_neighbors`,
-`anet.predecessors`, `anet.provenance`, `anet.read`, `anet.remove_edges`,
+`anet.predecessors`, `anet.provenance`, `anet.read`, `anet.remove_edges`, `anet.rx`,
 `anet.remove_nodes`, `anet.shape`, `anet.slices`, `anet.spaces`, `anet.successors`,
 `anet.summary`, `anet.supra_nodes`, `anet.supra_shape`, `anet.uns`, `anet.view`, `anet.write`.
 
@@ -444,8 +446,8 @@ The surface of a view:
   convention and `V.supra_shape` the placement convention. Each named matrix
   follows its own documented projection.
 - `V.layers` and `V.slices` carry the read operations of the graph's
-  namespaces (`where`, `window`, `aspect`, `list_layers`, `has_presence`,
-  `layer_node_set`, `layer_edge_set`, `values`, `matrix`, `node_frame`;
+  namespaces (`where`, `window`, `aspect`, `list_aspects`, `list_layers`,
+  `select`, `values`, `matrix`, `node_frame`;
   `list`, `exists`, `count`, `active`, `nodes`, `edges`, `info`, `union`,
   `intersect`, `difference`, `compare`, `edge_frame`), restricted to the view.
 - `V.uns` is a read-only mapping over the graph's metadata.

@@ -180,9 +180,7 @@ def serialize_multilayer_manifest(
     ----------
     attached : {"materialise", "drop"}, default "materialise"
         What to do with node-layer values held in an *attached array* rather than
-        in the contextual store. ``graph.layers.node_attrs`` reads only the
-        store, so before this parameter existed every value an attach had joined
-        was written nowhere and read back as null, silently.
+        in the contextual store.
 
         ``"materialise"`` writes them out as ordinary node-layer attributes —
         one stored cell per non-null pair the graph actually holds a node-layer
@@ -230,7 +228,7 @@ def serialize_multilayer_manifest(
             node_layer_attrs.append({'node': uu, 'layer': list(layer_tuple), 'attrs': attrs})
 
     layer_tuple_attrs = []
-    for layer_tuple in graph.layers.iter_layers():
+    for layer_tuple in graph.layers._iter_layers():
         attrs = dict(graph.attrs.row('layers', layer_tuple))
         if attrs:
             layer_tuple_attrs.append({'layer': list(layer_tuple), 'attrs': attrs})
@@ -286,9 +284,9 @@ def restore_multilayer_manifest(
         if not same_aspects:
             graph.layers.set_aspects(aspects)
         if elem_layers and not same_aspects:
-            graph.layers.set_elementary_layers(elem_layers)
+            graph.layers._set_elementary_layers(elem_layers)
         elif elem_layers:
-            graph.layers.augment_elementary_layers(elem_layers)
+            graph.layers._augment_elementary_layers(elem_layers)
         # Ensure '_' is available per aspect; legacy graphs may have stored
         # entities at single-aspect ('_',) coords on a multi-aspect graph.
         graph._ensure_placeholder_layers_declared()
@@ -306,7 +304,7 @@ def restore_multilayer_manifest(
         # The ordered flag is a declaration of the registry, not an attribute:
         # it goes back through the declaration's own API.
         if '__ordered__' in attrs:
-            graph.layers.set_ordered(aspect, bool(attrs.pop('__ordered__')))
+            graph.layers._set_ordered(aspect, bool(attrs.pop('__ordered__')))
         if attrs:
             graph.attrs.update('aspects', {aspect: attrs})
 

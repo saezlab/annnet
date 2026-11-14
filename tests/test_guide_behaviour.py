@@ -11,6 +11,7 @@ import warnings
 import numpy as np
 
 from annnet import AnnNet
+from annnet.algorithms import multilayer
 
 
 def _two_layers() -> AnnNet:
@@ -93,9 +94,9 @@ def test_categorical_coupling_puts_its_weight_on_the_cross_layer_diagonal() -> N
         warnings.simplefilter('ignore')
         count = G.layers.couple('t', kind='categorical', weight=0.2)
 
-    A = G.layers.supra_adjacency().toarray()
-    first = [G.layers.nl_to_row(node, ('t1',)) for node in ('A', 'B')]
-    second = [G.layers.nl_to_row(node, ('t2',)) for node in ('A', 'B')]
+    A = G.layers.supra().toarray()
+    first = [G.layers._nl_to_row(node, ('t1',)) for node in ('A', 'B')]
+    second = [G.layers._nl_to_row(node, ('t2',)) for node in ('A', 'B')]
 
     assert count == 2
     assert np.allclose(A[np.ix_(first, second)], 0.2 * np.eye(2))
@@ -106,9 +107,9 @@ def test_row_to_nl_inverts_nl_to_row() -> None:
 
     for node in ('A', 'B'):
         for label in ('t1', 't2'):
-            row = G.layers.nl_to_row(node, (label,))
+            row = G.layers._nl_to_row(node, (label,))
 
-            assert G.layers.row_to_nl(row) == (node, (label,))
+            assert G.layers._row_to_nl(row) == (node, (label,))
 
 
 def test_diffusion_step_is_one_explicit_euler_step_of_the_laplacian() -> None:
@@ -116,10 +117,10 @@ def test_diffusion_step_is_one_explicit_euler_step_of_the_laplacian() -> None:
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        G.layers.add_layer_coupling_pairs([(('t1',), ('t2',))])
+        G.layers.couple(kind='layers', layers=[(('t1',), ('t2',))])
 
-    L = G.layers.supra_laplacian(kind='comb')
+    L = G.layers.supra('laplacian', laplacian='comb')
     x = np.zeros(L.shape[0])
-    x[G.layers.nl_to_row('A', ('t1',))] = 1.0
+    x[G.layers._nl_to_row('A', ('t1',))] = 1.0
 
-    assert np.allclose(G.layers.diffusion_step(x, tau=0.1), x - 0.1 * (L @ x))
+    assert np.allclose(multilayer.diffusion_step(G, x, tau=0.1), x - 0.1 * (L @ x))

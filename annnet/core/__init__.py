@@ -12,6 +12,7 @@ Input-output code, adapters and bridges read structure through the query facade
 from .graph import AnnNet
 from ._space import Set, Space
 from ._Views import GraphView
+from ._Layers import LayerSet
 from ._select import EdgeSequence, NodeSequence, RowSelection
 from ._values import ValueMatrix, MatrixValues, ValueResolver, ContextualValues
 from ._aspects import BOUNDARIES, Aspect, OrderedLabels, as_aspect
@@ -35,6 +36,7 @@ __all__ = [
     'Graph',
     'ContextualValues',
     'LayerSelection',
+    'LayerSet',
     'MatrixValues',
     'Provenance',
     'Attrs',

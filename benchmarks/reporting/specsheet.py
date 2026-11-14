@@ -164,7 +164,7 @@ def _annnet_type_build(kind: str, n_v: int, n_e: int):
         def build():
             G = AnnNet(directed=True)
             G.layers.set_aspects(['layer'], {'layer': layer_vals})
-            coords = list(G.layers.iter_layers())
+            coords = list(iter(G.layers.where().layers))
             edges = []
             for aa in coords:
                 for i in range(base):

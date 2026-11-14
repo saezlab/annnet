@@ -265,7 +265,7 @@ def _graph_from_document(doc: dict) -> AnnNet:
     if aspects:
         H.layers.set_aspects(aspects)
         if elem_layers:
-            H.layers.set_elementary_layers(elem_layers)
+            H.layers._set_elementary_layers(elem_layers)
 
     # nodes
     if aspects:

@@ -1,6 +1,6 @@
 """Every subgraph path shares one materializer.
 
-``layers.subgraph_from_layer_*``, ``ops.subgraph`` and ``V.materialize()``
+``layers.select(...).subgraph()``, ``ops.subgraph`` and ``V.materialize()``
 resolve and copy through the same code, so a layer subgraph keeps every
 attribute address, its structure and the meaning of its boundary options.
 """
@@ -25,7 +25,7 @@ def layered():
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         G = AnnNet(directed=True, aspects={'c': ['a', 'b']})
-        G.layers.set_ordered('c')
+        G.layers.set_aspects(['c'], mode='extend', ordered={'c': True})
         G.layers.place(['n', 'm', 'k'], [('a',), ('b',)])
         G.add_edges(('n', ('a',)), ('m', ('a',)), edge_id='e1', weight=2.5)
         G.add_edges(('m', ('a',)), ('k', ('a',)), edge_id='e2', directed=False)
@@ -76,7 +76,7 @@ def _structure_of(G):
 
 
 def test_layer_subgraph_keeps_every_address_and_the_structure(layered):
-    H = layered.layers.subgraph_from_layer_tuple(('a',))
+    H = layered.layers.select(('a',)).subgraph()
     V = layered.view(layers=[('a',)]).materialize()
     assert list(H.E) == list(V.E) == ['e1', 'e2', 'h']
     assert list(H.supra_nodes()) == list(V.supra_nodes())
@@ -107,7 +107,7 @@ def test_layer_subgraph_keeps_every_address_and_the_structure(layered):
     ],
 )
 def test_layer_subgraph_options_keep_their_meaning(layered, kwargs, expected_edges):
-    H = layered.layers.subgraph_from_layer_tuple(('a',), **kwargs)
+    H = layered.layers.select(('a',), **kwargs).subgraph()
     assert list(H.E) == expected_edges
     touched = set()
     for eid in expected_edges:
@@ -124,19 +124,19 @@ def test_layer_subgraph_options_keep_their_meaning(layered, kwargs, expected_edg
 
 
 def test_layer_union_intersection_difference_subgraphs_share_the_materializer(layered):
-    union = layered.layers.subgraph_from_layer_union([('a',), ('b',)])
+    union = layered.layers.select([('a',), ('b',)]).subgraph()
     assert set(union.E) == {'e1', 'e2', 'h'}, 'intra edges alone by default'
-    union = layered.layers.subgraph_from_layer_union(
+    union = layered.layers.select(
         [('a',), ('b',)], include_inter=True, include_coupling=True
-    )
+    ).subgraph()
     assert set(union.E) == {'e1', 'e2', 'couple', 'inter', 'h'}
     assert union.attrs.row('node_layers', ('n', ('a',)))['value'] == 42
     assert union.attrs.row('edges', 'e1')['score'] == 7
-    inter = layered.layers.subgraph_from_layer_intersection([('a',), ('b',)])
+    inter = layered.layers.select([('a',), ('b',)], op='intersection').subgraph()
     assert set(inter.N) == {'n', 'm', 'k'}
     assert set(inter.E) == set()
     assert inter.attrs.row('nodes', 'n')['gene'] == 'TP53'
-    diff = layered.layers.subgraph_from_layer_difference(('a',), ('b',))
+    diff = layered.layers.select([('a',), ('b',)], op='difference').subgraph()
     assert list(diff.N) == []
     assert diff.attrs.rows('nodes') == {}
     for H in (union, inter, diff):

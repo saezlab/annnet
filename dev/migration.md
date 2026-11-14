@@ -212,6 +212,94 @@ and nothing collapses a placement to a bare id on its own.
 `hyper_directed` or `hyper_undirected` reads `kind == 'hyper'` and `directed`.
 The derived edges table and `G.E['kind']` say the same.
 
+## Layers (0.5)
+
+The layer namespace keeps one verb per job, with an argument that chooses
+between related operations. Every removed name raises `AttributeError` naming
+its replacement. `LayerSet`, which `select` returns, has `.nodes`, `.edges`,
+`.to_slice(slice_id, **attrs)` and `.subgraph()`. A selection that was a dict
+(`out['nodes']`) is now read as an attribute (`out.nodes`).
+
+| old | new |
+|---|---|
+| `G.layers.set_elementary_layers` | `G.layers.set_aspects({aspect: [label, ...]}, mode='extend')` |
+| `G.layers.augment_elementary_layers` | `G.layers.set_aspects({aspect: [label, ...]}, mode='extend')` |
+| `G.layers.add_elementary_layer` | `G.layers.set_aspects({aspect: [label]}, mode='extend')` |
+| `G.layers.set_ordered` | `G.layers.set_aspects([aspect], mode='extend', ordered={aspect: flag})` |
+| `G.layers.iter_layers` | `G.layers.where().layers` |
+| `G.layers.iter_node_layers` | `G.layers.list_layers(node=node_id)` |
+| `G.layers.has_presence` | `anet.exists(node_id, **aspects) or layer in list_layers(node=node_id)` |
+| `G.layers.layer_node_set` | `G.layers.select(layer).nodes` |
+| `G.layers.layer_edge_set` | `G.layers.select(layer).edges` |
+| `G.layers.layer_union` | `G.layers.select(layers)` |
+| `G.layers.layer_intersection` | `G.layers.select(layers, op='intersection')` |
+| `G.layers.layer_difference` | `G.layers.select([a, b], op='difference')` |
+| `G.layers.create_slice_from_layer` | `G.layers.select(layer).to_slice(slice_id)` |
+| `G.layers.create_slice_from_layer_union` | `G.layers.select(layers).to_slice(slice_id)` |
+| `G.layers.create_slice_from_layer_intersection` | `G.layers.select(layers, op='intersection').to_slice(slice_id)` |
+| `G.layers.create_slice_from_layer_difference` | `G.layers.select([a, b], op='difference').to_slice(slice_id)` |
+| `G.layers.subgraph_from_layer_tuple` | `G.layers.select(layer).subgraph()` |
+| `G.layers.subgraph_from_layer_union` | `G.layers.select(layers).subgraph()` |
+| `G.layers.subgraph_from_layer_intersection` | `G.layers.select(layers, op='intersection').subgraph()` |
+| `G.layers.subgraph_from_layer_difference` | `G.layers.select([a, b], op='difference').subgraph()` |
+| `G.layers.add_categorical_coupling` | `G.layers.couple(aspect, kind='categorical', groups=groups)` |
+| `G.layers.add_layer_coupling_pairs` | `G.layers.couple(kind='layers', layers=pairs)` |
+| `G.layers.add_diagonal_coupling_filter` | `G.layers.couple(kind='diagonal', within=filter)` |
+| `G.layers.supra_adjacency` | `G.layers.supra()` |
+| `G.layers.supra_adjacency_scaled` | `G.layers.supra(scale=..., include_inter=...)` |
+| `G.layers.supra_incidence` | `G.layers.supra('incidence')` |
+| `G.layers.supra_laplacian` | `G.layers.supra('laplacian', laplacian='norm')` |
+| `G.layers.supra_degree` | `G.layers.supra('degree')` |
+| `G.layers.transition_matrix` | `G.layers.supra('transition')` |
+| `G.layers.build_intra_block` | `G.layers.supra(block='intra')` |
+| `G.layers.build_inter_block` | `G.layers.supra(block='inter')` |
+| `G.layers.build_coupling_block` | `G.layers.supra(block='coupling')` |
+| `G.layers.tensor_index` | `G.layers.tensor()` |
+| `G.layers.adjacency_tensor_view` | `G.layers.tensor()` |
+| `G.layers.flatten_to_supra` | `G.layers.flatten_tensor(tensor)` |
+| `G.layers.unflatten_from_supra` | `G.layers.tensor(from_supra=A)` |
+| `G.layers.algebraic_connectivity` | `G.layers.spectral()` |
+| `G.layers.k_smallest_laplacian_eigs` | `G.layers.spectral('eigs', k=k)` |
+| `G.layers.dominant_rw_eigenpair` | `G.layers.spectral('rw_dominant')` |
+| `G.layers.flatten_layers` | `G.layers.flatten()` |
+| `G.layers.participation_coefficient` | `annnet.algorithms.multilayer.participation_coefficient(anet)` |
+| `G.layers.versatility` | `annnet.algorithms.multilayer.versatility(anet)` |
+| `G.layers.multislice_modularity` | `annnet.algorithms.multilayer.multislice_modularity(anet, partition)` |
+| `G.layers.layer_degree_vectors` | `annnet.algorithms.multilayer.layer_degree_vectors(anet)` |
+| `G.layers.diffusion_step` | `annnet.algorithms.multilayer.diffusion_step(anet, x)` |
+| `G.layers.random_walk_step` | `annnet.algorithms.multilayer.random_walk_step(anet, p)` |
+| `G.layers.sweep_coupling_regime` | `annnet.algorithms.multilayer.sweep_coupling_regime(anet, scales)` |
+| `G.layers.nl_to_row` | `anet.nl_to_row` |
+| `G.layers.row_to_nl` | `anet.row_to_nl` |
+| `G.layers.layer_id_to_tuple` | `(label,) on a single-aspect graph` |
+| `G.layers.layer_tuple_to_id` | `'×'.join(layer)` |
+| `G.layers.ensure_node_layer_index` | `nothing: the supra index is built on demand` |
+| `G.layers.add_nodes` | `anet.add_nodes(..., layer=...)` |
+| `G.layers.add_edges` | `anet.add_edges(...)` |
+| `G.layers.remove_node` | `anet.remove_nodes` |
+| `G.layers.remove_edge` | `anet.remove_edges` |
+
+```python
+# before
+nodes = G.layers.layer_node_set(('t1',))
+both = G.layers.layer_union([('t1',), ('t2',)], include_coupling=True)['edges']
+G.layers.create_slice_from_layer_intersection('core', [('t1',), ('t2',)])
+A = G.layers.supra_laplacian(kind='norm')
+pc = G.layers.participation_coefficient()
+
+# after
+from annnet.algorithms import multilayer
+nodes = G.layers.select(('t1',)).nodes
+both = G.layers.select([('t1',), ('t2',)], include_coupling=True).edges
+G.layers.select([('t1',), ('t2',)], op='intersection').to_slice('core')
+A = G.layers.supra('laplacian', laplacian='norm')
+pc = multilayer.participation_coefficient(G)
+```
+
+The binary batch form of `add_edges` now honours `layer=` and a per-item
+`'layer'` key, as the hyperedge form did. A bare id on several layers raises
+`ValueError` in every form; before, a batch put it on the placeholder layer.
+
 ## Registered dependents
 
 `dependents.toml` lists, per package, the names it was observed calling before

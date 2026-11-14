@@ -210,7 +210,7 @@ class TestGraphBasics(unittest.TestCase):
 
     def test_add_slice_does_not_mutate_layer_registry(self):
         self.g.layers.set_aspects(['time'])
-        self.g.layers.set_elementary_layers({'time': ['t0', 't1']})
+        self.g.layers.set_aspects({'time': ['t0', 't1']}, mode='extend')
         self.g.slices.add('analysis')
         self.assertEqual(self.g.layers.list_layers('time'), ['t0', 't1'])
 
@@ -222,7 +222,7 @@ class TestGraphBasics(unittest.TestCase):
         g.add_edges(('u', ('t1',)), ('v', ('t1',)), edge_id='e1')
         g.add_edges(('u', ('t1',)), ('v', ('t1',)), edge_id='e2', parallel='parallel')
 
-        out = g.layers.flatten_layers()
+        out = g.layers.flatten()
         e3 = out.add_edges('u', 'v', edge_id='e3', parallel='parallel')
 
         self.assertCountEqual(out.has_edge('u', 'v')[1], ['e1', 'e2', e3])
@@ -387,7 +387,7 @@ class TestGraphBasics(unittest.TestCase):
         )
         g.add_edges(src=[('v1', ('healthy', 't0')), ('v1', ('treated', 't1'))], edge_id='h1')
 
-        out = g.layers.flatten_layers()
+        out = g.layers.flatten()
 
         self.assertIs(out, g)
         self.assertEqual(g.aspects, [])
@@ -419,7 +419,7 @@ class TestGraphBasics(unittest.TestCase):
         g.add_nodes('v1', layer=('healthy', 't0'))
         g.add_nodes('v2', layer=('healthy', 't0'))
         g.add_edges(('v1', ('healthy', 't0')), ('v2', ('healthy', 't0')))
-        g.layers.flatten_layers()
+        g.layers.flatten()
         g.add_nodes('isolated')
         removed = g.remove_orphans()
         self.assertEqual(removed, 1)
@@ -437,9 +437,9 @@ class TestGraphBasics(unittest.TestCase):
         g._set_edge_field(hid, 'ml_kind', 'inter')
         g._set_edge_field(hid, 'ml_layers', (('healthy',), ('treated',)))
 
-        self.assertNotIn(hid, g.layers.layer_edge_set(('healthy',)))
-        self.assertIn(hid, g.layers.layer_edge_set(('healthy',), include_inter=True))
-        self.assertIn(hid, g.layers.layer_edge_set(('treated',), include_inter=True))
+        self.assertNotIn(hid, g.layers.select(('healthy',)).edges)
+        self.assertIn(hid, g.layers.select(('healthy',), include_inter=True, boundary='open').edges)
+        self.assertIn(hid, g.layers.select(('treated',), include_inter=True, boundary='open').edges)
 
     def test_multilayer_propagate_shared_uses_bare_slice_membership(self):
         g = AnnNet(aspects={'time': ['t1', 't2']})
@@ -489,11 +489,11 @@ class TestGraphBasics(unittest.TestCase):
         g._set_edge_field(hid, 'ml_kind', 'coupling')
         g._set_edge_field(hid, 'ml_layers', (('healthy',), ('treated',)))
 
-        B0, eids0, skipped0 = g.layers.supra_incidence(include_coupling=False)
+        B0, eids0, skipped0 = g.layers.supra('incidence', include_coupling=False)
         self.assertNotIn(hid, eids0)
         self.assertNotIn(hid, skipped0)
 
-        B1, eids1, skipped1 = g.layers.supra_incidence(include_coupling=True)
+        B1, eids1, skipped1 = g.layers.supra('incidence', include_coupling=True)
         self.assertIn(hid, eids1)
         self.assertNotIn(hid, skipped1)
         self.assertEqual(B1.shape[1], B0.shape[1] + 1)
@@ -523,7 +523,7 @@ class TestErrorPaths(unittest.TestCase):
 
     def test_has_node_multilayer_with_bare_id(self):
         self.g.layers.set_aspects(['condition', 'time'])
-        self.g.layers.set_elementary_layers({'condition': ['healthy'], 'time': ['t0']})
+        self.g.layers.set_aspects({'condition': ['healthy'], 'time': ['t0']}, mode='extend')
         self.g.add_nodes('v1', layer=('healthy', 't0'))
         self.assertTrue(self.g.has_node('v1'))
         self.assertTrue(self.g.has_node(('v1', ('healthy', 't0'))))
@@ -531,8 +531,8 @@ class TestErrorPaths(unittest.TestCase):
 
     def test_resolve_entity_key_multilayer_bare_id_is_explicitly_ambiguous(self):
         self.g.layers.set_aspects(['condition', 'time'])
-        self.g.layers.set_elementary_layers(
-            {'condition': ['healthy', 'treated'], 'time': ['t0', 't1']}
+        self.g.layers.set_aspects(
+            {'condition': ['healthy', 'treated'], 'time': ['t0', 't1']}, mode='extend'
         )
         self.g.add_nodes('v1', layer=('healthy', 't0'))
         self.g.add_nodes('v1', layer=('treated', 't1'))
@@ -541,8 +541,8 @@ class TestErrorPaths(unittest.TestCase):
 
     def test_degree_multilayer_bare_id_requires_explicit_supra_node(self):
         self.g.layers.set_aspects(['condition', 'time'])
-        self.g.layers.set_elementary_layers(
-            {'condition': ['healthy', 'treated'], 'time': ['t0', 't1']}
+        self.g.layers.set_aspects(
+            {'condition': ['healthy', 'treated'], 'time': ['t0', 't1']}, mode='extend'
         )
         self.g.add_nodes('v1', layer=('healthy', 't0'))
         self.g.add_nodes('v1', layer=('treated', 't1'))
@@ -555,8 +555,8 @@ class TestErrorPaths(unittest.TestCase):
         """On the node axis a bare id names the node — all of its
         placements — and an explicit ``(node_id, layer)`` key names one."""
         self.g.layers.set_aspects(['condition', 'time'])
-        self.g.layers.set_elementary_layers(
-            {'condition': ['healthy', 'treated'], 'time': ['t0', 't1']}
+        self.g.layers.set_aspects(
+            {'condition': ['healthy', 'treated'], 'time': ['t0', 't1']}, mode='extend'
         )
         self.g.add_nodes('v1', layer=('healthy', 't0'))
         self.g.add_nodes('v1', layer=('treated', 't1'))

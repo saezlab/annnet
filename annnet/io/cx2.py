@@ -254,7 +254,7 @@ def to_cx2(
     if layer is not None:
         if not isinstance(layer, tuple):
             raise TypeError(f'layer must be a tuple, got {type(layer).__name__}')
-        G = G.layers.subgraph_from_layer_tuple(
+        G = G.layers._subgraph_from_layer_tuple(
             layer, include_coupling=include_coupling, include_inter=include_inter
         )
 

@@ -34,7 +34,7 @@ def G():
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         g = AnnNet(directed=True, aspects={'time': ['0h', '1h', '12h'], 'cond': ['ctrl', 'stim']})
-        g.layers.set_ordered('time')
+        g.layers.set_aspects(['time'], mode='extend', ordered={'time': True})
         g.layers.place(['a', 'b', 'c', 'd'], [('0h', 'ctrl'), ('1h', 'ctrl'), ('12h', 'stim')])
         g.add_nodes('e', layer=('0h', 'ctrl'))
         g.attrs.update(

@@ -436,7 +436,7 @@ def test_the_ordered_declaration_is_not_an_aspect_attribute():
     import pandas as pd
 
     G = AnnNet(directed=True, aspects={'time': ['0h', '6h'], 'cond': ['a', 'b']})
-    G.layers.set_ordered('time')
+    G.layers.set_aspects(['time'], mode='extend', ordered={'time': True})
     G.attrs.update('aspects', {'time': {'unit': 'h'}})
     assert dict(G.attrs.row('aspects', 'time')) == {'unit': 'h'}
     assert G.attrs.schema('aspects').fields == (('unit', 'str'),)

@@ -210,7 +210,7 @@ def test_flattening_a_multilayer_graph_installs_the_store_it_built():
     edge_id = S.edge_ids(G._store)[0]
     policy = {'var': 'score', 'threshold': 2.0}
     G.edge_direction_policy = {edge_id: policy}
-    G.layers.flatten_layers()
+    G.layers.flatten()
     assert {key[1] for _slot, key in G._store.live_entities()} == {('_',)}
     assert S.edge_policies(G._store)[edge_id] == policy
     assert V.validate_internal_consistency(G._store, strict=False) == []
