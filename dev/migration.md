@@ -289,6 +289,7 @@ pc = G.layers.participation_coefficient()
 
 # after
 from annnet.algorithms import multilayer
+
 nodes = G.layers.select(('t1',)).nodes
 both = G.layers.select([('t1',), ('t2',)], include_coupling=True).edges
 G.layers.select([('t1',), ('t2',)], op='intersection').to_slice('core')
