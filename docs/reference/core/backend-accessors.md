@@ -1,12 +1,13 @@
 # Backend accessors
 
-An `AnnNet` object gives access to the algorithms of three graph libraries:
+An `AnnNet` object gives access to the algorithms of four graph libraries:
 
 | accessor | library | what `anet.<accessor>.<name>` calls |
 |---|---|---|
 | `anet.nx` | [NetworkX](https://networkx.org/) | the function `networkx.<name>`, for example from the [NetworkX algorithms](https://networkx.org/documentation/stable/reference/algorithms/index.html) |
 | `anet.ig` | [igraph](https://python.igraph.org/) | the method `igraph.Graph.<name>` of the converted graph (see the [`Graph` API](https://python.igraph.org/en/stable/api/igraph.Graph.html) and [graph analysis](https://python.igraph.org/en/stable/analysis.html)), or else the function `igraph.<name>` |
 | `anet.gt` | [graph-tool](https://graph-tool.skewed.de/) | the function `graph_tool.<namespace>.<name>`, called as `anet.gt.<namespace>.<name>` |
+| `anet.rx` | [rustworkx](https://www.rustworkx.org/) | the function `rustworkx.<name>` (see the [API](https://www.rustworkx.org/api/index.html)), with node indices in the result turned back into node ids |
 
 The accessor converts `anet` to a graph of the library, calls the function,
 and gives back the result of the library. The conversion is cached.
@@ -20,6 +21,9 @@ pagerank = anet.ig.pagerank()
 
 # graph_tool.centrality.pagerank(...)
 pagerank = anet.gt.centrality.pagerank(anet)
+
+# rustworkx.dijkstra_shortest_paths(...), weights read from the edge payload
+paths = anet.rx.dijkstra_shortest_paths(source='EGFR', target='ERK', weight_fn='weight')
 ```
 
 Pass `anet` where the library function expects its graph. The accessor puts the
@@ -85,6 +89,10 @@ An algorithm call takes the same options with a prefix, so that they do not
 mix with the arguments of the library function: `_nx_directed`,
 `_nx_hyperedge`, `_nx_slice`, `_nx_slices`, `_nx_label_field`, `_nx_simple`
 and `_nx_edge_aggs` for NetworkX, and the same names with `_ig_` for igraph.
+`anet.rx` takes `_rx_directed`, `_rx_hyperedge`, `_rx_slice`, `_rx_slices`, and
+`_rx_raw=True` to get the rustworkx result with indices untouched. A
+`weight_fn` or `edge_cost_fn` given as a string reads that key of the edge
+payload.
 
 ```python
 # Betweenness on the graph read as undirected

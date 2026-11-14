@@ -89,6 +89,7 @@ CONTRACT_SURFACE = {
     'nx',
     'ig',
     'gt',
+    'rx',
     'cache',
     # Views and IO
     'view',
@@ -207,8 +208,8 @@ def test_the_core_exports_the_graph_and_the_records():
             'ContextualValues',
             'EdgeSequence',
             'LayerSelection',
-            'MatrixValues',
             'LayerSet',
+            'MatrixValues',
             'NodeSequence',
             'Provenance',
             'RowSelection',

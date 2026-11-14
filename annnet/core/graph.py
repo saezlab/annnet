@@ -45,9 +45,11 @@ if TYPE_CHECKING:
     from .backend_accessors.gt_accessor import _GTBackendAccessor
     from .backend_accessors.ig_accessor import _IGBackendAccessor
     from .backend_accessors.nx_accessor import _NXBackendAccessor
+    from .backend_accessors.rx_accessor import _RXBackendAccessor
 else:
     _GTBackendAccessor = Any
     _IGBackendAccessor = Any
+    _RXBackendAccessor = Any
     _NXBackendAccessor = Any
 
 # ===================================
@@ -303,6 +305,7 @@ class AnnNet(
         'nx',
         'ig',
         'gt',
+        'rx',
         'read',
         'write',
         'view',
@@ -2048,6 +2051,23 @@ class AnnNet(
             self._ig_proxy = _IGBackendAccessor(self)
         return self._ig_proxy
 
+    ## Lazy rustworkx proxy
+
+    @property
+    def rx(self) -> _RXBackendAccessor:
+        """Rustworkx interoperability namespace.
+
+        Returns
+        -------
+        _RXBackendAccessor
+            Lazy proxy that converts to rustworkx only when a function is called.
+        """
+        if not hasattr(self, '_rx_proxy'):
+            from .backend_accessors.rx_accessor import _RXBackendAccessor
+
+            self._rx_proxy = _RXBackendAccessor(self)
+        return self._rx_proxy
+
     ## Lazy AnnNet-tool proxy
 
     @property
@@ -2977,7 +2997,7 @@ class AnnNet(
 
     def nl_to_row(self, *args, **kwargs):
         """Convert a (node, layer) key to its matrix row index."""
-        return self.layers.nl_to_row(*args, **kwargs)
+        return self.layers._nl_to_row(*args, **kwargs)
 
     def row_to_nl(self, *args, **kwargs):
         """Convert a matrix row index to its (node, layer) key."""

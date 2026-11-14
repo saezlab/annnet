@@ -17,6 +17,7 @@ class OptionalComponent(NamedTuple):
 GRAPH_BACKENDS: dict[str, OptionalComponent] = {
     'networkx': OptionalComponent('networkx', 'annnet[networkx]'),
     'igraph': OptionalComponent('igraph', 'annnet[igraph]'),
+    'rustworkx': OptionalComponent('rustworkx', 'annnet[rustworkx]'),
     'graph-tool': OptionalComponent('graph_tool', 'pixi / conda-forge / system package'),
     'pyg': OptionalComponent('torch_geometric', 'annnet[pyg]'),
 }

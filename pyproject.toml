@@ -29,6 +29,7 @@ docs = [
     "polars>=0.20.0",
     "pyarrow>=10",
     "python-igraph>=0.11",
+    "rustworkx>=0.15",
     "zarr>=2.18"
 ]
 docs-online = [
@@ -53,6 +54,7 @@ tests = [
     "pandas>=1.5",
     "networkx>=3.3",
     "python-igraph>=0.11",
+    "rustworkx>=0.15",
     "pyarrow>=10",
     "zarr>=2.18",
     "numcodecs>=0.12",
@@ -109,6 +111,7 @@ pyarrow = ["pyarrow>=10"]
 # Graph backends
 networkx = ["networkx>=3.3"]
 igraph   = ["python-igraph>=0.11"]
+rustworkx = ["rustworkx>=0.15"]
 pyg = [
   "torch>=2.2",
   "torch-geometric>=2.5",
@@ -130,6 +133,7 @@ zarr_io  = ["zarr>=2.18", "numcodecs>=0.12"]  # used by annnet_format.py
 backends = [
   "networkx>=3.3",
   "python-igraph>=0.11",
+  "rustworkx>=0.15",
   # graph-tool cannot be installed via pip
   # PyG will be a proper backand, for now mostly IO module
 ]
@@ -182,6 +186,7 @@ all = [
   "polars",
   "networkx>=3.3",
   "python-igraph>=0.11",
+  "rustworkx>=0.15",
   "openpyxl>=3.1",
   "lxml>=4.9",
   "pyarrow>=10",

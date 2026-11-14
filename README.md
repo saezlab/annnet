@@ -27,8 +27,8 @@ annnet aims to combine graph expressiveness, annotation-centric data handling, a
 - Rich graph semantics: directed and undirected edges, parallel edges, self-loops, hyperedges, and edge-as-entity semantic.
 - Multilayer and slice-aware modeling: represent layers, aspects, inter-layer links, and named graph slices.
 - Annotated tables throughout: keep structured metadata for nodes, edges, slices, layers, and graph-level state, using [Narwhals](https://narwhals-dev.github.io/narwhals/)-compatible dataframes.
-- Import and export: [NetworkX](https://networkx.org/), [igraph](https://python.igraph.org/), [graph-tool](https://graph-tool.skewed.de/), [GraphML](http://graphml.graphdrawing.org/), [GEXF](https://gexf.net/), SIF, [SBML](https://sbml.org/), CX2 ([Cytoscape](https://cytoscape.org/) exchange format v2), Excel/CSV/TSV/JSON, [Parquet](https://parquet.apache.org/) graph directories, and dataframes.
-- Algorithm access: lazy calls into NetworkX/igraph/graph‑tool via the graph-owned `anet.nx`, `anet.ig`, and `anet.gt` accessors.
+- Import and export: [NetworkX](https://networkx.org/), [igraph](https://python.igraph.org/), [graph-tool](https://graph-tool.skewed.de/), [rustworkx](https://www.rustworkx.org/), [GraphML](http://graphml.graphdrawing.org/), [GEXF](https://gexf.net/), SIF, [SBML](https://sbml.org/), CX2 ([Cytoscape](https://cytoscape.org/) exchange format v2), Excel/CSV/TSV/JSON, [Parquet](https://parquet.apache.org/) graph directories, and dataframes.
+- Algorithm access: lazy calls into NetworkX/igraph/graph‑tool/rustworkx via the graph-owned `anet.nx`, `anet.ig`, `anet.gt` and `anet.rx` accessors.
 - Native storage: persist graph structure and annotations in a `.annnet` layout built from [Zarr](https://zarr.dev/), Parquet, and JSON.
 
 
@@ -69,10 +69,12 @@ The file-format IO modules cover graph exchange and persistence formats such as:
 
 [![NetworkX](https://img.shields.io/badge/graph_backend-NetworkX-blue?logo=networkx)](https://networkx.org/)
 [![igraph](https://img.shields.io/badge/and/or-igraph-blue)](https://python.igraph.org/)
+[![rustworkx](https://img.shields.io/badge/and/or-rustworkx-blue)](https://www.rustworkx.org/)
 [![graph-tool](https://img.shields.io/badge/and/or-graph--tool-blue)](https://graph-tool.skewed.de/)
 
 - NetworkX via `anet.nx` and `to_nx` / `from_nx`
 - igraph via `anet.ig` and `to_igraph` / `from_igraph`
+- rustworkx via `anet.rx` and `to_rustworkx` / `from_rustworkx`
 - graph-tool via `anet.gt` and `to_graphtool` / `from_graphtool`
 
 ### Cytoscape Web integration and other network visualizations
@@ -110,7 +112,7 @@ Optional extras let you add tabular backends, graph backends, plotting backends,
 
 ```bash
 # Graph backends
-pip install "annnet[networkx,igraph]"
+pip install "annnet[networkx,igraph,rustworkx]"
 
 # IO and serialization helpers
 pip install "annnet[io]"
@@ -179,7 +181,7 @@ If an optional backend is installed, annnet can dispatch directly to that backen
 centrality = anet.nx.degree_centrality(anet)
 ```
 
-`anet.nx.<function>` is the function `networkx.<function>`: annnet converts the graph, puts the converted graph in place of `anet` in the call, and returns the result of NetworkX. `anet.ig` and `anet.gt` do the same for igraph and graph-tool. The converted graphs are cached. After edits, call the accessor's `clear()` or use a fresh adapter conversion; automatic invalidation does not cover every mutation. See [Backend accessors](https://annnet.sysbioverse.org/reference/core/backend-accessors/).
+`anet.nx.<function>` is the function `networkx.<function>`: annnet converts the graph, puts the converted graph in place of `anet` in the call, and returns the result of NetworkX. `anet.ig`, `anet.gt` and `anet.rx` do the same for igraph, graph-tool and rustworkx. The converted graphs are cached. After edits, call the accessor's `clear()` or use a fresh adapter conversion; automatic invalidation does not cover every mutation. See [Backend accessors](https://annnet.sysbioverse.org/reference/core/backend-accessors/).
 
 Use `anet.nx.backend(...)`, `anet.ig.backend(...)`, or `anet.gt.backend(...)` when you want the concrete projected graph object. Use `anet.nx.<function>(anet, ...)`, `anet.ig.<function>(anet, ...)`, or `anet.gt.<namespace>.<function>(anet, ...)` when you want conversion plus dispatch in one step.
 
@@ -208,7 +210,7 @@ High-fidelity conversions aim to preserve IDs, attributes, and directionality. W
 
 Two adapter families are involved:
 
-- Runtime backend adapters for in-memory conversion and algorithm dispatch with NetworkX, igraph, and graph-tool
+- Runtime backend adapters for in-memory conversion and algorithm dispatch with NetworkX, igraph, graph-tool and rustworkx
 - IO adapters for file formats and tabular exchange such as GraphML, GEXF, SIF, SBML, CX2, Parquet, Excel, JSON, and Narwhals-backed dataframes
 
 NetworkX:
@@ -228,6 +230,13 @@ igraph:
 ```python
 ig_graph, ig_manifest = an.adapters.to_igraph(anet, directed=True, hyperedge_mode='skip')
 from_igraph = an.adapters.from_igraph(ig_graph, ig_manifest)
+```
+
+rustworkx:
+
+```python
+rx_graph, rx_manifest = an.adapters.to_rustworkx(anet, directed=True, hyperedge_mode='skip')
+from_rustworkx = an.adapters.from_rustworkx(rx_graph, rx_manifest)
 ```
 
 File formats and dataframes:

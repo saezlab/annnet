@@ -28,6 +28,7 @@ class _BackendAccessorBase:
         'nx': ('annnet.adapters.networkx_adapter', 'to_nx'),
         'ig': ('annnet.adapters.igraph_adapter', 'to_igraph'),
         'gt': ('annnet.adapters.graphtool_adapter', 'to_graphtool'),
+        'rx': ('annnet.adapters.rustworkx_adapter', 'to_rustworkx'),
     }
 
     _G: AnnNet

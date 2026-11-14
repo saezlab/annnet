@@ -171,7 +171,7 @@ nothing under another name.
 | `V.node_ids`, `V.edge_ids` | `V.N.ids`, `V.E.ids` |
 | `V.subview(...)` | `V.view(...)` |
 | `V.X` | `V.B` |
-| `V.nx`, `V.ig`, `V.gt`, `V.cache` | `V.materialize().nx`, and likewise |
+| `V.nx`, `V.ig`, `V.gt`, `V.rx`, `V.cache` | `V.materialize().nx`, and likewise |
 
 What changed underneath: a view resolves over placement keys and edge ids
 with a stated boundary rule (`closed` by default, `open` on request), keeps a

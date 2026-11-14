@@ -21,24 +21,13 @@ from typing import TYPE_CHECKING, Any
 
 from ._common import (
     _rows_like,
-    _rows_to_df,
-    binary_ends,
-    _attrs_to_dict,
     iter_edge_sides,
     _is_directed_eid,
     _serialize_value,
-    restore_entities,
+    requested_slices,
     dataframe_to_rows,
-    edge_entity_record,
-    endpoint_coeff_map,
-    serialize_edge_layers,
-    collect_slice_manifest,
-    restore_slice_manifest,
-    update_edge_attributes,
-    deserialize_edge_layers,
-    restore_multilayer_manifest,
-    serialize_multilayer_manifest,
 )
+from ._manifest import build_manifest, graph_from_manifest
 
 if TYPE_CHECKING:
     from ..core import AnnNet
@@ -325,82 +314,13 @@ def to_igraph(
         slice_filter=_slice_filter_for_export,
     )
 
-    # -------------- collect node/edge attrs for manifest --------------
-    _raw_node_attrs = {
-        row['node_id']: {k: v for k, v in row.items() if k != 'node_id'}
-        for row in _rows_like(getattr(graph, '_node_table', None))
-        if row.get('node_id') is not None
-    }
-    node_attrs = {
-        v: _attrs_to_dict(
-            {
-                k: val
-                for k, val in _raw_node_attrs.get(v, {}).items()
-                if not public_only or not str(k).startswith('__')
-            }
-        )
-        for v in list(graph.N)
-    }
-
-    _raw_edge_attrs = {
-        row['edge_id']: {k: v for k, v in row.items() if k != 'edge_id'}
-        for row in _rows_like(getattr(graph, '_edge_table', None))
-        if row.get('edge_id') is not None
-    }
-
-    # Single pass over edge records — build edge_attrs, manifest_edges,
-    # base_weights, and edge_directed_dict together (previously 3 passes).
-    edge_attrs: dict = {}
-    manifest_edges: dict = {}
-    base_weights: dict = {}
-    edge_directed_dict: dict = {}
-
-    for eid, ref, sides in iter_edge_sides(graph):
-        # edge attrs (filtered for public_only)
-        eattr_full = _raw_edge_attrs.get(eid, {})
-        eattr_filtered = {
-            k: val
-            for k, val in eattr_full.items()
-            if not public_only or not str(k).startswith('__')
-        }
-        eattr = _attrs_to_dict(eattr_filtered)
-        edge_attrs[eid] = eattr
-
-        # topology
-        is_hyper = ref.kind == 'hyper'
-        S, T = set(sides.source), set(sides.target)
-
-        if not is_hyper:
-            members = S | T
-            if len(members) == 1:
-                u = next(iter(members))
-                manifest_edges[eid] = (u, u, 'regular')
-            elif len(members) == 2:
-                u, v = binary_ends(S, T, ref.directed)
-                manifest_edges[eid] = (u, v, 'regular')
-            else:
-                head_map = endpoint_coeff_map(eattr, '__source_attr', S)
-                tail_map = endpoint_coeff_map(eattr, '__target_attr', T)
-                manifest_edges[eid] = (head_map, tail_map, 'hyper')
-        else:
-            head_map = endpoint_coeff_map(eattr, '__source_attr', S)
-            tail_map = endpoint_coeff_map(eattr, '__target_attr', T)
-            manifest_edges[eid] = (head_map, tail_map, 'hyper')
-
-        # weight + directedness
-        base_weights[eid] = float(ref.weight)
-        edge_directed_dict[eid] = bool(ref.directed)
-
-    # ---------- slices + per-slice weights for manifest ----------
-    requested_lids = set()
-    if slice is not None:
-        requested_lids.update([slice] if isinstance(slice, str) else list(slice))
-    if slices is not None:
-        requested_lids.update(list(slices))
-    slices_section, slice_weights = collect_slice_manifest(
-        graph,
-        requested_lids=(list(requested_lids) if requested_lids else None),
-    )
+    manifest = build_manifest(graph, public_only=public_only, slice=slice, slices=slices)
+    manifest_edges = manifest['edges']
+    edge_attrs = manifest['edge_attrs']
+    base_weights = manifest['weights']
+    edge_directed_dict = manifest['edge_directed']
+    slices_section = manifest['slices']
+    requested_lids = requested_slices(slice, slices)
 
     # -------------- REIFY: add HE nodes + membership edges to igG --------------
     if hyperedge_mode == 'reify':
@@ -496,24 +416,6 @@ def to_igraph(
             for k in keys:
                 igG.es[start:][k] = [d.get(k) for d in payloads]
 
-    # -------------- manifest (unchanged semantics) --------------
-    manifest = {
-        'edges': manifest_edges,
-        'weights': base_weights,
-        'slices': slices_section,
-        'node_attrs': node_attrs,
-        'edge_attrs': edge_attrs,
-        'slice_weights': slice_weights,
-        'edge_directed': edge_directed_dict,
-        'edge_entities': edge_entity_record(graph),
-        'manifest_version': 1,
-        'multilayer': serialize_multilayer_manifest(
-            graph,
-            table_to_rows=dataframe_to_rows,
-            serialize_edge_layers=serialize_edge_layers,
-        ),
-    }
-
     return igG, manifest
 
 
@@ -605,16 +507,11 @@ def from_igraph(
       When "reified", also detect hyperedge nodes in igG and rebuild true hyperedges
       that are NOT present in the manifest.
     """
-    from ..core import AnnNet
-
-    H = AnnNet()
-    known_nodes = set()
+    H = graph_from_manifest(manifest)
 
     def ensure_node(node_id):
-        if node_id in known_nodes:
-            return
-        H.add_nodes(node_id)
-        known_nodes.add(node_id)
+        if not H.has_node(node_id):
+            H.add_nodes(node_id)
 
     # -------- helper: scan reified HE nodes in igG (used only if hyperedge == "reified") --------
     def _ig_collect_reified(ig):
@@ -714,135 +611,7 @@ def from_igraph(
 
         return out
 
-    # Declare aspects up front so multilayer supra-node coordinates resolve while
-    # edges and hyperedges are added below. The full multilayer state (presence,
-    # attrs, edge layers) is restored from the same manifest afterwards.
-    _mm = manifest.get('multilayer', {}) or {}
-    _asp = _mm.get('aspects')
-    if _asp and tuple(H.aspects) != tuple(_asp):
-        H.layers.set_aspects(list(_asp), _mm.get('elem_layers') or None)
-
-    # -------- nodes (from manifest = SSOT) --------
-    # Collect all node IDs referenced by manifest (attrs + edges). A multilayer
-    # endpoint is a (vid, layer_coord) supra-node key, but the node entity is
-    # keyed by the bare vid; its placement comes back with the multilayer state.
-    def _bare(x):
-        return x[0] if isinstance(x, tuple) else x
-
-    node_ids = set()
-
-    for vid in (manifest.get('node_attrs', {}) or {}).keys():
-        node_ids.add(_bare(vid))
-
     edges_def = manifest.get('edges', {}) or {}
-    for _eid, defn in edges_def.items():
-        kind = defn[-1]
-        if kind == 'regular':
-            u, v = defn[0], defn[1]
-            node_ids.add(_bare(u))
-            node_ids.add(_bare(v))
-        elif kind == 'hyper':
-            head_map, tail_map = defn[0], defn[1]
-            if isinstance(head_map, dict):
-                for u in head_map.keys():
-                    node_ids.add(_bare(u))
-            if isinstance(tail_map, dict):
-                for v in tail_map.keys():
-                    node_ids.add(_bare(v))
-
-    # Add nodes now (no he:: nodes will be included since they aren't in the manifest)
-    if node_ids:
-        H._add_nodes_bulk([{'node_id': v} for v in node_ids])
-
-    # -------- edges/hyperedges (from manifest = SSOT) --------
-    edge_directed_cache = manifest.get('edge_directed', {}) or {}
-    regular_edges_bulk = []
-    hyperedges_bulk = []
-
-    for eid, defn in edges_def.items():
-        kind = defn[-1]
-        is_dir = bool(edge_directed_cache.get(eid, True))
-        if kind == 'regular':
-            u, v = defn[0], defn[1]
-            regular_edges_bulk.append(
-                {
-                    'source': u,
-                    'target': v,
-                    'edge_id': eid,
-                    'edge_directed': is_dir,
-                    'weight': (manifest.get('weights', {}) or {}).get(eid, 1.0),
-                }
-            )
-        elif kind == 'hyper':
-            head_map, tail_map = defn[0], defn[1]
-            if isinstance(head_map, dict) and isinstance(tail_map, dict):
-                head, tail = list(head_map), list(tail_map)
-                # Coefficient maps are stored only when they carry a real
-                # (non-unit) coefficient; a unit map is what the edge already has.
-                attrs = {}
-                if any(c != 1.0 for c in head_map.values()) or any(
-                    c != 1.0 for c in tail_map.values()
-                ):
-                    attrs = {
-                        '__source_attr': {u: {'__value': float(c)} for u, c in head_map.items()},
-                        '__target_attr': {v: {'__value': float(c)} for v, c in tail_map.items()},
-                    }
-                if is_dir:
-                    hyperedges_bulk.append(
-                        {
-                            'head': head,
-                            'tail': tail,
-                            'edge_id': eid,
-                            'edge_directed': True,
-                            'weight': (manifest.get('weights', {}) or {}).get(eid, 1.0),
-                            'attributes': attrs,
-                        }
-                    )
-                else:
-                    hyperedges_bulk.append(
-                        {
-                            'members': list(set(head) | set(tail)),
-                            'edge_id': eid,
-                            'edge_directed': False,
-                            'weight': (manifest.get('weights', {}) or {}).get(eid, 1.0),
-                            'attributes': attrs,
-                        }
-                    )
-
-    if regular_edges_bulk:
-        H._add_edges_bulk(regular_edges_bulk, default_edge_directed=True)
-    if hyperedges_bulk:
-        H.add_hyperedges_bulk(hyperedges_bulk)
-
-    # -------- slices + per-slice overrides --------
-    restore_slice_manifest(
-        H,
-        manifest.get('slices', {}) or {},
-        manifest.get('slice_weights', {}) or {},
-    )
-
-    # ----- multilayer / Kivela -----
-    restore_multilayer_manifest(
-        H,
-        manifest.get('multilayer', {}),
-        rows_to_table=_rows_to_df,
-        deserialize_edge_layers=deserialize_edge_layers,
-    )
-
-    restore_entities(H, manifest.get('edge_entities'))
-
-    # -------- restore node/edge attrs (bulk, not per-element) --------
-    node_attrs_cache = manifest.get('node_attrs', {}) or {}
-    if node_attrs_cache:
-        v_updates = {vid: a for vid, a in node_attrs_cache.items() if a}
-        if v_updates:
-            H.attrs.update('nodes', v_updates)
-
-    edge_attrs_cache = manifest.get('edge_attrs', {}) or {}
-    if edge_attrs_cache:
-        e_updates = {eid: a for eid, a in edge_attrs_cache.items() if a}
-        if e_updates:
-            update_edge_attributes(H, e_updates)
 
     # -------- OPTIONAL: pull in reified HEs from igG not present in manifest --------
     if hyperedge == 'reified':

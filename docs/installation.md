@@ -68,8 +68,9 @@ pip install "annnet[backends]"
 
 - `networkx`: interoperability with [NetworkX](https://networkx.org/) and access to its algorithms
 - `igraph`: interoperability with [python-igraph](https://python.igraph.org/)
+- `rustworkx`: interoperability with [rustworkx](https://www.rustworkx.org/)
 - `pyg`: [PyTorch Geometric](https://pyg.org/) support
-- `backends`: installs the pip-installable graph backends `networkx` and `igraph`
+- `backends`: installs the pip-installable graph backends `networkx`, `igraph` and `rustworkx`
 
 annnet also supports [graph-tool](https://graph-tool.skewed.de/). graph-tool is not available on PyPI: install it separately with [Pixi](https://pixi.sh/), [conda](https://conda-forge.org/), or your system package manager.
 

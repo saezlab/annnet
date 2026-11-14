@@ -93,6 +93,7 @@ nav:
         -   NetworkX adapter: reference/adapters/networkx.md
         -   igraph adapter: reference/adapters/igraph.md
         -   graph-tool adapter: reference/adapters/graphtool.md
+        -   rustworkx adapter: reference/adapters/rustworkx.md
     -   Utilities:
         -   Plotting: reference/utils/plotting.md
 

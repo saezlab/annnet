@@ -26,8 +26,8 @@ import functools
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# The holders, in the order they appear in the table. ``nx``, ``ig`` and ``gt``
-# are proxies onto other libraries, whose surface is theirs and changes with
+# The holders, in the order they appear in the table. ``nx``, ``ig``, ``gt`` and
+# ``rx`` are proxies onto other libraries, whose surface is theirs and changes with
 # their version, so they are not walked.
 GRAPH_NAMESPACES = (
     'attrs',

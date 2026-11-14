@@ -159,7 +159,7 @@ NAMESPACES = {
         'get_csc': 'G.cache.csc',
         'get_csr': 'G.cache.csr',
     },
-    # A view. The last five are names the graph carries and a view does not,
+    # A view. The last six are names the graph carries and a view does not,
     # which a caller reaches through an independent copy.
     'V': {
         'obs': "V.attrs.table('nodes')",
@@ -175,6 +175,7 @@ NAMESPACES = {
         'nx': 'V.materialize().nx',
         'ig': 'V.materialize().ig',
         'gt': 'V.materialize().gt',
+        'rx': 'V.materialize().rx',
         'cache': 'V.materialize().cache',
     },
 }

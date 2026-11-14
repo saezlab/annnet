@@ -97,12 +97,11 @@ in a single call and in a batch alike. An id the graph does not hold yet
 becomes a node on the placeholder layer, with a `UserWarning` that asks for
 `layer=`. `remove_nodes` of a bare id removes every placement of that id.
 
-`layer=` places every endpoint that a bare id names, in `add_nodes` and in
 A `flexible` policy is accepted per item in a batch, as it is in a single
 call. When the policy reverses an edge, the source and the target change
 places, so `E.at`, `successors` and `predecessors` follow it.
-`layer=` places every endpoint that a bare id names, in `add_nodes` and in
 
+`layer=` places every endpoint that a bare id names, in `add_nodes` and in
 `add_edges`, in one call and in a batch. An item of a batch names its own with
 a `layer` key, which overrides the argument for that item. `layer` is
 therefore not the name of an attribute: a field of that name on an edge or a
@@ -171,7 +170,7 @@ ambiguous bare id on a multilayer graph raises `ValueError`.
 ### 2.7 Namespaces
 
 ```python
-anet.layers  # aspects, layer windows (where), placements, values, layer algebra
+anet.layers  # aspects, windows (where), selection (select), coupling, supra matrices, values
 anet.slices  # slice registry, membership, compare, edge_frame
 anet.ops  # copy, subgraph, extract, union/intersection/difference, reverse, incidence
 anet.history  # snapshots and diffs
@@ -181,8 +180,30 @@ anet.cache  # matrix caches
 anet.nx, anet.ig, anet.gt, anet.rx  # proxies onto networkx / igraph / graph-tool / rustworkx
 ```
 
+The layer namespace has one verb per job; an argument chooses between related
+operations:
+
+```python
+anet.layers.set_aspects(aspects, elem_layers=None, *, mode='replace'|'extend', ordered=None)
+anet.layers.aspect(name); anet.layers.list_aspects(); anet.layers.list_layers(aspect=None, *, node=None)
+anet.layers.where(**predicates)                     # LayerSelection
+anet.layers.select(layers, *, op='union'|'intersection'|'difference',
+                   include_inter=False, include_coupling=False, boundary='closed')  # LayerSet
+anet.layers.couple(aspect=None, *, kind='ordinal'|'categorical'|'layers'|'diagonal', ...)
+anet.layers.supra(kind='adjacency'|'incidence'|'laplacian'|'degree'|'transition', *,
+                  layers=None, block='all'|'intra'|'inter'|'coupling', scale=1.0, laplacian='comb')
+anet.layers.tensor(layers=None, *, from_supra=None); anet.layers.flatten_tensor(tensor)
+anet.layers.spectral(what='fiedler'|'eigs'|'rw_dominant', *, k=6, laplacian='comb', layers=None)
+anet.layers.flatten()
+anet.layers.place / values / attach_values / detach_values / matrix / node_frame
+```
+
+Measures over the supra-graph (participation coefficient, versatility,
+multislice modularity, layer degree vectors, diffusion and random-walk steps,
+coupling sweeps) are functions of the graph in `annnet.algorithms.multilayer`.
+
 The public names of each owned namespace are in the inventory. `anet.nx`,
-`anet.ig` and `anet.gt` expose the surface of the library they wrap, which is that
+`anet.ig`, `anet.gt` and `anet.rx` expose the surface of the library they wrap, which is that
 library's and changes with its version.
 
 ### 2.8 Views and IO
@@ -508,6 +529,7 @@ message.
 | `anet.remove_node`, `anet.remove_edge` | `anet.remove_nodes`, `anet.remove_edges` |
 | the 24 `get_*`/`set_*` attribute methods | `anet.attrs.row`, `anet.attrs.update`, `anet.attrs.rows`, `anet.attrs.select`, `anet.E.effective_weight`, `anet.uns` |
 | `anet.attrs[address]`, `anet.attrs[address, key]`, their assignment and `del`, `anet.attrs.<address> = table`; the live `Row` | `anet.attrs.<address>` / `table`, `row`, `update`, `replace`, `delete` |
+| the 51 layer operations folded into `select`, `couple`, `supra`, `tensor`, `spectral`, `set_aspects`, `list_layers`, `flatten` and `annnet.algorithms.multilayer` (0.5) | listed in `dev/migration.md`; each raises naming its replacement |
 | `anet.layers.*attrs*`, `anet.slices.attrs` | the `layers`, `aspects`, `elementary_layers`, `node_layers` and `slices` addresses of `anet.attrs` |
 | `anet.cache.get_adjacency/get_csr/get_csc` | `anet.cache.adjacency/csr/csc` |
 | `V.obs`, `V.var`, `V.nodes_df`, `V.edges_df`, `V.node_count`, `V.edge_count`, `V.node_ids`, `V.edge_ids`, `V.subview` | `V.attrs.table(...)`, `len(V.N)`, `len(V.E)`, `V.N.ids`, `V.E.ids`, `V.view(...)` |

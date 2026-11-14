@@ -145,7 +145,7 @@ multilayer structure without duplicating the underlying graph.
 
     ---
 
-    Run [NetworkX](https://networkx.org/), [igraph](https://python.igraph.org/) and [graph-tool](https://graph-tool.skewed.de/) algorithms directly on an annnet graph through `anet.nx`, `anet.ig` and `anet.gt`. annnet converts lazily and stays the canonical representation.
+    Run [NetworkX](https://networkx.org/), [igraph](https://python.igraph.org/), [graph-tool](https://graph-tool.skewed.de/) and [rustworkx](https://www.rustworkx.org/) algorithms directly on an annnet graph through `anet.nx`, `anet.ig`, `anet.gt` and `anet.rx`. annnet converts lazily and stays the canonical representation.
 
     See: [backends in the guide](guide/computation-and-storage.ipynb#make-the-algorithm-input-explicit) ·
     [PyG example](tutorials/pyg-heterodata-export.ipynb) ·

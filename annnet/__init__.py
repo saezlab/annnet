@@ -118,6 +118,8 @@ _lazy_functions: dict[str, tuple[str, str]] = {
     'from_nx': ('annnet.adapters.networkx_adapter', 'from_nx'),
     'to_igraph': ('annnet.adapters.igraph_adapter', 'to_igraph'),
     'from_igraph': ('annnet.adapters.igraph_adapter', 'from_igraph'),
+    'to_rustworkx': ('annnet.adapters.rustworkx_adapter', 'to_rustworkx'),
+    'from_rustworkx': ('annnet.adapters.rustworkx_adapter', 'from_rustworkx'),
     'to_graphtool': ('annnet.adapters.graphtool_adapter', 'to_graphtool'),
     'from_graphtool': ('annnet.adapters.graphtool_adapter', 'from_graphtool'),
     'to_pyg': ('annnet.io.pyg', 'to_pyg'),
