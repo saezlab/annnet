@@ -48,8 +48,45 @@ STORED_EDGE_KIND = {
     _structure.PLACEHOLDER: 'edge_placeholder',
 }
 
+
+def slice_members(graph, slice_ids) -> tuple[set | None, set | None]:
+    """Return the node ids and edge ids the named slices hold together.
+
+    ``(None, None)`` when no slice is named, which a caller reads as "no
+    restriction". A name the graph does not hold contributes nothing. The node
+    set also holds the endpoints of every slice edge, so an edge kept never
+    names a node that was dropped.
+    """
+    if not slice_ids:
+        return None, None
+    nodes: set = set()
+    edges: set = set()
+    for sid in slice_ids:
+        if not graph.slices.exists(sid):
+            continue
+        nodes.update(graph.slices.nodes(sid))
+        edges.update(graph.slices.edges(sid))
+    for eid, _ref, sides in iter_edge_sides(graph):
+        if eid in edges:
+            for endpoint in (*sides.source, *sides.target):
+                nodes.add(endpoint[0] if _structure.is_entity_key(endpoint) else endpoint)
+    return nodes, edges
+
+
+def requested_slices(slice=None, slices=None) -> set:
+    """Merge the ``slice`` and ``slices`` arguments every exporter takes."""
+    out: set = set()
+    if slice is not None:
+        out.update([slice] if isinstance(slice, str) else list(slice))
+    if slices is not None:
+        out.update(slices)
+    return out
+
+
 __all__ = [
     'STORED_EDGE_KIND',
+    'requested_slices',
+    'slice_members',
     'binary_ends',
     'dataframe_to_rows',
     'edge_entity_record',

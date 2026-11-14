@@ -97,6 +97,10 @@ becomes a node on the placeholder layer, with a `UserWarning` that asks for
 `layer=`. `remove_nodes` of a bare id removes every placement of that id.
 
 `layer=` places every endpoint that a bare id names, in `add_nodes` and in
+A `flexible` policy is accepted per item in a batch, as it is in a single
+call. When the policy reverses an edge, the source and the target change
+places, so `E.at`, `successors` and `predecessors` follow it.
+
 `add_edges`, in one call and in a batch. An item of a batch names its own with
 a `layer` key, which overrides the argument for that item. `layer` is
 therefore not the name of an attribute: a field of that name on an edge or a

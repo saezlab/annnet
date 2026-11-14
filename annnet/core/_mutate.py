@@ -263,6 +263,16 @@ def find_parallel_edges(g, endpoint_set, etype):
 # ---------------------------------------------------------------------------
 
 
+def _check_flexible(flexible) -> None:
+    """Refuse a flexible-direction policy that does not name a variable and a threshold."""
+    if flexible is not None and (
+        not isinstance(flexible, dict) or 'var' not in flexible or 'threshold' not in flexible
+    ):
+        raise ValueError(
+            "flexible must be a dict with keys {'var','threshold'[,'scope','above','tie']}"
+        )
+
+
 def add_edge(
     g,
     src=None,
@@ -291,12 +301,7 @@ def add_edge(
         raise ValueError(f"propagate must be 'none'|'shared'|'all', got {propagate!r}")
     if not isinstance(weight, (int, float)):
         raise TypeError(f'weight must be numeric, got {type(weight).__name__!r}')
-    if flexible is not None and (
-        not isinstance(flexible, dict) or 'var' not in flexible or 'threshold' not in flexible
-    ):
-        raise ValueError(
-            "flexible must be a dict with keys {'var','threshold'[,'scope','above','tie']}"
-        )
+    _check_flexible(flexible)
 
     slice = slice if slice is not None else g._current_slice
 
@@ -741,6 +746,25 @@ def restore_edge_column(g, edge_id, coefficients, explicit) -> None:
     if g._store.edge_slot(edge_id) is None:
         return
     g._store.restore_member_coefficients(edge_id, coefficients, explicit)
+    g._mark_structure_changed()
+    D.invalidate_sparse_caches(g)
+
+
+def restore_edge_members(g, edge_id, entities, coefficients, roles, explicit) -> None:
+    """Put back the whole member list of one edge as a transaction snapshotted it.
+
+    Used when a flexible-direction reversal exchanged the roles of an edge, which
+    a column of coefficients alone cannot undo.
+    """
+    store = g._store
+    if store.edge_slot(edge_id) is None:
+        return
+    members = tuple(
+        (store.entity_key(int(e)), float(c), int(r))
+        for e, c, r in zip(entities, coefficients, roles, strict=True)
+    )
+    store.replace_members(edge_id, members)
+    store.restore_member_coefficients(edge_id, coefficients, explicit)
     g._mark_structure_changed()
     D.invalidate_sparse_caches(g)
 
@@ -1203,6 +1227,7 @@ def batch_add_edges(
     _slice_weights: list = []
     _specs: list = []
     _spec_at: dict = {}
+    _flexible_ids: list = []
 
     def _ensure_endpoint(vid, et, place=None):
         """Register the entity one endpoint names, and return its key."""
@@ -1297,6 +1322,7 @@ def batch_add_edges(
                 slice_w = default_slice_weight
                 e_dir = default_edge_directed
                 edge_id = None
+                flex = None
                 item_layer = layer
                 _item = None
             else:
@@ -1313,6 +1339,8 @@ def batch_add_edges(
                 else:
                     e_dir = default_edge_directed
                 edge_id = it.get('edge_id')
+                flex = it.get('flexible')
+                _check_flexible(flex)
                 _item = it
         elif isinstance(it, (tuple, list)):
             s = it[0]
@@ -1324,6 +1352,7 @@ def batch_add_edges(
             slice_w = default_slice_weight
             e_dir = default_edge_directed
             edge_id = None
+            flex = None
             item_layer = layer
             _item = None
         else:
@@ -1370,16 +1399,9 @@ def batch_add_edges(
         ml_layers = None
         if not _is_multilayer:
             ml_kind = 'intra'
-        elif (
-            isinstance(s, tuple)
-            and len(s) == 2
-            and isinstance(s[1], tuple)
-            and isinstance(t, tuple)
-            and len(t) == 2
-            and isinstance(t[1], tuple)
-        ):
-            ml_kind = g._infer_ml_kind(s, t)
-            ml_layers = (s[1], t[1])
+        else:
+            ml_kind = g._infer_ml_kind(source_key, target_key)
+            ml_layers = (source_key[1], target_key[1])
 
         # ── edge id (auto-assign in input order) ───────────────────────────────
         if edge_id is None:
@@ -1405,6 +1427,12 @@ def batch_add_edges(
                 _slot.remove_edge(edge_id)
         else:
             policy = _specs[at][8]
+        if flex is not None:
+            # A flexible edge is directed; its policy sets which way once the
+            # attributes of the batch have landed.
+            policy = dict(flex)
+            is_dir = True
+            _flexible_ids.append(edge_id)
         spec = (
             edge_id,
             (
@@ -1494,6 +1522,9 @@ def batch_add_edges(
 
     if pending_attrs:
         g.attrs.update('edges', pending_attrs)
+
+    for eid in dict.fromkeys(_flexible_ids):
+        g._apply_flexible_direction(eid)
 
     if as_entity:
         flat = g._aspects == ('_',)
@@ -1606,22 +1637,13 @@ def batch_add_hyperedges(
             vid = u[0]
             coord = g._make_layer_coord(u[1])
             return vid, coord
-        # Bare string vid: place into layer_for_d if given, else fall
-        # through to the existing placeholder/single-match resolution.
+        # A bare id: layer= places it. Otherwise it resolves as an endpoint of a
+        # binary edge does, so an id on two placements, the placeholder among
+        # them, raises in every path.
         if layer_for_d is not None and g._aspects != ('_',):
             coord = g._make_layer_coord(layer_for_d)
             return u, coord
-        # No layer hint. If the vid already lives in exactly one real
-        # layer (i.e. it was previously inserted), reuse that coord
-        # instead of forking a placeholder copy — this is what previously
-        # produced the "Ambiguous bare node_id" failures.
-        if g._aspects != ('_',):
-            placeholder = g._placeholder_layer_coord()
-            real_keys = [k for k in _slot.entity_keys_of_id(u) if k[1] != placeholder]
-            if len(real_keys) == 1:
-                return u, real_keys[0][1]
-        coord = g._resolve_node_insert_coord(None, node_ids=u, context='_add_hyperedges_batch')
-        return u, coord
+        return I.resolve_endpoint_insert_key(g, u, context='_add_hyperedges_batch')
 
     # Resolve every member endpoint up-front and stash the resolved keys
     # back onto each item so the matrix-write loop below doesn't need to

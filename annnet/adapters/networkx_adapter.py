@@ -34,10 +34,12 @@ from ._common import (
     _rows_like,
     _rows_to_df,
     binary_ends,
+    slice_members,
     _attrs_to_dict,
     iter_edge_sides,
     _is_directed_eid,
     _serialize_value,
+    requested_slices,
     restore_entities,
     dataframe_to_rows,
     edge_entity_record,
@@ -93,6 +95,7 @@ def _export_binary_graph(
     skip_hyperedges: bool = True,
     public_only: bool = False,
     edge_directed_map: dict | None = None,
+    slice_ids=None,
 ):
     """Export AnnNet to NetworkX Multi(Di)Graph without manifest.
 
@@ -109,6 +112,8 @@ def _export_binary_graph(
           - undirected hyperedges expand to clique
     public_only : bool
         If True, strip private attrs starting with "__".
+    slice_ids : Iterable[str], optional
+        Keep only the nodes and edges these slices hold together.
 
     Returns
     -------
@@ -116,6 +121,7 @@ def _export_binary_graph(
 
     """
     G = nx.MultiDiGraph() if directed else nx.MultiGraph()
+    keep_nodes, keep_edges = slice_members(graph, slice_ids)
 
     # BATCH READ NODE ATTRIBUTES
     v_rows = _rows_like(graph._node_table)
@@ -151,11 +157,15 @@ def _export_binary_graph(
 
     # ADD NODES WITH CACHED ATTRIBUTES
     for v in list(graph.N):
+        if keep_nodes is not None and v not in keep_nodes:
+            continue
         v_attr = v_attrs_map.get(v, {})
         G.add_node(v, **v_attr)
 
     # ADD EDGES WITH CACHED ATTRIBUTES
     for eid, ref, sides in iter_edge_sides(graph):
+        if keep_edges is not None and eid not in keep_edges:
+            continue
         is_hyper = ref.kind == 'hyper'
         S, T = set(sides.source), set(sides.target)
 
@@ -266,9 +276,9 @@ def to_nx(
         ``"expand"`` loses them, and losing them silently is what this refuses.
     hyperedge_mode : {"skip", "expand", "reify"}
     slice : str, optional
-        Export single slice only (affects which hyperedges are reified).
+        Export only the nodes and edges of this slice.
     slices : list[str], optional
-        Export union of specified slices (affects which hyperedges are reified).
+        Export only the nodes and edges these slices hold together.
     public_only : bool
 
     Returns
@@ -287,12 +297,8 @@ def to_nx(
             return {}
         return {k: v for k, v in d.items() if not str(k).startswith('__')}
 
-    # Figure out which hyperedges should be included if user filters by slice(s)
-    requested_lids = set()
-    if slice is not None:
-        requested_lids.update([slice] if isinstance(slice, str) else list(slice))
-    if slices is not None:
-        requested_lids.update(list(slices))
+    # The slices asked for restrict the nodes and edges exported.
+    requested_lids = requested_slices(slice, slices)
 
     selected_eids = None
     if requested_lids:
@@ -339,7 +345,10 @@ def to_nx(
     manifest_edges: dict = {}
     weights_map: dict = {}
     edge_directed_dict: dict = {}
+    _, keep_edges = slice_members(graph, requested_lids)
     for eid, ref, sides in iter_edge_sides(graph):
+        if keep_edges is not None and eid not in keep_edges:
+            continue
         is_hyper = ref.kind == 'hyper'
         S, T = set(sides.source), set(sides.target)
 
@@ -373,6 +382,7 @@ def to_nx(
         skip_hyperedges=(hyperedge_mode in ('skip', 'reify')),
         public_only=public_only,
         edge_directed_map=edge_directed_dict,
+        slice_ids=requested_lids,
     )
 
     slices_section, slice_weights = collect_slice_manifest(

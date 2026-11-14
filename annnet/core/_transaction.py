@@ -137,7 +137,13 @@ class AttributeTransaction:
             if slot is None:
                 continue
             members = store.members(slot)
-            snapshot[eid] = (members.coefficients.copy(), bool(store.edge_explicit[slot]))
+            snapshot[eid] = (
+                members.entities.copy(),
+                members.coefficients.copy(),
+                members.roles.copy(),
+                bool(store.edge_explicit[slot]),
+                store.edge_policy.get(slot),
+            )
         return snapshot
 
     # -- the protocol --------------------------------------------------------
@@ -162,7 +168,7 @@ class AttributeTransaction:
         if self._key_index is not None:
             self._graph._node_key_index = self._key_index
         store = self._graph._store
-        for eid, (coefficients, explicit) in self._columns.items():
+        for eid, (entities, coefficients, roles, explicit, policy) in self._columns.items():
             slot = store.edge_slot(eid)
             if slot is None:
                 continue
@@ -170,10 +176,21 @@ class AttributeTransaction:
             if (
                 bool(store.edge_explicit[slot]) == explicit
                 and members.coefficients.shape == coefficients.shape
+                and np.array_equal(members.entities, entities)
                 and np.array_equal(members.coefficients, coefficients)
+                and np.array_equal(members.roles, roles)
+                and store.edge_policy.get(slot) == policy
             ):
                 continue
-            _mutate.restore_edge_column(self._graph, eid, coefficients, explicit)
+            if np.array_equal(members.entities, entities) and np.array_equal(members.roles, roles):
+                _mutate.restore_edge_column(self._graph, eid, coefficients, explicit)
+            else:
+                # A reversal rewrote the roles, so the whole member list goes back.
+                _mutate.restore_edge_members(
+                    self._graph, eid, entities, coefficients, roles, explicit
+                )
+            if store.edge_policy.get(slot) != policy:
+                store.set_edge_policy(eid, policy)
 
 
 __all__ = ['AttributeTransaction']

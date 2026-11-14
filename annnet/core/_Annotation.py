@@ -129,10 +129,35 @@ class AttributesClass(GraphState):
             cond = True if tie == 's->t' else False
 
         src_to_tgt = cond if above == 's->t' else (not cond)
-        if src_to_tgt:
+        if src_to_tgt or src == tgt:
             _resolve(+w, -w)
-        else:
-            _resolve(-w, +w)
+            return
+        self._reverse_flexible_edge(edge_id, src, tgt, pol)
+
+    def _reverse_flexible_edge(self, edge_id, src, tgt, pol):
+        """Make the target of a flexible edge its source, and the source its target.
+
+        The roles are what traversal, ``E.at(edge_id).source`` and every adapter
+        read, so the reversal rewrites them, not only the coefficients. A policy
+        is stated against the edge's current source and target, and the
+        reversal rewrites it to keep its meaning: an edge-scoped policy compares
+        one value to the threshold, so its ``above`` turns around; a node-scoped
+        one compares source to target, and exchanging them already turns the
+        comparison around. A tie rule that names a direction turns around in
+        both cases.
+        """
+        from . import _mutate
+
+        flip = {'s->t': 't->s', 't->s': 's->t'}
+        new_pol = dict(pol)
+        if new_pol.get('scope', 'edge') == 'edge':
+            new_pol['above'] = flip[new_pol.get('above', 's->t')]
+        tie = new_pol.get('tie', 'keep')
+        if tie in flip:
+            new_pol['tie'] = flip[tie]
+        _mutate._rewrite_sides(self, edge_id, tgt, src)
+        self._store.set_edge_policy(edge_id, new_pol)
+        self._invalidate_sparse_caches()
 
 
 __all__ = ['TABLE_NAMES', 'AttributesClass']
